@@ -450,6 +450,7 @@ pub(crate) fn domain_error_response(
     let status = match error.code {
         "badRequest" => StatusCode::BAD_REQUEST,
         "forbidden" => StatusCode::FORBIDDEN,
+        ghostex_gx_protocol::cloud_box::error_codes::KIT_OFF => StatusCode::FORBIDDEN,
         "notFound" => StatusCode::NOT_FOUND,
         "corruptState" => StatusCode::CONFLICT,
         "conflict" => StatusCode::CONFLICT,

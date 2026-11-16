@@ -11,7 +11,10 @@
 //!   is watching with Remove, a guest's waiting message with Review (the card above the chat box),
 //!   the guest-message mode, the time left, Stop sharing (asks first).
 //!
-//! The popover is a window of its own; it grows and shrinks to fit what it shows.
+//! The popover is a window of its own; it grows and shrinks to fit what it shows. It opens
+//! held, transparent, until gxserver's first answer is drawn at its height, then fades in
+//! (CDXC:AppModal 2026-11-13 in popup_frame.rs); the last answer seeds the next open, so a
+//! reopen shows at once.
 //!
 //! CDXC:Collab 2026-11-07 DECISION:
 //! User (Q1615): "Where Share lives: a button in the chat header", with its popover holding the link, code, expiry, mode, viewers and Stop sharing.
@@ -33,10 +36,25 @@ use gpui_component::ElementExt as _;
 use serde_json::{Value, json};
 
 pub(crate) const COLLAB_SHARE_POPUP_WIDTH: f32 = SHARE_POPOVER_WIDTH;
-/// The first height the popover opens at (the Ready state); it then fits what it shows.
+/// The window's first height, before the popover, still held, has measured itself.
 pub(crate) const COLLAB_SHARE_POPUP_HEIGHT: f32 = 300.0;
 /// The tallest it grows (four guests and a waiting card fit).
 const MAX_HEIGHT: f32 = 640.0;
+/// How long a first open waits for gxserver's answer before it shows "Loading" instead.
+const FIRST_READ_WAIT: Duration = Duration::from_millis(600);
+
+thread_local! {
+    /// gxserver's last `/api/collab` read, for this run: the next open starts from it.
+    static LAST_READ: std::cell::RefCell<Option<Value>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The guest-message mode a new share starts at: the default Settings keeps.
+fn default_mode(state: &Value) -> usize {
+    MODES
+        .iter()
+        .position(|(id, _)| state["config"]["mode"] == *id)
+        .unwrap_or(1)
+}
 
 pub(crate) struct CollabSharePanel {
     key: SessionKey,
@@ -58,6 +76,9 @@ pub(crate) struct CollabSharePanel {
     confirm_stop: bool,
     /// This chat's share was just stopped here: "Sharing ended" until the next change.
     just_stopped: bool,
+    hold: super::popup_frame::PopupHoldState,
+    /// The first read took longer than `FIRST_READ_WAIT`: show what there is.
+    read_overdue: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -113,6 +134,14 @@ impl CollabSharePanel {
         cx: &mut gpui::Context<Self>,
     ) -> Self {
         cx.spawn(async |this, cx| {
+            cx.background_executor().timer(FIRST_READ_WAIT).await;
+            let _ = this.update(cx, |panel, cx| {
+                panel.read_overdue = true;
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.spawn(async |this, cx| {
             loop {
                 let Ok(fast) = this.update(cx, |panel, cx| {
                     panel.read(cx);
@@ -127,20 +156,23 @@ impl CollabSharePanel {
             }
         })
         .detach();
+        let state = LAST_READ.with(|last| last.borrow().clone());
         Self {
             key,
             main_app,
-            state: None,
+            mode: state.as_ref().map_or(1, default_mode),
+            state,
             error: None,
             busy: false,
             copied: None,
             waiting: None,
             waiting_kind: None,
             generation: 0,
-            mode: 1,
             lifetime_menu_open: false,
             confirm_stop: false,
             just_stopped: false,
+            hold: Default::default(),
+            read_overdue: false,
         }
     }
 
@@ -163,12 +195,9 @@ impl CollabSharePanel {
             let _ = this.update(cx, |panel, cx| {
                 if let Ok(value) = result {
                     if panel.state.is_none() {
-                        // The new share's mode starts at the default Settings keeps.
-                        panel.mode = MODES
-                            .iter()
-                            .position(|(id, _)| value["config"]["mode"] == *id)
-                            .unwrap_or(1);
+                        panel.mode = default_mode(&value);
                     }
+                    LAST_READ.with(|last| *last.borrow_mut() = Some(value.clone()));
                     panel.state = Some(value);
                     cx.notify();
                 }
@@ -561,21 +590,33 @@ impl Render for CollabSharePanel {
         let on: view::ShareHandler<Self> =
             Rc::new(|panel: &mut Self, action, _window, cx| panel.act(action, cx));
         let popover = view::render_share_popover(&model, &on, cx);
-        div().size_full().child(
-            div()
-                .w(px(SHARE_POPOVER_WIDTH))
-                .child(popover)
-                // The window takes the popover's own height, whatever state it shows.
-                .on_prepaint(|bounds, window, _| {
-                    let height = bounds.size.height.as_f32().clamp(80.0, MAX_HEIGHT);
-                    let current = window.bounds().size;
-                    if (current.height.as_f32() - height).abs() > 0.5 {
-                        let width = current.width;
-                        window.on_next_frame(move |window, _| {
-                            window.resize(size(width, px(height)));
+        let ready = self.state.is_some() || self.read_overdue;
+        let hold = self.hold.clone();
+        let main_app = self.main_app.clone();
+        // The window takes the popover's own height, whatever state it shows.
+        let measured = div().w(px(SHARE_POPOVER_WIDTH)).child(popover).on_prepaint(
+            move |bounds, window, cx| {
+                let height = bounds.size.height.as_f32().clamp(80.0, MAX_HEIGHT);
+                super::popup_frame::fit_popup_window_to_content(
+                    height,
+                    ready,
+                    &hold,
+                    window,
+                    cx,
+                    move |cx| {
+                        let _ = main_app.update(cx, |app, cx| {
+                            app.reveal_titlebar_popup(GpuiTitlebarPopupKind::CollabShare, cx)
                         });
-                    }
-                }),
+                    },
+                );
+            },
+        );
+        super::popup_frame::popup_open_frame_held(
+            div().size_full(),
+            measured,
+            self.hold.get() == super::popup_frame::PopupHold::Held,
+            false,
+            cx.reduce_motion(),
         )
     }
 }

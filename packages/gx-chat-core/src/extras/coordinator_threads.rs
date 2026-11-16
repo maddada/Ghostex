@@ -48,7 +48,88 @@ pub struct CoordinatorThreadRow {
     /// That computer's name, which the row shows.
     #[serde(default)]
     pub computer: String,
+    /// The first [`ITEMS_SHOWN`] work items the thread is on, as pills on a second line under the
+    /// row ([`attach_items`]); empty for a thread on none, which keeps one line.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<WorkPill>,
+    /// "+2" for the items past those, or "".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub more_items: String,
+    /// The "+N" pill's hover: one line per item it stands for.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub more_items_tooltip: String,
+    /// The thread's last report (gxserver's `lastReport`), which an item's card quotes.
+    #[serde(skip)]
+    pub last_report: String,
+    /// The row's state for the desktop popover's dot and group: `working`, `approval`, `question`
+    /// or `done`.
+    #[serde(default)]
+    pub status: String,
+    /// Its last activity (ISO), which the desktop popover shows as "4m" at the row's right.
+    #[serde(default)]
+    pub active_at: String,
+    /// What the desktop popover previews in up to two lines: gxserver's longer `preview` of the
+    /// report, or the line, with the Markdown reduced to the words it shows ([`plain_preview`]).
+    #[serde(default)]
+    pub preview: String,
+    /// The agent gxserver names on the thread (`agent`), for its logo when the host does not list
+    /// its session.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub agent: String,
 }
+
+/// A work item a thread is on, as a pill in its Workers row, and the card that pill shows on hover
+/// (a tap on the phone).
+///
+/// CDXC:Coordinators 2026-11-13 DECISION:
+/// User, of the Workers pill's list: "when I click on Workers here, can I see pills for each item
+/// they're working on so I can hover over them to read more?" On the design page they picked
+/// (Q3020 B) a second line under each worker with its items as pills, two then "+N", the first
+/// line unchanged and a thread on no item keeping one line; a click shows the item in the Work
+/// panel (Q3021); on the phone a tap shows the card with a Show in Work button (Q3022); finished
+/// threads under Show recent list all their items with the finished ones dimmed (Q3023); the card
+/// quotes the thread's last report (Q3024); the pill is neutral with the Work panel's teal icon
+/// (Q3025). Dropped items are left out.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkPill {
+    /// The Work panel row's key, `work:402`, which the click focuses.
+    pub key: String,
+    /// `W402`.
+    #[serde(rename = "ref")]
+    pub reference: String,
+    pub title: String,
+    pub status: String,
+    /// "In progress", "Waiting", "Finished" (work_cards.rs `status_label`).
+    pub status_label: String,
+    /// Finished: drawn dimmed.
+    pub done: bool,
+    /// Where it stands now, as the coordinator last said.
+    pub now: String,
+    /// "3 of 5 steps", or "".
+    pub steps: String,
+    /// Its questions and tasks still open for the user.
+    pub asks: Vec<WorkPillAsk>,
+    /// The thread's last report, or "".
+    pub report: String,
+    /// The whole card as text, its first line the heading (the desktop's card tooltip).
+    pub tooltip: String,
+    /// What a click sends: `jumpToWorkCard` at `key`.
+    pub command: Value,
+}
+
+/// One open ask on a pill's card.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct WorkPillAsk {
+    pub tag: String,
+    pub text: String,
+}
+
+/// The items a row shows as pills before "+N".
+pub const ITEMS_SHOWN: usize = 2;
+
+/// The last line of an item's card: what a click on its pill does.
+pub const SHOW_IN_WORK_HINT: &str = "Click to show it in Work";
 
 /// The panel.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -76,6 +157,17 @@ pub struct CoordinatorThreadsPanel {
     pub in_flight: usize,
     /// Threads working right now, which mark the Workers pill as running (extras/chat_pills.rs).
     pub working: usize,
+    /// The desktop popover's header: "2 running · 1 needs you · 30 today" (Q3212). `meta` stays
+    /// for the phone and older apps.
+    #[serde(default)]
+    pub header: String,
+    /// The desktop popover's Finished line under the live rows: "27 in the last 2 hours", "1216
+    /// earlier", or "" when every thread is live.
+    #[serde(default)]
+    pub finished_label: String,
+    /// The step a click on the Finished line moves to: 0 folds it, 1 or 2 opens it.
+    #[serde(default)]
+    pub finished_step: u32,
 }
 
 /// The rows each "N more" click adds.
@@ -99,6 +191,130 @@ pub fn is_coordinator(threads: Option<&Value>) -> bool {
 
 fn plural(count: usize, one: &str, many: &str) -> String {
     format!("{count} {}", if count == 1 { one } else { many })
+}
+
+/// The pill of `item` (a row of `coordinatorThreads.work.items`) on a thread whose last report is
+/// `report`.
+fn work_pill(item: &Value, report: &str) -> WorkPill {
+    let status = text(item, "status");
+    let reference = text(item, "ref");
+    let title = text(item, "title");
+    let now = text(item, "now");
+    let (done, total) = (
+        item["steps"]["done"].as_u64().unwrap_or(0),
+        item["steps"]["total"].as_u64().unwrap_or(0),
+    );
+    let steps = if total > 0 {
+        format!("{done} of {total} steps")
+    } else {
+        String::new()
+    };
+    let asks: Vec<WorkPillAsk> = item["asks"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|ask| ask["open"] == true)
+        .map(|ask| WorkPillAsk {
+            tag: text(ask, "tag"),
+            text: text(ask, "text"),
+        })
+        .collect();
+    let status_label = crate::extras::work_cards::status_label(&status).to_string();
+    let mut lines = vec![format!("{reference} {title}")];
+    lines.push(
+        [status_label.as_str(), steps.as_str()]
+            .into_iter()
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(" \u{b7} "),
+    );
+    if !now.is_empty() {
+        lines.push(format!("Now: {now}"));
+    }
+    for ask in &asks {
+        lines.push(if ask.tag.is_empty() {
+            ask.text.clone()
+        } else {
+            format!("{}: {}", ask.tag, ask.text)
+        });
+    }
+    if !report.is_empty() {
+        lines.push(format!("Last report: {report}"));
+    }
+    lines.push(SHOW_IN_WORK_HINT.to_string());
+    let key = text(item, "key");
+    WorkPill {
+        command: json!({"type": "jumpToWorkCard", "key": key}),
+        key,
+        reference,
+        title,
+        done: status == "finished",
+        status,
+        status_label,
+        now,
+        steps,
+        asks,
+        report: report.to_string(),
+        tooltip: lines
+            .into_iter()
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n"),
+    }
+}
+
+/// Puts on each row the work items its thread is on (`work.items[].threads`): the open ones first,
+/// then the finished ones, each newest first; dropped items and threads on no item get none.
+fn attach_items(rows: &mut [CoordinatorThreadRow], work: Option<&Value>) {
+    let items: Vec<&Value> = work
+        .and_then(|work| work.get("items"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|item| text(item, "kind") == "item" && text(item, "status") != "dropped")
+        .collect();
+    if items.is_empty() {
+        return;
+    }
+    for row in rows {
+        let mut on: Vec<&Value> = items
+            .iter()
+            .copied()
+            .filter(|item| {
+                item["threads"].as_array().is_some_and(|threads| {
+                    threads.iter().any(|thread| {
+                        text(thread, "projectId") == row.project_id
+                            && text(thread, "sessionId") == row.session_id
+                            && text(thread, "serverId") == row.server_id
+                    })
+                })
+            })
+            .collect();
+        on.sort_by(|left, right| {
+            (text(left, "status") == "finished")
+                .cmp(&(text(right, "status") == "finished"))
+                .then_with(|| text(right, "at").cmp(&text(left, "at")))
+        });
+        // gxserver's `lastReport`; a gxserver from before it sends none, and a thread at rest
+        // shows its last report as its line, so that line stands in.
+        let report = if !row.last_report.is_empty() {
+            row.last_report.clone()
+        } else if !row.working && !row.waiting && !row.needs_approval {
+            row.detail.clone()
+        } else {
+            String::new()
+        };
+        let rest = on.split_off(on.len().min(ITEMS_SHOWN));
+        row.items = on.iter().map(|item| work_pill(item, &report)).collect();
+        if !rest.is_empty() {
+            row.more_items = format!("+{}", rest.len());
+            row.more_items_tooltip = rest
+                .iter()
+                .map(|item| format!("{} {}", text(item, "ref"), text(item, "title")))
+                .collect::<Vec<_>>()
+                .join("\n");
+        }
+    }
 }
 
 /// Moves the list to `step`; the first two steps drop the full list "N more" read.
@@ -275,6 +491,24 @@ fn parse_rows(rows: Option<&Value>) -> Vec<(String, CoordinatorThreadRow)> {
                     lifecycle_state: text(row, "lifecycleState"),
                     server_id: text(row, "serverId"),
                     computer: text(row, "computer"),
+                    last_report: text(row, "lastReport"),
+                    status: if working {
+                        "working"
+                    } else if row.get("needsApproval") == Some(&Value::Bool(true)) {
+                        "approval"
+                    } else if state == "waiting" {
+                        "question"
+                    } else {
+                        "done"
+                    }
+                    .to_string(),
+                    active_at: text(row, "activeAt"),
+                    agent: text(row, "agent"),
+                    preview: plain_preview(&match text(row, "preview") {
+                        preview if preview.is_empty() => text(row, "detail"),
+                        preview => preview,
+                    }),
+                    ..CoordinatorThreadRow::default()
                 },
             )
         })
@@ -349,6 +583,44 @@ pub fn coordinator_threads_panel(
         ));
     }
     meta.push(format!("{total} total"));
+    // CDXC:Coordinators 2026-11-14 DECISION:
+    // User, of the Workers popover ("1246 total", finished threads crowding out the running ones,
+    // raw Markdown in the lines, two pills a row, rows with no logo, one grey ring for every state,
+    // no time): from the design page they picked layout A (Q3211: running first under Running and
+    // Needs you, finished folded into one Finished line that opens on a click), a header of what
+    // is live plus what ran today (Q3212 "live and today"), a coloured dot while live and a muted
+    // check once finished with the time at the right (Q3213), the work item as a quiet ref after
+    // the title whose hover is its card and whose click shows it in Work as the pills did (Q3214),
+    // two lines of the report with its Markdown stripped (Q3215), and every row's real agent logo,
+    // gxserver's `agent` standing in for a session the host does not list (Q3216). The desktop
+    // draws it from `header`, `finishedLabel`, `finishedStep` and each row's `status`,
+    // `activeAt`, `preview` and `agentLogo`; `meta`, `moreLabel` and the rest stay as they were,
+    // so the phone's own Workers sheet (AgentPanels.tsx) and older apps are unchanged.
+    let needs_you = flying.saturating_sub(working);
+    let mut header = Vec::new();
+    if working > 0 {
+        header.push(format!("{working} running"));
+    }
+    if needs_you > 0 {
+        header.push(plural(needs_you, "needs you", "need you"));
+    }
+    if let Some(today) = threads.get("today").and_then(Value::as_u64) {
+        header.push(format!("{today} today"));
+    }
+    let header = if header.is_empty() {
+        "No workers running".to_string()
+    } else {
+        header.join(" \u{b7} ")
+    };
+    let (finished_label, finished_step) = if total <= flying {
+        (String::new(), 0)
+    } else if step > 0 {
+        (finished_count_label(recent, total - flying), 0)
+    } else if recent > 0 {
+        (finished_count_label(recent, total - flying), 1)
+    } else {
+        (finished_count_label(recent, total - flying), 2)
+    };
     let rows: Vec<CoordinatorThreadRow> = match all {
         // The full list: its first `listed` rows.
         Some(_) => rows.into_iter().take(listed).map(|(_, row)| row).collect(),
@@ -360,6 +632,8 @@ pub fn coordinator_threads_panel(
             .filter(|row| in_flight(row) || (step > 0 && row.recent))
             .collect(),
     };
+    let mut rows = rows;
+    attach_items(&mut rows, threads.get("work"));
     // With no recent rows "Show recent" would add nothing, so the first link is already "N more".
     let (more_label, more_step) = if hidden == 0 {
         if step > 0 && total > flying {
@@ -387,14 +661,92 @@ pub fn coordinator_threads_panel(
         in_flight: flying,
         working,
         rows,
+        header,
+        finished_label,
+        finished_step,
     })
 }
 
-/// The document value, `null` when there is no panel.
-pub fn project(threads: Option<&Value>, step: u32, all: Option<&Value>) -> Value {
-    coordinator_threads_panel(threads, step, all)
+/// The Finished line's count: the recent ones when there are any, else every finished thread.
+fn finished_count_label(recent: usize, finished: usize) -> String {
+    if recent > 0 {
+        format!("{recent} in the last 2 hours")
+    } else {
+        format!("{finished} earlier")
+    }
+}
+
+/// A report line as words: a link or image shows its label (also one cut off by the line's cap
+/// before its target closed), and emphasis, code ticks and strikes go.
+pub fn plain_preview(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(open) = rest.find('[') {
+        out.push_str(rest[..open].strip_suffix('!').unwrap_or(&rest[..open]));
+        let after = &rest[open + 1..];
+        let Some(close) = after.find("](") else {
+            out.push('[');
+            rest = after;
+            continue;
+        };
+        out.push_str(&after[..close]);
+        match after[close + 2..].find(')') {
+            Some(end) => rest = &after[close + 2 + end + 1..],
+            // The cap cut the target off: the label stands for it.
+            None => {
+                out.push('\u{2026}');
+                rest = "";
+            }
+        }
+    }
+    out.push_str(rest);
+    out.replace("~~", "")
+        .chars()
+        .filter(|character| !matches!(character, '*' | '`' | '<' | '>'))
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The document value, `null` when there is no panel. Each row's title draws as its session's pill
+/// (CDXC:SessionChat 2026-11-13 on `mention_card` in transcript/session_mentions.rs), so a row the
+/// host's list `sessions` knows carries its agent's `agentIcon` and `coordinator`.
+pub fn project(
+    threads: Option<&Value>,
+    step: u32,
+    all: Option<&Value>,
+    sessions: &[crate::event::KnownSession],
+) -> Value {
+    let mut panel = coordinator_threads_panel(threads, step, all)
         .and_then(|panel| serde_json::to_value(panel).ok())
-        .unwrap_or(Value::Null)
+        .unwrap_or(Value::Null);
+    if let Some(rows) = panel.get_mut("rows").and_then(Value::as_array_mut) {
+        for row in rows {
+            let found = sessions.iter().find(|session| {
+                session.project_id == text(row, "projectId")
+                    && session.session_id == text(row, "sessionId")
+                    && match text(row, "serverId") {
+                        server if server.is_empty() => true,
+                        server => session.global_ref.starts_with(&format!("{server}:")),
+                    }
+            });
+            if let Some(session) = found {
+                row["agentIcon"] = crate::transcript::agent_message_card::agent_icon(
+                    &session.agent_id,
+                    &session.agent_name,
+                );
+                row["coordinator"] = session.coordinator.into();
+            }
+            // The desktop popover's logo: the listed session's, else the agent gxserver names on
+            // the thread (Q3216), so a thread whose session the host no longer lists keeps its logo.
+            row["agentLogo"] = match &row["agentIcon"] {
+                Value::String(icon) => json!(icon),
+                _ => crate::transcript::agent_message_card::agent_icon(&text(row, "agent"), ""),
+            };
+        }
+    }
+    panel
 }
 
 #[cfg(test)]
@@ -469,5 +821,88 @@ mod tests {
             panic!("the click asks gxserver");
         };
         assert!(params.get("threadServerId").is_none());
+    }
+
+    /// The desktop popover's header counts what is live and what ran today; the Finished line
+    /// counts the recent finished threads and opens to them, then folds again.
+    #[test]
+    fn the_popover_header_and_finished_line() {
+        let threads = json!({"total": 40, "today": 30, "threads": [
+            {"projectId": "p", "sessionId": "a", "state": "working", "activeAt": "2026-11-14T10:00:00Z"},
+            {"projectId": "p", "sessionId": "b", "state": "waiting", "needsApproval": true},
+            {"projectId": "p", "sessionId": "c", "state": "waiting"},
+            {"projectId": "p", "sessionId": "d", "state": "finished", "recent": true},
+        ]});
+        let folded = coordinator_threads_panel(Some(&threads), 0, None).unwrap();
+        assert_eq!(folded.header, "1 running \u{b7} 2 need you \u{b7} 30 today");
+        assert_eq!(
+            folded.meta, "1 active \u{b7} 1 needs your approval \u{b7} 40 total",
+            "the phone's line is unchanged"
+        );
+        assert_eq!(
+            (folded.finished_label.as_str(), folded.finished_step),
+            ("1 in the last 2 hours", 1)
+        );
+        let statuses: Vec<&str> = folded.rows.iter().map(|row| row.status.as_str()).collect();
+        assert_eq!(statuses, ["working", "approval", "question"]);
+        assert_eq!(folded.rows[0].active_at, "2026-11-14T10:00:00Z");
+        let open = coordinator_threads_panel(Some(&threads), 1, None).unwrap();
+        assert_eq!((open.finished_step, open.rows.len()), (0, 4));
+        assert_eq!(open.rows[3].status, "done");
+
+        // Nothing live, no recent ones, an older gxserver with no `today`.
+        let quiet = json!({"total": 5, "threads": []});
+        let quiet = coordinator_threads_panel(Some(&quiet), 0, None).unwrap();
+        assert_eq!(quiet.header, "No workers running");
+        assert_eq!(
+            (quiet.finished_label.as_str(), quiet.finished_step),
+            ("5 earlier", 2)
+        );
+    }
+
+    /// A row previews gxserver's longer `preview` (else its line) as words, without Markdown.
+    #[test]
+    fn previews_drop_markdown() {
+        assert_eq!(
+            super::plain_preview("I fixed **all** four gaps in [features.md](/Users/x/features.md) and `ran` ![shot](a.png)."),
+            "I fixed all four gaps in features.md and ran shot."
+        );
+        assert_eq!(
+            super::plain_preview("I fixed [issue #615](https://github.com/maddada/Gh\u{2026}"),
+            "I fixed issue #615\u{2026}"
+        );
+        assert_eq!(super::plain_preview("a [b] c"), "a [b] c");
+        let panel = coordinator_threads_panel(
+            Some(&json!({"threads": [
+                {"projectId": "p", "sessionId": "a", "state": "working", "detail": "[x](y) one"},
+                {"projectId": "p", "sessionId": "b", "state": "working", "detail": "one", "preview": "one. two"},
+            ]})),
+            0,
+            None,
+        )
+        .unwrap();
+        assert_eq!(panel.rows[0].preview, "x one");
+        assert_eq!(
+            panel.rows[0].detail, "[x](y) one",
+            "the phone's line is unchanged"
+        );
+        assert_eq!(panel.rows[1].preview, "one. two");
+    }
+
+    /// A thread whose session the host does not list still gets its agent's logo from gxserver's
+    /// `agent`; `agentIcon` stays the listed session's alone.
+    #[test]
+    fn every_row_gets_a_logo() {
+        let panel = super::project(
+            Some(
+                &json!({"threads": [{"projectId": "p", "sessionId": "a", "state": "working", "agent": "claude"}]}),
+            ),
+            0,
+            None,
+            &[],
+        );
+        let row = &panel["rows"][0];
+        assert_eq!(row["agentLogo"], "claude");
+        assert!(row.get("agentIcon").is_none());
     }
 }

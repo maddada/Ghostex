@@ -315,6 +315,10 @@ impl GhostexGpuiApp {
                 );
                 let _ = app.react_to_native_sidebar_session_click(&session_id, cx);
                 app.reveal_floating_sessions(cx);
+                // Option-click (Alt) opens it in its own window too (app/session_popup/).
+                if modifiers.alt {
+                    app.open_session_popup_for_row(&session_id, cx);
+                }
             }),
         )
         .on_mouse_down(
@@ -558,6 +562,14 @@ impl GhostexGpuiApp {
                             // CDXC:Sidebar 2026-10-30 DECISION:
                             // User: "let's please not change the weight of any of the text when i change the currently active session card". Every line keeps the sidebar's own weight whether the card is active, needs you or neither (opening a Done card also clears its Done), so nothing reflows when the selection moves; the active card shows by its background, outline and brighter title, as a Project sidebar row does.
                             .when(recede, |title| title.opacity(0.75))
+                            // Bold coordinator title (off by default; CDXC:Coordinators 2026-11-15
+                            // in native_sidebar/sessions.rs).
+                            .when(
+                                coordinator
+                                    && hud["settings"]["sessionsBoldCoordinatorTitle"].as_bool()
+                                        == Some(true),
+                                |title| title.font_weight(gpui::FontWeight::SEMIBOLD),
+                            )
                             .child(session.title().to_owned()),
                     )
                     // What the card holds: its crew count (CDXC:Coordinators 2026-11-11 in

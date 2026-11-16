@@ -3,22 +3,25 @@
 
 use serde_json::{json, Value};
 
-use super::hex;
 use super::settings::{self, DictateSettings, Engine};
+use super::{hex, superwhisper};
 use crate::paths::GxserverPaths;
 use crate::server::AppState;
 use crate::voice_agent::keys::{self, KeyState};
 use crate::voice_agent::provider::Provider;
 
-/// The settings, picking a new install's engine from the saved keys.
+/// The settings, picking a new install's engine from the saved keys and Superwhisper.
 pub(crate) fn current_settings(paths: &GxserverPaths) -> DictateSettings {
-    settings::read(paths, || saved_keys(paths))
+    settings::read(paths, || new_install(paths))
 }
 
-pub(crate) fn saved_keys(paths: &GxserverPaths) -> (bool, bool) {
+/// What a new install's engine is picked from (`DictateSettings::first_run`): whether an xAI key
+/// and an OpenAI key are saved, and whether Superwhisper is installed.
+pub(crate) fn new_install(paths: &GxserverPaths) -> (bool, bool, bool) {
     (
         keys::key_state(paths, Provider::Xai) == KeyState::Saved,
         keys::key_state(paths, Provider::OpenAi) == KeyState::Saved,
+        superwhisper::state(&paths.home_dir) == superwhisper::State::Installed,
     )
 }
 
@@ -30,7 +33,7 @@ pub(crate) fn hint_words() -> Vec<String> {
 
 pub(crate) fn provider_of(engine: Engine) -> Option<Provider> {
     match engine {
-        Engine::Hex => None,
+        Engine::Hex | Engine::Superwhisper => None,
         Engine::OpenAi => Some(Provider::OpenAi),
         Engine::Xai => Some(Provider::Xai),
     }
@@ -45,6 +48,7 @@ pub(crate) fn engine_label(settings: &DictateSettings) -> String {
             Some(model) => format!("Hex, {model}"),
             None => "Hex".to_string(),
         },
+        Engine::Superwhisper => "Superwhisper".to_string(),
     }
 }
 
@@ -87,6 +91,9 @@ pub(crate) fn engine_problem(
             return None;
         }
         return hex::problem(state, settings.hex_model.as_deref());
+    }
+    if settings.engine == Engine::Superwhisper {
+        return superwhisper::problem(&superwhisper::state(&paths.home_dir));
     }
     let provider = provider_of(settings.engine)?;
     match keys::key_state(paths, provider) {

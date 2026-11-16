@@ -314,6 +314,10 @@ fn handle_action(state: &mut ChatState, action: &UserAction, context: &ChatConte
             if let Some(item) = crate::extras::coordinator_board::board_item(&href) {
                 return crate::extras::coordinator_board::show_item(state, item);
             }
+            // What a Reply in chat box answered: a label, never a place to open.
+            if crate::questions::answer_pills::parse_href(&href).is_some() {
+                return Vec::new();
+            }
             match classify_link_href(&href) {
                 LinkTarget::File(path) => vec![position_effect(&href, path)],
                 // CDXC:SessionChat 2026-10-26 WHY: Shift+click on a chat link opens it in the system browser (the 2026-08-03 SessionChat comment in the desktop's session_chat/host_actions.rs). The TypeScript brain passed the click's `external` on to the host; the Rust port dropped it, so Shift+click opened the app's Browser like a plain click.
@@ -337,9 +341,27 @@ fn handle_action(state: &mut ChatState, action: &UserAction, context: &ChatConte
             if project_id.is_empty() || session_id.is_empty() {
                 return Vec::new();
             }
+            let mut params = json!({ "projectId": project_id, "sessionId": session_id });
+            // CDXC:RemoteMachines 2026-11-14 WHY: a card's session on another computer than the
+            // chat's ("Message from <a thread on the Linux PC>" in a coordinator on the Mac) said
+            // only its project and session ids, so the host looked for them on the chat's own
+            // computer and the click failed. The renderers now hand on the card's `serverId`, and
+            // it goes to the host whenever it is not the chat's own gxserver (also when the host's
+            // list doesn't say which that is), as a mention's does (`open_mentioned_session`).
+            let server_id = text(action, "serverId");
+            if !server_id.is_empty() {
+                let own_server = crate::transcript::session_mentions::chat_server(
+                    &state.transcript_view.session_directory,
+                    &state.identity.project_id,
+                    &state.identity.session_id,
+                );
+                if own_server != server_id {
+                    params["serverId"] = server_id.into();
+                }
+            }
             vec![Effect::HostAction {
                 action: "openAgentSession".to_string(),
-                params: Box::new(json!({ "projectId": project_id, "sessionId": session_id })),
+                params: Box::new(params),
             }]
         }
         // A command in a reply goes to a terminal of the Commands panel, which only the host can

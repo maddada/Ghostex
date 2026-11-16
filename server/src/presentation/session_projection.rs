@@ -223,9 +223,11 @@ pub(crate) fn project_presentation_session(
     // The open ```questions forms and question pages count too, while the agent works as well
     // (CDXC:SessionStatus 2026-10-20 in server/src/session_chat_open_questions.rs). Only a running
     // session publishes them; `attention.kind` reads them in every lifecycle state.
+    // Open Needs you to-dos count too (session_needs_you/, CDXC:Notifications 2026-11-16).
     let unanswered_question_count =
         crate::session_chat_async_questions::pending_question_count(session)
-            + crate::session_chat_open_questions::open_question_count(session);
+            + crate::session_chat_open_questions::open_question_count(session)
+            + crate::session_needs_you::open_count(session);
     output.insert(
         "pendingQuestionCount".to_string(),
         Value::from(if lifecycle_state == "running" {
@@ -262,6 +264,17 @@ pub(crate) fn project_presentation_session(
     if let Some((since, reason)) = super::blocked_state(session) {
         output.insert("blockedSince".to_string(), Value::String(since));
         output.insert("blockedReason".to_string(), Value::String(reason));
+        if crate::memory_guard::blocked_by_memory_guard(session).is_some() {
+            output.insert(
+                "blockedAlertedBy".to_string(),
+                Value::String(crate::memory_guard::BLOCKED_ALERTED_BY.to_string()),
+            );
+        } else if crate::coordinators::blocked_by_restart(session).is_some() {
+            output.insert(
+                "blockedAlertedBy".to_string(),
+                Value::String(crate::coordinators::STOPPED_BY_RESTART_ALERTED_BY.to_string()),
+            );
+        }
     }
     // Present only while true (CDXC:SessionStatus 2026-10-31 in server/src/session_approval.rs).
     if crate::session_approval::session_awaits_answer(session) {

@@ -18,6 +18,8 @@ crate-type = ["cdylib", "rlib"]
 ghostex-gx-chat-json = { path = "../gx-chat-json" }
 # CDXC:CloudBoxes 2026-11-02 WHY: the phone starts, wakes, stops and deletes Cloud Boxes with the computer off on the same provider rules gxserver runs (`gx_cloud_call`).
 ghostex-gx-cloud = { path = "../gx-cloud" }
+# CDXC:ProjectBoard 2026-11-13 WHY: the phone's Beads screen arranges beads with the desktop's Tree rules (`beads_view::json_api::tree`).
+ghostex-gx-core = { path = "../gx-core" }
 
 [profile.release]
 # wasm32 cannot unwind: a panic traps the instance, and the page treats that as every core gone.

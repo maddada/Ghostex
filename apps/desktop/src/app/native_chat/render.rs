@@ -39,6 +39,7 @@ impl NativeChatView {
     fn hold_text_width_while_sliding(&mut self, p: &ChatAppearance) {
         let pane = self.bounds.get().size.width.as_f32();
         let natural = self.transcript_text_width(p);
+        self.frame_text_width = natural;
         if crate::terminal_element::grid_resize_held()
             || self.session_details.motion.frame().animating
             || self.board.motion.frame().animating
@@ -90,6 +91,13 @@ impl NativeChatView {
     pub(crate) fn transcript_scrolled_to_top(&self) -> bool {
         let top = self.list.logical_scroll_top();
         top.item_ix == 0 && top.offset_in_item <= px(0.0)
+    }
+
+    /// How wide the columns docked at the chat's right edge (the coordinator board and Session
+    /// details) were last drawn, sliding included. The header's fade over the transcript stops at
+    /// their left edge (`render_workarea_header_content_fade`).
+    pub(crate) fn docked_columns_width(&self) -> f32 {
+        self.board.dock_drawn_width + self.session_details.dock_width
     }
 }
 

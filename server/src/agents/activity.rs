@@ -95,6 +95,9 @@ pub(crate) fn update_agent_activity_endpoint(
     if !escape_denied_approval {
         carry_session_chat_prompt(&current, &mut update.activity);
     }
+    // A coordinator's turn that ends while its threads still work is stored as seen
+    // (CDXC:Notifications 2026-11-14 in coordinators/quiet_turn_end.rs).
+    let quiet_turn_end = crate::coordinators::quiet_turn_end(repository, &current, &mut update);
     let mut runtime_settings = object_field(&current, "runtimeSettings");
     runtime_settings.insert("agentActivity".to_string(), update.activity.clone());
     promote_draft_on_first_activity(
@@ -119,6 +122,9 @@ pub(crate) fn update_agent_activity_endpoint(
     });
     if escape_denied_approval {
         result["sessionChatPromptChanged"] = json!(true);
+    }
+    if quiet_turn_end {
+        result["quietTurnEnd"] = json!(true);
     }
     Ok(result)
 }
@@ -151,6 +157,16 @@ pub(crate) fn ingest_agent_hook_event(
             "changed": false,
             "enteredAttention": false,
             "reason": "subagent-hook",
+            "session": current,
+        }));
+    }
+    // A Codex approval its own reviewer decides is no user approval: no card, no attention
+    // (GitHub #597, session_chat_approval_call.rs `codex_reviewer_decides`).
+    if crate::session_chat_approval_call::codex_reviewer_decides(params, &current) {
+        return Ok(json!({
+            "changed": false,
+            "enteredAttention": false,
+            "reason": "codex-auto-review",
             "session": current,
         }));
     }
@@ -233,6 +249,7 @@ pub(crate) fn ingest_agent_hook_event(
         changed = true;
     }
     let mut activity_update: Option<ActivityUpdate> = None;
+    let mut quiet_turn_end = false;
     let mut session_chat_prompt_changed = false;
     let mut session_chat_activity_changed = false;
     if normalize_agent_id(params.get("agentName").and_then(Value::as_str)).as_deref()
@@ -319,6 +336,9 @@ pub(crate) fn ingest_agent_hook_event(
             }
         }
         if !is_stale_activity_event(&session, now_ms) {
+            // A coordinator's turn that ends while its threads still work is stored as seen
+            // (CDXC:Notifications 2026-11-14 in coordinators/quiet_turn_end.rs).
+            quiet_turn_end = crate::coordinators::quiet_turn_end(repository, &session, &mut update);
             let next_activity_name = update
                 .activity
                 .get("activity")
@@ -461,6 +481,9 @@ pub(crate) fn ingest_agent_hook_event(
         );
     } else {
         result.insert("enteredAttention".to_string(), Value::Bool(false));
+    }
+    if quiet_turn_end {
+        result.insert("quietTurnEnd".to_string(), Value::Bool(true));
     }
     result.insert("changed".to_string(), Value::Bool(changed));
     result.insert(
@@ -1163,6 +1186,8 @@ pub(crate) fn persistable_agent_activity_snapshot(value: Option<&Value>) -> Valu
         "suppressedUntil",
         "workingSource",
         "workingStartedAt",
+        // The working stint is only background work after the turn ended (session_status).
+        "backgroundOnlySince",
     ] {
         if let Some(value) = activity.get(key) {
             snapshot.insert(key.to_string(), value.clone());

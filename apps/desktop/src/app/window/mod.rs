@@ -43,6 +43,8 @@ pub(crate) mod new_gbot_modal;
 pub(crate) mod new_thread_picker;
 pub(crate) mod notice_modal;
 pub(crate) mod onboarding;
+pub(crate) mod page_band_geometry;
+pub(crate) mod page_controls;
 pub(crate) mod popup_dismissal;
 pub(crate) mod popup_frame;
 pub(crate) mod quick_access;

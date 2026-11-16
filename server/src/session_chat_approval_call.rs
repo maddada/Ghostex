@@ -115,15 +115,71 @@ pub fn transcript_has_result(tail: &str, id: &str) -> bool {
 }
 
 fn read_tail(path: &str) -> Option<String> {
+    read_tail_bytes(path, TRANSCRIPT_TAIL_BYTES)
+}
+
+fn read_tail_bytes(path: &str, bytes_wanted: u64) -> Option<String> {
     let mut file = std::fs::File::open(path).ok()?;
     let length = file.metadata().ok()?.len();
-    file.seek(SeekFrom::Start(
-        length.saturating_sub(TRANSCRIPT_TAIL_BYTES),
-    ))
-    .ok()?;
+    file.seek(SeekFrom::Start(length.saturating_sub(bytes_wanted)))
+        .ok()?;
     let mut bytes = Vec::new();
     file.read_to_end(&mut bytes).ok()?;
     Some(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// How much of a Codex rollout's end is searched for the turn's `turn_context`.
+const CODEX_TURN_CONTEXT_TAIL_BYTES: u64 = 4 * 1024 * 1024;
+
+/// CDXC:SessionChat 2026-11-13 WHY:
+/// GitHub #597: a coordinator's Codex thread running with Codex's automatic approval reviewer
+/// (`approvals_reviewer = "auto_review"`, the "Approve for me" mode) showed "Reviewing approval
+/// request" for a minute or two while Codex's reviewer decided, and Ghostex reported it as
+/// "waiting for an answer" with an approval card relayed to the user, five times in one review
+/// round; the reviewer then approved each one by itself. Codex runs PermissionRequest hooks before
+/// its reviewer (codex-rs core/src/tools/approvals.rs `request_approval_with_user_prompt`): the
+/// hook fires for every approval, whoever decides it, and its payload does not say who will. The
+/// turn's reviewer is in the rollout the hook names, on that turn's `turn_context` record. When it
+/// is Codex's reviewer, the hook is no user approval: it stores no card and moves no activity
+/// (`ingest_agent_hook_event`). A request the reviewer hands to the user, or one a managed
+/// checkpoint keeps for a person, is drawn as Codex's own approval prompt, which the screen reader
+/// already turns into a permission notice and relays like any other (session_chat_codex_blocking.rs).
+/// Seen live on Codex 0.167.2 (throwaway test server): the card stood the whole review and left
+/// when the reviewer's approval ran the command.
+pub(crate) fn codex_reviewer_decides(params: &Map<String, Value>, session: &Value) -> bool {
+    if event_kind(params) != "permissionrequest"
+        || crate::agents::normalize_agent_id(param(params, &["agentName"])).as_deref()
+            != Some("codex")
+    {
+        return false;
+    }
+    let Some(path) = param(params, &["agentSessionPath"]).or_else(|| {
+        session
+            .pointer("/runtimeSettings/agentSessionPath")
+            .and_then(Value::as_str)
+    }) else {
+        return false;
+    };
+    read_tail_bytes(path, CODEX_TURN_CONTEXT_TAIL_BYTES)
+        .and_then(|tail| codex_turn_reviewer(&tail))
+        .is_some_and(|reviewer| matches!(reviewer.as_str(), "auto_review" | "guardian_subagent"))
+}
+
+/// The `approvals_reviewer` of the newest `turn_context` record in a Codex rollout's `tail`.
+fn codex_turn_reviewer(tail: &str) -> Option<String> {
+    tail.lines()
+        .rev()
+        .filter(|line| line.contains("\"turn_context\""))
+        .find_map(|line| {
+            let record = serde_json::from_str::<Value>(line).ok()?;
+            (record.get("type").and_then(Value::as_str) == Some("turn_context")).then(|| {
+                record
+                    .pointer("/payload/approvals_reviewer")
+                    .and_then(Value::as_str)
+                    .unwrap_or("user")
+                    .to_string()
+            })
+        })
 }
 
 /// The stored card after a hook event, given what the usual clear rule left (`after`):

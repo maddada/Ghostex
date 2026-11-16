@@ -75,55 +75,14 @@ for sound in arcade.mp3 copy.mp3; do
 		exit 1
 	}
 done
-ON_DEMAND_MANIFEST="$APP_DIR/resources/on-demand-resources.json"
-CEF_COMPONENT_VERSION="$(node -e '
-const fs = require("node:fs");
-const manifest = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-const component = manifest.components?.cef;
-const asset = component?.platforms?.[`linux-${process.argv[2]}`];
-if (!component?.componentVersion || component.downloadTag !== `cef-${component.componentVersion}` || !/^[0-9a-f]{64}$/.test(asset?.sha256 ?? "")) process.exit(1);
-process.stdout.write(component.componentVersion);
-' "$ON_DEMAND_MANIFEST" "$LINUX_ARCH")" || {
-	echo "Linux release build has an invalid sealed CEF component manifest" >&2
-	exit 1
-}
-SEALED_CODE_SERVER_COMPONENT_VERSION="$(node -e '
-const fs = require("node:fs");
-const manifest = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-const component = manifest.components?.["code-server"];
-const asset = component?.platforms?.[`linux-${process.argv[3]}`];
-const expectedName = `code-server-${process.argv[2]}-linux-${process.argv[3]}.tar.gz`;
-if (component?.componentVersion !== process.argv[2] || component.downloadTag !== `code-server-${process.argv[2]}` || asset?.assetName !== expectedName || asset?.sha256SidecarName !== `${expectedName}.sha256` || !/^[0-9a-f]{64}$/.test(asset?.sha256 ?? "")) process.exit(1);
-process.stdout.write(component.componentVersion);
-' "$ON_DEMAND_MANIFEST" "$CODE_SERVER_COMPONENT_VERSION" "$LINUX_ARCH")" || {
-	echo "Linux release build has an invalid sealed Source component manifest" >&2
-	exit 1
-}
-# CDXC:Release 2026-10-19 WHY:
-# A build-only release run (release-gpui.yml `build_only`) produces packages as
-# Actions artifacts and publishes nothing, the components repository included:
-# neither the CEF component nor the code-server component. Both calls below
-# share one mode (COMPONENT_PUBLISH_MODE), so a build-only run only writes
-# their sealed metadata and uploads no archive. The sealed manifest already
-# records each archive's digest, so a tester serves the uploaded archives
-# through GHOSTEX_ON_DEMAND_BASE_URL instead.
-COMPONENT_PUBLISH_MODE=()
-if [[ "${GHOSTEX_RELEASE_BUILD_ONLY:-0}" == "1" ]]; then
-	COMPONENT_PUBLISH_MODE=(--metadata-only)
+# CDXC:Release 2026-11-14 SEE-ALSO:
+# The CEF and Source component publishing lives in linux-publish-components.sh. A release that
+# defers component signatures (GHOSTEX_COMPONENT_SIGNATURES_DEFERRED=1, CDXC:Release 2026-11-14 in
+# publish-component.mjs) runs it as a step of its own that holds the signing key and builds nothing;
+# everything else runs it here, in its old place.
+if [[ "${GHOSTEX_COMPONENT_SIGNATURES_DEFERRED:-0}" != "1" ]]; then
+	"$SCRIPT_DIR/linux-publish-components.sh" "$CODE_SERVER_COMPONENT_VERSION" "$CODE_SERVER_ARCHIVE"
 fi
-node "$REPO_ROOT/tooling/release-gpui/publish-component.mjs" \
-	"${COMPONENT_PUBLISH_MODE[@]}" \
-	--component cef \
-	--version "$CEF_COMPONENT_VERSION" \
-	--asset-dir "$REPO_ROOT/build/on-demand-components/assets" \
-	--output "$REPO_ROOT/build/on-demand-components/components.json"
-node "$REPO_ROOT/tooling/release-gpui/publish-component.mjs" \
-	"${COMPONENT_PUBLISH_MODE[@]}" \
-	--require-sha256-sidecars \
-	--component code-server \
-	--version "$SEALED_CODE_SERVER_COMPONENT_VERSION" \
-	--asset-dir "$(dirname "$CODE_SERVER_ARCHIVE")" \
-	--output "$REPO_ROOT/build/on-demand-components/components.json"
 
 rm -rf "$PACKAGE_ROOT"
 mkdir -p \

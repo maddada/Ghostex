@@ -121,6 +121,9 @@ pub(crate) struct NativeChatView {
     /// The room right of each "Worked for" title, by row, as last painted (unscaled), which its
     /// count pills fit on one line (completed_work_row.rs `stat_pills`).
     pub(super) stat_room: std::rc::Rc<std::cell::RefCell<std::collections::HashMap<String, f32>>>,
+    /// Each one-line card's title width as last painted, the time stepped aside (unscaled), by
+    /// card, which its name and time fit in (cards.rs `title_fit`).
+    pub(super) title_room: std::rc::Rc<std::cell::RefCell<std::collections::HashMap<String, f32>>>,
     /// "Don't show again" is ticked in the open coordinator tips; it applies when they close
     /// (coordinator_intro.rs).
     pub(super) coordinator_intro_dont_show: bool,
@@ -165,6 +168,9 @@ pub(crate) struct NativeChatView {
     /// True while an opened Quiet View line's rows render (quiet_view.rs): a row's tool calls,
     /// a tool card or plain rows, sit in the "Message to" card's shell (`SINGLE_LINE_CARD.shell`).
     pub(super) quiet_boxed: bool,
+    /// How the finished turn row an opened Quiet View line is drawing right now looks there
+    /// (gx-chat-core `QuietTurnLook`); the turn's row takes it, so nothing nested in it sees it.
+    pub(super) quiet_turn: Option<ghostex_gx_chat_core::transcript::quiet_view::QuietTurnLook>,
     /// Set while the plain tool rows drawn in such a card asked for a header that fills it
     /// (tool_run.rs `tool_rows`); `quiet_card_flush` says one was drawn.
     pub(super) quiet_card_header: bool,
@@ -235,10 +241,15 @@ pub(crate) struct NativeChatView {
     /// The composer pastes this view has started and the chat host may not have counted yet
     /// (clipboard.rs `PasteTiles`).
     pub(super) paste_tiles: super::clipboard::PasteTiles,
+    /// Pictures and files whose upload failed twice, still in the chat box (composer_attach.rs).
+    pub(super) failed_uploads: Vec<super::composer_attach::FailedUpload>,
     /// A send from the chat box waiting for a paste or drop to land (`composer_attach.rs`): its mode.
     pub(super) held_send: Option<String>,
     /// The timer that looks at a held send again while a clipboard read is pending.
     pub(super) held_send_recheck: Option<gpui::Task<()>>,
+    /// Attachment references whose file is on another computer than the session's, copied over
+    /// (carry_attachments.rs).
+    pub(super) carry: super::carry_attachments::CarryState,
     /// The chat box's height tween and the arrival fade of the controls an expansion brings back.
     pub(super) composer_animation: super::composer_animation::ComposerAnimation,
     /// Whether this session's status line holds its row of space, remembered across view
@@ -249,6 +260,11 @@ pub(crate) struct NativeChatView {
     /// keep this frame while one slides (`render.rs` `hold_text_width_while_sliding`).
     pub(super) settled_text_width: Option<f32>,
     pub(super) held_text_width: Option<f32>,
+    /// The transcript rows' natural text width (`transcript_text_width`) measured by this frame's
+    /// render, before the transcript list lays out. A row reads this instead of measuring: a row is
+    /// drawn from inside the list's own layout, which holds the list's state, so a row that asks the
+    /// list anything panics (`render.rs` `hold_text_width_while_sliding`, GitHub #638/#640/#642).
+    pub(super) frame_text_width: f32,
     /// The window's width on this frame, which a Transcript width percentage is taken of
     /// (transcript.rs `transcript_column_cap`).
     pub(super) window_width: f32,
@@ -382,6 +398,14 @@ pub(crate) struct NativeChatView {
     pub(super) held_log: Option<super::send_watch::HeldLog>,
     pub(crate) composer_ready: bool,
     pub(crate) expanded: FoldKeys,
+    /// Pending page-answers disclosure cards waiting to move onto their settled transcript row.
+    pub(super) retired_answer_cards: std::collections::VecDeque<RetiredAnswerCard>,
+    /// Newly inserted real rows kept only while pending answer disclosures could still settle onto them.
+    pub(super) recent_real_answer_rows: std::collections::VecDeque<String>,
+    /// Target `answers-card:<row>:<occ>:<pageId>:<by>` prefixes already claimed by migrated pending cards.
+    pub(super) claimed_answer_card_prefixes: HashSet<String>,
+    /// Prompt IDs explicitly removed (`removeQueue`) so cancelled pending rows never migrate disclosures.
+    pub(super) cancelled_answer_prompt_ids: std::collections::HashSet<String>,
     /// Scroll offsets of the capped boxes inside transcript rows (nested_scroll.rs).
     pub(super) nested_scrolls: super::nested_scroll::NestedScrolls,
     /// The detail of each row drawn open, keyed like the row (row_details.rs).
@@ -568,6 +592,7 @@ impl NativeChatView {
             menu_toggle: Default::default(),
             pill_bounds: Default::default(),
             stat_room: Default::default(),
+            title_room: Default::default(),
             coordinator_intro_dont_show: false,
             working_card: Default::default(),
             status_tail: false,
@@ -590,6 +615,7 @@ impl NativeChatView {
             hide_file_changes: false,
             quiet_steps: false,
             quiet_boxed: false,
+            quiet_turn: None,
             quiet_card_header: false,
             quiet_card_flush: false,
             quiet_flush_row: false,
@@ -628,13 +654,16 @@ impl NativeChatView {
             composer_held_key: None,
             paste_started: None,
             paste_tiles: Default::default(),
+            failed_uploads: Vec::new(),
             held_send: None,
             held_send_recheck: None,
+            carry: Default::default(),
             composer_animation: Default::default(),
             context_status_scroll: Default::default(),
             bounds: Default::default(),
             settled_text_width: None,
             held_text_width: None,
+            frame_text_width: 0.0,
             window_width: 0.0,
             scrollbar_track: Default::default(),
             transcript_scrolled_at: None,
@@ -702,6 +731,10 @@ impl NativeChatView {
             held_log: None,
             composer_ready: false,
             expanded: FoldKeys::default(),
+            retired_answer_cards: Default::default(),
+            recent_real_answer_rows: Default::default(),
+            claimed_answer_card_prefixes: Default::default(),
+            cancelled_answer_prompt_ids: Default::default(),
             nested_scrolls: Default::default(),
             row_details: Value::Null,
             detail_demand: Default::default(),
@@ -903,8 +936,18 @@ impl NativeChatView {
     }
 
     pub(crate) fn invoke(&mut self, action: Value, cx: &mut Context<Self>) {
+        // A pick in the dock ask panel's ⋯ menu closes the panel as it goes (dock_ask_modal.rs).
+        let action = self.unwrap_dock_ask_command(action, cx);
         self.hold_for_answer(&action, cx);
         self.note_resource_modal_send(&action);
+        if action.get("type").and_then(Value::as_str) == Some("removeQueue") {
+            if let Some(prompt_id) = action.get("promptId").and_then(Value::as_str) {
+                if !prompt_id.is_empty() {
+                    self.cancelled_answer_prompt_ids
+                        .insert(prompt_id.to_string());
+                }
+            }
+        }
         if let Some(runtime) = &self.runtime {
             runtime.call("action", vec![action]);
         }
@@ -1063,13 +1106,23 @@ impl NativeChatView {
         } = output;
         let mut changed = false;
         if let Some(splice) = items_splice {
+            // Measured from the layout before these rows (scroll_bottom.rs).
+            self.follow_tail_if_near_end();
             let anchor_key = self.transcript_anchor_key();
             // The host ships only the changed window of transcript items (see transcriptItemsSplice in native-host.ts).
-            let items = Arc::make_mut(&mut self.items);
-            let start = splice.start.min(items.len());
-            let end = start.saturating_add(splice.delete_count).min(items.len());
-            let inserted_len = splice.items.len();
-            let replaced: Vec<_> = items.splice(start..end, splice.items).collect();
+            let (start, end, items_len_before, inserted_len, replaced) = {
+                let items = Arc::make_mut(&mut self.items);
+                let items_len_before = items.len();
+                let start = splice.start.min(items_len_before);
+                let end = start
+                    .saturating_add(splice.delete_count)
+                    .min(items_len_before);
+                let inserted_len = splice.items.len();
+                let replaced: Vec<_> = items.splice(start..end, splice.items).collect();
+                (start, end, items_len_before, inserted_len, replaced)
+            };
+            let full_replace = start == 0 && end >= items_len_before;
+            self.migrate_page_answers_disclosures(&replaced, start, inserted_len, full_replace);
             drop_off_main_thread(replaced, cx);
             self.splice_transcript_keyed(start, end, inserted_len, anchor_key);
             changed = true;
@@ -1117,6 +1170,7 @@ impl NativeChatView {
             self.remeasure_on_look_change(&before);
             self.adopt_board_focus(&before, cx);
             self.prune_kept_replies(&before, cx);
+            self.sync_dock_ask_modal(cx);
             drop_off_main_thread(before, cx);
             if ring_moved {
                 cx.emit(NativeChatEvent::SessionDetailsRing);
@@ -1368,6 +1422,318 @@ impl NativeChatView {
         })
         .detach();
     }
+
+    /// Migrates `answers-card:<id>:<occ>:<pageId>:<by>` disclosure state (`expanded`/`collapsed`)
+    /// per card when pending or startup `pageAnswers` rows settle onto real transcript rows
+    /// (including merges where multiple pending rows combine into one transcript row), while
+    /// ignoring cancelled (`removeQueue`) rows and pre-existing historical rows.
+    pub(crate) fn migrate_page_answers_disclosures(
+        &mut self,
+        replaced: &[TranscriptItem],
+        inserted_start: usize,
+        inserted_len: usize,
+        full_replace: bool,
+    ) {
+        if full_replace {
+            self.recent_real_answer_rows.clear();
+            self.claimed_answer_card_prefixes.clear();
+        }
+        if replaced.is_empty() && inserted_len == 0 {
+            return;
+        }
+        let inserted_end = inserted_start
+            .saturating_add(inserted_len)
+            .min(self.items.len());
+        let inserted_cards: Vec<AnswerCardSignature> = self.items[inserted_start..inserted_end]
+            .iter()
+            .flat_map(item_answer_cards)
+            .collect();
+        let inserted_ids: HashSet<&str> = inserted_cards
+            .iter()
+            .map(|card| card.row_id.as_str())
+            .collect();
+
+        let mut cancelled_row_ids: HashSet<String> = HashSet::new();
+        for (old_id, prompt_id) in replaced.iter().flat_map(item_answer_row_prompts) {
+            if !is_pending_page_answers_id(&old_id) || inserted_ids.contains(old_id.as_str()) {
+                continue;
+            }
+            let prefix = format!("answers-card:{old_id}:");
+            let cancelled = prompt_id
+                .as_deref()
+                .is_some_and(|id| self.cancelled_answer_prompt_ids.remove(id));
+            if cancelled {
+                cancelled_row_ids.insert(old_id);
+                self.expanded.retain(|key| !key.starts_with(&prefix));
+                self.collapsed.retain(|key| !key.starts_with(&prefix));
+            }
+        }
+
+        if self.expanded.is_empty()
+            && self.collapsed.is_empty()
+            && self.retired_answer_cards.is_empty()
+        {
+            self.recent_real_answer_rows.clear();
+            self.claimed_answer_card_prefixes.clear();
+            return;
+        }
+
+        let replaced_cards: Vec<AnswerCardSignature> =
+            replaced.iter().flat_map(item_answer_cards).collect();
+        let replaced_real_ids: HashSet<&str> = replaced_cards
+            .iter()
+            .filter(|card| !is_pending_page_answers_id(&card.row_id))
+            .map(|card| card.row_id.as_str())
+            .collect();
+        for card in &replaced_cards {
+            if !is_pending_page_answers_id(&card.row_id)
+                || inserted_ids.contains(card.row_id.as_str())
+                || cancelled_row_ids.contains(&card.row_id)
+            {
+                continue;
+            }
+            let card_prefix = card.disclosure_prefix();
+            let expanded_suffixes = drain_card_disclosures(&mut self.expanded, &card_prefix);
+            let collapsed_suffixes = drain_card_disclosures(&mut self.collapsed, &card_prefix);
+            // Retain even untouched retired pending cards while any pending answer disclosure
+            // or retired card is active so merged rows preserve per-occurrence card order.
+            self.retired_answer_cards.push_back(RetiredAnswerCard {
+                page_id: card.page_id.clone(),
+                by: card.by.clone(),
+                summary: card.summary.clone(),
+                rows: card.rows.clone(),
+                expanded_suffixes,
+                collapsed_suffixes,
+            });
+            while self.retired_answer_cards.len() > 16 {
+                self.retired_answer_cards.pop_front();
+            }
+        }
+
+        let has_pending_disclosure = self.has_pending_answer_disclosure();
+        if has_pending_disclosure || !self.retired_answer_cards.is_empty() {
+            for card in &inserted_cards {
+                if !is_pending_page_answers_id(&card.row_id)
+                    && !replaced_real_ids.contains(card.row_id.as_str())
+                    && !self.recent_real_answer_rows.contains(&card.row_id)
+                {
+                    self.recent_real_answer_rows.push_back(card.row_id.clone());
+                    while self.recent_real_answer_rows.len() > 16 {
+                        self.recent_real_answer_rows.pop_front();
+                    }
+                }
+            }
+        } else {
+            self.recent_real_answer_rows.clear();
+            self.claimed_answer_card_prefixes.clear();
+        }
+
+        if !self.retired_answer_cards.is_empty() {
+            for card in &inserted_cards {
+                if !is_pending_page_answers_id(&card.row_id)
+                    && !replaced_real_ids.contains(card.row_id.as_str())
+                {
+                    self.migrate_retired_answer_card(card);
+                    if self.retired_answer_cards.is_empty() {
+                        break;
+                    }
+                }
+            }
+            if !self.retired_answer_cards.is_empty() && !self.recent_real_answer_rows.is_empty() {
+                let candidate_ids: HashSet<String> =
+                    self.recent_real_answer_rows.iter().cloned().collect();
+                let recent_cards: Vec<AnswerCardSignature> = self
+                    .items
+                    .iter()
+                    .rev()
+                    .flat_map(item_answer_cards)
+                    .filter(|card| {
+                        let prefix = card.disclosure_prefix();
+                        !is_pending_page_answers_id(&card.row_id)
+                            && (!inserted_ids.contains(card.row_id.as_str())
+                                || replaced_real_ids.contains(card.row_id.as_str()))
+                            && candidate_ids.contains(&card.row_id)
+                            && !self.claimed_answer_card_prefixes.contains(&prefix)
+                            && !self.has_answer_card_prefix_disclosure(&prefix)
+                    })
+                    .collect();
+                for card in &recent_cards {
+                    self.migrate_retired_answer_card(card);
+                    if self.retired_answer_cards.is_empty() {
+                        break;
+                    }
+                }
+            }
+        }
+        if !self.has_pending_answer_disclosure() {
+            if self
+                .retired_answer_cards
+                .iter()
+                .all(|card| card.expanded_suffixes.is_empty() && card.collapsed_suffixes.is_empty())
+            {
+                self.retired_answer_cards.clear();
+            }
+            if self.retired_answer_cards.is_empty() {
+                self.recent_real_answer_rows.clear();
+                self.claimed_answer_card_prefixes.clear();
+            }
+        }
+    }
+
+    fn migrate_retired_answer_card(&mut self, card: &AnswerCardSignature) {
+        let target_prefix = card.disclosure_prefix();
+        if self.claimed_answer_card_prefixes.contains(&target_prefix) {
+            return;
+        }
+        let Some(pos) = self.retired_answer_cards.iter().position(|retired| {
+            retired.page_id == card.page_id
+                && retired.by == card.by
+                && retired.summary == card.summary
+                && retired.rows == card.rows
+        }) else {
+            return;
+        };
+        let Some(retired) = self.retired_answer_cards.remove(pos) else {
+            return;
+        };
+        self.claimed_answer_card_prefixes
+            .insert(target_prefix.clone());
+        for suffix in retired.expanded_suffixes {
+            self.expanded.insert(format!("{target_prefix}{suffix}"));
+        }
+        for suffix in retired.collapsed_suffixes {
+            self.collapsed.insert(format!("{target_prefix}{suffix}"));
+        }
+    }
+
+    fn has_pending_answer_disclosure(&self) -> bool {
+        let matches_pending = |key: &String| {
+            key.strip_prefix("answers-card:")
+                .and_then(|rest| rest.split(':').next())
+                .is_some_and(|first| {
+                    matches!(first, "pending" | "startup" | "form" | "launch-pending")
+                })
+        };
+        self.expanded.iter().any(matches_pending) || self.collapsed.iter().any(matches_pending)
+    }
+
+    fn has_answer_card_prefix_disclosure(&self, card_prefix: &str) -> bool {
+        let sub_prefix = format!("{card_prefix}:");
+        self.expanded
+            .iter()
+            .any(|key| key == card_prefix || key.starts_with(&sub_prefix))
+            || self
+                .collapsed
+                .iter()
+                .any(|key| key == card_prefix || key.starts_with(&sub_prefix))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct RetiredAnswerCard {
+    page_id: String,
+    by: String,
+    summary: String,
+    rows: Value,
+    expanded_suffixes: Vec<String>,
+    collapsed_suffixes: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+struct AnswerCardSignature {
+    row_id: String,
+    occurrence: usize,
+    page_id: String,
+    by: String,
+    summary: String,
+    rows: Value,
+}
+
+impl AnswerCardSignature {
+    fn disclosure_prefix(&self) -> String {
+        format!(
+            "answers-card:{}:{}:{}:{}",
+            self.row_id, self.occurrence, self.page_id, self.by
+        )
+    }
+}
+
+fn drain_card_disclosures(keys: &mut FoldKeys, card_prefix: &str) -> Vec<String> {
+    let sub_prefix = format!("{card_prefix}:");
+    let matched: Vec<String> = keys
+        .iter()
+        .filter(|key| key.as_str() == card_prefix || key.starts_with(&sub_prefix))
+        .cloned()
+        .collect();
+    let mut suffixes = Vec::with_capacity(matched.len());
+    for key in matched {
+        keys.remove(&key);
+        if key.len() >= card_prefix.len() {
+            suffixes.push(key[card_prefix.len()..].to_string());
+        }
+    }
+    suffixes
+}
+
+fn item_candidate_rows(item: &TranscriptItem) -> Vec<&Value> {
+    match item {
+        TranscriptItem::Message { message } => vec![message.as_ref()],
+        TranscriptItem::Summary { user, .. } => vec![user.as_ref()],
+        TranscriptItem::Unknown(row) => vec![row],
+        _ => Vec::new(),
+    }
+}
+
+fn item_answer_row_prompts(item: &TranscriptItem) -> Vec<(String, Option<String>)> {
+    item_candidate_rows(item)
+        .into_iter()
+        .filter(|row| row["role"] == "user" && row["pageAnswers"].is_object())
+        .filter_map(|row| {
+            let id = row["id"].as_str()?.to_string();
+            let prompt_id = row["startupDelivery"]["promptId"]
+                .as_str()
+                .map(str::to_string)
+                .or_else(|| id.strip_prefix("pending:startup:").map(str::to_string));
+            Some((id, prompt_id))
+        })
+        .collect()
+}
+
+fn item_answer_cards(item: &TranscriptItem) -> Vec<AnswerCardSignature> {
+    item_candidate_rows(item)
+        .into_iter()
+        .flat_map(page_answers_card_signatures)
+        .collect()
+}
+
+fn is_pending_page_answers_id(id: &str) -> bool {
+    id.starts_with("pending:")
+        || id.starts_with("startup:")
+        || id.starts_with("form:")
+        || id.starts_with("launch-pending:")
+}
+
+fn page_answers_card_signatures(row: &Value) -> Vec<AnswerCardSignature> {
+    if row["role"] != "user" || !row["pageAnswers"].is_object() {
+        return Vec::new();
+    }
+    let Some(row_id) = row["id"].as_str() else {
+        return Vec::new();
+    };
+    let extra = row["extraPageAnswers"].as_array();
+    std::iter::once(&row["pageAnswers"])
+        .chain(extra.into_iter().flatten())
+        .filter(|card| card.is_object())
+        .enumerate()
+        .map(|(occurrence, card)| AnswerCardSignature {
+            row_id: row_id.to_string(),
+            occurrence,
+            page_id: card["pageId"].as_str().unwrap_or_default().to_string(),
+            by: card["by"].as_str().unwrap_or_default().to_string(),
+            summary: card["summary"].as_str().unwrap_or_default().to_string(),
+            rows: card["rows"].clone(),
+        })
+        .collect()
 }
 
 /// Frees `value` on a background thread.

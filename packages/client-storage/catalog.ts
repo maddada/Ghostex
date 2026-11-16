@@ -536,6 +536,29 @@ export const storageCatalog = Object.freeze({
     textCodec,
     disk
   ),
+  docsAnnotatedFiles: define(
+    'docsAnnotatedFiles',
+    'HTML files with Annotate on',
+    desktop + 'src/app/native_docs/annotate_storage.rs',
+    'ghostex.manage.annotatedFiles.',
+    stringListCodec,
+    disk
+  ),
+  docsAnnotateNotes: define(
+    'docsAnnotateNotes',
+    'Annotate notes on HTML files',
+    desktop + 'src/app/native_docs/annotate_storage.rs',
+    'ghostex.manage.annotateNotes.',
+    objectCodec,
+    { ...protectedDisk, maxEntryBytes: 8 * MiB, maxBytes: 64 * MiB, maxEntries: 2_000 }
+  ),
+  docsAnnotateSettings: define(
+    'docsAnnotateSettings',
+    'Annotate settings in Files',
+    desktop + 'src/app/native_docs/annotate_storage.rs',
+    'ghostex.manage.annotateSettings',
+    objectCodec
+  ),
   commitAgent: define(
     'commitAgent',
     'Commit prompt agent',

@@ -734,7 +734,7 @@ impl GhostexGpuiApp {
         shows, because that column is on screen in every view. This supersedes the 2026-08-02 rule
         that also enumerated the companion side pane's chat slots.
         */
-        let visible_session_ids = if drag_active || !self.agents_workspace_visible() {
+        let mut visible_session_ids = if drag_active || !self.agents_workspace_visible() {
             HashSet::new()
         } else {
             self.agents_workspace
@@ -744,6 +744,14 @@ impl GhostexGpuiApp {
                 .filter(|session_id| self.agents_chat_mode_sessions.contains(session_id))
                 .collect::<HashSet<_>>()
         };
+        // A chat in its own window is on screen whatever its pane or the view shows
+        // (app/session_popup/).
+        visible_session_ids.extend(self.session_popup_shell_sessions().into_iter().filter(
+            |session_id| {
+                live_session_ids.contains(session_id)
+                    && self.agents_chat_mode_sessions.contains(session_id)
+            },
+        ));
         for session_id in &visible_session_ids {
             self.ensure_native_chat(*session_id, cx);
         }

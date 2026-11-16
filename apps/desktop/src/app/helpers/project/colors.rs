@@ -94,6 +94,7 @@ pub(crate) fn refresh_gpui_visual_settings(
 ) {
     let object = settings.object();
     CHROME_LIGHT_APPEARANCE.store(sidebar_uses_light_theme(object), Ordering::Relaxed);
+    apply_theme_roles(object);
     SHOW_ACTIVE_PANE_OUTLINE.store(
         object
             .get("showActivePaneOutline")
@@ -212,10 +213,6 @@ pub(crate) fn gpui_terminal_theme_background(
     let light = settings.uses_light_theme(gpui_system_uses_light_appearance());
     let rgb = gpui_terminal_theme_background_rgb(snapshot.object(), light);
     [(rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8]
-}
-
-pub(crate) fn workspace_tab_drag_preview_color() -> Hsla {
-    chrome_color(0x242424, 0xf4f4f5).opacity(0.94).into()
 }
 
 pub(crate) fn workspace_drop_feedback_border_color() -> Hsla {

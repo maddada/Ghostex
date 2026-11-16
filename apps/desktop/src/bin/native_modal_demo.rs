@@ -64,6 +64,8 @@ mod agent_hooks_required_modal;
 mod agents_hub_demo;
 #[path = "../app/window/agents_hub/mod.rs"]
 mod agents_hub_modal;
+#[path = "native_modal_demo/browser_route_icon.rs"]
+mod browser_route_icon_demo;
 #[path = "native_modal_demo/chief_row.rs"]
 mod chief_row_demo;
 #[path = "../app/native_sidebar/chief_row_view.rs"]
@@ -128,7 +130,7 @@ mod notice_modal_demo;
 mod onboarding;
 #[path = "native_modal_demo/onboarding.rs"]
 mod onboarding_demo;
-#[path = "../app/window/visual_page_modal/band_geometry.rs"]
+#[path = "../app/window/page_band_geometry.rs"]
 mod page_band_geometry;
 #[path = "native_modal_demo/page_window_band.rs"]
 mod page_window_band_demo;
@@ -694,7 +696,7 @@ fn open_export_transcript(demo: &DemoEnv, cx: &mut App) {
     let agents = if demo.state == "noagents" {
         Vec::new()
     } else {
-        ["codex", "claude", "gemini"]
+        ["codex", "claude", "copilot"]
             .into_iter()
             .map(|id| ExportTranscriptAgent {
                 agent_id: id.to_string(),
@@ -859,6 +861,7 @@ fn main() {
                 "new-gbot" => new_gbot_demo::open(&demo, cx),
                 "new-bot" => new_bot_demo::open(&demo, cx),
                 "close-buttons" => close_buttons_demo::open(&demo, cx),
+                "browser-route-icon" => browser_route_icon_demo::open(&demo, cx),
                 "page-window-band" => page_window_band_demo::open(&demo, cx),
                 "page-window-menu" => page_window_menu_demo::open(&demo, cx),
                 "session-note" => session_note_demo::open(&demo, cx),

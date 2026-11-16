@@ -244,14 +244,23 @@ async fn hook_driven_thread_questions_approvals_and_failures_reach_the_feed() {
                     "toolInput": { "command": "rm -rf build" } }),
         )
         .await;
-    assert_eq!(fixture.rows(&thread, "needsInput").len(), 1);
+    // An approval only the user can grant still reaches the user, and opens the coordinator, where
+    // the card is relayed (CDXC:Notifications 2026-11-14, Q3243 in server/src/worker_alerts.rs).
+    let approval = fixture.rows(&thread, "needsInput");
+    assert_eq!(approval.len(), 1);
+    assert_eq!(approval[0]["openSessionId"], json!(coordinator));
     fixture
         .hook(
             &thread,
             json!({ "agentName": "claude", "eventName": "StopFailure", "stopError": "invalid_request" }),
         )
         .await;
-    assert_eq!(fixture.rows(&thread, "failed").len(), 1);
+    // Its error is the coordinator's to handle: no row while Workers is Off (Q3245).
+    assert!(
+        fixture.rows(&thread, "failed").is_empty(),
+        "{:?}",
+        fixture.feed()
+    );
 }
 
 #[tokio::test]
@@ -308,7 +317,7 @@ async fn switching_recovery_off_while_an_error_waits_announces_it_once() {
 }
 
 #[tokio::test]
-async fn viewing_a_coordinator_reads_its_finished_threads_and_leaves_a_failed_one_unread() {
+async fn a_coordinators_threads_leave_no_rows_for_finished_turns_or_errors() {
     let fixture = Fixture::new();
     let coordinator = fixture.session("claude", "Coordinator", json!({}));
     let finished = fixture.session("claude", "Finished thread", json!({}));
@@ -339,21 +348,29 @@ async fn viewing_a_coordinator_reads_its_finished_threads_and_leaves_a_failed_on
             json!({ "agentName": "claude", "eventName": "StopFailure", "stopError": "unknown" }),
         )
         .await;
-    let state = fixture.state.clone();
-    let params = json!({ "projectId": fixture.project_id, "sessionId": coordinator })
-        .as_object()
-        .cloned()
-        .expect("params");
-    tokio::task::spawn_blocking(move || {
-        crate::coordinators::acknowledge_coordinator_threads(&state, &params)
-    })
-    .await
-    .expect("join")
-    .expect("acknowledge");
 
-    assert_eq!(fixture.rows(&finished, "finished")[0]["read"], true);
-    // Only a finished turn is what viewing the coordinator clears; a failure is not one.
-    assert_eq!(fixture.rows(&failed, "failed")[0]["read"], false);
+    // CDXC:Notifications 2026-11-14 (Q3241, Q3245 in server/src/worker_alerts.rs): with Workers
+    // Off (the default) a thread's finished turn leaves no row and no dot, and its error no row.
+    assert!(
+        fixture.rows(&finished, "finished").is_empty(),
+        "{:?}",
+        fixture.feed()
+    );
+    assert!(
+        fixture.rows(&failed, "failed").is_empty(),
+        "{:?}",
+        fixture.feed()
+    );
+    let db = open_gxserver_database(&fixture.state.paths).expect("db");
+    let session = DomainRepository::new(&db, fixture.state.metadata.server_id.as_str())
+        .get_session(&fixture.project_id, &finished)
+        .expect("read")
+        .expect("session");
+    assert_ne!(
+        session.pointer("/runtimeSettings/agentActivity/activity"),
+        Some(&json!("attention")),
+        "{session:?}"
+    );
 }
 
 #[tokio::test]

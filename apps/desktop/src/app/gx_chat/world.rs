@@ -124,14 +124,14 @@ pub(super) enum HostCommand {
     /// Read aloud: what only the app knows, and the speaker's answers (`read_aloud.rs`).
     ReadAloud(ReadAloudInput),
     /// A session's computer changed (`computers.rs`); the turn's computer pass hands it on.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
+    #[cfg_attr(ghostex_web, allow(dead_code))]
     Computers,
 }
 
 impl HostCommand {
     /// What kind of command this is, for the runner's slow-turn line: a view's call by its method
     /// (`action`, `resolve`, `start`), never its arguments.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
+    #[cfg_attr(ghostex_web, allow(dead_code))]
     pub(super) fn kind(&self) -> &'static str {
         match self {
             Self::Attach { .. } => "attach",
@@ -591,7 +591,10 @@ fn settings_moved(
         })
         || settings
             .quiet_view
-            .is_some_and(|quiet| Some(quiet) != state.transcript_view.quiet_view_settings))
+            .is_some_and(|quiet| Some(quiet) != state.transcript_view.quiet_view_settings)
+        || settings
+            .composer_row
+            .is_some_and(|row| row != state.core.composer_row))
     .then(|| Event::SettingsChanged(Box::new(settings.clone())))
 }
 

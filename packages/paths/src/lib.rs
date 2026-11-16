@@ -6,6 +6,7 @@ use std::{
 };
 
 pub mod agent_homes;
+pub mod computer_ssh_key;
 pub mod durable_file;
 pub mod loopback_owner;
 #[cfg(target_os = "macos")]

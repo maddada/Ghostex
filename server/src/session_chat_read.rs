@@ -246,6 +246,8 @@ pub(crate) fn resolve_session_chat_read_state(
     .hash(&mut hasher);
     // Same discipline: a secret request card opening or closing wakes the long-poller.
     crate::secret_requests::secret_requests_identity(project_id, session_id).hash(&mut hasher);
+    // A Needs you to-do opening or closing too (session_needs_you/).
+    crate::session_needs_you::needs_you_identity(project_id, session_id).hash(&mut hasher);
     /*
     CDXC:AgentScreenDetection 2026-08-22:
     The progress row DOES hash its numbers, unlike the notice above. A notice
@@ -631,6 +633,15 @@ pub(crate) async fn handle_read_session_chat_http(
             "chatSendOnPick"
         )),
     );
+    // Varied thinking words rides every read too, so the phone's working strip says Thinking or the
+    // stint's word as the computer does (gx-chat-core `extras/working_strip.rs`).
+    result.insert(
+        "variedWorkingWords".to_string(),
+        json!(crate::session_chat_catch_up::chat_setting_enabled(
+            &state.paths,
+            "chatVariedWorkingWords"
+        )),
+    );
     // The phone reads the computer's answer delivery choice from this optional field; older
     // clients ignore it, and an older daemon leaves the core's default (normal send) in place.
     result.insert(
@@ -718,6 +729,8 @@ pub(crate) async fn handle_read_session_chat_http(
             coordinators: quiet_switch("chatQuietViewCoordinators", true),
             chats: quiet_switch("chatQuietViewChats", true),
             expand_last: quiet_switch("chatQuietViewExpandLast", true),
+            // Calm Quiet View (Settings > Experience's Chill); an older phone's core ignores it.
+            calm: quiet_switch("chatQuietViewCalm", false),
         }),
     );
     // The desktop's status line pins ride every read too, so the phone draws the line this
@@ -740,6 +753,7 @@ pub(crate) async fn handle_read_session_chat_http(
     crate::coordinators::insert_coordinator_threads(&mut result, &project_id, &session_id);
     crate::side_chats::insert_side_chats(&mut result, &project_id, &session_id);
     crate::secret_requests::insert_secret_requests(&mut result, &project_id, &session_id);
+    crate::session_needs_you::insert_needs_you(&mut result, &project_id, &session_id);
     crate::coordinators::insert_relayed_answers(&mut result, &project_id, &session_id);
     crate::autopilot::insert_chat_autopilot(&mut result, &project_id, &session_id);
     crate::collab_shim::insert_chat_collab(&mut result, &project_id, &session_id);
@@ -997,6 +1011,24 @@ pub(crate) async fn handle_read_session_chat_http(
             {
                 result.insert("workflows".to_string(), workflows.to_value());
             }
+        }
+        // CDXC:MemoryGuard 2026-11-14 WHY: a session the memory guard stopped is asleep, and its
+        // card (what was stopped, and Resume) is what the user opens the chat to read; no other
+        // notice outlives the screen it was read from.
+        let stopped_card =
+            crate::session_chat_notice::session_chat_watchdog_notice(&project_id, &session_id)
+                .filter(|notice| notice.kind == crate::memory_guard::NOTICE_KIND)
+                .or_else(|| {
+                    // After a gxserver restart the card comes from the stop record the session keeps.
+                    let db = open_gxserver_database(&state.paths).ok()?;
+                    let session = DomainRepository::new(&db, state.metadata.server_id.as_str())
+                        .get_session(&project_id, &session_id)
+                        .ok()??;
+                    crate::memory_guard::card_from_record(&session)
+                })
+                .or_else(|| crate::coordinators::stopped_threads_card(&project_id, &session_id));
+        if let Some(notice) = stopped_card {
+            result.insert("terminalNotice".to_string(), notice.to_value());
         }
         result.insert("screenProbed".to_string(), json!(true));
     }

@@ -55,7 +55,8 @@ fn page_id_param(body: &Value) -> Result<String, DomainStateError> {
 /// `questionsAnswered` and `questionsTotal` how many of its questions the reader's draft answers
 /// and how many it asks (`page_question_counts`, null for a page with no questions; added
 /// 2026-11-11 for the dock's page rows); `projectId` and `sessionId` the session that published
-/// it, null for none (added 2026-11-13 for the page window's Snooze).
+/// it, null for none (added 2026-11-13 for the page window's Snooze); `starred` whether the page
+/// or a version of its file is starred in that session's chat, null without one (added 2026-11-16).
 pub(crate) fn handle_read_http(
     state: &AppState,
     endpoint_path: String,
@@ -83,6 +84,20 @@ pub(crate) fn handle_read_http(
         .and_then(Value::as_str)
         .map(crate::agent_hooks::probing::parse_global_session_ref)
         .unwrap_or((None, None));
+    // Whether the page (or a version of its file) is starred in that session, for the page
+    // window's ⋯ menu (added 2026-11-16; an older gxserver leaves it out).
+    let starred = match (&project_id, &session_id) {
+        (Some(project_id), Some(session_id)) => {
+            crate::storage::open_gxserver_database(&state.paths)
+                .ok()
+                .map(|db| {
+                    crate::session_chat_open_questions::page_starred(
+                        state, &db, project_id, session_id, &id,
+                    )
+                })
+        }
+        _ => None,
+    };
     routed_json(
         Some(endpoint_path),
         StatusCode::OK,
@@ -97,6 +112,7 @@ pub(crate) fn handle_read_http(
                 "questionsTotal": counts.map(|(_, total)| total),
                 "projectId": project_id,
                 "sessionId": session_id,
+                "starred": starred,
             }),
         ),
     )

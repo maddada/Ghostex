@@ -38,6 +38,14 @@ export function componentSigningStatement({ name, componentVersion, platform, as
   ].join('\n');
 }
 
+/**
+ * Whether this step records archives unsigned for a later signing step
+ * (`GHOSTEX_COMPONENT_SIGNATURES_DEFERRED=1`, sign-component-records.mjs).
+ */
+export function signaturesDeferred(env = process.env) {
+  return env.GHOSTEX_COMPONENT_SIGNATURES_DEFERRED === '1';
+}
+
 /** The signing key from the environment, or null. */
 export function componentSigningKey(env = process.env) {
   const pem = env[COMPONENT_SIGNING_KEY_ENV];

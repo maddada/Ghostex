@@ -37,6 +37,10 @@ pub struct PageAnswers {
     pub page_id: String,
     pub title: String,
     pub answers: Value,
+    /// The envelope's `tags`, one per answer row key (`-` where none), when gxserver knew the
+    /// page's questions (`ghostex_gx_visual::questions::page_answers_message_tagged`); empty for
+    /// a form (its tags are on the form) and for answers sent before tags were written.
+    pub tags: Vec<String>,
 }
 
 fn attribute(head: &str, name: &str) -> Option<String> {
@@ -55,42 +59,159 @@ fn is_page_id(id: &str) -> bool {
     id.len() == 32 && id.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-/// The answers envelope a user message holds and the text written around it (empty when the
-/// message is only the envelope).
+/// Finds the closing `</ghostex-page-answers>` tag starting from `body_start`, ignoring tags embedded
+/// inside valid JSON bodies (objects, arrays, or string literals) before the closing tag.
+fn find_envelope_close(text: &str, body_start: usize) -> Option<usize> {
+    let tail = &text[body_start..];
+    let first_non_ws = tail.trim_start();
+    if first_non_ws.starts_with('{')
+        || first_non_ws.starts_with('[')
+        || first_non_ws.starts_with('"')
+    {
+        let mut stream = serde_json::Deserializer::from_str(first_non_ws).into_iter::<Value>();
+        if let Some(Ok(_)) = stream.next() {
+            let after_json = &first_non_ws[stream.byte_offset()..];
+            let trailing_ws = after_json.len() - after_json.trim_start().len();
+            if after_json[trailing_ws..].starts_with(CLOSE) {
+                let offset = text.len() - first_non_ws.len();
+                return Some(offset + stream.byte_offset() + trailing_ws);
+            }
+        }
+    }
+    tail.find(CLOSE).map(|rel| body_start + rel)
+}
+
+/// Byte spans `(open, close)` and parsed `PageAnswers` for every valid envelope in `text`.
+fn scan_page_answer_spans(text: &str) -> Vec<(usize, usize, PageAnswers)> {
+    if !text.contains(OPEN) {
+        return Vec::new();
+    }
+    let mut found = Vec::new();
+    let mut scan = 0usize;
+    while let Some(rel_open) = text[scan..].find(OPEN) {
+        let open = scan + rel_open;
+        let after_open = &text[open + OPEN.len()..];
+        if !after_open
+            .chars()
+            .next()
+            .is_some_and(|ch| ch.is_whitespace() || ch == '>')
+        {
+            scan = open + OPEN.len();
+            continue;
+        }
+        let Some(head_rel_end) = after_open.find('>') else {
+            break;
+        };
+        let head = &after_open[..head_rel_end];
+        if head.contains('<') {
+            scan = open + OPEN.len();
+            continue;
+        }
+        let body_start = open + OPEN.len() + head_rel_end + 1;
+        let Some(close_start) = find_envelope_close(text, body_start) else {
+            break;
+        };
+        let close = close_start + CLOSE.len();
+        if let Some(answers) = parse_page_answers(&text[open..close]) {
+            found.push((open, close, answers));
+            scan = close;
+        } else {
+            scan = open + OPEN.len();
+        }
+    }
+    found
+}
+
+/// Replaces only the envelope for `page_id` in `text` with `replacement`, keeping surrounding
+/// envelopes and prose verbatim.
+pub(crate) fn replace_page_answers_envelope(
+    text: &str,
+    page_id: &str,
+    replacement: &str,
+) -> Option<String> {
+    let spans = scan_page_answer_spans(text);
+    let (open, close, _) = spans
+        .into_iter()
+        .rfind(|(_, _, answers)| answers.page_id == page_id)?;
+    Some(format!("{}{}{}", &text[..open], replacement, &text[close..]))
+}
+
+/// All answers envelopes a user message holds (in document order) and the text written around
+/// them (empty when the message holds only envelopes).
 ///
 /// CDXC:SessionChat 2026-10-11 WHY:
 /// The envelope is not always the whole message: answers that went out while Claude could not
 /// take them came back into its input box, Ghostex handed them to the chat's composer, and the
-/// user's next message carried them with their own words below. The chat draws the answers card
-/// for the envelope and the rest as the user's text, and the form still reads Answered.
-pub fn split_page_answers(text: &str) -> Option<(PageAnswers, String)> {
-    let open = text.find(OPEN)?;
-    let close = text[open..].find(CLOSE)? + open + CLOSE.len();
-    let answers = parse_page_answers(&text[open..close])?;
-    let before = js_trim(&text[..open]);
-    let after = js_trim(&text[close..]);
-    let rest = match (before.is_empty(), after.is_empty()) {
-        (true, _) => after.to_string(),
-        (false, true) => before.to_string(),
-        (false, false) => format!("{before}\n\n{after}"),
-    };
-    Some((answers, rest))
+/// user's next message carried them with their own words below. Multiple forms answered while the
+/// agent was busy can also be concatenated into one user message. The chat draws an answers card
+/// for each envelope and the rest as the user's text, and each form still reads Answered.
+pub fn split_all_page_answers(text: &str) -> (Vec<PageAnswers>, String) {
+    let spans = scan_page_answer_spans(text);
+    if spans.is_empty() {
+        return (Vec::new(), text.to_string());
+    }
+    let mut found = Vec::with_capacity(spans.len());
+    let mut parts: Vec<&str> = Vec::new();
+    let mut cursor = 0usize;
+    for (open, close, answers) in spans {
+        let gap = js_trim(&text[cursor..open]);
+        if !gap.is_empty() {
+            parts.push(gap);
+        }
+        found.push(answers);
+        cursor = close;
+    }
+    let tail = js_trim(&text[cursor..]);
+    if !tail.is_empty() {
+        parts.push(tail);
+    }
+    (found, parts.join("\n\n"))
 }
 
-/// The page or question form a message's answers envelope answers, when it holds one.
-pub fn answers_page_id(text: &str) -> Option<String> {
+/// Every page or question form a message's answers envelopes answer, in document order.
+pub fn answers_page_ids(text: &str) -> Vec<String> {
     if !text.contains(OPEN) {
-        return None;
+        return Vec::new();
     }
-    split_page_answers(text).map(|(answers, _)| answers.page_id)
+    split_all_page_answers(text)
+        .0
+        .into_iter()
+        .map(|answers| answers.page_id)
+        .collect()
+}
+
+/// All projected answer cards a transcript row carries: the primary `pageAnswers` object plus any
+/// additional cards in `extraPageAnswers`.
+pub(crate) fn row_page_answers(row: &Value) -> impl Iterator<Item = &Value> {
+    let first = row
+        .get("pageAnswers")
+        .filter(|value| value.is_object())
+        .into_iter();
+    let extra = row
+        .get("extraPageAnswers")
+        .and_then(|value| value.as_array())
+        .into_iter()
+        .flatten()
+        .filter(|value| value.is_object());
+    first.chain(extra)
 }
 
 /// The answers a message holds, when the whole message is one answers envelope.
 pub fn parse_page_answers(text: &str) -> Option<PageAnswers> {
     let text = js_trim(text);
     let rest = text.strip_prefix(OPEN)?;
+    if !rest
+        .chars()
+        .next()
+        .is_some_and(|ch| ch.is_whitespace() || ch == '>')
+    {
+        return None;
+    }
     let head_end = rest.find('>')?;
     let head = &rest[..head_end];
+    if head.contains('<') {
+        return None;
+    }
     let body = rest[head_end + 1..].strip_suffix(CLOSE)?;
     let page_id = attribute(head, "page").filter(|id| is_page_id(id))?;
     let title = attribute(head, "title")
@@ -98,25 +219,40 @@ pub fn parse_page_answers(text: &str) -> Option<PageAnswers> {
         .filter(|title| !title.is_empty())
         .unwrap_or_else(|| "Ghostex page".to_string());
     let body = js_trim(body);
+    if body.contains(OPEN) && serde_json::from_str::<Value>(body).is_err() {
+        return None;
+    }
     let answers = serde_json::from_str(body).unwrap_or_else(|_| Value::String(body.to_string()));
+    let tags = attribute(head, "tags")
+        .map(|tags| tags.split_whitespace().map(str::to_string).collect())
+        .unwrap_or_default();
     Some(PageAnswers {
         page_id,
         title,
         answers,
+        tags,
+    })
+}
+
+pub(crate) fn is_unsent_or_failed(message: &ghostex_gx_protocol::ChatMessage) -> bool {
+    message.startup_delivery.as_ref().is_some_and(|delivery| {
+        delivery.state == "failed" || crate::composer::delivery::is_unsent(&delivery.prompt_id)
     })
 }
 
 /// The answers this transcript received, one per page or question form (the latest sent, where the
-/// first one arrived).
+/// first one arrived). Failed or unsent client recovery rows are excluded so they never settle
+/// an open form as answered before retry succeeds.
 pub fn page_answers_in<'a>(
     messages: impl IntoIterator<Item = &'a ghostex_gx_protocol::ChatMessage>,
 ) -> Vec<PageAnswers> {
     let mut found: Vec<PageAnswers> = Vec::new();
     for message in messages
         .into_iter()
-        .filter(|message| message.role == ChatRole::User)
+        .filter(|message| message.role == ChatRole::User && !is_unsent_or_failed(message))
     {
-        if let Some((answers, _)) = split_page_answers(&prose_markdown(&message.blocks)) {
+        let (envelopes, _) = split_all_page_answers(&prose_markdown(&message.blocks));
+        for answers in envelopes {
             // A later answer to the same question replaces the earlier one in place: a one-click
             // answer changed after the agent read it (`questions/inline_answers.rs`).
             match found
@@ -260,6 +396,18 @@ fn note_owner<'a>(
 /// question kit sends a question's note as `"<key> (note)"`; it is shown under that question's
 /// answer instead of as a row of its own.
 pub fn project_page_answers(answers: &PageAnswers, form: Option<&QuestionForm>) -> Value {
+    // A page's tags, by answer key, lined up with the keys gxserver tagged.
+    let page_tags: Vec<(&str, &str)> = {
+        let keys = ghostex_gx_visual::questions::answer_row_keys(&answers.answers);
+        if keys.len() == answers.tags.len() {
+            keys.into_iter()
+                .zip(answers.tags.iter().map(String::as_str))
+                .filter(|(_, tag)| *tag != "-")
+                .collect()
+        } else {
+            Vec::new()
+        }
+    };
     let rows: Vec<Value> = match &answers.answers {
         Value::Object(fields) => fields
             .iter()
@@ -276,6 +424,25 @@ pub fn project_page_answers(answers: &PageAnswers, form: Option<&QuestionForm>) 
                     .get(&format!("{key}{NOTE_SUFFIX}"))
                     .filter(|note| note.as_str().is_some_and(|note| !note.trim().is_empty()));
                 let note_as_answer = unpicked.then_some(own_note).flatten();
+                let tag = asked
+                    .map(|asked| asked.tag.as_str())
+                    .filter(|tag| !tag.is_empty())
+                    .or_else(|| {
+                        page_tags
+                            .iter()
+                            .find(|(tagged, _)| *tagged == key.as_str())
+                            .map(|(_, tag)| *tag)
+                    })
+                    .unwrap_or_default();
+                let skipped = note_as_answer.is_none()
+                    && (value.is_null()
+                        || value.as_array().is_some_and(Vec::is_empty)
+                        || value.as_str()
+                            == Some(crate::transcript::question_forms::SKIPPED));
+                // The reader's own notes box ("Anything else?"), not a question.
+                let extra = asked.is_none()
+                    && tag.is_empty()
+                    && key.starts_with(ghostex_gx_visual::questions::NOTES_KEY);
                 let mut row = json!({
                     "label": plain_words(&label),
                     "value": plain_words(&match note_as_answer {
@@ -283,6 +450,15 @@ pub fn project_page_answers(answers: &PageAnswers, form: Option<&QuestionForm>) 
                         None => display_answer(value, asked),
                     }),
                 });
+                if !tag.is_empty() {
+                    row["tag"] = json!(tag);
+                }
+                if skipped {
+                    row["skipped"] = json!(true);
+                }
+                if extra {
+                    row["extra"] = json!(true);
+                }
                 // The question's links, drawn as links (`questions/form_links.rs`).
                 if let Some(runs) = word_runs(&label) {
                     row["labelRuns"] = runs;
@@ -312,12 +488,100 @@ pub fn project_page_answers(answers: &PageAnswers, form: Option<&QuestionForm>) 
         other => vec![json!({"label": "", "value": display_value(other)})],
     };
     let more = rows.len().saturating_sub(MAX_ROWS);
+    let summary = answers_summary(&rows);
     json!({
         "pageId": answers.page_id,
         "title": plain_words(&answers.title),
+        "summary": summary,
         "rows": rows.into_iter().take(MAX_ROWS).collect::<Vec<_>>(),
         "more": more,
     })
+}
+
+/// The folded card's count: "3 answered · 1 skipped", "3 answered", "4 skipped" (the reader's
+/// own notes box is not a question and is not counted).
+fn answers_summary(rows: &[Value]) -> String {
+    let questions = rows.iter().filter(|row| row["extra"] != true);
+    let (skipped, answered): (Vec<&Value>, Vec<&Value>) =
+        questions.partition(|row| row["skipped"] == true);
+    match (answered.len(), skipped.len()) {
+        (0, 0) => String::new(),
+        (0, skipped) => format!("{skipped} skipped"),
+        (answered, 0) => format!("{answered} answered"),
+        (answered, skipped) => format!("{answered} answered \u{b7} {skipped} skipped"),
+    }
+}
+
+/// The page the answers came from, as the agent's ```visual block points at it (`{url, title,
+/// file?}`), so the folded card can open it again; `None` for a form, which lives in the chat.
+pub fn answered_page_link<'a>(
+    messages: impl IntoIterator<Item = &'a ghostex_gx_protocol::ChatMessage>,
+    page_id: &str,
+) -> Option<Value> {
+    messages
+        .into_iter()
+        .filter(|message| message.role == ChatRole::Assistant)
+        .flat_map(|message| {
+            crate::transcript::question_forms::content_fences(&prose_markdown(&message.blocks))
+        })
+        .filter(|fence| fence.kind == crate::transcript::question_forms::ContentKind::Page)
+        .filter_map(|fence| ghostex_gx_visual::page_reference(&fence.body))
+        .find(|page| page.page_id() == Some(page_id))
+        .map(|page| {
+            let mut link = json!({"url": page.url, "title": page.title});
+            if let Some(file) = page.file {
+                link["file"] = json!(file);
+            }
+            link
+        })
+}
+
+/// The forms and pages whose answers card is the very next row the transcript draws after the
+/// reply that asks them: their own Answered line is left out, since the card under it names the
+/// same form or page (the document's `answersBelow`).
+///
+/// CDXC:SessionChat 2026-11-13 DECISION:
+/// User (Q2995, sent answers page): "Hide the form's line when your answers sit right under it; keep it when other messages came between". Answers folded into a "Worked for" row (`folded_cards.rs`) are not right under it, so that line stays.
+pub fn answers_below<'a>(
+    items: impl IntoIterator<Item = &'a crate::document::TranscriptItem>,
+    askers: &[crate::transcript::open_questions::Asker],
+) -> Vec<String> {
+    use crate::document::TranscriptItem;
+    let mut below = Vec::new();
+    let mut last_reply: Option<&Value> = None;
+    for item in items {
+        let opener: Option<&Value> = match item {
+            TranscriptItem::Message { message } => Some(message),
+            TranscriptItem::Summary { user, .. } => Some(user),
+            _ => None,
+        };
+        if let (Some(reply), Some(row)) = (last_reply, opener) {
+            let card = &row["pageAnswers"];
+            if row["role"] == "user"
+                && card.is_object()
+                && card["withText"] != true
+                && row[crate::transcript::folded_cards::FOLDED_INTO_WORK] != true
+            {
+                let reply_id = reply["id"].as_str().unwrap_or_default();
+                for envelope in row_page_answers(row) {
+                    let page_id = envelope["pageId"].as_str().unwrap_or_default();
+                    if askers
+                        .iter()
+                        .any(|asker| asker.id == page_id && asker.message_id == reply_id)
+                    {
+                        below.push(page_id.to_string());
+                    }
+                }
+            }
+        }
+        last_reply = match item {
+            TranscriptItem::Message { message } if message["role"] == "assistant" => Some(message),
+            TranscriptItem::CompletedWork { final_message, .. } => final_message.as_deref(),
+            TranscriptItem::Summary { final_message, .. } => final_message.as_deref(),
+            _ => None,
+        };
+    }
+    below
 }
 
 #[cfg(test)]
@@ -333,6 +597,7 @@ mod tests {
                 "randomsand's asks ([Discord](https://discord.com/c/2)): what now?": "Fix all 4",
                 "Plain one?": "Yes",
             }),
+            tags: Vec::new(),
         };
         let card = project_page_answers(&answers, None);
         assert_eq!(card["title"], "About the picker");

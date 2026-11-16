@@ -480,6 +480,32 @@ fn run_client_once(
     (reason, connections_cut)
 }
 
+/// The variable that turns off UDP send batching (GSO) in tailcat's data plane. It is a Tailscale
+/// debug knob, so its name is pinned by a test here.
+pub const TAILCAT_DISABLE_UDP_GSO_ENV: &str = "TS_DEBUG_DISABLE_UDP_GSO";
+
+/*
+CDXC:RemotePairing 2026-11-14 DECISION:
+A user's Easy Connect link from a Mac to a Linux computer on the same LAN carried 12 to 18 KB/s and dropped every 2 to 8 minutes ("healthUnanswered": health checks queued behind a minute of other data on the one SSH stream). Measured with tailcat v0.6.0 on throwaway clients: the link was direct, but through each computer's Tailscale address (fd7a:115c:a1e0::/48), so tailcat's WireGuard ran inside Tailscale's, over a 1280-byte MTU. tailcat's packets are about 1440 bytes there, and Linux's batched (GSO) sends of them crawl, while plain UDP of the same size passes: Mac to Linux ran 25.7 MB/s, Linux to Mac 13 KB/s, and with this variable set on the Linux side 15 to 20 MB/s. User (Q3204 A): every tailcat Ghostex starts on Linux runs with UDP GSO off; macOS and Windows are unchanged. The cost is a little more CPU on Linux at high rates. The tailcat behavior itself (using a peer's Tailscale address as a direct path) is drafted as an upstream issue.
+*/
+/// The environment a tailcat helper that carries links (`serve`, `forward`) gets on `os`
+/// (`std::env::consts::OS`).
+fn tailcat_link_environment_for(os: &str) -> &'static [(&'static str, &'static str)] {
+    if os == "linux" {
+        &[(TAILCAT_DISABLE_UDP_GSO_ENV, "true")]
+    } else {
+        &[]
+    }
+}
+
+/// Gives `command`, a tailcat `serve` or `forward`, this computer's link environment
+/// (CDXC:RemotePairing 2026-11-14 above). gxserver's `tailcat serve` uses it too.
+pub fn apply_tailcat_link_environment(command: &mut Command) {
+    for (name, value) in tailcat_link_environment_for(std::env::consts::OS) {
+        command.env(name, value);
+    }
+}
+
 /// `tailcat [--key=<file>] forward --bind=127.0.0.1 <address> 0:<port>`, tied to this process.
 fn spawn_client(spec: &ForwardSpec, key: Option<PathBuf>) -> std::io::Result<Child> {
     let mut arguments: Vec<std::ffi::OsString> = Vec::new();
@@ -505,16 +531,20 @@ fn spawn_client(spec: &ForwardSpec, key: Option<PathBuf>) -> std::io::Result<Chi
             .stderr(Stdio::piped())
             // Its own group, so the shell, its reader and the helper are ended together.
             .process_group(0);
+        // The shell passes it on to the helper.
+        apply_tailcat_link_environment(&mut command);
         command.spawn()
     }
     #[cfg(not(unix))]
     {
-        let child = background_command(&spec.binary_path)
+        let mut command = background_command(&spec.binary_path);
+        command
             .args(arguments)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()?;
+            .stderr(Stdio::piped());
+        apply_tailcat_link_environment(&mut command);
+        let child = command.spawn()?;
         #[cfg(windows)]
         end_with_this_process(&child);
         Ok(child)
@@ -927,6 +957,36 @@ fn copy_stream(reader: &mut impl Read, writer: &mut impl Write, mut moved: impl 
             }
             Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(_) => return,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tailcat_link_environment_turns_udp_gso_off_on_linux_only() {
+        // The Tailscale knob tailcat reads; a renamed knob would silently stop working.
+        assert_eq!(TAILCAT_DISABLE_UDP_GSO_ENV, "TS_DEBUG_DISABLE_UDP_GSO");
+        assert_eq!(
+            tailcat_link_environment_for("linux"),
+            &[("TS_DEBUG_DISABLE_UDP_GSO", "true")]
+        );
+        for os in ["macos", "windows", "android", "ios", "freebsd"] {
+            assert!(tailcat_link_environment_for(os).is_empty(), "{os}");
+        }
+
+        let mut command = Command::new("tailcat");
+        apply_tailcat_link_environment(&mut command);
+        let gso = command
+            .get_envs()
+            .find(|(name, _)| *name == std::ffi::OsStr::new(TAILCAT_DISABLE_UDP_GSO_ENV))
+            .and_then(|(_, value)| value.map(|value| value.to_os_string()));
+        if cfg!(target_os = "linux") {
+            assert_eq!(gso.as_deref(), Some(std::ffi::OsStr::new("true")));
+        } else {
+            assert_eq!(gso, None);
         }
     }
 }

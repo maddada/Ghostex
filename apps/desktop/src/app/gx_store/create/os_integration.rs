@@ -552,7 +552,7 @@ impl GhostexGpuiApp {
 
     /// `resolveDomainProjectScope({ projectPath })`: this computer's project registered at that
     /// folder, as the store holds it.
-    fn gx_store_local_project_at_path(&self, path: &str) -> Option<String> {
+    pub(crate) fn gx_store_local_project_at_path(&self, path: &str) -> Option<String> {
         let wanted = normalize_project_path(path)?;
         let machine = self
             .gx_store

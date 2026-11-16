@@ -59,7 +59,7 @@ use crate::session_chat::{
     SessionChatTranscriptAgent,
 };
 use crate::session_chat_notice::{
-    classify_session_chat_terminal_notice, clear_session_chat_watchdog_notice,
+    classify_session_chat_terminal_notice, clear_session_chat_send_verdict,
     session_chat_delivery_mismatch_notice, session_chat_notice_key,
     session_chat_screen_shows_queued_input, session_chat_terminal_screen_tail,
     session_chat_watchdog_notice, set_session_chat_watchdog_notice, SessionChatTerminalNotice,

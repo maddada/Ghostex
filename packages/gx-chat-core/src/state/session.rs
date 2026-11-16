@@ -41,6 +41,13 @@ pub struct SessionState {
     /// The question forms and pages the user removed without answering, as gxserver keeps them
     /// (`crate::questions::later`). Absent means unchanged.
     pub removed_question_ids: crate::state::Stamped<Vec<String>>,
+    /// The pages their agent retired (`ghostex page retire`), as gxserver keeps them: their cards
+    /// read Replaced (`transcript::document`). Absent means unchanged.
+    pub retired_page_ids: Vec<String>,
+    /// The pages the reader starred in this chat, as gxserver keeps them
+    /// (`questions::later::starred_page_ids` adds this client's changes and follows each star to
+    /// the newest version of its file).
+    pub starred_page_ids: Vec<String>,
     /// The session's resource index as gxserver keeps it (`crate::questions::resource_index`):
     /// every form, page and chart of the whole conversation, which the Resources pill and list add
     /// to what the loaded rows hold. Absent means unchanged.
@@ -100,6 +107,8 @@ pub struct SessionState {
     pub side_chat_of: Option<Value>,
     /// The session's secret requests (`extras::secret_requests`); unchanged on omission.
     pub secret_requests: Option<Value>,
+    /// The session's Needs you to-dos (`extras::needs_you`); unchanged on omission.
+    pub needs_you: Option<Value>,
     /// For a coordinator's thread: the approvals its coordinator's chat answered for it
     /// (`extras::relayed_approvals::audit_lines`); unchanged on omission.
     pub relayed_answers: Option<Value>,
@@ -150,6 +159,12 @@ pub struct SessionState {
     /// the "daemon does not support it" state and hides every queue control; an empty list means
     /// supported and empty.
     pub queue_prompts: crate::state::Stamped<Option<Vec<Value>>>,
+    /// Un-patched authoritative queue rows from the latest server snapshot/frame or settled RPC.
+    pub server_queue_prompts: Option<Vec<Value>>,
+    /// Highest server queue version observed so older snapshots cannot resurrect deleted prompts.
+    pub server_queue_version: Option<u64>,
+    /// Monotonic counter bumped whenever authoritative server queue state updates.
+    pub queue_revision: u64,
     /// The latest synced composer draft. Unchanged on omission; a clear is an explicit empty
     /// `content`.
     pub synced_draft: Option<crate::document::SharedValue>,
@@ -175,6 +190,8 @@ impl Default for SessionState {
             later_question_ids: Default::default(),
             unavailable_modes: Vec::new(),
             removed_question_ids: Default::default(),
+            retired_page_ids: Vec::new(),
+            starred_page_ids: Vec::new(),
             resource_index: Default::default(),
             async_questions_since: None,
             forked_at: None,
@@ -200,6 +217,7 @@ impl Default for SessionState {
             side_chats: None,
             side_chat_of: None,
             secret_requests: None,
+            needs_you: None,
             relayed_answers: None,
             autopilot: None,
             collab: Default::default(),
@@ -218,6 +236,9 @@ impl Default for SessionState {
             api_retry: Tri::Absent,
             pending_model_selection: Tri::Absent,
             queue_prompts: Default::default(),
+            server_queue_prompts: None,
+            server_queue_version: None,
+            queue_revision: 0,
             synced_draft: None,
             synced_draft_revision: 0,
             deliveries_recorded_revision: 0,

@@ -561,6 +561,21 @@ pub(super) async fn route_sessions_http(
             )
             .await
         }
+        // `ghostex needs-you`: a session's to-dos for the user (session_needs_you/).
+        crate::session_needs_you::SESSION_NEEDS_YOU_ENDPOINT => {
+            let caller = caller.clone();
+            handle_domain_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+                |repository, db, params, _| {
+                    crate::session_needs_you::handle_needs_you_request(
+                        &state, &caller, db, repository, params,
+                    )
+                },
+            )
+        }
         "/api/readCoordinator"
         | "/api/readCoordinatorThreads"
         | "/api/listCoordinators"

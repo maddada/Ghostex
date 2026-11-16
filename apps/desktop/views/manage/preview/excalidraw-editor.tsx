@@ -63,6 +63,7 @@ export function ManageExcalidrawEditor({
       ) : null}
       <Excalidraw
         aiEnabled={false}
+        validateEmbeddable={validateManageExcalidrawEmbed}
         excalidrawAPI={(api) => {
           apiRef.current = api;
         }}
@@ -109,6 +110,21 @@ export function ManageExcalidrawEditor({
       />
     </div>
   );
+}
+
+/**
+ * CDXC:Docs 2026-11-14 WHY:
+ * Excalidraw shows X/Twitter, Reddit and GitHub Gist links as a `srcdoc` frame that runs those sites' widget scripts with this page's own origin, which is the page that holds the Files bridge. Those links stay link cards; YouTube, Vimeo, Figma and the other embeds Excalidraw allows load from their own sites as before (`undefined` keeps Excalidraw's own list).
+ */
+export function validateManageExcalidrawEmbed(link: string): boolean | undefined {
+  let host: string;
+  try {
+    host = new URL(link.trim()).hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
+  const writtenIntoPage = ['twitter.com', 'x.com', 'reddit.com', 'gist.github.com'];
+  return writtenIntoPage.some((site) => host === site || host.endsWith(`.${site}`)) ? false : undefined;
 }
 
 export function handleManageExcalidrawKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {

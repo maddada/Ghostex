@@ -75,6 +75,7 @@ impl GhostexGpuiApp {
                 "terminalColorScheme",
                 "terminalGhosttyLightTheme",
                 "terminalGhosttyTheme",
+                ghostex_settings_catalog::theme_roles::THEME_ROLES_SETTING,
             ]
             .iter()
             .any(|key| {

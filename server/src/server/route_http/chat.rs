@@ -171,6 +171,16 @@ pub(super) async fn route_chat_http(
             )
             .await
         }
+        "/api/restartSessionInMode" => {
+            crate::session_chat_mode_restart::handle_restart_session_in_mode_http(
+                &state,
+                &caller,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
         "/api/readSessionFilesLinks" => {
             crate::session_files_links::handle_read_session_files_links_http(
                 &state,
@@ -553,6 +563,15 @@ pub(super) async fn route_chat_http(
                 );
             }
             response
+        }
+        crate::visual_pages::RETIRE_VISUAL_PAGES_ENDPOINT => {
+            crate::visual_pages::handle_retire_visual_pages_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
         }
         crate::visual_pages::PUBLISH_VISUAL_PAGE_ENDPOINT => {
             crate::visual_pages::handle_publish_visual_page_http(

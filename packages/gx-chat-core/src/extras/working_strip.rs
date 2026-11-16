@@ -30,6 +30,19 @@ pub fn settle_working_word(word: &mut WorkingWordState, working: bool, context: 
     }
 }
 
+/// The word the strip shows while the agent works: Thinking, or the stint's drawn word when the
+/// Varied thinking words setting (`chatVariedWorkingWords`) is on.
+///
+/// CDXC:SessionChat 2026-11-15 DECISION:
+/// User: "Instead of ruminating and different words, let's just always say "Thinking..." when it's thinking. (keep other words as setting toggle advanced in chat)". Off by default, an Advanced row in Settings > Chat; the phone follows the computer through the chat read (`variedWorkingWords`). The stint word is still drawn every stint, so turning the setting on mid-turn shows a word at once and the host's random draws are consumed as before. Experience presets do not touch it.
+fn stint_word(state: &ChatState) -> &str {
+    if state.core.varied_working_words {
+        &state.extras.working_word.word
+    } else {
+        "Thinking"
+    }
+}
+
 /// `computeSessionChatWorkingStrip` plus the `presentation` field `publish` adds to it.
 ///
 /// The word is only shown when nothing more specific is: a live terminal activity (compaction)
@@ -60,8 +73,9 @@ pub fn working_strip(state: &ChatState, context: &ChatContext, working: bool) ->
         );
     }
     WorkingStrip {
-        label: (working && (activity.is_none() || background))
-            .then(|| format!("{}\u{2026}", state.extras.working_word.word)),
+        label: (working && (activity.is_none() || background)).then(|| {
+            format!("{}\u{2026}", stint_word(state))
+        }),
         presentation,
         activity,
         extra: serde_json::Map::new(),

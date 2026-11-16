@@ -317,21 +317,16 @@ pub(crate) struct ViewTabDragPreview {
 
 impl Render for ViewTabDragPreview {
     fn render(&mut self, _window: &mut Window, _cx: &mut gpui::Context<Self>) -> impl IntoElement {
-        div()
+        drag_ghost_surface(div(), 1.0)
             .flex()
             .h(px(WORKAREA_VIEW_TAB_HEIGHT))
             .w(px(WORKAREA_VIEW_TAB_WIDTH))
             .items_center()
             .gap(px(6.0))
             .overflow_hidden()
-            .rounded(px(WORKAREA_VIEW_TAB_RADIUS))
-            .border_1()
-            .border_color(workspace_drop_feedback_border_color())
-            .bg(workspace_tab_drag_preview_color())
             .px(px(WORKAREA_VIEW_TAB_HORIZONTAL_PADDING))
             .text_size(px(12.5))
             .text_color(titlebar_active_text_color())
-            .shadow_md()
             .child(titlebar_svg_icon(
                 self.icon,
                 WORKAREA_VIEW_TAB_ICON_SIZE,

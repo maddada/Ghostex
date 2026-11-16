@@ -8,17 +8,18 @@ import { afterEach, describe, expect, test } from 'vitest';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const stageScript = readFileSync(path.join(repoRoot, 'tooling/release-gpui/linux-stage.sh'), 'utf8');
+// The publishing moved out of linux-stage.sh into its own script (CDXC:Release 2026-11-14), which
+// linux-stage.sh runs unless signatures are deferred and the release workflow runs as a step of its own.
+const componentScript = readFileSync(path.join(repoRoot, 'tooling/release-gpui/linux-publish-components.sh'), 'utf8');
 const publishScript = path.join(repoRoot, 'tooling/release-gpui/publish-component.mjs');
 
 /*
  * CDXC:Release 2026-10-19 WHY: a build-only run publishes nothing, the
- * components repository included, so every publish-component call linux-stage.sh
- * makes (CEF and code-server) must take the same metadata-only mode.
+ * components repository included, so every publish-component call
+ * linux-publish-components.sh makes (CEF and code-server) must take the same
+ * metadata-only mode.
  */
-const publishBlock = stageScript.slice(
-  stageScript.indexOf('COMPONENT_PUBLISH_MODE=()'),
-  stageScript.indexOf('rm -rf "$PACKAGE_ROOT"')
-);
+const publishBlock = componentScript.slice(componentScript.indexOf('COMPONENT_PUBLISH_MODE=()'));
 
 const temporaryRoots = [];
 function temporaryRoot() {
@@ -53,7 +54,7 @@ function recordedPublishCalls(buildOnly) {
   return readFileSync(log, 'utf8').trim().split('\n');
 }
 
-describe('linux-stage.sh component publishing under a build-only run', () => {
+describe('linux-publish-components.sh component publishing under a build-only run', () => {
   test('publishes both components metadata-only when GHOSTEX_RELEASE_BUILD_ONLY=1', () => {
     const calls = recordedPublishCalls('1');
     expect(calls).toHaveLength(2);
@@ -71,9 +72,14 @@ describe('linux-stage.sh component publishing under a build-only run', () => {
   );
 
   test('every publish-component call in the script goes through the shared mode', () => {
-    const calls = stageScript.match(/publish-component\.mjs" \\\n[^\n]*\n/g) ?? [];
+    const calls = componentScript.match(/publish-component\.mjs" \\\n[^\n]*\n/g) ?? [];
     expect(calls).toHaveLength(2);
     for (const call of calls) expect(call).toContain('"${COMPONENT_PUBLISH_MODE[@]}"');
+    // linux-stage.sh itself publishes nothing; it runs the component script unless signatures are deferred.
+    expect(stageScript).not.toMatch(/node "\$REPO_ROOT\/tooling\/release-gpui\/publish-component\.mjs"/u);
+    expect(stageScript).toMatch(
+      /if \[\[ "\$\{GHOSTEX_COMPONENT_SIGNATURES_DEFERRED:-0\}" != "1" \]\]; then\n\t"\$SCRIPT_DIR\/linux-publish-components\.sh"/u
+    );
   });
 });
 

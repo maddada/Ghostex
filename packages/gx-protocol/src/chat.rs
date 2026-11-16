@@ -263,6 +263,23 @@ pub struct StartupDelivery {
 pub struct UnavailableMode {
     pub value: String,
     pub why: String,
+    /// Set when Ghostex can restart the agent in this mode once it is idle (Claude's Bypass,
+    /// server/src/session_chat_mode_restart.rs). Absent from older computers, and wherever a
+    /// restart can't bring the mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restart: Option<ModeRestart>,
+}
+
+/// The "restart in this mode when idle" switch beside an [`UnavailableMode`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModeRestart {
+    /// The user turned it on: the agent restarts in the mode as soon as it is idle.
+    #[serde(default)]
+    pub pending: bool,
+    /// Why the last restart did not happen, in the user's words.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failed: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -281,12 +298,14 @@ pub struct TurnLifecycle {
 /// | Key | Absent means |
 /// | --- | --- |
 /// | `prompt`, `terminalNotice`, `terminalActivity`, `agentFleet`, `agentTasks`, `agentGone` | CLEARED |
-/// | `selectedOptions`, `draft`, `appCommands`, `returnedPrompt`, `coordinatorThreads`, `sideChats`, `agentMessageDeliveries`, `secretRequests` | UNCHANGED |
+/// | `selectedOptions`, `draft`, `appCommands`, `returnedPrompt`, `coordinatorThreads`, `sideChats`, `agentMessageDeliveries`, `secretRequests`, `needsYou` | UNCHANGED |
 /// | `queue` | the daemon has no queue support (present even when empty otherwise) |
 /// | `screenProbed` | not probed yet (sticky once true) |
 /// | `agentSessionId` | snapshot or replaced: cleared; state: unchanged |
 /// | `accountSwitch`, `apiRetry`, `pendingModelSelection`, `asyncQuestionsSince`, `forkedAt` | a daemon without queue support; otherwise always written, `null` meaning none |
 /// | `retiredAsyncQuestionIds`, `laterQuestionIds`, `removedQuestionIds` | a daemon without queue support; otherwise always written |
+/// | `retiredPageIds` | UNCHANGED (a daemon before 2026-11-16 never writes it) |
+/// | `starredPageIds` | UNCHANGED (a daemon before 2026-11-16 never writes it) |
 /// | `resourceIndex` | UNCHANGED (a daemon before 2026-10-30 never writes it) |
 ///
 /// Payload shapes are kept loose (`Value`) until the native chat needs each one typed; every one
@@ -320,6 +339,8 @@ pub struct ChatSideState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queue: Option<Vec<Value>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queue_version: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub draft: Option<crate::shared::Shared<Value>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub app_commands: Option<Vec<Value>>,
@@ -351,6 +372,12 @@ pub struct ChatSideState {
     /// its composer. gxserver writes it on every frame. Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secret_requests: Option<Value>,
+    /// The to-dos for the user this session's agent added with `ghostex needs-you add`
+    /// (`{ items: [{ tag, title, detail, command, answers, askedAt }] }`,
+    /// server/src/session_needs_you/); rows of the dock above its composer. gxserver writes it on
+    /// every frame since 2026-11-16. Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub needs_you: Option<Value>,
     /// For a coordinator's thread, the approvals its coordinator's chat answered for it in the
     /// last 12 hours (`[{ at, label, from, question }]`, server/src/coordinators/relay.rs), drawn
     /// where its card was. Absent means unchanged.
@@ -401,6 +428,16 @@ pub struct ChatSideState {
     /// unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub removed_question_ids: Option<Vec<String>>,
+    /// The pages their agent retired with `ghostex page retire` (page ids,
+    /// server/src/visual_pages/retire.rs): also in `removed_question_ids`, so older clients stop
+    /// counting them; this list lets a card say Replaced. Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retired_page_ids: Option<Vec<String>>,
+    /// The pages the reader starred in this chat (page ids,
+    /// server/src/session_chat_open_questions.rs `set_starred`): Resources' Starred filter and the
+    /// star on their cards. Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub starred_page_ids: Option<Vec<String>>,
     /// The session's resource index (`ResourceEntry` records, gx-chat-core
     /// `questions/resource_index.rs`; server/src/session_chat_resources.rs): every question form,
     /// page and chart the whole conversation held, so the Resources list and count cover more than
@@ -423,6 +460,10 @@ pub struct ChatQuietViewSettings {
     pub chats: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expand_last: Option<bool>,
+    /// Calm Quiet View (`chatQuietViewCalm`, Settings > Experience's Chill); absent from an older
+    /// computer, which is off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub calm: Option<bool>,
 }
 
 /// One of a chat's view records as the session's computer keeps it: the value the user picked
@@ -614,6 +655,10 @@ pub struct ReadSessionChatResult {
     /// Whether the Show all effort levels setting is on, the same way as `catch_up`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub all_orchestrator_efforts: Option<bool>,
+    /// Whether the Varied thinking words setting (`chatVariedWorkingWords`) is on, the same way as
+    /// `catch_up`; off, the working strip says Thinking.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub varied_working_words: Option<bool>,
     /// The icons of the agents turned on in Settings › Agents (an agent with no icon gives its
     /// id), the same way as `catch_up`; the model menu shows only their providers' tabs.
     #[serde(default, skip_serializing_if = "Option::is_none")]

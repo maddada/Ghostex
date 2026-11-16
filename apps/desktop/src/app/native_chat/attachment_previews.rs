@@ -67,15 +67,151 @@ impl NativeChatView {
             .paste_tiles
             .shown(self.snapshot["pendingAttachments"].as_u64().unwrap_or(0));
         let active = self.composer_active_image(cx);
+        let failed = self.failed_upload_tiles(p, cx);
         self.render_reference_previews(
             self.composer_references.clone(),
             pending,
             active,
             None,
             false,
+            failed,
             p,
             cx,
         )
+    }
+
+    /// The pictures and files whose upload failed twice (`failed_uploads`, composer_attach.rs):
+    /// each a tile with a red ring and mark, the picture dimmed, its remove button, and after them
+    /// the words saying Send uploads them again.
+    ///
+    /// CDXC:Clipboard 2026-11-15 DECISION (issue #618, Q3274 A): never "tap the picture to retry"; Send retries.
+    /// SEE-ALSO: apps/mobile/app/src/chat/native/composer/AttachmentPreviews.tsx (`PICTURE_FAILED_WORDS`).
+    fn failed_upload_tiles(&self, p: &ChatAppearance, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        if self.failed_uploads.is_empty() {
+            return Vec::new();
+        }
+        let s = p.scale;
+        let error = p.error();
+        let words = super::composer_attach::UPLOAD_FAILED_WORDS;
+        let mut tiles: Vec<AnyElement> = self
+            .failed_uploads
+            .iter()
+            .map(|failed| {
+                let key = failed.key;
+                let (name, picture) = match &failed.upload {
+                    super::composer_attach::Upload::Picture(image) => (
+                        "Pasted image".to_owned(),
+                        Some(std::sync::Arc::new(image.clone())),
+                    ),
+                    super::composer_attach::Upload::File(path) => (
+                        std::path::Path::new(path)
+                            .file_name()
+                            .map(|name| name.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| path.clone()),
+                        None,
+                    ),
+                };
+                let tooltip = if failed.error.trim().is_empty() {
+                    format!("{name}: {words}")
+                } else {
+                    format!("{name}: {words} ({})", failed.error.trim())
+                };
+                div()
+                    .relative()
+                    .flex_shrink_0()
+                    .group(TILE_GROUP)
+                    .size(px(TILE_PX * s))
+                    .child(
+                        div()
+                            .id(("chat-attachment-failed", key as usize))
+                            .role(gpui::Role::Image)
+                            .aria_label(format!("{name}: {words}"))
+                            .size_full()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(px(8.0 * s))
+                            .overflow_hidden()
+                            .border(px(1.5 * s))
+                            .border_color(error)
+                            .tooltip(move |window, cx| {
+                                gpui_component::tooltip::Tooltip::new(tooltip.clone())
+                                    .build(window, cx)
+                            })
+                            .when_some(picture, |tile, image| {
+                                tile.child(
+                                    img(image)
+                                        .absolute()
+                                        .size_full()
+                                        .opacity(0.55)
+                                        .object_fit(gpui::ObjectFit::Cover),
+                                )
+                            })
+                            .child(
+                                div()
+                                    .size(px(18.0 * s))
+                                    .rounded_full()
+                                    .bg(error)
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .text_size(px(12.0 * s))
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .text_color(gpui::rgb(if p.light {
+                                        0xffffff
+                                    } else {
+                                        0x1a0b0b
+                                    }))
+                                    .child("!"),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id(("chat-attachment-failed-remove", key as usize))
+                            .role(gpui::Role::Button)
+                            .aria_label("Remove image")
+                            .invisible()
+                            .group_hover(TILE_GROUP, |style| style.visible())
+                            .block_mouse_except_scroll()
+                            .absolute()
+                            .top(px(-5.0 * s))
+                            .right(px(-5.0 * s))
+                            .chat_cursor_pointer()
+                            .size(px(16.0 * s))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded_full()
+                            .border_1()
+                            .border_color(p.input_border)
+                            .bg(p.background)
+                            .hover(|style| {
+                                style
+                                    .visible()
+                                    .bg(p.background.blend(p.muted.opacity(0.35)))
+                            })
+                            .child(
+                                gpui::svg()
+                                    .path("titlebar/x.svg")
+                                    .size(px(9.0 * s))
+                                    .text_color(p.muted),
+                            )
+                            .on_click(
+                                cx.listener(move |this, _, _, cx| this.drop_failed_upload(key, cx)),
+                            ),
+                    )
+                    .into_any_element()
+            })
+            .collect();
+        tiles.push(
+            div()
+                .min_w_0()
+                .text_size(px(12.0 * s))
+                .text_color(error)
+                .child(words)
+                .into_any_element(),
+        );
+        tiles
     }
 
     pub(super) fn render_reference_previews(
@@ -85,6 +221,7 @@ impl NativeChatView {
         active: Option<String>,
         answer_key: Option<String>,
         disabled: bool,
+        failed: Vec<AnyElement>,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
@@ -100,7 +237,7 @@ impl NativeChatView {
                 )
             })
             .collect();
-        if attachments.is_empty() && pending == 0 {
+        if attachments.is_empty() && pending == 0 && failed.is_empty() {
             return None;
         }
         // The viewer reads the same projected shape a transcript picture uses (`images.rs`), so a
@@ -266,6 +403,6 @@ impl NativeChatView {
                     ),
             );
         }
-        Some(row.into_any_element())
+        Some(row.children(failed).into_any_element())
     }
 }

@@ -8,8 +8,8 @@ use ghostex_gx_core::settings_sync::{
     apply_spaces_entries, category_enabled, derive_spaces_edits, describe_list_key,
     describe_setting_key, describe_spaces_key, entries_digest, is_seed_hlc, key_category,
     local_edit, member_key, merge_entries, merge_spaces_by_name, next_hlc, removed_key,
-    repair_folded_spaces, spaces_moves, spaces_named_apart, LocalSpaces, SyncEntry, GROUP_CATEGORY,
-    SYNC_CATEGORIES,
+    repair_folded_spaces, spaces_moves, spaces_named_apart, LocalSpaces, SyncEntry,
+    ALWAYS_CATEGORY, GROUP_CATEGORY, SYNC_CATEGORIES,
 };
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -125,6 +125,7 @@ impl Engine<'_> {
     pub(super) fn enabled(&self, key: &str) -> bool {
         let prefix = key_category(key);
         prefix == GROUP_CATEGORY
+            || prefix == ALWAYS_CATEGORY
             || SYNC_CATEGORIES
                 .iter()
                 .find(|category| category.prefix == prefix)
@@ -434,7 +435,8 @@ impl Engine<'_> {
 
     /// The categories this computer syncs (the group's own keys always).
     pub(super) fn enabled_categories(&self) -> Vec<&'static str> {
-        std::iter::once(GROUP_CATEGORY)
+        [GROUP_CATEGORY, ALWAYS_CATEGORY]
+            .into_iter()
             .chain(
                 SYNC_CATEGORIES
                     .iter()

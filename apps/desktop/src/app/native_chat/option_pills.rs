@@ -88,7 +88,11 @@ fn pill(
         .min_w_0()
         .max_w(px(pill_max_width(kind) * scale))
         .h(px(24.0 * scale))
-        .px(px(if icon_only { 6.0 } else { 10.0 } * scale))
+        .px(px(if icon_only {
+            ICON_PILL_PADDING
+        } else {
+            PILL_PADDING
+        } * scale))
         .flex()
         .items_center()
         .justify_center()
@@ -163,14 +167,29 @@ fn pill(
             color.g *= 0.525;
             color.b *= 0.525;
         }
-        item = item.child(
-            svg()
-                .path(format!("titlebar/{icon}.svg"))
-                .w(px(16.0 * scale))
-                .h(px(14.0 * scale))
-                .text_color(color)
-                .opacity(0.55),
-        );
+        item = item
+            .child(
+                svg()
+                    .path(format!("titlebar/{icon}.svg"))
+                    .w(px(16.0 * scale))
+                    .h(px(14.0 * scale))
+                    .text_color(color)
+                    .opacity(0.55),
+            )
+            // While a restart into another mode waits ("Bypass when idle", chat core
+            // `menus/mode_restart.rs`), the button says so beside its glyph.
+            .when_some(
+                values["modeNote"].as_str().map(str::to_owned),
+                |item, note| {
+                    item.child(
+                        div()
+                            .min_w_0()
+                            .text_ellipsis()
+                            .text_color(appearance.muted)
+                            .child(note),
+                    )
+                },
+            );
     } else {
         item = item
             .when(!loading, |item| {
@@ -332,8 +351,36 @@ impl NativeChatView {
             .is_some_and(|rows| !rows.is_empty())
         {
             width += 30.0 * scale;
+            if let Some(note) = values["modeNote"].as_str() {
+                width += text_width(note) + 4.0 * scale;
+            }
         }
-        width
+        width - self.option_pills_lead_in(values) * scale
+    }
+
+    /// CDXC:SessionChat 2026-11-14 DECISION: User: the first pill's icon sits as far from the box's
+    /// left border as the send/stop button sits from its right one. The row starts at the box's
+    /// 16px inset like the toolbar, but the first pill carries its own inner padding (its hover
+    /// background) before the icon, so the row is pulled left by that padding. The hover
+    /// background then reaches out to 6px from the border, inside the 22px rounded corner.
+    fn option_pills_lead_in(&self, values: &Value) -> f32 {
+        if values["agentChip"]["name"].as_str().is_some() {
+            AGENT_CHIP_PADDING
+        } else if values["showModel"] == true {
+            PILL_PADDING
+        } else if values["showOptions"] == true
+            && !values["modelMenu"].is_object()
+            && self.snapshot["composerOverflow"]["optionsOverflowed"] != true
+        {
+            PILL_PADDING
+        } else if self.snapshot["optionMenus"]["mode"]
+            .as_array()
+            .is_some_and(|rows| !rows.is_empty())
+        {
+            ICON_PILL_PADDING
+        } else {
+            0.0
+        }
     }
 
     pub(super) fn render_option_pills(
@@ -350,6 +397,7 @@ impl NativeChatView {
         div()
             .flex()
             .min_w_0()
+            .ml(px(-self.option_pills_lead_in(values) * appearance.scale))
             .overflow_hidden()
             .items_center()
             .gap(px(2.0 * appearance.scale))
@@ -407,7 +455,8 @@ impl NativeChatView {
             )
             .when(
                 self.snapshot["contextMeter"].is_object()
-                    && self.snapshot["composerOverflow"]["optionsOverflowed"] != true,
+                    && self.snapshot["composerOverflow"]["optionsOverflowed"] != true
+                    && self.snapshot["composerRow"]["hideContextRing"] != true,
                 |item| item.child(self.render_context_meter(appearance, cx)),
             )
             .into_any_element()
@@ -431,6 +480,9 @@ fn agent_accent(icon: &str, appearance: &ChatAppearance) -> u32 {
 }
 
 const AGENT_CHIP_PADDING: f32 = 8.0;
+/// A pill's inner padding either side of its label, and of an icon-only pill.
+const PILL_PADDING: f32 = 10.0;
+const ICON_PILL_PADDING: f32 = 6.0;
 const AGENT_TILE: f32 = 14.0;
 const AGENT_CHIP_GAP: f32 = 4.0;
 

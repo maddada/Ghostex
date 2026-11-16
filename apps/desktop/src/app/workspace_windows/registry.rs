@@ -564,6 +564,8 @@ impl GhostexGpuiApp {
         register_gpui_windows_notification_click_target(cx);
         #[cfg(target_os = "linux")]
         register_gpui_linux_notification_click_target(cx);
+        #[cfg(all(target_os = "linux", not(ghostex_web)))]
+        crate::app::helpers::window_glass::watch_linux_desktop_blur(cx);
     }
 
     /// The lead closed and this is the oldest remaining window: it runs the app-wide work from now

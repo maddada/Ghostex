@@ -26,19 +26,70 @@ fn saved_layout() -> Option<BeadsLayout> {
         .and_then(BeadsLayout::from_setting)
 }
 
+/// The width the details / New bead column was last dragged to, kept with the sidebar's own width
+/// in the desktop's native settings file (`sidebarWidth` beside it), so it survives a restart.
+#[cfg(not(ghostex_web))]
+fn saved_side_width() -> Option<f32> {
+    crate::app::helpers::read_json_number_field(
+        &crate::app::helpers::native_chrome_settings_path(),
+        BEADS_SIDE_WIDTH_SETTING,
+    )
+    .filter(|width| width.is_finite() && *width > 0.0)
+}
+
+/// The page keeps no settings file: the width lasts while the page is open.
+#[cfg(ghostex_web)]
+fn saved_side_width() -> Option<f32> {
+    None
+}
+
+/// CDXC:ProjectBoard 2026-11-13 WHY: the divider's width is the user's preference, so it is saved only when they drag; a panel that is narrower for a while clamps what is shown (`side_width_now`) without rewriting it.
+#[cfg(not(ghostex_web))]
+fn save_side_width(width: f32) {
+    let Some(number) = serde_json::Number::from_f64(f64::from(width.round())) else {
+        return;
+    };
+    crate::app::helpers::write_native_chrome_number_setting(BEADS_SIDE_WIDTH_SETTING, number);
+}
+
+#[cfg(ghostex_web)]
+fn save_side_width(_width: f32) {}
+
+/// The native settings key of the details column's dragged width.
+#[cfg_attr(ghostex_web, allow(dead_code))]
+const BEADS_SIDE_WIDTH_SETTING: &str = "beadsDetailsWidth";
+
 impl GhostexGpuiApp {
-    /// The active project, as the Beads view reads it.
+    /// The active project, as the Beads view reads it: the Board's own context (id, folder,
+    /// remote route), so Tree and Board never ask about two different projects.
+    ///
+    /// CDXC:ProjectBoard 2026-11-13 WHY: the Tree resolved its project through the git scope and sent only the project id, while the Board used the sidebar's board context with the folder and remote route, so the two could ask about different folders or computers and the Tree could show a setup card while the Board showed beads.
     pub(crate) fn beads_target(&self) -> Option<BeadsTarget> {
-        let key = self.git_active_scoped_project_id()?;
-        let scope = self.git_scope_for_project(&key).ok()?;
-        if scope.projectless {
+        let project_key = self.git_active_scoped_project_id()?;
+        // A projectless scope has no Beads workspace of its own (the check this had before PR #599).
+        if self
+            .git_scope_for_project(&project_key)
+            .is_ok_and(|scope| scope.projectless)
+        {
             return None;
         }
+        let context = self.native_kanban_bridge_context()?;
+        let machine = context
+            .remote_machine_id
+            .clone()
+            .map(MachineId::Remote)
+            .unwrap_or(MachineId::Local);
+        // The Board refuses a remote project whose computer has no route (`gxserver_target` in
+        // native_kanban/beads.rs); the Tree keeps the target but marks it, so it says so and calls
+        // nothing instead of asking this computer's gxserver.
+        let offline = !machine.is_local() && context.remote_target.is_none();
         Some(BeadsTarget {
-            project_key: scope.scoped_id(),
-            rpc_project_id: scope.project_id(),
-            project_path: scope.path.clone().unwrap_or_default(),
-            remote: scope.remote.clone(),
+            project_key,
+            rpc_project_id: context.project_id?,
+            project_path: context.project_path,
+            machine,
+            remote: context.remote_target,
+            offline,
         })
     }
 
@@ -76,7 +127,13 @@ impl GhostexGpuiApp {
         let host: super::view::BeadsHostFn = std::rc::Rc::new(move |request, window, cx| {
             let _ = app.update(cx, |app, cx| app.handle_beads_request(request, window, cx));
         });
-        let view = cx.new(|cx| BeadsView::new(host, window, cx));
+        let view = cx.new(|cx| {
+            let mut view = BeadsView::new(host, window, cx);
+            if let Some(width) = saved_side_width() {
+                view.side_width = width;
+            }
+            view
+        });
         self.native_beads = Some(view.clone());
         view
     }
@@ -96,11 +153,7 @@ impl GhostexGpuiApp {
         } else {
             None
         };
-        let machine = self
-            .git_scope_for_project(&target.project_key)
-            .map(|scope| scope.key.machine.clone())
-            .unwrap_or(MachineId::Local);
-        let sessions = self.beads_agent_sessions(&machine);
+        let sessions = self.beads_agent_sessions(&target.machine);
         let global_beads_directory = shared_settings::shared_sidebar_settings_snapshot()
             .object()
             .get("globalBeadsDirectory")
@@ -150,8 +203,7 @@ impl GhostexGpuiApp {
                 // The session lives on the computer that owns the project (a remote one too).
                 let machine = self
                     .beads_target()
-                    .and_then(|target| self.git_scope_for_project(&target.project_key).ok())
-                    .map(|scope| scope.key.machine.clone())
+                    .map(|target| target.machine)
                     .unwrap_or(MachineId::Local);
                 let session = SessionKey {
                     machine,
@@ -165,6 +217,7 @@ impl GhostexGpuiApp {
                 );
             }
             BeadsRequest::SaveLayout(layout) => self.save_beads_layout(layout),
+            BeadsRequest::SaveSideWidth(width) => save_side_width(width),
             BeadsRequest::Search(query) => self.native_kanban_set_search_query(query, cx),
             BeadsRequest::Changed => self.native_kanban_refresh_quietly(cx),
             BeadsRequest::Refresh => self.native_kanban_refresh_now(cx),
@@ -228,7 +281,7 @@ impl GhostexGpuiApp {
 
     /// CDXC:ProjectBoard 2026-11-11 DECISION:
     /// User: someone who had the Kanban tab saved opens the Beads view on Board; everyone else starts on Tree. Read once, the first time this Ghostex starts without a saved `beadsViewLayout`: the restored view tabs say whether the Kanban tab was saved, and the answer is written so later starts (and a Beads tab opened since) never move it again.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(ghostex_web))]
     pub(crate) fn migrate_beads_layout_setting(&mut self) {
         let saved: Option<serde_json::Map<String, Value>> =
             std::fs::read_to_string(shared_settings::shared_sidebar_settings_path())
@@ -260,7 +313,7 @@ impl GhostexGpuiApp {
         });
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(ghostex_web))]
     fn save_beads_layout(&mut self, layout: BeadsLayout) {
         let mut settings = shared_settings::shared_sidebar_settings_snapshot()
             .object()
@@ -273,15 +326,15 @@ impl GhostexGpuiApp {
     }
 
     /// The page cannot save settings: the choice lasts while the page is open.
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(ghostex_web)]
     fn save_beads_layout(&mut self, _layout: BeadsLayout) {}
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(ghostex_web))]
     fn beads_install(&mut self, cx: &mut Context<Self>) {
         self.native_kanban_install_beads(cx);
     }
 
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(ghostex_web)]
     fn beads_install(&mut self, cx: &mut Context<Self>) {
         self.native_kanban_toast(
             "Install Beads from the desktop app",

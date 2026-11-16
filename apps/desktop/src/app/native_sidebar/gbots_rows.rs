@@ -190,9 +190,9 @@ fn gbot_menu(look: &GbotLook, machine_id: &str) -> Value {
 /// which has no voice panel; greyed for a GBot whose chats run on another computer, which a call
 /// can't reach.
 fn call_item(look: &GbotLook, target: &Value) -> Option<Value> {
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(ghostex_web))]
     let on = crate::app::voice_agent::gbot_call::gbot_calls_on();
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(ghostex_web)]
     let on = false;
     on.then(|| {
         json!({ "label": "Call", "icon": "headset", "disabled": look.computer.is_some(), "command": gbots_command("call", target.clone()) })
@@ -712,7 +712,7 @@ impl GhostexGpuiApp {
                 cx,
             ),
             "newChat" => self.start_native_sidebar_gbot_chat(&machine, bot_id, cx),
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(ghostex_web))]
             "call" => self.call_gbot(&machine, bot_id, text("name"), window, cx),
             "remove" => {
                 let name = text("name");
@@ -774,7 +774,7 @@ impl GhostexGpuiApp {
                         json!({ "type": "selectSession", "sessionId": row_id, "mode": "focus" }),
                         cx,
                     );
-                    #[cfg(not(target_arch = "wasm32"))]
+                    #[cfg(not(ghostex_web))]
                     {
                         let _ = app.react_to_native_sidebar_session_click(&row_id, cx);
                     }

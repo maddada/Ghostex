@@ -247,6 +247,7 @@ impl MachinePresentation {
             sidebar_spaces_enabled: self.side_state().spaces_enabled,
             sidebar_workspaces: self.side_state().workspaces.clone(),
             custom_session_tags: self.side_state().custom_session_tags.clone(),
+            extension_panels: self.side_state().extension_panels.clone(),
         })
     }
 }

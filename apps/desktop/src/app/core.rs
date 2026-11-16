@@ -123,6 +123,13 @@ pub struct GhostexGpuiApp {
     pub(crate) browser_profiles: BrowserProfileModel,
     pub(crate) browser_tabs: BrowserTabModel,
     pub(crate) browser_tabs_project_id: Option<String>,
+    /// One-shot launch reload flag (`reloadBrowserTabsOnStartup`): cleared once the open
+    /// project's restored local `Loaded` tabs get their CEF surfaces, the view sleeps, or the user
+    /// switches projects.
+    pub(crate) pending_startup_browser_reload: bool,
+    /// Remote machines whose restored `Loaded` tabs are still waiting to reload on startup once
+    /// their SSH tunnel and remote CEF context become ready.
+    pub(crate) pending_startup_browser_remote_machines: HashSet<String>,
     /// The page on screen that another page opened, while it has stayed on screen since; see
     /// `forget_browser_tab_opener_once_hidden`.
     pub(crate) browser_tab_opener: Option<BrowserTabOpener>,
@@ -988,6 +995,8 @@ pub struct GhostexGpuiApp {
     pub(crate) pending_titlebar_popup_open: Option<GpuiTitlebarPopupKind>,
     pub(crate) titlebar_extension_popup_generation: u64,
     pub(crate) titlebar_extension_popup: Option<GpuiTitlebarExtensionPopupState>,
+    /// Sidebar extensions' `web` blocks: their pages (extensions/web_blocks.rs).
+    pub(crate) extension_web_blocks: crate::app::extensions::ExtensionWebBlocks,
     pub(crate) agent_hook_status_request_in_flight: bool,
     /// A status walk asked for while one was running (`Some(None)` = every agent), run when it ends.
     pub(crate) agent_hook_status_request_queued: Option<Option<Vec<String>>>,
@@ -996,6 +1005,8 @@ pub struct GhostexGpuiApp {
     /// The native Docs view's state; see app/native_docs/.
     pub(crate) native_docs: crate::app::native_docs::state::NativeDocsState,
     pub(crate) native_kanban: crate::app::native_kanban::state::NativeKanbanState,
+    /// The sessions in windows of their own; see app/session_popup/.
+    pub(crate) session_popups: crate::app::session_popup::SessionPopups,
     /// The Beads view (the side panel's view that was the Kanban); see app/native_beads/.
     pub(crate) native_beads: Option<gpui::Entity<crate::app::native_beads::BeadsView>>,
     pub(crate) floating_reveal: crate::app::floating_reveal::model::FloatingRevealState,

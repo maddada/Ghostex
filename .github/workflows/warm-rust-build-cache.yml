@@ -143,7 +143,7 @@ jobs:
           max-size: 1536MiB
           pr-comment: 'false'
       # macos.sh requires `bun` on PATH in its prologue.
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       - name: Resolve dependency cache keys
@@ -280,7 +280,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       - name: Resolve dependency cache keys
@@ -383,7 +383,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       - name: Resolve dependency cache keys
@@ -483,7 +483,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
@@ -553,7 +553,7 @@ jobs:
       # DUPLICATED CARGO COMMAND. linux-stage.sh cannot be used as the entry
       # point: it refuses to start without the gxserver runtime package and the
       # verified code-server archive, neither of which the cargo build reads.
-      # This mirrors apps/desktop/scripts/build-linux-app.sh lines 69-72
+      # This mirrors build_release_rust in apps/desktop/scripts/build-linux-app.sh
       # (`cd "$GPUI_DIR"; cargo build --release --bins`) as invoked by
       # tooling/release-gpui/linux-stage.sh lines 35-39, which is the only
       # place in that chain that sets GHOSTEX_GPUI_MARKETING_VERSION. CEF_PATH
@@ -634,7 +634,7 @@ jobs:
             ~/.cache/zig
           key: zig-gxserver-${{ runner.os }}-x64-${{ steps.cache_keys.outputs.zig }}
           restore-keys: zig-gxserver-${{ runner.os }}-x64-
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
@@ -749,7 +749,7 @@ jobs:
             ~/.cache/zig
           key: zig-gxserver-${{ runner.os }}-arm64-${{ steps.cache_keys.outputs.zig }}
           restore-keys: zig-gxserver-${{ runner.os }}-arm64-
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.

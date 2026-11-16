@@ -323,6 +323,8 @@ pub(crate) struct CoordinatorBoardView {
     pub(super) motion: crate::app::panel_motion::PanelMotion,
     /// The pane had room to dock last frame; a change of it snaps instead of sliding.
     fits: bool,
+    /// How wide the docked column was last drawn, sliding included; 0 while it is not docked.
+    pub(super) dock_drawn_width: f32,
     pub(super) scroll: ScrollHandle,
     /// The view the switch last picked here: it applies at once, before the settings file comes
     /// back with it, and on the web page, which cannot save settings, for as long as the page is open.
@@ -357,12 +359,18 @@ pub(crate) struct CoordinatorBoardView {
     /// The dock's rows' width at its last paint (unscaled), 0 before the first: what decides
     /// whether a row's answers fit beside its question (work_cards.rs `dock_row`).
     pub(super) dock_width: std::rc::Rc<std::cell::Cell<f32>>,
-    /// The dock's rows' scroll position, which an opened row past the dock's height cap scrolls so
-    /// its end shows (work_cards.rs `dock_row_reveal`).
+    /// The dock's rows' scroll position.
     pub(super) dock_scroll: gpui::ScrollHandle,
-    /// The dock row the reader last opened and when: it is scrolled into view as it grows
-    /// (work_cards.rs `dock_row_reveal`).
-    pub(super) dock_reveal: Option<(String, web_time::Instant)>,
+    /// The dock row whose ask is shown in its floating panel, by key (dock_ask_modal.rs).
+    pub(super) dock_modal: Option<String>,
+    /// What the row said it was replied to when the panel showed it: a change means a Reply from
+    /// the panel was taken, which closes it.
+    pub(super) dock_modal_replied: String,
+    /// The panel's window once open, and while it opens.
+    pub(super) dock_modal_window: Option<gpui::AnyWindowHandle>,
+    pub(super) dock_modal_opening: bool,
+    /// Clears the panel when its window is closed from outside (the main window going away).
+    pub(super) dock_modal_closed: Option<gpui::Subscription>,
     /// When each page row last asked its gxserver for its counts (work_cards.rs
     /// `refresh_page_counts`), by page id.
     pub(super) page_counts_asked:
@@ -404,32 +412,18 @@ pub(crate) struct BoardCardDrag {
     /// The group it is dragged from; dropping it back there does nothing.
     from: String,
     scale: f32,
-    foreground: gpui::Hsla,
-    surface: gpui::Hsla,
 }
 
 impl gpui::Render for BoardCardDrag {
+    /// The sidebar's dragged session row (`drag_ghost`), a default-width sidebar wide.
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let s = self.scale;
-        div()
-            .max_w(px(280.0 * s))
-            .px(px(12.0 * s))
-            .py(px(8.0 * s))
-            .rounded(px(10.0 * s))
-            .bg(self.surface)
-            .border(px(s))
-            .border_color(self.foreground.opacity(0.14))
-            .shadow(vec![gpui::BoxShadow {
-                color: gpui::black().opacity(0.3),
-                offset: gpui::point(px(0.0), px(8.0 * s)),
-                blur_radius: px(20.0 * s),
-                spread_radius: px(0.0),
-                inset: false,
-            }])
-            .text_size(px(TITLE_SIZE * s))
-            .text_color(self.foreground)
-            .truncate()
-            .child(self.title.clone())
+        crate::app::helpers::drag_ghost(
+            self.title.clone(),
+            None,
+            Some(px(crate::app::consts::DEFAULT_SIDEBAR_WIDTH * s)),
+            s,
+        )
     }
 }
 
@@ -1586,8 +1580,6 @@ impl NativeChatView {
                     move_to,
                     from: group.to_string(),
                     scale: s,
-                    foreground: p.foreground,
-                    surface: p.menu_opaque(),
                 };
                 this.on_drag(drag, |drag, _, _, cx| {
                     gpui::AppContext::new(cx, |_| drag.clone())
@@ -2464,11 +2456,17 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let frame = self.board.motion.frame();
+        self.board.dock_drawn_width = 0.0;
         if !self.board.docked && frame.extent <= 0.0 {
             return None;
         }
         let board = self.board_value()?.clone();
         let s = p.scale;
+        self.board.dock_drawn_width = if frame.animating {
+            frame.extent.max(0.0)
+        } else {
+            BOARD_WIDTH * s
+        };
         let column = div()
             .id("chat-coordinator-board-dock")
             .role(gpui::Role::Group)

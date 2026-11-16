@@ -38,7 +38,7 @@ impl GhostexGpuiApp {
     /// The rightmost band region owns the caption controls as fixed-width siblings, preserving the column divider alignment and the space available to each region's other controls.
     ///
     /// CDXC:Titlebar 2026-09-23 WHY:
-    /// Linux client decorations use this same band ownership; putting its window controls among project actions left them above the sessions column when Code or Browser opened to the right.
+    /// Linux client decorations (and Hyprland, which draws no titlebar for Ghostex: `linux_app_draws_window_caption`) use this same band ownership; putting its window controls among project actions left them above the sessions column when Code or Browser opened to the right.
     pub(crate) fn render_workarea_header(
         &self,
         window: &mut Window,
@@ -54,18 +54,32 @@ impl GhostexGpuiApp {
         } else {
             WORKAREA_HEADER_HEIGHT
         };
+        /*
+        CDXC:Titlebar 2026-11-16 DECISION:
+        User, on Linux: the transcript scrolled up behind minimise, maximise and close and showed through them, because the header row paints its colour but the caption controls beside it painted none. They take the colour of the band region they sit in: the header row's over the sessions column, the tab strip's over a view panel, the reserve's over a right-docked command pane. Windows draws the same controls through this code.
+        */
         #[cfg(any(target_os = "windows", target_os = "linux"))]
-        let mut window_controls = (cfg!(target_os = "windows")
-            || matches!(
-                window.window_decorations(),
-                gpui::Decorations::Client { .. }
-            ))
-        .then(|| {
+        let window_controls_view = app_draws_window_caption(window).then(|| {
             self.render_titlebar_window_controls(window, cx)
                 .into_any_element()
         });
         #[cfg(not(any(target_os = "windows", target_os = "linux")))]
-        let mut window_controls: Option<gpui::AnyElement> = None;
+        let window_controls_view: Option<gpui::AnyElement> = None;
+        let controls_background = if trailing_reserve > 0.0 {
+            workspace_nested_background()
+        } else if hosts_tab_strip {
+            glass_clear(project_editor_shell_background_color())
+        } else {
+            self.workarea_header_surface_color()
+        };
+        let mut window_controls = window_controls_view.map(|controls| {
+            h_flex()
+                .flex_shrink_0()
+                .h_full()
+                .bg(controls_background)
+                .child(controls)
+                .into_any_element()
+        });
         h_flex()
             .absolute()
             .top_0()
@@ -245,13 +259,7 @@ impl GhostexGpuiApp {
                 .max(0.0);
         if !self.workarea_header_hosts_view_tab_strip() {
             #[cfg(any(target_os = "windows", target_os = "linux"))]
-            if reserve == 0.0
-                && (cfg!(target_os = "windows")
-                    || matches!(
-                        window.window_decorations(),
-                        gpui::Decorations::Client { .. }
-                    ))
-            {
+            if reserve == 0.0 && app_draws_window_caption(window) {
                 return (band_width - 3.0 * TITLEBAR_WINDOW_BUTTON_WIDTH).max(0.0);
             }
             return band_width;

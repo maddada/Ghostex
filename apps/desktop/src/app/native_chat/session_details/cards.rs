@@ -45,7 +45,8 @@ fn str_of(value: &Value, key: &str) -> String {
 }
 
 /// The card folds from its title. The core says `foldable: false` for a Context card whose usage
-/// line and bar are all it holds, and `pinnedOpen` for a card that is always open (Context, Agent).
+/// line, bar and Compact context are all it holds, and `pinnedOpen` for a card that is always open
+/// (Agent).
 fn foldable(section: &Value) -> bool {
     section["foldable"] != false && section["pinnedOpen"] != true
 }
@@ -139,9 +140,9 @@ pub(super) fn context_offset(details: &Value, open: &mut dyn FnMut(&str, bool) -
 fn section_height(section: &Value, open: &mut dyn FnMut(&str, bool) -> f32) -> f32 {
     let mut total = CARD_PADDING_Y * 2.0 + HEADER_HEIGHT;
     let id = section["id"].as_str().unwrap_or_default();
-    // Context's usage line and bar stay under its title, folded or not.
+    // Context's usage line, bar and Compact context stay under its title, folded or not.
     if id == "context" {
-        total += SUMMARY_HEIGHT + BAR_HEIGHT;
+        total += SUMMARY_HEIGHT + BAR_HEIGHT + compact_height(section);
     }
     let fold = open(&card_key(id), !shut(section));
     if fold <= 0.0 {
@@ -161,21 +162,9 @@ fn section_height(section: &Value, open: &mut dyn FnMut(&str, bool) -> f32) -> f
                 } else {
                     0.0
                 };
-                let compact = &section["compact"];
-                let compact = if compact.is_object() {
-                    COMPACT_HEIGHT
-                        + if compact["disabled"] == true && compact["reason"].is_string() {
-                            NOTE_HEIGHT
-                        } else {
-                            0.0
-                        }
-                } else {
-                    0.0
-                };
                 (len(section, "rows") + len(section, "deferred")) as f32 * ROW_HEIGHT
                     + messages * ROW_HEIGHT
                     + status
-                    + compact
             }
             "connectors" => section["groups"]
                 .as_array()
@@ -207,6 +196,20 @@ fn section_height(section: &Value, open: &mut dyn FnMut(&str, bool) -> f32) -> f
             _ => len(section, "rows") as f32 * ROW_HEIGHT,
         };
     total + body * fold
+}
+
+/// Compact context under the Context card's bar, with the note of why it is off.
+fn compact_height(section: &Value) -> f32 {
+    let compact = &section["compact"];
+    if !compact.is_object() {
+        return 0.0;
+    }
+    COMPACT_HEIGHT
+        + if compact["disabled"] == true && compact["reason"].is_string() {
+            NOTE_HEIGHT
+        } else {
+            0.0
+        }
 }
 
 /// The chevron of a fold: at rest the right or down glyph, while the fold moves the right chevron
@@ -555,6 +558,9 @@ impl NativeChatView {
         let header = self.card_header(section, !collapsed, motion, p, cx);
         let loading = section["loading"] == true;
         let summary = (id == "context").then(|| context_summary(section, details, p));
+        let compact = (id == "context")
+            .then(|| self.context_compact(section, p, cx))
+            .flatten();
         // The core keeps a folded card's rows, so a closing card has its body to ease away.
         let body = (!collapsed || motion.is_some()).then(|| {
             let body = match id.as_str() {
@@ -586,6 +592,7 @@ impl NativeChatView {
             .child(header)
             .children(summary)
             .children(body)
+            .children(compact)
             .into_any_element()
     }
 
@@ -1045,55 +1052,70 @@ impl NativeChatView {
         if section["refresh"].is_object() {
             column = column.child(status_line.text_size(px(11.5 * s)).child(status));
         }
-        // Compact context, which the chat box's Context window popover held before it went (the
-        // decision at `TABS` in gx-chat-core `session_details/document.rs`).
-        let compact = &section["compact"];
-        if compact.is_object() {
-            let disabled = compact["disabled"] == true;
-            let action = compact["action"].clone();
-            let label = str_of(compact, "label");
-            column = column.child(
-                div().pt(px(6.0 * s)).flex().child(
-                    div()
-                        .id("session-details-compact")
-                        .role(gpui::Role::Button)
-                        .aria_label(label.clone())
-                        .h(px(24.0 * s))
-                        .px(px(10.0 * s))
-                        .flex()
-                        .items_center()
-                        .rounded(px(6.0 * s))
-                        .bg(p.foreground.opacity(0.06))
-                        .text_size(px(12.0 * s))
-                        .text_color(if disabled { p.card_muted } else { p.foreground })
-                        .when(!disabled, |button| {
-                            button
-                                .chat_cursor_pointer()
-                                .hover(|button| button.bg(p.foreground.opacity(0.10)))
-                        })
-                        .child(label)
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            cx.stop_propagation();
-                            if !disabled {
-                                this.session_details_action(&action, cx);
-                            }
-                        })),
-                ),
-            );
-            if let Some(reason) = compact["reason"].as_str().filter(|_| disabled) {
-                column = column.child(
-                    div()
-                        .h(px(NOTE_HEIGHT * s))
-                        .flex()
-                        .items_end()
-                        .truncate()
-                        .text_size(px(11.5 * s))
-                        .text_color(p.card_muted)
-                        .child(reason.to_string()),
-                );
-            }
-        }
         column.into_any_element()
+    }
+
+    /// CDXC:SessionDetails 2026-11-14 WHY:
+    /// Compact context sits under the Context card's bar, outside its fold: folding hides the
+    /// breakdown, not the card's one action, which the chat box's Context window popover always
+    /// showed before the panel replaced it (the decision at `TABS` in gx-chat-core
+    /// `session_details/document.rs`).
+    fn context_compact(
+        &mut self,
+        section: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let s = p.scale;
+        let compact = &section["compact"];
+        if !compact.is_object() {
+            return None;
+        }
+        let mut column = div().flex().flex_col().min_w_0();
+        let disabled = compact["disabled"] == true;
+        let action = compact["action"].clone();
+        let label = str_of(compact, "label");
+        column = column.child(
+            div().pt(px(6.0 * s)).flex().child(
+                div()
+                    .id("session-details-compact")
+                    .role(gpui::Role::Button)
+                    .aria_label(label.clone())
+                    .h(px(24.0 * s))
+                    .px(px(10.0 * s))
+                    .flex()
+                    .items_center()
+                    .rounded(px(6.0 * s))
+                    .bg(p.foreground.opacity(0.06))
+                    .text_size(px(12.0 * s))
+                    .text_color(if disabled { p.card_muted } else { p.foreground })
+                    .when(!disabled, |button| {
+                        button
+                            .chat_cursor_pointer()
+                            .hover(|button| button.bg(p.foreground.opacity(0.10)))
+                    })
+                    .child(label)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        if !disabled {
+                            this.session_details_action(&action, cx);
+                        }
+                    })),
+            ),
+        );
+        if let Some(reason) = compact["reason"].as_str().filter(|_| disabled) {
+            column = column.child(
+                div()
+                    .h(px(NOTE_HEIGHT * s))
+                    .flex()
+                    .items_end()
+                    .truncate()
+                    .text_size(px(11.5 * s))
+                    .text_color(p.card_muted)
+                    .child(reason.to_string()),
+            );
+        }
+        Some(column.into_any_element())
     }
 
     fn connectors_body(

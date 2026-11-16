@@ -1,6 +1,6 @@
 //! A computer's icon picker, under This computer and in a saved computer's dialog: a grid of the
-//! icons a computer can wear (gx-core computer_icons.rs), the first tile going back to the one its
-//! kind gives it. A pick is saved on that computer, by its gxserver, through the app
+//! icons a computer can wear (gx-core computer_icons.rs), the first tile going back to its
+//! system's logo, then the systems' logos, then the plain icons. A pick is saved on that computer, by its gxserver, through the app
 //! (gx_store/computer_icons.rs), so every device that reaches it shows the same icon.
 use super::super::super::super::native_modal_kit::*;
 use super::RemoteTab;
@@ -19,8 +19,8 @@ use std::collections::{HashMap, HashSet};
 pub(crate) struct ComputerIcons {
     /// The picked icon by machine id (`local` for this one); `None` for one that uses its default.
     picked: HashMap<String, Option<String>>,
-    /// The drawing this computer wears unpicked.
-    local_default: Option<String>,
+    /// The drawing each computer wears unpicked (its system's logo), by machine id.
+    defaults: HashMap<String, String>,
     /// The saved computers connected now, whose icon can be changed from here.
     connected: HashSet<String>,
 }
@@ -29,6 +29,16 @@ impl ComputerIcons {
     /// The icon the app last said was picked for that computer.
     pub(super) fn picked(&self, machine_id: &str) -> Option<&str> {
         self.picked.get(machine_id)?.as_deref()
+    }
+
+    /// The drawing that computer wears unpicked, as the app last sent it (always one of the
+    /// computer icons' drawings).
+    pub(super) fn default_asset(&self, machine_id: &str) -> Option<&'static str> {
+        let asset = self.defaults.get(machine_id)?;
+        ghostex_gx_core::computer_icons::COMPUTER_ICONS
+            .iter()
+            .find(|icon| icon.asset == asset)
+            .map(|icon| icon.asset)
     }
 }
 
@@ -46,10 +56,22 @@ impl RemoteTab {
                     .collect()
             })
             .unwrap_or_default();
-        icons.local_default = message
-            .get("localDefaultAsset")
-            .and_then(Value::as_str)
-            .map(str::to_string);
+        icons.defaults = message
+            .get("defaultAssets")
+            .and_then(Value::as_object)
+            .map(|defaults| {
+                defaults
+                    .iter()
+                    .filter_map(|(id, asset)| Some((id.clone(), asset.as_str()?.to_string())))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if let Some(local) = message.get("localDefaultAsset").and_then(Value::as_str) {
+            icons
+                .defaults
+                .entry(ghostex_gx_core::LOCAL_MACHINE_ID.to_string())
+                .or_insert_with(|| local.to_string());
+        }
         icons.connected = message
             .get("connected")
             .and_then(Value::as_array)
@@ -84,9 +106,8 @@ impl RemoteTab {
     }
 }
 
-/// The drawing a saved computer wears unpicked, as far as Settings can tell: its saved system
-/// mark is the app's to know, so the plain desktop stands in.
-const REMOTE_DEFAULT_ASSET: &str = "titlebar/device-desktop.svg";
+/// The drawing a computer wears unpicked until the app says its system.
+const UNKNOWN_DEFAULT_ASSET: &str = "titlebar/device-desktop.svg";
 
 /// The icon grid for `machine_id` (`local` for this computer). A saved computer that is not
 /// connected shows its grid faded with a line saying why.
@@ -119,15 +140,11 @@ pub(super) fn computer_icon_picker(
                 })
                 .flatten()
         });
-    let default_asset: SharedString = if local {
-        tab.computer_icons
-            .local_default
-            .clone()
-            .unwrap_or_else(|| REMOTE_DEFAULT_ASSET.to_string())
-            .into()
-    } else {
-        REMOTE_DEFAULT_ASSET.into()
-    };
+    let default_asset: SharedString = tab
+        .computer_icons
+        .default_asset(machine_id)
+        .unwrap_or(UNKNOWN_DEFAULT_ASSET)
+        .into();
     let tile = |key: String,
                 label: &'static str,
                 asset: SharedString,

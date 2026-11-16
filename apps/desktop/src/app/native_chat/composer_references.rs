@@ -108,6 +108,9 @@ pub(super) fn replacements(
             } else {
                 format!("chat-references/{}.svg", reference.kind)
             };
+            if reference.kind == "session" {
+                return Some(session_replacement(reference, &icon, appearance));
+            }
             Some(
                 InlineReplacement::new(reference.range.clone(), reference.pill.clone())
                     .color(color)
@@ -134,6 +137,9 @@ pub(super) fn replacements(
                         )
                         .map(|comment| comment.tooltip())
                         .unwrap_or_default()
+                    } else if reference.kind == "answer" {
+                        // The question it answers, by its title (never its tags).
+                        ghostex_gx_chat_core::questions::answer_pills::tooltip(&reference.label)
                     } else if reference.kind == "board" {
                         format!(
                             "{} on the board",
@@ -148,6 +154,69 @@ pub(super) fn replacements(
             )
         })
         .collect()
+}
+
+/// A mention of another session in the chat box: the sent mention's look (`session_pill_link` in
+/// markdown_links.rs), the agent's logo in its colour and the title in the line's colour and weight
+/// with a faint dotted underline that is full strength under the pointer, no frame; then its state
+/// dot while it works or needs you and, for a session on another computer, that computer's icon
+/// (`session_card.rs`). It stays one piece for the caret and Delete, as every replacement does.
+/// Hovering it shows the session's hover card, which the card builder finds by the Global Ref the
+/// tooltip carries. The user's decision is CDXC:SessionChat 2026-11-15 on `mention_card` in
+/// gx-chat-core; answering the follow-up, they asked for the chat box to drop its frame too. The
+/// marks' room is spaces after the core's pill text, because the input lays the replacement out as
+/// text.
+fn session_replacement(
+    reference: &ComposerReference,
+    icon: &str,
+    appearance: &ChatAppearance,
+) -> InlineReplacement {
+    let s = appearance.scale;
+    let known = crate::app::gx_chat::session_directory::find(&reference.path);
+    let (_, icon_color) = markdown_links::session_pill_icon(
+        known.as_ref().map_or("", |session| {
+            ghostex_gx_chat_core::extras::agents::default_agent_by_id(Some(&session.agent_id))
+                .map_or(session.agent_id.as_str(), |(icon, _)| icon)
+        }),
+        known.as_ref().is_some_and(|session| session.coordinator),
+        appearance,
+    );
+    let marks = super::session_card::card(&reference.path)
+        .map(|card| super::session_card::marks(&card, appearance))
+        .unwrap_or_default();
+    // Each mark takes its size and a 4px gap after the core's thin space; a no-break space is about
+    // a quarter of the 14px line.
+    let trailing_px = marks
+        .iter()
+        .map(|mark| match mark {
+            super::session_card::PillMark::Dot { size, .. }
+            | super::session_card::PillMark::Icon { size, .. } => 4.0 + f32::from(*size) / s,
+        })
+        .sum::<f32>();
+    let trailing = "\u{a0}".repeat((trailing_px / 3.6).ceil() as usize);
+    let text = format!("{}{trailing}", reference.pill);
+    InlineReplacement::new(reference.range.clone(), text)
+        .color(appearance.foreground)
+        .icon(
+            icon.to_string(),
+            gpui::px(SESSION_ICON_PX * s),
+            gpui::px(0.0),
+        )
+        .icon_color(icon_color)
+        // The core's room for the logo (four no-break spaces and a thin space) ends about 5px past
+        // it, where the title and its underline start.
+        .underline(super::inter_agent_message::session_name_input_underline(
+            SESSION_ICON_PX + 5.0,
+            s,
+        ))
+        .trailing(
+            marks
+                .into_iter()
+                .map(super::session_card::PillMark::into_replacement_mark)
+                .collect(),
+        )
+        .pointer(false)
+        .tooltip(reference.path.clone())
 }
 
 /// The draft with `·` inserted before the reference's destination, and the caret that follows it.

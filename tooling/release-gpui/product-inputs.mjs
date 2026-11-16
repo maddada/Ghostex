@@ -74,7 +74,7 @@ export const IGNORED_FOR_RELEASE = Object.freeze([
   { path: '.editorconfig', why: 'Editor configuration only.' },
   { path: '.gitattributes', why: 'Git checkout behavior only; release jobs use fresh clones.' },
   { path: '.gitignore', why: 'Ignore rules only; tracked inputs are enumerated explicitly.' },
-  { path: '.prettierrc', why: 'Formatter settings for the format check and agents; changes no artifact.' },
+  { path: '.oxfmtrc.json', why: 'Formatter settings for the format check and agents; changes no artifact.' },
   { path: 'AGENTS.md', why: 'Agent instructions; metadata only.' },
   { path: 'ai', why: 'Agent reference material such as the CDXC area list; metadata only.' },
   { path: 'ANALYTICS.md', why: 'Analytics policy documentation; never compiled into a release artifact.' },

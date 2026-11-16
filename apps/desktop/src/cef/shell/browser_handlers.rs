@@ -32,6 +32,7 @@ pub(crate) fn show_browser_dev_tools(
         None,
         None,
         None,
+        None,
         Some(GhostexGpuiCefFocusHandler::new()),
         None,
         None,
@@ -250,6 +251,231 @@ wrap_download_handler! {
     }
 }
 
+/// What a page context-menu command needs from the right-click, copied out of CEF's params
+/// (which may not be kept past the callback).
+#[derive(Clone, Default)]
+struct BrowserContextMenuTarget {
+    link_url: Option<String>,
+    image_url: Option<String>,
+    x: c_int,
+    y: c_int,
+    misspelled_word: String,
+}
+
+impl BrowserContextMenuTarget {
+    fn from_params(params: &ContextMenuParams) -> Self {
+        Self {
+            link_url: context_menu_link_url(params),
+            image_url: context_menu_image_url(params),
+            x: params.xcoord(),
+            y: params.ycoord(),
+            misspelled_word: CefString::from(&params.misspelled_word()).to_string(),
+        }
+    }
+}
+
+// CEF's built-in command ids (cef_menu_id_t) that Ghostex's page menu keeps.
+const MENU_ID_BACK: c_int = 100;
+const MENU_ID_FORWARD: c_int = 101;
+const MENU_ID_RELOAD: c_int = 102;
+const MENU_ID_UNDO: c_int = 110;
+const MENU_ID_REDO: c_int = 111;
+const MENU_ID_CUT: c_int = 112;
+const MENU_ID_COPY: c_int = 113;
+const MENU_ID_PASTE: c_int = 114;
+const MENU_ID_SELECT_ALL: c_int = 117;
+const MENU_ID_SPELLCHECK_SUGGESTION_0: c_int = 200;
+const MENU_ID_SPELLCHECK_SUGGESTION_LAST: c_int = 204;
+const MENU_ID_ADD_TO_DICTIONARY: c_int = 206;
+
+/// The label Ghostex's menu shows for a row of CEF's model, or `None` to leave the row out
+/// (Print, View page source, Delete, Paste and match style, No spelling suggestions).
+fn browser_context_menu_label(command_id: c_int, cef_label: &str) -> Option<String> {
+    let fixed = match command_id {
+        MENU_ID_BACK => "Back",
+        MENU_ID_FORWARD => "Forward",
+        MENU_ID_RELOAD => "Reload",
+        MENU_ID_UNDO => "Undo",
+        MENU_ID_REDO => "Redo",
+        MENU_ID_CUT => "Cut",
+        MENU_ID_COPY => "Copy",
+        MENU_ID_PASTE => "Paste",
+        MENU_ID_SELECT_ALL => "Select all",
+        MENU_ID_ADD_TO_DICTIONARY => "Add to dictionary",
+        MENU_ID_SPELLCHECK_SUGGESTION_0..=MENU_ID_SPELLCHECK_SUGGESTION_LAST
+        | CEF_CONTEXT_MENU_INSPECT_ELEMENT_COMMAND_ID
+        | CEF_CONTEXT_MENU_APP_OPEN_LINK_NEW_TAB_COMMAND_ID
+        | CEF_CONTEXT_MENU_SAVE_LINK_AS_COMMAND_ID
+        | CEF_CONTEXT_MENU_COPY_LINK_ADDRESS_COMMAND_ID
+        | CEF_CONTEXT_MENU_OPEN_IMAGE_NEW_TAB_COMMAND_ID
+        | CEF_CONTEXT_MENU_SAVE_IMAGE_AS_COMMAND_ID
+        | CEF_CONTEXT_MENU_COPY_IMAGE_COMMAND_ID
+        | CEF_CONTEXT_MENU_COPY_IMAGE_ADDRESS_COMMAND_ID => {
+            let label = cef_label.replace('&', "");
+            return (!label.trim().is_empty()).then_some(label);
+        }
+        _ => return None,
+    };
+    Some(fixed.to_string())
+}
+
+/// The rows of CEF's finished model that Ghostex's menu shows, with Reload added after Forward
+/// (Alloy's page menu has none).
+fn browser_context_menu_entries(model: &MenuModel) -> Vec<BrowserPageContextMenuEntry> {
+    let mut entries = Vec::new();
+    for index in 0..model.count() {
+        let item_type = model.type_at(index);
+        if item_type == cef::MenuItemType::SEPARATOR {
+            entries.push(BrowserPageContextMenuEntry::Separator);
+            continue;
+        }
+        if item_type != cef::MenuItemType::COMMAND || model.is_visible_at(index) == 0 {
+            continue;
+        }
+        let command_id = model.command_id_at(index);
+        let cef_label = CefString::from(&model.label_at(index)).to_string();
+        let Some(label) = browser_context_menu_label(command_id, &cef_label) else {
+            continue;
+        };
+        entries.push(BrowserPageContextMenuEntry::Item {
+            command_id,
+            label,
+            enabled: model.is_enabled_at(index) != 0,
+        });
+        if command_id == MENU_ID_FORWARD {
+            entries.push(BrowserPageContextMenuEntry::Item {
+                command_id: MENU_ID_RELOAD,
+                label: "Reload".to_string(),
+                enabled: true,
+            });
+        }
+    }
+    entries
+}
+
+/// Runs one page context-menu command on `browser`; returns whether it was handled.
+fn run_browser_context_menu_command(
+    browser: &cef::Browser,
+    frame: Option<&Frame>,
+    target: &BrowserContextMenuTarget,
+    command_id: c_int,
+    label: &str,
+    popup_open_handler: Option<&BrowserPopupOpenHandler>,
+    page_metadata_handler: Option<&BrowserPageMetadataHandler>,
+) -> bool {
+    let copy_text = |text: String| -> bool {
+        let Some(handler) = page_metadata_handler else {
+            return false;
+        };
+        handler(BrowserPageMetadataEvent::CopyToClipboard(
+            gpui::ClipboardItem::new_string(text),
+        ));
+        true
+    };
+    // Editing and navigation act on the page, which gave its keyboard to the menu.
+    let focus_page = || {
+        if let Some(host) = browser.host() {
+            platform::focus_native_view(platform::native_view_ptr(host.window_handle()));
+            host.set_focus(1);
+        }
+    };
+    let edit = |command: fn(&Frame)| -> bool {
+        let Some(frame) = frame else {
+            return false;
+        };
+        focus_page();
+        command(frame);
+        true
+    };
+    match command_id {
+        CEF_CONTEXT_MENU_INSPECT_ELEMENT_COMMAND_ID => {
+            let point = cef::Point {
+                x: target.x,
+                y: target.y,
+            };
+            show_browser_dev_tools(Some(&mut browser.clone()), Some(&point))
+        }
+        MENU_ID_BACK => {
+            focus_page();
+            browser.go_back();
+            true
+        }
+        MENU_ID_FORWARD => {
+            focus_page();
+            browser.go_forward();
+            true
+        }
+        MENU_ID_RELOAD => {
+            focus_page();
+            browser.reload();
+            true
+        }
+        MENU_ID_UNDO => edit(|frame| frame.undo()),
+        MENU_ID_REDO => edit(|frame| frame.redo()),
+        MENU_ID_CUT => edit(|frame| frame.cut()),
+        MENU_ID_COPY => edit(|frame| frame.copy()),
+        MENU_ID_PASTE => edit(|frame| frame.paste()),
+        MENU_ID_SELECT_ALL => edit(|frame| frame.select_all()),
+        MENU_ID_SPELLCHECK_SUGGESTION_0..=MENU_ID_SPELLCHECK_SUGGESTION_LAST => {
+            let Some(host) = browser.host() else {
+                return false;
+            };
+            focus_page();
+            host.replace_misspelling(Some(&CefString::from(label)));
+            true
+        }
+        MENU_ID_ADD_TO_DICTIONARY => {
+            let Some(host) = browser.host() else {
+                return false;
+            };
+            host.add_word_to_dictionary(Some(&CefString::from(target.misspelled_word.as_str())));
+            true
+        }
+        CEF_CONTEXT_MENU_OPEN_LINK_NEW_TAB_COMMAND_ID
+        | CEF_CONTEXT_MENU_OPEN_LINK_NEW_WINDOW_COMMAND_ID
+        | CEF_CONTEXT_MENU_APP_OPEN_LINK_NEW_TAB_COMMAND_ID
+        | CEF_CONTEXT_MENU_OPEN_IMAGE_NEW_TAB_COMMAND_ID => {
+            let url = if command_id == CEF_CONTEXT_MENU_OPEN_IMAGE_NEW_TAB_COMMAND_ID {
+                target.image_url.clone()
+            } else {
+                target.link_url.clone()
+            };
+            let (Some(popup_open_handler), Some(url)) = (popup_open_handler, url) else {
+                return false;
+            };
+            popup_open_handler(url, BrowserPopupPlacement::Selected);
+            true
+        }
+        CEF_CONTEXT_MENU_SAVE_LINK_AS_COMMAND_ID => target
+            .link_url
+            .as_deref()
+            .is_some_and(|url| start_browser_download(Some(&mut browser.clone()), url) != 0),
+        CEF_CONTEXT_MENU_SAVE_IMAGE_AS_COMMAND_ID => target
+            .image_url
+            .as_deref()
+            .is_some_and(|url| start_browser_download(Some(&mut browser.clone()), url) != 0),
+        CEF_CONTEXT_MENU_COPY_LINK_ADDRESS_COMMAND_ID => {
+            target.link_url.clone().is_some_and(copy_text)
+        }
+        CEF_CONTEXT_MENU_COPY_IMAGE_ADDRESS_COMMAND_ID => {
+            target.image_url.clone().is_some_and(copy_text)
+        }
+        CEF_CONTEXT_MENU_COPY_IMAGE_COMMAND_ID => {
+            let (Some(url), Some(handler), Some(host)) = (
+                target.image_url.as_deref(),
+                page_metadata_handler.cloned(),
+                browser.host(),
+            ) else {
+                return false;
+            };
+            let mut callback = GhostexGpuiCopyImageCallback::new(handler);
+            host.download_image(Some(&CefString::from(url)), 0, 0, 0, Some(&mut callback));
+            true
+        }
+        _ => false,
+    }
+}
+
 wrap_context_menu_handler! {
     pub(crate) struct GhostexGpuiContextMenuHandler {
         popup_open_handler: Option<BrowserPopupOpenHandler>,
@@ -259,8 +485,8 @@ wrap_context_menu_handler! {
     impl ContextMenuHandler {
         fn on_before_context_menu(
             &self,
-            _browser: Option<&mut cef::Browser>,
-            _frame: Option<&mut Frame>,
+            browser: Option<&mut cef::Browser>,
+            frame: Option<&mut Frame>,
             params: Option<&mut ContextMenuParams>,
             model: Option<&mut MenuModel>,
         ) {
@@ -280,8 +506,9 @@ wrap_context_menu_handler! {
             CDXC:ContextMenus 2026-07-10:
             Match the production macOS CEF browser menu by preserving CEF's
             normal page/edit/link commands and appending one real Inspect
-            Element command. This remains Chromium-owned menu UI and does not
-            add GPUI overlays, hit-test routing, or page-content logging.
+            Element command. Surfaces other than Browser pages keep this as
+            Chromium-owned menu UI; Browser pages show these rows in Ghostex's
+            own menu (below).
             */
             if model.count() > 0 {
                 model.add_separator();
@@ -290,83 +517,77 @@ wrap_context_menu_handler! {
                 CEF_CONTEXT_MENU_INSPECT_ELEMENT_COMMAND_ID,
                 Some(&CefString::from("Inspect Element")),
             );
+            /*
+            CDXC:ContextMenus 2026-11-16 DECISION:
+            User: right-clicking a browser pane should open "a regular small context menu, not this dumb huge white one". On Linux CEF's own menu is an X11 window that Hyprland managed like any new window (1100x760, white, away from the click), so Browser pages (the surfaces with a page metadata handler) show the rows of CEF's model in Ghostex's own GPUI context menu at the click instead, on every platform so the menu matches the app's other right-click menus. Clearing the model is CEF's documented way to show no menu of its own, and it leaves no CEF menu waiting on a callback; the chosen row runs through CEF's browser, frame and host calls (`run_browser_context_menu_command`). Other CEF surfaces keep CEF's menu.
+            */
+            let (Some(handler), Some(browser), Some(params)) =
+                (self.page_metadata_handler.as_ref(), browser, params.as_deref())
+            else {
+                return;
+            };
+            let entries = browser_context_menu_entries(model);
+            model.clear();
+            let target = BrowserContextMenuTarget::from_params(params);
+            let browser = browser.clone();
+            let frame = frame.map(|frame| frame.clone());
+            let labels = entries
+                .iter()
+                .filter_map(|entry| match entry {
+                    BrowserPageContextMenuEntry::Item {
+                        command_id, label, ..
+                    } => Some((*command_id, label.clone())),
+                    BrowserPageContextMenuEntry::Separator => None,
+                })
+                .collect::<HashMap<_, _>>();
+            let popup_open_handler = self.popup_open_handler.clone();
+            let page_metadata_handler = self.page_metadata_handler.clone();
+            let (x, y) = (target.x as f32, target.y as f32);
+            handler(BrowserPageMetadataEvent::ContextMenuRequested(
+                BrowserPageContextMenu {
+                    x,
+                    y,
+                    entries,
+                    run: StdRc::new(move |command_id| {
+                        run_browser_context_menu_command(
+                            &browser,
+                            frame.as_ref(),
+                            &target,
+                            command_id,
+                            labels.get(&command_id).map_or("", String::as_str),
+                            popup_open_handler.as_ref(),
+                            page_metadata_handler.as_ref(),
+                        );
+                    }),
+                },
+            ));
         }
 
         fn on_context_menu_command(
             &self,
             browser: Option<&mut cef::Browser>,
-            _frame: Option<&mut Frame>,
+            frame: Option<&mut Frame>,
             params: Option<&mut ContextMenuParams>,
             command_id: c_int,
             _event_flags: EventFlags,
         ) -> c_int {
-            if command_id == CEF_CONTEXT_MENU_INSPECT_ELEMENT_COMMAND_ID {
-                let inspect_point = params.as_deref().map(|params| cef::Point {
-                    x: params.xcoord(),
-                    y: params.ycoord(),
-                });
-                return show_browser_dev_tools(browser, inspect_point.as_ref()) as c_int;
+            // Only surfaces that keep CEF's own menu get here; Browser pages run their commands
+            // from Ghostex's menu. CEF's built-in ids keep CEF's default handling.
+            if command_id < CEF_CONTEXT_MENU_INSPECT_ELEMENT_COMMAND_ID {
+                return 0;
             }
-            let Some(params) = params.as_deref() else {
+            let (Some(browser), Some(params)) = (browser, params.as_deref()) else {
                 return 0;
             };
-            let copy_text = |text: String| -> c_int {
-                let Some(handler) = self.page_metadata_handler.as_ref() else {
-                    return 0;
-                };
-                handler(BrowserPageMetadataEvent::CopyToClipboard(
-                    gpui::ClipboardItem::new_string(text),
-                ));
-                1
-            };
-            match command_id {
-                CEF_CONTEXT_MENU_OPEN_LINK_NEW_TAB_COMMAND_ID
-                | CEF_CONTEXT_MENU_OPEN_LINK_NEW_WINDOW_COMMAND_ID
-                | CEF_CONTEXT_MENU_APP_OPEN_LINK_NEW_TAB_COMMAND_ID
-                | CEF_CONTEXT_MENU_OPEN_IMAGE_NEW_TAB_COMMAND_ID => {
-                    let url = if command_id == CEF_CONTEXT_MENU_OPEN_IMAGE_NEW_TAB_COMMAND_ID {
-                        context_menu_image_url(params)
-                    } else {
-                        context_menu_link_url(params)
-                    };
-                    let (Some(popup_open_handler), Some(url)) =
-                        (self.popup_open_handler.as_ref(), url)
-                    else {
-                        return 0;
-                    };
-                    popup_open_handler(url, BrowserPopupPlacement::Selected);
-                    1
-                }
-                CEF_CONTEXT_MENU_SAVE_LINK_AS_COMMAND_ID => context_menu_link_url(params)
-                    .map_or(0, |url| start_browser_download(browser, &url)),
-                CEF_CONTEXT_MENU_SAVE_IMAGE_AS_COMMAND_ID => context_menu_image_url(params)
-                    .map_or(0, |url| start_browser_download(browser, &url)),
-                CEF_CONTEXT_MENU_COPY_LINK_ADDRESS_COMMAND_ID => {
-                    context_menu_link_url(params).map_or(0, copy_text)
-                }
-                CEF_CONTEXT_MENU_COPY_IMAGE_ADDRESS_COMMAND_ID => {
-                    context_menu_image_url(params).map_or(0, copy_text)
-                }
-                CEF_CONTEXT_MENU_COPY_IMAGE_COMMAND_ID => {
-                    let (Some(url), Some(handler), Some(host)) = (
-                        context_menu_image_url(params),
-                        self.page_metadata_handler.clone(),
-                        browser.and_then(|browser| browser.host()),
-                    ) else {
-                        return 0;
-                    };
-                    let mut callback = GhostexGpuiCopyImageCallback::new(handler);
-                    host.download_image(
-                        Some(&CefString::from(url.as_str())),
-                        0,
-                        0,
-                        0,
-                        Some(&mut callback),
-                    );
-                    1
-                }
-                _ => 0,
-            }
+            run_browser_context_menu_command(
+                browser,
+                frame.as_deref(),
+                &BrowserContextMenuTarget::from_params(params),
+                command_id,
+                "",
+                self.popup_open_handler.as_ref(),
+                self.page_metadata_handler.as_ref(),
+            ) as c_int
         }
     }
 }

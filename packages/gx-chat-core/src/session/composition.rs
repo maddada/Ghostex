@@ -224,9 +224,11 @@ pub fn refresh_boundaried(state: &mut ChatState) {
         messages.pushed_since,
         &mut messages.assembled_tail,
     ) {
-        (Some(_), Some(pushed), Some(tail)) => {
-            tail.extend(&messages.list, key.list_revision, pushed)
-        }
+        (Some(_), Some(pushed), Some(tail)) => tail
+            .extend(&messages.list, key.list_revision, pushed)
+            .map(|added| {
+                crate::session::appended_notes::without_note_turns_after(added, &mut tail.notes)
+            }),
         _ => None,
     };
     match (previous, added) {
@@ -239,8 +241,15 @@ pub fn refresh_boundaried(state: &mut ChatState) {
             messages.boundaried_extended = Some((previous, from));
         }
         _ => {
-            let (assembled, tail) =
+            let (assembled, mut tail) =
                 crate::session::assembler::assembled_with_tail(&messages.list, key.list_revision);
+            // Ghostex's notes, and a turn one opened, are never drawn (`session/appended_notes.rs`).
+            let mut notes = crate::session::appended_notes::NoteTurns::default();
+            let assembled =
+                crate::session::appended_notes::without_note_turns_after(assembled, &mut notes);
+            if let Some(tail) = tail.as_mut() {
+                tail.notes = notes;
+            }
             messages.assembled_tail = tail;
             messages.boundaried = apply_marker_boundaries_in(
                 surface_skill_invocation_user_turns_in(assembled),
@@ -289,7 +298,11 @@ pub fn compose_cached(state: &mut ChatState, preview_text: Option<&str>, working
 /// This is `boundaried` in the TypeScript, and it is what every later step measures against.
 /// [`refresh_boundaried`] keeps the answer on the state; this is the rebuild.
 pub fn boundaried_transcript(state: &ChatState) -> Vec<ChatRow> {
-    let surfaced = surface_skill_invocation_user_turns_in(assembled_messages(&state.messages.list));
+    // Ghostex's notes, and a turn one opened, are never drawn (`session/appended_notes.rs`).
+    let surfaced =
+        surface_skill_invocation_user_turns_in(crate::session::appended_notes::without_note_turns(
+            assembled_messages(&state.messages.list),
+        ));
     apply_marker_boundaries_in(surfaced, &state.pending.markers)
 }
 

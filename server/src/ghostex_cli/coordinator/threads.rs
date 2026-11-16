@@ -523,7 +523,7 @@ pub(super) fn unlink(parsed: &ParsedArgs) -> CliResult<()> {
     Ok(())
 }
 
-/// `resolve` marks a thread done and closes its session (`--keep-open` parks it instead);
+/// `resolve` marks a thread done and closes its session (`--keep-open` only marks it done);
 /// `reopen` resumes a closed thread's session, then puts it back in its coordinator's tree.
 pub(super) fn set_resolved(parsed: &ParsedArgs, resolved: bool) -> CliResult<()> {
     let verb = if resolved { "resolve" } else { "reopen" };
@@ -610,7 +610,7 @@ pub(super) fn set_resolved(parsed: &ParsedArgs, resolved: bool) -> CliResult<()>
             "Marked {global_ref} done and closed its session. `ghostex coordinator reopen {global_ref}` or a message resumes the same conversation."
         );
     } else if resolved {
-        println!("Marked {global_ref} done; its session stays open (parked).");
+        println!("Marked {global_ref} done; its session stays open under its coordinator.");
     } else if result["sessionResuming"].as_bool() == Some(true) {
         println!("Reopened {global_ref}; its session is still starting and resumes on its own.");
     } else if resumed {

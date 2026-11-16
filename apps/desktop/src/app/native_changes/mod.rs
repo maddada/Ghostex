@@ -16,7 +16,7 @@ mod view;
 pub(crate) use model::ChangesScope;
 #[cfg(test)]
 pub(crate) use model::parse_patch_for_tests;
-#[cfg_attr(target_arch = "wasm32", allow(unused_imports))]
+#[cfg_attr(ghostex_web, allow(unused_imports))]
 pub(crate) use static_diff::render_static_diff;
 pub(crate) use view::{
     ChangesHostFn, ChangesHostInfo, ChangesPreset, ChangesRequest, ChangesTarget, ChangesView,

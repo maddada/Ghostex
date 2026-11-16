@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MANAGE_CONTENT_AUTOSAVE_DELAY_MS } from './constants';
 import { requestManageFiles } from './files-bridge';
 import { ManageExcalidrawEditor } from './preview/excalidraw-editor';
 import { ManageFontViewer } from './preview/font-viewer';
-import { ManageHtmlRenderViewer, manageHtmlPageName } from './preview/html-viewer';
+import { type ManageAnnotateBoot, ManageHtmlRenderViewer, manageHtmlPageName } from './preview/html-viewer';
 import type { ManageWebKitWindow } from './types';
 
 /** The Docs resource origin's URL for one file, or `undefined` when the app gave no origin. */
@@ -107,11 +107,74 @@ function ManageEmbedDocument() {
   const path = params.get('path') ?? '';
   // An outside file is read and saved by its real path but loads its resources from its grant's mount.
   const resourcePath = params.get('resourcePath') ?? path;
-  const annotate = params.get('annotate') !== '0';
   const drawing = /\.excalidraw$/i.test(path);
+  const html = !drawing;
   const [content, setContent] = useState<string>();
+  const [annotate, setAnnotate] = useState<ManageAnnotateBoot>();
   const [error, setError] = useState<string>();
   const saveTimer = useRef<number | undefined>(undefined);
+
+  // How Annotate starts in an HTML file: on or off for this file, Ghostex's theme, the saved
+  // settings and this file's saved notes (CDXC:Docs 2026-11-14 in preview/html-viewer.tsx).
+  useEffect(() => {
+    if (!html) {
+      return;
+    }
+    requestManageFiles({ action: 'annotateLoad', path, projectEditorId, projectId })
+      .then((response) => setAnnotate(response.annotate ?? { on: false, theme: 'dark' }))
+      .catch(() => setAnnotate({ on: false, theme: 'dark' }));
+  }, [html, path, projectEditorId, projectId]);
+
+  const onAnnotateState = useCallback(
+    (annotateState: Record<string, unknown>) =>
+      void requestManageFiles({
+        action: 'annotateState',
+        annotateState: annotateState as never,
+        path,
+        projectEditorId,
+        projectId,
+      }).catch(() => undefined),
+    [path, projectEditorId, projectId]
+  );
+  const onAnnotateNotes = useCallback(
+    (notes: unknown[]) =>
+      void requestManageFiles({ action: 'annotateNotes', notes, path, projectEditorId, projectId }).catch(
+        () => undefined
+      ),
+    [path, projectEditorId, projectId]
+  );
+  const onCopyAnnotation = useCallback(
+    (markdown: string) =>
+      void requestManageFiles({ action: 'copyPageAnnotation', markdown, path, projectEditorId, projectId }).catch(
+        () => undefined
+      ),
+    [path, projectEditorId, projectId]
+  );
+  const onAnnotateHotkey = useCallback(
+    () =>
+      void requestManageFiles({ action: 'annotateToggle', path, projectEditorId, projectId }).catch(() => undefined),
+    [path, projectEditorId, projectId]
+  );
+  const onOpenDocument = useCallback(
+    (next: string) => void requestManageFiles({ action: 'openDocsFile', path: next, projectEditorId, projectId }),
+    [projectEditorId, projectId]
+  );
+  const onSendAnnotation = useCallback(
+    async (markdown: string, screenshots: { id: string; png: string }[]) => {
+      const response = await requestManageFiles({
+        action: 'sendPageAnnotation',
+        markdown,
+        screenshots,
+        path,
+        projectEditorId,
+        projectId,
+      });
+      if (response.error) {
+        throw new Error(response.error);
+      }
+    },
+    [path, projectEditorId, projectId]
+  );
 
   useEffect(() => {
     requestManageFiles({ action: 'read', path, projectEditorId, projectId })
@@ -147,7 +210,7 @@ function ManageEmbedDocument() {
   if (error) {
     return <div className='manage-preview-message'>{error}</div>;
   }
-  if (content === undefined) {
+  if (content === undefined || (html && annotate === undefined)) {
     return null;
   }
   if (drawing) {
@@ -167,25 +230,15 @@ function ManageEmbedDocument() {
   return (
     <div className='manage-embed'>
       <ManageHtmlRenderViewer
-        annotationsEnabled={annotate}
+        annotate={annotate ?? { on: false, theme: 'dark' }}
         content={content}
         documentKey={resourcePath}
-        onOpenDocument={(next) =>
-          void requestManageFiles({ action: 'openDocsFile', path: next, projectEditorId, projectId })
-        }
-        onSendAnnotation={async (markdown, screenshots) => {
-          const response = await requestManageFiles({
-            action: 'sendPageAnnotation',
-            markdown,
-            screenshots,
-            path,
-            projectEditorId,
-            projectId,
-          });
-          if (response.error) {
-            throw new Error(response.error);
-          }
-        }}
+        onAnnotateHotkey={onAnnotateHotkey}
+        onAnnotateNotes={onAnnotateNotes}
+        onAnnotateState={onAnnotateState}
+        onCopyAnnotation={onCopyAnnotation}
+        onOpenDocument={onOpenDocument}
+        onSendAnnotation={onSendAnnotation}
         pageName={manageHtmlPageName(path, resourcePath)}
       />
     </div>

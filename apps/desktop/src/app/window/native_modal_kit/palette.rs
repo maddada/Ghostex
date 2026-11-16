@@ -233,10 +233,36 @@ impl ModalPalette {
         palette.raised = washes.raised;
         palette.raised_hover = washes.raised_hover;
         palette.hairline = washes.hairline;
-        palette
+        palette.with_theme_roles()
+    }
+
+    /// The theme roles over the derived colours (helpers/theme_roles.rs): Borders paints the
+    /// hairlines and menu borders, Grey text the muted text, Cards the panels, Controls the fields
+    /// and buttons, Hover their hover, Menus the menus, Focus ring the focused field's border, and
+    /// Success and Danger their colours. A role not set keeps the colour.
+    pub(crate) fn with_theme_roles(mut self) -> Self {
+        use crate::app::helpers::theme_role_or_rgba;
+        let light = self.light;
+        self.hairline = theme_role_or_rgba("border", light, self.hairline);
+        self.menu_border = theme_role_or_rgba("border", light, self.menu_border);
+        self.muted = theme_role_or_rgba("mutedText", light, self.muted);
+        self.foreground = theme_role_or_rgba("text", light, self.foreground);
+        self.panel = theme_role_or_rgba("surface", light, self.panel);
+        self.raised = theme_role_or_rgba("control", light, self.raised);
+        self.raised_hover = theme_role_or_rgba("hover", light, self.raised_hover);
+        self.accent = theme_role_or_rgba("hover", light, self.accent);
+        self.menu_background = theme_role_or_rgba("menu", light, self.menu_background);
+        self.focus_border = theme_role_or_rgba("focusRing", light, self.focus_border);
+        self.destructive = theme_role_or_rgba("danger", light, self.destructive);
+        self.success = theme_role_or_rgba("success", light, self.success);
+        self
     }
 
     pub(crate) fn resolve(light: bool, sidebar_theme: Option<&str>) -> Self {
+        Self::derive(light, sidebar_theme).with_theme_roles()
+    }
+
+    fn derive(light: bool, sidebar_theme: Option<&str>) -> Self {
         if light {
             Self {
                 surface: rgb(0xffffff),

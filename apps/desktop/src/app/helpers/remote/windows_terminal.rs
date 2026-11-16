@@ -63,6 +63,9 @@ $gxError=[IO.Path]::GetTempFileName()
 $env:GHOSTEX_REMOTE_SSH_STDERR=$gxError
 $gxAuthFailures=0
 $gxFastFailures=0
+# GitHub #613: fast failures back off 2, 4, 8, 16 then 30 s and the sixth in a row parks until
+# Enter; see gpui_remote_attach_terminal_process_command in attach_terminal_process.rs.
+$gxFastFailureCap=6
 try {
     while ($true) {
         $gxStarted=[DateTime]::UtcNow
@@ -82,9 +85,26 @@ try {
             continue
         }
         $gxAuthFailures=0
-        [Console]::WriteLine("`nRemote attach ended (exit $gxExit). Reconnecting...")
-        if ($gxDuration -ge 8) { $gxFastFailures=0 } else { $gxFastFailures++ }
-        if ($gxFastFailures -gt 0) { if ($gxFastFailures -le 3) { Start-Sleep -Seconds 2 } else { Start-Sleep -Seconds 5 } }
+        if ($gxDuration -ge 8) {
+            $gxFastFailures=0
+            [Console]::WriteLine("`nRemote attach ended (exit $gxExit). Reconnecting...")
+        } else {
+            $gxFastFailures++
+            if ($gxFastFailures -ge $gxFastFailureCap) {
+                [Console]::WriteLine("`nGhostex stopped reconnecting this terminal: the remote attach failed $gxFastFailures times in a row,")
+                [Console]::WriteLine("each time within seconds of connecting to $gxHost (last exit code $gxExit).")
+                [Console]::WriteLine('The remote machine refused or ended the attach command; its own message is above')
+                [Console]::WriteLine('(for example, antivirus blocking the command). Retrying would only repeat it.')
+                [Console]::WriteLine('Press Enter to try again. Ctrl+C stops this terminal.')
+                if ($null -eq [Console]::ReadLine()) { Start-Sleep -Seconds 600 }
+                $gxFastFailures=$gxFastFailureCap-1
+            } else {
+                $gxWait=30
+                if ($gxFastFailures -lt 5) { $gxWait=@(0,2,4,8,16)[$gxFastFailures] }
+                [Console]::WriteLine("`nRemote attach ended (exit $gxExit) within seconds. Retrying in ${gxWait}s (attempt $($gxFastFailures+1) of $gxFastFailureCap)...")
+                Start-Sleep -Seconds $gxWait
+            }
+        }
         while (!(Test-GxRemote)) { Start-Sleep -Seconds 2 }
         Start-Sleep -Seconds 1
     }

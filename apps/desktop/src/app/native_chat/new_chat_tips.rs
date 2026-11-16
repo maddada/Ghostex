@@ -61,7 +61,7 @@ thread_local! {
 }
 
 fn platform_name() -> &'static str {
-    if cfg!(target_family = "wasm") {
+    if cfg!(ghostex_web) {
         "web"
     } else if cfg!(target_os = "macos") {
         "macos"

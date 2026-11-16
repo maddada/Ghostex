@@ -760,6 +760,12 @@ impl SidebarViewModel {
             }
         }
 
+        // A coordinator's threads in its computer's other projects, under it (`thread_fold.rs`);
+        // the Unified sidebar nests across projects itself.
+        if !effective.settings.unified_sidebar {
+            super::thread_fold::fold_cross_project_threads(&mut plans, &mut drawn_focus);
+        }
+
         // Chief of Staff's row joins the home's group wherever its session lives (`chief.rs`).
         super::chief::lift_chief_into_home(&mut plans);
 

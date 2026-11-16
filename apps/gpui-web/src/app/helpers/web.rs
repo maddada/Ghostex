@@ -241,6 +241,7 @@ pub(crate) fn apply_settings_theme_colours() {
     }
     let light = sidebar_uses_light_theme(object);
     crate::CHROME_LIGHT_APPEARANCE.store(light, Ordering::Relaxed);
+    apply_theme_roles(object);
     let chrome = resolved_custom_sidebar_titlebar_background_for_variant(object, light);
     GPUI_TITLEBAR_BACKGROUND_RGB.store(u64::from(chrome), Ordering::Relaxed);
     crate::GPUI_MENU_BACKGROUND_RGB.store(

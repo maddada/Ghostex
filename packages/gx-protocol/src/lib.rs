@@ -34,6 +34,8 @@ pub mod coordinator;
 pub mod de;
 pub mod delta;
 pub mod event;
+/// Sidebar and side panel extension panels; used module-qualified (`extension_panel::PanelDocument`).
+pub mod extension_panel;
 /// Pairing v2 (GitHub #495): device keys, Pending and the three match words; used module-qualified.
 pub mod pairing;
 pub mod peek;

@@ -236,6 +236,12 @@ fn option_rows(remainder: &[String]) -> (Vec<TerminalDialogRow>, RangeInclusive<
 /// SEE-ALSO: apps/desktop/src/app/native_chat/terminal_dialog.rs.
 pub fn detect_claude_dialog(text: &str) -> Option<TerminalDialog> {
     let text = &crate::session_chat_resume_prompt::strip_claude_side_panel(text);
+    /*
+    CDXC:SessionChat 2026-11-15 WHY:
+    User: "Pls fix this. I couldn't go through this :((" (Mac app and Android app). A Bash permission prompt in a named session reached the chat as this dialog's card (the title rule under it hid it from the approval card, session_chat_resume_prompt.rs), and Claude Code's "will automatically block this request in 1:08" countdown sat in it. The card was built from the screen with the countdown cut out (session_chat_notice/classify.rs) while the answer read this dialog again with it left in, so the two ids never matched and every Yes was refused as "Claude's dialog changed". The countdown is cut here, where both read the dialog, so it is no part of the dialog's id or text; a changed command, question or row still changes the id and is refused. The session title rule is chrome, not the dialog's text, and is left out with it.
+    */
+    let (text, _) = crate::session_chat_claude_permission::split_claude_auto_block(text);
+    let text = text.as_ref();
     if let Some(dialog) = crate::session_chat_claude_effort_notice::detect_effort_notice(text) {
         return Some(dialog);
     }
@@ -246,6 +252,7 @@ pub fn detect_claude_dialog(text: &str) -> Option<TerminalDialog> {
                 .trim_end()
                 .to_string()
         })
+        .filter(|line| !crate::session_chat_resume_prompt::is_claude_session_title_rule(line))
         .collect();
     let rule = |fill: char| {
         lines.iter().rposition(|line| {

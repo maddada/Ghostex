@@ -60,6 +60,7 @@ use gpui::{
 };
 use gpui_component::v_flex;
 use model::*;
+pub(crate) use model::{connect_back_code_params, easy_connect_join_target};
 use serde_json::{Value, json};
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
@@ -1040,7 +1041,8 @@ impl RemoteTab {
 
     // ---- deep links and preview states --------------------------------------------------------------
 
-    /// `initialRemoteSection` scrolls to the top card or opens Tailscale, `initialRemoteMachineId` opens that
+    /// `initialRemoteSection` scrolls to the top card, opens Tailscale or the empty Add a computer
+    /// dialog, `initialRemoteMachineId` opens that
     /// machine's edit dialog; each applies once per visit to the page.
     fn apply_deep_links(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !self.is_active(cx) {
@@ -1053,6 +1055,24 @@ impl RemoteTab {
                 request.initial_remote_machine_id.clone(),
             )
         };
+        // `addComputerSsh` (Connect a computer's Use SSH details) opens the empty Add a computer
+        // dialog, which adds a computer over SSH; `addComputer` is its older name.
+        if matches!(section.as_deref(), Some("addComputer" | "addComputerSsh"))
+            && self.targeted_section != section
+        {
+            self.targeted_section = section.clone();
+            // An Add a computer draft the last visit left unsaved comes back on its values
+            // (CDXC:Settings 2026-10-16 in settings_modal/restore.rs); otherwise the form is empty.
+            let new_machine_draft = self
+                .kept_machine_form
+                .take()
+                .filter(|form| form.get("machineId").and_then(Value::as_str).is_none());
+            match new_machine_draft {
+                Some(form) => self.restore_machine_dialog(&form, window, cx),
+                None => self.open_machine_dialog(None, window, cx),
+            }
+            self.pending_scroll = Some(ScrollTarget::Machines);
+        }
         // `easyConnect` is the top of the page; `tailscale` opens its row.
         if let Some(section) = section
             && self.targeted_section.as_deref() != Some(section.as_str())

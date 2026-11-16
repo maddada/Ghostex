@@ -149,6 +149,7 @@ pub(crate) mod machine_integrations_http;
 #[cfg(target_os = "macos")]
 pub(crate) mod macos_login_recovery;
 pub(crate) mod managed_tools_http;
+mod memory_guard_runtime;
 mod network_status_runtime;
 mod open_conversation_http;
 mod peer_http;
@@ -209,6 +210,7 @@ pub use foreground::*;
 use http_dispatch::*;
 pub(crate) use http_endpoints::*;
 pub(crate) use http_infra::*;
+pub(crate) use memory_guard_runtime::resume_after_memory_stop;
 pub(crate) use presentation_delta::*;
 pub(crate) use project_paths::*;
 use route_http::*;

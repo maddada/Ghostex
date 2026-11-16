@@ -6,6 +6,7 @@
 
 pub mod account_wait;
 pub mod actions;
+pub mod answer_pills;
 pub mod async_answers;
 pub mod async_controller;
 pub mod content;
@@ -24,6 +25,7 @@ pub mod inline_answers;
 pub mod interactive;
 pub mod later;
 pub mod model;
+pub mod notice_checkboxes;
 pub mod notice_choices;
 pub mod notice_state;
 pub mod notice_tail;
@@ -40,6 +42,7 @@ pub mod sync;
 pub mod terminal_dialog_copy;
 pub mod terminal_picker;
 pub mod terminal_prompts;
+pub mod trust_card;
 pub mod unreachable_retry;
 
 pub use crate::questions::actions::handle;

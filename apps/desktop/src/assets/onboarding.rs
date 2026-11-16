@@ -129,6 +129,24 @@ const ICON_PATHS: &[(&str, &str)] = &[
         "capture",
         r#"<path d="M4 8.5V5.5a1.5 1.5 0 0 1 1.5-1.5h3M15.5 4h3A1.5 1.5 0 0 1 20 5.5v3M20 15.5v3a1.5 1.5 0 0 1-1.5 1.5h-3M8.5 20h-3A1.5 1.5 0 0 1 4 18.5v-3"/><circle cx="12" cy="12" r="3"/>"#,
     ),
+    // The devices page (window/onboarding/mobile.rs): another computer, a Cloud Box, Easy
+    // Connect's code and Tailscale's network.
+    (
+        "laptop",
+        r#"<rect x="4.5" y="5" width="15" height="10.5" rx="1.6"/><path d="M2.5 18.5h19"/>"#,
+    ),
+    (
+        "cloud",
+        r#"<path d="M7.2 18.5h9.6a4 4 0 0 0 .5-7.97 5.5 5.5 0 0 0-10.6 1.5A3.25 3.25 0 0 0 7.2 18.5z"/>"#,
+    ),
+    (
+        "qr",
+        r#"<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h2.5v2.5H14zM17.5 17.5H20V20h-2.5zM14 19.6h1.2M19.6 14v1.2"/>"#,
+    ),
+    (
+        "globe",
+        r#"<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.3 2.4 3.4 5.2 3.4 8.5s-1.1 6.1-3.4 8.5c-2.3-2.4-3.4-5.2-3.4-8.5s1.1-6.1 3.4-8.5z"/>"#,
+    ),
     (
         "wrench",
         r#"<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>"#,

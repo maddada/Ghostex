@@ -53,9 +53,6 @@ struct AgentCard<'a> {
     references: &'a Value,
 }
 
-/// How far a card's session name's hover fill reaches past the name on each side; the name's
-/// negative margin takes the same back, so it adds no space at rest.
-const CARD_PILL_PAD: f32 = 3.0;
 /// The width of a word space in the chat font, in ems.
 const WORD_SPACE_EM: f32 = 0.27;
 /// How strong a session name's dotted underline is at rest; under the pointer it is full strength.
@@ -97,6 +94,39 @@ impl NameUnderlineFade {
             self.started = None;
         }
         (self.at(now), self.started.is_some())
+    }
+}
+
+/// The same dotted line under a session named in a message's text, which gpui-component draws
+/// under the reference chip's label (`markdown_links.rs` `session_pill_link`).
+pub(super) fn session_name_chip_underline(
+    color: Hsla,
+    scale: f32,
+) -> gpui_component::text::InlineLinkUnderline {
+    gpui_component::text::InlineLinkUnderline {
+        color,
+        rest_opacity: NAME_UNDERLINE_REST,
+        dot: px(NAME_UNDERLINE_DOT * scale),
+        period: px(NAME_UNDERLINE_PERIOD * scale),
+        fade: if crate::app::helpers::gpui_macos_reduce_motion_enabled() {
+            std::time::Duration::ZERO
+        } else {
+            crate::app::consts::SIDEBAR_DIVIDER_HOVER_FADE_DURATION
+        },
+    }
+}
+
+/// The same dotted line under a session named in the chat box, which gpui-component's input draws
+/// under the replacement's text from `start` (`composer_references.rs` `session_replacement`).
+pub(super) fn session_name_input_underline(
+    start: f32,
+    scale: f32,
+) -> gpui_component::input::InlineReplacementUnderline {
+    gpui_component::input::InlineReplacementUnderline {
+        rest_opacity: NAME_UNDERLINE_REST,
+        dot: px(NAME_UNDERLINE_DOT * scale),
+        period: px(NAME_UNDERLINE_PERIOD * scale),
+        start: px(start * scale),
     }
 }
 
@@ -250,7 +280,7 @@ impl NativeChatView {
                 .flex_col()
                 .min_w_0()
                 .w_full()
-                .gap(px(SINGLE_LINE_CARD.stack_gap(p) * p.scale))
+                .gap(px(self.card_stack_gap(p) * p.scale))
                 .children(cards.iter().map(|sent| {
                     let marked = text(sent, "markdown");
                     self.agent_card(
@@ -337,6 +367,38 @@ impl NativeChatView {
         let status = &card["status"];
         let time = text(card, "time");
         let shape = &*SINGLE_LINE_CARD;
+        // The name is cut, never collapsed: on a tight row the time steps aside, then the name's
+        // marks (cards.rs `title_fit`, the user's Q3300 A).
+        let time_width =
+            super::fonts::label_width(&time, &p.font, gpui::FontWeight::NORMAL, 12.0 * s, cx) / s;
+        let fit = if card["pill"].is_object() {
+            let pill = &card["pill"];
+            let lead = super::fonts::label_width(
+                &text(pill, "prefix"),
+                &p.font,
+                gpui::FontWeight(shape.title_weight),
+                shape.title_size * s,
+                cx,
+            ) / s
+                + shape.title_size * WORD_SPACE_EM;
+            shape.title_fit(
+                self.title_room.borrow().get(key).copied(),
+                lead,
+                time_width,
+                Self::session_pill_marks_width(pill, p),
+            )
+        } else {
+            super::cards::TitleFit {
+                show_time: true,
+                show_marks: true,
+            }
+        };
+        let show_time = !time.is_empty() && fit.show_time;
+        let time_room = if show_time {
+            time_width + super::cards::TITLE_ROW_GAP
+        } else {
+            0.0
+        };
         let row = div()
             .id(SharedString::from(format!("{key}:row")))
             .h(px(shape.header_height(s)))
@@ -351,7 +413,16 @@ impl NativeChatView {
                 // `Message from` / `Message to`, then the other session's pill.
                 let pill = &card["pill"];
                 shape
-                    .title(div().flex_1().min_w_0().flex().items_center(), p)
+                    .title(
+                        div()
+                            .relative()
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .flex()
+                            .items_center(),
+                        p,
+                    )
                     // An ordinary word space between `Message to` and the session's name.
                     .gap(px(shape.title_size * WORD_SPACE_EM * s))
                     .text_color(p.foreground)
@@ -361,7 +432,26 @@ impl NativeChatView {
                             .whitespace_nowrap()
                             .child(text(pill, "prefix")),
                     )
-                    .child(self.session_pill(&format!("{key}:pill"), pill, p, cx))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_shrink(1.0)
+                            .min_w(px(shape.name_min() * s))
+                            .child(self.session_pill_fitted(
+                                &format!("{key}:pill"),
+                                pill,
+                                fit.show_marks,
+                                p,
+                                cx,
+                            )),
+                    )
+                    .child(super::cards::title_room_probe(
+                        self.title_room.clone(),
+                        key.to_string(),
+                        time_room,
+                        s,
+                        cx.entity_id(),
+                    ))
                     .into_any_element()
             } else {
                 shape
@@ -370,7 +460,7 @@ impl NativeChatView {
                     .child(text(card, "name"))
                     .into_any_element()
             })
-            .when(!time.is_empty(), |row| {
+            .when(show_time, |row| {
                 row.child(
                     div()
                         .flex_shrink_0()
@@ -446,6 +536,7 @@ impl NativeChatView {
                             .when(session.is_object(), |name| {
                                 let command = json!({
                                     "type": "openAgentSession",
+                                    "serverId": session["serverId"],
                                     "projectId": session["projectId"],
                                     "sessionId": session["sessionId"],
                                 });
@@ -483,11 +574,15 @@ impl NativeChatView {
     }
 
     /// The other session's name on a message card (gx-chat-core `transcript/session_mentions.rs`):
-    /// the session's title in the line's own type, a faint fill under the pointer (the decision
-    /// below) and a faint dotted underline (`session_name_underline`). A pill the core marks `logo: false` sits beside the card's own agent tile and leaves
-    /// the logo to it (CDXC:SessionChat 2026-10-28 on `card_pill`). A click switches to the
-    /// session; a session that is gone draws muted and opens nothing. Its own click never opens or
-    /// closes the card.
+    /// the session's title in the line's own type and colour with a faint dotted underline
+    /// (`session_name_underline`) that grows stronger under the pointer, no frame and no fill; then
+    /// its state dot while it works or needs you and, for a session on another computer, that
+    /// computer's icon (`session_card.rs`); its tooltip is the session's hover card. A name the core
+    /// marks `logo: false` sits beside the card's own agent tile and leaves the logo to it
+    /// (CDXC:SessionChat 2026-10-28 on `card_pill`). A click switches to the session; a session that
+    /// is gone draws muted, has no underline and opens nothing. Its own click never opens or closes
+    /// the card. The user's decision (2026-11-15, no frame, dotted underline, running dots only) is
+    /// on `mention_card` in gx-chat-core; it supersedes the framed pill of 2026-11-13 here.
     pub(super) fn session_pill(
         &self,
         key: &str,
@@ -495,9 +590,56 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
+        self.session_pill_fitted(key, pill, true, p, cx)
+    }
+
+    /// How wide a session name's logo, state dot and computer icon are with their gaps (unscaled):
+    /// what `session_pill_fitted` drops when a card's row is too tight for them
+    /// (cards.rs `title_fit`).
+    pub(super) fn session_pill_marks_width(pill: &Value, p: &ChatAppearance) -> f32 {
+        let gap = 4.0;
+        let logo = if pill["logo"] != false {
+            12.0 + gap
+        } else {
+            0.0
+        };
+        let session = &pill["session"];
+        let card = (pill["missing"] != true && session.is_object())
+            .then(|| {
+                super::session_card::card_for(
+                    session["serverId"].as_str().unwrap_or_default(),
+                    session["projectId"].as_str().unwrap_or_default(),
+                    session["sessionId"].as_str().unwrap_or_default(),
+                )
+            })
+            .flatten();
+        let trail: f32 = card
+            .as_ref()
+            .map(|card| super::session_card::marks(card, p))
+            .unwrap_or_default()
+            .iter()
+            .map(|mark| match mark {
+                super::session_card::PillMark::Dot { size, .. }
+                | super::session_card::PillMark::Icon { size, .. } => gap + f32::from(*size),
+            })
+            .sum();
+        logo + trail
+    }
+
+    /// The session's name; `show_marks` false leaves out its logo, state dot and computer icon,
+    /// which a tight card row drops before the name gets shorter than a few letters
+    /// (cards.rs `title_fit`).
+    pub(super) fn session_pill_fitted(
+        &self,
+        key: &str,
+        pill: &Value,
+        show_marks: bool,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
         let s = p.scale;
         let missing = pill["missing"] == true;
-        let shows_logo = pill["logo"] != false;
+        let shows_logo = show_marks && pill["logo"] != false;
         let (logo, logo_color) = super::markdown_links::session_pill_icon(
             pill["agentIcon"].as_str().unwrap_or_default(),
             pill["coordinator"] == true,
@@ -505,26 +647,48 @@ impl NativeChatView {
         );
         let session = &pill["session"];
         let command = session.is_object().then(|| {
+            // `serverId` names the session's computer, which the core hands on to the host when it
+            // is not the chat's own (gx-chat-core `transcript/actions.rs`).
             json!({
                 "type": "openAgentSession",
+                "serverId": session["serverId"],
                 "projectId": session["projectId"],
                 "sessionId": session["sessionId"],
             })
         });
+        let card = (!missing && session.is_object())
+            .then(|| {
+                super::session_card::card_for(
+                    session["serverId"].as_str().unwrap_or_default(),
+                    session["projectId"].as_str().unwrap_or_default(),
+                    session["sessionId"].as_str().unwrap_or_default(),
+                )
+            })
+            .flatten();
+        let marks = card
+            .as_ref()
+            .filter(|_| show_marks)
+            .map(|card| super::session_card::marks(card, p))
+            .unwrap_or_default();
         let hint = SharedString::from(text(pill, "title"));
-        let hover = p.foreground.opacity(0.06);
-        // CDXC:SessionChat 2026-10-29 DECISION: User, of the "Message from" card's pill (2026-10-28): "make this pill look like [the chat box's session pill] after removing the +", then of "Message to" followed by a wide gap and a smaller grey title: "make font size equal and let's not have this extra space there please. also no need to change the color of text of the session name like that". The card's session name (the header's, and each recipient row's on a "Message to N sessions" card) has no frame and takes the line's own size, weight and colour, so it reads as one title with the words before it, a word space away; it is still a pill: a faint fill under the pointer and a click switches to the session. The fill reaches past the name through a negative margin, so at rest it adds no space. Pills in a message's text and in the chat box keep their own look. The title's `+` went in gx-chat-core `pill_label`. Supersedes the reference colour of the 2026-10-28 decision.
-        let name_left = if shows_logo { 16.0 * s } else { 0.0 } + CARD_PILL_PAD * s;
+        // The underline runs under the title only: past the logo on the left, before the marks on
+        // the right.
+        let gap = 4.0 * s;
+        let lead = if shows_logo { 12.0 * s + gap } else { 0.0 };
+        let trail: f32 = marks
+            .iter()
+            .map(|mark| match mark {
+                super::session_card::PillMark::Dot { size, .. }
+                | super::session_card::PillMark::Icon { size, .. } => gap + f32::from(*size),
+            })
+            .sum();
         div()
             .id(SharedString::from(key.to_string()))
             .relative()
             .flex()
             .items_center()
             .min_w_0()
-            .gap(px(4.0 * s))
-            .px(px(CARD_PILL_PAD * s))
-            .mx(px(-CARD_PILL_PAD * s))
-            .rounded(px(5.0 * s))
+            .gap(px(gap))
             .when(missing, |pill| pill.text_color(p.card_muted))
             .whitespace_nowrap()
             .role(gpui::Role::Button)
@@ -533,8 +697,9 @@ impl NativeChatView {
                 text(pill, "label"),
                 text(pill, "title")
             )))
-            .tooltip(move |window, cx| {
-                gpui_component::tooltip::Tooltip::new(hint.clone()).build(window, cx)
+            .tooltip(move |window, cx| match &card {
+                Some(card) => super::session_card::card_view(card, window, cx),
+                None => gpui_component::tooltip::Tooltip::new(hint.clone()).build(window, cx),
             })
             .when(shows_logo, |pill| {
                 pill.child(
@@ -550,20 +715,27 @@ impl NativeChatView {
                 )
             })
             .child(div().min_w_0().truncate().child(text(pill, "label")))
+            .children(
+                marks
+                    .into_iter()
+                    .map(super::session_card::PillMark::element),
+            )
             .when_some(command, |pill, command| {
                 pill.chat_cursor_pointer()
-                    .hover(move |style| style.bg(hover))
+                    .hover(|style| style)
                     .on_click(cx.listener(move |this, _, _, cx| {
                         cx.stop_propagation();
                         this.invoke(command.clone(), cx)
                     }))
-                    .child(session_name_underline(
-                        format!("{key}:underline"),
-                        name_left,
-                        CARD_PILL_PAD * s,
-                        p.foreground,
-                        s,
-                    ))
+                    .when(!missing, |pill| {
+                        pill.child(session_name_underline(
+                            format!("{key}:underline"),
+                            lead,
+                            trail,
+                            p.foreground,
+                            s,
+                        ))
+                    })
             })
             .when(missing, |pill| {
                 pill.on_click(|_, _, cx| cx.stop_propagation())

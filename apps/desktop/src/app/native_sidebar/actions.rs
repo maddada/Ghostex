@@ -24,6 +24,9 @@ impl GhostexGpuiApp {
             if let Some(id) = action.command["collectionId"].as_str() {
                 self.begin_native_collection_rename(id, window, cx);
             }
+        } else if action.command["type"] == "extensionPanel" {
+            // A row of a sidebar extension's panel menu (extension_panel/actions.rs).
+            self.run_native_sidebar_extension_panel_command(&action.command, window, cx);
         } else if action.command["type"] == "beadsMenu" {
             // A row of a Beads view menu (native_beads/menus.rs) shown with this menu.
             self.run_beads_menu_command(&action.command, window, cx);
@@ -142,6 +145,15 @@ impl GhostexGpuiApp {
         // dispatch (gx_store/sidebar_runtime_route.rs).
         if !self.gx_store_sidebar_list_ready() {
             self.gx_store_drop_sidebar_command_before_ready(&command);
+            return;
+        }
+        // The session menu's Open in New Window, a desktop-only row (app/session_popup/).
+        if command["type"] == "sessionAction"
+            && command["action"] == crate::app::session_popup::OPEN_IN_NEW_WINDOW_ACTION
+        {
+            if let Some(row_id) = command["sessionId"].as_str() {
+                self.open_session_popup_for_row(row_id, cx);
+            }
             return;
         }
         // A pin call that carries a place in Pinned (a pinned drop in either sidebar, gx-core

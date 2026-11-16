@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, ChatSource, StartupDelivery};
 
-use crate::session::appended_notes::without_appended_notes;
+use crate::session::appended_notes::without_notes;
 use crate::session::constants::{DELIVERY_UNCONFIRMED, PENDING_ID_PREFIX};
 use crate::session::text::{
     is_js_space, is_staged_path_input, normalize_pending_text, parse_command_envelope,
@@ -127,7 +127,7 @@ fn shell_command_key(normalized: String) -> String {
 /// (`session/appended_notes.rs`).
 fn user_message_text(message: &ChatMessage) -> String {
     shell_command_prompt_text(message)
-        .unwrap_or_else(|| without_appended_notes(&block_text(message, "\n")).to_string())
+        .unwrap_or_else(|| without_notes(&block_text(message, "\n")))
 }
 
 fn user_message_content_key(message: &ChatMessage) -> String {
@@ -320,24 +320,31 @@ enum Mode {
     Matching,
 }
 
+fn bypasses_text_matching(entry: &PendingSend) -> bool {
+    entry.awaiting_attachments
+        || (entry.queued_prompt_id.is_some()
+            && !crate::transcript::page_answers::answers_page_ids(&entry.text).is_empty())
+}
+
 fn filter_pending_sends(
     pending: &[PendingSend],
     messages: &[ChatRow],
     mode: Mode,
 ) -> Vec<PendingSend> {
-    // A send still waiting for its pictures has not left, so no transcript row can be it: it stays,
-    // and the others are matched as if it were not there (`crate::composer::attaching`).
-    if pending.iter().any(|entry| entry.awaiting_attachments) {
+    // Sends waiting for attachments (`crate::composer::attaching`) and queued page-answer echoes
+    // (owned by `session/answer_echoes.rs` by `queued_prompt_id` + envelope occurrence) skip
+    // heuristic text/repeat matching here so unrelated sibling turns cannot drop them early.
+    if pending.iter().any(bypasses_text_matching) {
         let open: Vec<PendingSend> = pending
             .iter()
-            .filter(|entry| !entry.awaiting_attachments)
+            .filter(|entry| !bypasses_text_matching(entry))
             .cloned()
             .collect();
         let kept = filter_sent_pending_sends(&open, messages, mode);
         return pending
             .iter()
             .filter(|entry| {
-                entry.awaiting_attachments || kept.iter().any(|kept| kept.id == entry.id)
+                bypasses_text_matching(entry) || kept.iter().any(|kept| kept.id == entry.id)
             })
             .cloned()
             .collect();

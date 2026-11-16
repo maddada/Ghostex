@@ -146,6 +146,15 @@ impl NativeChatView {
         }
     }
 
+    /// A long reply holds the list at its top (following is off for it).
+    pub(super) fn reply_hold_placed(&self) -> bool {
+        self.reply_arrival
+            .borrow()
+            .hold
+            .as_ref()
+            .is_some_and(|hold| hold.at.is_some())
+    }
+
     /// The reader moved the list themselves: the reply is theirs to scroll.
     pub(super) fn release_reply_hold(&self) {
         let placed = self.reply_arrival.borrow_mut().hold.take();
@@ -227,7 +236,16 @@ impl NativeChatView {
                     return;
                 };
                 if list.is_scrollbar_dragging() {
-                    arrival.hold = None;
+                    // A placed hold turned following off; the drag hands the list back to Tail
+                    // mode where it is, so dragging to the end (or reaching it later) follows
+                    // again. Left in Normal mode it never followed again until the down pill
+                    // (GitHub issue #615).
+                    let placed = arrival.hold.take().is_some_and(|hold| hold.at.is_some());
+                    if placed && !list.is_following_tail() {
+                        let top = list.logical_scroll_top();
+                        list.set_follow_mode(FollowMode::Tail);
+                        list.scroll_to(top);
+                    }
                     return;
                 }
                 let Some((top, bottom)) = hold.extent.get() else {

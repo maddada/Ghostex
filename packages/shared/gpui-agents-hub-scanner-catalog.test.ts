@@ -71,7 +71,6 @@ describe('GPUI Agents Hub scanner catalog roots', () => {
       '.factory/skills',
       '.gemini/antigravity-cli/skills',
       '.gemini/antigravity/skills',
-      '.gemini/skills',
       '.hermes/skills',
       '.kiro/skills',
       '.pi/agent/settings.json',

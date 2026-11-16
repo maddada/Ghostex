@@ -45,7 +45,7 @@ pub(super) async fn run_session_chat_send_watchdog(
     }
     // A new send is itself proof the session took input, so the previous
     // watchdog's verdict is stale the moment this one starts.
-    if clear_session_chat_watchdog_notice(&probe.project_id, &probe.session_id).is_some() {
+    if clear_session_chat_send_verdict(&probe.project_id, &probe.session_id).is_some() {
         publish();
     }
 
@@ -115,7 +115,7 @@ pub(super) async fn run_session_chat_send_watchdog(
             if superseded() {
                 return;
             }
-            if clear_session_chat_watchdog_notice(&probe.project_id, &probe.session_id).is_some() {
+            if clear_session_chat_send_verdict(&probe.project_id, &probe.session_id).is_some() {
                 publish();
             }
             return;
@@ -353,7 +353,7 @@ pub(super) async fn escalate_undelivered_send(
         if let Some(heal) = heal.filter(|_| typed_into_terminal) {
             heal().await;
         }
-        if clear_session_chat_watchdog_notice(&probe.project_id, &probe.session_id).is_some() {
+        if clear_session_chat_send_verdict(&probe.project_id, &probe.session_id).is_some() {
             publish();
         }
         return;

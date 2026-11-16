@@ -89,6 +89,7 @@ mod local_focus;
 pub(crate) mod machine_short_names;
 mod machine_switch;
 mod notifications;
+pub(crate) mod panel_refs;
 mod presentation_ready;
 mod primary_launcher;
 mod project_activation;
@@ -179,6 +180,7 @@ pub(crate) use agentbox::{
 pub(crate) use capture_targets::CaptureTargetProject;
 pub(crate) use client_storage_init::initialize_client_storage_at_start;
 pub(crate) use cloud_boxes::{cloud_box_request_target, cloud_box_send_target};
+pub(crate) use computer_icons::COMPUTER_ICON_SETTINGS_SOURCE;
 pub(crate) use focus_perform::RowFocusOptions;
 pub(crate) use host::GxStoreHost;
 pub(crate) use primary_launcher::{

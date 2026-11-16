@@ -12,9 +12,23 @@ pub(crate) fn gpui_spawn_open_target_command(
     custom_args: &[String],
     project_path: &Path,
 ) -> Result<(), String> {
-    let mut process = std::process::Command::new("/usr/bin/env");
-    crate::restore_wayland_display_for_process_command(&mut process);
-    process.arg(command);
+    // Windows has no `/usr/bin/env`: the command (a full path from the scan, or a bare name Rust
+    // looks up on PATH) starts directly; std runs a `.cmd`/`.bat` through cmd.exe with its
+    // arguments escaped. No console: `code.cmd` or the `zed.exe` CLI would otherwise flash one.
+    #[cfg(target_os = "windows")]
+    let mut process = {
+        use std::os::windows::process::CommandExt;
+        let mut process = std::process::Command::new(command);
+        process.creation_flags(crate::app::helpers::CREATE_NO_WINDOW);
+        process
+    };
+    #[cfg(not(target_os = "windows"))]
+    let mut process = {
+        let mut process = std::process::Command::new("/usr/bin/env");
+        crate::restore_wayland_display_for_process_command(&mut process);
+        process.arg(command);
+        process
+    };
     for arg in base_args {
         process.arg(arg);
     }

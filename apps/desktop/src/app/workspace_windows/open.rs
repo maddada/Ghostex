@@ -223,6 +223,8 @@ pub(crate) fn open_workspace_window(
     let lead = start.lead();
     let slot = start.slot();
     let activate = options.focus;
+    // A window the app reopens at launch reopens its sessions' own windows (app/session_popup/).
+    let reopen_popups = matches!(start, WorkspaceWindowStart::Restore { .. });
     /*
     CDXC:CefRuntime 2026-06-14-13:10:
     CEF surfaces need an actual GPUI platform window before they attach native AppKit children. Create the GPUI window first, then let the CEF bridge wait for non-zero layout bounds before creating browser hosts. (CEF is optional since 2026-09-28: see app/helpers/web_runtime.rs.)
@@ -265,6 +267,9 @@ pub(crate) fn open_workspace_window(
                 );
             }
             view_for_cef.update(cx, |app, cx| {
+                if reopen_popups {
+                    app.reopen_saved_session_popups(cx);
+                }
                 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
                 app.begin_deferred_cef_startup(cx);
                 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -336,6 +341,8 @@ pub(crate) fn open_workspace_window(
                 }
             })
             .detach();
+            #[cfg(target_os = "linux")]
+            crate::app::helpers::follow_window_minimize_place(window, cx);
             cx.observe_window_activation(window, |app, window, cx| {
                 if !window.is_window_active() {
                     app.voice_agent_window_deactivated(cx);

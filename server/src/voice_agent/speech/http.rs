@@ -3,8 +3,10 @@
 //!
 //! - `/api/readDictateSettings`, `/api/setDictateSettings` `{patch}`
 //! - `/api/readDictateEngine` `{prepare?}`: what will transcribe and whether it can, for the mic
-//!   (greyed when it can't); `prepare` (the mic was pressed) opens a closed Hex on macOS
+//!   (greyed when it can't); `prepare` (the mic was pressed) opens a closed Hex on macOS and
+//!   starts Superwhisper's service
 //! - `hex` in `/api/readDictateSettings`: where the user stands with Hex 3 (`hex.rs`)
+//! - `superwhisper` in `/api/readDictateSettings`: whether Superwhisper is installed (`superwhisper.rs`)
 //! - `/api/deleteOldSpeechModels` and `/api/skipDictationPolish` `{id}`: kept for phones at 11.2.1
 //!   and desktops at 11.2.2, which may still call them; gxserver deletes the old models on its own
 //!   (`retired.rs`) and nothing polishes any more (CDXC:Dictate 2026-11-10 in transcribe.rs)
@@ -12,7 +14,7 @@
 use axum::http::StatusCode;
 use serde_json::{json, Value};
 
-use super::{dictate, hex, languages, retired, settings};
+use super::{dictate, hex, languages, retired, settings, superwhisper};
 use crate::domain::{read_domain_rpc_params, DomainStateError};
 use crate::protocol::rpc_success;
 use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
@@ -66,7 +68,7 @@ async fn route(state: &AppState, path: &str, body: &Value) -> Result<Value, Doma
             {
                 let paths = paths.clone();
                 blocking(move || {
-                    settings::update(&paths, &patch, || dictate::saved_keys(&paths))
+                    settings::update(&paths, &patch, || dictate::new_install(&paths))
                         .map(|_| ())
                         .map_err(|message| failure("badRequest", message))
                 })
@@ -85,6 +87,9 @@ async fn route(state: &AppState, path: &str, body: &Value) -> Result<Value, Doma
                 let hex_state = dictate::hex_state_for(&paths, &settings);
                 if prepare && matches!(hex_state, Some(hex::State::NotRunning)) {
                     hex::open_in_background(&paths.home_dir);
+                }
+                if prepare && settings.engine == settings::Engine::Superwhisper {
+                    superwhisper::prepare_in_background(&paths.home_dir);
                 }
                 Ok((settings, hex_state))
             })
@@ -152,6 +157,11 @@ async fn read_all(state: &AppState) -> Result<Value, DomainStateError> {
     object.insert(
         "hex".to_string(),
         hex::view(&hex_state, settings.hex_model.as_deref()),
+    );
+    // Offered on the engine picker only where it is installed (Linux).
+    object.insert(
+        "superwhisper".to_string(),
+        superwhisper::view(&superwhisper::state(&paths.home_dir)),
     );
     object.insert(
         "keys".to_string(),

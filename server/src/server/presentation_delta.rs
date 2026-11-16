@@ -184,14 +184,16 @@ pub(crate) fn read_presentation_snapshot_in_sequence(
     let sidebar_v2_selected = session_lifecycle::read_sidebar_v2_selected(&state.paths);
     let sidebar_spaces_enabled = crate::sidebar_spaces::read_sidebar_spaces_enabled(&state.paths);
     let _event_sequence = lock_presentation_event_sequence(state)?;
-    read_presentation_snapshot(
+    let mut snapshot = read_presentation_snapshot(
         db,
         server_id,
         auto_settle_after_days,
         sidebar_v2_selected,
         sidebar_spaces_enabled,
         sessions,
-    )
+    )?;
+    crate::extensions::ext_api::insert_extension_panels_presentation_payload(&mut snapshot, state);
+    Ok(snapshot)
 }
 
 pub(crate) fn schedule_stale_activity_presentation_refresh(

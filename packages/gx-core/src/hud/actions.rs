@@ -11,13 +11,12 @@ use crate::keys::ProjectKey;
 /// `createSidebarAgentButtons([], [])`: the default agents, which the launcher shows until this
 /// computer's HUD has been read once. The hidden-by-default ones (Rovo Dev, CodeBuddy, Qoder) are
 /// left out, as there. Order and ids are packages/shared/sidebar-agents.ts (deleted 2026-10-01)'s.
-const DEFAULT_AGENTS: [(&str, &str, &str, &str); 17] = [
+const DEFAULT_AGENTS: [(&str, &str, &str, &str); 16] = [
     ("codex", "codex", "codex", "Codex"),
     ("claude", "claude", "claude", "Claude"),
     ("cursor", "cursor-agent", "cursor-cli", "Cursor CLI"),
     ("pi", "pi", "pi", "Pi Agent"),
     ("opencode", "opencode", "opencode", "OpenCode"),
-    ("gemini", "gemini", "gemini", "Gemini"),
     ("copilot", "copilot", "copilot", "Copilot"),
     ("droid", "droid", "factory-droid", "Factory Droid"),
     ("grok", "grok", "grok-build", "Grok Build"),

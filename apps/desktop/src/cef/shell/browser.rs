@@ -50,6 +50,9 @@ pub struct CefBrowser {
     pub(crate) last_bounds: RefCell<Option<(f32, f32, f32, f32, f32)>>,
     pub(crate) last_visible: Cell<Option<bool>>,
     motion_hidden: Cell<bool>,
+    /// The corner radii the native view was last clipped to (`set_corner_radii`).
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    corner_radii: Cell<([f32; 4], f32)>,
     pub(crate) uses_system_page_appearance: bool,
     pub(crate) extension_bridge_installed: bool,
     /// The surface the bridge was installed for, so outbound messages can check that the main
@@ -119,6 +122,13 @@ impl CefBrowser {
         }
         let keyboard_zoom_enabled =
             page_metadata_handler.is_some() || project_workarea_bridge_event_handler.is_some();
+        // The page the project bridge belongs to; the Code view (the one surface with a trusted
+        // clipboard origin and a Code window route) gets none (CDXC:CefRuntime 2026-11-14 in
+        // GhostexGpuiProjectWorkareaBridgeLoadHandler).
+        let project_workarea_bridge_page = project_workarea_bridge_event_handler
+            .as_ref()
+            .filter(|_| trusted_clipboard_origin.is_none() && code_window_popup_handler.is_none())
+            .map(|_| first_party_page_entry_identity(url));
         /*
         CDXC:CefRuntime 2026-10-01 DECISION:
         User: disable two-finger zoom in every built-in CEF view and modal, including Code, but preserve it in browser pages and custom views (2026-09-09); and "please allow me to pinch zoom in/out in Excalidraw" (2026-10-01). The Files embed showing a drawing lets the pinch reach the page, which cancels the browser's page zoom and leaves the pinch to Excalidraw's own canvas zoom (apps/desktop/views/manage/embed.tsx). Browser pages and custom views use system page appearance; extension payloads also keep their own gesture behavior.
@@ -283,6 +293,7 @@ impl CefBrowser {
         } else if project_workarea_bridge_event_handler.is_some() {
             Some(GhostexGpuiProjectWorkareaBridgeLoadHandler::new(
                 manage_docs_resource_base_url,
+                project_workarea_bridge_page.clone(),
                 page_load_end_handler,
             ))
         } else if page_metadata_handler.is_some() || trusted_clipboard_origin.is_some() {
@@ -317,6 +328,7 @@ impl CefBrowser {
             find_handler,
             load_handler,
             project_workarea_bridge_event_handler,
+            project_workarea_bridge_page,
             extension_bridge_surface.clone(),
             extension_bridge_event_handler,
             request_handler,
@@ -396,6 +408,8 @@ impl CefBrowser {
             last_bounds: RefCell::new(None),
             last_visible: Cell::new(None),
             motion_hidden: Cell::new(false),
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            corner_radii: Cell::new(([0.0; 4], 0.0)),
             uses_system_page_appearance,
             extension_bridge_installed,
             extension_bridge_surface: extension_bridge_surface
@@ -513,6 +527,13 @@ impl CefBrowser {
             .map(|host| platform::native_view_ptr(host.window_handle()))
     }
 
+    /// The top-left corner of the page's view in the window, where GPUI last placed it.
+    pub fn view_origin(&self) -> Option<gpui::Point<Pixels>> {
+        self.last_bounds
+            .borrow()
+            .map(|(x, y, ..)| gpui::point(gpui::px(x), gpui::px(y)))
+    }
+
     /// Whether `bounds` differs from the frame the native view last took.
     pub fn bounds_differ(&self, bounds: Bounds<Pixels>, scale_factor: f32) -> bool {
         let raw_bounds = (
@@ -523,6 +544,30 @@ impl CefBrowser {
             scale_factor,
         );
         self.last_bounds.borrow().as_ref() != Some(&raw_bounds)
+    }
+
+    /// Rounds the native view's corners: `radii` is top-left, top-right, bottom-right, bottom-left in
+    /// GPUI logical pixels (0 keeps a corner square), `scale_factor` the window's, as `set_bounds`
+    /// takes it. The platform adapter keeps the shape across later frame changes.
+    /// SEE-ALSO: app/element/work_area_frame.rs (`clip_native_view_to_work_area_frame`), which asks
+    /// for the card's inner corners.
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    pub fn set_corner_radii(&self, radii: [f32; 4], scale_factor: f32) {
+        let (last_radii, last_scale) = self.corner_radii.get();
+        let square = |radii: [f32; 4]| radii.iter().all(|radius| *radius <= 0.0);
+        if last_radii == radii && (last_scale == scale_factor || square(radii)) {
+            return;
+        }
+        let browser = self.browser.borrow();
+        let Some(host) = browser.host() else {
+            return;
+        };
+        self.corner_radii.set((radii, scale_factor));
+        platform::set_native_view_corner_radii(
+            platform::native_view_ptr(host.window_handle()),
+            radii,
+            scale_factor,
+        );
     }
 
     /// Makes the page transparent for the frames a panel slides (app/panel_motion.rs), keeping its

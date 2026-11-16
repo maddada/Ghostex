@@ -24,7 +24,7 @@ use gpui::{
 use serde_json::{Value, json};
 
 /// The button an ask's answers fold into when they do not fit on one line (`answers_dropdown`).
-pub(super) const CHOOSE_ANSWER: &str = "Choose an answer";
+pub(super) const CHOOSE_ANSWER: &str = "Choices";
 /// Its dropdown grows to its longest answer up to this (unscaled), and the window's edge.
 const ANSWERS_MENU_MAX: f32 = 560.0;
 
@@ -176,7 +176,7 @@ impl NativeChatView {
     }
 
     /// An ask's answers folded into one button, for a line too short for them all (the dock's rows,
-    /// an opened Work panel card): "Choose an answer" with its arrow opens the app's dropdown, one
+    /// an opened Work panel card): "Choices" with its arrow opens the app's dropdown, one
     /// answer a line and each whole, the recommended one starred; a click on one answers at once,
     /// as its button does. `busy`: an answer is being sent, so it waits.
     pub(super) fn answers_dropdown(

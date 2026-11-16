@@ -64,12 +64,7 @@ pub fn run(args: &[String]) -> Res<i32> {
     }
     let is_darwin = cfg!(target_os = "macos");
     let is_windows = cfg!(windows);
-    let is_wsl = cfg!(target_os = "linux")
-        && (env_trimmed("WSL_DISTRO_NAME").is_some()
-            || fs::read_to_string("/proc/sys/kernel/osrelease")
-                .unwrap_or_default()
-                .to_lowercase()
-                .contains("microsoft"));
+    let is_wsl = runs_in_wsl();
     let targets_windows = is_windows || is_wsl;
 
     let isolated = resolve_isolated_variant(args)?
@@ -268,9 +263,13 @@ impl Start {
                     "GHOSTEX_GPUI_SIGN_TIMESTAMP_FLAG".into(),
                     codesign::timestamp_flag(),
                 ),
-                ("GHOSTEX_LOCAL_START".into(), "1".into()),
                 ("GHOSTEX_MACOS_ARCH".into(), macos_arch()?),
             ]);
+        }
+        if !self.targets_windows {
+            // CDXC:Build 2026-11-14 DECISION: Linux local starts get the macOS dev build too (user, Q51 "Both platforms"): ghostex-gpui and gxserver at opt-level 0 with incremental codegen, `--optimized` for opt-level 3; releases keep the plain release profile. Linux reads it in build-linux-rust.sh and through package-remote-linux.mjs --local-start.
+            self.build_env
+                .push(("GHOSTEX_LOCAL_START".into(), "1".into()));
             if self.opts.optimized || truthy(env_var("GHOSTEX_START_OPTIMIZED")) {
                 self.build_env
                     .push(("GHOSTEX_START_OPTIMIZED".into(), "1".into()));
@@ -282,6 +281,8 @@ impl Start {
                     .push(("GHOSTEX_START_VERBOSE".into(), "1".into()));
             }
         }
+        self.build_env
+            .push(util::kache_incremental_crates_environment());
         if self.isolated.is_some() {
             self.build_env
                 .push(("GHOSTEX_GPUI_ISOLATED_START".into(), "1".into()));
@@ -335,13 +336,19 @@ impl Start {
             desktop_rust_build = Some(rust_build);
         }
         if !self.is_darwin && !self.targets_windows {
+            // The desktop crate and gxserver build at the same time, as on macOS: they share no target folder, and each spends most of its time in one leaf crate. build-linux-app.sh then stages the prebuilt binaries.
+            let mut rust_build =
+                self.start_background_build("Desktop Rust build", "build-linux-rust.sh")?;
             // CDXC:PlatformSupport 2026-07-18:
             // gxserver and zmx are one protocol-coupled runtime. The Linux app packager previously reused whichever build/remote-gxserver-linux package happened to exist, so a freshly compiled gxserver could emit flags unsupported by the stale bundled zmx client. Rebuild the host-architecture package from the current source before staging every local GPUI build.
-            self.log.step("Building local gxserver and zmx runtime...");
+            self.log.step(
+                "Building local gxserver and zmx runtime (desktop Rust build running alongside)...",
+            );
             let arm = cfg!(target_arch = "aarch64");
             let mut package = self.build_command("bun");
             package
                 .arg(root().join("server").join("package-remote-linux.mjs"))
+                .arg("--local-start")
                 .args([
                     "--arch",
                     if arm { "arm64" } else { "x64" },
@@ -361,6 +368,8 @@ impl Start {
             self.log
                 .run(&mut package, "Linux gxserver runtime build", Summary::None)?;
             self.log.detail("Linux gxserver and zmx runtime is ready.");
+            rust_build.finish(&self.log)?;
+            desktop_rust_build = Some(rust_build);
         }
         self.log
             .step("Building GPUI app resources and native shell...");
@@ -776,6 +785,25 @@ fn macos_arch() -> Res<String> {
     } else {
         machine
     })
+}
+
+/// Linux under WSL, where the start builds and installs the Windows app instead.
+pub fn runs_in_wsl() -> bool {
+    cfg!(target_os = "linux")
+        && (env_trimmed("WSL_DISTRO_NAME").is_some()
+            || fs::read_to_string("/proc/sys/kernel/osrelease")
+                .unwrap_or_default()
+                .to_lowercase()
+                .contains("microsoft"))
+}
+
+/// The installed app a plain (not isolated) native Linux start replaces and opens: the packaged copy (/opt/ghostex) unless INSTALL_DIR says otherwise, else XDG data.
+pub fn linux_installed_app_path() -> PathBuf {
+    env_trimmed("INSTALL_DIR")
+        .is_none()
+        .then(install::resolve_linux_packaged_app_path)
+        .flatten()
+        .unwrap_or_else(|| resolve_gpui_install_dir(false).join("Ghostex"))
 }
 
 fn resolve_gpui_install_dir(is_darwin: bool) -> PathBuf {

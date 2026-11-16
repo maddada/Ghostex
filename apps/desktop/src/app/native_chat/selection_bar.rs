@@ -241,7 +241,7 @@ impl NativeChatView {
             .border(look.border_width)
             .border_color(look.border_color)
             .bg(look.background)
-            .shadow_md()
+            .shadow(look.shadow.clone())
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|chat, _, _, cx| {

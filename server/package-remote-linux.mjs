@@ -61,6 +61,9 @@ Inputs can be overridden with:
   --zig-target <triple>  default: arch-specific Linux musl target
   --zmx-zig-bin <path>   default: ZMX_ZIG, GHOSTEX_ZIG, ZIG, then the Zig the build requires
   --allow-cross          allow running outside Linux when cross toolchains are configured
+  --local-start          \`cargo xtask start\` on Linux only: gxserver at opt-level 0 with incremental
+                         codegen (GHOSTEX_START_OPTIMIZED=1 keeps opt-level 3), and tailcat reused
+                         from build/remote-gxserver-linux/<arch>/tailcat-cache
 `;
 
 main().catch((error) => {
@@ -136,6 +139,7 @@ async function buildLinuxPackageForArch({ arch, options }) {
       ),
       zmxZigBin,
       zigTarget: options.zigTarget || archConfig.zigTarget,
+      localStart: Boolean(options.localStart),
     };
 
     /*
@@ -179,6 +183,10 @@ function parseArgs(args) {
     }
     if (arg === '--allow-cross') {
       options.allowCross = true;
+      continue;
+    }
+    if (arg === '--local-start') {
+      options.localStart = true;
       continue;
     }
     if (!arg.startsWith('--')) {
@@ -236,7 +244,7 @@ async function buildPackage({ config, outputDir, workRoot }) {
   await copyExecutable(gxserverBin, path.join(binsDir, 'gxserver'), 'gxserver');
   await linkCli(binsDir);
   await copyStrippedExecutable(zmxBin, path.join(binsDir, 'zmx'), 'zmx');
-  const tailcatBin = await buildTailcat({ arch: config.arch, workRoot });
+  const tailcatBin = await buildTailcat({ arch: config.arch, localStart: config.localStart, workRoot });
   await copyExecutable(tailcatBin, path.join(binsDir, 'tailcat'), 'tailcat');
 
   /*
@@ -304,11 +312,30 @@ async function resolveMarketingVersion() {
   return manifest.version;
 }
 
+/*
+ * CDXC:Build 2026-11-14 WHY: a Linux `cargo xtask start` compiled gxserver as a full opt-level 3 release (about 160 s for a one-line edit on a Ryzen 9 5900XT), while macOS local starts already used opt-level 0 with incremental codegen (prepare-macos-runtime.sh, CDXC:Build 2026-09-23). With these flags the same edit takes about 15 s. They come from an explicit --local-start, not GHOSTEX_LOCAL_START, because the macOS start also runs this script (the Cloud Box package, build-macos-app.sh) with that variable set. Only the gxserver crate changes; dependencies keep release optimization.
+ * SEE-ALSO: apps/desktop/scripts/build-linux-rust.sh (the desktop crate), tooling/xtask/src/start/mod.rs (KACHE_INCREMENTAL_CRATES, without which kache strips the incremental flag).
+ */
+function localStartCargoArgs(config) {
+  if (!config.localStart) {
+    return [];
+  }
+  const args = ['--config', 'profile.release.package.gxserver.incremental=true'];
+  if (process.env.GHOSTEX_START_OPTIMIZED !== '1') {
+    args.push('--config', 'profile.release.package.gxserver.opt-level=0');
+  }
+  return args;
+}
+
 async function buildGxserver(config) {
-  await run('cargo', ['build', '--release', '--target', config.rustTarget, '--bin', 'gxserver'], {
-    cwd: gxserverRoot,
-    env: { GHOSTEX_GPUI_MARKETING_VERSION: await resolveMarketingVersion() },
-  });
+  await run(
+    'cargo',
+    ['build', '--release', '--target', config.rustTarget, '--bin', 'gxserver', ...localStartCargoArgs(config)],
+    {
+      cwd: gxserverRoot,
+      env: { GHOSTEX_GPUI_MARKETING_VERSION: await resolveMarketingVersion() },
+    }
+  );
   const releaseDir = path.join(cargoTargetRoot(gxserverRoot), config.rustTarget, 'release');
   return {
     gxserverBin: path.join(releaseDir, 'gxserver'),
@@ -330,9 +357,33 @@ function cargoTargetRoot(defaultRoot) {
  */
 const TAILCAT_MODULE = 'github.com/tailscale/tailcat/cmd/tailcat@v0.6.0';
 
-async function buildTailcat({ arch, workRoot }) {
+async function buildTailcat({ arch, localStart, workRoot }) {
   const goArch = arch === 'x64' ? 'amd64' : 'arm64';
-  const goPath = path.join(workRoot, 'go');
+  // A local start keeps the pinned tailcat between runs (the `go install` cost about 4 s every start); release packaging always builds it fresh.
+  const goPath = localStart
+    ? path.join(
+        repoRoot,
+        'build',
+        'remote-gxserver-linux',
+        arch,
+        'tailcat-cache',
+        TAILCAT_MODULE.replace(/[^A-Za-z0-9._-]/gu, '_')
+      )
+    : path.join(workRoot, 'go');
+  if (localStart) {
+    for (const cached of [
+      path.join(goPath, 'bin', 'tailcat'),
+      path.join(goPath, 'bin', `linux_${goArch}`, 'tailcat'),
+    ]) {
+      const found = await stat(cached).then(
+        (info) => info.isFile(),
+        () => false
+      );
+      if (found) {
+        return cached;
+      }
+    }
+  }
   const { stdout: modCache } = await execFileAsync('go', ['env', 'GOMODCACHE']);
   const { stdout: hostOs } = await execFileAsync('go', ['env', 'GOHOSTOS']);
   const { stdout: hostArch } = await execFileAsync('go', ['env', 'GOHOSTARCH']);

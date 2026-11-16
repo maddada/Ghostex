@@ -45,7 +45,7 @@ normalizes onto it.
 pub(crate) const GPUI_RESERVED_GHOSTEX_HOTKEY_KEYSTROKES: &[&str] = &["cmd-k"];
 
 pub(crate) fn gpui_hotkey_is_reserved(key: &str) -> bool {
-    cfg!(target_os = "macos")
+    cfg!(all(target_os = "macos", not(ghostex_web)))
         && gpui_keystroke_from_shared_hotkey(key).is_some_and(|keystroke| {
             GPUI_RESERVED_GHOSTEX_HOTKEY_KEYSTROKES.contains(&keystroke.as_str())
         })
@@ -403,6 +403,7 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("terminalSelectAll", "cmd+a"),
     ("openBrowserHistory", "cmd+y"),
     ("reloadBrowserPage", "cmd+r"),
+    ("toggleAnnotate", "cmd+ctrl+a"),
     ("sleepFocusedSessionSecondKey", "alt+shift+s"),
     ("unfocusTerminal", "cmd+shift+m"),
     ("focusLastTerminal", "cmd+shift+m"),
@@ -410,7 +411,7 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("focusSidebar", "cmd+shift+j"),
 ];
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 pub(crate) fn normalized_gpui_hotkey_text(value: &str) -> Option<String> {
     let mut command = false;
     let mut control = false;
@@ -460,7 +461,7 @@ pub(crate) fn normalized_gpui_hotkey_text(value: &str) -> Option<String> {
     Some(parts.join("+"))
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 /// Builds the shared hotkey text ("cmd+shift+p") for a native key press.
 /// `shortcut_characters` is the layout-independent key from
 /// GhostexGpuiShortcutCharactersForEvent (GpuiKeyboardShortcuts.m): the Latin
@@ -540,7 +541,7 @@ pub(crate) fn gpui_hotkey_feature_enabled(action_id: &str) -> bool {
 /// The configured hotkey a native key press runs. `in_terminal` (a terminal has the keyboard)
 /// picks each hotkey's Terminal focused binding instead of its normal one, as the GPUI keymap
 /// does with the terminal's key context.
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 pub(crate) fn gpui_configured_hotkey_action_id_for_native_text(
     hotkey_text: &str,
     in_terminal: bool,
@@ -620,7 +621,7 @@ pub(crate) fn gpui_configured_hotkey_action_id_for_native_text(
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 pub(crate) fn gpui_application_keyboard_command_for_native_text(
     hotkey_text: &str,
 ) -> Option<GpuiApplicationKeyboardCommand> {
@@ -687,6 +688,9 @@ pub(crate) fn gpui_configured_hotkey_key_in(
 pub(crate) fn gpui_normal_hotkey_context(action_id: &str) -> &'static str {
     match action_id {
         "openBrowserHistory" | "reloadBrowserPage" => BROWSER_KEY_CONTEXT,
+        // Files' HTML and Markdown files, and the Browser (CDXC:Docs 2026-11-14 DECISION in
+        // packages/settings-catalog/src/hotkey_definitions.rs).
+        "toggleAnnotate" => ANNOTATE_KEY_CONTEXT,
         _ => GPUI_OUTSIDE_TERMINAL_KEY_CONTEXT,
     }
 }
@@ -694,6 +698,11 @@ pub(crate) fn gpui_normal_hotkey_context(action_id: &str) -> &'static str {
 /// `!` + `terminal_element::TERMINAL_KEY_CONTEXT`. GPUI's `!` checks every context on the focus
 /// path, so a binding with it never fires while focus is anywhere inside a terminal.
 pub(crate) const GPUI_OUTSIDE_TERMINAL_KEY_CONTEXT: &str = "!GhostexGpuiTerminal";
+
+/// Where the Annotate hotkey applies: inside the Files view (its Markdown editor, or Files with an
+/// HTML file open) or the Browser, never in a terminal.
+pub(crate) const ANNOTATE_KEY_CONTEXT: &str =
+    "NativeDocs || (GhostexBrowser && !GhostexGpuiTerminal)";
 
 /// The normal binding's chord ([`gpui_configured_hotkey_key_in`]), `None` for a hotkey that has
 /// only a Terminal focused binding.
@@ -768,7 +777,7 @@ pub(crate) fn gpui_configured_hotkey_label(action_id: &str) -> Option<String> {
     Some(terminal_element::terminal_overlay_hotkey_chord_label(&key))
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 pub(crate) fn gpui_keyboard_owner_allows_hotkey(
     owner: GpuiKeyboardOwner,
     action_id: &str,
@@ -927,7 +936,7 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(
 ///
 /// CDXC:Hotkeys 2026-10-25 WHY:
 /// Previous/Next Session works from inside every web view, but in the VS Code view VS Code keeps its editor-tab keys (Ctrl+Tab, Ctrl+Shift+Tab, Cmd+Shift+] / [, which are also the session defaults and aliases), following the 2026-09-25 DECISION that Cmd+N and Cmd+Shift+O belong to VS Code while the Code editor has keyboard focus. Only a chord VS Code does not use (such as Ctrl+Cmd+Tab) switches sessions there; Browser and the other pages take the defaults too, as Chrome does.
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 fn gpui_vs_code_editor_tab_chord(hotkey_text: &str) -> bool {
     matches!(
         normalized_gpui_hotkey_text(hotkey_text).as_deref(),

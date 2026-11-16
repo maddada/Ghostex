@@ -460,7 +460,6 @@ pub(crate) fn default_agent_name(agent_id: &str) -> Option<&'static str> {
         "devin" => Some("Devin"),
         "droid" => Some("Factory Droid"),
         "empryo" => Some("Empryo"),
-        "gemini" => Some("Gemini"),
         "grok" => Some("Grok Build"),
         "hermes-agent" => Some("Hermes Agent"),
         "kimi" => Some("Kimi Code"),
@@ -667,7 +666,7 @@ fn commit_message_generation_output_tail(output: &str) -> String {
 /// it from there (`None` when the prompt is part of the command).
 ///
 /// CDXC:Git 2026-10-17 WHY:
-/// The prompt used to reach Codex, Claude, Gemini and a custom command through a POSIX heredoc (`codex exec … <<'DELIM'`), which PowerShell, the Windows command shell, cannot run, so commit message generation failed on Windows for every agent but Cursor. It now goes to the CLI's stdin, like the title job and Catch me up, and Cursor's argument is quoted for the shell that runs it.
+/// The prompt used to reach Codex, Claude and a custom command through a POSIX heredoc (`codex exec … <<'DELIM'`), which PowerShell, the Windows command shell, cannot run, so commit message generation failed on Windows for every agent but Cursor. It now goes to the CLI's stdin, like the title job and Catch me up, and Cursor's argument is quoted for the shell that runs it.
 pub(crate) fn build_commit_message_generation_shell_command(
     agent: &CommitMessageGenerationAgent,
     prompt: &str,
@@ -702,7 +701,6 @@ pub(crate) fn build_commit_message_generation_shell_command(
                 stdin,
             )
         }
-        "gemini" => (format!("{} -p", agent.command), stdin),
         _ if !agent.is_default => (agent.command.clone(), stdin),
         _ => {
             return Err(DomainStateError {

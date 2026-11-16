@@ -232,9 +232,62 @@ async fn answer_session_chat_prompt(
         .unwrap_or_default();
     // The limit card's "Continue with Opus 5.5 on ST" (server/src/accounts/model_fallback.rs):
     // the same step as `agentAccounts` `continueWithModel`, so it runs where account switches run.
-    if kind == "continueWithModel" {
+    // The Compact first checkbox on the coordinator's stopped-threads card or on the limit card
+    // after a restart (CDXC:AgentProviders 2026-11-14 in server/src/carry_on_compaction.rs).
+    if kind == "compactFirst" {
+        let checked = params.get("checked").and_then(Value::as_bool) == Some(true);
+        let coordinator = (target.project_id.clone(), target.session_id.clone());
+        // One thread's tick on the stopped-threads card (Q68); absent from older clients' single box.
+        let thread = params
+            .get("threadProjectId")
+            .and_then(Value::as_str)
+            .zip(params.get("threadSessionId").and_then(Value::as_str))
+            .map(|(project, session)| (project.to_string(), session.to_string()));
+        let result = if crate::coordinators::set_stopped_threads_compact(
+            &coordinator,
+            thread.as_ref(),
+            checked,
+        ) {
+            Ok(())
+        } else {
+            let mut request = params.clone();
+            request.insert("operation".to_string(), json!("compactFirst"));
+            let state = state.clone();
+            tokio::task::spawn_blocking(move || {
+                crate::accounts::endpoint::dispatch(&state, &request).map(|_| ())
+            })
+            .await
+            .unwrap_or_else(|_| {
+                Err(DomainStateError {
+                    code: "internalError",
+                    message: "Could not change Compact first.".to_string(),
+                })
+            })
+        };
+        let agent = session_chat_agent_for_session(&target.session);
+        schedule_session_chat_option_redetect(
+            state,
+            &target.project_id,
+            &target.session_id,
+            agent.as_deref(),
+        );
+        return match result {
+            Ok(()) => routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, json!({ "queued": false })),
+            ),
+            Err(error) => domain_error_response(endpoint_path, request_id, error),
+        };
+    }
+    // The limit card's Continue (a wait a restart paused), Not now and Stop (CDXC:AgentProviders
+    // 2026-11-14 in server/src/accounts/recovery.rs): the same steps as `agentAccounts`.
+    if matches!(
+        kind,
+        "continueWithModel" | "resumeRecovery" | "stopRecovery"
+    ) {
         let mut request = params.clone();
-        request.insert("operation".to_string(), json!("continueWithModel"));
+        request.insert("operation".to_string(), json!(kind));
         let state = state.clone();
         let result = tokio::task::spawn_blocking(move || {
             crate::accounts::endpoint::dispatch(&state, &request)
@@ -253,6 +306,64 @@ async fn answer_session_chat_prompt(
                 DomainStateError {
                     code: "internalError",
                     message: "Could not continue on the other model.".to_string(),
+                },
+            ),
+        };
+    }
+    // Starring a page is the chat's own bookkeeping too: nothing reaches the agent
+    // (session_chat_open_questions.rs `set_starred`).
+    if kind == "pageStar" {
+        let Some(page_id) = params
+            .get("questionId")
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty() && id.len() <= 4096)
+            .map(str::to_string)
+        else {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "invalidParams",
+                    message: "A page ID is required.".to_string(),
+                },
+            );
+        };
+        let starred = params
+            .get("starred")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        let worker_state = state.clone();
+        let (project_id, session_id) = (target.project_id.clone(), target.session_id.clone());
+        let result = tokio::task::spawn_blocking(move || {
+            crate::session_chat_open_questions::set_starred(
+                &worker_state,
+                &project_id,
+                &session_id,
+                &page_id,
+                starred,
+            )
+        })
+        .await;
+        return match result {
+            Ok(Ok(())) => routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, json!({ "starred": starred })),
+            ),
+            Ok(Err(error)) => domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message: error.to_string(),
+                },
+            ),
+            Err(_) => domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message: "Could not save the page's star.".to_string(),
                 },
             ),
         };

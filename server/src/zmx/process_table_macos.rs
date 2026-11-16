@@ -73,6 +73,26 @@ pub(crate) fn process_group_and_foreground(pid: i64) -> Option<(i64, i64)> {
     (info.e_tpgid != 0).then(|| (i64::from(info.pbi_pgid), i64::from(info.e_tpgid)))
 }
 
+/// The pid of the `zmx run <name>` daemon of `session_name`. Only processes the kernel names `zmx`
+/// have their argv read, so a machine full of sessions costs one pass of short records.
+pub(crate) fn zmx_daemon_pid(session_name: &str) -> Option<i64> {
+    let mut arguments = ProcArgs::new();
+    all_pids().into_iter().find_map(|pid| {
+        let short = short_info(pid)?;
+        if c_name(&short.pbsi_comm) != "zmx" {
+            return None;
+        }
+        let command = arguments.read(pid)?;
+        (super::process_identity::zmx_daemon_session_name(&command)? == session_name)
+            .then_some(i64::from(pid))
+    })
+}
+
+/// The terminal device `pid` runs on as `ps -o tty` prints it (`ttys003`), `None` without one.
+pub(crate) fn process_terminal_name(pid: i64) -> Option<String> {
+    terminal_name(bsd_info(i32::try_from(pid).ok()?)?.e_tdev)
+}
+
 fn all_pids() -> Vec<i32> {
     let mut pids = vec![0 as libc::pid_t; 4096];
     loop {

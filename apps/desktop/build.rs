@@ -845,6 +845,8 @@ fn compress_terminal_font_faces() {
 }
 
 fn main() {
+    // `ghostex_web` is set only by the GPUI web build, which compiles many of these files (apps/gpui-web/build.rs).
+    println!("cargo::rustc-check-cfg=cfg(ghostex_web)");
     // CDXC:Build 2026-10-07 WHY:
     // The About page, telemetry and the Linux update check read GHOSTEX_BUILD_MARKETING_VERSION on every platform. It used to be emitted only from the Windows resource step, so Linux and macOS release builds showed the crate version (0.1.0) instead of the release version.
     println!("cargo:rerun-if-env-changed=GHOSTEX_GPUI_MARKETING_VERSION");

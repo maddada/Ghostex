@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-pub use probe::{reach_cached, SystemChecker};
+pub use probe::{reach_cached, set_override_file, SystemChecker};
 pub use watch::{NetworkWatch, Transition};
 
 /// The words every surface shows while the computer is offline.
@@ -157,10 +157,6 @@ pub fn agent_target(agent: &str) -> Option<String> {
     let (base_url_env, host) = match agent {
         "claude" => ("ANTHROPIC_BASE_URL", "api.anthropic.com"),
         "codex" => ("OPENAI_BASE_URL", "chatgpt.com"),
-        "gemini" => (
-            "GOOGLE_GEMINI_BASE_URL",
-            "generativelanguage.googleapis.com",
-        ),
         _ => return None,
     };
     if let Some(proxy) = proxy_target() {

@@ -101,16 +101,27 @@ impl NewThreadPickerBoxes {
 /// One machine chip of the row.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RunOnMachine {
+    /// Its id (`local` for this computer): the project list's column for it.
+    pub(crate) machine_id: String,
     pub(crate) label: String,
     pub(crate) connected: bool,
     /// This computer, where boxes run.
     pub(crate) local: bool,
+    /// The logo it wears in the sidebar (Settings > Remote's computer icon), when the app knows it.
+    pub(crate) icon: Option<&'static str>,
+    /// Its full name (this computer's host name) for the logo's tooltip, when the app knows it.
+    pub(crate) name: Option<String>,
 }
 
 /// One place a thread can start: a machine, Cloud Box or a box.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RunOnChip {
+    /// The place it stands for, the same on every project's row: a machine's id, Cloud Box's or a
+    /// box's `runLocation`. The project list lines its logos up in one column per key.
+    pub(crate) key: String,
     pub(crate) label: String,
+    /// Its full name, which the project list's logo shows under the pointer.
+    pub(crate) name: String,
     pub(crate) icon: &'static str,
     pub(crate) selectable: bool,
     pub(crate) tooltip: Option<String>,
@@ -190,7 +201,9 @@ impl RunOnState {
     pub(crate) fn chips(&self) -> Vec<RunOnChip> {
         let mut chips: Vec<RunOnChip> = if self.machines.is_empty() {
             vec![RunOnChip {
+                key: "local".to_string(),
                 label: THIS_COMPUTER.to_string(),
+                name: THIS_COMPUTER.to_string(),
                 icon: ICON_THIS_COMPUTER,
                 selectable: true,
                 tooltip: Some(ghostex_gx_core::THIS_COMPUTER_DESCRIPTION.to_string()),
@@ -199,12 +212,17 @@ impl RunOnState {
             self.machines
                 .iter()
                 .map(|machine| RunOnChip {
+                    key: machine.machine_id.clone(),
                     label: machine.label.clone(),
-                    icon: if machine.local {
+                    name: machine
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| machine.label.clone()),
+                    icon: machine.icon.unwrap_or(if machine.local {
                         ICON_THIS_COMPUTER
                     } else {
                         ICON_REMOTE_MACHINE
-                    },
+                    }),
                     selectable: machine.connected,
                     tooltip: if !machine.connected {
                         Some(format!("{} isn't connected", machine.label))
@@ -218,7 +236,9 @@ impl RunOnState {
         };
         if self.cloud_box_offered() {
             chips.push(RunOnChip {
+                key: CLOUD_BOX_RUN_LOCATION.to_string(),
                 label: CLOUD_BOX_LABEL.to_string(),
+                name: CLOUD_BOX_LABEL.to_string(),
                 icon: ICON_CLOUD_BOX,
                 selectable: true,
                 tooltip: Some(CLOUD_BOX_TOOLTIP.to_string()),
@@ -226,7 +246,9 @@ impl RunOnState {
         }
         for location in &self.boxes.locations()[..self.box_count()] {
             chips.push(RunOnChip {
+                key: location.run_location.clone(),
                 label: location.label.clone(),
+                name: location.label.clone(),
                 icon: location.icon(),
                 selectable: true,
                 tooltip: location.tooltip.clone(),
@@ -763,9 +785,12 @@ mod tests {
 
     fn machine(label: &str, connected: bool, local: bool) -> RunOnMachine {
         RunOnMachine {
+            machine_id: label.to_lowercase(),
             label: label.to_string(),
             connected,
             local,
+            icon: None,
+            name: None,
         }
     }
 

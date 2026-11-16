@@ -1,6 +1,7 @@
 use std::ops::Range;
 
 use super::{is_horizontal_rule, is_titled_horizontal_rule, strip_ansi_sgr};
+use crate::session_chat_options::skip_non_csi_escape;
 
 /// CDXC:SessionChat 2026-09-15 DECISION:
 /// User: support sending ! shell commands from Chat for Claude agents, like Codex.
@@ -656,9 +657,15 @@ fn styled_lines(screen: &str) -> Vec<StyledLine> {
                     visible.push((ch, style));
                     continue;
                 }
-                if chars.next() != Some('[') {
+                if chars.peek() != Some(&'[') {
+                    // OSC strings and charset designations are skipped whole; any other escape
+                    // drops its one following character.
+                    if !skip_non_csi_escape(&mut chars) {
+                        chars.next();
+                    }
                     continue;
                 }
+                chars.next();
                 let mut parameters = String::new();
                 for next in chars.by_ref() {
                     if ('@'..='~').contains(&next) {
@@ -1229,6 +1236,29 @@ mod antigravity_mode_hint_tests {
                 .unwrap();
         assert!(!typed.is_empty());
         assert_eq!(typed.text, "Accept-edits mode: file edits");
+    }
+
+    /// Issue #637: a turn that ends on a Markdown link makes agy write the OSC-8 hyperlink reset
+    /// (`ESC ] 8 ; ; ESC \`) at the start of the composer's top rule, with either terminator.
+    #[test]
+    fn a_hyperlink_reset_on_the_top_rule_leaves_the_input_empty() {
+        for reset in ["\u{1b}]8;;\u{1b}\\", "\u{1b}]8;;\u{7}", "\u{1b}(B"] {
+            let screen = format!(
+                "\u{1b}[0m[Option B](ghostex-answer:Q1)\n\u{1b}[0m\u{1b}[38;5;8m{reset}{rule}\u{1b}[0m\n\u{1b}[0m\u{1b}[38;5;12m>\u{1b}[0m\n\u{1b}[0m\u{1b}[38;5;8m{rule}\u{1b}[0m",
+                rule = "─".repeat(60)
+            );
+            assert!(
+                session_chat_composer_input("antigravity", &screen)
+                    .unwrap()
+                    .is_empty(),
+                "{reset:?}"
+            );
+            assert!(
+                !detect_session_chat_composer_ready(Some("antigravity"), &screen)
+                    .blocks_message_for(Some("antigravity")),
+                "{reset:?}"
+            );
+        }
     }
 
     #[test]

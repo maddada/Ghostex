@@ -112,14 +112,12 @@ impl GpuiTitlebarReadingPanel {
                 feed.note_read(&machine);
             }
             let item = &feed.items[index];
+            let (project_id, session_id) = item.open_target();
             // An account row has no session to reveal; the store opens the account instead.
             reveal_session_id = item.account_id.is_none().then(|| match &item.machine {
-                MachineId::Local => {
-                    gpui_combined_presentation_session_id(&item.project_id, &item.session_id)
-                }
+                MachineId::Local => gpui_combined_presentation_session_id(project_id, session_id),
                 MachineId::Remote(machine_id) => {
-                    SessionKey::remote(machine_id, &item.project_id, &item.session_id)
-                        .to_sidebar_session_id()
+                    SessionKey::remote(machine_id, project_id, session_id).to_sidebar_session_id()
                 }
             });
             row = Some((machine, item.id.clone()));

@@ -367,7 +367,10 @@ impl GhostexGpuiApp {
         // whose page was still being created, a pane still mounting) used to land when its surface
         // arrived, focusing that surface under the dialog: typing into Add Worktree went nowhere
         // until the pane was hidden. It waits for the dialog to close, then lands as it would have.
-        if self.native_app_modal.is_some() || self.app_modal_window.is_some() {
+        if self.native_app_modal.is_some()
+            || self.app_modal_window.is_some()
+            || self.new_thread_picker_visible
+        {
             return;
         }
         /*
@@ -500,6 +503,9 @@ impl GhostexGpuiApp {
     /// User: after Cmd+P then Escape, or closing a modal with its X, typing did not reach the chat and Cmd+P did nothing until they clicked the window; "we need to focus the main window of the app automatically in all these cases".
     /// The modal is its own key window, and AppKit does not hand key status back to the main window when it closes, so the in-window handoff focused the composer of a window that received no keys.
     /// Skipped while another modal is up (a Quick Access action that opens one) and when Ghostex is no longer the active app (the modal closed because the user switched apps), so it never pulls Ghostex forward.
+    ///
+    /// CDXC:Coordinators 2026-11-15 WHY:
+    /// New Coordinator's Next closes the dialog and opens the New Thread picker ("Pick the coordinator's agent") in the same turn. GPUI's `activate_window` only queues `makeKeyAndOrderFront` on macOS, so this deferred activation made the main window key right after the picker, and the picker, which closes when it stops being key, vanished before the user saw it: no coordinator, no toast. A visible picker therefore counts as another modal here and in the keyboard handoff. The GPUI web build never activates windows, which is why it kept working (same bug class as CDXC:SessionChat 2026-10-30 in native_chat/option_menu/window.rs).
     pub(crate) fn activate_main_window_after_app_modal(&mut self, cx: &mut gpui::Context<Self>) {
         let Some(main) = self.main_window_handle else {
             return;
@@ -507,7 +513,9 @@ impl GhostexGpuiApp {
         let app = cx.weak_entity();
         cx.defer(move |cx| {
             let another_modal_open = app.read_with(cx, |app, _| {
-                app.native_app_modal.is_some() || app.app_modal_window.is_some()
+                app.native_app_modal.is_some()
+                    || app.app_modal_window.is_some()
+                    || app.new_thread_picker_visible
             });
             if another_modal_open.unwrap_or(true) || !ghostex_application_is_active() {
                 return;

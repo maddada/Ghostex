@@ -198,6 +198,12 @@ impl GhostexGpuiApp {
                 self.native_docs_open_with_app(&path, text("app").into(), cx);
             }
             "refresh" => self.native_docs_refresh(cx),
+            "annotate" => self.native_docs_annotate_menu_action(
+                command["command"].as_str().unwrap_or_default(),
+                &command["value"],
+                window,
+                cx,
+            ),
             "typeFilter" => self.native_docs_set_type_filter(Some(&text("filter")), cx),
             "typeFilterClear" => self.native_docs_set_type_filter(None, cx),
             "configureFolders" => self.native_docs_open_folders_settings(window, cx),

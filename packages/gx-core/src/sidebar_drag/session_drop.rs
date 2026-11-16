@@ -11,12 +11,12 @@
 use serde_json::{json, Value};
 
 use crate::core::Core;
-use crate::keys::{parse_workspace_subgroup_id, SessionKey};
+use crate::keys::SessionKey;
 use crate::sidebar_view::{
     DropLanding, DropWrites, SidebarInputs, SidebarViewModel, TreeDropTarget,
 };
 
-use super::inventory::{group_by_id, group_of_session, MoveGroup};
+use super::inventory::{group_by_id, group_of_session};
 use super::session_handoff::{check_session_handoff, SessionHandoffCheck, SessionHandoffDrop};
 use super::session_move::plan_session_move;
 
@@ -102,7 +102,7 @@ pub fn plan_session_drop(
     }
     let messages = match command.get("type")?.as_str()? {
         "moveSession" => plan_session_move(core, inputs, &command)?.messages,
-        "moveSessionToSection" => plan_section_move(core, inputs, &command)?,
+        "moveSessionToSection" => plan_section_move(core, inputs, model, &command)?,
         _ => return None,
     };
     if messages.is_empty() {
@@ -187,19 +187,24 @@ fn plan_drawn_pinned_move(
     if inputs.settings.pinned_session_order == crate::sidebar_view::PinnedSessionOrder::Recent {
         return Some(None);
     }
+    // A coordinator's open threads are drawn in its section without being pinned themselves; the
+    // pin calls that renumber the section must not pin them.
     let rows: Vec<(String, Option<i64>)> = section
         .session_ids
         .iter()
-        .map(|id| {
-            let order = group
+        .filter_map(|id| {
+            let row = &group
                 .core
                 .sessions
                 .iter()
-                .find(|session| session.row.sidebar_session_id == *id)
-                .and_then(|session| session.row.sidebar_order);
-            (id.clone(), order)
+                .find(|session| session.row.sidebar_session_id == *id)?
+                .row;
+            row.is_pinned.then(|| (id.clone(), row.sidebar_order))
         })
         .collect();
+    if !rows.iter().any(|(id, _)| id == session_id) {
+        return None;
+    }
     let Some(reorder) =
         super::pinned_order::plan_pinned_reorder(&rows, session_id, &target, position == "after")
     else {
@@ -237,9 +242,13 @@ fn plan_drawn_pinned_move(
 ///
 /// The command carries `sessionId`, `groupId`, `from` and `section` (the drawn sections the
 /// renderer resolved), plus `targetSessionId` and `position` when it was dropped on a row.
+///
+/// CDXC:Sidebar 2026-11-13 WHY:
+/// User, of a project whose sessions run on another computer (pinned coordinators among them): "I can't drag to move a session between different sections for this project (can't reorder pinned sessions too)". A drop into Pinned used to write the position as the project's session order (`syncSessionOrder` over the row's own project), which keeps no order for another computer's project and names a group the one list does not draw when the row is another computer's copy merged into this one, so the drop was refused. It now renumbers the pinned rows as the target group draws them, as a drop among pinned rows does (pinned_order.rs): each pinned row whose place changes, the dropped one included, gets `sidebarOrder` 1000, 2000, ... through the pin call on its own machine, and both sidebars sort pinned rows by that number.
 pub fn plan_section_move(
     core: &Core,
     inputs: &SidebarInputs,
+    model: &SidebarViewModel,
     command: &Value,
 ) -> Option<Vec<Value>> {
     let session_id = command.get("sessionId")?.as_str()?;
@@ -266,22 +275,24 @@ pub fn plan_section_move(
             if pinned && target.is_none() {
                 return Some(messages);
             }
-            let order = pinned_order(&group, session_id, target);
-            let mut pin =
-                json!({"type": "setSessionPinned", "sessionId": session_id, "pinned": true});
-            if is_project_group(&group) {
-                // `/api/updateSessionOrder` numbers the rows 1000, 2000, ... in this order.
-                let index = order.iter().position(|id| id == session_id)?;
-                pin["sidebarOrder"] = json!(((index + 1) * 1000) as i64);
+            let drawn = drawn_pinned_rows(model, command.get("groupId")?.as_str()?, session_id)?;
+            let order = pinned_order(&drawn, session_id, target);
+            for (index, id) in order.iter().enumerate() {
+                let sidebar_order = ((index + 1) * 1000) as i64;
+                let moved = id == session_id;
+                let saved = drawn
+                    .iter()
+                    .find(|(row, _)| row == id)
+                    .and_then(|(_, order)| *order);
+                if moved || saved != Some(sidebar_order) {
+                    messages.push(json!({
+                        "type": "setSessionPinned",
+                        "sessionId": id,
+                        "pinned": true,
+                        "sidebarOrder": sidebar_order,
+                    }));
+                }
             }
-            if !pinned {
-                messages.push(pin);
-            }
-            messages.push(json!({
-                "type": "syncSessionOrder",
-                "groupId": group.group_id,
-                "sessionIds": order,
-            }));
         }
         "sessions" => {
             if parked {
@@ -303,23 +314,47 @@ fn set_parked(session_id: &str, parked: bool) -> Value {
     json!({"type": "setSessionParked", "sessionId": session_id, "parked": parked})
 }
 
-fn is_project_group(group: &MoveGroup) -> bool {
-    parse_workspace_subgroup_id(&group.group_id).is_none()
-        && group
-            .project
-            .as_ref()
-            .is_some_and(|project| project.to_sidebar_group_id() == group.group_id)
+/// The pinned rows `group_id` draws (its Pinned section, a parked pinned row aside, and rows a
+/// folded heading or coordinator hides included), in drawn order with their saved `sidebarOrder`,
+/// without `session_id`. Rows of every machine and project the group lists are among them.
+fn drawn_pinned_rows(
+    model: &SidebarViewModel,
+    group_id: &str,
+    session_id: &str,
+) -> Option<Vec<(String, Option<i64>)>> {
+    let group = model
+        .view()
+        .groups
+        .iter()
+        .find(|group| group.core.group_id == group_id)?;
+    Some(
+        group
+            .core
+            .sessions
+            .iter()
+            .filter(|session| {
+                session.row.is_pinned
+                    && !session.row.is_parked
+                    && session.row.sidebar_session_id != session_id
+            })
+            .map(|session| {
+                (
+                    session.row.sidebar_session_id.clone(),
+                    session.row.sidebar_order,
+                )
+            })
+            .collect(),
+    )
 }
 
-/// The group's rows with `session_id` among the pinned ones at the drop position (the end when the
-/// drop names no pinned row), then every unpinned row in its own order.
-fn pinned_order(group: &MoveGroup, session_id: &str, target: Option<(&str, &str)>) -> Vec<String> {
-    let mut pinned: Vec<String> = group
-        .rows
-        .iter()
-        .filter(|row| row.is_pinned && row.sidebar_session_id != session_id)
-        .map(|row| row.sidebar_session_id.clone())
-        .collect();
+/// The pinned rows with `session_id` at the drop position (the end when the drop names no pinned
+/// row).
+fn pinned_order(
+    drawn: &[(String, Option<i64>)],
+    session_id: &str,
+    target: Option<(&str, &str)>,
+) -> Vec<String> {
+    let mut pinned: Vec<String> = drawn.iter().map(|(id, _)| id.clone()).collect();
     let index = target
         .and_then(|(target, position)| {
             pinned
@@ -330,15 +365,6 @@ fn pinned_order(group: &MoveGroup, session_id: &str, target: Option<(&str, &str)
         .unwrap_or(pinned.len());
     pinned.insert(index, session_id.to_string());
     pinned
-        .into_iter()
-        .chain(
-            group
-                .rows
-                .iter()
-                .filter(|row| !row.is_pinned && row.sidebar_session_id != session_id)
-                .map(|row| row.sidebar_session_id.clone()),
-        )
-        .collect()
 }
 
 /// What the messages change, for the landing preview.
@@ -356,8 +382,19 @@ fn drop_writes(
     for message in messages {
         let text = |key: &str| message.get(key).and_then(Value::as_str);
         match text("type") {
-            Some("setSessionPinned") => writes.pinned = message.get("pinned")?.as_bool(),
-            Some("setSessionParked") => writes.parked = message.get("parked")?.as_bool(),
+            Some("setSessionPinned") => {
+                if let Some(order) = message.get("sidebarOrder").and_then(Value::as_i64) {
+                    writes
+                        .sidebar_orders
+                        .push((text("sessionId")?.to_string(), order));
+                }
+                if text("sessionId") == Some(session_id) {
+                    writes.pinned = message.get("pinned")?.as_bool();
+                }
+            }
+            Some("setSessionParked") if text("sessionId") == Some(session_id) => {
+                writes.parked = message.get("parked")?.as_bool()
+            }
             Some("syncSessionOrder") => {
                 writes.group_id = text("groupId")?.to_string();
                 writes.order = Some(

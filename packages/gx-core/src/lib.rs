@@ -53,6 +53,7 @@ mod session_create;
 mod session_deep_link;
 pub mod session_handoff;
 pub mod settings_sync;
+pub mod settings_transfer;
 mod sidebar_accounts;
 mod sidebar_actions;
 mod sidebar_command_run;
@@ -243,24 +244,25 @@ pub use crate::sidebar_ui::{
     HIDDEN_ITEMS_STORAGE_KEY, MACHINE_TAB_STORAGE_KEY, PROJECT_COLLECTIONS_STORAGE_KEY,
     SIDEBAR_WINDOW_SCOPE_ID,
 };
+pub use crate::sidebar_view::extension_panel;
 pub use crate::sidebar_view::project_sidebar_icon_data_url;
 pub use crate::sidebar_view::{
     armed_actions_by_session, close_project_group_is_active, close_project_successor_candidates,
     close_project_successor_group_order, first_awake_successor_session_id, is_awake_successor_row,
     link_chips_that_fit, machine_state_copy, machine_state_is_busy, machine_state_is_failure,
     machine_state_short_word, machine_tab_layout, machine_tab_reveal_offset,
-    machine_tabs_out_of_view, plan_space_sleep, plan_space_switch_restore, project_slot_plan,
-    rename_shake_key, rendered_session_ids, reveal_plan, session_is_snoozed, session_slot_plan,
-    space_for_focused_row, space_landing_project_ids, ArmedAction, BrowserTabInput,
-    CloseAfterDoneInput, Collection, CollectionView, CollectionsState, CoordinatorBadge,
-    CoordinatorBadgeTone, DelayedSendInput, DelayedSendView, DropLanding, DropWrites, EmptyState,
-    FocusedRowSpace, FoldedStatus, FoldedWorktree, GroupActionTarget, GroupCore, GroupSummary,
-    GroupView, LabelDeadline, MachineChip, MachineNotice, MachineSummary, MachineTabInput,
-    MachineTabLayout, MachineTabView, NeedsYou, OrderItem, OrderKind, PinnedSessionOrder,
-    ProjectContextView, ProjectCopy, ProjectDiffStats, ProjectDropLanding, ProjectDropRow,
-    ProjectSlotPlan, RemoteMachineView, RowNesting, RowWorktree, SectionCollapse, SectionId,
-    SectionView, SessionLink, SessionLinkGlyph, SessionLinkKind, SessionLinkTone, SessionLinks,
-    SessionLinksBadge, SessionLinksChatPill, SessionLinksDisplay, SessionLinksRow,
+    machine_tabs_out_of_view, plan_space_sleep, plan_space_switch_restore, project_machine_key,
+    project_slot_plan, rename_shake_key, rendered_session_ids, reveal_plan, session_is_snoozed,
+    session_slot_plan, space_for_focused_row, space_landing_project_ids, ArmedAction,
+    BrowserTabInput, CloseAfterDoneInput, Collection, CollectionView, CollectionsState,
+    CoordinatorBadge, CoordinatorBadgeTone, DelayedSendInput, DelayedSendView, DropLanding,
+    DropWrites, EmptyState, FocusedRowSpace, FoldedStatus, FoldedWorktree, GroupActionTarget,
+    GroupCore, GroupSummary, GroupView, LabelDeadline, MachineChip, MachineNotice, MachineSummary,
+    MachineTabInput, MachineTabLayout, MachineTabView, NeedsYou, OrderItem, OrderKind,
+    PinnedSessionOrder, ProjectContextView, ProjectCopy, ProjectDiffStats, ProjectDropLanding,
+    ProjectDropRow, ProjectSlotPlan, RemoteMachineView, RowNesting, RowWorktree, SectionCollapse,
+    SectionId, SectionView, SessionLink, SessionLinkGlyph, SessionLinkKind, SessionLinkTone,
+    SessionLinks, SessionLinksBadge, SessionLinksChatPill, SessionLinksDisplay, SessionLinksRow,
     SessionMenuFacts, SessionRow, SessionSlotPlan, SessionSortMode, SessionTiming, SessionView,
     SessionWork, ShowAllProjectsRow, SidebarCollapseState, SidebarHiddenItems, SidebarHostInputs,
     SidebarInputs, SidebarMode, SidebarRevealPlan, SidebarSettings, SidebarUiState,
@@ -283,8 +285,8 @@ pub use crate::sidebar_view::{
     gbots_department_storage_id, gbots_section_storage_id, GbotsDepartmentView, GbotsSectionView,
 };
 pub use crate::sidebar_view::{
-    open_draft_headings, project_draft_rows, DraftArrival, DraftArrivals, DraftRow,
-    DRAFT_ARRIVAL_WINDOW_MS, DRAFT_CLOCK_SLACK_MS, DRAFT_FOCUS_WAIT_MS,
+    open_draft_headings, project_draft_rows, project_session_rows, DraftArrival, DraftArrivals,
+    DraftRow, DRAFT_ARRIVAL_WINDOW_MS, DRAFT_CLOCK_SLACK_MS, DRAFT_FOCUS_WAIT_MS,
 };
 pub use crate::sidebar_view::{tag_choice, tag_choices, TagChoice};
 pub use crate::sidebar_view::{ChiefRowView, HomeHeaderView};

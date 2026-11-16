@@ -19,6 +19,7 @@ pub(crate) mod collections;
 mod daemon_wait;
 mod draft_arrivals;
 mod drop_landing;
+pub mod extension_panel;
 mod gbots;
 mod groups;
 #[cfg(test)]
@@ -51,6 +52,7 @@ mod space_switch;
 pub(crate) mod spaces;
 pub(crate) mod tags;
 pub(crate) mod text;
+mod thread_fold;
 mod threads;
 #[cfg(test)]
 pub(crate) use threads::MAX_DEPTH as MAX_THREAD_DEPTH;
@@ -80,19 +82,20 @@ pub use daemon_wait::{
     SESSIONS_LOADING_TITLE,
 };
 pub use draft_arrivals::{
-    open_draft_headings, project_draft_rows, DraftArrival, DraftArrivals, DraftRow,
-    DRAFT_ARRIVAL_WINDOW_MS, DRAFT_CLOCK_SLACK_MS, DRAFT_FOCUS_WAIT_MS,
+    open_draft_headings, project_draft_rows, project_session_rows, DraftArrival, DraftArrivals,
+    DraftRow, DRAFT_ARRIVAL_WINDOW_MS, DRAFT_CLOCK_SLACK_MS, DRAFT_FOCUS_WAIT_MS,
 };
 pub use drop_landing::{DropLanding, DropWrites, TreeDropTarget};
 pub use gbots::{
     gbots_department_storage_id, gbots_section_storage_id, GbotsDepartmentView, GbotsSectionView,
 };
 pub use inputs::{
-    BrowserTabInput, CloseAfterDoneInput, DelayedSendInput, MachineTabInput, PinnedSessionOrder,
-    ProjectDiffStats, SectionCollapse, SectionId, SessionSortMode, SidebarCollapseState,
-    SidebarHiddenItems, SidebarHostInputs, SidebarInputs, SidebarMode, SidebarSettings,
-    SidebarUiState, UnavailableState, GROUP_WORKING_SESSIONS_SETTING_KEY, LOCAL_MACHINE_ID,
-    MACHINE_STATE_CONNECTED, MAX_RECENT_SPACE_SESSION_IDS, PINNED_SESSION_ORDER_SETTING_KEY,
+    project_machine_key, BrowserTabInput, CloseAfterDoneInput, DelayedSendInput, MachineTabInput,
+    PinnedSessionOrder, ProjectDiffStats, SectionCollapse, SectionId, SessionSortMode,
+    SidebarCollapseState, SidebarHiddenItems, SidebarHostInputs, SidebarInputs, SidebarMode,
+    SidebarSettings, SidebarUiState, UnavailableState, GROUP_WORKING_SESSIONS_SETTING_KEY,
+    LOCAL_MACHINE_ID, MACHINE_STATE_CONNECTED, MAX_RECENT_SPACE_SESSION_IDS,
+    PINNED_SESSION_ORDER_SETTING_KEY,
 };
 pub use links::{
     link_chips_that_fit, SessionLink, SessionLinkGlyph, SessionLinkKind, SessionLinkTone,

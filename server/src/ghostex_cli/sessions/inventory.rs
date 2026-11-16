@@ -365,6 +365,14 @@ fn cli_session_list_from(
             .filter(|_| crate::workspaces::workspaces_feature_enabled())
             .and_then(|snapshot| snapshot.get("sidebarWorkspaces")),
     );
+    // Sidebar extensions' panels: the phone reaches gxserver only through this CLI, so they ride
+    // the same result. Absent while no sidebar extension is on; phones up to 11.6 ignore the key
+    // (their summary parser reads named keys only).
+    insert_present(
+        &mut result,
+        "extensionPanels",
+        snapshot.and_then(|snapshot| snapshot.get("extensionPanels")),
+    );
     /*
      * CDXC:StateSync 2026-07-29-00:00:
      * Machine-scoped capability flags travel with the inventory so a client

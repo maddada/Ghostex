@@ -2,6 +2,9 @@ use super::super::appearance::ChatAppearance;
 use gpui::{App, TextRun, WindowTextSystem, px};
 use serde_json::Value;
 
+/// A switch row's switch, unscaled (`SwitchShape::REGULAR`).
+const SWITCH_WIDTH: f32 = 32.0;
+
 /// The box sizes of a menu panel's plain rows, in unscaled pixels.
 #[derive(Clone, Copy)]
 pub(super) struct MenuMetrics {
@@ -113,10 +116,18 @@ fn natural_width(rows: &[Value], appearance: &ChatAppearance, cx: &App) -> f32 {
             } else {
                 0.0
             };
-            let accessory = if row.get("checked").is_some() || row["children"].is_array() {
+            let accessory = if row["toggle"] == true {
+                SWITCH_WIDTH + m.row_gap
+            } else if row.get("checked").is_some() || row["children"].is_array() {
                 m.icon + m.row_gap
             } else {
                 0.0
+            };
+            // A switch row's line wraps (`measure_rows`), so it never widens the menu.
+            let description = if row["toggle"] == true {
+                0.0
+            } else {
+                description
             };
             m.row_x * 2.0 + icon + (label + badge).max(description) + detail + accessory
         })
@@ -175,12 +186,13 @@ pub(super) fn measure_rows(
                 return Ok(m.separator);
             }
             let heading = row["heading"] == true;
-            let accessory =
-                if !heading && (row.get("checked").is_some() || row["children"].is_array()) {
-                    m.icon + m.row_gap
-                } else {
-                    0.0
-                };
+            let accessory = if row["toggle"] == true {
+                SWITCH_WIDTH + m.row_gap
+            } else if !heading && (row.get("checked").is_some() || row["children"].is_array()) {
+                m.icon + m.row_gap
+            } else {
+                0.0
+            };
             let icon = if row["icon"].is_string() || row["iconPath"].is_string() {
                 m.icon + m.row_gap
             } else if row["dot"].is_string() {
@@ -196,7 +208,8 @@ pub(super) fn measure_rows(
                 (width - m.chrome() - m.row_x * 2.0 - accessory - icon - detail).max(1.0) * scale;
             // A greyed row's line is how to turn it on, so it is read whole (chat core's
             // `unavailable_modes`).
-            let wraps = heading || row["disabled"] == true;
+            // A switch row's line says what the switch is waiting on, so it is read whole too.
+            let wraps = heading || row["disabled"] == true || row["toggle"] == true;
             let description_height = if row["description"].is_string() && !wraps {
                 // A row's subtitle is one truncated 16px line under a 2px gap (`render.rs`). Its
                 // shaped text is one wrapped line whose height counts every wrap, so a subtitle

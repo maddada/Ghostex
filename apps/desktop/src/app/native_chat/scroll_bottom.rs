@@ -300,15 +300,40 @@ impl NativeChatView {
         }
     }
 
+    /// Before rows arrive (the core's splice, a message just sent, the status row): a reader within
+    /// the pill's edge threshold of the end follows them, as the phone's list does. Nothing moves a
+    /// reader a hold keeps in place (a clicked answer, a focused form field, a disclosure in motion,
+    /// a long reply stopped at its top) or one dragging the scrollbar.
+    ///
+    /// CDXC:SessionChat 2026-11-14 WHY:
+    /// GitHub issue #615: on the desktop, new messages often landed below the fold while the reader was at the end. gpui's list stops following on any scroll up, even a fraction of a pixel of trackpad momentum, and starts again only when a layout leaves the viewport within 1px of the end; a reader a few pixels short of it never followed again until they pressed the down pill. The phone follows whenever new content arrives while the reader is within the edge threshold (`autoscrollToTopThreshold` in Transcript.tsx). The desktop now asks the same question at the same moments, with the same threshold, and hides the pill within it (`transcript_left_bottom`), so "at the end" and "following" are one thing again.
+    pub(super) fn follow_tail_if_near_end(&self) {
+        if self.list.is_following_tail() || self.list.is_scrollbar_dragging() {
+            return;
+        }
+        let held = self.answer_hold_active()
+            || self.transcript_focus_follow.get().is_some()
+            || self.disclosure_motion.borrow().follow_paused
+            || self.reply_hold_placed();
+        if held {
+            return;
+        }
+        let scale = ChatAppearance::current(&self.snapshot).scale;
+        if transcript_distance_to_end(&self.list) <= px(SPEC.edge_threshold * scale) {
+            self.list.set_follow_mode(gpui::FollowMode::Tail);
+        }
+    }
+
     /// Paints nothing; placed after the list so its prepaint reads the layout this frame just made,
     /// and redraws the chat when the pill drawn before that layout no longer matches it.
     pub(super) fn scroll_bottom_sync(&self, cx: &Context<Self>) -> AnyElement {
         let list = self.list.clone();
         let drawn = self.scroll_bottom_drawn.clone();
         let chat = cx.entity_id();
+        let scale = ChatAppearance::current(&self.snapshot).scale;
         gpui::canvas(
             move |_, _, cx| {
-                if transcript_left_bottom(&list) != drawn.get() {
+                if transcript_left_bottom(&list, scale) != drawn.get() {
                     cx.notify(chat);
                 }
             },
@@ -327,7 +352,7 @@ impl NativeChatView {
         let p = ChatAppearance::current(&self.snapshot).on_window_glass(glass);
         let toast = self.pill_toast();
         self.scroll_bottom_drawn
-            .set(transcript_left_bottom(&self.list));
+            .set(transcript_left_bottom(&self.list, p.scale));
         let shown = toast.is_some();
         if glass {
             let label = toast.map_or_else(String::new, |toast| toast.text);
@@ -384,17 +409,14 @@ pub(super) fn transcript_distance_to_end(list: &gpui::ListState) -> gpui::Pixels
 }
 
 /// The reader has left the bottom of the transcript: the "Scroll to bottom" pill shows, and new
-/// rows arrive below the fold.
+/// rows arrive below the fold. Within the edge threshold the reader is at the end: the next rows
+/// to arrive are followed (`follow_tail_if_near_end`).
 ///
 /// CDXC:SessionChat 2026-10-04 WHY:
-/// User (Windows): "we're not auto scrolling down to the bottom automatically even when i don't see the scroll to bottom [button]". The pill used to hide within the 10px edge threshold while gpui's list resumes following only within 1px of the end, so a reader a few pixels short of it saw neither the pill nor following. This is now the one definition: the pill hides exactly while the list follows or will at its next layout, `scroll_bottom_sync` redraws it from the layout just made (the render decides it from the previous one), and the edge threshold only widens what counts as reaching the end on a downward wheel (`follow_tail_if_wheel_reaches_end`). Only a scroll up stops following.
-pub(super) fn transcript_left_bottom(list: &gpui::ListState) -> bool {
-    !list.is_following_tail() && transcript_distance_to_end(list) > px(LIST_RESUME_TOLERANCE)
+/// User (Windows): "we're not auto scrolling down to the bottom automatically even when i don't see the scroll to bottom [button]". The pill used to hide within the 10px edge threshold while gpui's list resumes following only within 1px of the end, so a reader a few pixels short of it saw neither the pill nor following. This is now the one definition: the pill hides exactly while the list follows or will at its next layout, `scroll_bottom_sync` redraws it from the layout just made (the render decides it from the previous one), and the edge threshold only widens what counts as reaching the end on a downward wheel (`follow_tail_if_wheel_reaches_end`). Only a scroll up stops following. The 1px half of this is superseded by the 2026-11-14 WHY on `follow_tail_if_near_end`: the pill again hides within the edge threshold, and the list now follows from there too.
+pub(super) fn transcript_left_bottom(list: &gpui::ListState, scale: f32) -> bool {
+    !list.is_following_tail() && transcript_distance_to_end(list) > px(SPEC.edge_threshold * scale)
 }
-
-/// gpui's list follows its tail again once a layout leaves the viewport within this many pixels
-/// of the end (`StateInner::layout_items`).
-const LIST_RESUME_TOLERANCE: f32 = 1.0;
 
 /// What the pill's slot shows instead of "Scroll to bottom".
 pub(super) struct PillToast {

@@ -676,11 +676,64 @@ pub fn answers_message(form: &QuestionForm, answers: &Value) -> String {
 /// would read as one of these escapes are escaped, which is what the chat's parser
 /// (packages/gx-chat-core/src/transcript/page_answers.rs) needs to read the title back exactly.
 pub fn page_answers_message(id: &str, title: &str, answers: &Value) -> String {
+    page_answers_message_tagged(id, title, answers, &[])
+}
+
+/// The answers' keys that are not a question's note (`… (note)`), in the order the answers hold
+/// them: the rows of the answers card, which a `tags` attribute lines up with.
+pub fn answer_row_keys(answers: &Value) -> Vec<&str> {
+    answers
+        .as_object()
+        .map(|fields| {
+            fields
+                .keys()
+                .map(String::as_str)
+                .filter(|key| !key.ends_with(NOTE_SUFFIX))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// [`page_answers_message`] with the tag of each question a page asked: `keys` pairs a question's
+/// answer key with its tag. The envelope gains `tags="Q12 Q13 - Q14"`, one word per
+/// [`answer_row_keys`] entry, `-` for a key that is no tagged question ("Additional notes"), so
+/// the chat can show each answer under its tag. No tag known, no attribute.
+///
+/// CDXC:SessionChat 2026-11-13 DECISION:
+/// User (Q2990 A, sent answers page, ~/.local/share/agent-work/Ghostex/sent-answers/sent-answers.html): the answers card lists each question once by its tag and a one-line question. A form's tags are in the transcript, but a published page's are only in its HTML, which gxserver reads (server/src/visual_pages/questions.rs), so it writes them into the envelope. Older answers without the attribute show numbers instead (packages/gx-chat-core/src/transcript/page_answers.rs).
+pub fn page_answers_message_tagged(
+    id: &str,
+    title: &str,
+    answers: &Value,
+    keys: &[(String, String)],
+) -> String {
     let body = serde_json::to_string_pretty(answers).unwrap_or_else(|_| "null".to_string());
+    let tags: Vec<&str> = answer_row_keys(answers)
+        .into_iter()
+        .map(|key| {
+            keys.iter()
+                .find(|(asked, tag)| asked == key && valid_tag_word(tag))
+                .map_or("-", |(_, tag)| tag.as_str())
+        })
+        .collect();
+    let tags = if tags.iter().any(|tag| *tag != "-") {
+        format!(" tags=\"{}\"", tags.join(" "))
+    } else {
+        String::new()
+    };
     format!(
-        "<ghostex-page-answers page=\"{id}\" title=\"{}\">\n{body}\n</ghostex-page-answers>",
+        "<ghostex-page-answers page=\"{id}\" title=\"{}\"{tags}>\n{body}\n</ghostex-page-answers>",
         escape_title(title)
     )
+}
+
+/// A tag that fits in the space-separated `tags` attribute as one word.
+fn valid_tag_word(tag: &str) -> bool {
+    !tag.is_empty()
+        && tag != "-"
+        && tag.chars().all(|character| {
+            character.is_alphanumeric() || character == '-' || character == '_' || character == '.'
+        })
 }
 
 fn escape_title(title: &str) -> String {

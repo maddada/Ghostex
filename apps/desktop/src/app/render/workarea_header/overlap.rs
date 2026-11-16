@@ -149,13 +149,23 @@ impl GhostexGpuiApp {
     /// all: the transcript underneath keeps every click, drag and scroll it had. It ramps from the
     /// header's own colour, which is the chat's background here, so the strip really does fade one
     /// surface out rather than crossfade the workspace background into the chat's.
-    pub(crate) fn render_workarea_header_content_fade(&self) -> impl IntoElement {
+    ///
+    /// CDXC:Titlebar 2026-11-14 WHY:
+    /// It covers the transcript only. The columns docked at the chat's right edge (Session details,
+    /// the coordinator board) start just below the header rather than passing under it, so a fade
+    /// across them dimmed their top row (the user, of Session details' Overview / Limits tabs: "i
+    /// see the tabs are faded from the top pls fix without moving them lower"). It stops at their
+    /// left edge, following their slide.
+    pub(crate) fn render_workarea_header_content_fade(&self, cx: &gpui::App) -> impl IntoElement {
         let background = gpui_session_chat_background_color();
+        let docked = self
+            .agents_column_solo_gpui_chat()
+            .map_or(0.0, |chat| chat.read(cx).docked_columns_width());
         div()
             .absolute()
             .top(px(WORKAREA_HEADER_HEIGHT))
             .left_0()
-            .right_0()
+            .right(px(docked))
             .h(px(WORKAREA_HEADER_FADE_HEIGHT))
             .bg(gpui::linear_gradient(
                 180.0,

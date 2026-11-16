@@ -28,6 +28,16 @@ kache init
 kache doctor
 ```
 
+#### A second worktree
+
+A `git worktree add` folder starts without submodules, `node_modules`, the CEF download or a built zmx. Run this once inside it:
+
+```sh
+cargo xtask setup-worktree
+```
+
+It checks out the build submodules at their pinned commits from the main checkout's copies (GitHub only for a commit the main checkout lacks), reuses the main checkout's CEF download and Ghostty's Zig packages, runs `bun install`, and builds zmx. `--with <path>` checks out another submodule too, such as `apps/mobile/app`.
+
 #### Windows
 
 Install Git for Windows, Bun, Node.js, rustup, and Visual Studio Build Tools with the

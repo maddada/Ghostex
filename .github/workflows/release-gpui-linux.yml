@@ -78,8 +78,9 @@ permissions:
 
 # Ghostex's component signing key (tooling/release-gpui/component-signing.mjs): publish-component.mjs
 # signs every component archive it records; GHOSTEX_REQUIRE_COMPONENT_SIGNATURES makes it, and the seal, refuse unsigned ones (#495).
+# The key itself is set only on the steps that publish or seal a component, never workflow-wide, so
+# third-party actions and other steps never see it.
 env:
-  GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
   # The app's sealed on-demand-resources.json must carry every archive's signature.
   GHOSTEX_REQUIRE_COMPONENT_SIGNATURES: '1'
 
@@ -118,7 +119,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       # kache (CDXC:ReleaseKache 2026-11-04, replacing sccache's GitHub Actions backend). The registry cache below
@@ -245,7 +246,7 @@ jobs:
       # build rather than after: `linux-stage.sh` refuses to start without the
       # package (it would otherwise build gxserver from source itself, which is
       # far worse), and `build-linux-app.sh` copies those bytes into the app dir
-      # at step 5, after the compile at line 72. Starting cargo first would mean
+      # at step 5, after the compile (build_release_rust). Starting cargo first would mean
       # splitting `build-linux-app.sh` into compile and bundle halves — a change
       # to the shared script that macOS/Windows/local builds also run, for a few
       # minutes of overlap on full rebuilds only.
@@ -306,6 +307,7 @@ jobs:
       - name: Reuse the published Source component for standalone runs
         if: ${{ ! inputs.runtime_artifacts_ready }}
         env:
+          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
           GH_TOKEN: ${{ github.token }}
         run: |
           tooling/release-gpui/retry.sh 4 2 -- node tooling/release-gpui/publish-component.mjs \
@@ -330,12 +332,33 @@ jobs:
           tar -xzf "build/runtime-artifacts/$LINUX_ARCH/gxserver-linux-$LINUX_ARCH.tar.gz" -C "build/remote-gxserver-linux/$LINUX_ARCH/package"
       - name: Stage the Linux desktop payload once
         env:
+          GHOSTEX_COMPONENT_SIGNATURES_DEFERRED: '1'
           GH_TOKEN: ${{ github.token }}
-          COMPONENTS_GITHUB_TOKEN: ${{ secrets.COMPONENTS_GITHUB_TOKEN }}
           GHOSTEX_CODE_SERVER_COMPONENT_VERSION: ${{ steps.code_server_identity.outputs.component_version }}
           GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_X64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/code-server-x64/${{ steps.code_server_identity.outputs.archive_name }}
           GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_ARM64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/code-server-arm64/${{ steps.code_server_identity.outputs.archive_name }}
         run: tooling/release-gpui/linux-stage.sh "${{ inputs.version }}" "$GHOSTEX_LINUX_PACKAGE_ROOT"
+      # CDXC:Release 2026-11-14 DECISION: user (Q3121): no step that runs build tooling holds the
+      # component signing key. The steps above record and seal the component archives unsigned
+      # (GHOSTEX_COMPONENT_SIGNATURES_DEFERRED); this step runs only Ghostex's signing code, and the
+      # uploads run in a step of their own (tooling/release-gpui/sign-component-records.mjs).
+      - name: Sign the component records
+        env:
+          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
+        run: |
+          node tooling/release-gpui/sign-component-records.mjs \
+            build/on-demand-components/components.json \
+            apps/desktop/build/linux/Ghostex/resources/on-demand-resources.json \
+            "$GHOSTEX_LINUX_PACKAGE_ROOT/opt/ghostex/resources/on-demand-resources.json"
+      - name: Publish the CEF and Source components
+        env:
+          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          COMPONENTS_GITHUB_TOKEN: ${{ secrets.COMPONENTS_GITHUB_TOKEN }}
+        run: |
+          tooling/release-gpui/linux-publish-components.sh \
+            '${{ steps.code_server_identity.outputs.component_version }}' \
+            "${{ github.workspace }}/build/runtime-artifacts/code-server-$LINUX_ARCH/${{ steps.code_server_identity.outputs.archive_name }}"
       # RPM and the portable tarball first: both archive the whole staged root,
       # and linux-deb.sh creates DEBIAN/ inside it.
       - name: Build the RPM package

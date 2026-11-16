@@ -37,7 +37,7 @@ impl GhostexGpuiApp {
                 }
                 // A browser page has no settings write (its Settings patch answers with a toast),
                 // so its folds live in the page's own copy of the settings until it reloads.
-                #[cfg(target_arch = "wasm32")]
+                #[cfg(ghostex_web)]
                 {
                     let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
                     let mut object = settings.object().clone();
@@ -45,7 +45,7 @@ impl GhostexGpuiApp {
                     crate::shared_settings::install(object);
                     cx.notify();
                 }
-                #[cfg(not(target_arch = "wasm32"))]
+                #[cfg(not(ghostex_web))]
                 self.handle_gpui_app_modal_update_settings_patch_message(
                     &json!({
                         "patch": { "sessionLinksFoldedGroups": sections },

@@ -25,10 +25,44 @@
 //! - Blocked (every account out of usage; an API, login, overload or rate-limit error account
 //!   recovery could not get past) is a red dot that always alerts, Autopilot or not, unless
 //!   Ghostex fixed it right away (an automatic switch to an account with room, a quick retry that
-//!   got through), in which case it never became blocked.
+//!   got through), in which case it never became blocked. Since 2026-11-14 (CDXC:MemoryGuard
+//!   DECISION in server/src/memory_guard/card.rs, Q3190, "only the guard's alert"), a session the
+//!   memory guard stopped shows the blocked red dot without this sound and banner
+//!   (`blockedAlertedBy`): the guard's own notification, under its switch, is its only alert.
 //! - Every other session keeps its finished-turn alert, under Alert me for (All, or Needs you only).
 //! Supersedes the parts of the 2026-11-07 Alert me for decision (attention.rs) that let a thread's
 //! or a coordinator's finished turn alert under All.
+//!
+//! CDXC:Notifications 2026-11-13 DECISION:
+//! User: "we're getting way too many notifications from the coordinator when it finishes. I don't
+//! think anyone cares about when the coordinator finishes. Please disable those. Just show for new
+//! needs-you, blocked or approval: those need user attention." A coordinator's handover ends with a
+//! Needs you section nearly every turn, so for a coordinator gxserver no longer reads it: its
+//! `handover_needs_you` means the turn put something new on its board for the user (an item ask,
+//! an item moved into Needs you or Blocked; server/src/coordinators/work.rs
+//! `raised_for_user_since`). A plain finished turn never alerts, whatever its handover says. Its
+//! open question forms, approvals and red dots alert as before (they are not `Finished`).
+//!
+//! CDXC:Notifications 2026-11-14 DECISION:
+//! User: "please don't show the blue dot on any coordinator while it has workers still working. ur
+//! spamming me with notifications this is annoying af. only 1 notification when u send me when all
+//! done and no running workers. dont put blue dot on sidebar if not all workers done under the
+//! coordinator". gxserver stores a coordinator's turn that ends while its threads still work as
+//! already seen (no dot, row or alert; server/src/coordinators/quiet_turn_end.rs), so a
+//! coordinator's finished turn reaches this rule only when no thread works, or when the turn opened
+//! an ask that holds the work. That turn alerts once, like any session's, under Alert me for.
+//! Supersedes the 2026-11-08 and 2026-11-13 rules above that a plain finished coordinator turn never
+//! alerts.
+//!
+//! CDXC:Notifications 2026-11-14 DECISION:
+//! User: "lets pls not show notifications on done for workers". A coordinator's thread (a worker)
+//! now reports everything that is its coordinator's to handle there: its finished turn leaves no
+//! row or dot, and its question card, a message stuck on its input box, a stall, an error and a
+//! memory-guard stop alert nobody, unless Settings > Notifications > Workers brings them back
+//! (Silent: rows; Sound: gxserver stamps it as any session). An approval, every account out of
+//! usage and a sign-in that stopped working still alert. gxserver applies it
+//! (server/src/worker_alerts.rs); clients read its stamps (`attention.alerts`, `stuckHandledBy`,
+//! `blockedAlertedBy` `coordinator`), so this rule's fallback for an older daemon is unchanged.
 //! SEE-ALSO: server/src/presentation/attention_alerts.rs (the stamps), server/src/notification_feed/producer.rs
 //! (rows and pushes), apps/desktop/src/app/gx_store/attention/host.rs (sound and banner),
 //! apps/mobile/app/src/notifications/attentionAlerts.ts (the phone).
@@ -52,7 +86,9 @@ pub enum AlertRole {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AlertTrigger {
     /// A turn ended with nothing waiting on the user. `handover_needs_you`: its handover has a
-    /// Blocked or Needs you section.
+    /// Blocked or Needs you section; for a coordinator, the turn raised a new ask, Needs you item
+    /// or Blocked item on its board (CDXC:Notifications 2026-11-13). A coordinator's turn that
+    /// ended while its threads still work never gets here (CDXC:Notifications 2026-11-14).
     Finished { handover_needs_you: bool },
     /// A question card, open question, bell, connector card or other wait: the pink dot.
     NeedsInput,
@@ -90,8 +126,7 @@ pub fn should_alert(
         AlertTrigger::Approval | AlertTrigger::Stuck => !handling.autopilot_handles,
         AlertTrigger::Finished { handover_needs_you } => match role {
             AlertRole::Thread => false,
-            AlertRole::Coordinator => handover_needs_you,
-            AlertRole::Session => match alerts_for {
+            AlertRole::Coordinator | AlertRole::Session => match alerts_for {
                 AttentionAlerts::All => true,
                 AttentionAlerts::NeedsYou => handover_needs_you,
             },
@@ -203,6 +238,10 @@ pub fn stuck_alerts(session: &PresentationSession) -> bool {
 /// Whether a row is blocked (and so alerts).
 pub fn blocked_alerts(session: &PresentationSession) -> bool {
     session.blocked_since.is_some()
+        && session
+            .blocked_alerted_by
+            .as_deref()
+            .is_none_or(|by| by.trim().is_empty())
         && should_alert(
             presentation_role(session),
             AlertTrigger::Blocked,

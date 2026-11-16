@@ -265,6 +265,11 @@ impl CefSurface {
         }
     }
 
+    /// The top-left corner of the page's view in the window, once a paint has placed it.
+    pub(crate) fn view_origin(&self) -> Option<Point<Pixels>> {
+        self.browser.view_origin()
+    }
+
     pub(crate) fn can_go_back(&self) -> bool {
         self.browser.can_go_back()
     }
@@ -756,7 +761,36 @@ impl Element for CefElement {
                 super::window_corner_pane::refresh_native_window_corner_clip(native_view);
             }
         }
+        // Windows and Linux: with the work area frame on, the page's native window takes the card's
+        // inner corners where it meets them (element/work_area_frame.rs); square everywhere else.
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        if self.surface_id != APP_MODAL_HOST_ID {
+            super::work_area_frame::clip_native_view_to_work_area_frame(
+                &self.browser,
+                bounds,
+                window,
+            );
+        }
         let hitbox = window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal);
+        Some(hitbox)
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _: &mut Self::RequestLayoutState,
+        hitbox: &mut Self::PrepaintState,
+        window: &mut Window,
+        _: &mut App,
+    ) {
+        let Some(hitbox) = hitbox.as_ref() else {
+            window.with_content_mask(Some(ContentMask { bounds }), |_window| {});
+            return;
+        };
+        let bounds = hitbox.bounds;
+        // Mouse listeners may only be registered while painting (gpui `debug_assert_paint`).
         let browser = self.browser.clone();
         let focus_handle = self.focus_handle.clone();
         let surface_id = self.surface_id.clone();
@@ -789,23 +823,6 @@ impl Element for CefElement {
                 window.refresh();
             }
         });
-        Some(hitbox)
-    }
-
-    fn paint(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        bounds: Bounds<Pixels>,
-        _: &mut Self::RequestLayoutState,
-        hitbox: &mut Self::PrepaintState,
-        window: &mut Window,
-        _: &mut App,
-    ) {
-        let bounds = hitbox
-            .as_ref()
-            .map(|hitbox| hitbox.bounds)
-            .unwrap_or(bounds);
         window.with_content_mask(Some(ContentMask { bounds }), |_window| {});
     }
 }

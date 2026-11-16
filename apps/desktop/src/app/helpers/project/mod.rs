@@ -12,7 +12,7 @@ pub(crate) mod colors;
 pub(crate) mod contract_and_paths;
 pub(crate) mod editor_launch;
 pub(crate) mod menu_bar_status;
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "windows", test))]
 pub(crate) mod open_target_scan;
 pub(crate) mod project_beads;
 pub(crate) mod project_settings;
@@ -25,7 +25,7 @@ pub(crate) use colors::*;
 pub(crate) use contract_and_paths::*;
 pub(crate) use editor_launch::*;
 pub(crate) use menu_bar_status::*;
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "windows", test))]
 pub(crate) use open_target_scan::*;
 pub(crate) use project_beads::*;
 pub(crate) use project_settings::*;

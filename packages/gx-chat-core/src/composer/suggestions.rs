@@ -500,7 +500,6 @@ const DEFAULT_AGENT_NAMES: &[(&str, &str)] = &[
     ("cursor", "Cursor CLI"),
     ("pi", "Pi Agent"),
     ("opencode", "OpenCode"),
-    ("gemini", "Gemini"),
     ("copilot", "Copilot"),
     ("droid", "Factory Droid"),
     ("grok", "Grok Build"),

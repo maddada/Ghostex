@@ -147,6 +147,19 @@ pub struct SavedDraftPill {
     pub hint: String,
 }
 
+/// The "Option + Enter to compact then send" hint pinned at the left of the chat box's pill strip
+/// (`composer::compact_hint`): a Codex chat idle for more than a day.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompactHint {
+    /// The words on a Mac keyboard: "Option + Enter to compact then send".
+    pub mac_label: String,
+    /// The words elsewhere: "Alt + Enter to compact then send".
+    pub label: String,
+    /// What a screen reader says for the hint.
+    pub aria_label: String,
+}
+
 /// The agent terminal's last lines, offered when the chat cannot explain what is happening.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -20,6 +20,7 @@ pub mod coordinator_threads;
 pub mod document;
 pub mod minimap;
 pub mod minimap_rail;
+pub mod needs_you;
 pub mod new_chat_tips;
 pub mod panels;
 pub mod relayed_approvals;

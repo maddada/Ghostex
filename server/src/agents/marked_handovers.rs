@@ -91,9 +91,17 @@ pub(crate) fn coordinator_marks_replies(paths: &GxserverPaths) -> bool {
 /// CDXC:MarkedHandovers 2026-10-11 WHY:
 /// For a session the setting covers, the note is added when the launch or resume command is resolved instead of being saved in the session's base command: the command is resolved again on every start, resume, fork and account switch, so turning the setting on or off reaches each session the next time it starts or resumes, while a running agent keeps the instructions it started with. Orchestrators made before 2026-10-17 carry it in their role (role.rs) unless Marked handovers is Off; newer ones read it from `ghostex orchestrator guide`, which their `ghostex-coordinator` skill sends them to (role.rs `coordinator_guide`), and threads have it saved in their base command at creation (`with_thread_marked_handovers`), so both keep it whatever the setting says. Claude keeps only the last `--append-system-prompt-file` (tested 2026-10-11 on Claude Code 2.1.296) and Codex reads one `developer_instructions`, so a command that already names its own is left alone rather than lose it, except a Codex orchestrator's guide pointer, which the note joins. ZCode has no such flag and gets the note as SessionStart hook context (activity.rs); Empryo ignores hook context and other agents have no channel Ghostex can use, so they do not get the note outside an Empryo orchestrator's profile.
 /// CDXC:AgentGuide 2026-11-02 WHY:
-/// The Ghostex note (agents/ghostex_note.rs) rides the same flag, joined with this note into one file or value, so neither replaces the other. Pi (`--append-system-prompt`, which takes a file) and Droid (`--append-system-prompt-file`) get the joined text through their own flags; OpenCode, Gemini, Cursor, Copilot, Amp and the rest have no flag Ghostex can use and get the note as the `ghostex-agent-guide` skill instead.
+/// The Ghostex note (agents/ghostex_note.rs) rides the same flag, joined with this note into one file or value, so neither replaces the other. Pi (`--append-system-prompt`, which takes a file) and Droid (`--append-system-prompt-file`) get the joined text through their own flags; OpenCode, Cursor, Copilot, Amp and the rest have no flag Ghostex can use and get the note as the `ghostex-agent-guide` skill instead.
 /// SEE-ALSO: server/src/agents/launch_plan.rs (`resolve_agent_launch_command` calls this), server/src/coordinators/role.rs (`coordinator_role_file` and `GUIDE_POINTER_COORDINATOR_INSTRUCTIONS`, the older orchestrators' role flags this combines with), server/src/agents/ghostex_note.rs.
-pub(crate) fn with_launch_notes(agent_id: &str, icon: Option<&str>, command: &str) -> String {
+///
+/// CDXC:Extensions 2026-11-16 WHY:
+/// A coordinator made since 2026-10-17 takes its role from the skill and has no system prompt flag of its own, so it took this note like any session; the lines extensions add (`agentNote`, extensions/agent_notes.rs) are for ordinary sessions only (Q3430), so a `coordinator` launch gets the note without them, from a file of its own so the two never overwrite each other between launches.
+pub(crate) fn with_launch_notes(
+    agent_id: &str,
+    icon: Option<&str>,
+    command: &str,
+    coordinator: bool,
+) -> String {
     if command.trim().is_empty() {
         return command.to_string();
     }
@@ -124,10 +132,18 @@ pub(crate) fn with_launch_notes(agent_id: &str, icon: Option<&str>, command: &st
             return command.to_string();
         }
     }
-    let Some(text) = super::current_launch_note_text(&paths) else {
+    let Some(text) = super::current_launch_note_text(&paths, !coordinator) else {
         return command.to_string();
     };
-    with_note_text(&paths, &family, command, &text)
+    let path = if coordinator && text != MARKED_HANDOVERS_NOTE {
+        paths
+            .root_dir
+            .join("agent-note")
+            .join("coordinator-note.md")
+    } else {
+        note_file_path(&paths, &text)
+    };
+    with_note_at(&family, command, &text, &path)
 }
 
 /// A thread's base command at creation, with the note saved in it, so the thread marks its
@@ -144,6 +160,11 @@ pub(crate) fn with_thread_marked_handovers(family: &str, command: &str) -> Strin
 /// `command` with `text` behind the system prompt flag of its family, unless it already names a
 /// system prompt file or developer instructions (a note's own included).
 fn with_note_text(paths: &GxserverPaths, family: &str, command: &str, text: &str) -> String {
+    with_note_at(family, command, text, &note_file_path(paths, text))
+}
+
+/// [`with_note_text`] with the note written to `path`.
+fn with_note_at(family: &str, command: &str, text: &str, path: &std::path::Path) -> String {
     let file_flag = match family {
         "claude" if !command.contains("--append-system-prompt-file") => {
             "--append-system-prompt-file"
@@ -156,8 +177,7 @@ fn with_note_text(paths: &GxserverPaths, family: &str, command: &str, text: &str
         }
         _ => return command.to_string(),
     };
-    let path = note_file_path(paths, text);
-    match write_note_file(&path, text) {
+    match write_note_file(path, text) {
         Ok(()) => format!(
             "{} {file_flag} {}",
             command.trim_end(),

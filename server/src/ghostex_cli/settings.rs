@@ -31,6 +31,7 @@ pub(super) const SETTINGS_UPDATE_SOURCE: &str = "cli:settings";
 /// packages/gx-core/src/renderer_commands/verbs.rs, which the desktop app checks again.
 const SETTINGS_MODAL_TABS: &[&str] = &[
     "settings",
+    "experience",
     "chat",
     "sidebar",
     "terminal",
@@ -100,11 +101,11 @@ pub struct CatalogEntry {
 }
 
 #[derive(Debug, Deserialize)]
-struct SettingsCatalog {
-    settings: Vec<CatalogEntry>,
+pub(crate) struct SettingsCatalog {
+    pub(crate) settings: Vec<CatalogEntry>,
 }
 
-fn catalog() -> CliResult<&'static SettingsCatalog> {
+pub(crate) fn catalog() -> CliResult<&'static SettingsCatalog> {
     static CATALOG: OnceLock<Result<SettingsCatalog, String>> = OnceLock::new();
     CATALOG
         .get_or_init(|| {
@@ -126,7 +127,7 @@ fn catalog() -> CliResult<&'static SettingsCatalog> {
         .map_err(|message| CliError::Other(message.clone()))
 }
 
-fn find_entry(key: &str) -> CliResult<&'static CatalogEntry> {
+pub(crate) fn find_entry(key: &str) -> CliResult<&'static CatalogEntry> {
     let catalog = catalog()?;
     let trimmed = key.trim();
     if let Some(entry) = catalog.settings.iter().find(|entry| entry.key == trimmed) {
@@ -187,7 +188,7 @@ pub(super) fn read_settings_file() -> CliResult<Map<String, Value>> {
 
 /// The catalog default of `entry` on this computer: a platform default (Enable transparency is
 /// Never on Windows) wins over the shared one the catalog JSON carries.
-fn effective_default(entry: &CatalogEntry) -> Option<Value> {
+pub(crate) fn effective_default(entry: &CatalogEntry) -> Option<Value> {
     ghostex_settings_catalog::availability::platform_default(
         ghostex_settings_catalog::Platform::current(),
         &entry.key,
@@ -199,7 +200,7 @@ fn effective_default(entry: &CatalogEntry) -> Option<Value> {
 /// Whether Settings leaves the row out on this computer for the saved values (Blur on Windows
 /// while the glass shows the desktop, Menu blur off macOS), or the page is one a built-in extension
 /// this platform does not have owns (Cloud Boxes on Windows).
-fn hidden_here(entry: &CatalogEntry, file: &Map<String, Value>) -> bool {
+pub(crate) fn hidden_here(entry: &CatalogEntry, file: &Map<String, Value>) -> bool {
     !ghostex_settings_catalog::built_in_extensions::page_available_on(
         &entry.tab,
         ghostex_settings_catalog::Platform::current(),
@@ -217,7 +218,7 @@ fn current_value(entry: &CatalogEntry, file: &Map<String, Value>) -> (Value, &'s
     }
 }
 
-fn format_value(value: &Value) -> String {
+pub(crate) fn format_value(value: &Value) -> String {
     let mut normalized = value.clone();
     normalize_js_numbers(&mut normalized);
     match &normalized {
@@ -228,7 +229,7 @@ fn format_value(value: &Value) -> String {
     }
 }
 
-fn option_values(entry: &CatalogEntry) -> Vec<&str> {
+pub(crate) fn option_values(entry: &CatalogEntry) -> Vec<&str> {
     entry
         .options
         .as_ref()
@@ -236,7 +237,7 @@ fn option_values(entry: &CatalogEntry) -> Vec<&str> {
         .unwrap_or_default()
 }
 
-fn type_summary(entry: &CatalogEntry) -> String {
+pub(crate) fn type_summary(entry: &CatalogEntry) -> String {
     match entry.value_type.as_str() {
         "boolean" => "boolean".to_string(),
         "enum" => format!("one of {}", option_values(entry).join("|")),
@@ -264,7 +265,7 @@ fn type_summary(entry: &CatalogEntry) -> String {
     }
 }
 
-fn format_number(value: f64) -> String {
+pub(crate) fn format_number(value: f64) -> String {
     if value.fract() == 0.0 && value.abs() < 1e15 {
         format!("{}", value as i64)
     } else {
@@ -348,6 +349,8 @@ pub fn settings_command(args: &[String]) -> CliResult<()> {
         "reset" => reset_command(&rest),
         "open" => open_command(&rest),
         "hotkeys" | "hotkey" => super::settings_hotkeys::hotkeys_command(&rest),
+        "export" => super::settings_transfer::export_command(&rest),
+        "import" => super::settings_transfer::import_command(&rest),
         other => Err(CliError::Other(format!(
             "Unknown settings command: {other}\n\n{}",
             usage::settings_usage()
@@ -517,7 +520,7 @@ fn get_command(args: &[String]) -> CliResult<()> {
     Ok(())
 }
 
-fn not_writable_error(entry: &CatalogEntry) -> CliError {
+pub(crate) fn not_writable_error(entry: &CatalogEntry) -> CliError {
     if entry.key == "hotkeys" {
         return CliError::Other(
             "Hotkeys are changed one at a time: `ghostex settings hotkeys list`, `ghostex settings hotkeys set <id> <keys>`, `ghostex settings hotkeys reset <id>|--all`.".to_string(),
@@ -553,7 +556,7 @@ fn number_value(number: f64) -> Value {
     }
 }
 
-fn parse_value(entry: &CatalogEntry, raw: &str) -> CliResult<Value> {
+pub(crate) fn parse_value(entry: &CatalogEntry, raw: &str) -> CliResult<Value> {
     match entry.value_type.as_str() {
         "boolean" => parse_boolean(raw).map(Value::Bool).ok_or_else(|| {
             CliError::Other(format!(
@@ -644,7 +647,7 @@ fn parse_value(entry: &CatalogEntry, raw: &str) -> CliResult<Value> {
     }
 }
 
-fn values_equal(left: &Value, right: &Value) -> bool {
+pub(crate) fn values_equal(left: &Value, right: &Value) -> bool {
     match (left.as_f64(), right.as_f64()) {
         (Some(left), Some(right)) => (left - right).abs() < 1e-9,
         _ => left == right,

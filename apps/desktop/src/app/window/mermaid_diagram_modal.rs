@@ -414,7 +414,7 @@ impl GpuiMermaidDiagramModalWindow {
             .gap(px(6.0))
             // 9pt at the sides: the 32pt mode switch makes the row taller than the 26pt X, which
             // then sits 3pt lower, so this keeps the X as far from the window's side as from its
-            // top (CDXC:SessionChat 2026-11-11 in visual_page_modal/band_geometry.rs).
+            // top (CDXC:SessionChat 2026-11-11 in window/page_band_geometry.rs).
             .px(px(9.0))
             .py(px(6.0))
             .border_b_1()

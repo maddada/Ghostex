@@ -82,6 +82,8 @@ pub(super) async fn route_control_http(
         | "/api/pairComputer"
         | "/api/computerPairingStatus"
         | "/api/cancelComputerPairing"
+        | crate::remote_access::connect_back::SIGN_CONNECT_BACK_ENDPOINT
+        | crate::remote_access::connect_back::CONNECT_BACK_ENDPOINT
         | "/api/pairedDeviceSeen"
         | "/api/easyConnectAddresses"
         | crate::remote_access::EASY_CONNECT_CLIENT_KEY_ENDPOINT
@@ -140,6 +142,7 @@ pub(super) async fn route_control_http(
         }
         "/api/listExtensions"
         | "/api/extensionsCatalog"
+        | "/api/extensionStoreContent"
         | "/api/installExtension"
         | "/api/uninstallExtension"
         | "/api/updateExtensionState"
@@ -153,6 +156,26 @@ pub(super) async fn route_control_http(
                 request_id,
                 &body_json,
                 token_extension_id,
+            )
+            .await
+        }
+        crate::extensions::ext_api::PAGE_TOKEN_RPC_ENDPOINT => {
+            crate::extensions::ext_api::handle_page_token_rpc(
+                state.clone(),
+                &caller,
+                endpoint.path,
+                request_id,
+                body_json,
+            )
+            .await
+        }
+        crate::extensions::ext_api::PANEL_ACTION_RPC_ENDPOINT => {
+            crate::extensions::ext_api::handle_panel_action_rpc(
+                state.clone(),
+                &caller,
+                endpoint.path,
+                request_id,
+                body_json,
             )
             .await
         }

@@ -1,7 +1,7 @@
 # Ghostex overview
 
 Ghostex is a desktop workspace for running AI coding agents (Claude Code, Codex,
-Gemini CLI, OpenCode, Pi, and other agent CLIs) side by side across many
+Cursor, OpenCode, Pi, Antigravity CLI, and other agent CLIs) side by side across many
 projects. Every agent runs in a real, persistent terminal session; Ghostex adds
 the sidebar, the chat view, the browser, the editor, the board, and the
 automation and remote-access layers around those sessions.
@@ -29,10 +29,14 @@ hotkeys Every shortcut and its default binding
   Panel and the buttons drop their labels and the breadcrumb drops the project
   name. There is no line under the header: your chat fades out beneath it. Drag
   the header, or the sidebar's Search row, to move the window.
+  On Windows, and on Linux where the desktop draws no title bar (Hyprland and
+  Omarchy), the window's minimize, maximize and close buttons sit at the right
+  end of that row. On Omarchy, minimize shows only while the window is on a
+  floating workspace, and sends the window to the dock.
 - **Sidebar** (left by default): projects, their sessions, tags and filters,
   remote machines, and the More Options menu under the three-lines button at
   the top right (Sort & Filter, Collapse All, Commands, Agents Hub, All Automations,
-  Connect a Device, Keep Awake, then Ask Ghostex AI, Join Discord and Send Bug / Feedback, then the Tools and Ghostex submenus and
+  Connect a Phone, Connect a Computer, Keep Awake, then Ask Ghostex AI, Join Discord and Send Bug / Feedback, then the Tools and Ghostex submenus and
   Settings; Ghostex holds New Window, Check for Updates, Restart Ghostex, Quit
   Ghostex, and Quit Ghostex & BG Service, which also stops the background
   service and every session; Tools holds Search by Prompt, Import

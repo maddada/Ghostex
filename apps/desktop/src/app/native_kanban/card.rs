@@ -3,7 +3,7 @@
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, AppContext as _, Context, ElementId, FontWeight, Hsla, InteractiveElement as _,
+    AnyElement, AppContext as _, Context, ElementId, FontWeight, InteractiveElement as _,
     IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Render, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
@@ -20,28 +20,11 @@ use crate::app::native_chat::fonts::CHAT_MONO;
 pub(crate) struct KanbanCardDrag {
     pub(crate) ticket_id: String,
     title: SharedString,
-    font: SharedString,
-    background: Hsla,
-    border: Hsla,
-    foreground: Hsla,
 }
 
 impl Render for KanbanCardDrag {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .w(px(240.0))
-            .px(px(12.0))
-            .py(px(10.0))
-            .rounded(px(CARD_RADIUS))
-            .bg(self.background)
-            .border_1()
-            .border_color(self.border)
-            .opacity(0.92)
-            .font_family(self.font.clone())
-            .text_size(px(13.0))
-            .text_color(self.foreground)
-            .truncate()
-            .child(self.title.clone())
+        crate::app::helpers::drag_ghost(self.title.clone(), None, Some(px(240.0)), 1.0)
     }
 }
 
@@ -164,10 +147,6 @@ impl GhostexGpuiApp {
         let drag = KanbanCardDrag {
             ticket_id: id.clone(),
             title: issue.title.clone().into(),
-            font: p.font.clone().into(),
-            background: p.card_hover,
-            border: p.border_strong,
-            foreground: p.foreground,
         };
         let open_id = id.clone();
         let menu_id = id.clone();

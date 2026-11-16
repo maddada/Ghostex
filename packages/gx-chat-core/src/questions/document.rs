@@ -40,12 +40,14 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         (Some(raw), Some(notice)) => {
             let mut decorated = decorate_notice(raw, notice, state.session.agent.as_deref());
             if let Some(object) = decorated.as_object_mut() {
+                crate::questions::trust_card::decorate(object);
                 crate::questions::account_wait::decorate(
                     object,
                     state.core.hide_account_emails,
                     context.now_ms,
                     context.utc_offset_minutes,
                 );
+                crate::questions::notice_checkboxes::decorate(object);
             }
             Tri::Value(decorated)
         }
@@ -112,6 +114,9 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     // `openQuestions` is assembled beside this family too (`open_questions::project_with`).
     into.resource_modal = crate::questions::resource_modal::project(state, context);
     into.later_questions = crate::questions::open_questions::later_waiting(state);
+    into.starred_pages = crate::questions::later::starred_page_ids(state)
+        .into_iter()
+        .collect();
 
     into.async_questions = async_controller::project(
         &questions.async_questions,

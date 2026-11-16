@@ -237,6 +237,68 @@ fn ghostex_config_folder_trusted(folders: &[String]) -> bool {
         .any(|folder| std::path::Path::new(folder).starts_with(config_dir))
 }
 
+/// CDXC:AgentProviders 2026-11-14 DECISION:
+/// User: "can we make it so we show the interface to trust a folder when the agent shows it to us? should be easy to trust folders too." The agent's own folder-trust question is the card that asks now that Ghostex no longer trusts folders by default, so every agent's card reads the same: who asks, the folder it is about, and (in the chat core) Trust folder and Don't trust. The agent's own words from its screen move behind the card's Details toggle. A card the chat cannot answer (Claude's older wording) keeps its own sentence telling the user to answer in the terminal.
+/// SEE-ALSO: packages/gx-chat-core/src/questions/trust_card.rs (the two buttons).
+pub fn word_trust_notice(notice: &mut SessionChatTerminalNotice, agent: &str, folder: &str) {
+    // Empryo's repository-config notice is not a folder question and blocks nothing.
+    if notice.kind != SESSION_CHAT_NOTICE_TRUST_PROMPT || !notice.blocks_input() {
+        return;
+    }
+    let answerable = !notice.choices.is_empty()
+        || notice.dialog.is_some()
+        || notice
+            .actions
+            .iter()
+            .any(|action| action.kind == SessionChatTerminalNoticeActionKind::SendKeys);
+    if !answerable || folder.trim().is_empty() {
+        return;
+    }
+    let screen_words = notice.detail.take();
+    notice.title = "Trust this folder?".to_string();
+    notice.detail = Some(format!(
+        "{agent} asks before it reads, edits or runs anything in this folder. Trust it only if you know where its files came from.\n{}",
+        folder.trim()
+    ));
+    if notice.details.is_none() {
+        notice.details = screen_words.filter(|words| !words.trim().is_empty());
+    }
+}
+
+/// The agent's name and the folder a session's trust card names: its working directory, else its
+/// project's folder.
+pub(crate) fn trust_card_place(
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+    agent_id: Option<&str>,
+) -> Option<(String, String)> {
+    let session = repository.get_session(project_id, session_id).ok()??;
+    let folder = session
+        .get("cwd")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|cwd| !cwd.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            repository
+                .get_project(project_id)
+                .ok()
+                .flatten()
+                .and_then(|project| {
+                    project
+                        .get("path")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                })
+        })?;
+    let agent = agent_id
+        .and_then(crate::sidebar_hud::default_agent_name)
+        .unwrap_or("The agent")
+        .to_string();
+    Some((agent, folder))
+}
+
 /// Applied to every trust-prompt notice in the detection funnel: an
 /// unremembered folder offers the button; a remembered one is marked for the
 /// funnel to answer and is hidden from every client while that happens.

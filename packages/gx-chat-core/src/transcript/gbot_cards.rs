@@ -14,7 +14,7 @@
 //! User (Q2103 A, mockup "Researcher added"): the card's title says the bot was added, one line says what it is and what it runs on, and its buttons are Undo and Open settings; after Undo it reads "Researcher removed" and "Undone". Undo is offered only while it would work (gxserver refuses it once the bot changed since), and the reason shows instead.
 //! SEE-ALSO: server/src/gbots/card.rs and changes.rs (the card line and Undo), apps/desktop/src/app/native_chat/gbot_card.rs (desktop and web), apps/mobile/app/src/chat/native/transcript/GbotCard.tsx (phone).
 
-use ghostex_gx_protocol::chat_card::{chat_cards_in, GBOT_ADDED, ROUTINE_SET};
+use ghostex_gx_protocol::chat_card::{chat_cards_in, GBOT_ADDED, ROUTINE_SET, THEME_CHANGED};
 use serde_json::{json, Value};
 
 use crate::action::UserAction;
@@ -41,12 +41,15 @@ pub fn gbot_cards(pair: &ToolPair<'_>) -> Vec<Value> {
     chat_cards_in(output)
         .into_iter()
         .filter(|card| {
-            matches!(str_of(card, "kind"), GBOT_ADDED | ROUTINE_SET)
+            matches!(str_of(card, "kind"), GBOT_ADDED | ROUTINE_SET | THEME_CHANGED)
                 && !str_of(card, "changeId").is_empty()
         })
         .map(|card| {
             if str_of(&card, "kind") == ROUTINE_SET {
                 return crate::transcript::routine_cards::routine_card(&card);
+            }
+            if str_of(&card, "kind") == THEME_CHANGED {
+                return crate::transcript::theme_cards::theme_card(&card);
             }
             let name = str_of(&card, "name");
             let agent = agent_display_name(str_of(&card, "agentId"), "");
@@ -79,6 +82,11 @@ fn card_state(entry: &GbotCardEntry) -> Value {
         return json!({ "off": true });
     }
     let change = entry.change.as_ref();
+    if change.is_some_and(|change| {
+        crate::transcript::theme_cards::is_theme_change(str_of(change, "changeId"))
+    }) {
+        return crate::transcript::theme_cards::card_state(entry);
+    }
     if change.is_some_and(|change| str_of(change, "kind").starts_with("routine")) {
         return crate::transcript::routine_cards::card_state(entry);
     }
@@ -211,6 +219,12 @@ pub fn act(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
         }
         _ => return Vec::new(),
     };
+    // A "Theme changed" card's change lives in gxserver's theme history (theme_cards.rs).
+    let endpoint = if crate::transcript::theme_cards::is_theme_change(&change_id) {
+        "theme"
+    } else {
+        "gbots"
+    };
     let request_id = state.core.allocate_request_id();
     state
         .transcript_view
@@ -218,7 +232,7 @@ pub fn act(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
         .insert(request_id, change_id);
     vec![Effect::SendRpc {
         request_id,
-        method: ChatRpcMethod::Other("gbots".to_string()),
+        method: ChatRpcMethod::Other(endpoint.to_string()),
         params: Box::new(params),
     }]
 }
@@ -228,6 +242,7 @@ pub fn settle_rpc(state: &mut ChatState, request_id: u64, outcome: &RpcOutcome) 
     let Some(change_id) = state.transcript_view.gbot_card_requests.remove(&request_id) else {
         return false;
     };
+    let theme = crate::transcript::theme_cards::is_theme_change(&change_id);
     // The card shows its own refusal; the composer's error line stays clear.
     state.core.claim_refusal();
     let entry = state
@@ -263,7 +278,9 @@ pub fn settle_rpc(state: &mut ChatState, request_id: u64, outcome: &RpcOutcome) 
                 return true;
             }
             entry.error = if message.trim().is_empty() {
-                if pausing {
+                if theme {
+                    crate::transcript::theme_cards::fallback_error(undoing).to_string()
+                } else if pausing {
                     "That didn't go through. Try again.".to_string()
                 } else if undoing {
                     "Undo didn't go through. Try again.".to_string()

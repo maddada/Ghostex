@@ -496,6 +496,9 @@ impl Drop for GpuiRemoteAskpassScript {
         if let Some(password_server) = self.password_server.take() {
             let _ = password_server.join();
         }
+        // A helper that opened the pipe just as the broker stopped would wait forever for a
+        // writer: opening and closing it once ends that read empty, and the helper exits.
+        let _ = gpui_open_askpass_pipe_for_writing(self.directory.join("p").as_path());
         let _ = fs::remove_dir_all(&self.directory);
     }
 }

@@ -152,7 +152,9 @@ impl NativeChatView {
                         chat.sync_rewind_window(cx);
                     }
                     Err(error) => {
-                        chat.error = Some(error.to_string());
+                        chat.error = Some(
+                            crate::app::native_chat::child_window::window_open_failed(error),
+                        );
                         chat.invoke(json!({"type":"rewindCancel"}), cx);
                     }
                 }

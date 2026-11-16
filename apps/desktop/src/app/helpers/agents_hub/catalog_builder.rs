@@ -412,19 +412,6 @@ pub(crate) fn gpui_agents_hub_catalog_build() -> GpuiAgentsHubCatalogBuild {
             )],
         ),
         (
-            "skill-gemini",
-            builder.home_path(&[".gemini", "skills"]),
-            "Gemini CLI global skill installed under ~/.gemini/skills.",
-            "Gemini CLI system skill installed under ~/.gemini/skills.",
-            vec![gpui_agents_hub_profile(
-                "gemini",
-                "Gemini CLI skills",
-                builder.home_path(&[".gemini"]),
-                builder.home_path(&[".gemini", "skills"]),
-                None,
-            )],
-        ),
-        (
             "skill-copilot",
             builder.home_path(&[".copilot", "skills"]),
             "GitHub Copilot global skill installed under ~/.copilot/skills.",

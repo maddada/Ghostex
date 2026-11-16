@@ -21,6 +21,7 @@ mod chief;
 mod claude_cloud_cli;
 mod cloud_attach;
 mod cloud_cli;
+mod computer_code;
 mod computers;
 mod connectors;
 mod connectors_executor;
@@ -28,6 +29,7 @@ mod connectors_mcp;
 mod coordinator;
 pub mod diagnostics;
 pub mod editors;
+pub mod extension_panel;
 pub mod extensions;
 mod feedback;
 mod gbots_api_cli;
@@ -45,13 +47,16 @@ mod help_ask;
 mod hookless_activity;
 pub mod launchers;
 mod mcp_stdio;
+mod needs_you;
 pub mod notify;
 pub mod output;
+mod page;
 pub mod paired_device;
 pub mod picker;
 mod port_web_metadata;
 pub mod ports;
 mod previous_sessions;
+mod project_status;
 mod projects;
 pub mod resources;
 pub mod rpc;
@@ -70,6 +75,7 @@ pub mod sessions;
 mod sessions_brief;
 pub mod settings;
 mod settings_hotkeys;
+mod settings_transfer;
 mod show;
 mod side_chats;
 pub mod skills;
@@ -77,6 +83,7 @@ pub mod tailcat;
 pub mod tailcat_tunnel;
 mod team;
 mod team_slack;
+mod theme_cli;
 pub mod usage;
 mod visual;
 mod visual_export;
@@ -128,9 +135,11 @@ pub fn run() -> i32 {
 /// global help gate.
 const HELP_GATE_EXCLUDED: &[&str] = &[
     "account-login",
+    "theme",
     "chief",
     "security",
     "agent-guide",
+    "computer-code",
     "computers",
     "autopilot",
     "help",
@@ -165,6 +174,7 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "guide",
     "manage-beads",
     "notify",
+    "needs-you",
     "secret",
     "secrets",
     "visual",
@@ -264,6 +274,11 @@ fn dispatch(argv: &[String]) -> CliResult<i32> {
 /// Commands record that here.
 static EXIT_CODE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
+/// `gxserver computer-code`, the same command as `ghostex computer-code`.
+pub fn run_computer_code(args: &[String]) -> CliResult<()> {
+    computer_code::run(args)
+}
+
 pub fn set_exit_code(code: i32) {
     EXIT_CODE.store(code, std::sync::atomic::Ordering::SeqCst);
 }
@@ -275,6 +290,7 @@ fn exit_code() -> i32 {
 fn is_known_command(name: &str) -> bool {
     const NAMES: &[&str] = &[
         "account-login",
+        "theme",
         "accounts",
         "agent-cli",
         "agent-hooks",
@@ -439,7 +455,9 @@ fn is_known_command(name: &str) -> bool {
         "web",
         "ports",
         "resources",
+        "project",
         "projects",
+        "computer-code",
         "computers",
         "chief",
         "autopilot",
@@ -467,9 +485,11 @@ fn is_known_command(name: &str) -> bool {
         "agent-sync",
         "feedback",
         "notify",
+        "needs-you",
         "secret",
         "secrets",
         "show",
+        "page",
         "visual",
         "install-help-skill",
         "settings",
@@ -515,7 +535,9 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             agentbox_cli::run(args)
         }
         "agents" => agents::run(args),
+        "computer-code" => computer_code::run(args),
         "computers" => computers::run(args),
+        "project" => project_status::run(args),
         "projects" => projects::run(args),
         "chief" => chief::run(args),
         "autopilot" => autopilot::autopilot_command(args),
@@ -1019,8 +1041,10 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "board" => board::board_command(args),
         "notify" => notify::notify_command(args),
         "secret" | "secrets" => secret::secret_command(args),
+        "needs-you" => needs_you::needs_you_command(args),
         "feedback" => feedback::feedback_command(args),
         "show" => show::show_command(args),
+        "page" => page::page_command(args),
         "visual" => visual::visual_command(args),
         "server" => server_command(args),
         "tailcat" => tailcat::tailcat_command(args),
@@ -1057,6 +1081,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "agent-sync" => agent_sync::agent_sync_command(args),
         "install-help-skill" => skills::install_help_skill_command(args),
         "settings" => settings::settings_command(args),
+        "theme" => theme_cli::run(args),
         "toggle-sidebar" => run_bridge_action("toggleSidebarCollapsed", Parser::None, plain, args),
         "assert-card" => {
             run_bridge_action("assertSidebarCard", Parser::AssertCard, assert_ok, args)

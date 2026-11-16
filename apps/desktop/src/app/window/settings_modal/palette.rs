@@ -73,6 +73,31 @@ const DEFAULT_GHOSTEX_ACCENT: u32 = 0x86d3f8;
 
 impl SettingsPalette {
     pub(crate) fn resolve(modal: &ModalPalette) -> Self {
+        Self::derive(modal).with_theme_roles()
+    }
+
+    /// The Borders and Grey text theme roles over the derived colours (helpers/theme_roles.rs).
+    fn with_theme_roles(mut self) -> Self {
+        use crate::app::helpers::theme_role_or_rgba;
+        let light = self.light;
+        self.hairline = theme_role_or_rgba("border", light, self.hairline);
+        self.popup_border = theme_role_or_rgba("border", light, self.popup_border);
+        self.muted = theme_role_or_rgba("mutedText", light, self.muted);
+        self.foreground = theme_role_or_rgba("text", light, self.foreground);
+        self.raised = theme_role_or_rgba("control", light, self.raised);
+        self.raised_hover = theme_role_or_rgba("hover", light, self.raised_hover);
+        self.popup_hover = theme_role_or_rgba("hover", light, self.popup_hover);
+        self.settings_accent = theme_role_or_rgba("accent", light, self.settings_accent);
+        self.primary = theme_role_or_rgba("accent", light, self.primary);
+        self.focus_border = theme_role_or_rgba("focusRing", light, self.focus_border);
+        self.ring = theme_role_or_rgba("focusRing", light, self.ring);
+        self.destructive = theme_role_or_rgba("danger", light, self.destructive);
+        self.popup_background = theme_role_or_rgba("menu", light, self.popup_background);
+        self.popup_selected = theme_role_or_rgba("selection", light, self.popup_selected);
+        self
+    }
+
+    fn derive(modal: &ModalPalette) -> Self {
         let modal = *modal;
         let foreground = modal.foreground;
         if modal.glass && !modal.light {
@@ -245,6 +270,7 @@ impl SettingsPalette {
             focus_border: css_mix(self.foreground, 0.58, washes.hairline),
             ..*self
         }
+        .with_theme_roles()
     }
 
     /// `color-mix(in srgb, var(--settings-raised) 82%, transparent)`: text inputs.

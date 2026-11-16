@@ -2,9 +2,7 @@
 //! it, onto a file moves it beside that file (a top-level file's row and the empty space below the
 //! rows mean the `docs` folder), like the former React Docs page did.
 
-use gpui::{
-    Context, IntoElement, ParentElement as _, Render, SharedString, Styled as _, Window, div, px,
-};
+use gpui::{Context, IntoElement, Render, SharedString, Window};
 use serde_json::json;
 
 use super::files::parent_path;
@@ -19,28 +17,23 @@ pub(crate) struct DocsTreeDrag {
     pub(crate) kind: DocsEntryKind,
     pub(crate) name: SharedString,
     pub(crate) icon: &'static str,
-    pub(crate) text: gpui::Hsla,
-    pub(crate) background: gpui::Hsla,
-    pub(crate) border: gpui::Hsla,
 }
 
 impl Render for DocsTreeDrag {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .flex()
-            .items_center()
-            .gap(px(7.0))
-            .h(px(28.0))
-            .px(px(10.0))
-            .rounded(px(7.0))
-            .bg(self.background)
-            .border_1()
-            .border_color(self.border)
-            .shadow_md()
-            .text_size(px(13.0))
-            .text_color(self.text)
-            .child(titlebar_svg_icon(self.icon, 15.0, self.text))
-            .child(self.name.clone())
+        crate::app::helpers::drag_ghost(
+            self.name.clone(),
+            Some(
+                titlebar_svg_icon(
+                    self.icon,
+                    15.0,
+                    crate::app::helpers::drag_ghost_text_color(),
+                )
+                .into_any_element(),
+            ),
+            None,
+            1.0,
+        )
     }
 }
 

@@ -6,9 +6,9 @@
 
 use ghostex_gx_core::protocol::SidebarSpacesState;
 use ghostex_gx_core::{
-    plan_space_switch_restore, Core, Event, Intent, MachineId, MachineTabInput, SessionKey,
-    SideStateUpdate, SidebarInputs, SidebarView, SidebarViewModel, SpaceSwitchFocus,
-    MACHINE_STATE_CONNECTED,
+    plan_space_switch_restore, project_machine_key, ConnectionUpdate, Core, Event, Intent,
+    MachineId, MachineTabInput, NeedsYou, SessionKey, SideStateUpdate, SidebarInputs, SidebarView,
+    SidebarViewModel, SpaceSwitchFocus, MACHINE_STATE_CONNECTED,
 };
 use serde_json::{json, Value};
 
@@ -135,7 +135,8 @@ fn session(project_id: &str, session_id: &str) -> Value {
         "alias": format!("Session {session_id}"),
         "title": format!("Session {session_id}"),
         "activity": "idle",
-        "pendingQuestionCount": 0,
+        // A session whose id names ASK waits on the user's answer.
+        "pendingQuestionCount": u64::from(session_id.contains("ASK")),
         "lifecycleState": "running",
         "createdAt": "2026-11-07T00:00:00.000Z",
         "updatedAt": "2026-11-07T00:00:00.000Z",
@@ -428,5 +429,152 @@ fn the_same_project_on_another_computer_still_merges_into_its_own_entry() {
             .unwrap_or_default()
     };
     assert_eq!(names("TR"), vec!["local".to_string(), REMOTE.to_string()]);
-    assert!(names("PX").is_empty());
+    // With another computer in the list, a project only this one has names it too
+    // (CDXC:RemoteMachines 2026-11-15).
+    assert_eq!(names("PX"), vec!["local".to_string()]);
+}
+
+/// A click on a computer's icon after a merged project's name hides that computer's sessions in
+/// that project only; its chip says so, and carries the most urgent wait among the rows it hides
+/// (CDXC:RemoteMachines 2026-11-15 in sidebar_view/merged.rs).
+#[test]
+fn a_hidden_computer_leaves_its_sessions_out_of_that_project_only() {
+    let mut core = one_computer();
+    let remote_projects = [
+        Project {
+            id: "R-TR",
+            path: "/home/me/monorepo/trading",
+            root: "/home/me/monorepo",
+            sessions: &["RT1", "RT-ASK"],
+        },
+        Project {
+            id: "R-MONO",
+            path: "/home/me/monorepo",
+            root: "/home/me/monorepo",
+            sessions: &["RM1"],
+        },
+    ];
+    core.handle_raw_frame(
+        MachineId::Remote(REMOTE.to_string()),
+        &frame("S4k", ORIGIN, &remote_projects),
+        NOW_MS,
+    )
+    .expect("the remote frame parses");
+    let shown =
+        SidebarViewModel::build_from_scratch(&core, &inputs(&["local", REMOTE], None), NOW_MS);
+    let trading = |view: &SidebarView| {
+        view.groups
+            .iter()
+            .find(|group| {
+                group
+                    .core
+                    .project_context
+                    .as_ref()
+                    .is_some_and(|project| project.project_id == "TR")
+            })
+            .expect("the trading entry")
+            .core
+            .clone()
+    };
+    let group_id = trading(&shown).group_id.clone();
+    assert!(trading(&shown)
+        .machine_names
+        .iter()
+        .all(|chip| !chip.hidden));
+
+    let mut hiding = inputs(&["local", REMOTE], None);
+    hiding
+        .ui
+        .collapse
+        .hidden_project_machines
+        .insert(project_machine_key(&group_id, REMOTE));
+    let view = SidebarViewModel::build_from_scratch(&core, &hiding, NOW_MS);
+    let entry = entries(&view);
+    assert_eq!(
+        entry.iter().find(|(id, _)| id == "TR"),
+        Some(&local("TR", &["TR1"]))
+    );
+    // The same computer still shows in every other project.
+    assert!(entry
+        .iter()
+        .find(|(id, _)| id == "MONO")
+        .is_some_and(|(_, sessions)| sessions.contains(&format!("{REMOTE}/R-MONO/RM1"))));
+    let chips = trading(&view).machine_names.clone();
+    let remote = chips.iter().find(|chip| chip.machine_id == REMOTE).unwrap();
+    assert!(remote.hidden);
+    assert_eq!(remote.hidden_needs_you, Some(NeedsYou::Question));
+    let this = chips
+        .iter()
+        .find(|chip| chip.machine_id == "local")
+        .unwrap();
+    assert!(!this.hidden && this.hidden_needs_you.is_none());
+}
+
+/// Hide sessions and projects from computers that aren't connected: a computer whose stream is
+/// down leaves the one list (its sessions in shared projects, and a project only it has), and
+/// comes back once live (CDXC:RemoteMachines 2026-11-15 in sidebar_view/merged.rs).
+#[test]
+fn a_disconnected_computer_leaves_the_list_while_the_setting_is_on() {
+    let mut core = one_computer();
+    let remote_projects = [
+        Project {
+            id: "R-TR",
+            path: "/home/me/monorepo/trading",
+            root: "/home/me/monorepo",
+            sessions: &["RT1"],
+        },
+        Project {
+            id: "R-HEALTH",
+            path: "/home/me/monorepo/health",
+            root: "/home/me/monorepo",
+            sessions: &["RH1"],
+        },
+    ];
+    let remote = MachineId::Remote(REMOTE.to_string());
+    core.handle_raw_frame(
+        remote.clone(),
+        &frame("S4k", ORIGIN, &remote_projects),
+        NOW_MS,
+    )
+    .expect("the remote frame parses");
+    core.handle(
+        Event::Connection {
+            machine: remote.clone(),
+            update: ConnectionUpdate::Lost { error: None },
+        },
+        NOW_MS,
+    );
+    let ids = |view: &SidebarView| -> Vec<String> {
+        entries(view).into_iter().map(|(id, _)| id).collect()
+    };
+    // Off (the default): the computer's last rows stay, faded.
+    let view =
+        SidebarViewModel::build_from_scratch(&core, &inputs(&["local", REMOTE], None), NOW_MS);
+    assert!(ids(&view).contains(&"R-HEALTH".to_string()));
+    let mut hiding = inputs(&["local", REMOTE], None);
+    hiding.settings.hide_disconnected_machines = true;
+    let view = SidebarViewModel::build_from_scratch(&core, &hiding, NOW_MS);
+    assert_eq!(
+        entries(&view),
+        vec![
+            local("MONO", &["MONO1"]),
+            local("PX", &["PX1", "PX2"]),
+            local("TR", &["TR1"]),
+            local("SUB", &["SUB1"]),
+        ]
+    );
+    // With this computer alone in the list, no project names a computer.
+    assert!(view
+        .groups
+        .iter()
+        .all(|group| group.core.machine_names.is_empty()));
+    core.handle(
+        Event::Connection {
+            machine: remote,
+            update: ConnectionUpdate::Live,
+        },
+        NOW_MS,
+    );
+    let view = SidebarViewModel::build_from_scratch(&core, &hiding, NOW_MS);
+    assert!(ids(&view).contains(&"R-HEALTH".to_string()));
 }

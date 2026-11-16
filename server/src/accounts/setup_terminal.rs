@@ -34,10 +34,16 @@ impl vt100::Callbacks for Queries {
 
 impl LoginTerminal {
     pub(crate) fn new() -> Self {
+        Self::sized(ROWS, COLS)
+    }
+
+    /// A terminal of another size (the hidden `/model` picker reads in agent_model_pickers.rs need a
+    /// taller one, so a long model list is not scrolled).
+    pub(crate) fn sized(rows: u16, cols: u16) -> Self {
         Self {
             parser: vt100::Parser::new_with_callbacks(
-                NonZeroU16::new(ROWS).unwrap(),
-                NonZeroU16::new(COLS).unwrap(),
+                NonZeroU16::new(rows.max(1)).unwrap(),
+                NonZeroU16::new(cols.max(1)).unwrap(),
                 0,
                 Queries::default(),
             ),

@@ -211,12 +211,42 @@ pub fn rename_queued_coordinator_skill_lines(db: &rusqlite::Connection) -> rusql
                 "{SKILL_LINE_PREFIX}{}",
                 skill_invocation(COORDINATOR_SKILL_NAME, Some(agent))
             );
-            changed += db.execute(
-                "UPDATE session_chat_queued_prompts SET text = ?2 || substr(text, length(?1) + 1), updatedAt = ?3
+            let mut statement = db.prepare(
+                "SELECT DISTINCT projectId, sessionId FROM session_chat_queued_prompts
                  WHERE substr(text, 1, length(?1)) = ?1
                    AND (length(text) = length(?1) OR substr(text, length(?1) + 1, 1) IN (char(10), char(13), ' '))",
-                rusqlite::params![from, to, now],
             )?;
+            let sessions = statement
+                .query_map(rusqlite::params![from], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            for (project_id, session_id) in sessions {
+                let update_session = |conn: &rusqlite::Connection| -> rusqlite::Result<usize> {
+                    let next_version = crate::session_chat_queue::bump_queue_version(
+                        conn,
+                        &project_id,
+                        &session_id,
+                    )
+                    .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+                    conn.execute(
+                        "UPDATE session_chat_queued_prompts SET text = ?2 || substr(text, length(?1) + 1), updatedAt = ?3, version = ?6
+                         WHERE projectId = ?4 AND sessionId = ?5 AND substr(text, 1, length(?1)) = ?1
+                           AND (length(text) = length(?1) OR substr(text, length(?1) + 1, 1) IN (char(10), char(13), ' '))",
+                        rusqlite::params![from, to, now, project_id, session_id, next_version as i64],
+                    )
+                };
+                if db.is_autocommit() {
+                    let tx = rusqlite::Transaction::new_unchecked(
+                        db,
+                        rusqlite::TransactionBehavior::Immediate,
+                    )?;
+                    changed += update_session(&tx)?;
+                    tx.commit()?;
+                } else {
+                    changed += update_session(db)?;
+                }
+            }
         }
     }
     Ok(changed)

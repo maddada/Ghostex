@@ -17,7 +17,6 @@ pub(super) fn classify_terminal_title_status(
             "codex" => get_codex_title_state(title, true),
             "copilot" => get_copilot_title_state(title, true),
             "cursor" => get_cursor_title_state(title, true),
-            "gemini" => get_gemini_title_state(title, true),
             "grok" => get_grok_title_state(title),
             "pi" => get_pi_title_state(title, true),
             /*
@@ -38,7 +37,7 @@ pub(super) fn classify_terminal_title_status(
             */
             /*
             CDXC:AgentScreenDetection 2026-10-28 WHY:
-            DeepSeek Harness's terminal app titles its terminal `⠂ 🐋 <title>` while it works and `✦ 🐋 <title>` when idle. Unrecognised, the braille and the four-pointed star fell through to Claude's, Codex's and Gemini's scans, and the next title tick idled the turn its session log had just started (observed live 2026-10-28, throwaway G5usd). Its session log (server/src/dsh_activity.rs) and its OSC 7501 reports own its status, so its titles carry no status signal.
+            DeepSeek Harness's terminal app titles its terminal `⠂ 🐋 <title>` while it works and `✦ 🐋 <title>` when idle. Unrecognised, the braille and the four-pointed star fell through to Claude's and Codex's scans, and the next title tick idled the turn its session log had just started (observed live 2026-10-28, throwaway G5usd). Its session log (server/src/dsh_activity.rs) and its OSC 7501 reports own its status, so its titles carry no status signal.
             */
             "opencode" | "empryo" | "zcode" | "omp" | "claude-cloud" | "dsh" => None,
             _ => None,
@@ -62,9 +61,6 @@ pub(super) fn classify_terminal_title_status(
     }
     if let Some(state) = get_codex_title_state(title, false) {
         return Some(signal("codex", state));
-    }
-    if let Some(state) = get_gemini_title_state(title, false) {
-        return Some(signal("gemini", state));
     }
     if let Some(state) = get_copilot_title_state(title, false) {
         return Some(signal("copilot", state));
@@ -106,7 +102,6 @@ pub(super) fn normalize_status_agent_name(value: Option<&str>) -> Option<String>
             | "claude"
             | "codex"
             | "cursor"
-            | "gemini"
             | "copilot"
             | "grok"
             | "opencode"
@@ -339,22 +334,6 @@ fn get_pi_title_state(title: &str, allow_agent_hint_match: bool) -> Option<&'sta
         return Some("working");
     }
     (has_prefix || allow_agent_hint_match).then_some("idle")
-}
-
-fn get_gemini_title_state(title: &str, allow_agent_hint_match: bool) -> Option<&'static str> {
-    let normalized = normalize_spaces(title);
-    let lower = normalized.to_ascii_lowercase();
-    if !allow_agent_hint_match
-        && !lower.contains("gemini")
-        && !normalized.contains('\u{2726}')
-        && !normalized.contains('\u{25c7}')
-    {
-        return None;
-    }
-    if normalized.contains('\u{2726}') {
-        return Some("working");
-    }
-    normalized.contains('\u{25c7}').then_some("idle")
 }
 
 fn get_antigravity_title_state(title: &str, allow_agent_hint_match: bool) -> Option<&'static str> {

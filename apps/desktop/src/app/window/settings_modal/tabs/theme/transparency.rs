@@ -129,11 +129,16 @@ fn status_note(blocked: bool) -> &'static str {
         (true, true) => {
             " Transparency effects is off in Windows Settings > Personalization > Colors, so the window stays opaque until you turn it on there."
         }
+        // CDXC:Theming 2026-11-14 SEE-ALSO: `desktop_withholds_blur` in app/helpers/window_glass.rs.
+        (true, false) if cfg!(target_os = "linux") => LINUX_NO_BLUR_NOTE,
         (true, false) => {
             " Reduce transparency is on in System Settings > Accessibility > Display, so the window stays opaque until you turn it off."
         }
     }
 }
+
+/// Why the window is solid on a Linux desktop that does not blur, and how to get glass.
+pub(in super::super) const LINUX_NO_BLUR_NOTE: &str = " Your desktop is not blurring windows, so Ghostex keeps this window solid. On Omarchy, turn on Glassy Windows (Omarchy menu > Appearance > Windows > Window Opacity), or pick a picture or video to show behind the glass.";
 
 /// What Blur says on Windows while Desktop and windows shows behind the glass.
 pub(in super::super) const WINDOWS_BLUR_DESCRIPTION: &str = "Windows draws this blur itself and has no amount to set. Acrylic is Windows' own frosted blur. Plain blur is the same blur without Windows' grey frost, so the tints can go fully clear; it takes more work to draw. Off shows what is behind sharp and is the fastest.";

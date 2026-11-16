@@ -17,16 +17,19 @@ const TITLEBAR_SPLIT_BUTTON_RADIUS: f32 = 7.0;
 ///
 /// CDXC:Titlebar 2026-09-25 DECISION:
 /// User: "when we're in glass mode pls make the border color lighter". Under window glass the solid #252525 outline read as a dark groove on the frosted header, so it becomes a light see-through line (white 16% in dark mode, black 10% in light mode, paler than #d4d4d4); opaque keeps the solid colours.
+/// The Borders theme role replaces it when set (helpers/theme_roles.rs).
 pub(crate) fn titlebar_split_button_border_color() -> Hsla {
     let light = chrome_uses_light_appearance();
-    if crate::app::helpers::window_glass_active() {
-        return if light {
+    let derived = if crate::app::helpers::window_glass_active() {
+        if light {
             gpui::black().opacity(0.10)
         } else {
             gpui::white().opacity(0.16)
-        };
-    }
-    rgb(if light { 0xd4d4d4 } else { 0x252525 }).into()
+        }
+    } else {
+        rgb(if light { 0xd4d4d4 } else { 0x252525 }).into()
+    };
+    crate::app::helpers::theme_role_or("border", light, derived)
 }
 
 /// CDXC:Titlebar 2026-09-25 DECISION:

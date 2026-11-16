@@ -19,6 +19,7 @@ use std::rc::Rc;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum SettingsTabId {
     Updates,
+    Experience,
     Chat,
     Sidebar,
     Terminal,
@@ -99,8 +100,9 @@ impl SettingsTabId {
     /// `RailTier`) ending with About, then the Extensions page (the catalog) at the rail's bottom with the pages
     /// that fold under it ([`Self::EXTENSIONS_GROUP`]). Pages the shell filters (OS Integration,
     /// Connectors, Debugging, the built-in extensions' pages) leave the rail while they are off.
-    pub(crate) const RAIL_ORDER: [SettingsTabId; 30] = [
+    pub(crate) const RAIL_ORDER: [SettingsTabId; 31] = [
         SettingsTabId::Updates,
+        SettingsTabId::Experience,
         SettingsTabId::Theme,
         SettingsTabId::Chat,
         SettingsTabId::Sidebar,
@@ -155,7 +157,11 @@ impl SettingsTabId {
     /// The rail group the page is listed under (CDXC:Settings 2026-11-11 at `RailTier`).
     pub(crate) fn tier(self) -> RailTier {
         match self {
-            SettingsTabId::Updates | SettingsTabId::Theme => RailTier::Top,
+            // CDXC:Experience 2026-11-15: the presets page sits at the top, under Updates (the
+            // design page's plan, in packages/settings-catalog/src/experience.rs).
+            SettingsTabId::Updates | SettingsTabId::Experience | SettingsTabId::Theme => {
+                RailTier::Top
+            }
             SettingsTabId::Chat
             | SettingsTabId::Sidebar
             | SettingsTabId::Terminal
@@ -183,6 +189,7 @@ impl SettingsTabId {
     /// The catalog group (`GENERAL_GROUPS`) a page General split into renders, by the group's id.
     pub(crate) fn general_group(self) -> Option<&'static str> {
         match self {
+            SettingsTabId::Experience => Some("experience"),
             SettingsTabId::Chat => Some("chat"),
             SettingsTabId::Sidebar => Some("sidebar"),
             SettingsTabId::Terminal => Some("terminal"),
@@ -209,6 +216,7 @@ impl SettingsTabId {
     pub(crate) fn id(self) -> &'static str {
         match self {
             SettingsTabId::Updates => "updates",
+            SettingsTabId::Experience => "experience",
             SettingsTabId::Chat => "chat",
             SettingsTabId::Sidebar => "sidebar",
             SettingsTabId::Terminal => "terminal",
@@ -259,6 +267,7 @@ impl SettingsTabId {
     pub(crate) fn title(self) -> &'static str {
         match self {
             SettingsTabId::Updates => "Updates",
+            SettingsTabId::Experience => "Experience",
             SettingsTabId::Chat => "Chat",
             SettingsTabId::Sidebar => "Sidebar & Sessions",
             SettingsTabId::Terminal => "Terminal",
@@ -296,6 +305,7 @@ impl SettingsTabId {
     pub(crate) fn icon(self) -> &'static str {
         match self {
             SettingsTabId::Updates => "modals/settings/circle-arrow-up.svg",
+            SettingsTabId::Experience => "modals/settings/adjustments-horizontal.svg",
             SettingsTabId::Chat => "modals/settings/message-circle.svg",
             SettingsTabId::Sidebar => "modals/settings/layout-sidebar.svg",
             SettingsTabId::Terminal => "modals/settings/terminal-2.svg",
@@ -344,7 +354,8 @@ pub(crate) struct SettingsOpenRequest {
     pub(crate) initial_sidebar_tags_action: Option<String>,
     pub(crate) initial_search_query: Option<String>,
     pub(crate) initial_remote_machine_id: Option<String>,
-    /// `easyConnect` or `tailscale`.
+    /// `easyConnect`, `tailscale`, or `addComputerSsh` / its older name `addComputer` (the Add a
+    /// computer dialog, Connect a computer's Use SSH details).
     pub(crate) initial_remote_section: Option<String>,
     /// `agentHooks`.
     pub(crate) initial_agents_section: Option<String>,
@@ -412,8 +423,18 @@ impl SettingsOpenRequest {
             initial_search_query: optional_text(message, "initialSearchQuery"),
             initial_remote_machine_id: optional_text(message, "initialRemoteMachineId")
                 .filter(|id| !id.trim().is_empty()),
-            initial_remote_section: optional_text(message, "initialRemoteSection")
-                .filter(|section| section == "easyConnect" || section == "tailscale"),
+            // CDXC:RemotePairing 2026-11-16 WHY: this list once kept only easyConnect and
+            // tailscale, so the `addComputerSsh` that Use SSH details sends was dropped here and
+            // Settings opened on Remote with no Add a computer form ("clicking on use ssh details
+            // does nothing"). Every section the Remote page reads (`apply_deep_links`) must pass.
+            initial_remote_section: optional_text(message, "initialRemoteSection").filter(
+                |section| {
+                    matches!(
+                        section.as_str(),
+                        "easyConnect" | "tailscale" | "addComputer" | "addComputerSsh"
+                    )
+                },
+            ),
             initial_agents_section: optional_text(message, "initialAgentsSection")
                 .filter(|section| section == "agentHooks"),
             initial_machine_id: optional_text(message, "initialMachineId")
@@ -567,7 +588,7 @@ mod tests {
         assert_eq!(
             labelled,
             [
-                ("", vec!["Updates", "Interface"]),
+                ("", vec!["Updates", "Experience", "Interface"]),
                 (
                     "Working",
                     vec![

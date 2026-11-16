@@ -33,7 +33,7 @@ pub(super) fn image_file_path(image: &Value) -> Option<String> {
 impl NativeChatView {
     /// Whether this app can show a file of this chat in the system file manager.
     pub(super) fn file_locate_available(&self) -> bool {
-        self.config.machine_id == "local" && !cfg!(target_family = "wasm")
+        self.config.machine_id == "local" && !cfg!(ghostex_web)
     }
 
     /// Drops the folder row from a menu when [`Self::file_locate_available`] says it cannot work.

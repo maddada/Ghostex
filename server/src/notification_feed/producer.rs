@@ -50,6 +50,13 @@ pub(crate) fn observe_agent_activity_result(
     if let Some(session) = result.get("session") {
         crate::gbots::observe_gbot_activity(&state.paths, previous, next, activity, session);
     }
+    // A thread's finished turn stored as already seen (Workers Off, Q3241 in
+    // server/src/worker_alerts.rs) has no row; a phone whose own Workers choice is on still hears.
+    if result.get("quietTurnEnd").and_then(Value::as_bool) == Some(true) {
+        if let Some(session) = result.get("session") {
+            announce_quiet_thread_report(state, session);
+        }
+    }
     let entered_attention = result.get("enteredAttention").and_then(Value::as_bool) == Some(true);
     let left_attention = previous == "attention" && next != "attention";
     let explicitly_acknowledged = endpoint_path == "/api/updateAgentActivity"
@@ -160,6 +167,29 @@ fn record_attention_row(
             message: format!("SQLite gxserver state error: {error}"),
         })?;
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    // CDXC:Notifications 2026-11-14 (server/src/worker_alerts.rs): a coordinator's thread's own
+    // news (its finished turn, Q3241; its question card, Q3244) is the coordinator's: no row while
+    // Workers is Off, and its push follows the phone's Workers choice. What only the user can do
+    // in it (an approval, a permission, a bell) is the user's, and opens the coordinator (Q3243).
+    let coordinator = crate::worker_alerts::worker_coordinator(&db, project_id, session_id);
+    let worker_news = coordinator.is_some()
+        && (kind == NOTIFICATION_FEED_KIND_FINISHED
+            || (kind == NOTIFICATION_FEED_KIND_NEEDS_INPUT
+                && crate::session_approval::session_has_question(session)
+                && !crate::session_approval::session_awaits_approval(
+                    session,
+                    &crate::presentation::now_iso(),
+                )));
+    let worker_alert_kind = if kind == NOTIFICATION_FEED_KIND_FINISHED {
+        crate::push::message::AlertKind::ThreadReport
+    } else {
+        crate::push::message::AlertKind::NeedsInput
+    };
+    let workers = crate::worker_alerts::worker_alerts();
+    if worker_news && !workers.rows() {
+        crate::push::announce_worker_event(state, &repository, session, worker_alert_kind);
+        return Ok(false);
+    }
     let (title, subtitle) = session_row_heading(&repository, project_id, session)?;
     let row = insert_notification_feed_row(
         &db,
@@ -181,20 +211,66 @@ fn record_attention_row(
     // does not alert (a thread's finished turn, a coordinator's with nothing for the user, an
     // approval Autopilot answers) is written already read and goes to no phone, so the bell, the
     // phone and the computer's sound agree (packages/gx-core/src/alert_rule.rs).
-    if attention_row_alerts(&db, session, project_id, session_id) {
-        crate::push::announce_feed_row(state, &repository, session, &row);
+    let alerts = attention_row_alerts(&db, session, project_id, session_id);
+    if worker_news {
+        // Workers Silent keeps the row unread without the sound; Sound alerts like any session.
+        if !alerts && workers != crate::worker_alerts::WorkerAlerts::Silent {
+            if let Some(id) = row.get("id").and_then(Value::as_str) {
+                super::store::mark_notification_feed_row_read(&db, id)?;
+            }
+        }
+        crate::push::announce_feed_row_as(
+            state,
+            &repository,
+            session,
+            &row,
+            worker_alert_kind,
+            crate::push::PushRoute::worker(),
+        );
+    } else if alerts {
+        match coordinator.as_ref() {
+            Some((_, coordinator_session_id)) => {
+                let alert_kind = match kind {
+                    NOTIFICATION_FEED_KIND_FINISHED => crate::push::message::AlertKind::Finished,
+                    _ => crate::push::message::AlertKind::NeedsInput,
+                };
+                if kind != NOTIFICATION_FEED_KIND_BELL {
+                    crate::push::announce_feed_row_as(
+                        state,
+                        &repository,
+                        session,
+                        &row,
+                        alert_kind,
+                        crate::push::PushRoute::opens(coordinator_session_id),
+                    );
+                }
+            }
+            None => crate::push::announce_feed_row(state, &repository, session, &row),
+        }
     } else if let Some(id) = row.get("id").and_then(Value::as_str) {
         super::store::mark_notification_feed_row_read(&db, id)?;
-        // A thread's finished turn stays quiet here; a phone that chose Thread reports hears of it
-        // (CDXC:Notifications 2026-11-11 in push/message.rs).
-        if row.get("kind").and_then(Value::as_str) == Some("finished")
-            && crate::presentation::recorded_alert_role(&db, project_id, session_id)
-                == ghostex_gx_core::alert_rule::AlertRole::Thread
-        {
-            crate::push::announce_thread_report(state, &repository, session, &row);
-        }
     }
     Ok(true)
+}
+
+/// The phone's thread report for a thread's finished turn stored as already seen, which writes no
+/// row (CDXC:Notifications 2026-11-14, Q3241 in server/src/worker_alerts.rs).
+fn announce_quiet_thread_report(state: &AppState, session: &Value) {
+    let text = |key: &str| session.get(key).and_then(Value::as_str).unwrap_or_default();
+    let Ok(db) = open_gxserver_database_with_busy_timeout(&state.paths, OBSERVER_BUSY_TIMEOUT)
+    else {
+        return;
+    };
+    if !crate::worker_alerts::is_worker(&db, text("projectId"), text("sessionId")) {
+        return;
+    }
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    crate::push::announce_worker_event(
+        state,
+        &repository,
+        session,
+        crate::push::message::AlertKind::ThreadReport,
+    );
 }
 
 /// The same verdict the presentation stamps on this attention (`attention.alerts`), read from the
@@ -206,13 +282,25 @@ fn attention_row_alerts(
     session_id: &str,
 ) -> bool {
     let now = crate::presentation::now_iso();
-    let attention = crate::presentation::attention_state(session, &now);
+    let mut attention = crate::presentation::attention_state(session, &now);
     let role = crate::presentation::recorded_alert_role(db, project_id, session_id);
+    // For a coordinator, Needs you only reads whether the turn put something new on its board for
+    // the user (CDXC:Notifications 2026-11-13 in coordinators/work.rs `raised_for_user_since`); a
+    // turn that ended while its threads work never gets here (2026-11-14, quiet_turn_end.rs).
+    if role == ghostex_gx_core::alert_rule::AlertRole::Coordinator {
+        crate::coordinators::set_coordinator_turn_needs_you(
+            &mut attention,
+            db,
+            &(project_id.to_string(), session_id.to_string()),
+        );
+    }
     let awaiting_approval = crate::session_approval::session_awaits_approval(session, &now);
+    crate::autopilot::note_read_only_thread(project_id, session_id, session);
     crate::presentation::attention_state_alerts(
         role,
         &attention,
         awaiting_approval,
+        crate::session_approval::session_has_question(session),
         project_id,
         session_id,
     )

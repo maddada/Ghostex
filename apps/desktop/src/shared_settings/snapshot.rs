@@ -528,6 +528,12 @@ impl SharedSidebarSettingsSnapshot {
         strict_bool_field(&self.object, "browserPagesInViewRow").unwrap_or(false)
     }
 
+    /// Reload the open project's Browser tabs on launch so active and background pages start
+    /// loading without waiting until clicked.
+    pub fn reload_browser_tabs_on_startup(&self) -> bool {
+        strict_bool_field(&self.object, "reloadBrowserTabsOnStartup").unwrap_or(false)
+    }
+
     /// Side panel views without the three-view limit, every page of a project that is left kept
     /// for its return, and no sleep on a workspace switch
     /// (`ProjectEditorAutoSleepPolicySnapshot::keep_views_loaded`).

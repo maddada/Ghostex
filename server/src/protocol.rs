@@ -673,6 +673,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         // CDXC:SessionDetails 2026-10-25 WHY: remote-allowed like readSessionChat: the transcript, the agent process and the checkout the panel reads live on the machine that runs the session.
         | "/api/readSessionDetails"
         | "/api/stopSessionBackgroundTask"
+        // CDXC:SessionChat 2026-11-14 WHY: remote-allowed like reloadSessionAgent: the Mode menu's "Restart in Bypass when idle" restarts the agent on the machine that runs it; it carries only ids, the mode and on or off (session_chat_mode_restart.rs).
+        | "/api/restartSessionInMode"
         | "/api/readSessionChatSkills"
         | "/api/readSessionChatFiles"
         | "/api/sendSessionChatMessage"
@@ -832,6 +834,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/lookupRepository"
         | "/api/listExtensions"
         | "/api/extensionsCatalog"
+        | "/api/extensionStoreContent"
         | "/api/installExtension"
         | "/api/uninstallExtension"
         | "/api/updateExtensionState"
@@ -840,6 +843,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/stopExtension"
         | "/api/extensionStatus"
         | "/api/extensionBadge"
+        // A tap on a sidebar extension's panel from a client (extensions/ext_api.rs).
+        | "/api/extensionPanelAction"
         /*
         CDXC:WorkMode 2026-10-09 WHY:
         A sidebar showing a remote machine's projects can flip their Work mode switch and set a
@@ -911,6 +916,13 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         */
         "/api/gbots" => full_local(path),
         /*
+        CDXC:Theming 2026-11-14 WHY:
+        The look is this computer's settings, changed through its own desktop app; the "Theme changed" card's Undo reaches it from the chat that shows the card, like the "GBot added" card's.
+        */
+        "/api/theme" => full_local(path),
+        // A sidebar extension's web pages call the extension API with this (extensions/ext_api.rs).
+        "/api/extensionPageToken" => full_local(path),
+        /*
         CDXC:PiChatChannel 2026-11-05 WHY:
         The Ghostex Pi and OMP extensions poll it from inside the agent process on this computer, with the same token their hook reports use; it hands them chat commands for their own session only, so no other computer has any business with it.
         */
@@ -940,6 +952,12 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         "/api/readVoiceAgent" | "/api/forgetVoiceAgentMemory" | "/api/setVoiceAgentSettings" => {
             remote_allowed(path)
         }
+        // Claude Code's idle compaction settings, which the phone's Settings › Chat shows per
+        // computer (agents/claude_idle_compaction.rs); it changes them with `updateSettingsPatch`.
+        "/api/readClaudeCompaction" => remote_allowed(path),
+        // The memory guard's switches, which the phone's Settings › Connection shows per computer
+        // (memory_guard/mod.rs); it changes them with `updateSettingsPatch`.
+        "/api/readMemoryGuard" => remote_allowed(path),
         // A recorded or typed turn for a call the client opened (`voice_agent/clip.rs`): any client that may call.
         "/api/voiceAgentClip" | "/api/voiceAgentText" => remote_allowed(path),
         "/api/setVoiceAgentKey" => full_local(path),
@@ -948,6 +966,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         A secret request is created and waited for by the `ghostex secret request` an agent runs on this computer, and answered from any chat that shows the session, the phone included (the value only travels to this computer). Secret providers are a setting of this computer's: only its own clients list, change or test them.
         */
         "/api/answerSecretRequest" => remote_allowed(path),
+        // A session's to-dos for the user (session_needs_you/): kept by the `ghostex needs-you`
+        // an agent runs on this computer. The user's Done arrives as `/api/coordinatorBoard`.
+        "/api/sessionNeedsYou" => full_local(path),
         "/api/createSecretRequest"
         | "/api/waitSecretRequest"
         | "/api/cancelSecretRequest"
@@ -1158,6 +1179,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/pairComputer"
         | "/api/computerPairingStatus"
         | "/api/cancelComputerPairing"
+        // CDXC:RemotePairing 2026-11-14 WHY: Connect both ways (remote_access/connect_back.rs): this computer signs its ask with its pairing key, and the computer it connected to takes the ask from its desktop's connection; the ask is checked against that computer's paired computers, so the token alone can't start one.
+        | crate::remote_access::connect_back::SIGN_CONNECT_BACK_ENDPOINT
+        | crate::remote_access::connect_back::CONNECT_BACK_ENDPOINT
         /*
         CDXC:RemotePairing 2026-11-06 WHY:
         A paired phone asks for this computer's Easy Connect addresses with its device token, through the tunnel, which lands on the local listener; the addresses dial this computer, so like the tailcat status they never reach the remote listener.

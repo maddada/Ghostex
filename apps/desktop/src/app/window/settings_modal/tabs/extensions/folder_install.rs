@@ -14,7 +14,7 @@ use super::super::super::palette::SettingsPalette;
 use super::super::super::store::store_gxserver_rpc;
 use super::ExtensionsTab;
 use super::data::{
-    CatalogEntry, InstalledExtension, capitalize, permission_description, replace_installed,
+    CatalogEntry, InstalledExtension, permission_description, permission_label, replace_installed,
 };
 use super::sections::error_banner;
 use gpui::{
@@ -36,6 +36,8 @@ pub(crate) struct FolderInstall {
     pub(crate) entry: CatalogEntry,
     /// The permissions the owner ticked; nothing is ticked at first.
     pub(crate) ticked: BTreeSet<String>,
+    /// "Install its agent skill too" is ticked; nothing is at first.
+    pub(crate) install_skill: bool,
     pub(crate) installing: bool,
     pub(crate) error: Option<String>,
 }
@@ -127,6 +129,7 @@ impl ExtensionsTab {
             path,
             entry: CatalogEntry { raw: manifest },
             ticked: BTreeSet::new(),
+            install_skill: false,
             installing: false,
             error: None,
         });
@@ -160,6 +163,7 @@ impl ExtensionsTab {
                 "permissions": install.ticked.iter().collect::<Vec<_>>(),
                 "backgroundProcess": entry.runs_background_process(),
                 "remoteUrl": entry.remote_url(),
+                "skill": install.install_skill && entry.skill_name().is_some(),
             },
         });
         cx.notify();
@@ -177,6 +181,9 @@ impl ExtensionsTab {
                                 raw: value["extension"].clone(),
                             };
                             page.browser.icons.remove(&extension.id());
+                            page.browser.error = extension
+                                .skill_left_out()
+                                .map(super::browser::skill_left_out_message);
                             replace_installed(&mut page.browser.installed, extension);
                             page.browser.folder_install = None;
                         }
@@ -298,7 +305,7 @@ impl ExtensionsTab {
                         .text_size(px(14.0))
                         .line_height(px(20.0))
                         .text_color(hsla(m.foreground))
-                        .child(capitalize(&permission)),
+                        .child(permission_label(&permission)),
                 )
                 .child(
                     div()
@@ -339,6 +346,29 @@ impl ExtensionsTab {
                     ))
                     .into_any_element(),
             );
+        }
+        if let Some(skill) = entry.skill_name() {
+            let installed_already = self.browser.installed.iter().any(|extension| {
+                extension.id() == entry.name() && extension.skill_installed().is_some()
+            });
+            if !installed_already {
+                items.push(skill_choice(
+                    p,
+                    "extension-folder-skill",
+                    &skill,
+                    self.browser
+                        .folder_install
+                        .as_ref()
+                        .is_some_and(|install| install.install_skill),
+                    |page: &mut Self, checked, _window, cx| {
+                        if let Some(install) = page.browser.folder_install.as_mut() {
+                            install.install_skill = checked;
+                            cx.notify();
+                        }
+                    },
+                    cx,
+                ));
+            }
         }
         if entry.runs_background_process() {
             items.push(notice(
@@ -409,4 +439,53 @@ impl ExtensionsTab {
             cx,
         ))
     }
+}
+
+/// The install cards' question for an extension that ships an agent skill: a box to tick (off at
+/// first), naming the skill and saying it goes away with the extension.
+pub(super) fn skill_choice(
+    p: &SettingsPalette,
+    id: &'static str,
+    skill: &str,
+    checked: bool,
+    on_change: impl Fn(&mut ExtensionsTab, bool, &mut Window, &mut Context<ExtensionsTab>) + 'static,
+    cx: &mut Context<ExtensionsTab>,
+) -> AnyElement {
+    let m = p.modal;
+    let label = v_flex()
+        .min_w_0()
+        .child(
+            div()
+                .text_size(px(14.0))
+                .line_height(px(20.0))
+                .text_color(hsla(m.foreground))
+                .child("Also install its skill for your agents"),
+        )
+        .child(
+            div()
+                .text_size(px(13.0))
+                .line_height(px(20.0))
+                .text_color(hsla(m.muted))
+                .child(format!(
+                    "Adds the {skill} skill to your coding agents. Uninstalling the extension removes it."
+                )),
+        )
+        .into_any_element();
+    div()
+        .w_full()
+        .p(px(12.0))
+        .rounded(px(MODAL_RADIUS_SECTION))
+        .border_1()
+        .border_color(hsla(m.hairline))
+        .bg(hsla(m.panel))
+        .child(checkbox_control(
+            p,
+            id,
+            checked,
+            Some(label),
+            12.0,
+            on_change,
+            cx,
+        ))
+        .into_any_element()
 }

@@ -91,8 +91,15 @@ pub(crate) enum FinishTarget {
     None,
     /// Settings, optionally on one of its pages (`theme`).
     Settings(Option<&'static str>),
-    /// The Connect a Device window ("Pair my phone after setup").
-    RemoteSettings,
+}
+
+/// What the devices page's two switches queued for after setup.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct AfterSetup {
+    /// "Pair my phone after setup": the Connect a Device window.
+    pub(crate) pair_phone: bool,
+    /// "Add another computer after setup": Settings > Remote on its Add a computer dialog.
+    pub(crate) add_computer: bool,
 }
 
 /// Commands the onboarding sends to the app. Each maps to the bridge message the React page posted.
@@ -112,14 +119,12 @@ pub(crate) enum OnboardingCommand {
     },
     OpenAccessibilityPreferences,
     OpenScreenRecordingPreferences,
-    /// `installBrowserUseSkill`.
+    /// `installBrowserUseSkill`: turning on Fast Computer & Browser use adds it too.
     InstallBrowserSkill,
-    /// `uninstallBundledAgentSkill` for `browserUse`.
-    UninstallBrowserSkill,
     OpenExternalUrl(String),
     /// `completeFirstLaunchSetup`, then open `FinishTarget` (and Add Project when the app has no
-    /// project yet).
-    Finish(FinishTarget),
+    /// project yet), and queue what the devices page asked for.
+    Finish(FinishTarget, AfterSetup),
     /// Close without a project: setup is not marked finished, so it comes back on the next launch
     /// while there is still no project, and Add Project opens so the app is never an empty shell.
     Leave,
@@ -207,7 +212,7 @@ struct Toast {
     warning: bool,
 }
 
-/// The browser skill switch while its install or removal runs.
+/// The browser skill while the install Fast Computer & Browser use started runs.
 #[derive(Clone, Copy)]
 struct BrowserSkillPending {
     /// Installed (true) or removed (false) once the run ends.
@@ -460,18 +465,17 @@ impl GpuiOnboardingWindow {
         }
     }
 
-    /// `finishOnboarding`: record completion, close, and open Connect a Device when the phone step was queued.
+    /// `finishOnboarding`: record completion, close, and queue what the devices page's switches asked for.
     fn finish(&mut self, target: FinishTarget, cx: &mut Context<Self>) {
         if self.closed {
             return;
         }
         self.closed = true;
-        let target = if target == FinishTarget::None && self.flow.phone_queued {
-            FinishTarget::RemoteSettings
-        } else {
-            target
+        let after = AfterSetup {
+            pair_phone: self.flow.phone_queued,
+            add_computer: self.flow.computer_queued,
         };
-        self.send(OnboardingCommand::Finish(target), cx);
+        self.send(OnboardingCommand::Finish(target, after), cx);
     }
 
     /// Closing without a project (the window's close control, or skipping setup on Get started).
@@ -549,11 +553,8 @@ impl GpuiOnboardingWindow {
             .map_or_else(|| self.browser_skill_installed(), |pending| pending.target)
     }
 
-    fn browser_skill_busy(&self) -> bool {
-        self.browser_skill_pending.is_some()
-    }
-
-    /// The status shows the install or removal landed.
+    /// The status shows the install landed. It runs beside Fast Computer & Browser use, whose
+    /// own toast (what the computer asks for) stays up; only a failure says anything.
     fn settle_browser_skill(&mut self, cx: &mut Context<Self>) {
         let Some(pending) = self.browser_skill_pending else {
             return;
@@ -562,14 +563,7 @@ impl GpuiOnboardingWindow {
             return;
         }
         self.browser_skill_pending = None;
-        self.show_toast(
-            if pending.target {
-                "Browser skill added: agents can open, click and read pages in the Browser view."
-            } else {
-                "Browser skill removed."
-            },
-            cx,
-        );
+        cx.notify();
     }
 
     // Host replies ---------------------------------------------------------------------------
@@ -617,15 +611,11 @@ impl GpuiOnboardingWindow {
             .map(str::trim)
             .filter(|message| !message.is_empty());
         // The browser skill and Computer Use run quietly (no app toast): a failure is said here.
-        if matches!(
-            action,
-            Some("installBrowserUseSkill" | "uninstallBundledAgentSkill")
-        ) && self.browser_skill_pending.is_some()
-        {
+        if action == Some("installBrowserUseSkill") && self.browser_skill_pending.is_some() {
             if !available {
                 self.browser_skill_pending = None;
                 self.show_warning_toast(
-                    message.unwrap_or("The browser skill could not be changed."),
+                    message.unwrap_or("The browser skill could not be added."),
                     cx,
                 );
             }
@@ -1371,6 +1361,21 @@ impl GpuiOnboardingWindow {
         };
         self.welcome.tab_since = Instant::now();
         cx.notify();
+    }
+
+    pub(crate) fn preview_queue_devices(&mut self, cx: &mut Context<Self>) {
+        self.flow.phone_queued = true;
+        self.flow.computer_queued = true;
+        cx.notify();
+    }
+
+    pub(crate) fn preview_settings_patch(
+        &mut self,
+        patch: Map<String, Value>,
+        cx: &mut Context<Self>,
+    ) {
+        self.update_settings(patch, cx);
+        self.get_started.reset(&self.settings, self.system_light);
     }
 
     pub(crate) fn preview_workspace_tab(&mut self, view: Option<usize>, cx: &mut Context<Self>) {

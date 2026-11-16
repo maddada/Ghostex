@@ -202,8 +202,11 @@ action_kinds! {
     ImportPageAnswers => "importPageAnswers",
     ExportPage => "exportPage",
     QuestionRemove => "questionRemove",
+    PageStar => "pageStar",
     SnoozeQuestion => "snoozeQuestion",
     CancelQuestion => "cancelQuestion",
+    MarkQuestionAnswered => "markQuestionAnswered",
+    MarkPagesSeen => "markPagesSeen",
     QuestionsReply => "questionsReply",
     QuestionListFilter => "questionListFilter",
     OpenResource => "openResource",
@@ -224,6 +227,8 @@ action_kinds! {
 
     // Options, models and accounts.
     SelectOption => "selectOption",
+    // The Mode menu's "Restart in Bypass when idle" switch (`menus/mode_restart.rs`).
+    RestartInMode => "restartInMode",
     ModelMenuView => "modelMenuView",
     ModelMenuFavorite => "modelMenuFavorite",
     ModelMenuPick => "modelMenuPick",

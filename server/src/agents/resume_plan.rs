@@ -215,7 +215,16 @@ pub(crate) fn agent_conversation_written(
             Some(claude_transcript_written(&input, &id))
         }
         "codex" => {
-            let id = get_codex_session_reference(&input)?;
+            // CDXC:SessionIdentity 2026-11-13 WHY: GitHub #595: a Codex that quit before
+            // Ghostex learned its thread id has no id and, never prompted, no trusted title to
+            // look one up by, so a wake starts it fresh (session_glue.rs falls back to its launch
+            // command) and there is nothing to lose. Answering `None` here made the send heal
+            // refuse with "the agent has no conversation to resume" and the chat stayed stuck.
+            let Some(id) = get_codex_session_reference(&input) else {
+                return agent_resume_title("codex", &input)
+                    .is_none()
+                    .then_some(false);
+            };
             Some(codex_rollout_written(&input, &id))
         }
         _ => None,
@@ -318,12 +327,17 @@ pub(crate) fn to_agent_resume_input(
         .as_ref()
         .and_then(|agent_id| {
             base_command.as_ref().map(|command| {
-                resolve_agent_launch_command(
+                resolve_session_launch_command(
                     agent_id,
                     command,
-                    read_text_from_map(&agent_config, "acceptAllMode")
-                        .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode"))
-                        .as_deref(),
+                    // A Claude the user restarted in Bypass from the Mode menu keeps starting in
+                    // it (CDXC:SessionChat 2026-11-14 in session_chat_mode_restart.rs).
+                    (agent_id == "claude"
+                        && crate::session_chat_mode_restart::starts_in_bypass(&runtime_settings))
+                    .then(|| "enabled".to_string())
+                    .or_else(|| read_text_from_map(&agent_config, "acceptAllMode"))
+                    .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode"))
+                    .as_deref(),
                     settings
                         .get("agentAcceptAllEnabled")
                         .and_then(Value::as_bool)
@@ -331,6 +345,7 @@ pub(crate) fn to_agent_resume_input(
                     read_text_from_map(&agent_config, "icon")
                         .or_else(|| read_text_from_map(&launch_settings, "icon"))
                         .as_deref(),
+                    session_is_coordinator(&runtime_settings),
                 )
             })
         })
@@ -360,6 +375,8 @@ pub(crate) fn to_agent_resume_input(
         );
         // Claude's Bypass Permissions warning, consented to for a bypass resume (bypass_consent.rs).
         let command = super::with_claude_bypass_consent(agent_id.as_deref(), &command);
+        // Claude's idle compaction and cache length from Settings (claude_idle_compaction.rs).
+        let command = super::with_claude_compaction_settings(agent_id.as_deref(), &command);
         // The home folder's secret folders (home_secret_folders.rs), and a GBot's screen tools
         // when it may not use them (gbot_computer_use.rs).
         let command = super::with_home_secret_folders_denied(
@@ -611,13 +628,14 @@ pub(crate) fn build_agent_resume_command(
                 quote_shell_double_arg(&reference)
             )
         }),
-        "codebuddy" | "copilot" | "droid" | "dsh" | "gemini" | "hermes-agent" | "qoder"
-        | "zcode" => exact_reference.map(|reference| {
-            format!(
-                "{agent_command} --resume {}",
-                quote_shell_double_arg(&reference)
-            )
-        }),
+        "codebuddy" | "copilot" | "droid" | "dsh" | "hermes-agent" | "qoder" | "zcode" => {
+            exact_reference.map(|reference| {
+                format!(
+                    "{agent_command} --resume {}",
+                    quote_shell_double_arg(&reference)
+                )
+            })
+        }
         "grok" => exact_reference
             .map(|reference| format!("{agent_command} -r {}", quote_shell_double_arg(&reference))),
         "freebuff" => exact_reference.map(|reference| {
@@ -781,13 +799,14 @@ pub(crate) fn build_agent_resume_copy_command(input: &AgentResumeInput) -> Optio
                 quote_shell_double_arg(&reference)
             )
         }),
-        "codebuddy" | "copilot" | "droid" | "dsh" | "gemini" | "hermes-agent" | "qoder"
-        | "zcode" => exact_reference.map(|reference| {
-            format!(
-                "{agent_command} --resume {}",
-                quote_shell_double_arg(&reference)
-            )
-        }),
+        "codebuddy" | "copilot" | "droid" | "dsh" | "hermes-agent" | "qoder" | "zcode" => {
+            exact_reference.map(|reference| {
+                format!(
+                    "{agent_command} --resume {}",
+                    quote_shell_double_arg(&reference)
+                )
+            })
+        }
         "grok" => exact_reference
             .map(|reference| format!("{agent_command} -r {}", quote_shell_double_arg(&reference))),
         "freebuff" => exact_reference.map(|reference| {
@@ -930,7 +949,7 @@ pub(crate) fn restorable_agent_id(value: Option<&str>) -> Option<&str> {
     let value = value?.trim();
     match value {
         "amp" | "antigravity" | "claude" | "codebuddy" | "codex" | "command-code" | "copilot"
-        | "cursor" | "devin" | "droid" | "dsh" | "empryo" | "freebuff" | "gemini" | "grok"
+        | "cursor" | "devin" | "droid" | "dsh" | "empryo" | "freebuff" | "grok"
         | "hermes-agent" | "kimi" | "kiro" | "omp" | "openclaude" | "opencode" | "pi" | "qoder"
         | "rovodev" | "zcode" => Some(value),
         _ => None,

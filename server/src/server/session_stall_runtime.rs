@@ -88,6 +88,9 @@ fn tick(state: &AppState, watches: &Mutex<HashMap<SessionKey, StallWatch>>) {
 fn watched(session: &Value, key: &SessionKey, now_iso: &str) -> bool {
     if effective_lifecycle_state(session) != "running"
         || presentation_activity(session, now_iso) != "working"
+        // A turn that ended with a background shell still running is not stuck: nothing runs in
+        // the turn (CDXC:Coordinators 2026-11-13 in session_status/model.rs).
+        || crate::presentation::working_only_in_background(session, now_iso)
         || waits_on_the_user(session, now_iso)
     {
         return false;
@@ -216,6 +219,28 @@ fn announce_stuck(
         ),
         QuietOwner::Heal => "Stopped and couldn't restart: it ended unexpectedly and Ghostex couldn't keep it running. Open it to start it again.".to_string(),
     };
+    // CDXC:Notifications 2026-11-14 (Q3245 in server/src/worker_alerts.rs): a thread that is not
+    // moving is its coordinator's to heal (it was nudged and told at 8 minutes); the user sees the
+    // red dot, a row only while Workers brings them back, and a push by the phone's Workers choice.
+    // A thread Ghostex's restarts gave up on (`Heal`) is still the user's.
+    let worker =
+        owner == QuietOwner::Threads && crate::worker_alerts::is_worker(db, project_id, session_id);
+    let route = if worker {
+        crate::push::PushRoute::worker()
+    } else {
+        crate::push::PushRoute::default()
+    };
+    if worker && !crate::worker_alerts::worker_alerts().rows() {
+        if let Ok(Some(session)) = repository.get_session(project_id, session_id) {
+            crate::push::announce_worker_event(
+                state,
+                repository,
+                &session,
+                crate::push::BlockedWhy::Stuck.kind(),
+            );
+        }
+        return;
+    }
     let mut params = Map::new();
     params.insert("projectId".to_string(), json!(project_id));
     params.insert("sessionId".to_string(), json!(session_id));
@@ -237,6 +262,7 @@ fn announce_stuck(
         &session,
         id,
         crate::push::BlockedWhy::Stuck,
+        route,
     );
 }
 

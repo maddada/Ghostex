@@ -169,6 +169,18 @@ pub(super) fn read_record(gxserver_state_dir: &Path, id: &str) -> Option<serde_j
     serde_json::from_slice(&bytes).ok()
 }
 
+/// The file the page was published from, as `ghostex show` named it (`sourcePath` on its
+/// record), or `None` for a page published from no file or before files were kept. Two pages with
+/// the same one are versions of the same file (the starred pages,
+/// server/src/session_chat_open_questions.rs `set_starred`).
+pub(crate) fn page_source_path(gxserver_state_dir: &Path, id: &str) -> Option<String> {
+    read_record(gxserver_state_dir, id)?
+        .get("sourcePath")
+        .and_then(serde_json::Value::as_str)
+        .filter(|path| !path.is_empty())
+        .map(str::to_string)
+}
+
 pub(super) enum StoreAnswersError {
     NotFound,
     /// The page already holds answers, sent at this time.
@@ -351,6 +363,23 @@ pub(super) fn note_delivery(gxserver_state_dir: &Path, id: &str, error: Option<&
         None => record["queuedAt"] = json!(now),
         Some(error) => record["deliveryError"] = json!(clip_chars(error, 500)),
     }
+    let _ = write_record(gxserver_state_dir, id, &record);
+}
+
+/// Notes on the record that its agent retired the page (`retire.rs`). Retiring it again keeps the
+/// first time.
+pub(super) fn note_retired(gxserver_state_dir: &Path, id: &str) {
+    let _guard = RECORD_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let Some(mut record) = read_record(gxserver_state_dir, id) else {
+        return;
+    };
+    if record.get("retiredAt").is_some() {
+        return;
+    }
+    record["retiredAt"] =
+        json!(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
     let _ = write_record(gxserver_state_dir, id, &record);
 }
 

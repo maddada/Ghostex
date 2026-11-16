@@ -40,9 +40,22 @@ pub fn command_usage(command_name: &str) -> String {
     if command_name == "read-session-chat" {
         text.push_str(READ_SESSION_CHAT_HELP);
     }
+    if command_name == "page" {
+        text.push_str(PAGE_HELP);
+    }
     text.push_str("\nEvery command: ghostex --help");
     text
 }
+
+const PAGE_HELP: &str = "
+Examples:
+  ghostex page retire 0123456789abcdef0123456789abcdef
+  ghostex page retire http://127.0.0.1:8899/visual/0123456789abcdef0123456789abcdef --json
+
+Use it for a page you replaced with another file, or that is out of date. You do not need it after
+publishing a newer version of the same file with ghostex show: the newest card already replaces
+the older ones. The page's card then reads Replaced; nothing is sent to you.
+";
 
 const READ_SESSION_CHAT_HELP: &str = "
 Examples:
@@ -217,6 +230,10 @@ pub fn usage() -> String {
             "Update this or a connected computer's Ghostex app",
         ),
         format_help_command(
+            "computer-code [--once] [--json]",
+            "Print this computer's pairing code (the one Connect a Computer shows) to paste into Connect a Computer on another computer, then approve that computer here when its three words match; works on a server without the app; run it in your own terminal, not in a Ghostex session",
+        ),
+        format_help_command(
             "computers [--json]",
             "List the computers this one is connected to; any agent can then start, message and read sessions there with --computer <name> (sessions, agents create/send/list, coordinator start-thread, read-session-chat, read-text and the other session verbs), or with a session ref from that computer",
         ),
@@ -230,7 +247,7 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "create-agent <agentId> --project-id id [--group-id id] [--model m] [--effort e] [--first-input-draft text] [--run-on location] [--account number|email] [--defer-start] [--replace-empty-sessions] [--allow-hidden]",
-            "Create and start a configured agent session (ghostex projects lists the project ids); --group-id puts it in one of the project's session groups; an agent turned off in Settings > Agents is refused unless --allow-hidden is passed (ghostex agents types lists the visible ones); --model/--effort (Claude, Codex, Antigravity CLI, Copilot, Grok Build, Hermes Agent; Pi and OMP take provider/model and a thinking level; Cursor CLI and Gemini take --model only) apply to this session only; Empryo takes provider/model and starts on it without changing Empryo's default; --first-input-draft stages text in its input without sending; --run-on local|docker|hetzner|vercel|daytona|e2b|digitalocean|docker:<host> runs Claude, Codex, OpenCode or Pi in an agentbox box; --account starts a Claude or Codex session on that saved account (one that needs signing in is refused)",
+            "Create and start a configured agent session (ghostex projects lists the project ids); --group-id puts it in one of the project's session groups; an agent turned off in Settings > Agents is refused unless --allow-hidden is passed (ghostex agents types lists the visible ones); --model/--effort (Claude, Codex, Antigravity CLI, Copilot, Grok Build, Hermes Agent; Pi and OMP take provider/model and a thinking level; Cursor CLI takes --model only) apply to this session only; Empryo takes provider/model and starts on it without changing Empryo's default; --first-input-draft stages text in its input without sending; --run-on local|docker|hetzner|vercel|daytona|e2b|digitalocean|docker:<host> runs Claude, Codex, OpenCode or Pi in an agentbox box; --account starts a Claude or Codex session on that saved account (one that needs signing in is refused)",
         ),
         format_help_command(
             "board start-work <bead-id> [--agent id [--allow-hidden]] [--model m] [--effort e] [--project-path path|--project-id id] [--json]",
@@ -249,6 +266,10 @@ pub fn usage() -> String {
             "Ask the user for a password, API key or token through a private card in this session's chat, and wait for the answer. The value never enters the chat or your context: when saved, the result names an owner-only file (deleted after 24 hours) to read inside the command that needs it. Use it instead of asking for a secret in chat, and for a sudo password",
         ),
         format_help_command(
+            "needs-you add \"what to do\" [--detail text] [--command text] [--answer label]... | list [--all] | done Q<n> | drop Q<n>",
+            "Put a step only the user can do (a sudo command, a tap on their phone, a sign-in, a check by eye) above this session's chat box as a to-do with a Done button; it stays until they press Done or you clear it, and their answer arrives as \"Q61: Done\". Add one without being asked whenever such a step blocks your work",
+        ),
+        format_help_command(
             "secret providers [list|add --name text --account text|remove <id>|check --provider id --reference op://…]",
             "List, add, remove or test the 1Password accounts Ghostex reads saved keys from (Settings > Secrets); check says only whether a reference can be read, never its value",
         ),
@@ -258,11 +279,15 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "show <file.html> [--title text] [--json] [--no-check]",
-            "Publish a Ghostex page (gx page): a self-contained HTML page, and print the ```visual block that shows it as a card in the chat; the card opens it where the reader's Open Ghostex pages in setting says (a floating window over the chat by default). Questions written as <gx-questions> (or the page's own ghostex.submit(answers)) send the reader's answers back to you as a message; the block then lists the questions' tags, so the chat counts the page as unanswered until they arrive. When Chrome is installed it then opens the page at a phone's width and says what did not fit (--no-check skips that). Ghostex paints the page's backdrop and glass cards itself; for a page that looks good at a glance (a strong header, options side by side in .gx-options with Pick buttons, one question under them, about one screen) follow $ghostex-visuals and its examples/plan-review.html",
+            "Publish a Ghostex page (gx page): a self-contained HTML page, and print the ```visual block that shows it as a card in the chat; the card opens it where the reader's Open Ghostex pages in setting says (a floating window over the chat by default). Questions written as <gx-questions> (or the page's own ghostex.submit(answers)) send the reader's answers back to you as a message; the block then lists the questions' tags, so the chat counts the page as unanswered until they arrive. When Chrome is installed it then opens the page at 360 and 600px and at 900px with large text and says what overflows, overlaps or did not fit (--no-check skips that). Ghostex paints the page's backdrop and glass cards itself; for a page that looks good at a glance (a strong header, options side by side in .gx-options with Pick buttons, one question under them, about one screen) follow $ghostex-visuals and its examples/plan-review.html",
         ),
         format_help_command(
-            "visual check <file.json|-|page.html> [--width N] [--light] [--out file.png]",
-            "Draw a Ghostex visual (a ```visual block's JSON) to a PNG and print its path, or read a Ghostex form (a ```questions block) and list its questions, so an agent can check it before replying. Given a page (.html), opens it in headless Chrome at a phone's width (390px) and a computer's (1280px), saves a screenshot of each and lists what does not fit",
+            "page retire <page>... [--json]",
+            "Retire Ghostex pages you published and then replaced or no longer need: each page (its id or its address, the \"url\" in the block ghostex show printed) and its open questions stop waiting on the reader, so they leave the dock, the ? pill and the sidebar's dot on every computer and phone; the page still opens. A newer ghostex show of the same file already replaces its older cards by itself",
+        ),
+        format_help_command(
+            "visual check <file.json|-|page.html> [--width N] [--text-scale P] [--light] [--out file.png]",
+            "Draw a Ghostex visual (a ```visual block's JSON) to a PNG and print its path, or read a Ghostex form (a ```questions block) and list its questions, so an agent can check it before replying. Given a page (.html), opens it in headless Chrome at 360, 600, 900 and 1280px and with 130% text at 360 and 900px, saves a screenshot of each and lists, by CSS selector, what overflows its box, is cut off or is drawn over other text; it fails while anything does",
         ),
         format_help_command(
             "run-agent <agentId> [--allow-hidden]",
@@ -279,6 +304,10 @@ pub fn usage() -> String {
         format_help_command(
             "projects [--all] [--json] [--computer name]",
             "List the projects with their ids, the --project-id that create-session, create-agent and the other project verbs take; --all adds parked projects (Recent Projects); read-only",
+        ),
+        format_help_command(
+            "project status [--computer name | --all-computers] [--project-id id] [--json]",
+            "This project's git state here and on every connected computer, as one table: uncommitted files, commits not on origin, stashes, and each submodule and worktree; an offline computer shows when it was last seen. Run it before a release; read-only",
         ),
         format_help_command(
             "switch-project (--project-id|--path|--name) <value>",
@@ -404,6 +433,18 @@ pub fn usage() -> String {
         format_help_command(
             "settings hotkeys [list|get|set|reset] ...",
             "List hotkeys, or change, unassign or reset one (or --all) through the running desktop app",
+        ),
+        format_help_command(
+            "settings export <file> [--json]",
+            "Save this computer's settings to a JSON file for another computer (no secrets or sign-ins)",
+        ),
+        format_help_command(
+            "settings import <file> [--dry-run] [--json]",
+            "Apply a settings export here through the running desktop app and list what changed",
+        ),
+        format_help_command(
+            "theme [read|set <key>=<value> ...|undo|redo|history] [--json]",
+            "Read the look settings, change several as one change, undo or redo it, list the last 20 changes",
         ),
         format_help_command(
             "guide [overview|features|settings|hotkeys]",

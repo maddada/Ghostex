@@ -85,7 +85,9 @@ impl GhostexGpuiApp {
         }
         let error = match result {
             Ok(Some(page)) => {
-                let Some(url) = sanitize_browser_tab_url_for_state(&page.url) else {
+                let Some(url) =
+                    sanitize_browser_tab_url_for_tab(&page.url, page.remote_machine_id.as_deref())
+                else {
                     return;
                 };
                 if !self.browser_tabs.focus_pane(pane_id) {

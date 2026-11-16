@@ -32,6 +32,7 @@ pub struct NavItem {
 /// keep using that section's own search result (no separate page-title match). `appearance` is
 /// the Interface page, which has its own tab.
 pub const GENERAL_GROUPS: &[GeneralGroup] = &[
+    group("experience", "Experience", &["experience"]),
     group("appearance", "Interface", &["theming"]),
     group("chat", "Chat", &["chat", "markedHandovers"]),
     group(
@@ -59,7 +60,7 @@ pub const GENERAL_GROUPS: &[GeneralGroup] = &[
     group(
         "system",
         "Power & Sleep",
-        &["computerStartup", "autoSleep", "power"],
+        &["computerStartup", "memoryGuard", "autoSleep", "power"],
     ),
 ];
 
@@ -89,6 +90,7 @@ pub fn general_group(id: &str) -> Option<&'static GeneralGroup> {
 /// Ghostty terminal controls belong in the Settings window's own search so one query can find app settings and terminal settings together.
 pub fn general_navigation() -> Vec<NavItem> {
     vec![
+        nav("experience", "Experience"),
         nav("chat", "Chat"),
         nav("sidebar", "Sidebar & Sessions"),
         nav("terminal", "Terminal"),

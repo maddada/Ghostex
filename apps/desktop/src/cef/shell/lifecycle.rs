@@ -524,6 +524,28 @@ wrap_keyboard_handler! {
                     handler(BrowserPageMetadataEvent::FindRequested);
                     return 1;
                 }
+            // The Annotate hotkey in a Browser page (CDXC:Docs 2026-11-14 DECISION in
+            // packages/settings-catalog/src/hotkey_definitions.rs): a focused page owns its keys on
+            // Windows and Linux, and on macOS when no GPUI binding took the chord first.
+            if let Some(handler) = &self.page_metadata_handler
+                && let Some((code, chord)) = crate::app::shell_hotkeys::ANNOTATE_PAGE_CHORD
+                    .lock()
+                    .ok()
+                    .and_then(|chord| *chord)
+            {
+                use crate::app::shell_hotkeys::{
+                    PAGE_CHORD_ALT, PAGE_CHORD_COMMAND, PAGE_CHORD_CONTROL, PAGE_CHORD_SHIFT,
+                };
+                let flag = |bit: u32, flag: u32| if chord & bit != 0 { flag } else { 0 };
+                let wanted = flag(PAGE_CHORD_CONTROL, control)
+                    | flag(PAGE_CHORD_ALT, alt)
+                    | flag(PAGE_CHORD_SHIFT, shift)
+                    | flag(PAGE_CHORD_COMMAND, command);
+                if event.windows_key_code == code && modifiers == wanted {
+                    handler(BrowserPageMetadataEvent::AnnotateRequested);
+                    return 1;
+                }
+            }
             let reload_chord = (event.windows_key_code == 0x74 && modifiers == 0)
                 || (event.windows_key_code == 0x52 && modifiers == primary);
             if reload_chord && self.page_metadata_handler.is_some()

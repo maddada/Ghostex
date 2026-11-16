@@ -522,6 +522,7 @@ impl ExtensionsTab {
         cx: &mut Context<Self>,
     ) {
         self.browser.consent = Some(name);
+        self.browser.consent_skill = false;
         self.consent_focus.focus(window, cx);
         cx.notify();
     }

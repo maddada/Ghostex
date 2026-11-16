@@ -12,23 +12,18 @@ impl Render for CommandTabDragPreview {
         let title_trailing_reserved_width =
             command_terminal_tab_status_title_trailing_reserved_width(self.tab_status);
 
-        div()
+        drag_ghost_surface(div(), 1.0)
             .relative()
             .flex()
             .h(px(COMMAND_PANE_TAB_BAR_HEIGHT))
             .w(px(COMMAND_PANE_TAB_MAX_WIDTH))
             .items_center()
             .overflow_hidden()
-            .rounded(px(5.0))
-            .border_1()
-            .border_color(workspace_drop_feedback_border_color())
-            .bg(command_pane_tab_background_color(true, false))
             .pl(px(8.0))
             .pr(px(0.0))
             .text_size(px(COMMAND_PANE_TAB_TITLE_FONT_SIZE))
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(command_pane_tab_title_text_color(true, false))
-            .shadow_md()
             .child(
                 div()
                     .flex_1()
@@ -50,22 +45,17 @@ impl Render for CommandTabDragPreview {
 
 impl Render for BrowserTabDragPreview {
     fn render(&mut self, _window: &mut Window, _cx: &mut gpui::Context<Self>) -> impl IntoElement {
-        div()
+        drag_ghost_surface(div(), 1.0)
             .flex()
             .h(px(BROWSER_TAB_BAR_HEIGHT))
             .w(px(BROWSER_TAB_MAX_WIDTH))
             .items_center()
             .overflow_hidden()
-            .rounded(px(5.0))
-            .border_1()
-            .border_color(workspace_drop_feedback_border_color())
-            .bg(workspace_tab_drag_preview_color())
             .pl(px(8.0))
             .pr(px(10.0))
             .text_size(px(13.0))
             .font_weight(FontWeight::NORMAL)
             .text_color(browser_tab_text_color(self.state, true))
-            .shadow_md()
             .child(browser_tab_icon_element(
                 self.profile_id,
                 self.chrome_status,

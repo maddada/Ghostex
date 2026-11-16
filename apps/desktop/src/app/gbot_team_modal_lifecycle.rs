@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 impl GhostexGpuiApp {
     /// Import Team…: a file panel (the desktop) or the paste box (the browser), then the preview.
     pub(crate) fn open_gpui_gbot_team_import(&mut self, cx: &mut gpui::Context<Self>) {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(ghostex_web))]
         {
             let receiver = cx.prompt_for_paths(gpui::PathPromptOptions {
                 files: true,
@@ -57,7 +57,7 @@ impl GhostexGpuiApp {
             })
             .detach();
         }
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(ghostex_web)]
         self.open_gpui_gbot_team_window(GbotTeamStart::Paste { error: None }, cx);
     }
 
@@ -69,7 +69,7 @@ impl GhostexGpuiApp {
                 Ok(list) => app.open_gpui_gbot_team_window(
                     GbotTeamStart::Export {
                         list,
-                        can_save: cfg!(not(target_arch = "wasm32")),
+                        can_save: cfg!(not(ghostex_web)),
                     },
                     cx,
                 ),
@@ -152,7 +152,7 @@ impl GhostexGpuiApp {
                 });
                 return;
             }
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(ghostex_web))]
             {
                 let name = answer["fileName"]
                     .as_str()
@@ -186,7 +186,7 @@ impl GhostexGpuiApp {
                     Err(error) => reply.finish(Err(format!("Couldn't save it: {error}")), cx),
                 });
             }
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(ghostex_web)]
             {
                 let _ = this;
                 let _ = cx.update(|cx| {
@@ -208,7 +208,7 @@ fn run_gbots(params: Value, reply: GbotTeamReply, cx: &mut gpui::Context<Ghostex
     cx.spawn(async move |_this, cx| {
         #[allow(unused_mut)]
         let mut answer = gx_rpc(None, "/api/gbots", params.clone()).await;
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(ghostex_web))]
         if let Some(id) = answer
             .as_ref()
             .err()

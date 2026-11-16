@@ -18,11 +18,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let config = FeedbackModalConfig {
-            app: if cfg!(target_family = "wasm") {
-                "web"
-            } else {
-                "desktop"
-            },
+            app: if cfg!(ghostex_web) { "web" } else { "desktop" },
             palette: self.gpui_native_dialog_palette(),
             github_username: read_preference_value(FEEDBACK_GITHUB_USERNAME_STORAGE_KEY)
                 .ok()
@@ -30,9 +26,9 @@ impl GhostexGpuiApp {
                 .unwrap_or_default(),
             agent_id: read_primary_agent_launcher_id(),
             agent_machine: self.feedback_agent_machine(),
-            #[cfg(not(target_family = "wasm"))]
+            #[cfg(not(ghostex_web))]
             offline_diagnostics: Some(feedback_offline_diagnostics),
-            #[cfg(target_family = "wasm")]
+            #[cfg(ghostex_web)]
             offline_diagnostics: None,
             scrub_context: feedback_scrub_context(),
             collect_with_agent,
@@ -131,7 +127,7 @@ impl GhostexGpuiApp {
 /// This computer's gxserver startup diagnostics for the browser issue Send Bug / Feedback opens
 /// while gxserver does not answer: a fresh health probe and the startup report the "gxserver
 /// failed to start" notice copies.
-#[cfg(not(target_family = "wasm"))]
+#[cfg(not(ghostex_web))]
 fn feedback_offline_diagnostics() -> String {
     let (_, probe) = crate::app::helpers::gpui_probe_local_gxserver_health_with_diagnostics();
     crate::app::helpers::gpui_gxserver_startup_failure_report(&[format!(
@@ -164,7 +160,7 @@ fn feedback_scrub_context() -> FeedbackScrubContext {
     .into_iter()
     .filter_map(variable)
     .collect();
-    #[cfg(all(unix, not(target_family = "wasm")))]
+    #[cfg(all(unix, not(ghostex_web)))]
     {
         let mut name = [0u8; 256];
         // SAFETY: the buffer is writable for its whole length and stays alive for the call.

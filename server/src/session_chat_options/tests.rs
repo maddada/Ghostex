@@ -116,7 +116,7 @@ fn pair(selection: &SessionChatDetectedSelection) -> (Option<&str>, Option<&str>
 #[test]
 fn detects_claude_custom_statusline_model_and_effort() {
     let selection = claude(CLAUDE_CUSTOM_STATUSLINE).expect("claude statusline detected");
-    assert_eq!(pair(&selection), (Some("fable"), Some("high")));
+    assert_eq!(pair(&selection), (Some("claude-fable-5"), Some("high")));
     // The RAW rendered text is preserved so the pill can show the real
     // version instead of the catalog's.
     assert_eq!(selection.model.as_ref().unwrap().label, "Fable 5");
@@ -127,13 +127,13 @@ fn detects_claude_custom_statusline_model_and_effort() {
 #[test]
 fn detects_claude_medium_effort() {
     let selection = claude(CLAUDE_MEDIUM).expect("claude statusline detected");
-    assert_eq!(pair(&selection), (Some("fable"), Some("medium")));
+    assert_eq!(pair(&selection), (Some("claude-fable-5"), Some("medium")));
 }
 
 #[test]
 fn claude_prose_mentioning_models_never_matches() {
     let selection = claude(CLAUDE_WITH_PROSE).expect("claude statusline detected");
-    assert_eq!(pair(&selection), (Some("fable"), Some("high")));
+    assert_eq!(pair(&selection), (Some("claude-fable-5"), Some("high")));
 }
 
 #[test]
@@ -386,7 +386,7 @@ fn bottom_most_statusline_wins() {
         "  Ctx Used: 1.0% | 2.0% | $1.00 | Fable 5 | high\n",
     );
     let selection = claude(text).expect("statusline detected");
-    assert_eq!(pair(&selection), (Some("fable"), Some("high")));
+    assert_eq!(pair(&selection), (Some("claude-fable-5"), Some("high")));
 }
 
 #[test]
@@ -412,7 +412,7 @@ fn claude_statusline_rendered_with_non_breaking_spaces_matches() {
         "  \u{23f5}\u{23f5} bypass permissions on (shift+tab to cycle) \u{b7} \u{2190} for agents\n",
     );
     let selection = claude(text).expect("statusline detected");
-    assert_eq!(pair(&selection), (Some("fable"), Some("high")));
+    assert_eq!(pair(&selection), (Some("claude-fable-5"), Some("high")));
     assert_eq!(selection.model.as_ref().unwrap().label, "Fable 5");
 }
 
@@ -420,7 +420,7 @@ fn claude_statusline_rendered_with_non_breaking_spaces_matches() {
 fn ansi_colour_codes_are_stripped_before_matching() {
     let text = "  Ctx Used: 1.0% | \u{1b}[32m$1.00\u{1b}[0m | \u{1b}[1mFable 5\u{1b}[0m | \u{1b}[33mhigh\u{1b}[0m\n";
     let selection = claude(text).expect("statusline detected");
-    assert_eq!(pair(&selection), (Some("fable"), Some("high")));
+    assert_eq!(pair(&selection), (Some("claude-fable-5"), Some("high")));
 }
 
 #[test]
@@ -455,7 +455,7 @@ fn detects_claude_model_and_effort_from_structured_transcript_rows() {
     );
     let selection = detect_session_chat_transcript_selection(SessionChatOptionAgent::Claude, text)
         .expect("claude transcript options detected");
-    assert_eq!(pair(&selection), (Some("fable"), Some("high")));
+    assert_eq!(pair(&selection), (Some("claude-fable-5"), Some("high")));
     let model = selection.model.as_ref().unwrap();
     assert_eq!(model.label, "Fable 5");
     assert_eq!(model.source, SessionChatOptionEvidence::Transcript);
@@ -469,7 +469,7 @@ fn ignores_claude_sidechain_models_when_resolving_the_main_session() {
     );
     let selection = detect_session_chat_transcript_selection(SessionChatOptionAgent::Claude, text)
         .expect("main claude transcript options detected");
-    assert_eq!(pair(&selection), (Some("fable"), Some("high")));
+    assert_eq!(pair(&selection), (Some("claude-fable-5"), Some("high")));
 }
 
 #[test]
@@ -518,7 +518,7 @@ fn terminal_values_override_transcript_values_per_option() {
     let terminal = claude("Ctx Used: 1% | Opus 4.8").unwrap();
     let merged = merge_session_chat_option_selections(None, Some(transcript), None, Some(terminal))
         .expect("merged options");
-    assert_eq!(pair(&merged), (Some("opus"), Some("high")));
+    assert_eq!(pair(&merged), (Some("claude-opus-4-8"), Some("high")));
     assert_eq!(
         merged.model.as_ref().unwrap().source,
         SessionChatOptionEvidence::Terminal

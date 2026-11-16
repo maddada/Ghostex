@@ -104,13 +104,6 @@
     }
   },
   {
-    "agentId": "gemini",
-    "binary": "gemini",
-    "docsUrl": "https://github.com/google-gemini/gemini-cli#installation",
-    "npmPackage": "@google/gemini-cli",
-    "miseTool": "gemini"
-  },
-  {
     "agentId": "copilot",
     "binary": "copilot",
     "docsUrl": "https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli",

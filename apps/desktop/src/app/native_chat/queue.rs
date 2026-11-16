@@ -18,22 +18,7 @@ struct QueuedPromptDrag {
 
 impl Render for QueuedPromptDrag {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        let p = &self.appearance;
-        div()
-            .px(px(8.0 * p.scale))
-            .h(px(28.0 * p.scale))
-            .max_w(px(500.0 * p.scale))
-            .flex()
-            .items_center()
-            .rounded(px(8.0 * p.scale))
-            .bg(p.input)
-            .border_1()
-            .border_color(p.border)
-            .text_color(p.muted)
-            .font_family(p.font.clone())
-            .text_size(px(12.0 * p.scale))
-            .text_ellipsis()
-            .child(self.preview.clone())
+        crate::app::helpers::drag_ghost(self.preview.clone(), None, None, self.appearance.scale)
     }
 }
 

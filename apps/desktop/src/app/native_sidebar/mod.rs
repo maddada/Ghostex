@@ -16,9 +16,11 @@ mod disclosure;
 pub(crate) mod drag;
 mod drag_source;
 mod empty;
+pub(crate) mod extension_panel;
 pub(crate) mod focus_order;
 mod gbots_departments;
 pub(crate) mod gbots_rows;
+pub(crate) mod github_star;
 mod host;
 pub(crate) mod hover_actions;
 pub(crate) mod icons;
@@ -35,11 +37,11 @@ pub(crate) mod menus;
 pub(crate) mod model;
 pub(crate) mod navigation;
 mod new_session_row;
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 mod pointer;
 mod project_header;
 pub(crate) mod project_hover;
-mod project_status;
+pub(crate) mod project_status;
 mod rename;
 pub(crate) mod render;
 pub(crate) mod row_drag;

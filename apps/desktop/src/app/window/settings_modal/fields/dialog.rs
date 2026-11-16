@@ -34,6 +34,9 @@ pub(crate) struct SettingsDialogSpec {
     /// The dialog's padding and gap (`p-5 gap-4` on the QR preview; 16/12 by default).
     pub(crate) padding: f32,
     pub(crate) gap: f32,
+    /// Return dismisses the dialog like Escape: Cancel is its default button (the settings
+    /// import's confirm, where a stray Return must not overwrite settings).
+    pub(crate) enter_cancels: bool,
 }
 
 impl SettingsDialogSpec {
@@ -47,7 +50,13 @@ impl SettingsDialogSpec {
             backdrop: true,
             padding: 16.0,
             gap: 12.0,
+            enter_cancels: false,
         }
+    }
+
+    pub(crate) fn enter_cancels(mut self) -> Self {
+        self.enter_cancels = true;
+        self
     }
 
     pub(crate) fn width(mut self, width: f32) -> Self {
@@ -138,6 +147,7 @@ pub(crate) fn settings_dialog<V: 'static>(
     let on_dismiss = Rc::new(on_dismiss);
     let key_dismiss = on_dismiss.clone();
     let key_focus = focus.cloned();
+    let enter_cancels = spec.enter_cancels;
     let mouse_dismiss = on_dismiss.clone();
     let title_line = h_flex()
         .w_full()
@@ -181,7 +191,8 @@ pub(crate) fn settings_dialog<V: 'static>(
         .line_height(px(20.0))
         .text_color(hsla(p.foreground))
         .on_key_down(cx.listener(move |page, event: &KeyDownEvent, window, cx| {
-            if event.keystroke.key == "escape" {
+            if event.keystroke.key == "escape" || (enter_cancels && event.keystroke.key == "enter")
+            {
                 cx.stop_propagation();
                 key_dismiss(page, window, cx);
                 return;

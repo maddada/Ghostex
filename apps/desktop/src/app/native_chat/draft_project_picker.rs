@@ -98,19 +98,22 @@ struct ProjectPickerCard {
 pub(super) enum DraftListKind {
     BaseBranch,
     Worktree,
+    /// This folder's branch: rows in sections (Recent, Local, Remote) and a create row for a
+    /// typed name no branch has (`menus/folder_branch.rs` in gx-chat-core).
+    FolderBranch,
 }
 
 impl DraftListKind {
     fn placeholder(self) -> &'static str {
         match self {
-            Self::BaseBranch => "Search branches",
+            Self::BaseBranch | Self::FolderBranch => "Search branches",
             Self::Worktree => "Search worktrees",
         }
     }
 
     fn nothing(self) -> &'static str {
         match self {
-            Self::BaseBranch => "No branches match",
+            Self::BaseBranch | Self::FolderBranch => "No branches match",
             Self::Worktree => "No worktrees match",
         }
     }
@@ -119,6 +122,7 @@ impl DraftListKind {
         match self {
             Self::BaseBranch => "Pick the base branch",
             Self::Worktree => "Pick a worktree",
+            Self::FolderBranch => "Switch this folder to",
         }
     }
 }
@@ -129,10 +133,15 @@ enum Pick {
     Command(Value),
 }
 
-/// The rows of `rows` whose label holds `query` anywhere, ignoring case.
+/// The rows of `rows` whose label holds `query` anywhere, ignoring case. A `createFrom` row (This
+/// folder's branch list) is not a row of its own: while something is typed that no row is called
+/// exactly, it becomes "Create <typed> from <branch>" at the end.
 fn matching_rows(rows: &[Value], query: &str) -> Vec<Value> {
-    let query = query.trim().to_lowercase();
-    rows.iter()
+    let typed = query.trim();
+    let query = typed.to_lowercase();
+    let mut matching: Vec<Value> = rows
+        .iter()
+        .filter(|row| row.get("createFrom").is_none())
         .filter(|row| {
             query.is_empty()
                 || row["label"]
@@ -142,8 +151,49 @@ fn matching_rows(rows: &[Value], query: &str) -> Vec<Value> {
                     .contains(&query)
         })
         .cloned()
+        .collect();
+    let exact = matching
+        .iter()
+        .any(|row| row["label"].as_str() == Some(typed));
+    if let Some(create) = rows.iter().find(|row| row.get("createFrom").is_some()) {
+        // Only a create row whose `command` is an object: `value["key"] = ..` panics on a
+        // string or a list.
+        if let Some(mut command) = create
+            .get("command")
+            .and_then(serde_json::Value::as_object)
+            .cloned()
+            .filter(|_| !typed.is_empty() && !exact && !typed.contains(char::is_whitespace))
+        {
+            let from = create["createFrom"].as_str().unwrap_or_default();
+            command.insert("folderBranch".to_owned(), serde_json::json!(typed));
+            matching.push(serde_json::json!({
+                "label": format!("Create {typed} from {from}"),
+                "iconPath": "titlebar/plus.svg",
+                "command": command,
+            }));
+        }
+    }
+    matching
+}
+
+/// How many section headings `rows` draw: one wherever a row's `section` differs from the row
+/// before it.
+fn section_starts(rows: &[Value]) -> Vec<bool> {
+    let mut last: Option<&str> = None;
+    rows.iter()
+        .map(|row| {
+            let section = row["section"]
+                .as_str()
+                .filter(|section| !section.is_empty());
+            let starts = section.is_some() && section != last;
+            last = section.or(last);
+            starts
+        })
         .collect()
 }
+
+/// A section heading's height in the list, before the zoom.
+const SECTION_HEIGHT: f32 = 24.0;
 
 impl ProjectPickerCard {
     fn rows(&self) -> Vec<UnifiedProjectChoice> {
@@ -393,7 +443,17 @@ impl NativeChatView {
             &appearance,
             window,
         );
-        let height = card_height(rows.len(), true, appearance.scale);
+        let headings = section_starts(&rows)
+            .into_iter()
+            .filter(|starts| *starts)
+            .count();
+        let height = card_height(rows.len(), true, appearance.scale)
+            + (headings as f32 * SECTION_HEIGHT * appearance.scale)
+                .min(
+                    LIST_MAX_HEIGHT * appearance.scale
+                        - rows.len() as f32 * ROW_HEIGHT * appearance.scale,
+                )
+                .max(0.0);
         let highlighted = rows
             .iter()
             .position(|row| row["checked"] == true)
@@ -515,7 +575,9 @@ impl NativeChatView {
                 }
                 Err(error) => {
                     chat.draft_project_picker = None;
-                    chat.error = Some(error.to_string());
+                    chat.error = Some(crate::app::native_chat::child_window::window_open_failed(
+                        error,
+                    ));
                     cx.notify();
                 }
             });
@@ -902,17 +964,21 @@ impl ProjectPickerCard {
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
         let s = p.scale;
-        self.list_rows()
-            .into_iter()
+        let rows = self.list_rows();
+        let starts = section_starts(&rows);
+        rows.into_iter()
             .enumerate()
             .map(|(index, row)| {
+                let heading =
+                    starts[index].then(|| row["section"].as_str().unwrap_or_default().to_owned());
+                let icon = row["iconPath"].as_str().map(str::to_owned);
                 let label = row["label"].as_str().unwrap_or_default().to_owned();
                 let detail = row["detail"]
                     .as_str()
                     .filter(|detail| !detail.is_empty())
                     .map(str::to_owned);
                 let command = row["command"].clone();
-                div()
+                let line = div()
                     .id(("chat-draft-list-row", index))
                     .role(gpui::Role::Button)
                     .aria_label(label.clone())
@@ -927,6 +993,13 @@ impl ProjectPickerCard {
                     .chat_cursor_pointer()
                     .when(index == self.highlighted, |row| row.bg(wash))
                     .hover(move |style| style.bg(wash))
+                    .children(icon.map(|icon| {
+                        svg()
+                            .path(icon)
+                            .size(px(13.0 * s))
+                            .flex_shrink_0()
+                            .text_color(p.muted)
+                    }))
                     .child(
                         div()
                             .flex_1()
@@ -959,8 +1032,29 @@ impl ProjectPickerCard {
                         if command.is_object() {
                             card.close(Some(Pick::Command(command.clone())), cx);
                         }
-                    }))
-                    .into_any_element()
+                    }));
+                // A heading rides with its section's first row, so the list keeps one child per
+                // row and Up and Down scroll to the right one.
+                match heading {
+                    Some(heading) => div()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .h(px(SECTION_HEIGHT * s))
+                                .px(px(ROW_PADDING * s))
+                                .pb(px(3.0 * s))
+                                .flex()
+                                .items_end()
+                                .text_size(px(11.0 * s))
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(p.muted)
+                                .child(heading),
+                        )
+                        .child(line)
+                        .into_any_element(),
+                    None => line.into_any_element(),
+                }
             })
             .collect()
     }

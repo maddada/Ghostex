@@ -12,20 +12,25 @@ use super::native_modal_kit::*;
 use super::settings_modal::fields::{QrGrid, qr_code};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Context, Div, FocusHandle, FontWeight, InteractiveElement as _, IntoElement,
-    KeyDownEvent, ParentElement as _, Render, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Task, Window, div, px,
+    AnyElement, App, AppContext as _, Context, Div, Entity, FocusHandle, FontWeight,
+    InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement as _, Render, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Task, Window, div, px,
 };
 use gpui_component::{h_flex, v_flex};
+use serde_json::Value;
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::time::Duration;
 
+#[path = "connect_device_modal/computer_way.rs"]
+mod computer_way;
 #[path = "connect_device_modal/tailscale_pane.rs"]
 mod tailscale_pane;
 #[path = "connect_device_modal/ways.rs"]
 mod ways;
 
+pub(crate) use computer_way::{BackStep, JoinTarget, join_target};
+use computer_way::{ComputerInputs, JoinFlow};
 pub(crate) use tailscale_pane::TailscalePane;
 pub(crate) use ways::ConnectWay;
 
@@ -141,6 +146,45 @@ pub(crate) enum ConnectDeviceCommand {
     OpenRemote,
     /// Settings > Remote with its Tailscale row open.
     OpenTailscale,
+    /// Settings > Remote's Add a computer with SSH details (Connect a computer's quiet link).
+    OpenAddComputerSsh,
+    /// Pair this computer with the one behind `code` (Connect); the host answers `join_started`.
+    JoinComputer {
+        code: String,
+    },
+    /// Ask how that pairing stands; the host answers `join_status`.
+    JoinStatus {
+        pending_id: String,
+    },
+    /// Stop waiting for that pairing.
+    CancelJoin {
+        pending_id: String,
+    },
+    /// The other computer approved: save it here; the host answers `join_saved`.
+    SaveJoined {
+        target: JoinTarget,
+        key_installed: bool,
+    },
+    /// Read how signing in to the saved computer stands; the host answers `sign_in_state`.
+    ReadSignIn {
+        remote_machine_id: String,
+    },
+    /// Save that computer's username and password, then sign in again.
+    SubmitPassword {
+        remote_machine_id: String,
+        user: String,
+        password: String,
+    },
+    /// Sign in to the saved computer again.
+    Reconnect {
+        remote_machine_id: String,
+    },
+    /// Connect both ways with this computer's own `code`; the host answers
+    /// `connect_back_progress`.
+    ConnectBack {
+        remote_machine_id: String,
+        code: String,
+    },
     Close,
 }
 
@@ -210,6 +254,17 @@ pub(crate) struct GpuiConnectDeviceWindow {
     /// screen instead of the first.
     fitted_screen: Option<(u8, ConnectWay)>,
     focus_handle: FocusHandle,
+    /// Opened as Connect a computer: no list of ways, only the computer's pane.
+    computer_only: bool,
+    computer_inputs: ComputerInputs,
+    /// Why the pasted code can't be used.
+    code_error: Option<String>,
+    /// The pairing this computer started by entering another computer's code.
+    join: Option<JoinFlow>,
+    join_polling: Option<Task<()>>,
+    join_poll_in_flight: bool,
+    /// Asks left in which a failure is the attempt before the new one (computer_way.rs).
+    stale_failure_polls: u8,
 }
 
 impl GpuiConnectDeviceWindow {
@@ -221,6 +276,7 @@ impl GpuiConnectDeviceWindow {
     ) -> Self {
         let focus_handle = cx.focus_handle();
         focus_handle.focus(window, cx);
+        let computer_inputs = ComputerInputs::new(window, cx);
         let this = Self {
             host,
             palette: config.palette,
@@ -246,6 +302,13 @@ impl GpuiConnectDeviceWindow {
             fit: ModalScrollFit::new(),
             fitted_screen: None,
             focus_handle,
+            computer_only: config.kind == ConnectDeviceKind::Computer,
+            computer_inputs,
+            code_error: None,
+            join: None,
+            join_polling: None,
+            join_poll_in_flight: false,
+            stale_failure_polls: 0,
         };
         (this.host)(ConnectDeviceCommand::Prepare, cx);
         this
@@ -373,7 +436,8 @@ impl GpuiConnectDeviceWindow {
     }
 
     fn poll(&mut self, cx: &mut Context<Self>) {
-        if self.poll_in_flight || matches!(self.stage, Stage::Connected(_)) {
+        if self.poll_in_flight || (matches!(self.stage, Stage::Connected(_)) && self.join.is_none())
+        {
             return;
         }
         self.poll_in_flight = true;
@@ -418,6 +482,9 @@ impl GpuiConnectDeviceWindow {
 
     /// What the picked way connects; the Tailscale way has no code, and asks as a phone does.
     fn kind(&self) -> ConnectDeviceKind {
+        if self.computer_only {
+            return ConnectDeviceKind::Computer;
+        }
         match self.way {
             ConnectWay::Computer => ConnectDeviceKind::Computer,
             ConnectWay::Phone | ConnectWay::Tailscale => ConnectDeviceKind::Phone,
@@ -458,6 +525,7 @@ impl GpuiConnectDeviceWindow {
     ) {
         self.polling = None;
         self.tailscale_refresh = None;
+        self.join_polling = None;
         window.remove_window();
         (self.host)(command, cx);
     }
@@ -481,9 +549,13 @@ impl GpuiConnectDeviceWindow {
     // ---- drawing ---------------------------------------------------------------------------------
 
     fn title(&self) -> String {
+        if let Some(title) = self.join_title() {
+            return title;
+        }
         match (&self.stage, &self.waiting) {
             (Stage::Connected(device), _) => format!("{} is connected", device.name),
             (Stage::Ready, Some(device)) => pairing_question(device.phone).to_string(),
+            _ if self.computer_only => "Connect a computer".to_string(),
             _ => "Connect a device".to_string(),
         }
     }
@@ -834,10 +906,16 @@ impl GpuiConnectDeviceWindow {
                             .flex_shrink_0()
                             .child(modal_icon(ICON_CONNECTED, 18.0, p.success)),
                     )
-                    .child(self.muted(format!(
-                        "It can open your chats and terminals on {} from anywhere. Remove it any time in Settings > Remote.",
-                        self.computer_name
-                    )).flex_1().min_w_0()),
+                    .child(self.muted(match (self.kind(), &self.stage) {
+                        (ConnectDeviceKind::Computer, Stage::Connected(device)) => format!(
+                            "It can open your chats and terminals on {} from anywhere. To open {} from here too, click Connect both ways on {}.",
+                            self.computer_name, device.name, device.name
+                        ),
+                        _ => format!(
+                            "It can open your chats and terminals on {} from anywhere. Remove it any time in Settings > Remote.",
+                            self.computer_name
+                        ),
+                    }).flex_1().min_w_0()),
             )
             .child(modal_footer(vec![
                 modal_action_button(
@@ -869,7 +947,7 @@ impl GpuiConnectDeviceWindow {
 }
 
 impl Render for GpuiConnectDeviceWindow {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = self.palette;
         // A phone that scanned takes the window from the large code.
         if !self.shows_code_screen() {
@@ -884,11 +962,13 @@ impl Render for GpuiConnectDeviceWindow {
         }
         self.fitted_screen = Some((screen, self.way));
         let body = match (self.stage.clone(), self.waiting.clone()) {
+            _ if self.join.is_some() => self.join_body(window, cx),
             (Stage::Connected(_), _) => self.connected_body(cx),
             (Stage::Finishing { device, .. }, _) => self.finishing_body(&device),
             (Stage::Ready, Some(device)) => self.ask_body(&device, cx),
             _ if self.shows_large_code() => self.large_code_body(cx),
-            _ => self.ways_body(cx),
+            _ if self.computer_only => self.computer_way(window, cx),
+            _ => self.ways_body(window, cx),
         };
         let header = div()
             .text_size(px(16.0))

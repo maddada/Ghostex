@@ -59,14 +59,24 @@ param(
     [Parameter(Mandatory = $true)][string]$Version,
     [ValidateSet("x64", "arm64")][string]$Arch = "x64",
     [string]$Output = "",
-    [ValidateSet("all", "compile", "compile-app", "compile-runtime", "package", "package-collect", "package-pack", "package-bundle", "package-finalize")][string]$Phase = "all"
+    [ValidateSet("all", "compile", "compile-app", "compile-runtime", "stage", "publish-components", "package", "package-collect", "package-pack", "package-bundle", "package-finalize")][string]$Phase = "all"
 )
 
 $ErrorActionPreference = "Stop"
 $RunCompileApp = $Phase -in @("all", "compile", "compile-app")
 $RunCompileRuntime = $Phase -in @("all", "compile", "compile-runtime")
 $RunPackage = $Phase -in @("all", "package", "package-collect", "package-pack", "package-bundle", "package-finalize")
-$RunStage = $Phase -in @("all", "package", "package-collect")
+# CDXC:Release 2026-11-14 DECISION:
+# User (Q3121): no step that runs build tooling holds GHOSTEX_COMPONENT_SIGNING_KEY. A release that
+# defers component signatures (GHOSTEX_COMPONENT_SIGNATURES_DEFERRED=1) runs `stage` (the app
+# staged, its components recorded and sealed unsigned, no key), signs the records in a step of its
+# own (sign-component-records.mjs), runs `publish-components` (the uploads, with the key, nothing
+# built), then `package` or `package-collect` with GHOSTEX_WINDOWS_APP_STAGED=1 so they pack the app
+# that is already staged and signed. Without those variables every phase runs as before.
+$StageOnly = $Phase -eq "stage"
+$AlreadyStaged = $env:GHOSTEX_WINDOWS_APP_STAGED -eq "1"
+$SignaturesDeferred = $env:GHOSTEX_COMPONENT_SIGNATURES_DEFERRED -eq "1"
+$RunStage = ($Phase -in @("all", "stage", "package", "package-collect")) -and -not $AlreadyStaged
 $RunCollect = $Phase -eq "package-collect"
 $RunPack = $Phase -in @("all", "package", "package-pack")
 $RunBundle = $Phase -in @("all", "package", "package-bundle")
@@ -126,6 +136,7 @@ $env:GHOSTEX_WINDOWS_BUILD_PHASE = switch ($Phase) {
     "compile" { "compile" }
     "compile-app" { "compile-app" }
     "compile-runtime" { "compile-runtime" }
+    "stage" { "stage" }
     "package" { "stage" }
     "package-collect" { "stage" }
     default { $null }
@@ -136,7 +147,44 @@ if ($RunCompileApp -or $RunCompileRuntime -or $RunStage) {
 }
 Remove-Item Env:GHOSTEX_WINDOWS_BUILD_PHASE -ErrorAction SilentlyContinue
 
-if (-not $RunPackage) {
+# The CEF and Source component uploads (and their records): after the stage in a single packaging
+# run, or as the `publish-components` phase of a release that defers component signatures.
+function Publish-WindowsComponents {
+    $ComponentManifestPath = Join-Path $RepoRoot "build/on-demand-components/components.json"
+    $ComponentManifest = Get-Content -Raw $ComponentManifestPath | ConvertFrom-Json
+    $CodeServerComponentVersion = $ComponentManifest.components.'code-server'.componentVersion
+    $ComponentPublishes = @(
+        @{ Name = "cef"; Version = $ComponentManifest.components.cef.componentVersion }
+    )
+    if ($CodeServerComponentVersion) {
+        $ComponentPublishes += @{ Name = "code-server"; Version = $CodeServerComponentVersion }
+    }
+    foreach ($ComponentPublish in $ComponentPublishes) {
+        $PublishArgs = @(
+            (Join-Path $RepoRoot "tooling/release-gpui/publish-component.mjs")
+            "--component"
+            $ComponentPublish.Name
+            "--version"
+            $ComponentPublish.Version
+            "--asset-dir"
+            (Join-Path $RepoRoot "build/on-demand-components/assets")
+            "--output"
+            $ComponentManifestPath
+        )
+        if ($ComponentPublish.Name -eq "code-server") {
+            $PublishArgs += "--require-sha256-sidecars"
+        }
+        & node @PublishArgs
+        if ($LASTEXITCODE -ne 0) { throw "Publishing the Windows $($ComponentPublish.Name) component failed" }
+    }
+}
+
+if ($Phase -eq "publish-components") {
+    Publish-WindowsComponents
+    exit 0
+}
+
+if (-not $RunPackage -and -not $StageOnly) {
     Write-Host "Compiled the Windows $Arch release inputs; run -Phase package to stage and package them"
     exit 0
 }
@@ -204,34 +252,15 @@ if ($RunStage) {
         }
     }
 
-    $ComponentManifestPath = Join-Path $RepoRoot "build/on-demand-components/components.json"
-    $ComponentManifest = Get-Content -Raw $ComponentManifestPath | ConvertFrom-Json
-    $CodeServerComponentVersion = $ComponentManifest.components.'code-server'.componentVersion
-    $ComponentPublishes = @(
-        @{ Name = "cef"; Version = $ComponentManifest.components.cef.componentVersion }
-    )
-    if ($CodeServerComponentVersion) {
-        $ComponentPublishes += @{ Name = "code-server"; Version = $CodeServerComponentVersion }
+    # A release that defers component signatures publishes in its own step, after the signing step.
+    if (-not $SignaturesDeferred) {
+        Publish-WindowsComponents
     }
-    foreach ($ComponentPublish in $ComponentPublishes) {
-        $PublishArgs = @(
-            (Join-Path $RepoRoot "tooling/release-gpui/publish-component.mjs")
-            "--component"
-            $ComponentPublish.Name
-            "--version"
-            $ComponentPublish.Version
-            "--asset-dir"
-            (Join-Path $RepoRoot "build/on-demand-components/assets")
-            "--output"
-            $ComponentManifestPath
-        )
-        if ($ComponentPublish.Name -eq "code-server") {
-            $PublishArgs += "--require-sha256-sidecars"
-        }
-        & node @PublishArgs
-        if ($LASTEXITCODE -ne 0) { throw "Publishing the Windows $($ComponentPublish.Name) component failed" }
-    }
+}
 
+if ($StageOnly) {
+    Write-Host "Staged the Windows $Arch app; sign its component records, then run -Phase package or package-collect with GHOSTEX_WINDOWS_APP_STAGED=1"
+    exit 0
 }
 
 $Vpk = Get-Command vpk -ErrorAction SilentlyContinue

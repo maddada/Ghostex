@@ -37,7 +37,14 @@ pub fn decorate(
     object.insert("tone".to_string(), json!("warning"));
     // The card's main button (Q2977/Q2978 in model_fallback.rs): ahead of the notice's own
     // actions, and `primary` so the renderers draw it filled and Switch account beside it.
-    if let Some(action) = words.action {
+    // A limit that already reset has the agent's own Continue on the card (it presses Enter), so a
+    // paused wait adds no second one.
+    let own_continue = object
+        .get("actions")
+        .and_then(Value::as_array)
+        .is_some_and(|actions| actions.iter().any(|action| action["id"] == "continueNow"));
+    let paused = wait.get("mode").and_then(Value::as_str) == Some("afterRestart");
+    if let Some(action) = words.action.filter(|_| !(paused && own_continue)) {
         let mut actions = object
             .get("actions")
             .and_then(Value::as_array)
@@ -46,15 +53,51 @@ pub fn decorate(
         actions.insert(
             0,
             json!({
-                "id": "continueWithModel",
+                "id": action.answer["kind"].clone(),
                 "label": action.label,
-                "kind": "continueWithModel",
+                "kind": action.answer["kind"].clone(),
                 "primary": true,
                 "answer": action.answer,
             }),
         );
         object.insert("actions".to_string(), Value::Array(actions));
     }
+    // The Compact first checkbox on a wait a restart paused (CDXC:AgentProviders 2026-11-14 in
+    // server/src/carry_on_compaction.rs, Q3238): ticked for a chat at or above the compaction size,
+    // with the (i) tooltip saying why.
+    if paused {
+        if let Some(compact) = wait.get("compact").and_then(Value::as_object) {
+            let checked = compact.get("checked").and_then(Value::as_bool) == Some(true);
+            let label = match compact.get("tokens").and_then(Value::as_u64) {
+                Some(tokens) => format!("Compact first ({} of context)", short_tokens(tokens)),
+                None => "Compact first".to_string(),
+            };
+            object.insert(
+                "checkbox".to_string(),
+                json!({
+                    "id": "compactFirst",
+                    "label": label,
+                    "checked": checked,
+                    "hint": compact.get("hint").cloned().unwrap_or(Value::Null),
+                    "answer": { "kind": "compactFirst", "checked": !checked },
+                }),
+            );
+        }
+    }
+    // Every wait can be ended from its card: Stop while Ghostex waits to continue, Not now on a
+    // wait a restart paused (CDXC:AgentProviders 2026-11-14 in server/src/accounts/recovery.rs).
+    let mut actions = object
+        .get("actions")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    actions.push(json!({
+        "id": "stopRecovery",
+        "label": if paused { "Not now" } else { "Stop" },
+        "kind": "stopRecovery",
+        "answer": { "kind": "stopRecovery" },
+    }));
+    object.insert("actions".to_string(), Value::Array(actions));
 }
 
 /// What the card and the Accounts & limits panel's waiting box say while every account is full.
@@ -99,6 +142,38 @@ pub fn wait_words(
             value.to_string()
         }
     };
+    // CDXC:AgentProviders 2026-11-14 DECISION in server/src/accounts/recovery.rs (GitHub #608,
+    // Q3228 and Q3229): a wait for the reset says when Ghostex continues the session, and a wait a
+    // restart paused asks before anything is sent.
+    match text("mode") {
+        Some("afterRestart") => {
+            return WaitWords {
+                title: "Continue after the limit reset?".to_string(),
+                detail: "This session was waiting for its usage limit when Ghostex closed, so Ghostex won\u{2019}t continue it on its own.".to_string(),
+                action: Some(ContinueAction {
+                    label: "Continue".to_string(),
+                    answer: json!({ "kind": "resumeRecovery" }),
+                }),
+            };
+        }
+        Some("reset") => {
+            let at = text("resetsAt")
+                .and_then(|at| parse_iso_millis(at, utc_offset_minutes))
+                .filter(|at| *at > now_ms);
+            return WaitWords {
+                title: "Continuing after the limit reset".to_string(),
+                detail: match at {
+                    Some(at) => format!(
+                        "Ghostex will continue this session {}. Stop if you\u{2019}d rather continue it yourself.",
+                        local_time(at, now_ms, utc_offset_minutes)
+                    ),
+                    None => "Ghostex will continue this session when the limit resets. Stop if you\u{2019}d rather continue it yourself.".to_string(),
+                },
+                action: None,
+            };
+        }
+        _ => {}
+    }
     let model = text("model");
     let limit = text("limit").unwrap_or("Usage limit");
     let reset = text("resetsAt")
@@ -181,6 +256,15 @@ pub fn wait_words(
         title: format!("No account has room for {model}"),
         detail: format!("{why} {when}"),
         action,
+    }
+}
+
+/// "312K" for 312,400 tokens (server/src/carry_on_compaction.rs `short_tokens`).
+fn short_tokens(tokens: u64) -> String {
+    if tokens >= 1_000_000 {
+        format!("{:.1}M", tokens as f64 / 1_000_000.0)
+    } else {
+        format!("{}K", (tokens + 500) / 1_000)
     }
 }
 

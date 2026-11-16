@@ -1,6 +1,8 @@
 pub mod authorized_keys;
 pub mod computer_link_keys;
 pub mod computer_pairing;
+pub mod computer_ssh_key;
+pub mod connect_back;
 pub mod easy_connect_addresses;
 pub mod http;
 pub mod identity;

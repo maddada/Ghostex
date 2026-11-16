@@ -417,6 +417,13 @@ impl GhostexGpuiApp {
         let moved = self.gx_store.remote.tabs != tabs;
         let marks = self.gx_store_computer_marks(&tabs);
         if self.gx_store.remote.marks != marks {
+            // A session pill for a session on another computer ends with that computer's icon.
+            crate::app::gx_chat::session_directory::set_computer_icons(
+                marks
+                    .iter()
+                    .map(|(machine, mark)| (machine.clone(), mark.asset))
+                    .collect(),
+            );
             self.gx_store.remote.marks = marks;
             cx.notify();
         }
@@ -678,6 +685,7 @@ impl GhostexGpuiApp {
     ) {
         // Its icon may have been picked from another device while it was away.
         self.gx_store.remote.icons_asked.remove(machine_id);
+        super::computer_icons::forget_computer_icon_read_failures(machine_id);
         self.gx_store
             .remote
             .clients

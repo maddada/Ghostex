@@ -34,9 +34,9 @@ const CHAT_ROWS_LISTED: usize = 24;
 /// How often the always-kept heap record may be written, and how far the heap must have moved.
 ///
 /// CDXC:Memory 2026-11-12 WHY: the heap numbers were written only behind Show debug UI controls and the chat's diagnostic scenario, so on the user's Mac, with the app's footprint at 1.1 to 1.2 GB and its Rust heap the largest part, nothing on disk said how much of that heap was live or how many rows each warm chat held. `gxChat.host.heap` is written whatever the debug switches say: numbers only (the heap counters, the retained chat count and the per-chat row counts in size order), at most every ten minutes and only when the heap moved by `HEAP_RECORD_MOVED_BYTES`, so a day adds a few dozen lines.
-#[cfg_attr(target_family = "wasm", allow(dead_code))] // the web build has no heap counter
+#[cfg_attr(ghostex_web, allow(dead_code))] // the web build has no heap counter
 const HEAP_RECORD_INTERVAL: Duration = Duration::from_secs(10 * 60);
-#[cfg_attr(target_family = "wasm", allow(dead_code))] // the web build has no heap counter
+#[cfg_attr(ghostex_web, allow(dead_code))] // the web build has no heap counter
 const HEAP_RECORD_MOVED_BYTES: usize = 32 * 1024 * 1024;
 
 /// What the host counts between two summaries.
@@ -86,7 +86,7 @@ pub(super) struct HostCounters {
 pub(super) struct HostDiagnostics {
     considered_at: Option<Instant>,
     /// When the always-kept heap record was last written, and the heap's bytes in use then.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))] // the web build has no heap counter
+    #[cfg_attr(ghostex_web, allow(dead_code))] // the web build has no heap counter
     heap_recorded: Option<(Instant, usize)>,
     written: Option<HostCounters>,
     /// The heap's bytes in use when the last summary was written.
@@ -172,7 +172,7 @@ impl HostDiagnostics {
 
 impl HostDiagnostics {
     /// Writes `gxChat.host.heap` when it is due (`HEAP_RECORD_INTERVAL`).
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(not(ghostex_web))]
     fn heap_record(&mut self, heap: Option<crate::heap_counter::HeapCounts>, store: &ChatStore) {
         let Some(heap) = heap else {
             return;
@@ -198,7 +198,7 @@ impl HostDiagnostics {
         );
     }
 
-    #[cfg(target_family = "wasm")]
+    #[cfg(ghostex_web)]
     fn heap_record(&mut self, _heap: Option<HeapCountsAbsent>, _store: &ChatStore) {}
 }
 
@@ -237,18 +237,18 @@ fn chat_rows(store: &ChatStore) -> Vec<[usize; 5]> {
 
 /// The app's heap counters. The web build has no counting allocator (its crate root is not
 /// `apps/desktop/src/main.rs`), so it writes none.
-#[cfg(not(target_family = "wasm"))]
+#[cfg(not(ghostex_web))]
 fn heap_counts() -> Option<crate::heap_counter::HeapCounts> {
     Some(crate::heap_counter::counts())
 }
 
-#[cfg(target_family = "wasm")]
+#[cfg(ghostex_web)]
 fn heap_counts() -> Option<HeapCountsAbsent> {
     None
 }
 
 /// Stands in for `HeapCounts` where there is none, so the summary's fields still type-check.
-#[cfg(target_family = "wasm")]
+#[cfg(ghostex_web)]
 #[allow(dead_code)]
 #[derive(Clone, Copy)]
 struct HeapCountsAbsent {

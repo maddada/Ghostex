@@ -139,12 +139,17 @@ pub struct ClaudeRateLimits {
 #[serde(rename_all = "camelCase")]
 pub struct ClaudePromptCache {
     pub warm: Option<bool>,
+    /// How long the cache lives: `"1h"` or `"5m"`.
+    pub ttl: Option<String>,
     /// Epoch seconds.
     pub expires_at: Option<f64>,
     pub hit_ratio: Option<f64>,
     pub requests: Option<f64>,
     pub misses: Option<f64>,
     pub last_miss_cause: Option<String>,
+    /// The smallest context Claude compacts while idle, while Ghostex's Compact idle chats is on
+    /// (gxserver, server/src/agents/claude_idle_compaction.rs); absent while it is off.
+    pub idle_compact_min_tokens: Option<f64>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -357,6 +362,8 @@ pub struct ContextDetailStatus {
     pub context_used_percent: Option<String>,
     /// The context meter's token counts (84k/200k).
     pub context_tokens: Option<String>,
+    /// The tokens the context holds, for idle compaction's size check.
+    pub context_used_tokens: Option<f64>,
     pub model_name: Option<String>,
     pub effort_name: Option<String>,
     /// The checked-out branch, for the Basic catalog (Cursor's lives in `cursor`).
@@ -591,6 +598,7 @@ pub fn resolve_context_detail_status(
         .or_else(|| status.pi.as_ref().and_then(|pi| pi.thinking_level.clone()));
     status.context_used_percent =
         usage.and_then(|usage| format_context_percentage(usage.used_percentage));
+    status.context_used_tokens = usage.and_then(|usage| usage.used_tokens);
     status.context_tokens = usage.and_then(|usage| {
         usage.used_tokens.map(|used| {
             format!(

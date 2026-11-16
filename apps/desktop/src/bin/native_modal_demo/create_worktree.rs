@@ -222,7 +222,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         [
             ("claude", "Claude Code"),
             ("codex", "Codex"),
-            ("gemini", "Gemini"),
+            ("copilot", "Copilot"),
         ]
         .into_iter()
         .map(|(agent_id, name)| CreateWorktreeAgent {

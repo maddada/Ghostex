@@ -169,7 +169,7 @@ pub(crate) enum GpuiAppToastAction {
     /// Settings > Extensions, where views are turned on.
     OpenViewSettings,
     /// The release page of the update a failed AppImage update was installing (Linux).
-    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    #[cfg_attr(not(all(target_os = "linux", not(ghostex_web))), allow(dead_code))]
     OpenUpdateDownloadPage,
     /// A fixed native project-path bridge payload a planned toast carries
     /// (`ghostex_gx_core::ToastButton`), such as Copy Path on a remote project.
@@ -192,7 +192,7 @@ pub(crate) enum GpuiAppToastAction {
     UndoChiefDisable,
     /// Set to 100% on the one-time Linux note that Ghostex now follows the desktop's display
     /// scale: Interface scale back to 100% (app/display_scale_offer.rs).
-    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    #[cfg_attr(not(all(target_os = "linux", not(ghostex_web))), allow(dead_code))]
     ResetInterfaceScale,
     /// An approval notice's Approve (`deny: false`) or Deny: GitHub #495,
     /// app/owner_security/ui.rs.
@@ -441,7 +441,7 @@ pub(crate) fn gpui_app_toast_stack_height(toasts: &[GpuiAppToast]) -> f32 {
         + GPUI_APP_TOAST_CLOSE_WINDOW_INSET
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 pub(crate) fn remove_gpui_app_toast_popup_window_chrome(
     window: &mut Window,
     main_window_native_view: *mut std::ffi::c_void,
@@ -462,7 +462,7 @@ pub(crate) fn remove_gpui_app_toast_popup_window_chrome(
 
 /// A toast can open while Ghostex is in the background (an agent finished), when GPUI would leave
 /// its pop-up unowned and topmost over the app in front; it belongs to the main window instead.
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", not(ghostex_web)))]
 pub(crate) fn remove_gpui_app_toast_popup_window_chrome(
     window: &mut Window,
     main_window_native_view: *mut std::ffi::c_void,
@@ -470,7 +470,10 @@ pub(crate) fn remove_gpui_app_toast_popup_window_chrome(
     super::own_gpui_popup_window(window, main_window_native_view);
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(
+    all(target_os = "macos", not(ghostex_web)),
+    all(target_os = "windows", not(ghostex_web))
+)))]
 pub(crate) fn remove_gpui_app_toast_popup_window_chrome(
     _window: &mut Window,
     _main_window_native_view: *mut std::ffi::c_void,
@@ -478,7 +481,7 @@ pub(crate) fn remove_gpui_app_toast_popup_window_chrome(
 }
 
 /// Makes the app-modal window an AppKit child of the main window (CDXC:Onboarding 2026-09-15 in GpuiAppToastWindowChrome.m).
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 pub(crate) fn attach_gpui_app_modal_window_to_main_window(
     window: &mut Window,
     main_window_native_view: *mut std::ffi::c_void,
@@ -496,7 +499,7 @@ pub(crate) fn attach_gpui_app_modal_window_to_main_window(
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(all(target_os = "macos", not(ghostex_web))))]
 pub(crate) fn attach_gpui_app_modal_window_to_main_window(
     _window: &mut Window,
     _main_window_native_view: *mut std::ffi::c_void,
@@ -630,7 +633,10 @@ pub(crate) use super::round_close_button::{
 /// CDXC:Theming 2026-09-27 DECISION:
 /// User: "same for ones that should be glass on windows but they're not". Toasts are frosted on Windows too. Their window's blur is limited to the cards (`set_background_blur_region`): macOS masks the blur, and Windows, which can only confine a window's blur by clipping the window itself, clips the window to the cards plus the × of a hovered toast, so the close button stays visible and clickable. Supersedes the 2026-09-25 rule that kept solid cards on Windows.
 pub(crate) fn toast_window_glass() -> bool {
-    cfg!(any(target_os = "macos", target_os = "windows")) && window_glass_active()
+    cfg!(any(
+        all(target_os = "macos", not(ghostex_web)),
+        all(target_os = "windows", not(ghostex_web))
+    )) && window_glass_active()
 }
 
 impl Render for GpuiAppToastWindow {
@@ -664,8 +670,8 @@ impl Render for GpuiAppToastWindow {
                 let card_frames = card_frames.clone();
                 // Windows clips the window to its region, so a shown × joins it (see
                 // `render_close_button`); macOS only masks the blur and leaves it out.
-                let close_region =
-                    (glass && cfg!(target_os = "windows")).then(|| card_frames.clone());
+                let close_region = (glass && cfg!(all(target_os = "windows", not(ghostex_web))))
+                    .then(|| card_frames.clone());
                 let truncate_description_from_start =
                     toast.id == GPUI_SESSION_CHAT_FILE_OPENING_TOAST_ID;
                 let dot = div()

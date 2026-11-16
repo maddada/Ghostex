@@ -57,6 +57,11 @@ pub struct BeadsWorkspaceInfo {
     pub actor: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+    /// The folder bd was asked about when no workspace was found or reading failed (the project's
+    /// Beads folder setting, or the project folder), so the card can name it. Absent from older
+    /// gxservers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checked_folder: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -166,7 +171,10 @@ pub mod capability {
     pub const HUMAN: &str = "human";
     pub const SYNC: &str = "sync";
     pub const GENERATE_TITLE: &str = "generateTitle";
-    pub const ALL: [&str; 8] = [
+    /// `update` takes `externalRef` and `specId` (the details' Links row). Without it a
+    /// computer's links show read-only.
+    pub const LINKS: &str = "links";
+    pub const ALL: [&str; 9] = [
         CREATE_TYPE_PARENT,
         CREATE_BLOCKED_BY,
         CLAIM,
@@ -175,6 +183,7 @@ pub mod capability {
         HUMAN,
         SYNC,
         GENERATE_TITLE,
+        LINKS,
     ];
 }
 

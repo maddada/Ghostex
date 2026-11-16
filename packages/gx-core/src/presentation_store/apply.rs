@@ -94,6 +94,14 @@ impl PresentationStore {
                 side.custom_session_tags.as_ref() != Some(&tags);
             side.custom_session_tags = Some(tags);
         }
+        // gxserver sends the panels only while a sidebar extension is on, so a snapshot without
+        // them means there are none.
+        let panels = snapshot
+            .extension_panels
+            .take()
+            .filter(|panels| !panels.0.is_empty());
+        summary.side_state.extension_panels = side.extension_panels != panels;
+        side.extension_panels = panels;
 
         let mut next = LoadedPresentation::from_snapshot(server_id.to_string(), snapshot);
         match &entry.state {
@@ -359,6 +367,11 @@ impl PresentationStore {
             SideStateUpdate::Workspaces(state) => {
                 summary.side_state.spaces = side.workspaces.as_ref() != Some(&state);
                 side.workspaces = Some(state);
+            }
+            SideStateUpdate::ExtensionPanels(state) => {
+                let state = (!state.0.is_empty()).then_some(state);
+                summary.side_state.extension_panels = side.extension_panels != state;
+                side.extension_panels = state;
             }
         }
         summary

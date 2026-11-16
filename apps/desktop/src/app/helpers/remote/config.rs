@@ -71,7 +71,12 @@ pub(crate) fn gpui_remote_machine_config_from_settings(
         easy_connect_ssh_port,
         ssh_host,
         ssh_identity_file: gpui_remote_machine_string_field(machine, "sshIdentityFile")
-            .map(|path| gpui_expand_remote_identity_file(path.as_str())),
+            .map(|path| gpui_expand_remote_identity_file(path.as_str()))
+            .or_else(|| {
+                (transport == GpuiRemoteMachineTransport::EasyConnect)
+                    .then(gpui_easy_connect_pairing_key_file)
+                    .flatten()
+            }),
         ssh_port,
         ssh_user: gpui_remote_machine_string_field(machine, "sshUser"),
         has_saved_password: machine
@@ -93,6 +98,19 @@ pub(crate) fn gpui_remote_machine_config_from_settings(
         ssh_control_path: None,
         reinstall_package: false,
     })
+}
+
+/*
+CDXC:RemotePairing 2026-11-14 DECISION:
+User, on the Easy Connect page (Q3 "Key first, password fallback"): a computer connected with Easy Connect signs in with the key this computer sent when it paired (server/src/remote_access/computer_ssh_key.rs), and when that key fails, for example because the other computer runs an older Ghostex that didn't keep it, with the saved username and password as before. ssh offers the key first and the saved password after it (`PreferredAuthentications=publickey,password,…` in `gpui_remote_ssh_client_options`), so one dial covers both; a key the user set under Advanced wins.
+SEE-ALSO: packages/paths/src/computer_ssh_key.rs.
+*/
+/// This computer's pairing key, once gxserver made it.
+pub(crate) fn gpui_easy_connect_pairing_key_file() -> Option<String> {
+    let path = ghostex_paths::computer_ssh_key::computer_ssh_key_file(
+        &crate::shared_settings::ghostex_storage_paths().gxserver_state_dir(),
+    );
+    path.is_file().then(|| path.to_string_lossy().into_owned())
 }
 
 pub(crate) fn gpui_disabled_remote_machine_ids(

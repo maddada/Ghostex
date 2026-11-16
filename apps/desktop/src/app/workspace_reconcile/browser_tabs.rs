@@ -43,7 +43,16 @@ impl GhostexGpuiApp {
         {
             self.browser_tabs_project_id = new_project_id;
             self.persist_shell_layout_state();
+            self.reload_open_project_browser_tabs_on_startup(cx);
             return;
+        }
+
+        // Switching away from an already-loaded project ends the one-shot launch reload pass so
+        // parked projects are not silently woken when opened later.
+        let switching_loaded_project = self.browser_tabs_project_id.is_some();
+        if switching_loaded_project {
+            self.pending_startup_browser_reload = false;
+            self.pending_startup_browser_remote_machines.clear();
         }
 
         self.browser_tabs_project_epoch = self.browser_tabs_project_epoch.wrapping_add(1);
@@ -129,6 +138,9 @@ impl GhostexGpuiApp {
         */
         self.update_active_mode_cef_child_visibility(cx);
         self.persist_shell_layout_state();
+        if self.pending_startup_browser_reload {
+            self.reload_open_project_browser_tabs_on_startup(cx);
+        }
         cx.notify();
     }
 
@@ -144,6 +156,13 @@ impl GhostexGpuiApp {
                 if let Some(pane_id) = find_browser_leaf_id_for_tab(&self.browser_tabs.root, tab_id)
                 {
                     self.show_browser_history_popup(pane_id, window, cx);
+                }
+            }
+            cef::BrowserPageMetadataEvent::AnnotateRequested => {
+                if let Some(pane_id) = find_browser_leaf_id_for_tab(&self.browser_tabs.root, tab_id)
+                    && self.browser_tabs.active_tab_id_for_pane(pane_id) == Some(tab_id)
+                {
+                    self.run_browser_feedback_tool_from_toolbar(pane_id, window, cx);
                 }
             }
             cef::BrowserPageMetadataEvent::FindRequested => {
@@ -187,6 +206,9 @@ impl GhostexGpuiApp {
             }
             cef::BrowserPageMetadataEvent::CopyToClipboard(item) => {
                 gpui_copy_to_clipboard(item, cx);
+            }
+            cef::BrowserPageMetadataEvent::ContextMenuRequested(menu) => {
+                self.show_browser_page_context_menu(tab_id, menu, window, cx);
             }
             cef::BrowserPageMetadataEvent::TitleChanged(title) => {
                 /*
@@ -262,6 +284,143 @@ impl GhostexGpuiApp {
     ) -> Option<Entity<CefSurface>> {
         let (tab_id, url, profile_id) = self.active_loaded_browser_tab_for_pane(pane_id)?;
         self.ensure_browser_surface_for_tab(tab_id, url, profile_id, cx)
+    }
+
+    /// CDXC:Browser 2026-11-14 WHY: added with the file:// tab restore (PR #624). When
+    /// `reloadBrowserTabsOnStartup` is on (off by default, see its default in settings-catalog),
+    /// create CEF surfaces once on startup for the open project's restored `Loaded` tabs so both
+    /// the active tab and background tabs are ready before being clicked, while parked inactive
+    /// projects stay asleep.
+    pub(crate) fn reload_open_project_browser_tabs_on_startup(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if !shared_settings::shared_sidebar_settings_snapshot().reload_browser_tabs_on_startup() {
+            self.pending_startup_browser_reload = false;
+            self.pending_startup_browser_remote_machines.clear();
+            return;
+        }
+        if !self.pending_startup_browser_reload {
+            return;
+        }
+        if self.workspace_window_closing
+            || !cef::context_initialized()
+            || self.parent_ns_view.is_null()
+        {
+            return;
+        }
+        if self.browser_tabs_project_id.is_none() && self.pending_project_view_restore.is_some() {
+            return;
+        }
+
+        let (waiting_on_local_context, waiting_remote_machines) =
+            self.reload_loaded_browser_tabs_matching(None, cx);
+        self.pending_startup_browser_remote_machines
+            .extend(waiting_remote_machines);
+        if !waiting_on_local_context {
+            self.pending_startup_browser_reload = false;
+        }
+    }
+
+    /// Retries restored startup tabs belonging to `machine_id` once its tunnel or remote CEF
+    /// context becomes ready, unless Browser was explicitly slept or the user switched projects.
+    pub(crate) fn reload_pending_startup_browser_tabs_for_remote_machine(
+        &mut self,
+        machine_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if !self
+            .pending_startup_browser_remote_machines
+            .contains(machine_id)
+            || !shared_settings::shared_sidebar_settings_snapshot().reload_browser_tabs_on_startup()
+        {
+            self.pending_startup_browser_remote_machines
+                .remove(machine_id);
+            return;
+        }
+        if self.workspace_window_closing
+            || !cef::context_initialized()
+            || self.parent_ns_view.is_null()
+        {
+            return;
+        }
+
+        let (_waiting_local, waiting_remote_machines) =
+            self.reload_loaded_browser_tabs_matching(Some(machine_id), cx);
+        if !waiting_remote_machines.contains(machine_id) {
+            self.pending_startup_browser_remote_machines
+                .remove(machine_id);
+        }
+    }
+
+    fn reload_loaded_browser_tabs_matching(
+        &mut self,
+        filter_remote_machine_id: Option<&str>,
+        cx: &mut gpui::Context<Self>,
+    ) -> (bool, HashSet<String>) {
+        let rendered_active = self.browser_tabs.rendered_active_loaded_tab_ids();
+        let browser_awake_on_screen = self.active_mode == TitlebarMode::Browser
+            && self
+                .project_editor_shell
+                .is_mode_awake(TitlebarMode::Browser);
+        let mut loaded_tabs: Vec<(BrowserTabId, String, BrowserProfileId, Option<String>)> = self
+            .browser_tabs
+            .tabs
+            .iter()
+            .filter(|tab| tab.state == BrowserTabState::Loaded && !tab.url.trim().is_empty())
+            .filter(|tab| {
+                filter_remote_machine_id
+                    .is_none_or(|target| tab.remote_machine_id.as_deref() == Some(target))
+            })
+            .map(|tab| {
+                (
+                    tab.id,
+                    tab.url.clone(),
+                    tab.profile_id,
+                    tab.remote_machine_id.clone(),
+                )
+            })
+            .collect();
+        // Start visible pane active tabs before background tabs so the active view finishes first.
+        loaded_tabs.sort_by_key(|(tab_id, _, _, _)| !rendered_active.contains(tab_id));
+
+        let mut waiting_on_local_context = false;
+        let mut waiting_remote_machines = HashSet::new();
+        let mut created_any = false;
+        for (tab_id, url, profile_id, remote_machine_id) in loaded_tabs {
+            let needs_background_bounds =
+                !browser_awake_on_screen || !rendered_active.contains(&tab_id);
+            if let Some(existing) = self.browser_surfaces.get(&tab_id).cloned() {
+                if needs_background_bounds {
+                    self.size_background_browser_page(existing, cx);
+                }
+                continue;
+            }
+            if let Some(surface) = self.ensure_browser_surface_for_tab(tab_id, url, profile_id, cx)
+            {
+                created_any = true;
+                if needs_background_bounds {
+                    self.size_background_browser_page(surface, cx);
+                }
+            } else if let Some(machine_id) = remote_machine_id {
+                if !self.remote_browser.errors.contains_key(&machine_id) {
+                    waiting_remote_machines.insert(machine_id);
+                }
+            } else {
+                waiting_on_local_context = true;
+            }
+        }
+        let woke_browser = (created_any || !self.browser_surfaces.is_empty())
+            && !self
+                .project_editor_shell
+                .is_mode_awake(TitlebarMode::Browser)
+            && self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
+        if created_any || woke_browser {
+            self.update_active_mode_cef_child_visibility(cx);
+            self.persist_shell_layout_state();
+            cx.notify();
+        }
+        (waiting_on_local_context, waiting_remote_machines)
     }
 
     pub(crate) fn load_browser_cef_url_for_pane(

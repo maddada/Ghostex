@@ -16,7 +16,9 @@ pub mod availability;
 pub mod built_in_extensions;
 pub mod dark_chrome;
 mod data;
+pub mod experience;
 pub mod file_opening;
+pub mod folder_trust;
 mod general;
 pub mod help;
 pub mod hotkey_chords;
@@ -33,6 +35,8 @@ pub mod platform_text;
 pub mod rows;
 mod search_keywords;
 pub mod spaces;
+pub mod theme_colours;
+pub mod theme_roles;
 pub use search_keywords::{search_keywords, section_search_keywords};
 
 pub use hotkey_chords::{

@@ -223,7 +223,6 @@ pub(crate) fn provider_hook_paths(agent_id: &str, hook_paths: &HookPaths) -> Vec
         }
         "cursor" => vec![hook_paths.home_dir.join(".cursor").join("hooks.json")],
         "zcode" => vec![super::zcode::zcode_hook_config_path(&hook_paths.home_dir)],
-        "gemini" => vec![hook_paths.home_dir.join(".gemini").join("settings.json")],
         "opencode" => {
             let config_dir = resolve_config_directory(
                 &hook_paths.home_dir,
@@ -432,7 +431,6 @@ fn normalize_requested_agent_id(value: &Value) -> Option<String> {
         "command code" | "commandcode" => "command-code",
         "cursor agent" | "cursor cli" | "cursor-agent" => "cursor",
         "factory" | "factory droid" => "droid",
-        "gemini cli" => "gemini",
         "github copilot" => "copilot",
         "kimi code" => "kimi",
         "kiro cli" | "kiro-cli" => "kiro",

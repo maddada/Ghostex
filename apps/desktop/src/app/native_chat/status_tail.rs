@@ -49,6 +49,9 @@ impl NativeChatView {
         if wanted == self.status_tail {
             return;
         }
+        if wanted {
+            self.follow_tail_if_near_end();
+        }
         // After the transcript's rows and the messages just sent (send_watch.rs).
         let rows = self.items.len() + self.sent_rows_listed;
         self.list.splice(

@@ -81,7 +81,6 @@ pub(crate) fn workspace_tab_agent_icon_path(agent_icon: &str) -> Option<&'static
         "empryo" => Some("agent-icons/empryo.svg"),
         "factory-droid" => Some("agent-icons/factory-droid.svg"),
         "freebuff" => Some("agent-icons/freebuff.svg"),
-        "gemini" => Some("agent-icons/gemini.svg"),
         "grok-build" => Some("agent-icons/grok-build.svg"),
         "hermes-agent" => Some("agent-icons/hermes-agent.svg"),
         "kimi" => Some("agent-icons/kimi.svg"),
@@ -99,7 +98,7 @@ pub(crate) fn workspace_tab_agent_icon_path(agent_icon: &str) -> Option<&'static
 pub(crate) fn workspace_tab_agent_svg_size(agent_icon: &str) -> f32 {
     match agent_icon {
         "amp-cli" => 12.0,
-        "codex" | "copilot" | "gemini" | "pi" => 10.5,
+        "codex" | "copilot" | "pi" => 10.5,
         "claude" => 11.0,
         // The cloud is wide and short, so it takes more of its box to read at a logo's weight.
         "claude-cloud" => 13.0,
@@ -132,7 +131,6 @@ pub(crate) fn workspace_tab_agent_icon_accent_color(agent_icon: &str) -> u32 {
         "devin" => 0x3ea6ff,
         "empryo" => 0x1fa31d,
         "factory-droid" => 0xff7a1a,
-        "gemini" => 0x8b9aff,
         "grok-build" => 0xffffff,
         "hermes-agent" => 0xf3c46b,
         "kimi" => 0x7b6cf6,

@@ -62,6 +62,24 @@ pub fn debug_info_level(flag: Option<&str>) -> Res<Option<String>> {
     }
 }
 
+/// CDXC:Build 2026-11-14 WHY: kache, the rustc wrapper every crate here uses, strips `-C incremental` from what it compiles unless the crate is on its incremental list, so the incremental codegen local starts turn on for ghostex-gpui and gxserver never happened: a one-line gxserver edit at opt-level 0 took 71 s through kache and 14 s with the crates listed (measured on Linux, 2026-11-14). Crates already listed in the caller's environment are kept. Without kache the variable is ignored.
+/// SEE-ALSO: apps/desktop/scripts/build-macos-rust.sh, build-linux-rust.sh, prepare-macos-runtime.sh and server/package-remote-linux.mjs, which turn incremental on for these crates.
+pub fn kache_incremental_crates_environment() -> (String, String) {
+    const NAME: &str = "KACHE_INCREMENTAL_CRATES";
+    let mut crates: Vec<String> = std::env::var(NAME)
+        .unwrap_or_default()
+        .split(',')
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .collect();
+    for name in ["ghostex-gpui", "gxserver"] {
+        if !crates.iter().any(|existing| existing == name) {
+            crates.push(name.to_string());
+        }
+    }
+    (NAME.to_string(), crates.join(","))
+}
+
 /// Environment that turns debug info and symbols back on for every cargo build a command runs.
 /// It undoes the root `.cargo/config.toml` (CDXC:Build 2026-10-11): the profile keys for dev and release, and a later `/DEBUG` that overrides its `/DEBUG:NONE` so the MSVC linker writes a .pdb again.
 pub fn debug_info_environment(level: &str) -> Vec<(String, String)> {

@@ -183,16 +183,25 @@ impl Render for ModalWindowFrame {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // An open modal follows the Menu blur slider (CDXC:Theming 2026-10-15 on
         // `apply_frosted_menu_blur`).
-        #[cfg(target_os = "macos")]
+        #[cfg(all(target_os = "macos", not(ghostex_web)))]
         crate::app::helpers::apply_frosted_menu_blur(window);
         let show_close = (self.shows_corner_close)(cx);
         let reveal = self.corner_close_reveal(window, cx);
         set_reveal(&reveal, cx, |r| &mut r.enabled, show_close);
+        /*
+        CDXC:AppModal 2026-11-16 DECISION:
+        User: on Linux "pls put a thin border around the settings and other modals like it on arch, cuz the edge of the modal blends with the bg of the main window". Settings, Connect a computer, Add a computer and every other app modal draw a square surface tinted from the app chrome, and a Linux window gets no edge of its own from Ghostex (Hyprland's own border is the user's theme, often invisible), so each modal draws a 1px inner edge in `ModalPalette::window_border`, the colour Windows modals already get from DWM (`frame_app_modal_window`): the foreground mixed 16% into the modal surface, a soft gray in dark mode, never black or an accent. Linux only: macOS draws its rim and shadow around these windows, and Windows 11 draws the DWM border in this same colour, so a second line there would double the edge.
+        */
+        let linux_edge = cfg!(all(target_os = "linux", not(ghostex_web)))
+            .then(|| hsla(self.palette.window_border()));
         div()
             .id("app-modal-window-frame")
             .relative()
             .size_full()
             .child(self.content.clone())
+            .when_some(linux_edge, |this, edge| {
+                this.child(div().absolute().inset_0().border_1().border_color(edge))
+            })
             .when(show_close, |this| {
                 this.child(Self::top_band_tracker(reveal))
             })
@@ -212,7 +221,15 @@ fn open_corner_close_window(
 ) -> Option<AnyWindowHandle> {
     // CDXC:AppModal 2026-10-27 WHY:
     // A page's windows are canvases that the web platform always draws opaque (it ignores a transparent background), so the X's own 24px window showed as a black square on every app modal's corner in the GPUI web build. The page has no X there; its modals close with Escape, their buttons or a click away.
-    if cfg!(target_arch = "wasm32") {
+    if cfg!(ghostex_web) {
+        return None;
+    }
+    /*
+    CDXC:AppModal 2026-11-14 DECISION:
+    User: Ghostex should not draw the floating close (x) button on Omarchy at all: Hyprland draws window buttons in floating mode, and in tiled mode people close windows with the hotkey. On Hyprland an app modal closes with its titlebar's X, the close hotkey, Escape, its own buttons or a click away; other Linux desktops keep the X.
+    */
+    #[cfg(all(target_os = "linux", not(ghostex_web)))]
+    if crate::linux_hyprland::running_on_hyprland() {
         return None;
     }
     let Ok((modal_bounds, display_bounds, owner, modal_native)) =
@@ -237,7 +254,7 @@ fn open_corner_close_window(
     CDXC:AppModal 2026-11-11 WHY:
     GPUI on Windows opens a window whose centre is on no display at that display's default size, so an X centred on a corner past the screen's edge became one big round button over the whole modal ("Connect a Phone" on Windows, CDXC:AppModal 2026-11-11 on `gpui_native_modal_frame_on_screen`). The X's centre stays on the modal's display.
     */
-    #[cfg(target_os = "windows")]
+    #[cfg(all(target_os = "windows", not(ghostex_web)))]
     let corner = match display_bounds {
         Some(display) => {
             let within = |value: gpui::Pixels, low: gpui::Pixels, high: gpui::Pixels| {
@@ -250,7 +267,7 @@ fn open_corner_close_window(
         }
         None => corner,
     };
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(all(target_os = "windows", not(ghostex_web))))]
     let _ = display_bounds;
     let screen = Bounds::new(
         point(corner.x - px(half), corner.y - px(half)),
@@ -371,7 +388,10 @@ impl Render for ModalCornerCloseButton {
 #[derive(Clone, Copy)]
 struct NativeWindowRef(Option<isize>);
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(
+    all(target_os = "macos", not(ghostex_web)),
+    all(target_os = "windows", not(ghostex_web))
+))]
 fn native_window_ref(window: &Window) -> NativeWindowRef {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     NativeWindowRef(
@@ -379,23 +399,26 @@ fn native_window_ref(window: &Window) -> NativeWindowRef {
             .ok()
             .map(|handle| handle.as_raw())
         {
-            #[cfg(target_os = "macos")]
+            #[cfg(all(target_os = "macos", not(ghostex_web)))]
             Some(RawWindowHandle::AppKit(handle)) => Some(handle.ns_view.as_ptr() as isize),
-            #[cfg(target_os = "windows")]
+            #[cfg(all(target_os = "windows", not(ghostex_web)))]
             Some(RawWindowHandle::Win32(handle)) => Some(handle.hwnd.get()),
             _ => None,
         },
     )
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(
+    all(target_os = "macos", not(ghostex_web)),
+    all(target_os = "windows", not(ghostex_web))
+)))]
 fn native_window_ref(_: &Window) -> NativeWindowRef {
     NativeWindowRef(None)
 }
 
 /// Stacks the button's window above the modal's for as long as both are open, without ever
 /// taking key status from it.
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 fn attach_corner_close_window(window: &mut Window, modal: NativeWindowRef) {
     unsafe extern "C" {
         fn GhostexGpuiAttachComposerSuggestionsWindow(
@@ -425,7 +448,7 @@ fn attach_corner_close_window(window: &mut Window, modal: NativeWindowRef) {
 /// despite `focus: false`, so a click activated it, and closing the modal then destroyed the
 /// active window, which flashed the main window hidden for a moment (Escape did not). It is made
 /// non-activating like the titlebar dropdowns, so the modal stays active and closes as on Escape.
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", not(ghostex_web)))]
 fn attach_corner_close_window(window: &mut Window, modal: NativeWindowRef) {
     super::make_gpui_popup_window_non_activating(window);
     use windows_sys::Win32::Graphics::Dwm::{
@@ -460,5 +483,8 @@ fn attach_corner_close_window(window: &mut Window, modal: NativeWindowRef) {
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(
+    all(target_os = "macos", not(ghostex_web)),
+    all(target_os = "windows", not(ghostex_web))
+)))]
 fn attach_corner_close_window(_: &mut Window, _: NativeWindowRef) {}

@@ -74,10 +74,23 @@ CEF_RUST_TARGET="$(uname -m)-unknown-linux-gnu"
 # 2) Rust binaries (main app + CEF helper). Requires cmake and ninja
 # (cef-dll-sys builds libcef_dll_wrapper), plus Zig 0.17.x for
 # libghostty-vt (GHOSTEX_ZIG override honored by apps/desktop/build.rs).
-(
+# A local start builds them with build-linux-rust.sh (dev settings), usually
+# in the background before this script runs (GHOSTEX_GPUI_USE_PREBUILT_RUST=1);
+# release packaging keeps the plain release build below.
+build_release_rust() (
+	# The component signing key (release workflows set it on the steps that publish components)
+	# never reaches cargo, build scripts or the compiler wrapper; the component publishing below still has it.
+	unset GHOSTEX_COMPONENT_SIGNING_KEY
 	cd "$GPUI_DIR"
 	cargo build --release --bins
 )
+if [[ "${GHOSTEX_GPUI_USE_PREBUILT_RUST:-0}" == "1" ]]; then
+	echo "Using the Rust binaries cargo xtask start built alongside gxserver."
+elif [[ "${GHOSTEX_LOCAL_START:-0}" == "1" ]]; then
+	"$SCRIPT_DIR/build-linux-rust.sh"
+else
+	build_release_rust
+fi
 
 # 3) Locate the extracted CEF distribution. Unlike the macOS bundle layout,
 # download-cef extracts the Linux minimal distribution FLAT (verified on

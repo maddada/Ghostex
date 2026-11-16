@@ -157,7 +157,13 @@ pub(crate) async fn handle_tailcat_http(
                 error_code,
                 started_at.elapsed().as_millis(),
             );
-            tailcat_error_response(endpoint_path, request_id, "internalError", message)
+            // Adding a device while Easy Connect is off is the caller's to fix, not a fault here.
+            let code = if message.contains(super::EASY_CONNECT_OFF_REFUSAL) {
+                "badRequest"
+            } else {
+                "internalError"
+            };
+            tailcat_error_response(endpoint_path, request_id, code, message)
         }
     }
 }

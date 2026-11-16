@@ -35,7 +35,7 @@ fn with_repository<T>(
 /// How long a reopen waits for the thread's session to wake before answering.
 const REOPEN_WAKE_WAIT: std::time::Duration = std::time::Duration::from_secs(8);
 
-/// Marks a thread done and closes its session (`keepOpen` parks it instead), or reopens it,
+/// Marks a thread done and closes its session (`keepOpen` leaves it open, never parked), or reopens it,
 /// waking its session first when it is not running.
 ///
 /// CDXC:Coordinators 2026-10-13 WHY:

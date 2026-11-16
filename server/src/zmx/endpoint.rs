@@ -123,7 +123,8 @@ pub(crate) fn create_started_workspace_terminal(
                 "Cannot start terminal because the project directory is missing.".to_string(),
             )
         })?;
-    let zmx = require_zmx()?;
+    // The new terminal's daemon runs from a copy of the app that outlives updates (zmx/session_host.rs).
+    let zmx = super::session_daemon_zmx(require_zmx()?);
     let mut create_params = Map::new();
     create_params.insert("kind".to_string(), json!("terminal"));
     create_params.insert("lifecycleState".to_string(), json!("running"));

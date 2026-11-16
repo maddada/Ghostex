@@ -144,6 +144,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     ]),
     // CDXC:GBots 2026-11-08 DECISION:
     // User: native GBots show "under Chief of Staff in Main Hub"; the GBots switch stays and turns them on or off, and needs Main Hub on (`requiresExtension: chief`). Off by default under a key that enables (`gbotsEnabled`). Supersedes the 2026-11-06 entry, which put the previous GBots in the Bots space.
+    // CDXC:Settings 2026-11-14 DECISION (AGENTS.md; Q3110, user: "fix all these too but make sure ux makes sense after fix"): while Main Hub is off the GBots card is hidden, not greyed with "Turn on Main Hub first"; Main Hub's card stands in for it on its tab and in a search, and says it unlocks GBots (settings_modal/tabs/extensions/sections.rs). The same goes for Bot automations under Bots.
     J::Obj(&[
         ("appWide", J::Bool(true)),
         ("description", J::Str("Your own team of bots under Chief of Staff in Main Hub, each with its own instructions and memory, running on your Claude Code or Codex. Needs Main Hub.")),

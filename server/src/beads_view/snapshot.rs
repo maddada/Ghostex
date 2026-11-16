@@ -652,6 +652,7 @@ fn build_reply(
         mode: workspace_mode(info).to_string(),
         actor: state.actor.clone().flatten(),
         message: None,
+        checked_folder: None,
     };
     let mut snapshot = BeadsViewSnapshot {
         workspace,

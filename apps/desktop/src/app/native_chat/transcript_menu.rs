@@ -31,6 +31,29 @@ impl NativeChatView {
         let selection = gpui_component::TextSelection::selected_text(window, cx)
             .trim()
             .to_owned();
+        self.show_transcript_menu_for(href, selection, at, window, cx)
+    }
+
+    /// The transcript menu for `text` rather than the window's selection: Copy, Add to Chat and
+    /// Reply take it whole (a side question's answer, side_question.rs, the phone's long press).
+    pub(super) fn show_text_menu(
+        &mut self,
+        text: String,
+        at: Point<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        self.show_transcript_menu_for(None, text.trim().to_owned(), at, window, cx)
+    }
+
+    fn show_transcript_menu_for(
+        &mut self,
+        href: Option<String>,
+        selection: String,
+        at: Point<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
         // The composer hides behind a question card (composer.rs), which is when Add to Chat is disabled.
         let question_active = self.snapshot["questionCard"]["visible"] == true
             && self.snapshot["prompt"]["kind"] == "question";

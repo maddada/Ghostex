@@ -293,23 +293,27 @@ pub(crate) fn create_agent_session_params_for_project(
             .launch_plan
         }
         _ => {
-            let mut plan = build_agent_launch_plan(AgentLaunchInput {
-                accept_all_mode: read_text_from_map(&agent_config, "acceptAllMode")
-                    .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode")),
-                agent_id: agent_id.clone(),
-                agent_session_id: read_text_from_map(&runtime_settings, "agentSessionId"),
-                command: account_command.or(configured_command),
-                delayed_send_deadline_at: read_text_from_map(
-                    &launch_settings,
-                    "delayedSendDeadlineAt",
-                ),
-                first_user_message: read_text_from_map(&runtime_settings, "firstUserMessage"),
-                global_accept_all_enabled: settings
-                    .get("agentAcceptAllEnabled")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false),
-                icon: agent_icon.clone(),
-            });
+            let coordinator = session_is_coordinator(&runtime_settings);
+            let mut plan = build_session_launch_plan(
+                AgentLaunchInput {
+                    accept_all_mode: read_text_from_map(&agent_config, "acceptAllMode")
+                        .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode")),
+                    agent_id: agent_id.clone(),
+                    agent_session_id: read_text_from_map(&runtime_settings, "agentSessionId"),
+                    command: account_command.or(configured_command),
+                    delayed_send_deadline_at: read_text_from_map(
+                        &launch_settings,
+                        "delayedSendDeadlineAt",
+                    ),
+                    first_user_message: read_text_from_map(&runtime_settings, "firstUserMessage"),
+                    global_accept_all_enabled: settings
+                        .get("agentAcceptAllEnabled")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                    icon: agent_icon.clone(),
+                },
+                coordinator,
+            );
             // Only the command this launch runs names the id; `agentCommand` stays the base that
             // resume, fork and account wrapping rebuild from. Pi's id is minted here; Empryo's names
             // the session folder seeded for a launch model (session_chat_empryo_launch_selection.rs).
@@ -401,6 +405,25 @@ pub(crate) fn create_agent_session_params_for_project(
                         (
                             command.to_string(),
                             with_claude_bypass_consent(family.as_deref(), command),
+                        )
+                    })
+                    .and_then(|(before, after)| (after != before).then_some(after))
+                {
+                    plan.insert(
+                        "startupText".to_string(),
+                        Value::String(as_atuin_ignored_shell_input(&command)),
+                    );
+                    plan.insert("command".to_string(), Value::String(command));
+                }
+                // Claude's idle compaction and cache length from Settings (claude_idle_compaction.rs),
+                // in the same one `--settings` JSON.
+                if let Some(command) = plan
+                    .get("command")
+                    .and_then(Value::as_str)
+                    .map(|command| {
+                        (
+                            command.to_string(),
+                            super::with_claude_compaction_settings(family.as_deref(), command),
                         )
                     })
                     .and_then(|(before, after)| (after != before).then_some(after))
@@ -667,7 +690,7 @@ fn empryo_cwd(
 /// The flags live in the session's saved base command, which resume, fork and account wrapping all rebuild from.
 /// Sven extended it to Empryo on 2026-10-06 (Empryo harness spec). Empryo's terminal app ignores launch flags, so the model goes into a session folder Ghostex seeds and launches with `--session`, and the effort is typed with `/effort` once Empryo is up; neither changes Empryo's default. A resume keeps the model (it reopens that tab), but Empryo 3.9.0-beta drops a tab's effort when it resumes it (seen 2026-10-06), so the effort lasts until the session restarts (session_chat_empryo_launch_selection.rs).
 /// Antigravity CLI joined on 2026-10-13 (user: port the launch flags after checking agy still accepts `--effort`): agy 1.2.14 takes `--model <id>` and `--effort low|medium|high|max` for that CLI session only.
-/// On 2026-11-01 the user approved every other agent whose installed CLI has the flags, so a coordinator on any agent can start threads on its own model and effort (server/src/coordinators/playbook.md): OMP 18.13.2 (`--model`, `--thinking`), Copilot 1.0.103 (`--model`, `--reasoning-effort`), Grok Build 1.0.70 (`--model`, `--reasoning-effort`) and Hermes Agent 0.22.5 (`--model`, `--reasoning`) take both; Cursor CLI 2026.10.22 (effort lives with each model) and Gemini 0.41.2 take a model only. DeepSeek Harness 0.17.0 and OpenCode 2.1.4 (the build `with_opencode2` launches; 1.19.4's `-m` is gone from its terminal app, only `opencode run` takes one) have no interactive model flag and stay refused.
+/// On 2026-11-01 the user approved every other agent whose installed CLI has the flags, so a coordinator on any agent can start threads on its own model and effort (server/src/coordinators/playbook.md): OMP 18.13.2 (`--model`, `--thinking`), Copilot 1.0.103 (`--model`, `--reasoning-effort`), Grok Build 1.0.70 (`--model`, `--reasoning-effort`) and Hermes Agent 0.22.5 (`--model`, `--reasoning`) take both; Cursor CLI 2026.10.22 (effort lives with each model) takes a model only. DeepSeek Harness 0.17.0 and OpenCode 2.1.4 (the build `with_opencode2` launches; 1.19.4's `-m` is gone from its terminal app, only `opencode run` takes one) have no interactive model flag and stay refused.
 /// SEE-ALSO: server/src/ghostex_cli/actions/create.rs (create-agent), server/src/ghostex_cli/board.rs and server/src/board_start_work.rs (board start-work).
 fn apply_requested_agent_model(
     project: &Value,
@@ -695,7 +718,6 @@ fn apply_requested_agent_model(
                     | "grok"
                     | "hermes-agent"
                     | "cursor"
-                    | "gemini"
                     | "zcode"
                     | "empryo"
                     | "antigravity"
@@ -704,7 +726,7 @@ fn apply_requested_agent_model(
         })
         .ok_or_else(|| {
             DomainStateError::bad_request(
-                "A launch model or effort can only be set for Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI agents; Cursor CLI and Gemini take a model only, ZCode only a coordinator's model, and OpenCode only a coordinator's model and variant.",
+                "A launch model or effort can only be set for Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI agents; Cursor CLI takes a model only, ZCode only a coordinator's model, and OpenCode only a coordinator's model and variant.",
             )
         })?;
     if effort.is_some() {
@@ -807,7 +829,6 @@ fn model_only_effort_refusal(family: &str) -> Option<&'static str> {
         "cursor" => Some(
             "Cursor CLI takes a launch model but no effort: Cursor keeps the effort with each model, so pick a model id that names it, such as gpt-5.3-codex-high.",
         ),
-        "gemini" => Some("Gemini takes a launch model but no effort: Gemini CLI has no effort flag."),
         _ => None,
     }
 }
@@ -1001,7 +1022,6 @@ pub(crate) fn default_agent_session_title_name(agent_id: &str) -> Option<&'stati
         "dsh" => Some("DeepSeek Harness"),
         "empryo" => Some("Empryo"),
         "freebuff" => Some("Freebuff"),
-        "gemini" => Some("Gemini"),
         "grok" => Some("Grok Build"),
         "hermes-agent" => Some("Hermes Agent"),
         "kimi" => Some("Kimi Code"),
@@ -1028,16 +1048,23 @@ pub(crate) struct AgentLaunchInput {
 }
 
 pub(crate) fn build_agent_launch_plan(input: AgentLaunchInput) -> Value {
+    build_session_launch_plan(input, false)
+}
+
+/// [`build_agent_launch_plan`] for a session that may be a `coordinator`
+/// ([`session_is_coordinator`]), which takes no extension lines in its launch note.
+pub(crate) fn build_session_launch_plan(input: AgentLaunchInput, coordinator: bool) -> Value {
     let base_command = input
         .command
         .or_else(|| default_agent_command(&input.agent_id).map(str::to_string))
         .unwrap_or_default();
-    let launch_command = resolve_agent_launch_command(
+    let launch_command = resolve_session_launch_command(
         &input.agent_id,
         &base_command,
         input.accept_all_mode.as_deref(),
         input.global_accept_all_enabled,
         input.icon.as_deref(),
+        coordinator,
     );
     let command = if input.agent_id == "cursor" {
         input
@@ -1126,6 +1153,34 @@ pub(crate) fn resolve_agent_launch_command(
     global_accept_all_enabled: bool,
     icon: Option<&str>,
 ) -> String {
+    resolve_session_launch_command(
+        agent_id,
+        command,
+        accept_all_mode,
+        global_accept_all_enabled,
+        icon,
+        false,
+    )
+}
+
+/// Whether a session's runtime settings mark it as a coordinator (`coordinatorRole`), whose launch
+/// note takes no extension lines (marked_handovers.rs `with_launch_notes`).
+pub(crate) fn session_is_coordinator(runtime_settings: &Map<String, Value>) -> bool {
+    runtime_settings
+        .get(crate::coordinators::COORDINATOR_ROLE_SETTING)
+        .and_then(Value::as_str)
+        .is_some_and(|role| !role.is_empty())
+}
+
+/// [`resolve_agent_launch_command`] for a session that may be a `coordinator`.
+pub(crate) fn resolve_session_launch_command(
+    agent_id: &str,
+    command: &str,
+    accept_all_mode: Option<&str>,
+    global_accept_all_enabled: bool,
+    icon: Option<&str>,
+    coordinator: bool,
+) -> String {
     let enabled = match accept_all_mode {
         Some("enabled") => true,
         Some("disabled") => false,
@@ -1139,8 +1194,9 @@ pub(crate) fn resolve_agent_launch_command(
         icon,
         accept_all_mode == Some("disabled"),
     );
+    let command = super::mode_picker_off::with_auto_mode(agent_id, icon, enabled, &command);
     let command = with_codex_no_daemon(agent_id, icon, &command);
-    let command = with_launch_notes(agent_id, icon, &command);
+    let command = with_launch_notes(agent_id, icon, &command, coordinator);
     let command = crate::connectors::with_connector_tools(agent_id, icon, &command);
     // Last, so the steps above still read the program's own name (agent_cli/launch_path.rs).
     let command = crate::agent_cli::launch_path::with_reachable_program(&command);
@@ -1265,32 +1321,25 @@ mod launch_choice_tests {
             .as_deref(),
             Some("hermes --model anthropic/claude-sonnet-4.6 --reasoning high")
         );
-        for (agent, command) in [
-            ("cursor", "cursor-agent --model grok-4.7"),
-            ("gemini", "gemini --model grok-4.7"),
-        ] {
-            assert_eq!(
-                launch(agent, Some("grok-4.7"), None).unwrap().as_deref(),
-                Some(command)
-            );
-        }
+        assert_eq!(
+            launch("cursor", Some("grok-4.7"), None).unwrap().as_deref(),
+            Some("cursor-agent --model grok-4.7")
+        );
     }
 
     #[test]
     fn an_agent_without_an_effort_flag_refuses_only_the_effort() {
-        for agent in ["cursor", "gemini"] {
-            let refusal = launch(agent, Some("m"), Some("high")).unwrap_err();
-            assert!(
-                refusal.contains("takes a launch model but no effort"),
-                "{agent}: {refusal}"
-            );
-        }
+        let refusal = launch("cursor", Some("m"), Some("high")).unwrap_err();
+        assert!(
+            refusal.contains("takes a launch model but no effort"),
+            "{refusal}"
+        );
         assert!(launch("opencode", Some("opencode/big-pickle"), None)
             .unwrap_err()
             .contains("An OpenCode thread keeps its configured model"));
         assert!(launch("dsh", Some("deepseek-v4"), None)
             .unwrap_err()
-            .contains("Cursor CLI and Gemini take a model only"));
+            .contains("Cursor CLI takes a model only"));
         assert!(launch("copilot", None, Some("hgih"))
             .unwrap_err()
             .contains("A Copilot effort is one of"));

@@ -107,6 +107,8 @@ struct KeyField {
     unreadable: bool,
     /// The 1Password reference the key is read from, when it is kept there (Settings > Secrets).
     reference: Option<String>,
+    /// The key is the ChatGPT sign-in Codex keeps (OpenAI only).
+    chatgpt_signin: bool,
     busy: bool,
     /// The last save or remove: whether it worked and what to say.
     note: Option<(bool, String)>,
@@ -121,6 +123,9 @@ pub(crate) struct VoiceAgentTab {
     fields: FieldStates,
     xai: KeyField,
     openai: KeyField,
+    /// Codex is signed in with ChatGPT on this computer (`chatgptSignInAvailable`), so OpenAI's
+    /// key row offers "Use my ChatGPT sign-in". An older gxserver doesn't say, and never sees it.
+    chatgpt_signin_available: bool,
     read_error: Option<String>,
     /// The remembered last conversation (`memory` of `/api/readVoiceAgent`); `None` until read.
     memory: Option<serde_json::Value>,
@@ -170,6 +175,7 @@ impl VoiceAgentTab {
                 configured: None,
                 unreadable: false,
                 reference: None,
+                chatgpt_signin: false,
                 busy: false,
                 note: None,
             };
@@ -191,6 +197,7 @@ impl VoiceAgentTab {
                 window,
                 cx,
             ),
+            chatgpt_signin_available: false,
             read_error: None,
             memory: None,
             memory_pending: false,
@@ -241,7 +248,10 @@ impl VoiceAgentTab {
                                 field.configured = key["configured"].as_bool();
                                 field.unreadable = key["unreadable"].as_bool() == Some(true);
                                 field.reference = key["reference"].as_str().map(str::to_string);
+                                field.chatgpt_signin = key["chatgptSignIn"] == true;
                             }
+                            page.chatgpt_signin_available =
+                                status["chatgptSignInAvailable"] == true;
                             page.memory = Some(status["memory"].clone());
                             page.memory_pending =
                                 status["memorySummaryPending"].as_bool().unwrap_or(false);
@@ -299,6 +309,7 @@ impl VoiceAgentTab {
                             field.configured = Some(configured);
                             field.unreadable = false;
                             field.reference = typed_reference.clone().filter(|_| from_reference);
+                            field.chatgpt_signin = false;
                             field.note = Some((
                                 true,
                                 if from_reference {
@@ -311,6 +322,45 @@ impl VoiceAgentTab {
                                 } else {
                                     "Removed from this computer.".to_string()
                                 },
+                            ));
+                        }
+                        Err(error) => field.note = Some((false, error)),
+                    }
+                    cx.notify();
+                });
+            },
+            cx,
+        );
+        cx.notify();
+    }
+
+    /// "Use my ChatGPT sign-in": OpenAI's key becomes the token Codex keeps, which gxserver checks
+    /// with OpenAI now and reads from Codex each time (server/src/voice_agent/chatgpt_signin.rs).
+    fn use_chatgpt_signin(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let field = self.key(Provider::OpenAi);
+        field.busy = true;
+        field.note = None;
+        let input = field.input.clone();
+        input.update(cx, |input, cx| input.set_value("", window, cx));
+        let page = cx.entity().downgrade();
+        store_gxserver_rpc(
+            &self.store,
+            "/api/setVoiceAgentKey",
+            json!({ "provider": Provider::OpenAi.id(), "chatgptSignIn": true }),
+            SAVE_TIMEOUT,
+            move |result, cx| {
+                let _ = page.update(cx, |page, cx| {
+                    let field = page.key(Provider::OpenAi);
+                    field.busy = false;
+                    match result {
+                        Ok(_) => {
+                            field.configured = Some(true);
+                            field.unreadable = false;
+                            field.reference = None;
+                            field.chatgpt_signin = true;
+                            field.note = Some((
+                                true,
+                                "Saved. OpenAI accepted your ChatGPT sign-in; Ghostex reads it from Codex each time.".to_string(),
                             ));
                         }
                         Err(error) => field.note = Some((false, error)),
@@ -478,12 +528,21 @@ impl VoiceAgentTab {
         let configured = field.configured;
         let unreadable = field.unreadable;
         let reference = field.reference.clone();
+        let chatgpt_signin = field.chatgpt_signin;
         let busy = field.busy;
         let note = field.note.clone();
+        // CDXC:VoiceMode 2026-11-16 DECISION: GitHub #629, picked by the user: OpenAI voice can use
+        // the ChatGPT sign-in Codex keeps instead of a pasted key, offered beside Save whenever Codex
+        // is signed in with ChatGPT here and that sign-in isn't already in use.
+        let offer_signin =
+            provider == Provider::OpenAi && self.chatgpt_signin_available && !chatgpt_signin;
         let status: SharedString = match (busy, configured) {
             (true, _) => format!("Checking the key with {}…", provider.label()).into(),
             (false, _) if unreadable => {
                 "This saved key can't be read anymore. Paste it again.".into()
+            }
+            (false, Some(true)) if chatgpt_signin => {
+                "Using your ChatGPT sign-in from Codex.".into()
             }
             (false, Some(true)) => match &reference {
                 Some(reference) => format!("Read from 1Password: {reference}").into(),
@@ -494,6 +553,7 @@ impl VoiceAgentTab {
         };
         let save_id = SharedString::from(format!("{row_key}-save"));
         let remove_id = SharedString::from(format!("{row_key}-remove"));
+        let signin_id = SharedString::from(format!("{row_key}-chatgpt-signin"));
         let control = v_flex()
             .w_full()
             .gap(px(6.0))
@@ -520,6 +580,19 @@ impl VoiceAgentTab {
                         },
                         cx,
                     ))
+                    .when(offer_signin, |this| {
+                        this.child(settings_button(
+                            p,
+                            signin_id,
+                            "Use my ChatGPT sign-in",
+                            None,
+                            ButtonVariant::Outline,
+                            busy,
+                            None,
+                            move |page: &mut Self, window, cx| page.use_chatgpt_signin(window, cx),
+                            cx,
+                        ))
+                    })
                     .when(configured == Some(true) || unreadable, |this| {
                         this.child(settings_button(
                             p,
@@ -743,6 +816,9 @@ impl VoiceAgentTab {
                 let description = match key_provider {
                     Provider::Xai => {
                         "Get one at console.x.ai under API Keys. Dictation uses this key too when its engine is xAI. Each provider bills your account while a conversation is open."
+                    }
+                    Provider::OpenAi if self.chatgpt_signin_available => {
+                        "Get one at platform.openai.com under API keys, or use the ChatGPT sign-in Codex has on this computer. Dictation uses this key too when its engine is OpenAI. Each provider bills your account while a conversation is open."
                     }
                     Provider::OpenAi => {
                         "Get one at platform.openai.com under API keys. Dictation uses this key too when its engine is OpenAI. Each provider bills your account while a conversation is open."

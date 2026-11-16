@@ -33,7 +33,13 @@ pub(crate) fn write_failure(title: &str, reply: &Value) -> BeadsNotice {
         .collect::<Vec<_>>()
         .join("\n");
     let lower = output.to_lowercase();
-    let message = if lower.contains("already claimed") {
+    let error_code = reply
+        .get("error")
+        .and_then(|error| error.get("code"))
+        .and_then(Value::as_str);
+    let message = if error_code == Some("workspaceChanged") {
+        "This project now uses another Beads folder, so nothing was changed. Try again on the refreshed list."
+    } else if lower.contains("already claimed") {
         "Someone else has claimed it. Refresh to see who."
     } else if lower.contains("no issue found") || lower.contains("not found") {
         "It was deleted or renamed elsewhere. Refresh to see the current list."
@@ -338,6 +344,14 @@ impl BeadsView {
             .as_ref()
             .map(|target| target.project_path.clone())
             .unwrap_or_default();
+        if self.target.as_ref().is_some_and(|target| target.offline) {
+            return Some(card(
+                "That computer isn't connected",
+                vec!["Reconnect to it to see and change this project's beads.".to_string()],
+                None,
+                p,
+            ));
+        }
         if self.legacy {
             return Some(card(
                 "Update Ghostex on that computer",
@@ -362,6 +376,22 @@ impl BeadsView {
         };
         let notice = board_notice(&message, &project_path);
         let prompt = notice.fix_prompt.clone();
+        // Names the folder bd was asked about, so a project whose Beads folder setting points
+        // somewhere else shows where Ghostex looked (absent from older computers).
+        // bd's own words go behind Details, not into the card's sentences.
+        let raw = (snapshot.workspace.state == BeadsWorkspaceState::Failed)
+            .then(|| message.trim().to_string())
+            .filter(|raw| !raw.is_empty());
+        let mut lines: Vec<String> = notice
+            .lines
+            .iter()
+            .filter(|line| raw.as_deref() != Some(line.trim()))
+            .cloned()
+            .collect();
+        if let Some(folder) = snapshot.workspace.checked_folder.as_deref() {
+            lines.push(format!("Looked in {}", tilde_home(folder)));
+        }
+        let show_raw = self.notice_details_open == Some("beads-empty-details");
         let mut buttons = div().flex().gap(px(8.0)).child(
             kanban_button(
                 "beads-copy-fix",
@@ -390,12 +420,61 @@ impl BeadsView {
                 })),
             );
         }
+        if raw.is_some() {
+            buttons = buttons.child(
+                kanban_button(
+                    "beads-empty-details",
+                    None,
+                    Some(if show_raw { "Hide details" } else { "Details" }.into()),
+                    KanbanButtonKind::Ghost,
+                    false,
+                    p,
+                )
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.notice_details_open =
+                        if this.notice_details_open == Some("beads-empty-details") {
+                            None
+                        } else {
+                            Some("beads-empty-details")
+                        };
+                    cx.notify();
+                })),
+            );
+        }
+        let actions = div()
+            .flex()
+            .flex_col()
+            .gap(px(8.0))
+            .child(buttons)
+            .when_some(raw.filter(|_| show_raw), |this, raw| {
+                this.child(
+                    div()
+                        .p(px(8.0))
+                        .rounded(px(6.0))
+                        .bg(p.control)
+                        .font_family(crate::app::native_chat::fonts::CHAT_MONO)
+                        .text_size(px(11.0))
+                        .text_color(p.muted)
+                        .child(raw),
+                )
+            });
         Some(card(
             &notice.title,
-            notice.lines.clone(),
-            Some(buttons.into_any_element()),
+            lines,
+            Some(actions.into_any_element()),
             p,
         ))
+    }
+}
+
+/// A path under the home folder written with `~`, as the app shows paths elsewhere.
+fn tilde_home(path: &str) -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    match path.strip_prefix(home.as_str()) {
+        Some(rest) if !home.is_empty() && (rest.is_empty() || rest.starts_with('/')) => {
+            format!("~{rest}")
+        }
+        _ => path.to_string(),
     }
 }
 

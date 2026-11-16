@@ -67,6 +67,9 @@ pub(crate) fn dispatch(
     if operation == "redeemReset" {
         return super::reset_claim::redeem(state, params);
     }
+    if operation == "readUsageNow" {
+        return super::usage_screen::read_now(state, params);
+    }
     if operation == "resetWatch" {
         return super::reset_watch::endpoint(state, params);
     }
@@ -514,7 +517,7 @@ pub(crate) fn dispatch(
             )?;
             changed_sessions.push(session);
         }
-        "sessionPolicy" | "select" | "stopRecovery" => {
+        "sessionPolicy" | "select" | "stopRecovery" | "resumeRecovery" | "compactFirst" => {
             let session = get_session(&repository, params)?;
             let project = repository
                 .get_project(required(params, "projectId")?)?
@@ -541,6 +544,55 @@ pub(crate) fn dispatch(
                 // settings stop retrying is announced once (CDXC:Notifications 2026-10-31 in
                 // api_errors.rs).
                 super::api_errors::save_settings(state, &repository, &session, runtime)?;
+            } else if operation == "compactFirst" {
+                // The Compact first checkbox on a limit card a restart paused
+                // (CDXC:AgentProviders 2026-11-14 in server/src/carry_on_compaction.rs).
+                let checked = params.get("checked").and_then(Value::as_bool) == Some(true);
+                let mut recovery = runtime
+                    .get("accountRecovery")
+                    .cloned()
+                    .unwrap_or(Value::Null);
+                if recovery["status"] != "paused" {
+                    return Err(DomainStateError::bad_request(
+                        "This session is not waiting to continue.",
+                    ));
+                }
+                recovery["compactFirst"] = json!(checked);
+                if recovery["accountWait"]["compact"].is_object() {
+                    recovery["accountWait"]["compact"]["checked"] = json!(checked);
+                }
+                runtime.insert("accountRecovery".into(), recovery);
+                let row = update_session(&repository, &session, runtime)?;
+                super::limit_wait::restore(&row);
+            } else if operation == "resumeRecovery" {
+                // The limit card's Continue on a wait a restart paused (CDXC:AgentProviders
+                // 2026-11-14 in recovery.rs, Q3228): the wait goes on as if the restart had not
+                // happened, due now, so the next pass continues it or waits for the reset again.
+                let mut recovery = runtime
+                    .get("accountRecovery")
+                    .cloned()
+                    .unwrap_or(Value::Null);
+                if recovery["status"] != "paused" {
+                    return Err(DomainStateError::bad_request(
+                        "This session is not waiting to continue.",
+                    ));
+                }
+                let now = chrono::Utc::now().to_rfc3339();
+                recovery["status"] = json!("waiting");
+                recovery["reason"] = json!("Continuing after the usage limit.");
+                recovery["attempt"] = json!(0);
+                recovery["nextAttemptAt"] = json!(now);
+                recovery["updatedAt"] = json!(now);
+                if let Some(fields) = recovery.as_object_mut() {
+                    fields.remove("accountWait");
+                }
+                runtime.insert("accountRecovery".into(), recovery);
+                runtime.remove("accountRecoverySuppressed");
+                update_session(&repository, &session, runtime)?;
+                state.accounts.recovery.wake(
+                    required(params, "projectId")?,
+                    required(params, "sessionId")?,
+                );
             } else if operation == "stopRecovery" {
                 runtime.remove("accountRecovery");
                 runtime.insert("accountRecoverySuppressed".into(), json!(true));

@@ -35,6 +35,44 @@ pub(crate) fn extension_icon_color(p: &SettingsPalette) -> gpui::Rgba {
     }
 }
 
+/// A Community extension's GitHub mark, in the card's icon grey: opens its folder in the
+/// Ghostex-extensions repo (the catalog's `sourceUrl`) in the browser. A press on it never opens
+/// the card's own page.
+///
+/// CDXC:Extensions 2026-11-14 DECISION:
+/// User: "for all community extensions we have to have a small github logo on their card that takes you to their folder in the github repo for ghostex-extensions". Every card from the Community catalog (its Store card, its Installed card, its detail page) shows the real GitHub mark once, with "View source on GitHub"; built-in extensions and folder installs that aren't in the catalog have none.
+/// SEE-ALSO: server/src/extensions/catalog.rs (`fill_source_urls`), the extensions repo's tooling/build-catalog.mjs.
+pub(crate) fn github_source_button(
+    p: &SettingsPalette,
+    id: impl Into<SharedString>,
+    url: String,
+    size: f32,
+) -> AnyElement {
+    let hover = p.foreground_alpha(0.08);
+    div()
+        .id(id.into())
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        .size(px(size + 8.0))
+        .rounded(px(5.0))
+        .cursor_pointer()
+        .hover(move |this| this.bg(hsla(hover)))
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .on_click(move |_, _, cx| {
+            cx.stop_propagation();
+            cx.open_url(&url);
+        })
+        .tooltip(tooltip_text("View source on GitHub"))
+        .child(settings_icon(
+            "titlebar/github-mark.svg",
+            size,
+            extension_icon_color(p),
+        ))
+        .into_any_element()
+}
+
 /// The columns of `.extension-card-grid` for a grid `width` wide (its container queries): two
 /// cards to a row, one in a narrow column. Settings > Updates' cards use it; the Extensions page
 /// lists its cards one to a row ([`EXTENSION_LIST_COLUMNS`]).
@@ -249,6 +287,8 @@ pub(crate) struct GridCardSpec {
     /// Opens the extension's own page (its details, permissions, settings, version, remove) when
     /// the tile is clicked anywhere but its switch, its buttons and its (i).
     pub(crate) open: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
+    /// A Community extension's folder on GitHub: the GitHub mark after its title.
+    pub(crate) source_url: Option<String>,
 }
 
 /// `keep_press` around an element that is already built (the grip, the option row under the line).
@@ -381,6 +421,9 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
                 .line_height(px(15.0))
                 .text_color(hsla(p.foreground_alpha(0.8)))
                 .child(summary)
+        }))
+        .children(spec.source_url.map(|url| {
+            github_source_button(p, format!("extension-card-github-{}", spec.id), url, 14.0)
         }))
         .when(!tooltip.is_empty(), |this| {
             this.child(

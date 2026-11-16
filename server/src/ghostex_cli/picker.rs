@@ -120,13 +120,6 @@ const AGENT_PICKER_INDICATORS: &[(&str, AgentIndicator)] = &[
         },
     ),
     (
-        "gemini",
-        AgentIndicator {
-            color: "#8b9aff",
-            label: "GEM",
-        },
-    ),
-    (
         "grok",
         AgentIndicator {
             color: "#ffffff",

@@ -66,6 +66,12 @@ pub fn nudge_message() -> String {
         minutes_of(quiet_round_ms())
     )
 }
+/// Whether a message's text is Ghostex's stall nudge (`nudge_message`), whatever its minutes.
+pub fn is_stall_nudge_text(text: &str) -> bool {
+    text.trim_start()
+        .starts_with("Ghostex: no new output from you for ")
+}
+
 /// How often one session's transcript (and, once it is quiet, its screen) is looked at.
 pub(super) const STALL_CHECK_EVERY_MS: i64 = 30_000;
 /// The screen is only fingerprinted once the session has been quiet this long: one that writes

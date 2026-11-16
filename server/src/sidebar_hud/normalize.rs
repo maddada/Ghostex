@@ -15,7 +15,9 @@ pub(super) fn normalized_stored_sidebar_agents(
         let Some(agent_id) = trimmed_json_string_field(item, "agentId") else {
             continue;
         };
-        if agent_id == "campfire" || seen_agent_ids.contains(agent_id) {
+        // `gemini`: Gemini CLI was dropped on 2026-11-13 (storage migration 0078, which says why);
+        // a row synced from an older computer stays dropped too.
+        if agent_id == "campfire" || agent_id == "gemini" || seen_agent_ids.contains(agent_id) {
             continue;
         }
         let Some(name) = trimmed_json_string_field(item, "name") else {

@@ -65,7 +65,7 @@ pub(crate) const SIDEBAR_MENU_HOST_RADIUS: f32 = 8.0;
 /// CDXC:ContextMenus 2026-10-31 WHY:
 /// User, on Windows with transparency on: "when i show the context menu in the sidebar on windows and transparency is enabled i see a weird thick border from the bottom". The host window came out taller than the panel it shows (about 7px in the user's screenshot), and the panel drew at its own height, top-aligned, so the window's bare blur showed as a band below its bottom border. Every step that sizes the window (the measured height, `move_host`, GPUI's `WM_SIZE`) is exact on paper, so the panel fills its window instead and no window height can leave a band. The sidebar menu is the one host whose frame is worked out from its rows rather than taken from something already laid out (the terminal bar's ⋯ menu, Quick Access's pickers, the usage strip), and tooltips clip their blur to the bubble. macOS sizes the window to the panel and keeps drawing it at its own height.
 pub(crate) fn hosted_menu_fills_window() -> bool {
-    cfg!(target_os = "windows")
+    cfg!(all(target_os = "windows", not(ghostex_web)))
 }
 
 /// The corner radius of the sidebar's peeking usage strip, which its window's blur takes too.
@@ -85,8 +85,21 @@ pub(crate) const DOCS_SELECTION_TOOLBAR_RADIUS: f32 = 8.0;
 /// CDXC:Theming 2026-09-27 DECISION:
 /// User: "same for ones that should be glass on windows but they're not". The frosted host windows (the sidebar's menus and usage strip, tooltips, modal dropdowns, Quick Access pickers) run on Windows too, where a pop-up window is already non-activating and blurred; supersedes the macOS-only rule.
 pub(crate) fn frosted_hosting_active() -> bool {
-    cfg!(any(target_os = "macos", target_os = "windows")) && window_glass_active()
+    cfg!(any(
+        all(target_os = "macos", not(ghostex_web)),
+        all(target_os = "windows", not(ghostex_web))
+    )) && window_glass_active()
 }
+
+/// Whether a hidden host keeps its window, hidden, for its next use; elsewhere hiding closes it and
+/// the next use opens a new one.
+///
+/// CDXC:PlatformSupport 2026-11-14 WHY:
+/// The floating Ghostex page window's ⋯ menu could not be opened on Omarchy. Its page is a native browser view nothing in the window can draw over, so that menu always asks for a host window of its own (more_menu.rs), on every platform; the host only knew how to attach to a macOS view or a Windows HWND, so on Linux it opened nothing and the ⋯ press went nowhere. On Linux a host is an override-redirect pop-up owned by its window through `x11_parent` (clickable on Hyprland, placed where the app puts it, never focused) and moved against that window. X11 gives no way here to hide one and show it again where it was, so hiding closes it.
+const HIDDEN_HOSTS_KEEP_THEIR_WINDOW: bool = cfg!(any(
+    all(target_os = "macos", not(ghostex_web)),
+    all(target_os = "windows", not(ghostex_web))
+));
 
 #[derive(Default)]
 struct HostSlot {
@@ -254,11 +267,17 @@ fn apply(kind: FrostedHostKind, cx: &mut App) {
         let handle = handle.filter(|handle| handle.update(cx, |_, _, _| ()).is_ok());
         match wanted {
             None => {
-                if let Some(handle) = handle
-                    && shown.is_some()
-                {
-                    set_visible(handle.into(), None, false, cx);
-                }
+                let handle = match handle {
+                    Some(handle) if shown.is_some() && !HIDDEN_HOSTS_KEEP_THEIR_WINDOW => {
+                        let _ = handle.update(cx, |_, window, _| window.remove_window());
+                        None
+                    }
+                    Some(handle) if shown.is_some() => {
+                        set_visible(handle.into(), None, false, cx);
+                        Some(handle)
+                    }
+                    handle => handle,
+                };
                 with_slot(kind, |slot| {
                     slot.handle = handle;
                     slot.shown = None;
@@ -318,7 +337,11 @@ fn open_host(
     frame: Bounds<Pixels>,
     cx: &mut App,
 ) -> Option<WindowHandle<FrostedHostView>> {
+    // On Linux the host is owned through `x11_parent` below, not attached to a native view.
+    #[cfg(not(all(target_os = "linux", not(ghostex_web))))]
     let parent_view = native_view_of(parent, cx)?;
+    #[cfg(all(target_os = "linux", not(ghostex_web)))]
+    let parent_view = std::ptr::null_mut();
     let (origin, owner) = parent
         .update(cx, |_, window, cx| {
             (
@@ -335,6 +358,9 @@ fn open_host(
             display_id,
             titlebar: None,
             kind: gpui::WindowKind::PopUp,
+            // Owned by the window it sits over, so `move_host` can place it against that window.
+            #[cfg(all(target_os = "linux", not(ghostex_web)))]
+            x11_parent: Some(parent),
             focus: false,
             show: true,
             is_movable: false,
@@ -425,7 +451,7 @@ impl Render for FrostedHostView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // The host window is reused, so it follows the Menu blur slider here rather than at open
         // (CDXC:Theming 2026-10-15 on `apply_frosted_menu_blur`).
-        #[cfg(target_os = "macos")]
+        #[cfg(all(target_os = "macos", not(ghostex_web)))]
         apply_host_blur(window, self.kind);
         // A sidebar menu's host hands its tooltips (the New Orchestrator… (i)) to the frosted
         // tooltip window, attached above this one, so the bubble is neither clipped to the menu's
@@ -442,6 +468,8 @@ impl Render for FrostedHostView {
     }
 }
 
+// Linux hosts are owned through `x11_parent` and never need a native view.
+#[cfg_attr(all(target_os = "linux", not(ghostex_web)), allow(dead_code))]
 fn native_view_of(window: AnyWindowHandle, cx: &mut App) -> Option<*mut std::ffi::c_void> {
     window
         .update(cx, |_, window, _| native_view(window))
@@ -449,7 +477,7 @@ fn native_view_of(window: AnyWindowHandle, cx: &mut App) -> Option<*mut std::ffi
         .flatten()
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 fn native_view(window: &Window) -> Option<*mut std::ffi::c_void> {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     match HasWindowHandle::window_handle(window).ok()?.as_raw() {
@@ -458,7 +486,7 @@ fn native_view(window: &Window) -> Option<*mut std::ffi::c_void> {
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", not(ghostex_web)))]
 fn native_view(window: &Window) -> Option<*mut std::ffi::c_void> {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     match HasWindowHandle::window_handle(window).ok()?.as_raw() {
@@ -467,13 +495,17 @@ fn native_view(window: &Window) -> Option<*mut std::ffi::c_void> {
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(
+    all(target_os = "macos", not(ghostex_web)),
+    all(target_os = "windows", not(ghostex_web))
+)))]
+#[cfg_attr(all(target_os = "linux", not(ghostex_web)), allow(dead_code))]
 fn native_view(_: &Window) -> Option<*mut std::ffi::c_void> {
     None
 }
 
 /// Moves an open host onto `frame` in `parent`'s content coordinates.
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 fn move_host(
     handle: AnyWindowHandle,
     parent: AnyWindowHandle,
@@ -494,7 +526,7 @@ fn move_host(
 ///
 /// CDXC:ContextMenus 2026-10-02 WHY:
 /// `SetWindowPos` delivers `WM_SIZE` synchronously, and GPUI's resize callback updates the window's layout size through the app. Called straight from `apply` (a deferred callback that holds the app) that update failed, so a reused menu host grew to the new menu's frame but kept laying out at the previous menu's size: the agent launcher drew inside the compact session menu's 178px box and lost its last rows (New Coordinator…, Configure). The move runs from a task, as the macOS host's does, so the app is free when `WM_SIZE` arrives.
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", not(ghostex_web)))]
 fn move_host(
     handle: AnyWindowHandle,
     parent: AnyWindowHandle,
@@ -539,12 +571,28 @@ fn move_host(
     .detach();
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+/// Moves an open host onto `frame` in the content coordinates of the window it was opened over
+/// (its `x11_parent`).
+#[cfg(all(target_os = "linux", not(ghostex_web)))]
+fn move_host(handle: AnyWindowHandle, _: AnyWindowHandle, frame: Bounds<Pixels>, cx: &mut App) {
+    crate::app::native_chat::child_window::move_child_window(
+        handle,
+        std::ptr::null_mut(),
+        frame,
+        cx,
+    );
+}
+
+#[cfg(not(any(
+    all(target_os = "macos", not(ghostex_web)),
+    all(target_os = "windows", not(ghostex_web)),
+    all(target_os = "linux", not(ghostex_web))
+)))]
 fn move_host(_: AnyWindowHandle, _: AnyWindowHandle, _: Bounds<Pixels>, _: &mut App) {}
 
 /// Attaches the host above its parent without ever taking key status from it (the same attachment
 /// the composer's suggestions use), and lets a tooltip pass the mouse through.
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 fn attach_host_window(window: &mut Window, parent: *mut std::ffi::c_void, kind: FrostedHostKind) {
     let ignores_mouse = kind == FrostedHostKind::Tooltip;
     unsafe extern "C" {
@@ -580,7 +628,7 @@ fn attach_host_window(window: &mut Window, parent: *mut std::ffi::c_void, kind: 
 ///
 /// CDXC:ContextMenus 2026-09-28 WHY:
 /// GPUI activates even a `focus: false` pop-up when it is clicked, so a click on a frosted menu row deactivated the owner window first, and the owner's deactivation observer (which closes the sidebar menu when Ghostex loses focus) took the menu down before the click reached the row. The host keeps activation on its owner, as the macOS host and the titlebar dropdowns do, and as every frosted surface expects: the owner keeps the keyboard.
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", not(ghostex_web)))]
 fn attach_host_window(window: &mut Window, parent: *mut std::ffi::c_void, kind: FrostedHostKind) {
     if kind == FrostedHostKind::Tooltip {
         super::make_gpui_popup_window_click_through(window);
@@ -590,10 +638,13 @@ fn attach_host_window(window: &mut Window, parent: *mut std::ffi::c_void, kind: 
     super::own_gpui_popup_window(window, parent);
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(
+    all(target_os = "macos", not(ghostex_web)),
+    all(target_os = "windows", not(ghostex_web))
+)))]
 fn attach_host_window(_: &mut Window, _: *mut std::ffi::c_void, _: FrostedHostKind) {}
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 fn set_visible(
     handle: AnyWindowHandle,
     parent: Option<AnyWindowHandle>,
@@ -619,7 +670,7 @@ fn set_visible(
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", not(ghostex_web)))]
 fn set_visible(
     handle: AnyWindowHandle,
     _parent: Option<AnyWindowHandle>,
@@ -634,7 +685,10 @@ fn set_visible(
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(
+    all(target_os = "macos", not(ghostex_web)),
+    all(target_os = "windows", not(ghostex_web))
+)))]
 fn set_visible(_: AnyWindowHandle, _: Option<AnyWindowHandle>, _: bool, _: &mut App) {}
 
 thread_local! {
@@ -735,12 +789,14 @@ pub(crate) fn sync_frosted_tooltip_presenter(window: &mut Window, cx: &mut App) 
             .insert(window.window_handle().window_id(), window.bounds())
     });
     let wanted = frosted_hosting_active()
-        || (cfg!(any(target_os = "macos", target_os = "windows"))
-            && TOOLTIPS_ALWAYS_HOSTED.with(|hosted| {
-                hosted
-                    .borrow()
-                    .contains(&window.window_handle().window_id())
-            }));
+        || (cfg!(any(
+            all(target_os = "macos", not(ghostex_web)),
+            all(target_os = "windows", not(ghostex_web))
+        )) && TOOLTIPS_ALWAYS_HOSTED.with(|hosted| {
+            hosted
+                .borrow()
+                .contains(&window.window_handle().window_id())
+        }));
     if window.tooltip_presenter_active() == wanted {
         return;
     }

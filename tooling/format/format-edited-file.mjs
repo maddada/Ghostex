@@ -1,13 +1,13 @@
 // Formats the files an agent just edited, from a PostToolUse hook in your own untracked agent settings (.claude/settings.local.json for Claude Code, .codex/hooks.json for Codex; ai/formatting-and-file-size.md).
 // It reads the hook's JSON on stdin (Claude's `tool_input.file_path`, or the paths in Codex's `apply_patch` text); file paths given as arguments are formatted instead, for a manual run.
-// Only app-owned files are touched, by tooling/format/scope.json: Rust anywhere outside `neverFormat`, and prettier only for the files its globs cover.
+// Only app-owned files are touched, by tooling/format/scope.json: Rust anywhere outside `neverFormat`, and oxfmt (pinned in package.json) only for the files its globs cover.
 // It never fails the edit: from a hook every outcome exits 0, and a formatter error is one short line on stderr. A manual run
-// (paths as arguments) exits 1 when a formatter could not run at all (rustfmt missing, prettier not installed), so a
+// (paths as arguments) exits 1 when a formatter could not run at all (rustfmt missing, oxfmt not installed), so a
 // file left unformatted is not mistaken for a formatted one.
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 const root = realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'));
 const scope = JSON.parse(readFileSync(path.join(root, 'tooling/format/scope.json'), 'utf8'));
@@ -127,16 +127,16 @@ function formatRust(file) {
   writeIfChanged(file, before, result.stdout);
 }
 
-async function formatPrettier(file) {
-  const entry = path.join(root, 'node_modules/prettier/index.mjs');
-  if (!existsSync(entry)) return noteMissing('prettier is not installed (run bun install)');
-  const prettier = await import(pathToFileURL(entry).href);
-  const before = readFileSync(file, 'utf8');
-  const options = (await prettier.resolveConfig(file)) ?? {};
-  try {
-    writeIfChanged(file, before, await prettier.format(before, { ...options, filepath: file }));
-  } catch (error) {
-    note(`prettier left ${path.relative(root, file)} as it was: ${String(error.message).split('\n')[0]}`);
+function formatOxfmt(file) {
+  const result = spawnSync(path.join(root, 'node_modules/.bin/oxfmt'), ['--write', file], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  if (result.error) return noteMissing('oxfmt is not installed (run bun install)');
+  if (result.status !== 0) {
+    note(
+      `oxfmt left ${path.relative(root, file)} as it was: ${(result.stderr || result.stdout).trim().split('\n')[0]}`
+    );
   }
 }
 
@@ -145,7 +145,7 @@ export async function formatFile(file) {
   if (!relative || gitIgnored(relative)) return;
   const absolute = path.join(root, relative);
   if (relative.endsWith('.rs')) return formatRust(absolute);
-  if (scope.prettierGlobs.some((glob) => path.matchesGlob(relative, glob))) return formatPrettier(absolute);
+  if (scope.oxfmtGlobs.some((glob) => path.matchesGlob(relative, glob))) return formatOxfmt(absolute);
 }
 
 async function main() {

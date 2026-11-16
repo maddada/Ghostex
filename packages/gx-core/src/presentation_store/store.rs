@@ -28,6 +28,9 @@ pub struct SideState {
     /// The daemon's workspaces; `None` from a daemon without them, whose projects and Spaces show
     /// unfiltered.
     pub workspaces: Option<SidebarWorkspacesState>,
+    /// Sidebar extensions' panels (`extensionPanels`); `None` while none is on, and from an older
+    /// daemon. Only this computer's are drawn.
+    pub extension_panels: Option<ghostex_gx_protocol::extension_panel::ExtensionPanels>,
 }
 
 /// One side-state replacement, from a change frame or from a local edit of a client-owned
@@ -40,6 +43,7 @@ pub enum SideStateUpdate {
     Spaces(SidebarSpacesState),
     CustomSessionTags(CustomSessionTagsState),
     Workspaces(SidebarWorkspacesState),
+    ExtensionPanels(ghostex_gx_protocol::extension_panel::ExtensionPanels),
 }
 
 /// Whether a machine's presentation has arrived.

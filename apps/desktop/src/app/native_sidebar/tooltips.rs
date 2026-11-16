@@ -348,7 +348,7 @@ pub(crate) struct InWindowBubble {
 /// tooltip fill, nearly opaque under window glass so it still sits on the glass.
 ///
 /// CDXC:Tooltips 2026-10-25 DECISION: User, of the chat's floating Copy / Paste in terminal bar over a reply: "this floating terminal/copy thing is too clear bg, please make the bg super blurred like we do in the sidebar tool tips!!" Anything that floats over content takes this bubble's fill (the frosted host's when it draws there), never a faint wash the text underneath reads through.
-/// SEE-ALSO: apps/desktop/src/app/native_chat/run_command.rs (the inline command bar), native_chat/image_viewer/ and native_docs/picture_viewer.rs (the picture toolbars and arrows).
+/// SEE-ALSO: native_chat/image_viewer/ and native_docs/picture_viewer.rs (the picture toolbars and arrows). The chat's inline command bar and selection bar took the chat menu's look instead on 2026-11-13 (CDXC:SessionChat on `ChatMenuGlass`, native_chat/option_menu/render.rs).
 pub(crate) fn in_window_bubble(glass: bool) -> InWindowBubble {
     let fill = tooltip_background(titlebar_popup_menu_background());
     InWindowBubble {

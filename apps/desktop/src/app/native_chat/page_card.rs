@@ -214,6 +214,15 @@ impl NativeChatView {
                 .as_array()
                 .is_some_and(|ids| ids.iter().any(|id| id == page_id))
         });
+        // Answered, with the reader's answers card right under it, which names the page and opens
+        // it again (Q2995).
+        if answered
+            && page_id
+                .as_deref()
+                .is_some_and(|id| self.answers_right_below(id))
+        {
+            return div().into_any_element();
+        }
         // Its questions a later block withdrew, some or all (`withdrawnPages`, the core's
         // open_questions.rs): the card says so where an answered page says Answered.
         let withdrawn = page_id
@@ -229,7 +238,14 @@ impl NativeChatView {
                     .filter_map(Value::as_str)
                     .collect();
                 let total = entry["total"].as_u64().unwrap_or(0) as usize;
-                if tags.len() >= total {
+                // A newer `ghostex show` of the same file replaced it (the core's
+                // `Asker::replaced`); the newest card is the page.
+                if entry["replaced"] == true {
+                    (
+                        "Replaced".to_string(),
+                        "Replaced by a newer version of this page".to_string(),
+                    )
+                } else if tags.len() >= total {
                     (
                         "Withdrawn".to_string(),
                         "Withdrawn, no answer needed".to_string(),
@@ -256,7 +272,20 @@ impl NativeChatView {
             .filter(|_| !answered)
             .and_then(|page_id| self.question_section_of(page_id))
             .is_some_and(|section| section == "canceled");
-        let withdrawn = if canceled {
+        // A page that waited only to be looked at and was cleared from the dock (Mark all seen,
+        // Dismiss) reads Seen, as one marked seen on the page does (gx-chat-core
+        // questions/later.rs `mark_seen`).
+        let seen_only = page.awaits_seen && page.questions.is_none();
+        // A page its agent retired is on that removed list too, but reads Replaced
+        // (`withdrawnPages`' `replaced`, gx-chat-core transcript/document.rs).
+        let replaced = page_id
+            .as_deref()
+            .is_some_and(|id| self.snapshot["withdrawnPages"][id]["replaced"] == true);
+        let withdrawn = if replaced {
+            withdrawn
+        } else if canceled && seen_only {
+            Some(("Seen".to_string(), "Seen, no answer needed".to_string()))
+        } else if canceled {
             Some((
                 "Canceled".to_string(),
                 "Canceled, no answer needed".to_string(),
@@ -356,11 +385,20 @@ impl NativeChatView {
                     .text_color(p.muted)
                     .child(bar_label),
             )
-            // Balances the dots so the name sits in the middle of the bar.
+            // Balances the dots so the name sits in the middle of the bar, and holds the page's
+            // star at its right end (gx-chat-core questions/later.rs `starred_page_ids`).
             .child(
                 div()
                     .flex_shrink_0()
-                    .w(px((v.dot_size * 3.0 + v.dot_gap * 2.0) * s)),
+                    .w(px((v.dot_size * 3.0 + v.dot_gap * 2.0) * s))
+                    .flex()
+                    .justify_end()
+                    .when_some(page_id.clone(), |this, page_id| {
+                        let starred = self.snapshot["starredPages"]
+                            .as_array()
+                            .is_some_and(|ids| ids.iter().any(|id| id == page_id.as_str()));
+                        this.child(star_button(key, &page_id, starred, p, cx))
+                    }),
             );
         let preview = div()
             .relative()
@@ -571,6 +609,56 @@ impl NativeChatView {
     }
 }
 
+/// The star at the right end of the card's window bar: yellow and filled once the page is starred,
+/// a quiet outline otherwise. Its press never opens the page behind it.
+///
+/// CDXC:SessionChat 2026-11-16 DECISION:
+/// The user picked the window bar for the card's star (Q3544 on the star-resources page); the rest
+/// of the decision is on gx-chat-core questions/later.rs `starred_page_ids`.
+fn star_button(
+    key: &str,
+    page_id: &str,
+    starred: bool,
+    p: &ChatAppearance,
+    cx: &Context<NativeChatView>,
+) -> AnyElement {
+    let s = p.scale;
+    let label = if starred { "Unstar page" } else { "Star page" };
+    let action = json!({"type": "pageStar", "id": page_id, "starred": !starred});
+    let (icon, color) = if starred {
+        (
+            "titlebar/star-filled.svg",
+            gpui::Hsla::from(gpui::rgb(STAR_YELLOW)),
+        )
+    } else {
+        ("titlebar/star.svg", p.muted)
+    };
+    let hover = p.foreground;
+    div()
+        .id(SharedString::from(format!("visual-page-star:{key}")))
+        .role(gpui::Role::Button)
+        .aria_label(label)
+        .flex_shrink_0()
+        .size(px(22.0 * s))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(5.0 * s))
+        .chat_cursor_pointer()
+        .hover(move |style| style.bg(hover.opacity(0.08)))
+        .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(label).build(window, cx))
+        .child(svg().path(icon).size(px(14.0 * s)).text_color(color))
+        .on_click(cx.listener(move |this, _, _, cx| {
+            cx.stop_propagation();
+            this.invoke(action.clone(), cx)
+        }))
+        .into_any_element()
+}
+
+/// The star yellow of a starred page (the settings' favourite star,
+/// window/settings_modal/fields/tag_list.rs).
+pub(super) const STAR_YELLOW: u32 = 0xf3cd5f;
+
 /// The filled button the card opens its page with (also the hover label over the picture).
 /// "For later" on a page still waiting, "Back to unanswered" on one put off: the question form's
 /// quiet button (`ask_soft_button`), which keeps its press from opening the page behind it.
@@ -616,7 +704,7 @@ fn later_button(
 
 /// The address of the page's exported file (server/src/visual_pages/exported.rs): the page's own
 /// address with `/export`, which the reader's browser downloads.
-#[cfg(target_arch = "wasm32")]
+#[cfg(ghostex_web)]
 fn exported_page_url(url: &str) -> String {
     let end = url.find(['?', '#']).unwrap_or(url.len());
     format!("{}/export", url[..end].trim_end_matches('/'))
@@ -638,9 +726,9 @@ fn export_button(
     // The desktop has its own gxserver build the file and saves it (app/visual_page_modal_lifecycle.rs
     // `export_visual_page_to_file`), which works for a page on a computer with an older Ghostex; the
     // web build hands the page's export address to the browser.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(ghostex_web))]
     let action = json!({"type": "exportVisualPage", "url": export_url});
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(ghostex_web)]
     let action = json!({"type": "openMarkdownLink", "href": exported_page_url(&export_url), "external": true});
     div()
         .id(SharedString::from(format!("visual-page-export:{key}")))
@@ -674,9 +762,9 @@ fn export_button(
         .child("Export")
         .on_click(cx.listener(move |this, _, _, cx| {
             cx.stop_propagation();
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(ghostex_web))]
             cx.emit(super::state::NativeChatEvent::Host(action.clone()));
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(ghostex_web)]
             this.invoke(action.clone(), cx);
             let _ = &this;
         }))

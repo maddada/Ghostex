@@ -8,9 +8,12 @@ mod gxserver;
 mod help;
 mod http;
 mod isolated;
+mod linux_desktop;
 mod mobile_chat_wasm;
 mod rebuild;
 mod remote_build;
+#[cfg(unix)]
+mod setup_worktree;
 mod start;
 mod start_server;
 mod tasks;
@@ -26,7 +29,7 @@ Desktop app
                           --debug-info builds with symbols for crash debugging, off by default;
                           --install-only installs the already staged build on Linux and Windows)
   rebuild [--dry-run] [--allow-dirty] [--no-health-check] [--wait[=<minutes>]] [--log-dir <dir>] [--optimized]
-                          macOS, for a coordinator's background shell: start from committed code only, into a numbered
+                          macOS and Linux, for a coordinator's background shell: start from committed code only, into a numbered
                           log (~/.local/share/agent-work/Ghostex/rebuilds), retrying kache's known flake once, then
                           print a short summary (result, time, gxserver and app pids, a health check a minute later, log, last errors)
   remote-start [--repo <owner/name>] [--build-only]
@@ -38,6 +41,9 @@ Desktop app
   gx-isolated [--isolated=<variant>] [--print | <ghostex arguments>]
                           run an isolated variant's ghostex CLI
   setup-windows           Windows: install the build prerequisites and prepare sources
+  setup-worktree [--with <submodule path>]... [--no-zmx]
+                          macOS and Linux: prepare a fresh `git worktree` for building: build submodules at their pins (fetched from the
+                          main checkout's copies), its CEF and Zig package caches, bun install, a ReleaseSafe zmx
 
 Testing
   test-server start [--name <n>] [--projects <path>...] [--port <p>] [--no-build] [--dry-run] | env <name> | stop <name> | remove <name> | list
@@ -47,12 +53,14 @@ Testing
 Web build
   web-build [--debug]     build apps/gpui-web into apps/gpui-web/www/dist
   web-dev [--debug]       build the wasm and run the Vite dev server on :4174
+  web-test [<cargo test arguments>]
+                          macOS and Linux: run apps/gpui-web's tests on this computer (native, not wasm)
   start-web [<ghostex web arguments>]
                           build the web app and serve it with `ghostex web` on :4173
 
 Checks and generators
   typecheck               root gate (storage lint, Help files, tsc, release scripts, formatting)
-  format                  format every app-owned file (cargo fmt per crate, prettier; tooling/format/scope.json)
+  format                  format every app-owned file (cargo fmt per crate, oxfmt; tooling/format/scope.json)
   format-check            fail when an app-owned file is not formatted (part of typecheck)
   desktop-typecheck       apps/desktop/tsconfig.json (CEF entry modules, Files embed page)
   test [<vitest arguments>]
@@ -106,8 +114,16 @@ fn main() {
             Err("test-server runs on macOS and Linux (gxserver's zmx sessions).".into())
         }
         "setup-windows" => tasks::setup_windows(&args),
+        #[cfg(unix)]
+        "setup-worktree" => setup_worktree::run(&args),
+        #[cfg(not(unix))]
+        "setup-worktree" => Err(
+            "setup-worktree runs on macOS and Linux. On Windows, `cargo xtask setup-windows` prepares the sources."
+                .into(),
+        ),
         "web-build" => tasks::web_build(&args),
         "web-dev" => tasks::web_dev(&args),
+        "web-test" => tasks::web_test(&args),
         "start-web" => tasks::start_web(&args),
         "typecheck" => tasks::typecheck(&args),
         "format" => format::run(&args),

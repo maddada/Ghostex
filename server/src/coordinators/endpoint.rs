@@ -103,10 +103,15 @@ pub fn handle_coordinator_endpoint(
             resolve_coordinator(db, &key)?;
             let threads = super::panel::cached_thread_rows(&key);
             let chat_tags = crate::session_chat_open_questions::asked_question_tags(&key.0, &key.1);
+            // A coordinator's own Needs you to-dos hold their tags too (session_needs_you/).
             let ask_floor =
-                crate::session_chat_open_questions::highest_question_tag(&key.0, &key.1);
+                crate::session_chat_open_questions::highest_question_tag(&key.0, &key.1)
+                    .max(crate::session_needs_you::highest_tag(db, &key));
+            // `fromThread` is gxserver's own mark (session_needs_you/thread.rs), never a caller's.
+            let mut params = params.clone();
+            params.remove("fromThread");
             let (result, _) = super::work::handle_work_request(
-                db, &key, &threads, params, ask_floor, &chat_tags,
+                db, &key, &threads, &params, ask_floor, &chat_tags,
             )?;
             Ok(CoordinatorEndpointOutput {
                 result,
@@ -349,8 +354,9 @@ pub fn handle_coordinator_endpoint(
             if held.is_some() {
                 set_thread_observed_working(db, &thread_key.0, &thread_key.1)?;
             }
-            if changed && !close_session {
-                set_parked(repository, &thread_key, resolved)?;
+            // Resolving never parks (see `set_parked`); a reopen still takes a thread out of Parked.
+            if changed && !resolved {
+                set_parked(repository, &thread_key, false)?;
             }
             let thread = read_thread(db, &thread_key.0, &thread_key.1)?
                 .ok_or_else(|| DomainStateError::not_found("The thread disappeared."))?;
@@ -443,6 +449,9 @@ fn refuse_closing_unfinished(
 
 /// CDXC:Coordinators 2026-10-01 DECISION:
 /// User: "If I close those threads in the sidebar, would we still be able to reopen them and send there later if needed? Can we start doing this to make the sidebar less cluttered? Instead of moving them to Parked." So `ghostex coordinator resolve` closes a finished thread's session (`closeSession`, which skips parking) and `reopen` or a coordinator's message resumes the same conversation. Only `resolve --keep-open` still parks a done thread, so the sidebar's Sessions list keeps only the work in flight, and reopening unparks it. Supersedes the 2026-09-30 rule that every done thread was parked.
+///
+/// CDXC:Coordinators 2026-11-14 DECISION:
+/// User: "i want u to stop parking sessions that are created by the coordinator after they're done. they should just always appear under the agent that created them, never get moved to parked". Ghostex never parks a coordinator's thread: `resolve --keep-open` (and Mark Thread Done with the session kept open) only marks it done, so it stays under its coordinator, drawn as done, and the Work panel's Clean up leaves a thread unparked too (route_http/work_links.rs). Only the user parks a thread, by hand. A reopen still unparks, so a thread the coordinator takes up again is back in its tree. Storage migration 0079 unparked, once, the done threads earlier versions had parked. Supersedes the 2026-10-01 rule that `--keep-open` parks a done thread.
 pub(super) fn set_parked(
     repository: &DomainRepository<'_>,
     key: &SessionKey,

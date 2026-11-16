@@ -24,7 +24,6 @@ use std::rc::Rc;
 
 /// The colour Terminal background starts from when Follow theme is turned off.
 const TERMINAL_BACKGROUND_STARTING_COLOR: &str = "#111111";
-const SHADER_BACKGROUND_OVERRIDE_REASON: &str = "Custom shaders use the background from Ghostex's terminal config. To edit this override, turn Terminal shaders off in Settings > Extensions > Experimental; your saved choice will return.";
 
 fn option(label: &str, value: &str) -> SettingOption {
     SettingOption {
@@ -354,12 +353,17 @@ fn terminal_section(
             ));
         }
     }
-    if g.visible(s, "terminalBackgroundMode") {
+    // CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): with Terminal shaders on (macOS) the
+    // shaders draw the background from Ghostex's terminal config, so Terminal background and its
+    // colour are hidden instead of greyed out; the saved choice returns when shaders go off.
+    let shaders_own_background =
+        cfg!(target_os = "macos") && g.values.bool("terminalShadersEnabled");
+    if !shaders_own_background && g.visible(s, "terminalBackgroundMode") {
         let spec = g.spec(
             "terminalBackgroundMode",
             "Terminal background",
             "Only changes the terminal panes. Black / white is pure black in dark mode and pure white in light mode.",
-        ).disabled_reason((cfg!(target_os = "macos") && g.values.bool("terminalShadersEnabled")).then(|| SHADER_BACKGROUND_OVERRIDE_REASON.into()));
+        );
         let options = vec![
             option("Black / white", "pure"),
             option("Follow theme", "theme"),
@@ -394,7 +398,8 @@ fn terminal_section(
             cx,
         ));
     }
-    if g.values.string("terminalBackgroundMode") == "custom"
+    if !shaders_own_background
+        && g.values.string("terminalBackgroundMode") == "custom"
         && g.visible(s, "workspaceBackgroundColor")
     {
         let spec = g
@@ -403,8 +408,7 @@ fn terminal_section(
                 "Terminal background color",
                 "Painted behind terminal text in dark and light mode. Window glass keeps the theme.",
             )
-            .dependent()
-            .disabled_reason((cfg!(target_os = "macos") && g.values.bool("terminalShadersEnabled")).then(|| SHADER_BACKGROUND_OVERRIDE_REASON.into()));
+            .dependent();
         let value = g.values.string("workspaceBackgroundColor");
         rows.push(color_field(
             page,
@@ -519,6 +523,10 @@ fn terminal_section(
     // CDXC:Settings 2026-10-29 DECISION (cleanup Q15): Terminal width is one slider (100% is the
     // full pane, so the Full choice is gone) and Match chat a switch; Padding is one slider that
     // sets both axes.
+    // CDXC:Settings 2026-11-14 DECISION (AGENTS.md; Q3110, user: "fix all these too but make sure
+    // ux makes sense after fix"): Match chat width comes first and Terminal width (%) shows only
+    // while it is off, since the slider does nothing while the terminal matches the chat. Before,
+    // the slider came first with Match chat width as its ↳ row.
     let width_mode = g.values.string("terminalViewWidthMode");
     let width_percent = if width_mode == "full" {
         100.0
@@ -526,65 +534,6 @@ fn terminal_section(
         g.values.f64("terminalViewWidthPercent")
     };
     if g.any_visible(s, &["terminalViewWidthPercent", "terminalViewWidthMode"]) {
-        let spec = g
-            .spec(
-                "terminalViewWidthPercent",
-                "Terminal width (%)",
-                "The centered terminal body's width. 100% uses the whole pane; panes 1070px wide or narrower always stay full-width.",
-            )
-            .modified(
-                g.values.is_modified("terminalViewWidthPercent")
-                    || g.values.is_modified("terminalViewWidthMode"),
-            );
-        let reset = Rc::new(
-            |page: &mut GeneralTab, _window: &mut Window, cx: &mut Context<GeneralTab>| {
-                let store = page.store.clone();
-                store.update(cx, |store, cx| {
-                    store.reset_setting("terminalViewWidthPercent", cx);
-                    store.reset_setting("terminalViewWidthMode", cx);
-                });
-            },
-        );
-        let saver: SliderSaver = Rc::new(
-            |store: &Entity<SettingsStore>, value: f64, commit: bool, cx: &mut App| {
-                let percent = value.round().clamp(50.0, 100.0) as i64;
-                store.update(cx, |store, cx| {
-                    if !commit {
-                        store.update_setting_debounced(
-                            "terminalViewWidthPercent",
-                            json!(percent),
-                            cx,
-                        );
-                        return;
-                    }
-                    let mut patch = Map::new();
-                    patch.insert("terminalViewWidthPercent".to_string(), json!(percent));
-                    if store.values().string("terminalViewWidthMode") != "match-chat" {
-                        patch.insert(
-                            "terminalViewWidthMode".to_string(),
-                            json!(if percent >= 100 { "full" } else { "custom" }),
-                        );
-                    }
-                    store.apply_patch(patch, "settings:control", cx);
-                });
-            },
-        );
-        rows.push(slider_number_field_with(
-            page,
-            &p,
-            spec,
-            Some(reset),
-            SliderBinding {
-                key: "terminalViewWidthPercent",
-                min: g.number("MIN_TERMINAL_VIEW_WIDTH_PERCENT"),
-                max: g.number("MAX_TERMINAL_VIEW_WIDTH_PERCENT"),
-                step: g.number("TERMINAL_VIEW_WIDTH_PERCENT_STEP"),
-            },
-            width_percent,
-            saver,
-            window,
-            cx,
-        ));
         let match_chat = width_mode == "match-chat";
         rows.push(toggle_field_with(
             &p,
@@ -592,9 +541,8 @@ fn terminal_section(
             g.spec(
                 "terminalViewWidthMode",
                 "Match chat width",
-                "Make the terminal body the same width as the chat transcript instead of the width above.",
-            )
-            .dependent(),
+                "Make the terminal body the same width as the chat transcript. Off, Terminal width below sets it.",
+            ),
             match_chat,
             Some(reset_key::<GeneralTab>("terminalViewWidthMode")),
             move |page: &mut GeneralTab, checked, _window, cx| {
@@ -609,6 +557,67 @@ fn terminal_section(
             },
             cx,
         ));
+        if !match_chat {
+            let spec = g
+                .spec(
+                    "terminalViewWidthPercent",
+                    "Terminal width (%)",
+                    "The centered terminal body's width. 100% uses the whole pane; panes 1070px wide or narrower always stay full-width.",
+                )
+                .modified(
+                    g.values.is_modified("terminalViewWidthPercent")
+                        || g.values.is_modified("terminalViewWidthMode"),
+                );
+            let reset = Rc::new(
+                |page: &mut GeneralTab, _window: &mut Window, cx: &mut Context<GeneralTab>| {
+                    let store = page.store.clone();
+                    store.update(cx, |store, cx| {
+                        store.reset_setting("terminalViewWidthPercent", cx);
+                        store.reset_setting("terminalViewWidthMode", cx);
+                    });
+                },
+            );
+            let saver: SliderSaver = Rc::new(
+                |store: &Entity<SettingsStore>, value: f64, commit: bool, cx: &mut App| {
+                    let percent = value.round().clamp(50.0, 100.0) as i64;
+                    store.update(cx, |store, cx| {
+                        if !commit {
+                            store.update_setting_debounced(
+                                "terminalViewWidthPercent",
+                                json!(percent),
+                                cx,
+                            );
+                            return;
+                        }
+                        let mut patch = Map::new();
+                        patch.insert("terminalViewWidthPercent".to_string(), json!(percent));
+                        if store.values().string("terminalViewWidthMode") != "match-chat" {
+                            patch.insert(
+                                "terminalViewWidthMode".to_string(),
+                                json!(if percent >= 100 { "full" } else { "custom" }),
+                            );
+                        }
+                        store.apply_patch(patch, "settings:control", cx);
+                    });
+                },
+            );
+            rows.push(slider_number_field_with(
+                page,
+                &p,
+                spec,
+                Some(reset),
+                SliderBinding {
+                    key: "terminalViewWidthPercent",
+                    min: g.number("MIN_TERMINAL_VIEW_WIDTH_PERCENT"),
+                    max: g.number("MAX_TERMINAL_VIEW_WIDTH_PERCENT"),
+                    step: g.number("TERMINAL_VIEW_WIDTH_PERCENT_STEP"),
+                },
+                width_percent,
+                saver,
+                window,
+                cx,
+            ));
+        }
     }
     if width_mode != "full" {
         rows.extend(page.toggle(g, s, "terminalWidthApplyToCommandPaneTerminals", "Use this width in the Commands pane too", "Use the same centered width for terminals in the command pane. Padding remains shared across terminal types.", true, cx));

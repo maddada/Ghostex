@@ -481,11 +481,11 @@ fn move_to_group_item(id: &str, moves: Option<&SessionGroupMoves>, stale: bool) 
 }
 
 /// An orchestrator's Goal & Instructions, Memory, View playbook and Playbook overrides, and a thread's Mark Thread Done or
-/// Reopen Thread, after a separator. An orchestrator's block goes on with Sleep Inactive Threads.
+/// Reopen Thread, after a separator. An orchestrator's rows (and Sleep Inactive Threads) sit in one Coordinator submenu.
 ///
 /// CDXC:Coordinators 2026-10-13 DECISION:
 /// User: "Mark done / Reopen on threads, Goal & instructions and Memory editing on coordinators on both the phone and the desktop" (2026-10-01), ported onto the Orchestrator menus ("port all of it, rebased onto main"). Goal & Instructions and Memory open editors that save through gxserver; Mark Thread Done does what `ghostex orchestrator resolve` does (marks the thread done and closes its session) and is disabled while the thread works or waits on an answer, which resolve refuses; Reopen Thread shows instead on a done thread still in the list. A machine that is not connected gets none of them. The phone's menu (`apps/mobile/app/src/screens/sessions-screen/sidebar-menus.ts`) must match.
-fn coordinator_rows(row: &SessionRow, stale: bool) -> Vec<MenuItem> {
+fn coordinator_rows(row: &SessionRow, stale: bool, has_inactive_threads: bool) -> Vec<MenuItem> {
     if stale || row.is_draft {
         return Vec::new();
     }
@@ -504,31 +504,57 @@ fn coordinator_rows(row: &SessionRow, stale: bool) -> Vec<MenuItem> {
                 MenuCommand::coordinator_session(id, "makeMain"),
             ));
         }
-        rows.push(MenuItem::row(
-            "Goal & Instructions…",
-            "checklist",
-            MenuCommand::coordinator_session(id, "goal"),
-        ));
-        rows.push(MenuItem::row(
-            "Memory…",
-            "brain",
-            MenuCommand::coordinator_session(id, "memory"),
-        ));
-        // CDXC:Coordinators 2026-11-09 WHY: the user, after View playbook had shipped inside the
-        // New Coordinator dialog, Settings and the overrides editor: "i still don't know how a
-        // user can see the coordinator playbook". The playbook this coordinator reads (Ghostex's,
-        // the reply format, then the user's overrides) opens straight from its own menu.
-        rows.push(MenuItem::row(
-            "View playbook",
-            "book",
-            MenuCommand::coordinator_session(id, "viewPlaybook"),
-        ));
-        // CDXC:Coordinators 2026-11-07: the user's playbook overrides (for every coordinator on
-        // this one's computer) open from here too; see server/src/coordinators/playbook.rs.
-        rows.push(MenuItem::row(
-            "Playbook overrides…",
-            "pencil",
-            MenuCommand::coordinator_session(id, "playbookOverrides"),
+        // CDXC:Coordinators 2026-11-16 DECISION:
+        // User (Android screenshot of the long-press menu of a coordinator): "the context menu for
+        // coordinator is too long. Also view playbook didn't have icon. Pls put all these under 1
+        // menu", then confirmed the desktop gets the same. Goal & Instructions, Memory, View
+        // playbook, Playbook overrides and Sleep Inactive Threads are one "Coordinator" submenu
+        // (the coordinator's crown icon) where the loose rows were; Make main coordinator stays a
+        // row of its own above it. View playbook's icon (`book`) is drawn on the phone too. The
+        // phone's menu (`apps/mobile/app/src/screens/sessions-screen/sidebar-menus.ts`) must match.
+        let mut children = vec![
+            MenuItem::row(
+                "Goal & Instructions…",
+                "checklist",
+                MenuCommand::coordinator_session(id, "goal"),
+            ),
+            MenuItem::row(
+                "Memory…",
+                "brain",
+                MenuCommand::coordinator_session(id, "memory"),
+            ),
+            // CDXC:Coordinators 2026-11-09 WHY: the user, after View playbook had shipped inside the
+            // New Coordinator dialog, Settings and the overrides editor: "i still don't know how a
+            // user can see the coordinator playbook". The playbook this coordinator reads (Ghostex's,
+            // the reply format, then the user's overrides) opens straight from its own menu.
+            MenuItem::row(
+                "View playbook",
+                "book",
+                MenuCommand::coordinator_session(id, "viewPlaybook"),
+            ),
+            // CDXC:Coordinators 2026-11-07: the user's playbook overrides (for every coordinator on
+            // this one's computer) open from here too; see server/src/coordinators/playbook.rs.
+            MenuItem::row(
+                "Playbook overrides…",
+                "pencil",
+                MenuCommand::coordinator_session(id, "playbookOverrides"),
+            ),
+        ];
+        // CDXC:Coordinators 2026-10-13 SEE-ALSO: the user's decision on `coordinator_thread_keys` in sidebar_actions/bulk.rs ("right click on orchestrator and sleep", "Should just be sleep inactive not park"). Disabled, like the project menu's Sleep Inactive, when no thread can be slept.
+        if !row.is_draft {
+            children.push(
+                MenuItem::row(
+                    "Sleep Inactive Threads",
+                    "moon",
+                    MenuCommand::command(message::sleep_inactive_coordinator_threads(id)),
+                )
+                .with_disabled(!has_inactive_threads),
+            );
+        }
+        rows.push(MenuItem::submenu(
+            "Coordinator",
+            "coordinator-crown-points",
+            children,
         ));
     } else if row.coordinator_parent.is_some() {
         let state = row.thread_state.as_deref();
@@ -587,46 +613,43 @@ fn full_menu(
     CDXC:ContextMenus 2026-10-01 DECISION:
     The user wants the session menu in ChatGPT's conversation-menu order (Rename, Pin, Mark as unread, Archive, then Section after a line), mirrored hover buttons included: "why is rename below those other buttons? match the order of ChatGPT". The rows run Rename, Pin, Snooze, Park, Sleep, Note, then Tag As after a separator, whether a row is there as a mirrored hover button or on its own; this supersedes the mirrored buttons leading the menu in the card's right-to-left order. Note shows here only as a mirrored hover button and otherwise sits first in Advanced. Close keeps its hover-strip rule, and Fork stays in Advanced (Copy Details moved into the Copy submenu on 2026-10-09, sidebar_menu/copy.rs). The phone's menu (`apps/mobile/app/src/screens/sessions-screen/sidebar-menus.ts`) must match.
     */
-    const PRIMARY_ORDER: [HoverAction; 7] = [
-        HoverAction::Rename,
-        HoverAction::Pin,
+    /*
+    CDXC:ContextMenus 2026-11-15 DECISION:
+    User (Android screenshot of the long-press menu running off the screen): "This is too long", then picked the quick row with "Put sleep under advanced, 4 quick actions only pls" (Q3420 C) and the same change on the desktop's right-click menu (Q3421 Yes). The menu opens with a row of icon buttons, Rename, Pin and Copy ID (the phone adds Voice Call, which the desktop has no row for), then Snooze, Park, Note and Tag As as rows with no line between them; Sleep (or Wake) moves to the top of Advanced. Each keeps its hover-strip rule (`shown`). Supersedes Copy ID's own row above Tag As (2026-11-12, copy.rs); the order inside the list is still ChatGPT's (2026-10-01). The phone's menu (`apps/mobile/app/src/screens/sessions-screen/sidebar-menus.ts`) must match.
+    */
+    let shown = |action: HoverAction| {
+        mirror.contains(&action) || (action != HoverAction::Note && !enabled.contains(&action))
+    };
+    let mut menu: Vec<MenuItem> = Vec::new();
+    let mut quick: Vec<MenuItem> = Vec::new();
+    for action in [HoverAction::Rename, HoverAction::Pin] {
+        if let Some(item) = rows.get(action).filter(|_| shown(action)) {
+            quick.push(if action == HoverAction::Pin && !row.is_pinned {
+                MenuItem {
+                    icon: Some("pin-outline".to_string()),
+                    ..item.clone()
+                }
+            } else {
+                item.clone()
+            });
+        }
+    }
+    quick.extend(super::copy::copy_id_row(row, group));
+    if !quick.is_empty() {
+        menu.push(MenuItem::quick_row(quick));
+    }
+    for action in [
         HoverAction::Snooze,
         HoverAction::Park,
-        HoverAction::Sleep,
         HoverAction::Note,
         HoverAction::Tag,
-    ];
-    let mut menu: Vec<MenuItem> = Vec::new();
-    // Copy ID opens the block after the line, right above Tag As (CDXC:ContextMenus 2026-11-12 in
-    // copy.rs), and keeps that place when Tag As is not in the menu.
-    let copy_id = super::copy::copy_id_row(row, group);
-    for action in PRIMARY_ORDER {
-        let shown = if mirror.contains(&action) {
-            true
-        } else {
-            action != HoverAction::Note && !enabled.contains(&action)
-        };
-        let item = rows.get(action).filter(|_| shown);
-        if action == HoverAction::Tag {
-            if !menu.is_empty() && (copy_id.is_some() || item.is_some()) {
-                menu.push(MenuItem::separator());
-            }
-            menu.extend(copy_id.clone());
+    ] {
+        if let Some(item) = rows.get(action).filter(|_| shown(action)) {
+            menu.push(item.clone());
         }
-        let Some(item) = item else {
-            continue;
-        };
-        menu.push(if action == HoverAction::Pin && !row.is_pinned {
-            MenuItem {
-                icon: Some("pin-outline".to_string()),
-                ..item.clone()
-            }
-        } else {
-            item.clone()
-        });
     }
 
-    let mut coordinator_block = coordinator_rows(row, group.is_stale);
+    let mut coordinator_block = coordinator_rows(row, group.is_stale, input.has_inactive_threads);
     let has_coordinator_block = !coordinator_block.is_empty();
     // Its separator only divides it from rows above, so a menu never opens on a line.
     if has_coordinator_block && menu.is_empty() {
@@ -634,9 +657,9 @@ fn full_menu(
     }
     menu.extend(coordinator_block);
 
-    // CDXC:Coordinators 2026-10-13 SEE-ALSO: the user's decision on `coordinator_thread_keys` in sidebar_actions/bulk.rs ("right click on orchestrator and sleep", "Should just be sleep inactive not park"). Disabled, like the project menu's Sleep Inactive, when no thread can be slept.
-    if row.is_coordinator && !row.is_draft {
-        if !has_coordinator_block && !menu.is_empty() {
+    // A coordinator whose computer is not connected has no Coordinator submenu (`coordinator_rows`), so its Sleep Inactive Threads stays a row of its own, as before.
+    if row.is_coordinator && !row.is_draft && !has_coordinator_block {
+        if !menu.is_empty() {
             menu.push(MenuItem::separator());
         }
         menu.push(
@@ -720,6 +743,10 @@ fn full_menu(
     }
 
     let mut advanced: Vec<MenuItem> = vec![MenuItem::heading("Session")];
+    // Sleep sits first in Advanced (CDXC:ContextMenus 2026-11-15 above).
+    if let Some(item) = rows.get(HoverAction::Sleep).filter(|_| shown(HoverAction::Sleep)) {
+        advanced.push(item.clone());
+    }
     if !enabled.contains(&HoverAction::Note) {
         if let Some(item) = &rows.note {
             advanced.push(item.clone());

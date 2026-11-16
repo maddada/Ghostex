@@ -139,6 +139,22 @@ pub(in crate::server) async fn route_http(
         .await;
     }
 
+    // The scoped extension API (server/src/extensions/ext_api.rs): it settles its own callers, so
+    // an extension's token reaches these routes and, at the token gate below, only its three old
+    // endpoints.
+    if path.starts_with(crate::extensions::ext_api::EXT_API_ROUTE_PREFIX) {
+        let query = parts.uri.query().map(str::to_string);
+        return crate::extensions::ext_api::serve_ext_api(
+            state.clone(),
+            method,
+            path,
+            query,
+            parts.headers,
+            body,
+        )
+        .await;
+    }
+
     if path.starts_with(crate::connected_computers::RELAY_ROUTE_PREFIX) {
         /*
         CDXC:SessionLinks 2026-11-08 FIX:
@@ -410,10 +426,15 @@ pub(in crate::server) async fn route_http(
                     size_bytes,
                     limit_bytes: body_limit_bytes,
                 });
+                response.response.extensions_mut().insert(BodyReadFailure {
+                    code: "payloadTooLarge",
+                    received_bytes: None,
+                    declared_bytes: content_length(&parts.headers),
+                });
                 return response;
             }
             Err(ReadBodyError::InvalidJson) => {
-                return routed_json(
+                let mut response = routed_json(
                     Some(endpoint.path),
                     StatusCode::BAD_REQUEST,
                     rpc_error(
@@ -422,9 +443,15 @@ pub(in crate::server) async fn route_http(
                         Some(request_id),
                     ),
                 );
+                response.response.extensions_mut().insert(BodyReadFailure {
+                    code: "badRequest",
+                    received_bytes: None,
+                    declared_bytes: content_length(&parts.headers),
+                });
+                return response;
             }
-            Err(ReadBodyError::Incomplete) => {
-                return routed_json(
+            Err(ReadBodyError::Incomplete { received_bytes }) => {
+                let mut response = routed_json(
                     Some(endpoint.path),
                     StatusCode::BAD_REQUEST,
                     rpc_error(
@@ -433,6 +460,12 @@ pub(in crate::server) async fn route_http(
                         Some(request_id),
                     ),
                 );
+                response.response.extensions_mut().insert(BodyReadFailure {
+                    code: "incompleteRequest",
+                    received_bytes: Some(received_bytes),
+                    declared_bytes: content_length(&parts.headers),
+                });
+                return response;
             }
         }
     } else {
@@ -639,6 +672,10 @@ pub(in crate::server) async fn route_http(
         Err(request) => request,
     };
     let request = match route_gbots_http(request).await {
+        Ok(response) => return response,
+        Err(request) => request,
+    };
+    let request = match route_theme_http(request).await {
         Ok(response) => return response,
         Err(request) => request,
     };

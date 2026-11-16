@@ -96,7 +96,10 @@ impl GhostexGpuiApp {
         let wraps =
             document.editor.is_some() && kind != DocsFileKind::Markdown && !document.data_view_open;
         let word_wrap = self.native_docs.word_wrap;
-        let html_annotate = document.html_annotate;
+        // At side-panel width, Annotate's ⋯ menu holds Open in Browser and Open With (Q41).
+        let open_buttons_folded = kind == DocsFileKind::Html
+            && document.html_annotate
+            && super::render::view_width() < super::annotate::ANNOTATE_COMPACT_WIDTH;
         let svg = kind == DocsFileKind::Image && DocsFileKind::is_svg(&path);
         let svg_source = document.svg_source;
         let media = kind.is_viewer();
@@ -270,88 +273,64 @@ impl GhostexGpuiApp {
                     .children(note_actions)
                     .children(data_tiles)
                     .children(picture_tiles)
-                    .when(kind.opens_externally() && review.is_none(), |this| {
-                        let (open_path, menu_path) = (path.clone(), path.clone());
-                        this.child(
-                            header_tile(
-                                "native-docs-open-externally",
-                                header_icon("titlebar/external-link.svg", false, p),
-                                false,
-                                false,
-                                p,
+                    .when(
+                        kind.opens_externally() && review.is_none() && !open_buttons_folded,
+                        |this| {
+                            let (open_path, menu_path) = (path.clone(), path.clone());
+                            this.child(
+                                header_tile(
+                                    "native-docs-open-externally",
+                                    header_icon("titlebar/external-link.svg", false, p),
+                                    false,
+                                    false,
+                                    p,
+                                )
+                                .tooltip(|window, cx| {
+                                    titlebar_tooltip("Open in browser", window, cx)
+                                })
+                                .on_click(cx.listener(
+                                    move |this, _, _, cx| {
+                                        this.native_docs_open_externally(&open_path, None, cx);
+                                    },
+                                )),
                             )
-                            .tooltip(|window, cx| titlebar_tooltip("Open in browser", window, cx))
-                            .on_click(cx.listener(
-                                move |this, _, _, cx| {
-                                    this.native_docs_open_externally(&open_path, None, cx);
-                                },
-                            )),
-                        )
-                        .child(
-                            header_tile(
-                                "native-docs-open-with",
-                                titlebar_svg_icon(
-                                    "titlebar/chevron-down.svg",
-                                    12.0,
-                                    p.toolbar_icon,
-                                ),
-                                false,
-                                false,
-                                p,
-                            )
-                            .w(px(16.0))
                             .child(
-                                gpui::canvas(
-                                    |bounds, _, _| {
-                                        super::open_externally::OPEN_WITH_MENU_ANCHOR
-                                            .with(|cell| cell.set(bounds))
-                                    },
-                                    |_, _, _, _| {},
+                                header_tile(
+                                    "native-docs-open-with",
+                                    titlebar_svg_icon(
+                                        "titlebar/chevron-down.svg",
+                                        12.0,
+                                        p.toolbar_icon,
+                                    ),
+                                    false,
+                                    false,
+                                    p,
                                 )
-                                .absolute()
-                                .size_full(),
+                                .w(px(16.0))
+                                .child(
+                                    gpui::canvas(
+                                        |bounds, _, _| {
+                                            super::open_externally::OPEN_WITH_MENU_ANCHOR
+                                                .with(|cell| cell.set(bounds))
+                                        },
+                                        |_, _, _, _| {},
+                                    )
+                                    .absolute()
+                                    .size_full(),
+                                )
+                                .tooltip(|window, cx| titlebar_tooltip("Open with", window, cx))
+                                .on_click(cx.listener(
+                                    move |this, _, window, cx| {
+                                        this.show_native_docs_open_with_menu(
+                                            &menu_path, window, cx,
+                                        );
+                                    },
+                                )),
                             )
-                            .tooltip(|window, cx| titlebar_tooltip("Open with", window, cx))
-                            .on_click(cx.listener(
-                                move |this, _, window, cx| {
-                                    this.show_native_docs_open_with_menu(&menu_path, window, cx);
-                                },
-                            )),
-                        )
-                    })
+                        },
+                    )
                     .when(kind == DocsFileKind::Html && !page_file, |this| {
-                        let annotate = html_annotate;
-                        let toggle_path = path.clone();
-                        this.child(
-                            header_tile(
-                                "native-docs-html-annotate",
-                                header_icon("files-view/t-message-plus-2.svg", false, p),
-                                annotate,
-                                false,
-                                p,
-                            )
-                            .tooltip(move |window, cx| {
-                                titlebar_tooltip(
-                                    if annotate {
-                                        "Disable annotations"
-                                    } else {
-                                        "Enable annotations"
-                                    },
-                                    window,
-                                    cx,
-                                )
-                            })
-                            .on_click(cx.listener(
-                                move |this, _, _, cx| {
-                                    if let Some(document) =
-                                        this.native_docs.document_mut(&toggle_path)
-                                    {
-                                        document.html_annotate = !document.html_annotate;
-                                    }
-                                    this.native_docs_notify(cx);
-                                },
-                            )),
-                        )
+                        this.children(self.render_native_docs_annotate_tiles(&path, p, cx))
                     })
                     .when(svg, |this| {
                         let toggle_path = path.clone();

@@ -83,6 +83,17 @@ pub(super) fn tone_look(tone: &str, p: &ChatAppearance) -> ToneLook {
         entry.dark.as_deref()
     }
     .and_then(hex);
+    // A warning or error card takes the Warning or Danger theme role when it is set
+    // (helpers/theme_roles.rs).
+    let role = match tone {
+        "warning" | "wait" => Some("warning"),
+        "error" => Some("danger"),
+        _ => None,
+    };
+    let hue = role
+        .and_then(|role| crate::app::helpers::theme_role_rgba(role, p.light))
+        .map(gpui::Hsla::from)
+        .or(hue);
     ToneLook {
         hue,
         icon: format!("titlebar/{}.svg", entry.icon),
@@ -221,6 +232,19 @@ impl NativeChatView {
                 _ => column,
             }
         });
+        // CDXC:SessionChat 2026-11-16 WHY: The header and the action row never shrink; only the
+        // body does, scrolling inside itself, so a card squeezed by its container (the Approvals
+        // menu) keeps its Yes / No in sight instead of cutting them off. A card with the room it
+        // needs (the transcript, the chat box's dock) lays out exactly as before: the body is a
+        // block box as tall as its content, and the scroll has nothing to move.
+        // SEE-ALSO: apps/mobile/app/src/chat/native/cards/RelayedApprovalCard.tsx (`RelayedApprovalsMenu`).
+        let body = body.map(|body| {
+            div()
+                .id("tone-card-body")
+                .min_h_0()
+                .overflow_y_scroll()
+                .child(body)
+        });
         div()
             .relative()
             .w_full()
@@ -233,11 +257,12 @@ impl NativeChatView {
             .bg(p.card_panel)
             .overflow_hidden()
             .text_color(p.card_muted)
-            .child(header)
+            .child(div().flex_shrink_0().child(header))
             .when_some(body, |card, body| card.child(body))
             .when(has_footer, |card| {
                 card.child(
                     div()
+                        .flex_shrink_0()
                         .flex()
                         .flex_wrap()
                         .items_center()

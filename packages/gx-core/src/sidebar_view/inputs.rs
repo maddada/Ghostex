@@ -162,12 +162,16 @@ impl SectionCollapse {
 /// User: Bots is a sidebar mode, entered from a Hermes-logo button, off by default.
 /// Projects mode never lists a bot project and Bots mode lists only bot projects, ignoring the Space filter.
 /// The mode is remembered across restarts beside the selected Space.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// CDXC:Extensions 2026-11-14 DECISION:
+/// Q24, user: a sidebar extension gets its own sidebar mode, like Bots. `Extension(id)` swaps the whole list for that extension's panel (`extension_panel.rs`); underneath, the list is built as Projects, so leaving the mode shows exactly what was there.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SidebarMode {
     #[default]
     Projects,
     Bots,
+    Extension(String),
 }
 
 impl SidebarMode {
@@ -175,10 +179,32 @@ impl SidebarMode {
         match value {
             "projects" => Some(SidebarMode::Projects),
             "bots" => Some(SidebarMode::Bots),
+            other => other
+                .strip_prefix(EXTENSION_MODE_PREFIX)
+                .filter(|id| !id.is_empty())
+                .map(|id| SidebarMode::Extension(id.to_string())),
+        }
+    }
+
+    /// The saved and command form: `projects`, `bots`, `extension:<id>`.
+    pub fn as_wire(&self) -> String {
+        match self {
+            SidebarMode::Projects => "projects".to_string(),
+            SidebarMode::Bots => "bots".to_string(),
+            SidebarMode::Extension(id) => format!("{EXTENSION_MODE_PREFIX}{id}"),
+        }
+    }
+
+    /// The sidebar extension whose mode this is.
+    pub fn extension_id(&self) -> Option<&str> {
+        match self {
+            SidebarMode::Extension(id) => Some(id),
             _ => None,
         }
     }
 }
+
+const EXTENSION_MODE_PREFIX: &str = "extension:";
 
 /// What the user collapsed and expanded. Group ids key the project rows; the storage id (a
 /// project's own id, or the group id for a user-made group) keys everything below a project.
@@ -192,6 +218,9 @@ pub struct SidebarCollapseState {
     pub collapsed_coordinators: BTreeSet<String>,
     /// Coordinators whose older threads (idle for two hours) the user listed, by sidebar row id.
     pub expanded_coordinator_older_threads: BTreeSet<String>,
+    /// The computers whose sessions a merged project hides, keyed by [`project_machine_key`]
+    /// (CDXC:RemoteMachines 2026-11-15 in `merged.rs`).
+    pub hidden_project_machines: BTreeSet<String>,
     pub section_collapse: BTreeMap<String, SectionCollapse>,
     /// Keyed by section key (`local`, `remote:<machine>`).
     pub selected_space_by_section: BTreeMap<String, String>,
@@ -205,6 +234,13 @@ pub struct SidebarCollapseState {
     /// The mode the user left the sidebar in. Read through [`effective_sidebar_mode`], which falls
     /// back to Projects while Bots is switched off.
     pub sidebar_mode: SidebarMode,
+}
+
+/// The key [`SidebarCollapseState::hidden_project_machines`] holds for one computer of one project
+/// row: the project row's group id and the computer's id (`MachineChip::machine_id`). Only ever
+/// compared whole, never split.
+pub fn project_machine_key(group_id: &str, machine_id: &str) -> String {
+    format!("{group_id}|{machine_id}")
 }
 
 /// `MAX_RECENT_SIDEBAR_SPACE_SESSION_IDS`.
@@ -272,6 +308,10 @@ pub const WORKTREE_SESSIONS_IN_PROJECT_SETTING_KEY: &str = "worktreeSessionsInPr
 /// The setting behind Merge copies of the same repository (CDXC:RemoteMachines 2026-11-09 in
 /// `merged.rs`).
 pub const MERGE_REPOSITORY_COPIES_SETTING_KEY: &str = "sidebarMergeRepositoryCopies";
+
+/// The setting behind Hide sessions and projects from computers that aren't connected
+/// (CDXC:RemoteMachines 2026-11-15 in `merged.rs`).
+pub const HIDE_DISCONNECTED_MACHINES_SETTING_KEY: &str = "sidebarHideDisconnectedMachines";
 
 /// The setting behind Settings > Sidebar & Sessions > Advanced's Pinned order.
 pub const PINNED_SESSION_ORDER_SETTING_KEY: &str = "pinnedSessionOrder";
@@ -369,6 +409,10 @@ pub struct SidebarSettings {
     /// on by default): two folders on one computer that are copies of one repository are one
     /// entry of the one list. Off, each is its own (`merged.rs`).
     pub merge_repository_copies: bool,
+    /// Settings › Sidebar › Advanced's Hide sessions and projects from computers that aren't
+    /// connected (`sidebarHideDisconnectedMachines`, off by default): the one list leaves out a
+    /// computer whose stream is down (`merged.rs`).
+    pub hide_disconnected_machines: bool,
     /// Settings › Sidebar & Sessions › Advanced's Worktree sessions show in their project
     /// (`worktreeSessionsInProject`, on by default): the Project sidebar lists a worktree
     /// project's sessions under its parent project (`worktree_fold.rs`).
@@ -410,6 +454,7 @@ impl Default for SidebarSettings {
             active_projects: true,
             separate_by_machine: false,
             merge_repository_copies: true,
+            hide_disconnected_machines: false,
             worktree_sessions_in_project: true,
             pinned_session_order: PinnedSessionOrder::Manual,
         }
@@ -514,6 +559,10 @@ impl SidebarSettings {
             merge_repository_copies: boolean(
                 MERGE_REPOSITORY_COPIES_SETTING_KEY,
                 defaults.merge_repository_copies,
+            ),
+            hide_disconnected_machines: boolean(
+                HIDE_DISCONNECTED_MACHINES_SETTING_KEY,
+                defaults.hide_disconnected_machines,
             ),
             worktree_sessions_in_project: boolean(
                 WORKTREE_SESSIONS_IN_PROJECT_SETTING_KEY,
@@ -714,9 +763,9 @@ pub(crate) fn effective_sidebar_mode(
     settings: &SidebarSettings,
     ui: &SidebarUiState,
 ) -> SidebarMode {
-    if settings.bots_enabled {
-        ui.collapse.sidebar_mode
-    } else {
-        SidebarMode::Projects
+    match &ui.collapse.sidebar_mode {
+        SidebarMode::Bots if settings.bots_enabled => SidebarMode::Bots,
+        // The list under an extension's mode is the projects (`extension_panel.rs` draws the mode).
+        _ => SidebarMode::Projects,
     }
 }

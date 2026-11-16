@@ -591,7 +591,7 @@ impl RemoteTab {
         let Some(dialog) = self.machine_dialog.as_ref() else {
             return;
         };
-        let Some(machine) = normalize_remote_machine_draft(&dialog.draft) else {
+        let Some(mut machine) = normalize_remote_machine_draft(&dialog.draft) else {
             return;
         };
         let password = dialog.draft.ssh_password.clone();
@@ -605,7 +605,29 @@ impl RemoteTab {
             .iter()
             .position(|candidate| candidate.get("id").and_then(Value::as_str) == Some(id.as_str()))
         {
-            Some(index) => machines[index] = machine,
+            Some(index) => {
+                /*
+                CDXC:RemoteMachines 2026-11-16 FIX:
+                The dialog doesn't edit the computer's icon fields: its picker saves through the
+                app (gx_store/computer_icons.rs), which writes them on the saved machine. Its Save
+                wrote back the icon the draft held when the dialog opened, so an icon picked in the
+                dialog went back to the old one (for m7-arch, the penguin) on Save. The saved
+                machine's own icon fields are kept instead.
+                */
+                if let Some(fields) = machine.as_object_mut() {
+                    for key in ["icon", "iconKeptHere", "logo"] {
+                        match machines[index].get(key) {
+                            Some(value) => {
+                                fields.insert(key.to_string(), value.clone());
+                            }
+                            None => {
+                                fields.remove(key);
+                            }
+                        }
+                    }
+                }
+                machines[index] = machine;
+            }
             None => machines.push(machine),
         }
         self.save_remote_machines(normalize_remote_machines(&Value::Array(machines)), cx);
@@ -908,14 +930,16 @@ fn add_tile(t: &RemoteTokens, cx: &mut Context<RemoteTab>) -> AnyElement {
         .bg(hsla(t.card(0.38)))
         .cursor_pointer()
         .hover(move |this| this.bg(hsla(hover)))
-        .on_click(cx.listener(|tab, _: &ClickEvent, window, cx| {
-            tab.open_machine_dialog(None, window, cx);
+        // Add a computer opens the Connect a computer window, SSH details one link away in it
+        // (CDXC:RemotePairing 2026-11-14 in connect_device_modal/computer_way.rs).
+        .on_click(cx.listener(|tab, _: &ClickEvent, _window, cx| {
+            tab.open_connect_device("computer", cx);
         }))
         .child(tile_icon(t, icon::PLUS))
         .child(tile_text(
             t,
             "Add a computer".to_string(),
-            "SSH details or a code".to_string(),
+            "With a code or SSH details".to_string(),
         ))
         .into_any_element()
 }
@@ -971,14 +995,17 @@ fn machine_tile(
                 .on_click(cx.listener(move |tab, _: &ClickEvent, window, cx| {
                     tab.open_machine_dialog(Some(&open_machine), window, cx);
                 }))
-                // Its icon as last read on that computer (gx-core computer_icons.rs).
+                // Its icon as last read on that computer, else its system's logo (gx-core
+                // computer_icons.rs).
                 .child(tile_icon(
                     t,
                     tab.computer_icons
                         .picked(&id)
                         .or_else(|| machine.get("icon").and_then(Value::as_str))
                         .and_then(ghostex_gx_core::computer_icons::computer_icon)
-                        .map_or(ICON_DEVICE_DESKTOP, |icon| icon.asset),
+                        .map(|icon| icon.asset)
+                        .or_else(|| tab.computer_icons.default_asset(&id))
+                        .unwrap_or(ICON_DEVICE_DESKTOP),
                 ))
                 .child(tile_text_with_dot(
                     t,
@@ -1373,30 +1400,8 @@ pub(super) fn machine_dialog(
     {
         body = body.child(panel);
     }
-    if is_new {
-        body = body.child(div().mb(px(2.0)).child(raised_segmented(
-            &p,
-            "remote-machine-add-mode",
-            &[
-                Segment {
-                    value: "ssh",
-                    label: "SSH details",
-                    icon: None,
-                },
-                Segment {
-                    value: "easyConnect",
-                    label: "Easy Connect code",
-                    icon: None,
-                },
-            ],
-            if easy_connect { "easyConnect" } else { "ssh" },
-            true,
-            |tab: &mut RemoteTab, value, window, cx| {
-                tab.set_dialog_transport(value == "easyConnect", window, cx);
-            },
-            cx,
-        )));
-    }
+    // A new computer here is added over SSH; its Easy Connect code goes into the Connect a
+    // computer window (CDXC:RemotePairing 2026-11-14 in connect_device_modal/computer_way.rs).
     body = body.child(v_flex().w_full().gap(px(12.0)).children(fields));
     // A machine that is this computer runs this app's own gxserver: installing or updating it
     // there would stop that gxserver, so the row explains instead of offering the button.
@@ -1598,7 +1603,7 @@ pub(super) fn machine_dialog(
                         .line_height(px(20.0))
                         .text_color(hsla(colors.muted))
                         .child(if is_new {
-                            "Paste an Easy Connect code or enter the other computer’s address, then use that computer’s SSH username and password to sign in."
+                            "Enter the other computer’s address and the username and password you sign in with there."
                         } else {
                             "Connection details for this machine. Changes apply when you save."
                         }),
@@ -1779,7 +1784,11 @@ fn computer_pairing_panel(t: &RemoteTokens, pairing: &ComputerPairing) -> AnyEle
         .border_color(hsla(t.edge(0.70)));
     match pairing {
         ComputerPairing::Starting => frame
-            .child(detail(t, "Asking the other computer to let this machine in…", true))
+            .child(detail(
+                t,
+                "Asking the other computer to let this machine in…",
+                true,
+            ))
             .into_any_element(),
         ComputerPairing::Waiting {
             words, computer, ..
@@ -1787,7 +1796,9 @@ fn computer_pairing_panel(t: &RemoteTokens, pairing: &ComputerPairing) -> AnyEle
             .items_center()
             .child(detail(
                 t,
-                format!("Approve this computer on {computer}. Check it shows the same three words:"),
+                format!(
+                    "Approve this computer on {computer}. Check it shows the same three words:"
+                ),
                 true,
             ))
             .child(
@@ -1800,7 +1811,7 @@ fn computer_pairing_panel(t: &RemoteTokens, pairing: &ComputerPairing) -> AnyEle
             )
             .child(detail(
                 t,
-                "It's under Settings > Remote > Paired devices there, waiting for Touch ID, Windows Hello or the system password.",
+                "Click Approve there only if it shows these words.",
                 true,
             ))
             .into_any_element(),

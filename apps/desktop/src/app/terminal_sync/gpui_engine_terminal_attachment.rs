@@ -386,10 +386,7 @@ impl GhostexGpuiApp {
                 Ok(())
             }
             ManageFilesBridgeSideEffect::RevealInFinder(path) => gpui_reveal_path_in_finder(&path),
-            ManageFilesBridgeSideEffect::OpenWithSystemApp(path, app) => match app {
-                Some(app) => gpui_open_with_application(&app, path.as_os_str()),
-                None => gpui_open_path(&path),
-            },
+            ManageFilesBridgeSideEffect::OpenWithSystemApp(path) => gpui_open_path(&path),
             ManageFilesBridgeSideEffect::OpenInCodeView(path) => {
                 self.open_docs_file_in_code_view(path, cx)
             }

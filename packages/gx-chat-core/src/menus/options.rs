@@ -64,6 +64,10 @@ pub struct OptionLabels {
     pub options_tooltip: String,
     pub show_model: bool,
     pub show_options: bool,
+    /// Words beside the Mode button while something about the mode waits ("Bypass when idle",
+    /// `menus/mode_restart.rs`); the desktop's button is otherwise a glyph alone.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode_note: Option<String>,
 }
 
 /// The bot a Hermes session talks to (`Harry`, `session_chat_hermes_status.rs`), drawn as a chip
@@ -261,7 +265,14 @@ pub fn compute_native_chat_options(state: &ChatState, _context: &ChatContext) ->
                 && catalog
                     .as_ref()
                     .is_some_and(|catalog| options_may_resolve(catalog, can_send_key))),
+        mode_note: None,
     };
+    if crate::menus::mode_restart::restart_pending(state) {
+        option_labels.mode = Some(crate::menus::mode_restart::pill_label(
+            option_labels.mode.as_deref(),
+        ));
+        option_labels.mode_note = Some(crate::menus::mode_restart::PILL_SUFFIX.to_string());
+    }
     // A completed screen read without a model is an unset control, not a
     // pending read. Keep the same settled state on every chat renderer.
     if state.session.screen_probed {

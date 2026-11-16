@@ -239,6 +239,7 @@ pub(crate) fn agent_message_reply_to(text: &str) -> Option<(&str, &str)> {
 /// CDXC:SessionChat 2026-09-24 DECISION:
 /// User: when a queued message from another agent is marked failed, tell the agent that sent it. The notice goes into the sender's own queue as a plain Ghostex note, so it reaches the sender at its next stop and can never trigger a notice of its own.
 /// Only unattended failures notify; a failed "Send now" is shown to the person who pressed it.
+/// CDXC:SessionChat 2026-11-13 WHY: User: "messages that are about failing to send a message to another agent are getting stuck in the queue until I hit Send now on them, please fix." The notice went in as an ordinary row, which waits for the turn to end like a Tab-queued message, while every other Ghostex report is a held message that a busy agent takes as soon as its input box is up (GitHub #591 in session_chat_queue_runtime/scheduler.rs). A coordinator's turn keeps going while thread reports arrive, so the notice sat at the head of its queue with Send now (repro on a test server: 70 s behind a busy Codex, "Waiting for the agent to finish its turn"). A running or sleeping sender now gets it as a held message, delivered at once when idle or as soon as the input box is free mid-turn; a failed one no longer blocks the rows behind it (`deliverable_head`). A closed sender keeps the ordinary row, since a held message would wake it.
 pub(crate) fn notify_sender_of_undelivered_agent_message(
     paths: &GxserverPaths,
     server_id: &str,
@@ -257,7 +258,7 @@ pub(crate) fn notify_sender_of_undelivered_agent_message(
     }
     let db = open_gxserver_database(paths).ok()?;
     let repository = DomainRepository::new(&db, server_id);
-    repository
+    let sender = repository
         .get_session(sender_project, sender_session)
         .ok()??;
     let recipient = repository.get_session(project_id, session_id).ok()??;
@@ -276,11 +277,17 @@ pub(crate) fn notify_sender_of_undelivered_agent_message(
     let notice = format!(
         "Ghostex could not deliver your queued message to \"{title}\" ({recipient_ref}).\nReason: {reason}\nThe message is still in that session's queue, marked Not delivered, until someone retries or deletes it there. Read that session's chat before sending it again.\n\nYour message began:\n{excerpt}{ellipsis}"
     );
+    // A closed sender keeps a plain row: a held message would wake it just to read this.
+    let held = matches!(
+        sender.get("lifecycleState").and_then(Value::as_str),
+        Some("running" | "sleeping")
+    );
     crate::session_chat_queue::enqueue_session_chat_prompt(
         &db,
         sender_project,
         sender_session,
         &notice,
+        held,
     )
     .ok()?;
     Some((sender_project.to_string(), sender_session.to_string()))

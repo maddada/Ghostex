@@ -81,6 +81,30 @@ pub(crate) struct QuickAccessPalette {
 
 impl QuickAccessPalette {
     pub(crate) fn resolve(light: bool, sidebar_theme: Option<&str>, window: Rgba) -> Self {
+        Self::derive(light, sidebar_theme, window).with_theme_roles(light)
+    }
+
+    /// The Borders and Grey text theme roles over the derived colours (helpers/theme_roles.rs).
+    fn with_theme_roles(mut self, light: bool) -> Self {
+        use crate::app::helpers::theme_role_or_rgba;
+        self.hairline = theme_role_or_rgba("border", light, self.hairline);
+        self.menu_border = theme_role_or_rgba("border", light, self.menu_border);
+        self.muted = theme_role_or_rgba("mutedText", light, self.muted);
+        self.foreground = theme_role_or_rgba("text", light, self.foreground);
+        self.raised = theme_role_or_rgba("control", light, self.raised);
+        self.raised_hover = theme_role_or_rgba("hover", light, self.raised_hover);
+        self.menu_hover = theme_role_or_rgba("hover", light, self.menu_hover);
+        self.row_selected = theme_role_or_rgba("selection", light, self.row_selected);
+        self.menu_background = theme_role_or_rgba("menu", light, self.menu_background);
+        self.destructive = theme_role_or_rgba("danger", light, self.destructive);
+        if light && crate::app::helpers::theme_role_rgba("border", light).is_some() {
+            // The light sheet pins the focus border to the hairline.
+            self.focus_border = self.hairline;
+        }
+        self
+    }
+
+    fn derive(light: bool, sidebar_theme: Option<&str>, window: Rgba) -> Self {
         let modal = ModalPalette::resolve(light, sidebar_theme);
         if light {
             let foreground = rgb(0x262626);
@@ -201,7 +225,7 @@ impl QuickAccessPalette {
             crate::app::helpers::titlebar_popup_menu_background(),
         )
         .into();
-        self
+        self.with_theme_roles(light)
     }
 
     /// `bg-border/50`: the hairline the Commands list draws between groups.

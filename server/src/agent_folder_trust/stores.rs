@@ -2,7 +2,7 @@
 //! answers its folder-trust prompt with yes.
 //!
 //! CDXC:AgentProviders 2026-10-17 WHY:
-//! Measured on macOS against Claude Code 2.1.296, Codex 0.163.0, Cursor CLI 2026.10.16, Gemini CLI 0.41.2, Copilot CLI 1.0.98, Grok Build 1.0.62, Antigravity CLI 1.4.0, Pi 1.3.0 and Factory Droid 0.205.1. OMP 18.11.1 trusts every project in code, and Hermes 0.21.4 and OpenCode 2.0.24 have no folder-trust step (Hermes asks about each shell hook, which is not folder trust), so they have no writer here. Codex's `-c projects."<folder>".trust_level=…` override is ignored inside a git worktree (the prompt still showed), while the same entry in `config.toml` is honoured, so every agent is trusted through its file, never a launch flag. Copilot keeps its list in `config.json` (what its own "remember this folder" writes); a `trustedFolders` list in `settings.json`, where its `/settings` help lists it, did not stop the prompt. A folder the user explicitly marked untrusted in an agent's own record is left as it is.
+//! Measured on macOS against Claude Code 2.1.296, Codex 0.163.0, Cursor CLI 2026.10.16, Copilot CLI 1.0.98, Grok Build 1.0.62, Antigravity CLI 1.4.0, Pi 1.3.0 and Factory Droid 0.205.1. OMP 18.11.1 trusts every project in code, and Hermes 0.21.4 and OpenCode 2.0.24 have no folder-trust step (Hermes asks about each shell hook, which is not folder trust), so they have no writer here. Codex's `-c projects."<folder>".trust_level=…` override is ignored inside a git worktree (the prompt still showed), while the same entry in `config.toml` is honoured, so every agent is trusted through its file, never a launch flag. Copilot keeps its list in `config.json` (what its own "remember this folder" writes); a `trustedFolders` list in `settings.json`, where its `/settings` help lists it, did not stop the prompt. A folder the user explicitly marked untrusted in an agent's own record is left as it is.
 
 use std::{
     io,
@@ -23,7 +23,6 @@ pub(super) enum TrustingAgent {
     Claude,
     Codex,
     Cursor,
-    Gemini,
     Copilot,
     Grok,
     Antigravity,
@@ -37,7 +36,6 @@ impl TrustingAgent {
             "claude" | "openclaude" | "claude-code" => Self::Claude,
             "codex" => Self::Codex,
             "cursor" | "cursor-cli" | "cursor-agent" => Self::Cursor,
-            "gemini" | "gemini-cli" => Self::Gemini,
             "copilot" | "github-copilot" => Self::Copilot,
             "grok" => Self::Grok,
             "antigravity" | "antigravity-cli" | "agy" => Self::Antigravity,
@@ -52,7 +50,6 @@ impl TrustingAgent {
             Self::Claude => "Claude Code",
             Self::Codex => "Codex",
             Self::Cursor => "Cursor CLI",
-            Self::Gemini => "Gemini CLI",
             Self::Copilot => "Copilot CLI",
             Self::Grok => "Grok Build",
             Self::Antigravity => "Antigravity CLI",
@@ -83,15 +80,6 @@ pub(super) fn trust_folder(agent: TrustingAgent, home: &Path, folder: &Path) -> 
                 .into_iter()
                 .collect()
         }
-        TrustingAgent::Gemini => existing_folder(&home.join(".gemini"))
-            .map(|gemini| {
-                env_folder_or(
-                    "GEMINI_CLI_TRUSTED_FOLDERS_PATH",
-                    gemini.join("trustedFolders.json"),
-                )
-            })
-            .into_iter()
-            .collect(),
         TrustingAgent::Copilot => {
             existing_folder(&env_folder_or("COPILOT_HOME", home.join(".copilot")))
                 .map(|copilot| copilot.join("config.json"))
@@ -135,13 +123,6 @@ fn write_record(agent: TrustingAgent, file: &Path, key: &str) -> io::Result<()> 
         TrustingAgent::Claude => trust_in_claude_config(file, key),
         TrustingAgent::Codex => trust_in_codex_config(file, key),
         TrustingAgent::Cursor => trust_in_cursor_marker(file, key),
-        TrustingAgent::Gemini => edit_json_object(file, |root| {
-            if root.contains_key(key) {
-                return false;
-            }
-            root.insert(key.to_string(), json!("TRUST_FOLDER"));
-            true
-        }),
         TrustingAgent::Copilot => add_to_json_list(file, "trustedFolders", key),
         TrustingAgent::Grok => trust_in_grok_store(file, key),
         TrustingAgent::Antigravity => add_to_json_list(file, "trustedWorkspaces", key),

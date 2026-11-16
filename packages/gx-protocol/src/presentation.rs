@@ -49,6 +49,10 @@ pub struct PresentationSnapshot {
     /// Absent on a daemon without workspaces (`capabilities.workspaces`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sidebar_workspaces: Option<SidebarWorkspacesState>,
+    /// Every enabled sidebar extension's panels. Absent on an older daemon; read entry by entry
+    /// (`ExtensionPanels`), so a panel this client cannot read never fails the snapshot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extension_panels: Option<crate::extension_panel::ExtensionPanels>,
 }
 
 impl PresentationSnapshot {
@@ -1021,7 +1025,9 @@ pub struct PresentationSession {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stuck_since: Option<String>,
     /// Who is healing a stuck session, so its red dot does not alert yet: `autopilot` while
-    /// Autopilot covers it and has not left it for the user. Absent otherwise and on older daemons.
+    /// Autopilot covers it and has not left it for the user, `coordinator` for a coordinator's
+    /// thread while Settings > Notifications > Workers is not Sound (server/src/worker_alerts.rs).
+    /// Absent otherwise and on older daemons.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stuck_handled_by: Option<String>,
     /// Since when the session is blocked on something Ghostex could not get past itself: every
@@ -1032,6 +1038,12 @@ pub struct PresentationSession {
     /// Why the session is blocked, in a few plain words; present with `blocked_since`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_reason: Option<String>,
+    /// Who already alerted for this blocked state, so clients draw the red dot without their own
+    /// sound and banner: `memoryGuard` for a session the memory guard stopped, which notifies under
+    /// its own switch; `restart` for a thread a restart cut off; `coordinator` for a coordinator's
+    /// thread blocked on an error its coordinator handles. Absent otherwise and on older daemons.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked_alerted_by: Option<String>,
     /// A running session holds a question card (an ask-user tool call) only the user can answer,
     /// also while its agent reads as working. Absent (false) otherwise and on daemons without
     /// [`PresentationCapabilities::awaiting_answer`]. Independent of `pending_question_count`.

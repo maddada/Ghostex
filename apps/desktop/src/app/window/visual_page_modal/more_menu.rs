@@ -39,14 +39,18 @@ enum MoreAction {
     Import,
     OpenInBrowser,
     Snooze,
+    Star,
 }
 
 /// The menu's actions, in the order of the panel's rows (`more_menu_panel::menu_rows`): Snooze
 /// first while the page waits for answers.
-fn actions(snooze: bool) -> Vec<MoreAction> {
-    let mut actions = Vec::with_capacity(4);
+fn actions(snooze: bool, star: Option<bool>) -> Vec<MoreAction> {
+    let mut actions = Vec::with_capacity(5);
     if snooze {
         actions.push(MoreAction::Snooze);
+    }
+    if star.is_some() {
+        actions.push(MoreAction::Star);
     }
     actions.extend([
         MoreAction::Export,
@@ -71,6 +75,20 @@ impl GpuiVisualPageModalWindow {
         self.questions_left && self.page_session.is_some()
     }
 
+    /// Whether the page is starred, for the menu's Star page or Unstar page; `None` (no row) until
+    /// gxserver named the page's session and said.
+    fn star_state(&self) -> Option<bool> {
+        self.page_session.as_ref().and(self.page_starred)
+    }
+
+    /// Draws the open menu again (its Star page row changed).
+    pub(super) fn refresh_more_menu(&mut self, cx: &mut Context<Self>) {
+        if self.more_menu.is_some() {
+            self.show_more_menu(cx);
+        }
+        cx.notify();
+    }
+
     /// The ⋯ button: opens the menu under it, or closes it when it is open.
     pub(super) fn toggle_more_menu(&mut self, window: &Window, cx: &mut Context<Self>) {
         if self.more_menu.is_some() {
@@ -80,7 +98,7 @@ impl GpuiVisualPageModalWindow {
         let Some(button) = self.more_button.get() else {
             return;
         };
-        let rows = menu_rows(self.can_snooze()).len();
+        let rows = menu_rows(self.can_snooze(), self.star_state()).len();
         let left = (button.right() - px(MENU_WIDTH)).max(px(8.0));
         let frame = Bounds::new(
             point(left, button.bottom() + px(MENU_GAP)),
@@ -101,6 +119,7 @@ impl GpuiVisualPageModalWindow {
             return;
         };
         let snooze = self.can_snooze();
+        let star = self.star_state();
         let light = self.glass.light;
         let view = cx.entity();
         show_frosted_host(
@@ -113,10 +132,10 @@ impl GpuiVisualPageModalWindow {
                 panel(
                     "visual-page-more-menu",
                     menu_ink(light),
-                    menu_rows(snooze),
+                    menu_rows(snooze, star),
                     menu.snooze.then_some(0),
                     Rc::new(move |index, cx| {
-                        let Some(action) = actions(snooze).get(index).copied() else {
+                        let Some(action) = actions(snooze, star).get(index).copied() else {
                             return;
                         };
                         view.update(cx, |this, cx| this.run_more_action(action, cx));
@@ -201,8 +220,52 @@ impl GpuiVisualPageModalWindow {
                 (self.host)(VisualPageModalCommand::OpenInBrowser { url }, cx);
             }
             MoreAction::Import => self.import_answers(cx),
+            MoreAction::Star => self.star_page(cx),
             MoreAction::Snooze => {}
         }
+    }
+
+    /// Stars the page in the chat of the session that published it, or takes its star off (every
+    /// version of its file, server/src/session_chat_open_questions.rs `set_starred`). The menu
+    /// reads the new state at once; a refusal puts it back and says why.
+    fn star_page(&mut self, cx: &mut Context<Self>) {
+        let (Some(page_id), Some((project_id, session_id)), Some(starred)) = (
+            self.page_id.clone(),
+            self.page_session.clone(),
+            self.page_starred,
+        ) else {
+            return;
+        };
+        self.page_starred = Some(!starred);
+        let remote = self.remote.clone();
+        cx.spawn(async move |this, cx| {
+            let answer = gx_rpc(
+                remote,
+                "/api/answerSessionChatPrompt",
+                json!({
+                    "kind": "pageStar",
+                    "questionId": page_id,
+                    "starred": !starred,
+                    "projectId": project_id,
+                    "sessionId": session_id,
+                }),
+            )
+            .await;
+            if let Err(error) = answer {
+                let _ = this.update(cx, |this, cx| {
+                    this.page_starred = Some(starred);
+                    (this.host)(
+                        VisualPageModalCommand::Notice {
+                            level: "warning",
+                            title: "The page's star was not changed".to_string(),
+                            message: error.message,
+                        },
+                        cx,
+                    );
+                });
+            }
+        })
+        .detach();
     }
 
     /// Snoozes the page for `hours` on the session that published it, then closes the window; a

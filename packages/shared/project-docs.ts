@@ -22,7 +22,13 @@ export type ProjectDocsFileEntry = {
 };
 
 export type ProjectDocsGitBaselineReason =
-  'binary' | 'error' | 'git-unavailable' | 'ignored' | 'not-file' | 'not-repo' | 'too-large';
+  | 'binary'
+  | 'error'
+  | 'git-unavailable'
+  | 'ignored'
+  | 'not-file'
+  | 'not-repo'
+  | 'too-large';
 
 export type ProjectDocsGitBaseline = {
   available: boolean;
@@ -72,8 +78,17 @@ export type ProjectDocsRequest = {
     | 'openDocsFile'
     | 'annotationSendTarget'
     | 'sendAnnotationFeedback'
-    | 'sendPageAnnotation';
+    | 'sendPageAnnotation'
+    | 'annotateLoad'
+    | 'annotateState'
+    | 'annotateNotes'
+    | 'annotateToggle'
+    | 'copyPageAnnotation';
   content?: string;
+  /** `annotateState`: what Annotate's header buttons in Files show for this HTML file. */
+  annotateState?: ProjectDocsAnnotateState;
+  /** `annotateNotes`: Annotate's notes on this HTML file, as Agentation keeps them. */
+  notes?: unknown[];
   /** `sendPageAnnotation`: Annotate's Send markdown from an HTML file, and its screenshots (PNG data URLs) by annotation id. */
   markdown?: string;
   screenshots?: { id: string; png: string }[];
@@ -110,6 +125,41 @@ export type ProjectDocsResponse = {
    */
   annotationTarget?: ProjectDocsAnnotationSendTarget | null;
   annotationDelivery?: ProjectDocsAnnotationDelivery;
+  /** `annotateLoad`: how Annotate starts in this HTML file. */
+  annotate?: ProjectDocsAnnotateLoad;
+};
+
+/** What the Files header shows for Annotate in an HTML file (Agentation's state, reported by the file). */
+export type ProjectDocsAnnotateState = {
+  active: boolean;
+  frozen: boolean;
+  layout: boolean;
+  marksVisible: boolean;
+  notes: number;
+  canCopy: boolean;
+  canSend: boolean;
+  canClear: boolean;
+  sendState: 'idle' | 'sending' | 'sent' | 'failed';
+};
+
+/** How Annotate starts when an HTML file loads in Files: on or off, Ghostex's theme, the saved settings and the file's saved notes. */
+export type ProjectDocsAnnotateLoad = {
+  on: boolean;
+  theme: 'dark' | 'light';
+  settings?: Record<string, unknown>;
+  notes?: unknown[];
+  /** The Annotate hotkey, which the page listens for itself while it has the keyboard. */
+  hotkey?: ProjectDocsAnnotateHotkey | null;
+};
+
+/** A chord as a page's `keydown` reads it: `code` for letters and digits (Option changes `key`), else `key`. */
+export type ProjectDocsAnnotateHotkey = {
+  key: string;
+  code: string;
+  ctrl: boolean;
+  alt: boolean;
+  shift: boolean;
+  meta: boolean;
 };
 
 export type ProjectDocsAnnotationSendTarget = {

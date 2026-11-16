@@ -11,6 +11,9 @@ wrap_client! {
         find_handler: Option<FindHandler>,
         load_handler: Option<LoadHandler>,
         project_workarea_bridge_event_handler: Option<ProjectWorkareaBridgeEventHandler>,
+        // The page the project bridge belongs to (`first_party_page_entry_identity`), `None` when
+        // this browser gets no project bridge.
+        project_workarea_bridge_page: Option<String>,
         extension_bridge_surface: Option<ExtensionBridgeSurfaceSpec>,
         extension_bridge_event_handler: Option<ExtensionBridgeEventHandler>,
         request_handler: Option<RequestHandler>,
@@ -99,6 +102,19 @@ wrap_client! {
                 let Some(handler) = self.project_workarea_bridge_event_handler.clone() else {
                     return 0;
                 };
+                // Only the page the bridge was installed for may use it (CDXC:CefRuntime
+                // 2026-11-14 in GhostexGpuiProjectWorkareaBridgeLoadHandler).
+                let frame_url = frame
+                    .as_ref()
+                    .map(|frame| CefString::from(&frame.url()).to_string())
+                    .unwrap_or_default();
+                if !self
+                    .project_workarea_bridge_page
+                    .as_deref()
+                    .is_some_and(|page| same_first_party_page(&frame_url, page))
+                {
+                    return 1;
+                }
                 /*
                 CDXC:CefRuntime 2026-06-24-11:03:
                 Project-workarea CEF process messages are fixed-function and main-frame-only like the sidebar bridge, but their payload budget is larger because Manage save requests carry bounded file contents. The CEF boundary forwards only in-memory strings to the app handler and does not log, persist, inspect URL/title state, expose generic IPC, or create a WKWebView/WebKit path.
@@ -281,6 +297,9 @@ wrap_load_handler! {
 wrap_load_handler! {
     pub(crate) struct GhostexGpuiProjectWorkareaBridgeLoadHandler {
         manage_docs_resource_base_url: Option<String>,
+        // The page the bridge is installed on (`first_party_page_entry_identity`); `None` installs
+        // it nowhere (the Code view).
+        bridge_page: Option<String>,
         page_load_end_handler: Option<PageLoadEndHandler>,
     }
 
@@ -302,7 +321,18 @@ wrap_load_handler! {
             /*
             CDXC:CefRuntime 2026-06-24-11:03:
             Project workarea CEF clients install only the Kanban/Manage fixed bridge functions after the first-party CEF entry loads. Sidebar and ordinary Browser clients do not receive this handler, keeping project file/board messages out of generic Browser tabs and avoiding WKWebView/WebKit compatibility at the native runtime layer.
+
+            CDXC:CefRuntime 2026-11-14 WHY:
+            The bridge goes only to the page the surface was made for, checked by its address like the extension bridge's `matches_url`, so a document that somehow got into the main frame never receives it; the client refuses bridge messages from any other address as well. The Code view (code-server) is not Ghostex's page and never gets it.
             */
+            let frame_url = CefString::from(&frame.url()).to_string();
+            if !self
+                .bridge_page
+                .as_deref()
+                .is_some_and(|page| same_first_party_page(&frame_url, page))
+            {
+                return;
+            }
             let mut message =
                 match cef::process_message_create(Some(&CefString::from(
                     PROJECT_WORKAREA_BRIDGE_INSTALL_MESSAGE_NAME,

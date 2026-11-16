@@ -63,7 +63,6 @@ pub(crate) fn normalized_hook_agent_key(value: &str) -> String {
         "grok" | "grok build" => "grok",
         "amp" | "amp cli" => "amp",
         "cursor" | "cursor agent" | "cursor cli" | "cursor-agent" => "cursor",
-        "gemini" | "gemini cli" => "gemini",
         "agy" | "antigravity" | "antigravity cli" => "antigravity",
         "copilot" | "github copilot" => "copilot",
         "codebuddy" | "code buddy" => "codebuddy",

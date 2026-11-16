@@ -547,6 +547,8 @@ impl GhostexGpuiApp {
         self.new_thread_picker_visible = false;
         self.remove_gpui_new_thread_picker_window(cx);
         self.restore_keyboard_focus_after_app_modal(cx);
+        // Same as the release path below: a held-back keyboard handoff drains on this render.
+        cx.notify();
         self.ensure_gpui_new_thread_picker_preloaded(cx);
     }
 
@@ -559,6 +561,9 @@ impl GhostexGpuiApp {
         self.new_thread_picker_window = None;
         self.new_thread_picker = None;
         self.restore_keyboard_focus_after_app_modal(cx);
+        // A handoff held back while the picker was up keeps its request, which notified nothing:
+        // render the main window so it drains now.
+        cx.notify();
         let app = cx.entity();
         cx.defer(move |cx| {
             app.update(cx, |app, cx| {

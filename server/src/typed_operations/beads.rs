@@ -1242,12 +1242,40 @@ fn build_beads_update_args(
     if params.contains_key("labels") {
         args.extend(build_beads_set_label_args(params.get("labels"))?);
     }
+    // The Beads view's Links row (`capability::LINKS`); an empty value clears the link.
+    for (key, flag) in [("externalRef", "--external-ref"), ("specId", "--spec-id")] {
+        if params.contains_key(key) {
+            args.push(format!(
+                "{flag}={}",
+                normalize_beads_link(params.get(key), key)?
+            ));
+        }
+    }
     if args.is_empty() {
         return Err(TypedOperationError::bad_request(
             "Beads update requires at least one typed field.",
         ));
     }
     Ok(args)
+}
+
+/// A bead's external link or spec link: one line of text, empty to clear it.
+fn normalize_beads_link(input: Option<&Value>, key: &str) -> Result<String, TypedOperationError> {
+    let link = match input {
+        None | Some(Value::Null) => String::new(),
+        Some(Value::String(link)) => link.trim().to_string(),
+        Some(_) => {
+            return Err(TypedOperationError::bad_request(format!(
+                "{key} must be a string."
+            )))
+        }
+    };
+    if link.len() > 2_000 || link.contains('\n') || link.contains('\r') {
+        return Err(TypedOperationError::bad_request(format!(
+            "{key} must be one line of at most 2000 characters."
+        )));
+    }
+    Ok(link)
 }
 
 fn build_beads_set_label_args(input: Option<&Value>) -> Result<Vec<String>, TypedOperationError> {

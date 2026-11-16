@@ -9,13 +9,21 @@
 //! names a picture to put behind it (else a warm gradient) and `GHOSTEX_SHARE_DEMO_BACKDROP_BLURRED`
 //! the same picture blurred, drawn under the panel as the app's window glass would. Clicks print
 //! the action.
+//!
+//! `GHOSTEX_SHARE_DEMO_OPEN=before|after` replays how the app opens the popover instead: its window
+//! starts 300px tall on "Reading Ghostex Collab…", gxserver's answer lands 400ms in, and the window
+//! takes the drawn height a frame later. `before` shows it all as it happens (the old open);
+//! `after` keeps it transparent until it has its content and height, then fades in and rises
+//! (`fit_popup_window_to_content` and `popup_open_frame` in app/window/popup_frame.rs). Each drawn
+//! frame is 16ms of the replay, so `GHOSTEX_SHARE_DEMO_OPEN_AT=<ms>` stops it at that moment, the
+//! same picture every run, for snapshots; without it the replay loops.
 use std::rc::Rc;
 
 use gpui::{
     App, AppContext as _, Context, IntoElement, ParentElement as _, Render, Styled as _,
     StyledImage as _, Window, div, px, rgb, svg,
 };
-use gpui_component::h_flex;
+use gpui_component::{ElementExt as _, h_flex};
 
 use super::share_popover_view::{
     self as view, Guest, Lifetime, Live, SHARE_POPOVER_WIDTH, ShareModel, Stage,
@@ -86,7 +94,46 @@ pub(crate) fn model(state: &str, light: bool) -> ShareModel {
     model
 }
 
+/// The replay of an open (`GHOSTEX_SHARE_DEMO_OPEN`).
+struct OpenReplay {
+    after: bool,
+    /// Replay time, ms: 16 per drawn frame.
+    at: f32,
+    stop_at: Option<f32>,
+    /// The stand-in window's height (the app's `COLLAB_SHARE_POPUP_HEIGHT` at first).
+    height: f32,
+    revealed_at: Option<f32>,
+}
+
+const OPEN_FIRST_HEIGHT: f32 = 300.0;
+const OPEN_READ_LANDS: f32 = 400.0;
+const OPEN_FADE: f32 = 140.0;
+const OPEN_RISE: f32 = 4.0;
+
+impl OpenReplay {
+    fn restart(&mut self) {
+        self.at = 0.0;
+        self.height = OPEN_FIRST_HEIGHT;
+        self.revealed_at = None;
+    }
+
+    fn loaded(&self) -> bool {
+        self.at >= OPEN_READ_LANDS
+    }
+
+    /// How far the fade has run, 0 to 1 (always 1 for the old open).
+    fn shown(&self) -> f32 {
+        if !self.after {
+            return 1.0;
+        }
+        self.revealed_at.map_or(0.0, |revealed| {
+            gpui::ease_out_quint()(((self.at - revealed) / OPEN_FADE).clamp(0.0, 1.0))
+        })
+    }
+}
+
 struct SharePopoverDemo {
+    open: Option<OpenReplay>,
     model: ShareModel,
     backdrop: Option<std::path::PathBuf>,
     /// The same picture blurred, drawn under the panel the way the app's window glass blurs what
@@ -100,8 +147,23 @@ const POPOVER_TOP: f32 = 46.0;
 const POPOVER_LEFT: f32 = WINDOW_WIDTH - 16.0 - SHARE_POPOVER_WIDTH;
 
 impl Render for SharePopoverDemo {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let on: view::ShareHandler<Self> = Rc::new(|_, action, _, _| eprintln!("{action:?}"));
+        if let Some(open) = &mut self.open {
+            if open.stop_at.is_none_or(|stop| open.at < stop) {
+                open.at += 16.0;
+                window.request_animation_frame();
+            }
+            if open.stop_at.is_none() && open.at > 2600.0 {
+                open.restart();
+            }
+            let stage = if open.loaded() {
+                Stage::Ready
+            } else {
+                Stage::Loading
+            };
+            self.model.stage = stage;
+        }
         let light = self.model.light;
         let shared = matches!(self.model.stage, Stage::Live(_) | Stage::ConfirmStop(_));
         let ink = if light { rgb(0x1a1a1c) } else { rgb(0xf2f2f2) };
@@ -185,12 +247,62 @@ impl Render for SharePopoverDemo {
                                 .object_fit(gpui::ObjectFit::Cover),
                         )
                     })
-                    .child(view::render_share_popover(&self.model, &on, cx)),
+                    .child(self.popover(&on, cx)),
             )
     }
 }
 
 use gpui::prelude::FluentBuilder as _;
+
+impl SharePopoverDemo {
+    /// The popover, or during a replay the popover in its stand-in window: that window's height,
+    /// taken from what the popover drew a frame later, and (`after`) its fade and rise.
+    fn popover(&self, on: &view::ShareHandler<Self>, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let popover = view::render_share_popover(&self.model, on, cx);
+        let Some(open) = &self.open else {
+            return popover.into_any_element();
+        };
+        let demo = cx.entity().downgrade();
+        let (after, loaded, height) = (open.after, open.loaded(), open.height);
+        let measured = div().w(px(SHARE_POPOVER_WIDTH)).child(popover).on_prepaint(
+            move |bounds, window, _| {
+                let drawn = bounds.size.height.as_f32();
+                let demo = demo.clone();
+                if (drawn - height).abs() > 0.5 {
+                    window.on_next_frame(move |_, cx| {
+                        let _ = demo.update(cx, |demo, cx| {
+                            if let Some(open) = &mut demo.open {
+                                open.height = drawn;
+                            }
+                            cx.notify();
+                        });
+                    });
+                } else if after && loaded {
+                    window.on_next_frame(move |_, cx| {
+                        let _ = demo.update(cx, |demo, cx| {
+                            if let Some(open) = &mut demo.open {
+                                open.revealed_at.get_or_insert(open.at);
+                            }
+                            cx.notify();
+                        });
+                    });
+                }
+            },
+        );
+        let shown = open.shown();
+        div()
+            .h(px(height))
+            .overflow_hidden()
+            .opacity(shown)
+            .child(
+                div()
+                    .relative()
+                    .top(px(OPEN_RISE * (1.0 - shown)))
+                    .child(measured),
+            )
+            .into_any_element()
+    }
+}
 
 pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     let light = super::env("GHOSTEX_NATIVE_MODAL_DEMO_THEME") == "light";
@@ -206,11 +318,22 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         .map(std::path::PathBuf::from)
         .filter(|path| path.is_file());
     let model = model(&state, light);
+    let open = match super::env("GHOSTEX_SHARE_DEMO_OPEN").as_str() {
+        "before" | "after" => Some(OpenReplay {
+            after: super::env("GHOSTEX_SHARE_DEMO_OPEN") == "after",
+            at: 0.0,
+            stop_at: super::env("GHOSTEX_SHARE_DEMO_OPEN_AT").parse().ok(),
+            height: OPEN_FIRST_HEIGHT,
+            revealed_at: None,
+        }),
+        _ => None,
+    };
     super::open_modal_window(
         WINDOW_WIDTH,
         WINDOW_HEIGHT,
         move |_, cx| {
             cx.new(|_| SharePopoverDemo {
+                open,
                 model,
                 backdrop,
                 blurred,

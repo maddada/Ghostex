@@ -255,7 +255,7 @@ impl BeadsView {
     /// A bead created without a title gets one from the Title Generation agent on the computer
     /// that owns the project; until then it keeps a title cut from its description.
     fn generate_title(&mut self, id: &str, description: &str, cx: &mut Context<Self>) {
-        let Some(target) = self.target.clone() else {
+        let Some(target) = self.rpc_target() else {
             return;
         };
         let id = id.to_string();
@@ -579,19 +579,17 @@ impl BeadsView {
             ));
         }
         let from_board = form.from_board && self.can_start_work;
+        let beside = !self.is_narrow();
         Some(
             div()
                 .id("beads-create")
                 .flex()
                 .flex_col()
-                .w(px(440.0))
-                .flex_none()
+                .w_full()
                 .h_full()
                 .min_h_0()
-                .pl(px(18.0))
+                .when(beside, |this| this.pl(px(12.0)))
                 .pr(px(6.0))
-                .border_l_1()
-                .border_color(p.border)
                 .child(
                     div()
                         .flex()

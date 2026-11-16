@@ -75,20 +75,29 @@ pub(crate) fn gpui_remote_attach_terminal_process_command(
     CDXC:RemoteMachines 2026-08-14:
     Probe polling stays at a flat 2s so a returning link reconnects within
     ~2 seconds; only the probe runs while the network is down (one cheap
-    process + one packet), so this cadence cannot flood anything. The backoff
-    ladder applies only to fast ssh failures against a reachable host
-    (2s steady, 5s cap) and auth rejections keep their own hard 30s/3-attempt
-    budget. Network outages never park: a 2s probe is one packet and ~50ms of
-    CPU, and a system-suspended wrapper consumes nothing (the process is
-    frozen), so probing stays effectively free no matter how long the laptop
-    sleeps or stays offline. A wall-clock budget is wrong here because sleep
-    time would count against it and park the loop the moment the lid opens.
-    Only auth rejections park, because they require a human or the app's
-    recovery flow.
+    process + one packet), so this cadence cannot flood anything. Network
+    outages never park: a 2s probe is one packet and ~50ms of CPU, and a
+    system-suspended wrapper consumes nothing (the process is frozen), so
+    probing stays effectively free no matter how long the laptop sleeps or
+    stays offline. A wall-clock budget is wrong here because sleep time would
+    count against it and park the loop the moment the lid opens. Auth
+    rejections keep their own hard 30s/3-attempt budget.
+
+    CDXC:RemoteMachines 2026-11-14 (GitHub #613):
+    An attach that fails within seconds against a reachable host fails the
+    same way next time: the remote refuses the command (Defender blocked the
+    Windows attach as malware), the session is gone, or the remote Ghostex is
+    broken. Retrying it every 5s without end ran the failing command thousands
+    of times a day on the remote, for every session open on this computer,
+    terminal shown or not. Fast failures back off 2, 4, 8, 16 then 30s, and
+    the sixth in a row parks the wrapper with a message naming why it stopped
+    until the user presses Enter. A manual retry that fails fast parks again
+    at once; an attach that lasts resets the count.
     */
     let backoff_lines = [
-        "__gx_backoff() {",
-        "  case \"$1\" in 0|1|2|3) sleep 2 ;; *) sleep 5 ;; esac",
+        "__gx_fastfail_cap=6",
+        "__gx_backoff_seconds() {",
+        "  case \"$1\" in 1) echo 2 ;; 2) echo 4 ;; 3) echo 8 ;; 4) echo 16 ;; *) echo 30 ;; esac",
         "}",
     ];
     /*
@@ -99,7 +108,7 @@ pub(crate) fn gpui_remote_attach_terminal_process_command(
     attempts and then parks with guidance to use the sidebar recovery (the
     app-owned re-prepare path re-arms askpass/credentials correctly), because
     a wrapper-side retry cannot re-read the Keychain. Fast non-auth failures
-    (< 8s) escalate through the same backoff ladder as the probe loop so a
+    (< 8s) escalate through the backoff ladder above and park at its cap, so a
     reachable-but-failing path can never hammer the remote sshd; only a real
     session drop resets the failure counters.
     */
@@ -137,13 +146,25 @@ pub(crate) fn gpui_remote_attach_terminal_process_command(
         "    continue",
         "  fi",
         "  __gx_authfails=0",
-        "  printf '\\nRemote attach ended (exit %s). Reconnecting...\\n' \"$__gx_exit\"",
         "  if [ \"$__gx_dur\" -ge 8 ]; then",
         "    __gx_fastfails=0",
+        "    printf '\\nRemote attach ended (exit %s). Reconnecting...\\n' \"$__gx_exit\"",
         "  else",
         "    __gx_fastfails=$((__gx_fastfails + 1))",
+        "    if [ \"$__gx_fastfails\" -ge \"$__gx_fastfail_cap\" ]; then",
+        "      printf '\\nGhostex stopped reconnecting this terminal: the remote attach failed %s times in a row,\\n' \"$__gx_fastfails\"",
+        "      printf 'each time within seconds of connecting to %s (last exit code %s).\\n' \"$__gx_attach_host\" \"$__gx_exit\"",
+        "      printf 'The remote machine refused or ended the attach command; its own message is above\\n'",
+        "      printf '(for example, antivirus blocking the command). Retrying would only repeat it.\\n'",
+        "      printf 'Press Enter to try again. Ctrl+C stops this terminal.\\n'",
+        "      if ! read -s -r __gx_junk; then sleep 600; fi",
+        "      __gx_fastfails=$((__gx_fastfail_cap - 1))",
+        "    else",
+        "      __gx_wait=$(__gx_backoff_seconds \"$__gx_fastfails\")",
+        "      printf '\\nRemote attach ended (exit %s) within seconds. Retrying in %ss (attempt %s of %s)...\\n' \"$__gx_exit\" \"$__gx_wait\" \"$((__gx_fastfails + 1))\" \"$__gx_fastfail_cap\"",
+        "      sleep \"$__gx_wait\"",
+        "    fi",
         "  fi",
-        "  if [ \"$__gx_fastfails\" -gt 0 ]; then __gx_backoff \"$__gx_fastfails\"; fi",
         "  while ! __gx_probe; do",
         "    sleep 2",
         "  done",
@@ -172,4 +193,77 @@ pub(crate) fn gpui_remote_attach_terminal_process_command(
         "/bin/zsh"
     };
     format!("{shell} -c {}", gpui_shell_single_quote(body.trim_end()))
+}
+
+#[cfg(all(test, not(windows)))]
+mod reconnect_cap_tests {
+    use super::*;
+    use std::process::{Command, Stdio};
+
+    /// GitHub #613: an attach the remote refuses at once must back off and then stop with a
+    /// message, never retry every few seconds for as long as the session stays open.
+    #[test]
+    fn an_attach_that_fails_at_once_backs_off_then_parks_with_the_reason() {
+        let work = std::env::temp_dir().join(format!(
+            "gx-reconnect-cap-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&work).unwrap();
+        let attempts = work.join("attempts");
+        // The probe needs a reachable port; the fake attach stubs `sleep` so the ladder runs
+        // instantly, records each attempt, fails at once, and ends the wrapper at the 8th.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let fake_ssh = format!(
+            "sleep() {{ echo \"slept $1\" >> {log}; }}; echo attempt >> {log}; [ \"$(grep -c attempt {log})\" -ge 8 ] && exit 99; false",
+            log = gpui_shell_single_quote(&attempts.to_string_lossy())
+        );
+        let command =
+            gpui_remote_attach_terminal_process_command(&fake_ssh, "127.0.0.1", Some(port));
+        let output = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(&command)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let log = std::fs::read_to_string(&attempts).unwrap_or_default();
+        std::fs::remove_dir_all(&work).ok();
+        drop(listener);
+
+        assert_eq!(log.matches("attempt").count(), 8, "{log}\n{stdout}");
+        // Back off 2, 4, 8, 16, 30 s between the first six attempts, then park instead of a 7th
+        // 30 s retry; with no terminal input the park waits ten minutes, not seconds.
+        let sleeps = log
+            .lines()
+            .filter_map(|line| line.strip_prefix("slept "))
+            .filter(|seconds| *seconds != "1")
+            .collect::<Vec<_>>();
+        assert_eq!(sleeps, ["2", "4", "8", "16", "30", "600", "600"], "{log}");
+        assert!(
+            stdout.contains("Retrying in 2s (attempt 2 of 6)"),
+            "{stdout}"
+        );
+        assert!(
+            stdout.contains("Retrying in 30s (attempt 6 of 6)"),
+            "{stdout}"
+        );
+        // A manual retry that fails fast parks again at once instead of restarting the ladder.
+        assert_eq!(
+            stdout
+                .matches("Ghostex stopped reconnecting this terminal: the remote attach failed")
+                .count(),
+            2,
+            "{stdout}"
+        );
+        assert!(
+            stdout.contains("within seconds of connecting to 127.0.0.1"),
+            "{stdout}"
+        );
+        assert!(stdout.contains("Press Enter to try again."), "{stdout}");
+    }
 }

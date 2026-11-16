@@ -128,7 +128,53 @@ pub fn insert_coordinator_presentation_payload(
         );
         if is_coordinator {
             super::remote_threads::insert_coordinator_remote_threads(session, db, &key);
+            set_session_coordinator_turn_needs_you(session, db, &key);
         }
+    }
+}
+
+/// Whether the coordinator turn behind `attention` (a finished attention, timed by its
+/// `workingStartedAt`) put a new ask, Needs you item or Blocked item on its board
+/// (`raised_for_user_since`). An attention with no stint start raised nothing.
+pub(crate) fn turn_raised_for_user(db: &Connection, key: &SessionKey, attention: &Value) -> bool {
+    let Some(since) = attention
+        .get("workingStartedAt")
+        .and_then(Value::as_str)
+        .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+    else {
+        return false;
+    };
+    super::list_work_items(db, key)
+        .is_ok_and(|items| super::raised_for_user_since(&items, since.with_timezone(&chrono::Utc)))
+}
+
+/// For a coordinator, `attention.handoverNeedsYou` (what the alert rule reads for its finished
+/// turn, gx-core `alert_rule`) comes from its board, not its handover's text: the turn alerts only
+/// when it raised something new for the user.
+pub(crate) fn set_coordinator_turn_needs_you(
+    attention: &mut Value,
+    db: &Connection,
+    key: &SessionKey,
+) {
+    if attention.get("kind").and_then(Value::as_str) != Some("finished") {
+        return;
+    }
+    let raised = turn_raised_for_user(db, key, attention);
+    if let Some(object) = attention.as_object_mut() {
+        if raised {
+            object.insert("handoverNeedsYou".to_string(), json!(true));
+        } else {
+            object.remove("handoverNeedsYou");
+        }
+    }
+}
+
+fn set_session_coordinator_turn_needs_you(session: &mut Value, db: &Connection, key: &SessionKey) {
+    if let Some(attention) = session
+        .get_mut("attention")
+        .filter(|value| value.is_object())
+    {
+        set_coordinator_turn_needs_you(attention, db, key);
     }
 }
 
@@ -162,10 +208,8 @@ pub fn insert_coordinator_session_projection(
         &now_iso(),
     );
     if is_coordinator {
-        super::remote_threads::insert_coordinator_remote_threads(
-            presentation_session,
-            db,
-            &(project_id, session_id),
-        );
+        let key = (project_id, session_id);
+        super::remote_threads::insert_coordinator_remote_threads(presentation_session, db, &key);
+        set_session_coordinator_turn_needs_you(presentation_session, db, &key);
     }
 }

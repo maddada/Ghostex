@@ -291,7 +291,13 @@ pub(crate) async fn handle_remote_access_http(
                 let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
                 let doors =
                     crate::tailcat::known_door_addresses(&paths, status.relay.host.as_deref());
-                Ok(json!({ "addresses": easy_connect_addresses_with_doors(&status, doors) }))
+                // `enabled`: the user's Easy Connect switch, so a phone tells Off from a helper that
+                // is restarting (CDXC:RemotePairing 2026-11-13 in tailcat/status.rs); older phones
+                // read only `addresses`.
+                Ok(json!({
+                    "addresses": easy_connect_addresses_with_doors(&status, doors),
+                    "enabled": status.enabled,
+                }))
             })
             .await
         }
@@ -385,6 +391,9 @@ pub(crate) async fn handle_remote_access_http(
                         "clientKey must be a nodekey: public key.",
                     )),
                     Err(LinkKeyError::NotPaired) => Err(RemoteAccessHttpError::unknown_device(&device_id)),
+                    Err(LinkKeyError::EasyConnectOff) => Err(RemoteAccessHttpError::bad_request(
+                        crate::tailcat::EASY_CONNECT_OFF_REFUSAL,
+                    )),
                     Err(LinkKeyError::HeldByAnotherDevice { name, paired }) => {
                         Err(PairDeviceError::KeyHeldByAnotherDevice { name, paired }.into())
                     }
@@ -471,6 +480,16 @@ pub(crate) async fn handle_remote_access_http(
             let server_port = state.config.listeners.local.port;
             tokio::task::spawn_blocking(move || {
                 let device_name = params.device_name.clone();
+                // Easy Connect off here: no ask, no card, no key (CDXC:RemotePairing 2026-11-13 in
+                // tailcat/status.rs).
+                let db = open_gxserver_database(&paths)?;
+                if params.tailcat_client_key.is_some()
+                    && !crate::tailcat::easy_connect_turned_on(&db)?
+                {
+                    return Err(RemoteAccessHttpError::bad_request(
+                        crate::tailcat::EASY_CONNECT_OFF_REFUSAL,
+                    ));
+                }
                 // Traced only for a pairing that includes Easy Connect, the one it can approve.
                 let owner = if params.tailcat_client_key.is_some() {
                     super::tailnet_owner::check(client, server_port)
@@ -486,7 +505,6 @@ pub(crate) async fn handle_remote_access_http(
                     ),
                     _ => "A phone that signs in over SSH asked to pair with this computer".to_string(),
                 };
-                let db = open_gxserver_database(&paths)?;
                 let started = begin_ssh_pairing(&db, &pairing_runtime, &security, params, &owner);
                 // The same request handed back again is no new ask: the log keeps the first one. One
                 // approved without a click is logged once, when it pairs (`finish_pairing`).
@@ -596,7 +614,7 @@ pub(crate) async fn handle_remote_access_http(
             };
             tokio::task::spawn_blocking(move || {
                 let name = code.name.clone();
-                let started = super::computer_pairing::start_computer_pairing(&paths, code);
+                let started = super::computer_pairing::start_computer_pairing(&paths, code, None);
                 crate::audit::record(
                     crate::audit::Action::new(
                         "pairing.computerRequest",
@@ -624,13 +642,70 @@ pub(crate) async fn handle_remote_access_http(
                     .into_response(endpoint_path, request_id);
             };
             let cancel = endpoint_path == "/api/cancelComputerPairing";
-            tokio::task::spawn_blocking(move || {
+            let answer = tokio::task::spawn_blocking(move || {
                 if cancel {
                     super::computer_pairing::cancel_computer_pairing(&pending_id);
                     return Ok(json!({ "status": "cancelled" }));
                 }
                 super::computer_pairing::computer_pairing_status(&paths, &pending_id)
                     .map_err(|error| RemoteAccessHttpError::bad_request(format!("{error:#}")))
+            })
+            .await;
+            // Connect both ways: this computer's desktop adds the computer that asked
+            // (CDXC:RemotePairing 2026-11-14 in connect_back.rs).
+            match answer {
+                Ok(Ok(mut answer)) => {
+                    if let Some(machine) =
+                        answer.get("addMachine").and_then(Value::as_object).cloned()
+                    {
+                        let added = state
+                            .event_hub
+                            .dispatch_renderer_command(
+                                "addRemoteMachine".to_string(),
+                                machine,
+                                15_000,
+                            )
+                            .await
+                            .is_ok();
+                        answer["machineAdded"] = json!(added);
+                    }
+                    Ok(Ok(answer))
+                }
+                other => other,
+            }
+        }
+        crate::remote_access::connect_back::SIGN_CONNECT_BACK_ENDPOINT => {
+            tokio::task::spawn_blocking(move || {
+                super::connect_back::sign_connect_back(&paths, &params)
+                    .map_err(|error| RemoteAccessHttpError::bad_request(format!("{error:#}")))
+            })
+            .await
+        }
+        crate::remote_access::connect_back::CONNECT_BACK_ENDPOINT => {
+            let caller = caller.clone();
+            tokio::task::spawn_blocking(move || {
+                let db = open_gxserver_database(&paths)?;
+                let started = super::connect_back::connect_back(&db, &paths, &params, &caller);
+                crate::audit::record(
+                    crate::audit::Action::new(
+                        "pairing.computerRequest",
+                        "A connected computer asked this one to connect back to it through Easy Connect",
+                    )
+                    .target(
+                        params
+                            .get("name")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .to_string(),
+                    ),
+                    actor,
+                    match &started {
+                        Ok(_) => crate::audit::Outcome::Pending,
+                        Err(error) => crate::audit::Outcome::Failed(format!("{error:#}")),
+                    },
+                    None,
+                );
+                started.map_err(|error| RemoteAccessHttpError::bad_request(format!("{error:#}")))
             })
             .await
         }

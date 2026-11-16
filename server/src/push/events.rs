@@ -22,18 +22,95 @@ pub(crate) fn announce_feed_row(
         Some("failed") => AlertKind::Failed,
         _ => return,
     };
-    enqueue_row_alert(state, repository, session, row, kind);
+    enqueue_row_alert(state, repository, session, row, kind, PushRoute::default());
 }
 
-/// A thread's finished turn under a coordinator, which the alert rule keeps quiet: it goes only to
-/// the phones whose Thread reports choice is not Off (`AlertKind::ThreadReport`).
+/// Where a push goes besides its kind's own choice: a worker's news follows the phone's Workers
+/// choice, and a tap may open another session (CDXC:Notifications 2026-11-14 in
+/// server/src/worker_alerts.rs).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct PushRoute {
+    pub(crate) worker: bool,
+    pub(crate) open_session_id: Option<String>,
+}
+
+impl PushRoute {
+    /// A worker's own news.
+    pub(crate) fn worker() -> Self {
+        Self {
+            worker: true,
+            open_session_id: None,
+        }
+    }
+
+    /// Something only the user can do in a worker (an approval), opened on its coordinator.
+    pub(crate) fn opens(session_id: &str) -> Self {
+        Self {
+            worker: false,
+            open_session_id: Some(session_id.to_string()),
+        }
+    }
+}
+
+/// A committed feed row as `kind`, routed by `route`.
+pub(crate) fn announce_feed_row_as(
+    state: &AppState,
+    repository: &DomainRepository<'_>,
+    session: &Value,
+    row: &Value,
+    kind: AlertKind,
+    route: PushRoute,
+) {
+    enqueue_row_alert(state, repository, session, row, kind, route);
+}
+
+/// A thread's finished turn under a coordinator, which the alert rule keeps quiet on the computer:
+/// it goes only to the phones whose Workers (Thread reports) choice is not Off
+/// (`AlertKind::ThreadReport`).
 pub(crate) fn announce_thread_report(
     state: &AppState,
     repository: &DomainRepository<'_>,
     session: &Value,
     row: &Value,
 ) {
-    enqueue_row_alert(state, repository, session, row, AlertKind::ThreadReport);
+    enqueue_row_alert(
+        state,
+        repository,
+        session,
+        row,
+        AlertKind::ThreadReport,
+        PushRoute::worker(),
+    );
+}
+
+/// A worker's news that has no Notifications row (Workers is Off on this computer): it still goes
+/// to the phones whose own Workers choice is not Off, under a notice id of its own.
+pub(crate) fn announce_worker_event(
+    state: &AppState,
+    repository: &DomainRepository<'_>,
+    session: &Value,
+    kind: AlertKind,
+) {
+    let row = rowless_notice(repository, session, &uuid::Uuid::new_v4().to_string());
+    enqueue_row_alert(state, repository, session, &row, kind, PushRoute::worker());
+}
+
+/// The fields a push reads from a feed row, for a notice whose row is not the feed's own kind.
+fn rowless_notice(repository: &DomainRepository<'_>, session: &Value, id: &str) -> Value {
+    let project_id = session["projectId"].as_str().unwrap_or_default();
+    let subtitle = repository
+        .get_project(project_id)
+        .ok()
+        .flatten()
+        .and_then(|project| project["name"].as_str().map(str::to_string))
+        .unwrap_or_default();
+    serde_json::json!({
+        "id": id,
+        "projectId": project_id,
+        "sessionId": session["sessionId"],
+        "subtitle": subtitle,
+        "createdAt": chrono::Utc::now().to_rfc3339(),
+    })
 }
 
 /// Why a red-dot row goes to the phones (`announce_red_dot`).
@@ -43,6 +120,8 @@ pub(crate) enum BlockedWhy {
     Stuck,
     /// Every account is out of usage.
     Usage,
+    /// The memory guard stopped something because the computer was running out of memory.
+    OutOfMemory,
 }
 
 /// CDXC:Notifications 2026-11-08 DECISION:
@@ -58,26 +137,20 @@ pub(crate) fn announce_blocked(
     session: &Value,
     notification_id: &str,
     why: BlockedWhy,
+    route: PushRoute,
 ) {
-    let project_id = session["projectId"].as_str().unwrap_or_default();
-    let subtitle = repository
-        .get_project(project_id)
-        .ok()
-        .flatten()
-        .and_then(|project| project["name"].as_str().map(str::to_string))
-        .unwrap_or_default();
-    let row = serde_json::json!({
-        "id": notification_id,
-        "projectId": project_id,
-        "sessionId": session["sessionId"],
-        "subtitle": subtitle,
-        "createdAt": chrono::Utc::now().to_rfc3339(),
-    });
-    let kind = match why {
-        BlockedWhy::Stuck => AlertKind::Stuck,
-        BlockedWhy::Usage => AlertKind::Blocked,
-    };
-    enqueue_row_alert(state, repository, session, &row, kind);
+    let row = rowless_notice(repository, session, notification_id);
+    enqueue_row_alert(state, repository, session, &row, why.kind(), route);
+}
+
+impl BlockedWhy {
+    pub(crate) fn kind(self) -> AlertKind {
+        match self {
+            Self::Stuck => AlertKind::Stuck,
+            Self::Usage => AlertKind::Blocked,
+            Self::OutOfMemory => AlertKind::OutOfMemory,
+        }
+    }
 }
 
 fn enqueue_row_alert(
@@ -86,6 +159,7 @@ fn enqueue_row_alert(
     session: &Value,
     row: &Value,
     kind: AlertKind,
+    route: PushRoute,
 ) {
     let text = |key: &str| row.get(key).and_then(Value::as_str).unwrap_or_default();
     let occurred_at_ms = chrono::DateTime::parse_from_rfc3339(text("createdAt"))
@@ -143,6 +217,8 @@ fn enqueue_row_alert(
         project_name: text("subtitle").to_string(),
         session_title,
         occurred_at_ms,
+        worker: route.worker,
+        open_session_id: route.open_session_id,
     });
 }
 

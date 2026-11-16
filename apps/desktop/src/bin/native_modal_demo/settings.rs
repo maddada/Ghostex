@@ -68,6 +68,13 @@ fn story_settings(state: &str) -> serde_json::Map<String, Value> {
     settings.insert("terminalFontSize".into(), json!(16));
     settings.insert("terminalFontWeight".into(), json!(400));
     settings.insert("terminalLineHeight".into(), json!(1.35));
+    if state == "theme-colours" {
+        settings.insert("sidebarTheme".into(), json!("system"));
+        settings.insert(
+            "themeRoles".into(),
+            json!({ "dark": { "border": "4%", "divider": "3%" }, "light": { "mutedText": "#6b7280" } }),
+        );
+    }
     if state == "pick-color" {
         settings.insert("terminalBackgroundMode".into(), json!("custom"));
         settings.insert("workspaceBackgroundColor".into(), json!("#1d3b53"));
@@ -336,6 +343,8 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         "security-log" => json!({ "initialTab": "security", "initialSection": "log" }),
         // Settings > About with its Reset all settings? confirmation open.
         "about-reset-confirm" => json!({ "initialTab": "about" }),
+        // Settings > Interface scrolled to Theme colours, with a few colours set and More open.
+        "theme-colours" => json!({ "initialTab": "theme", "initialSection": "themeColours" }),
         // `page-<id>`: that rail page (`page-connectors`, `page-tools`), for pages with no state of their own.
         state if state.starts_with("page-") => json!({ "initialTab": &state["page-".len()..] }),
         "tags" => {

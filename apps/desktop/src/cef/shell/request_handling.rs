@@ -4,6 +4,10 @@
 // telemetry, and browser popup link routing. Pure move out of `cef/shell.rs`.
 // See docs/2026-08-22/repo-restructure/SPLITS.md C4.
 use super::*;
+use crate::app::helpers::manage_embed_page_rules::{
+    manage_docs_page_may_read, manage_docs_resource_path_is_hidden, manage_embed_url_resource_path,
+    manage_embed_url_shows_html, manage_html_frame_may_navigate, manage_html_page_may_request,
+};
 
 /*
 CDXC:Docs 2026-07-14:
@@ -74,7 +78,42 @@ pub(crate) fn manage_docs_resource_relative_path(url: &str) -> Option<String> {
     {
         return None;
     }
+    // CDXC:Docs 2026-11-14 DECISION: pages never load dot-files or anything in a dot-folder
+    // (`.env`, `.git/`, `.claude/`), wherever they sit (app/helpers/manage_embed_page_rules.rs).
+    if manage_docs_resource_path_is_hidden(&relative_path) {
+        return None;
+    }
     Some(relative_path.to_string())
+}
+
+/// Where a request in the Files embed page comes from, for the rules in
+/// `app/helpers/manage_embed_page_rules.rs`.
+pub(crate) enum ManageEmbedRequestSource {
+    /// Ghostex's own embed page (the main frame), or a drawing's or a media file's frames.
+    App,
+    /// The rendered HTML file, or a frame or worker it made; carries the page's resource path.
+    HtmlPage { resource_path: String },
+}
+
+/// Every frame below the main frame of an HTML embed is the rendered file; so is a request with
+/// no frame (a worker) there. The main frame is Ghostex's own page.
+pub(crate) fn manage_embed_request_source(
+    browser: Option<&mut cef::Browser>,
+    frame: Option<&mut Frame>,
+) -> ManageEmbedRequestSource {
+    if frame.as_ref().is_some_and(|frame| frame.is_main() != 0) {
+        return ManageEmbedRequestSource::App;
+    }
+    let main_url = browser
+        .and_then(|browser| browser.main_frame())
+        .map(|frame| CefString::from(&frame.url()).to_string())
+        .unwrap_or_default();
+    if !manage_embed_url_shows_html(&main_url) {
+        return ManageEmbedRequestSource::App;
+    }
+    ManageEmbedRequestSource::HtmlPage {
+        resource_path: manage_embed_url_resource_path(&main_url).unwrap_or_default(),
+    }
 }
 
 /// Opens a Docs resource, from `range_header`'s first byte range when the request carries a
@@ -239,6 +278,8 @@ wrap_resource_handler! {
         source: ManageDocsResourceSource,
         relative_path: String,
         range_header: Option<String>,
+        // Whether the requesting document may read the answer (`Access-Control-Allow-Origin`).
+        cors: bool,
         body: Arc<Mutex<Option<ManageDocsResourceBody>>>,
     }
 
@@ -296,11 +337,20 @@ wrap_resource_handler! {
             )));
             let mut headers = string_multimap_alloc();
             if let Some(headers) = headers.as_mut() {
-                string_multimap_append(
-                    Some(headers),
-                    Some(&CefString::from("Access-Control-Allow-Origin")),
-                    Some(&CefString::from("*")),
-                );
+                /*
+                CDXC:Docs 2026-11-14 DECISION:
+                Only a document allowed to read a file gets the header that lets its script read
+                the answer: Ghostex's own embed page, a font (it loads in CORS mode and shows
+                nothing of its bytes), and a rendered HTML file reading inside its own folder or
+                below. Pictures, stylesheets and scripts beside it still load without it.
+                */
+                if self.cors {
+                    string_multimap_append(
+                        Some(headers),
+                        Some(&CefString::from("Access-Control-Allow-Origin")),
+                        Some(&CefString::from("*")),
+                    );
+                }
                 string_multimap_append(
                     Some(headers),
                     Some(&CefString::from("Cache-Control")),
@@ -396,8 +446,8 @@ wrap_resource_request_handler! {
 
         fn resource_handler(
             &self,
-            _browser: Option<&mut cef::Browser>,
-            _frame: Option<&mut Frame>,
+            browser: Option<&mut cef::Browser>,
+            frame: Option<&mut Frame>,
             request: Option<&mut Request>,
         ) -> Option<ResourceHandler> {
             let request = request?;
@@ -405,10 +455,18 @@ wrap_resource_request_handler! {
             let relative_path = manage_docs_resource_relative_path(&request_url)?;
             let range_header = CefString::from(&request.header_by_name(Some(&CefString::from("Range"))))
                 .to_string();
+            let cors = match manage_embed_request_source(browser, frame) {
+                ManageEmbedRequestSource::App => true,
+                ManageEmbedRequestSource::HtmlPage { resource_path } => {
+                    request.resource_type() == cef::ResourceType::FONT_RESOURCE
+                        || manage_docs_page_may_read(&resource_path, &relative_path)
+                }
+            };
             Some(GhostexManageDocsResourceHandler::new(
                 self.source.clone(),
                 relative_path,
                 (!range_header.trim().is_empty()).then_some(range_header),
+                cors,
                 Arc::new(Mutex::new(None)),
             ))
         }
@@ -506,6 +564,39 @@ pub(crate) fn first_party_page_entry_identity(url: &str) -> String {
     get_url_without_query_or_fragment(url).to_string()
 }
 
+/// Whether `url` shows the first-party page whose entry identity is `page`: the same address
+/// without query or fragment, compared as parsed URLs so CEF's own spelling of a frame URL
+/// (lower-case scheme and host, percent-encoding) still matches.
+pub(crate) fn same_first_party_page(url: &str, page: &str) -> bool {
+    let entry = first_party_page_entry_identity(url);
+    match (url::Url::parse(&entry), url::Url::parse(page)) {
+        (Ok(entry), Ok(page)) => {
+            entry.scheme() == page.scheme()
+                && entry.host_str() == page.host_str()
+                && entry.port_or_known_default() == page.port_or_known_default()
+                && entry.path() == page.path()
+        }
+        _ => entry == page,
+    }
+}
+
+wrap_resource_request_handler! {
+    // Cancels the one request it is given: something a rendered HTML file may not reach.
+    pub(crate) struct GhostexRefusedResourceRequestHandler;
+
+    impl ResourceRequestHandler {
+        fn on_before_resource_load(
+            &self,
+            _browser: Option<&mut cef::Browser>,
+            _frame: Option<&mut Frame>,
+            _request: Option<&mut Request>,
+            _callback: Option<&mut Callback>,
+        ) -> ReturnValue {
+            ReturnValue::CANCEL
+        }
+    }
+}
+
 wrap_request_handler! {
     pub(crate) struct GhostexManageDocsRequestHandler {
         source: ManageDocsResourceSource,
@@ -519,22 +610,46 @@ wrap_request_handler! {
             browser: Option<&mut cef::Browser>,
             frame: Option<&mut Frame>,
             request: Option<&mut Request>,
-            _user_gesture: c_int,
+            user_gesture: c_int,
             _is_redirect: c_int,
         ) -> c_int {
-            let (mut frame, mut request) = (frame, request);
+            let (mut browser, mut frame, mut request) = (browser, frame, request);
             // An HTML file's app links run in its sub-frame, so this comes before the frame check.
             if cancel_external_app_navigation(
-                browser,
+                browser.as_deref_mut(),
                 frame.as_deref_mut(),
                 request.as_deref_mut(),
                 None,
             ) {
                 return 1;
             }
-            let is_main_frame = frame.map(|frame| frame.is_main() != 0).unwrap_or(true);
+            let is_main_frame = frame.as_ref().map(|frame| frame.is_main() != 0).unwrap_or(true);
             if !is_main_frame {
-                return 0;
+                /*
+                CDXC:Docs 2026-11-14 DECISION:
+                A rendered HTML file's frames stay on their own document and the Files resource
+                origin (User: network blocked for the page, so nothing it reads can leave). A link
+                the user clicks still opens, where a clicked chat link would; a page cannot
+                navigate anywhere by itself.
+                */
+                let ManageEmbedRequestSource::HtmlPage { .. } =
+                    manage_embed_request_source(browser, frame)
+                else {
+                    return 0;
+                };
+                let request_url = request
+                    .map(|request| CefString::from(&request.url()).to_string())
+                    .unwrap_or_default();
+                if manage_html_frame_may_navigate(&request_url) {
+                    return 0;
+                }
+                if user_gesture != 0
+                    && (request_url.starts_with("http://") || request_url.starts_with("https://"))
+                    && let Some(handler) = self.bridge_event_handler.as_ref()
+                {
+                    handler(ProjectWorkareaBridgeEvent::RefusedPageNavigation(request_url));
+                }
+                return 1;
             }
             let Some(request_url) = request.map(|request| CefString::from(&request.url()).to_string())
             else {
@@ -553,8 +668,8 @@ wrap_request_handler! {
 
         fn resource_request_handler(
             &self,
-            _browser: Option<&mut cef::Browser>,
-            _frame: Option<&mut Frame>,
+            browser: Option<&mut cef::Browser>,
+            frame: Option<&mut Frame>,
             request: Option<&mut Request>,
             _is_navigation: c_int,
             _is_download: c_int,
@@ -567,6 +682,16 @@ wrap_request_handler! {
             let request_url = CefString::from(&request.url()).to_string();
             if request_url.starts_with(MANAGE_DOCS_RESOURCE_BASE_URL) {
                 return Some(GhostexManageDocsResourceRequestHandler::new(self.source.clone()));
+            }
+            // A rendered HTML file reaches nothing outside the Files resource origin but a few
+            // library CDNs (CDXC:Docs 2026-11-14 in app/helpers/manage_embed_page_rules.rs).
+            if let ManageEmbedRequestSource::HtmlPage { .. } =
+                manage_embed_request_source(browser, frame)
+            {
+                let method = CefString::from(&request.method()).to_string();
+                if !manage_html_page_may_request(&request_url, &method) {
+                    return Some(GhostexRefusedResourceRequestHandler::new());
+                }
             }
             external_app_resource_request_handler(Some(request))
         }

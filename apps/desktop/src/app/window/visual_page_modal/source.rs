@@ -76,6 +76,7 @@ impl GpuiVisualPageModalWindow {
                 let questions_left = status["questionsLeft"].as_bool();
                 let counts = question_counts(&status);
                 let session = page_session(&status);
+                let starred = status["starred"].as_bool();
                 if status["refreshable"] != true && questions_left.is_none() {
                     return;
                 }
@@ -83,6 +84,10 @@ impl GpuiVisualPageModalWindow {
                 let updated = this.update(cx, |this, cx| {
                     if session.is_some() {
                         this.page_session = session;
+                    }
+                    if starred.is_some() && this.page_starred != starred {
+                        this.page_starred = starred;
+                        this.refresh_more_menu(cx);
                     }
                     if this.source_changed != changed && !this.refreshing {
                         this.source_changed = changed;

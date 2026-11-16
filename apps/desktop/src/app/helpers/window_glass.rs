@@ -415,14 +415,20 @@ pub(crate) fn refresh_window_glass(object: &serde_json::Map<String, serde_json::
     }
     window_glass_live::refresh_window_glass_live(object);
     terminal_glass::refresh_terminal_glass(object);
+    // A picture, video or Live backdrop is drawn by Ghostex itself; only the desktop behind the
+    // window needs the compositor's blur.
+    let shows_desktop = !matches!(source, Some("wallpaper" | "customImage" | "video" | "live"));
+    let blur_withheld = shows_desktop && desktop_withholds_blur();
     let active = cfg!(any(
         target_os = "macos",
         target_os = "windows",
         target_os = "linux"
     )) && wanted
-        && !system_reduces_transparency();
+        && !system_reduces_transparency()
+        && !blur_withheld;
     WINDOW_GLASS_SYSTEM_BLOCKED.store(
-        cfg!(any(target_os = "macos", target_os = "windows")) && system_reduces_transparency(),
+        (cfg!(any(target_os = "macos", target_os = "windows")) && system_reduces_transparency())
+            || blur_withheld,
         Ordering::Relaxed,
     );
     WINDOW_GLASS_ACTIVE.swap(active, Ordering::Relaxed) != active
@@ -469,6 +475,58 @@ fn system_reduces_transparency() -> bool {
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn system_reduces_transparency() -> bool {
     false
+}
+
+/// Whether the desktop is known not to blur what is behind a see-through window: Hyprland with
+/// `decoration:blur:enabled` off (Omarchy's default; its Glassy Windows turns it on), and GNOME,
+/// whose Mutter has no blur for apps. KDE blurs on request, and a desktop Ghostex cannot ask keeps
+/// the glass.
+///
+/// CDXC:Theming 2026-11-14 DECISION:
+/// User (Omarchy audit Q8): "paint the window opaque when the desktop won't blur it (and tell people how to turn on Omarchy's Glassy look)". Without blur, glass showed the windows behind it sharp through the work area and sidebar. The desktop look of glass is turned off while the desktop won't blur, and Settings > Interface > Transparency says why and how (`status_note`); a picture, video or Live backdrop is Ghostex's own and stays. Turning Glassy Windows on or off applies at once (`watch_linux_desktop_blur`).
+#[cfg(all(target_os = "linux", not(ghostex_web)))]
+fn desktop_withholds_blur() -> bool {
+    if let Some(blurs) = crate::linux_hyprland::blurs_windows() {
+        return !blurs;
+    }
+    std::env::var("XDG_CURRENT_DESKTOP").is_ok_and(|desktop| {
+        desktop
+            .split(':')
+            .any(|name| name.eq_ignore_ascii_case("GNOME"))
+    })
+}
+
+#[cfg(not(all(target_os = "linux", not(ghostex_web))))]
+fn desktop_withholds_blur() -> bool {
+    false
+}
+
+/// Re-applies the glass each time Hyprland's blur is turned on or off, so Omarchy's Glassy Windows
+/// takes effect without a restart (`desktop_withholds_blur`).
+#[cfg(all(target_os = "linux", not(ghostex_web)))]
+pub(crate) fn watch_linux_desktop_blur(cx: &mut Context<GhostexGpuiApp>) {
+    use futures::StreamExt as _;
+    let mut changes = crate::linux_hyprland::watch_blur();
+    cx.spawn(async move |this, cx| {
+        while changes.next().await.is_some() {
+            let refreshed = this.update(cx, |app, cx| {
+                let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
+                if refresh_window_glass(settings.object()) {
+                    app.refresh_workarea_page_themes(&settings, cx);
+                    cx.notify();
+                    app.update_other_workspace_windows(cx, |app, cx| {
+                        let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
+                        app.refresh_workarea_page_themes(&settings, cx);
+                        cx.notify();
+                    });
+                }
+            });
+            if refreshed.is_err() {
+                break;
+            }
+        }
+    })
+    .detach();
 }
 
 /// The background a window that follows the glass live (every workspace window, the Project
@@ -994,12 +1052,14 @@ pub(crate) fn glass_card(color: Hsla, strength: f32) -> Hsla {
 
 /// CDXC:Theming 2026-09-23 DECISION:
 /// User picked "23a": under window glass the divider lines stay, but as faint see-through 1px lines like the chat composer's border (the chrome ink at 8%), instead of solid dark or light grey lines that read as grooves cut into the glass. Pane borders, resize rails, the sidebar edge and the command pane's edges all take it; focus and attention outlines and the resize hover highlight keep their colours. The opaque window keeps the given colour.
+/// The Dividers theme role replaces both when it is set (helpers/theme_roles.rs).
 pub(crate) fn glass_divider(color: Hsla) -> Hsla {
-    if window_glass_active() {
+    let derived = if window_glass_active() {
         Hsla::from(chrome_ink()).opacity(0.08)
     } else {
         color
-    }
+    };
+    theme_role_or("divider", chrome_uses_light_appearance(), derived)
 }
 
 /// The body row behind the sidebar, its divider and the workspace column. Opaque, it is the

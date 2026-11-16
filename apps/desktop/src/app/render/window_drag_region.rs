@@ -20,21 +20,20 @@ fn set_window_drag_press(press: Option<gpui::Point<gpui::Pixels>>) {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 fn window_drag_is_app_owned(_window: &gpui::Window) -> bool {
     true
 }
 
-#[cfg(target_os = "linux")]
+/// CDXC:PlatformSupport 2026-11-14 WHY:
+/// On Omarchy the page window a `ghostex show` card opens could not be dragged by its top band. Hyprland's XWayland does not advertise `_GTK_FRAME_EXTENTS`, so GPUI reports every window as server-decorated, yet Hyprland never draws a title bar for one: with the drag left to the window manager there was nothing to drag. On Hyprland the app's drag regions always move the window (gpui_linux moves it itself there, since Hyprland also drops `_NET_WM_MOVERESIZE`).
+#[cfg(all(target_os = "linux", not(ghostex_web)))]
 fn window_drag_is_app_owned(window: &gpui::Window) -> bool {
-    matches!(
-        window.window_decorations(),
-        gpui::Decorations::Client { .. }
-    )
+    crate::app::helpers::linux_app_draws_window_caption(window)
 }
 
 // The browser build (apps/gpui-web) compiles this file too; a page has no window to drag.
-#[cfg(any(target_os = "windows", target_family = "wasm"))]
+#[cfg(any(all(target_os = "windows", not(ghostex_web)), ghostex_web))]
 fn window_drag_is_app_owned(_window: &gpui::Window) -> bool {
     false
 }
@@ -52,18 +51,20 @@ honours the user's NSGlobalDomain AppleActionOnDoubleClick preference (Maximize/
 Do Nothing). Linux compositors leave the same gesture to the client, so zoom directly there;
 Windows already resolves it from the WindowControlArea::Drag hit test in the platform layer.
 */
-#[cfg(target_os = "macos")]
-fn window_drag_double_click_action(window: &gpui::Window) {
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
+fn window_drag_double_click_action(window: &mut gpui::Window) {
     window.titlebar_double_click();
 }
 
-#[cfg(target_os = "linux")]
-fn window_drag_double_click_action(window: &gpui::Window) {
+#[cfg(all(target_os = "linux", not(ghostex_web)))]
+fn window_drag_double_click_action(window: &mut gpui::Window) {
     window.zoom_window();
+    // The maximize button's icon follows; Hyprland's maximize can leave the size unchanged.
+    window.refresh();
 }
 
-#[cfg(any(target_os = "windows", target_family = "wasm"))]
-fn window_drag_double_click_action(_window: &gpui::Window) {}
+#[cfg(any(all(target_os = "windows", not(ghostex_web)), ghostex_web))]
+fn window_drag_double_click_action(_window: &mut gpui::Window) {}
 
 /// CDXC:Titlebar 2026-09-21 WHY:
 /// The view tab strip sits in the window's top band, and on macOS AppKit moved the window from any

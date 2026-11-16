@@ -1,3 +1,4 @@
+use super::super::appearance::ChatAppearance;
 use super::window::ChatOptionMenuPanel;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -440,7 +441,7 @@ impl Render for ChatOptionMenuPanel {
                                 .mt(px(2.0 * scale))
                                 .text_size(px(12.0 * scale))
                                 .line_height(px(16.0 * scale))
-                                .when(!disabled, |line| line.truncate())
+                                .when(!disabled && row["toggle"] != true, |line| line.truncate())
                                 .text_color(foreground.opacity(0.58))
                                 .child(description),
                         )
@@ -457,7 +458,32 @@ impl Render for ChatOptionMenuPanel {
             // An unchecked row with a hotkey drops its empty check slot, so the hotkey sits on the
             // right edge like the hotkeys of rows that cannot be checked.
             let empty_check_beside_hotkey = row["checked"] == false && row["detail"].is_string();
-            if children || (row.get("checked").is_some() && !empty_check_beside_hotkey) {
+            if row["toggle"] == true {
+                // A row that turns something on or off draws the app's switch (the Mode menu's
+                // "Restart in Bypass when idle", chat core `menus/mode_restart.rs`).
+                use crate::app::window::native_modal_kit::{SwitchOff, SwitchShape, draw_switch};
+                let light = appearance.light;
+                item = item.role(gpui::Role::Switch).child(
+                    draw_switch(
+                        SwitchShape::REGULAR.scaled(scale),
+                        SwitchOff {
+                            track: gpui::Hsla::from(gpui::rgb(if light {
+                                0x000000
+                            } else {
+                                0xffffff
+                            }))
+                            .opacity(if light { 0.144 } else { 0.135 })
+                            .into(),
+                            edge: None,
+                            thumb: gpui::rgb(if light { 0xfcfcfc } else { 0x292929 }),
+                        },
+                        light,
+                        row["checked"] == true,
+                        disabled,
+                    )
+                    .flex_shrink_0(),
+                );
+            } else if children || (row.get("checked").is_some() && !empty_check_beside_hotkey) {
                 item = item.child(div().flex_shrink_0().size(px(m.icon * scale)).when(
                     children || row["checked"] == true,
                     |item| {
@@ -489,7 +515,8 @@ impl Render for ChatOptionMenuPanel {
                 crate::app::helpers::titlebar_popup_menu_border_color(),
             )
         } else {
-            (appearance.menu_surface(), border)
+            let glass = ChatMenuGlass::menu(&appearance);
+            (glass.fill, glass.edge)
         };
         let card = div()
             .id("chat-option-menu")
@@ -507,24 +534,12 @@ impl Render for ChatOptionMenuPanel {
             .text_size(px(m.text * scale))
             .line_height(px(m.line * scale))
             .on_key_down(cx.listener(Self::key));
-        if self
-            .rows
-            .first()
-            .is_some_and(|row| row["accounts"].is_object())
-        {
-            let at_once = !self
-                .rows
-                .first()
-                .is_some_and(super::window::accounts_row_opens_animated);
-            crate::app::window::popup_frame::popup_open_frame(
-                card,
-                body,
-                at_once,
-                cx.reduce_motion(),
-            )
-        } else {
-            card.child(body).into_any_element()
-        }
+        crate::app::window::popup_frame::popup_open_frame(
+            card,
+            body,
+            !self.opens_animated,
+            cx.reduce_motion(),
+        )
     }
 }
 
@@ -536,4 +551,49 @@ pub(super) fn menu_ink_washes(light: bool) -> (gpui::Hsla, gpui::Hsla) {
     let foreground: gpui::Hsla = gpui::rgb(if light { 0x292929 } else { 0xfcfcfc }).into();
     let border: gpui::Hsla = gpui::rgba(if light { 0x0000001f } else { 0xffffff1f }).into();
     (foreground.opacity(if light { 0.06 } else { 0.08 }), border)
+}
+
+/// The chat menu's material (the transcript's right-click menu): its fill, hairline, ink, row hover
+/// and corner radius, for the menu itself and for the bars that float over the transcript in the
+/// chat's own window (the selection bar, an inline command's Copy / Paste in terminal bar).
+///
+/// CDXC:SessionChat 2026-11-13 DECISION: User, of the selection bar (Copy / Add to Chat / Reply) drawn as a near-black box: "can we make this not so dark please? also should be glassy, like the context menu looks. Do the same for the buttons for the commands too." Both bars take the right-click menu's own colours: its tone (the chat's menu colour, never darkened toward black as the tooltip bubble is), its hairline, its ink for the icons, its row hover and its 8px corners, with no drop shadow (the menu's window has none). GPUI blurs only behind a whole window, and both bars live in the chat's window (`selection_bar.rs` WHY, `run_command.rs` WHY), so under window glass the bar is that tone covering `IN_WINDOW_GLASS_ALPHA` of what is under it, where the menu is its tone at the frosted menus' coverage over a blur; glass off, both are the solid menu colour. Supersedes, for these two bars only, the tooltip bubble fill of CDXC:Tooltips 2026-10-25 (`in_window_bubble`); the 2026-10-25 rule that a floating control is never a faint wash text reads through still holds.
+#[derive(Clone, Copy)]
+pub(in crate::app::native_chat) struct ChatMenuGlass {
+    pub(in crate::app::native_chat) fill: gpui::Hsla,
+    pub(in crate::app::native_chat) edge: gpui::Hsla,
+    pub(in crate::app::native_chat) ink: gpui::Hsla,
+    pub(in crate::app::native_chat) hover: gpui::Hsla,
+    pub(in crate::app::native_chat) radius: gpui::Pixels,
+}
+
+/// How much of what is under it an in-window glass bar covers: enough that text beneath never reads
+/// through it (CDXC:Tooltips 2026-10-25), where the menu itself has a blur to hide it.
+const IN_WINDOW_GLASS_ALPHA: f32 = 0.88;
+
+impl ChatMenuGlass {
+    /// The menu's own window: frosted under window glass (`ChatAppearance::menu_surface`).
+    pub(in crate::app::native_chat) fn menu(appearance: &ChatAppearance) -> Self {
+        let (hover, edge) = menu_ink_washes(appearance.light);
+        Self {
+            fill: appearance.menu_surface(),
+            edge,
+            ink: gpui::rgb(if appearance.light { 0x292929 } else { 0xfcfcfc }).into(),
+            hover,
+            radius: px(super::geometry::MenuMetrics::REGULAR.radius * appearance.scale),
+        }
+    }
+
+    /// A bar drawn inside the chat's window, where nothing blurs behind it.
+    pub(in crate::app::native_chat) fn in_window(appearance: &ChatAppearance) -> Self {
+        let solid = appearance.menu_opaque();
+        Self {
+            fill: if appearance.window_glass {
+                solid.opacity(IN_WINDOW_GLASS_ALPHA)
+            } else {
+                solid
+            },
+            ..Self::menu(appearance)
+        }
+    }
 }

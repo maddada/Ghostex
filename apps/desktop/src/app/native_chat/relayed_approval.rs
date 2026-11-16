@@ -26,6 +26,9 @@ const APPROVALS_MENU_MAX: f32 = 560.0;
 /// The rows the command box shows before it scrolls inside itself (`tone_card::command_box`'s
 /// 160px at 20px a row).
 const COMMAND_BOX_ROWS: usize = 8;
+/// The least height (unscaled) a card in the menu shrinks to: its header, its buttons and a few
+/// rows of its command, so several cards scroll as a list instead of each shrinking to nothing.
+const APPROVALS_CARD_FLOOR: f32 = 230.0;
 
 /// A settled card's mark and colour.
 fn settled_mark(tone: &str, p: &ChatAppearance) -> (&'static str, gpui::Hsla) {
@@ -84,7 +87,7 @@ impl NativeChatView {
         let s = p.scale;
         let key = text(card, "key");
         if card["open"] != true {
-            return self.relayed_settled_row(card, place, p);
+            return self.relayed_settled_row(card, place, p, cx);
         }
         let thread = text(card, "threadTitle");
         let header = text(card, "header");
@@ -281,80 +284,124 @@ impl NativeChatView {
             .collect()
     }
 
-    /// An ended card: its mark, how it ended and when, on one line.
+    /// An ended card as the shared one-line card (`SINGLE_LINE_CARD`): the approvals shield in the
+    /// tile with how it ended as the badge (a green check, a red cross, an amber clock), how it
+    /// ended as the title and when; it opens to the whole sentence and the command it asked about.
+    ///
+    /// CDXC:SessionChat 2026-11-15 DECISION: User, picking Q3401 B on the event cards page
+    /// (~/.local/share/agent-work/Ghostex/chat-event-cards/more-cards.html): a settled approval is
+    /// the shared card that opens, not the smaller tinted line whose sentence wrapped to two lines.
+    /// The phone matches (RelayedApprovalCard.tsx `RelayedSettledRow`).
     fn relayed_settled_row(
         &self,
         card: &Value,
         place: &'static str,
         p: &ChatAppearance,
+        cx: &Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
-        let (icon, color) = settled_mark(&text(card, "settledTone"), p);
+        let shape = &*super::cards::SINGLE_LINE_CARD;
+        let key = format!("relay-settled:{place}:{}", text(card, "key"));
+        let open = self.is_expanded(&key, false);
+        let motion = self.disclosure_frame(&key, open, cx);
         let time = clock(&text(card, "settledAt"));
+        let lead = text(card, "settledLead");
+        let title = lead.trim_end_matches('.').to_string();
+        let sentence = text(card, "settledText");
         let thread = text(card, "threadTitle");
         let tooltip = [thread.as_str(), text(card, "title").as_str()]
             .into_iter()
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>()
             .join("\n");
-        div()
-            .id(gpui::SharedString::from(format!(
-                "relay-settled:{place}:{}",
-                text(card, "key")
-            )))
-            .w_full()
-            .min_w_0()
+        let tile = shape.tile("titlebar/shield-check.svg", p);
+        let tile = match text(card, "settledTone").as_str() {
+            "good" => tile.child(shape.check_badge(p)),
+            "bad" => tile.child(shape.error_badge(p)),
+            "warn" => tile.child(shape.badge(
+                gpui::rgb(0xd97706).into(),
+                "titlebar/chat-card-clock.svg",
+                gpui::white(),
+                p,
+            )),
+            _ => tile,
+        };
+        let toggle_key = key.clone();
+        let hover = super::cards::card_hover_fill(p);
+        let header = div()
+            .id(gpui::SharedString::from(format!("{key}:header")))
+            .role(gpui::Role::Button)
+            .aria_label(format!("{lead} {sentence}"))
+            .aria_expanded(open)
+            .h(px(shape.header_height(s)))
+            .px(px(shape.padding_x * s))
             .flex()
             .items_center()
-            .gap(px(8.0 * s))
-            .px(px(10.0 * s))
-            .py(px(6.0 * s))
-            .rounded(px(9.0 * s))
-            .border_1()
-            .border_color(p.input_border)
-            .bg(p.card_panel)
-            .text_size(px(12.5 * s))
+            .gap(px(super::cards::TITLE_ROW_GAP * s))
+            .min_w_0()
+            .chat_cursor_pointer()
+            .hover(move |style| style.bg(hover))
             .when(!tooltip.is_empty(), |row| {
                 row.tooltip(move |window, cx| {
                     gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
                 })
             })
+            .on_click(cx.listener(move |this, _, _, cx| {
+                cx.stop_propagation();
+                this.toggle_marker_disclosure(toggle_key.clone(), open, cx)
+            }))
+            .child(tile)
             .child(
-                svg()
-                    .path(icon)
-                    .size(px(14.0 * s))
-                    .flex_shrink_0()
-                    .text_color(color),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .truncate()
-                    .text_color(p.card_muted)
-                    .child(
-                        div()
-                            .flex()
-                            .gap(px(4.0 * s))
-                            .child(
-                                div()
-                                    .flex_shrink_0()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(p.foreground)
-                                    .child(text(card, "settledLead")),
-                            )
-                            .child(div().min_w_0().truncate().child(text(card, "settledText"))),
-                    ),
+                shape
+                    .title(div().flex_1().min_w_0().truncate(), p)
+                    .text_color(p.foreground)
+                    .child(title),
             )
             .when(!time.is_empty(), |row| {
                 row.child(
                     div()
                         .flex_shrink_0()
-                        .text_size(px(11.0 * s))
+                        .whitespace_nowrap()
+                        .text_size(px(12.0 * s))
                         .text_color(p.muted)
                         .child(time),
                 )
-            })
+            });
+        let opened = (open || motion.is_some()).then(|| {
+            let code = text(card, "code");
+            let body = div()
+                .border_t_1()
+                .border_color(shape.hairline(p))
+                .px(px(12.0 * s))
+                .pt(px(8.0 * s))
+                .pb(px(10.0 * s))
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(6.0 * s))
+                .text_size(px(13.0 * s))
+                .text_color(p.card_muted)
+                .when(!sentence.is_empty(), |body| body.child(sentence.clone()))
+                .when(!code.is_empty(), |body| {
+                    body.child(super::tone_card::command_box(
+                        code,
+                        text(card, "codeLabel") == "Command",
+                        p,
+                    ))
+                })
+                .into_any_element();
+            self.disclosure_body_motion(&key, motion, 0.0, body)
+        });
+        shape
+            .shell(div(), p)
+            .id(gpui::SharedString::from(key.clone()))
+            .w_full()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .overflow_hidden()
+            .child(header)
+            .children(opened)
             .into_any_element()
     }
 
@@ -374,45 +421,59 @@ impl NativeChatView {
         }
         let cards: f32 = open
             .iter()
-            .map(|card| {
-                let key = text(card, "key");
-                let preview = text(card, "codePreview");
-                let expanded = self.expanded.contains(&format!("relay-code:{key}"));
-                let code = if expanded || preview.is_empty() {
-                    text(card, "code")
-                } else {
-                    preview
-                };
-                let rows = code
-                    .lines()
-                    .map(ghostex_gx_chat_core::questions::permission_card::wrapped_rows)
-                    .sum::<usize>()
-                    .min(COMMAND_BOX_ROWS) as f32;
-                let title_lines = (text(card, "title").chars().count() as f32 / 52.0)
-                    .ceil()
-                    .max(1.0);
-                // Header (title rows and the detail line), footer, the card's padding.
-                let mut height = 30.0 + title_lines * 20.0 + 18.0 + 48.0;
-                if rows > 0.0 {
-                    height += 12.0
-                        + 22.0
-                        + rows * 20.0
-                        + if text(card, "codeMore").is_empty() {
-                            0.0
-                        } else {
-                            22.0
-                        };
-                }
-                if !text(&card["reason"], "text").is_empty() {
-                    height += 34.0;
-                }
-                if !text(card, "error").is_empty() {
-                    height += 34.0;
-                }
-                height + 12.0
-            })
+            .map(|card| self.approvals_card_height(card) + 8.0)
             .sum();
         Some((super::chat_pills::MENU_HEADER_HEIGHT + 8.0 + cards).min(APPROVALS_MENU_MAX))
+    }
+
+    /// One open card's height (unscaled) as the menu estimates it.
+    fn approvals_card_height(&self, card: &Value) -> f32 {
+        let key = text(card, "key");
+        let preview = text(card, "codePreview");
+        let expanded = self.expanded.contains(&format!("relay-code:{key}"));
+        let code = if expanded || preview.is_empty() {
+            text(card, "code")
+        } else {
+            preview
+        };
+        let rows = code
+            .lines()
+            .map(ghostex_gx_chat_core::questions::permission_card::wrapped_rows)
+            .sum::<usize>()
+            .min(COMMAND_BOX_ROWS) as f32;
+        let title_lines = (text(card, "title").chars().count() as f32 / 52.0)
+            .ceil()
+            .max(1.0);
+        // Header (title rows and the detail line), footer, the card's padding.
+        let mut height = 30.0 + title_lines * 20.0 + 18.0 + 48.0;
+        if rows > 0.0 {
+            height += 12.0
+                + 22.0
+                + rows * 20.0
+                + if text(card, "codeMore").is_empty() {
+                    0.0
+                } else {
+                    22.0
+                };
+        }
+        // The warning and error lines wrap (about 62 characters a row in the menu's width)
+        // and the "blocks this at" line is one more row; each sits 12px below the last.
+        let wrapped = |line: String| {
+            if line.is_empty() {
+                0.0
+            } else {
+                12.0 + (line.chars().count() as f32 / 62.0).ceil().max(1.0) * 21.0
+            }
+        };
+        height += wrapped(text(&card["reason"], "text"));
+        height += wrapped(text(card, "error"));
+        if card["autoBlockAt"]
+            .as_str()
+            .is_some_and(|at| !at.is_empty())
+        {
+            height += 12.0 + 21.0;
+        }
+        height + 4.0
     }
 
     /// The Approvals menu: every open card, oldest asked first.
@@ -450,10 +511,27 @@ impl NativeChatView {
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
-            .children(
-                open.iter()
-                    .map(|card| self.relayed_approval_card(card, "menu", p, cx)),
-            )
+            // CDXC:SessionChat 2026-11-16 DECISION: User: a card's Yes / No stay pinned at its
+            // bottom and only its command area scrolls. A card taller than the menu shrinks to it
+            // and its body scrolls (`tone_card`); with several cards each keeps at least
+            // `APPROVALS_CARD_FLOOR`, so the list scrolls rather than squeezing them to their
+            // buttons. Before, the card shrank with no floor and its body clipped instead of
+            // scrolling, cutting off the buttons (the user's screenshot of a long expanded
+            // command, 2026-11-16).
+            .children(open.iter().map(|card| {
+                let floor = self.approvals_card_height(card).min(APPROVALS_CARD_FLOOR);
+                div()
+                    .id(gpui::SharedString::from(format!(
+                        "relay-menu-card:{}",
+                        text(card, "key")
+                    )))
+                    .w_full()
+                    .min_w_0()
+                    .min_h(px(floor * s))
+                    .flex()
+                    .flex_col()
+                    .child(self.relayed_approval_card(card, "menu", p, cx))
+            }))
             .into_any_element();
         Some(super::chat_pills::pill_menu_column(
             "chat-approvals-menu",

@@ -24,7 +24,7 @@ impl GhostexGpuiApp {
     /// lanes by the cached view (`view.rs`). `None` when the current context has no Kanban
     /// (Quick/projectless or the feature is off), which keeps the static placeholder. The board's
     /// own window draws this whole board.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))] // the page has no board window
+    #[cfg_attr(ghostex_web, allow(dead_code))] // the page has no board window
     pub(crate) fn render_native_kanban(
         &mut self,
         window: &mut Window,

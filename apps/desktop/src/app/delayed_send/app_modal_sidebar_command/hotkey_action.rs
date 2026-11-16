@@ -312,7 +312,11 @@ impl GhostexGpuiApp {
                                     let _ = self.reload_focused_view(window, cx);
                                 }
                             }
-                            GpuiFocusedPaneRuntimeAction::PopOutPane => {}
+                            // The focused pane's session goes to its own window, or comes back
+                            // from it (app/session_popup/).
+                            GpuiFocusedPaneRuntimeAction::PopOutPane => {
+                                self.toggle_session_popup_for_focused_pane(cx);
+                            }
                         }
                         return;
                     }

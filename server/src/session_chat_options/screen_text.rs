@@ -37,28 +37,42 @@ pub(crate) fn strip_ansi_sgr(line: &str) -> String {
                     params.push(inner);
                 }
             }
-            Some(']') => {
-                chars.next();
-                while let Some(inner) = chars.next() {
-                    if inner == '\u{7}' {
-                        break;
-                    }
-                    if inner == '\u{1b}' && chars.peek() == Some(&'\\') {
-                        chars.next();
-                        break;
-                    }
-                }
+            _ => {
+                skip_non_csi_escape(&mut chars);
             }
-            // A character-set designation (`ESC ( B`), which the VT capture appends after a
-            // row that switched sets.
-            Some('(' | ')' | '*' | '+') => {
-                chars.next();
-                chars.next();
-            }
-            _ => {}
         }
     }
     out
+}
+
+/// Skips the escape that follows an `ESC` already read when it is an OSC string (`ESC ] ... BEL` or
+/// `ESC ] ... ESC \`, such as a hyperlink or working-directory report) or a character-set
+/// designation (`ESC ( B`, which the VT capture appends after a row that switched sets). Returns
+/// whether it skipped one; any other escape is left for the caller.
+/// CDXC:SessionChat 2026-11-16 WHY:
+/// Antigravity ends a turn that closes on a Markdown link by writing the OSC-8 hyperlink reset at the start of the composer's top rule. A second reader that only knew CSI printed its `8;;` as text, the rule no longer began with `─`, and every chat send failed with composerNotCleared (GitHub #637). Every reader of VT captures shares this skip so none can drift.
+pub(crate) fn skip_non_csi_escape(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> bool {
+    match chars.peek() {
+        Some(']') => {
+            chars.next();
+            while let Some(inner) = chars.next() {
+                if inner == '\u{7}' {
+                    break;
+                }
+                if inner == '\u{1b}' && chars.peek() == Some(&'\\') {
+                    chars.next();
+                    break;
+                }
+            }
+            true
+        }
+        Some('(' | ')' | '*' | '+') => {
+            chars.next();
+            chars.next();
+            true
+        }
+        _ => false,
+    }
 }
 
 /// How many cells a cursor-forward (`ESC [ n C`) skips: its count, 1 when the count is left out.

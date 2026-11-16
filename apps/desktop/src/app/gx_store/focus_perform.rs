@@ -144,6 +144,9 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         let row_id = row_id.trim();
+        // A session in its own window is shown there: that window comes forward too
+        // (app/session_popup/).
+        self.session_popup_bring_forward_for_row(row_id, cx);
         if let Some(remote) = SessionKey::parse_remote_scoped_session_id(row_id) {
             return self.gx_store_focus_remote_session(row_id, &remote, options, cx);
         }
@@ -430,9 +433,9 @@ impl GhostexGpuiApp {
         let Some(session_id) = target else {
             self.receive_gpui_app_toast_bridge_message(
                 &json!({
-                    "description": "This remote project has no attachable sessions.",
+                    "description": "This project has nothing to open on that computer yet.",
                     "level": "info",
-                    "title": "Remote attach unavailable",
+                    "title": "Nothing to open",
                     "type": "toast",
                 }),
                 cx,

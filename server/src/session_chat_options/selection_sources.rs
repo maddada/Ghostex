@@ -284,6 +284,18 @@ fn read_session_chat_statusline_selection(
         .map(|(selection, _)| selection)
 }
 
+/// CDXC:AgentProviders 2026-11-16 WHY: until its first request after it starts, resumes or
+/// compacts (by itself while idle too), Claude's statusline reports `total_input_tokens` 0 with no
+/// `current_usage`: nothing measured yet, not an empty context. Read as a size, it put "0K" beside
+/// two compacted threads on the stopped-threads card and "0%" on the context meter, so that reading
+/// is "not yet reported", like Hermes' `ctx --`.
+pub(crate) fn claude_context_measured(context_window: Option<&Value>) -> bool {
+    context_window
+        .and_then(|window| window.get("total_input_tokens"))
+        .and_then(Value::as_u64)
+        .is_some_and(|tokens| tokens > 0)
+}
+
 /// Claude's last statusline payload as a selection, with the time Ghostex stored it.
 /// `login_limits` takes the 5h / 7d windows from the newest reading on the session's login.
 ///
@@ -322,12 +334,15 @@ pub(crate) fn read_claude_statusline_reading(
         .map(|found| choice(&found.value, &found.label));
     let fast = payload.get("fast_mode").and_then(Value::as_bool);
     let context_window = payload.get("context_window");
+    let measured = claude_context_measured(context_window);
     let context_usage = SessionChatContextUsage {
         used_percentage: context_window
+            .filter(|_| measured)
             .and_then(|window| window.get("used_percentage"))
             .and_then(Value::as_f64)
             .map(|value| value.round().clamp(0.0, 100.0) as u32),
         used_tokens: context_window
+            .filter(|_| measured)
             .and_then(|window| window.get("total_input_tokens"))
             .and_then(Value::as_u64),
         window_size: context_window
@@ -344,7 +359,7 @@ pub(crate) fn read_claude_statusline_reading(
         terminal_status_line: None,
         fast,
         context_usage: (!context_usage.is_empty()).then_some(context_usage),
-        claude_status: claude_statusline_status_value(payload),
+        claude_status: claude_statusline_status_value(payload).map(with_idle_compaction),
         codex_status: None,
         cursor_status: None,
         hermes_status: None,
@@ -359,6 +374,27 @@ pub(crate) fn read_claude_statusline_reading(
         || selection.context_usage.is_some()
         || selection.claude_status.is_some())
     .then_some((selection, stored.updated_at))
+}
+
+/// The prompt cache with the smallest context Claude compacts while idle, while Settings > Agents >
+/// Claude Code's Compact idle chats is on, for the context panel's Cache card (`idleCompactAt` in
+/// gx-chat-core menus/context/rows.rs). Unit tests read no settings file.
+fn with_idle_compaction(mut status: Value) -> Value {
+    if cfg!(test) {
+        return status;
+    }
+    let compaction = crate::agents::claude_idle_compaction::ClaudeCompaction::read();
+    if let Some(cache) = status
+        .get_mut("promptCache")
+        .and_then(Value::as_object_mut)
+        .filter(|_| compaction.idle_compaction)
+    {
+        cache.insert(
+            "idleCompactMinTokens".to_string(),
+            json!(compaction.min_tokens),
+        );
+    }
+    status
 }
 
 /*
@@ -848,6 +884,24 @@ pub(super) fn merge_session_chat_option_selections(
 /// The option readings that live on disk rather than on the screen: the transcript's structured
 /// metadata, and the statusline sidecar Claude, Cursor and Hermes write. Also returns Claude's own
 /// session id and transcript path, which the task store hangs off.
+/// The Claude transcript file of a session, when Ghostex knows it (server/src/carry_on_compaction.rs
+/// reads its last cache write to know the session's prompt cache life).
+pub(crate) fn claude_session_transcript_path(
+    repository: &DomainRepository<'_>,
+    hook_state_directory: &Path,
+    project_id: &str,
+    session_id: &str,
+) -> Option<String> {
+    read_session_chat_stored_selections(
+        repository,
+        hook_state_directory,
+        project_id,
+        session_id,
+        Some(SessionChatOptionAgent::Claude),
+    )
+    .3
+}
+
 #[allow(clippy::type_complexity)]
 pub(super) fn read_session_chat_stored_selections(
     repository: &DomainRepository<'_>,

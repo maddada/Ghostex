@@ -1,5 +1,5 @@
 pub(in crate::app::native_chat) fn prepare(window: &mut gpui::Window) {
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", not(ghostex_web)))]
     {
         use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
         unsafe extern "C" {
@@ -11,6 +11,6 @@ pub(in crate::app::native_chat) fn prepare(window: &mut gpui::Window) {
             unsafe { GhostexGpuiPrepareChatDialogWindow(handle.ns_view.as_ptr()) };
         }
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(all(target_os = "macos", not(ghostex_web))))]
     let _ = window;
 }

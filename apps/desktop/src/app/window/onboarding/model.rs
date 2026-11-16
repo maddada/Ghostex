@@ -70,6 +70,11 @@ pub(crate) struct DetectedAgent {
     /// Only an install-on-first-run launcher is on PATH (gxserver's `cliInstallsOnDemand`, e.g.
     /// Omarchy's `mise use -g …` wrappers): not installed yet.
     pub(crate) installs_on_demand: bool,
+    /// Ghostex follows this agent from its own transcript, with no helper in its settings
+    /// (`notRequired`: Claude Code, Codex and OpenCode while Use agent hooks is off).
+    pub(crate) built_in: bool,
+    /// The settings file a helper goes into, home folder written as `~` (the row's first `paths`).
+    pub(crate) helper_file: Option<String>,
 }
 
 /// A sidebar catalog agent: id, display name and logo (`DEFAULT_SIDEBAR_AGENTS`).
@@ -142,12 +147,42 @@ pub(crate) fn detected_agents_from_hook_status(
                     == Some("updateRequired"),
                 installs_on_demand: row.get("cliInstallsOnDemand").and_then(Value::as_bool)
                     == Some(true),
+                built_in: row.get("status").and_then(Value::as_str) == Some("notRequired"),
+                helper_file: row
+                    .get("paths")
+                    .and_then(Value::as_array)
+                    .and_then(|paths| paths.first())
+                    .and_then(Value::as_str)
+                    .map(home_relative),
                 agent_id,
                 name,
                 detail,
             })
         })
         .collect()
+}
+
+/// A path with the home folder written as `~`, the way the page names settings files.
+pub(crate) fn home_relative(path: &str) -> String {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_default();
+    match path.strip_prefix(home.as_str()) {
+        Some(rest) if !home.is_empty() && (rest.starts_with('/') || rest.starts_with('\\')) => {
+            format!("~{rest}")
+        }
+        _ => path.to_string(),
+    }
+}
+
+/// CDXC:Onboarding 2026-11-13 DECISION:
+/// User, on the first-run showcase page (Q3045, the Welcome page), took every change shown there,
+/// including "One number everywhere": Welcome and the Workspace preview name the same agent count,
+/// read from the sidebar catalog and rounded down to a five ("20+" for 23 agents), so it stays true
+/// as agents come and go.
+pub(crate) fn agent_count_label(catalog: &[CatalogAgent]) -> String {
+    let count = catalog.len().max(5);
+    format!("{}+", count / 5 * 5)
 }
 
 /// `deriveOnboardingComputerUseState`: installed and granted, installed and waiting for a grant,
@@ -187,6 +222,9 @@ pub(crate) struct OnboardingSettings {
     pub(crate) spaces_on: bool,
     /// The Unified sidebar (`sidebarView` = `unified`); Settings > Sidebar writes the same key.
     pub(crate) unified_sidebar: bool,
+    /// The settings Settings > Experience's presets set, each its value or its default, so the
+    /// Workspace step shows which preset they match (`ghostex_settings_catalog::experience`).
+    pub(crate) experience_values: Map<String, Value>,
     pub(crate) notify: bool,
     pub(crate) preferred_interface: String,
     pub(crate) default_prompt_agent_id: String,
@@ -331,6 +369,20 @@ impl OnboardingSettings {
             view_hidden: VIEW_KEYS.map(|key| read_bool(object, key.hidden_key(), false)),
             spaces_on: read_bool(object, "sidebarSpacesEnabled", false),
             unified_sidebar: text("sidebarView") == Some("unified"),
+            experience_values: ghostex_settings_catalog::experience::AREAS
+                .iter()
+                .flat_map(|area| area.keys())
+                .map(|key| {
+                    let value = object.get(key).cloned().unwrap_or_else(|| {
+                        ghostex_settings_catalog::default_value(key)
+                            .map(|value| {
+                                ghostex_settings_catalog::json::ToJson::to_json(value).to_value()
+                            })
+                            .unwrap_or(Value::Null)
+                    });
+                    (key.to_string(), value)
+                })
+                .collect(),
             notify: read_bool(object, "showMacOSAttentionNotifications", true),
             preferred_interface: match text("preferredAgentInterface") {
                 Some("terminal") => "terminal".to_string(),
@@ -387,6 +439,11 @@ impl OnboardingSettings {
         }
         if let Some(value) = patch.get("sidebarView").and_then(Value::as_str) {
             self.unified_sidebar = value == "unified";
+        }
+        for (key, value) in patch {
+            if let Some(kept) = self.experience_values.get_mut(key) {
+                *kept = value.clone();
+            }
         }
         let text = |key: &str| patch.get(key).and_then(Value::as_str).map(str::to_string);
         let number = |key: &str| patch.get(key).and_then(Value::as_f64);
@@ -459,6 +516,8 @@ pub(crate) struct FlowState {
     /// CDXC:Onboarding 2026-09-11 WHY:
     /// "Pair this computer" used to open Settings -> Remote at once, which replaces the onboarding window and ends the flow before the Get started panel. The click now only queues the phone step and `finish` opens the Connect a Device window right before closing.
     pub(crate) phone_queued: bool,
+    /// "Add another computer after setup": Settings > Remote opens on its Add a computer dialog.
+    pub(crate) computer_queued: bool,
 }
 
 impl Default for FlowState {
@@ -466,6 +525,7 @@ impl Default for FlowState {
         Self {
             hooks_requested: false,
             phone_queued: false,
+            computer_queued: false,
         }
     }
 }
@@ -910,15 +970,15 @@ mod tests {
     #[test]
     fn a_launcher_only_agent_reads_as_not_installed() {
         let payload = serde_json::json!({ "agents": [
-            { "agentId": "gemini", "cliInstalled": false, "cliInstallsOnDemand": true, "status": "cliMissing" },
+            { "agentId": "qoder", "cliInstalled": false, "cliInstallsOnDemand": true, "status": "cliMissing" },
             { "agentId": "claude", "cliInstalled": true, "hookInstalled": true, "status": "installed" },
         ]});
         let agents = detected_agents_from_hook_status(&payload, &[]);
-        let gemini = agents
+        let qoder = agents
             .iter()
-            .find(|agent| agent.agent_id == "gemini")
+            .find(|agent| agent.agent_id == "qoder")
             .unwrap();
-        assert!(!gemini.installed && gemini.installs_on_demand);
+        assert!(!qoder.installed && qoder.installs_on_demand);
         let claude = agents
             .iter()
             .find(|agent| agent.agent_id == "claude")
@@ -931,6 +991,42 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["claude"]
         );
+    }
+
+    #[test]
+    fn built_in_agents_and_helper_files_read_from_the_hook_status() {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/Users/you".to_string());
+        let payload = serde_json::json!({ "agents": [
+            { "agentId": "claude", "cliInstalled": true, "hookInstalled": false, "status": "notRequired",
+              "paths": [format!("{home}/.claude/settings.json")] },
+            { "agentId": "cursor", "cliInstalled": true, "hookInstalled": false, "status": "missing",
+              "paths": [format!("{home}/.cursor/hooks.json")] },
+        ]});
+        let agents = detected_agents_from_hook_status(&payload, &[]);
+        let claude = &agents[0];
+        assert!(claude.built_in && claude.hooks_installed);
+        let cursor = &agents[1];
+        assert!(!cursor.built_in && !cursor.hooks_installed);
+        assert_eq!(cursor.helper_file.as_deref(), Some("~/.cursor/hooks.json"));
+        assert_eq!(home_relative("/etc/hooks.json"), "/etc/hooks.json");
+    }
+
+    #[test]
+    fn the_agent_count_rounds_down_to_a_five() {
+        let agent = |id: usize| CatalogAgent {
+            agent_id: id.to_string(),
+            name: id.to_string(),
+            icon: String::new(),
+        };
+        assert_eq!(
+            agent_count_label(&(0..23).map(agent).collect::<Vec<_>>()),
+            "20+"
+        );
+        assert_eq!(
+            agent_count_label(&(0..25).map(agent).collect::<Vec<_>>()),
+            "25+"
+        );
+        assert_eq!(agent_count_label(&[]), "5+");
     }
 
     #[test]
@@ -1022,5 +1118,17 @@ mod tests {
             tints(&transparency_strength_patch(100.0, &settings)),
             [0.0, 0.0, 0.0, 2.0]
         );
+    }
+}
+
+impl OnboardingSettings {
+    /// The Experience preset every area's settings match, or `None` (Custom).
+    pub(crate) fn experience(&self) -> Option<ghostex_settings_catalog::experience::Preset> {
+        ghostex_settings_catalog::experience::overall(&|key: &str| {
+            self.experience_values
+                .get(key)
+                .cloned()
+                .unwrap_or(Value::Null)
+        })
     }
 }

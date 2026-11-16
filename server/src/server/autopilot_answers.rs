@@ -2,9 +2,10 @@
 //! recommended choice after the user's wait, or handed to the supervisor when it has none), a
 //! Ghostex question form (the same), and approval cards: a permission prompt (stored by the hooks
 //! or read off the screen), a Connectors card, or folder trust. Approvals are answered by Ghostex
-//! itself, never by an agent, only while "Answer approval cards" is on, within the tier, and never
-//! across a hard limit the user left off; one that would cross it, or that only a human can do
-//! (sign in, 2FA, identity, payment), is declined and the agent is told to carry on without it.
+//! itself, never by an agent, only while "When it asks permission" is Safe steps or All but limits,
+//! after the user's minute, and never across a hard limit (which counts only on All but limits);
+//! one that would cross it, or that only a human can do (sign in, 2FA, identity, payment), is
+//! declined and the agent is told to carry on without it.
 //!
 //! SEE-ALSO: server/src/coordinators/relay.rs (CDXC:Autopilot 2026-11-07 DECISION on the approval
 //! rule), server/src/session_chat_send/answer_http.rs (the answer path), server/src/server/autopilot_runtime.rs.
@@ -35,6 +36,8 @@ pub(super) enum PromptAct {
     },
     /// Leave it for the user, logged once with this note.
     Leave { note: String },
+    /// An approval card in the user's minute: nothing yet, look again in this many milliseconds.
+    Hold { after_ms: i64 },
     /// Answer the session's open Ghostex forms with their recommended choices.
     Forms,
     /// Hand it to the supervisor.
@@ -358,10 +361,32 @@ enum Verdict {
     Decline(String, String),
     Leave(String),
     Wait,
+    /// What it would do, held for the user's minute: look again in this many milliseconds.
+    Hold(i64),
 }
 
-/// What the user's choices make of one approval.
-fn verdict(config: &AutopilotConfig, class: Class) -> Verdict {
+/// How long an approval card waits for the user before Autopilot answers it.
+///
+/// CDXC:Autopilot 2026-11-14 DECISION:
+/// User, on the Autopilot design page (Q3034, "1 minute"): approval cards were answered at Autopilot's next look, so a card for `rm -rf build/` could be approved while the user sat reading it. Every card (approve or decline) now waits a minute from when Autopilot first sees it, so a user at the desk answers it themselves; away, it is answered a minute later.
+const APPROVAL_WAIT_MS: i64 = 60_000;
+
+/// Holds a verdict that would act until the card has waited its minute.
+fn after_users_minute(verdict: Verdict, waited: i64) -> Verdict {
+    let wait = crate::coordinators::test_scaled(APPROVAL_WAIT_MS);
+    match verdict {
+        Verdict::Wait => Verdict::Wait,
+        _ if waited < wait => Verdict::Hold(wait - waited),
+        verdict => verdict,
+    }
+}
+
+/// What the user's choices make of one approval. `read_only` is a read-only thread's card (not
+/// its folder trust): Autopilot may decline it, never approve it.
+///
+/// CDXC:Autopilot 2026-11-13 DECISION:
+/// The coordinator, for the user, when "Answer approval cards" became on by default: "Autopilot must never approve leaving read-only/Plan mode for a read-only thread" (`start-thread --read-only`, CDXC:Coordinators 2026-11-13 in coordinators/read_only.rs). Every approval such a thread asks for is a step out of its mode (Claude's "Ready to code?" plan exit, an edit or command in Plan mode, a Codex sandbox escalation), and its plan text would sort as an ordinary prompt that Everything approves, so the whole card waits for the user and Autopilot's log says why.
+fn verdict(config: &AutopilotConfig, class: Class, read_only: bool) -> Verdict {
     if !config.answer_approvals || config.tier == Tier::Heal {
         return Verdict::Wait;
     }
@@ -370,17 +395,23 @@ fn verdict(config: &AutopilotConfig, class: Class) -> Verdict {
             format!("It asked for {what}, which only you can do."),
             format!("it asks for {what}, which only the user can do"),
         ),
-        Class::Limit(limit) if !limit.allowed(&config.limits) => Verdict::Decline(
-            format!(
-                "It asked for {}, a hard limit you haven't allowed.",
-                limit.words()
-            ),
-            format!("{} is a hard limit the user hasn't allowed", limit.words()),
-        ),
+        // CDXC:Autopilot 2026-11-14 DECISION: user (Q3033, "only full"): the hard-limit switches show and count only on "All but limits"; on "Safe steps" every hard limit is declined.
+        Class::Limit(limit)
+            if config.tier != Tier::Everything || !limit.allowed(&config.limits) =>
+        {
+            Verdict::Decline(
+                format!(
+                    "It asked for {}, a hard limit you haven't allowed.",
+                    limit.words()
+                ),
+                format!("{} is a hard limit the user hasn't allowed", limit.words()),
+            )
+        }
+        _ if read_only => Verdict::Leave(READ_ONLY_NOTE.to_string()),
         Class::Limit(_) | Class::Safe => Verdict::Approve,
         Class::Plain if config.tier == Tier::Everything => Verdict::Approve,
         Class::Plain => Verdict::Leave(
-            "Its approval isn't on the allow list of Heal and decide, so it waits for you."
+            "It isn't one of the safe steps Autopilot may approve, so it waits for you."
                 .to_string(),
         ),
     }
@@ -417,6 +448,9 @@ fn recommended_index(
         })
 }
 
+const READ_ONLY_NOTE: &str =
+    "It's a read-only thread, so its approvals wait for you: approving one would take it out of read-only.";
+
 const DECLINE_MESSAGE: &str = "Ghostex: [Autopilot] I declined that request: {why}. It's noted for them in Autopilot's log. Carry on with the rest of your task without it, and say at the end what's left for them.";
 
 /// What to do about the session's waiting prompt, if any: `None` when nothing waits (the other
@@ -431,6 +465,9 @@ pub(super) fn decide_prompt(
     now: i64,
 ) -> Option<PromptDecision> {
     let stored = crate::agents::session_chat_prompt_setting(session);
+    let read_only = crate::coordinators::is_read_only_thread(
+        session.get("runtimeSettings").and_then(Value::as_object),
+    );
     let notice =
         crate::session_chat_options::cached_session_chat_terminal_notice(state, &key.0, &key.1)
             .filter(|notice| {
@@ -478,6 +515,13 @@ pub(super) fn decide_prompt(
             act: PromptAct::Wait,
         })
     };
+    let hold = |after_ms: i64| {
+        Some(PromptDecision {
+            rule: "",
+            saw: String::new(),
+            act: PromptAct::Hold { after_ms },
+        })
+    };
 
     // A stored prompt: an agent's question, a Connectors card, or a hook permission card.
     if let Some(prompt) = stored.as_deref().and_then(parse_stored_session_chat_prompt) {
@@ -505,8 +549,16 @@ pub(super) fn decide_prompt(
                             "selections": [{ "indices": [index], "other": null }],
                         })
                     };
-                    return match verdict(config, classify("connector", &text, project_path)) {
+                    return match after_users_minute(
+                        verdict(
+                            config,
+                            classify("connector", &text, project_path),
+                            read_only,
+                        ),
+                        waited,
+                    ) {
                         Verdict::Wait => wait(),
+                        Verdict::Hold(after_ms) => hold(after_ms),
                         Verdict::Approve => decision(
                             "approval",
                             saw,
@@ -605,8 +657,12 @@ pub(super) fn decide_prompt(
             } => {
                 let text = summary.clone().unwrap_or_default();
                 let saw = format!("It asked to run {tool}: {}", short(&text, 160));
-                return match verdict(config, classify(&tool, &text, project_path)) {
+                return match after_users_minute(
+                    verdict(config, classify(&tool, &text, project_path), read_only),
+                    waited,
+                ) {
                     Verdict::Wait => wait(),
+                    Verdict::Hold(after_ms) => hold(after_ms),
                     Verdict::Approve => decision(
                         "approval",
                         saw,
@@ -715,8 +771,10 @@ pub(super) fn decide_prompt(
                 json!({ "kind": "terminalChoice", "choiceIndex": index, "noticeDetectedAt": notice.detected_at })
             }
         };
-        return match verdict(config, class) {
+        // Trusting the project folder lets the agent start; it is not a step out of read-only.
+        return match after_users_minute(verdict(config, class, read_only && !trust), waited) {
             Verdict::Wait => wait(),
+            Verdict::Hold(after_ms) => hold(after_ms),
             Verdict::Approve => match yes {
                 Some(index) => decision(
                     if trust { "trust" } else { "approval" },

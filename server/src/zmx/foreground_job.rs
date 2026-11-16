@@ -2,9 +2,6 @@
 //! started there. The agent-gone idle write reads it last, so an agent the process scan does not
 //! recognise (started through a wrapper it has no name for) keeps its working state.
 
-#[cfg(all(unix, not(target_os = "macos")))]
-use std::collections::{HashMap, HashSet, VecDeque};
-
 #[cfg(unix)]
 use super::*;
 
@@ -60,9 +57,9 @@ fn foreground_commands(zmx_name: &str) -> Option<Vec<String>> {
         return None;
     }
     let names = [zmx_name.to_string()];
+    let root = *super::provider::parse_zmx_root_pids(&result.stdout, &names).get(zmx_name)?;
     #[cfg(target_os = "macos")]
     {
-        let root = *super::provider::parse_zmx_root_pids(&result.stdout, &names).get(zmx_name)?;
         let rows = super::process_table_macos::process_tree_rows(&[root]);
         Some(
             rows.iter()
@@ -74,34 +71,21 @@ fn foreground_commands(zmx_name: &str) -> Option<Vec<String>> {
                 .collect(),
         )
     }
+    // Linux reads the session's tree from /proc (session_tree.rs); the script ran `zmx list` only.
     #[cfg(not(target_os = "macos"))]
     {
-        let (ps_output, zmx_list) =
-            super::provider::parse_zmx_process_snapshot_sections(&result.stdout);
-        let root = *super::provider::parse_zmx_root_pids(&zmx_list, &names).get(zmx_name)?;
-        let rows = parse_process_rows(&ps_output);
-        let mut children = HashMap::<i64, Vec<usize>>::new();
-        for (index, row) in rows.iter().enumerate() {
-            children.entry(row.ppid()).or_default().push(index);
-        }
-        let mut seen = HashSet::new();
-        let mut queue = VecDeque::from([root]);
-        let mut commands = Vec::new();
-        while let Some(pid) = queue.pop_front() {
-            if !seen.insert(pid) || seen.len() > 4096 {
-                continue;
-            }
-            for &index in children.get(&pid).map(Vec::as_slice).unwrap_or_default() {
-                let row = &rows[index];
-                if linux_group_and_foreground(row.pid())
-                    .is_some_and(|(group, foreground)| group == foreground)
-                {
-                    commands.push(row.command().to_string());
-                }
-                queue.push_back(row.pid());
-            }
-        }
-        Some(commands)
+        let rows = super::session_tree::linux_process_tree_rows(&[root]);
+        Some(
+            rows.iter()
+                // The root is the daemon, which the walk below it never counted.
+                .filter(|row| row.pid() != root)
+                .filter(|row| {
+                    linux_group_and_foreground(row.pid())
+                        .is_some_and(|(group, foreground)| group == foreground)
+                })
+                .map(|row| row.command().to_string())
+                .collect(),
+        )
     }
 }
 

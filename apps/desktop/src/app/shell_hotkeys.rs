@@ -16,6 +16,7 @@ use crate::*;
 const SHELL_HOTKEY_ACTIONS: &[(&str, fn() -> Box<dyn Action>)] = &[
     ("openBrowserHistory", || Box::new(OpenBrowserHistory)),
     ("reloadBrowserPage", || Box::new(ReloadFocusedBrowser)),
+    ("toggleAnnotate", || Box::new(ToggleAnnotate)),
     ("pasteIntoTerminal", || Box::new(PasteIntoFocusedTerminal)),
     ("findInFocusedView", || Box::new(FindInFocusedTerminal)),
     ("findNextInBrowser", || Box::new(FindNextInFocusedBrowser)),
@@ -156,8 +157,50 @@ pub(crate) fn gpui_shell_hotkey_unbinds_from_settings(
         .collect()
 }
 
+/// Modifier bits of [`ANNOTATE_PAGE_CHORD`].
+pub(crate) const PAGE_CHORD_CONTROL: u32 = 1;
+pub(crate) const PAGE_CHORD_ALT: u32 = 2;
+pub(crate) const PAGE_CHORD_SHIFT: u32 = 4;
+pub(crate) const PAGE_CHORD_COMMAND: u32 = 8;
+
+/// The Annotate hotkey as a Browser page's key handler reads it (Windows virtual key code and
+/// the `PAGE_CHORD_*` modifiers), or `None` when it is unbound or not a letter or digit. On
+/// Windows and Linux a focused page gets its keys before GPUI's bindings do
+/// (`GhostexGpuiSurfaceKeyboardHandler` in cef/shell/lifecycle.rs).
+pub(crate) static ANNOTATE_PAGE_CHORD: std::sync::Mutex<Option<(i32, u32)>> =
+    std::sync::Mutex::new(None);
+
+fn annotate_page_chord(
+    snapshot: &shared_settings::SharedSidebarSettingsSnapshot,
+) -> Option<(i32, u32)> {
+    let chord = gpui_normal_hotkey_key_in(snapshot, "toggleAnnotate")?;
+    let keystroke = gpui_keystroke_from_shared_hotkey(&chord)?;
+    let mut parts: Vec<&str> = keystroke.split('-').collect();
+    let key = parts.pop()?.to_ascii_uppercase();
+    let [code] = key.as_bytes() else {
+        return None;
+    };
+    if !code.is_ascii_alphanumeric() {
+        return None;
+    }
+    let mut modifiers = 0;
+    for part in parts {
+        modifiers |= match part {
+            "ctrl" | "control" => PAGE_CHORD_CONTROL,
+            "alt" | "option" => PAGE_CHORD_ALT,
+            "shift" => PAGE_CHORD_SHIFT,
+            "cmd" | "super" | "win" | "platform" => PAGE_CHORD_COMMAND,
+            _ => return None,
+        };
+    }
+    Some((*code as i32, modifiers))
+}
+
 /// The shell bindings and then the configured hotkeys for the current settings, in that order.
 pub(crate) fn gpui_bind_hotkeys_from_settings(cx: &mut gpui::App) {
+    if let Ok(mut chord) = ANNOTATE_PAGE_CHORD.lock() {
+        *chord = annotate_page_chord(&shared_settings::shared_sidebar_settings_snapshot());
+    }
     let shell_hotkeys = gpui_shell_hotkey_key_bindings_from_settings(cx);
     cx.bind_keys(shell_hotkeys);
     let configured_hotkeys = gpui_configured_hotkey_key_bindings_from_settings(cx);

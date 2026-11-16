@@ -6,7 +6,7 @@
 pub(crate) fn local_computer_name() -> String {
     static NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     NAME.get_or_init(|| {
-        #[cfg(all(unix, not(target_family = "wasm")))]
+        #[cfg(all(unix, not(ghostex_web)))]
         let host = {
             let mut name = [0u8; 256];
             // SAFETY: the buffer is writable for its whole length and stays alive for the call.
@@ -20,7 +20,7 @@ pub(crate) fn local_computer_name() -> String {
         };
         #[cfg(windows)]
         let host = std::env::var("COMPUTERNAME").ok();
-        #[cfg(not(any(all(unix, not(target_family = "wasm")), windows)))]
+        #[cfg(not(any(all(unix, not(ghostex_web)), windows)))]
         let host: Option<String> = None;
         host.and_then(|host| host.split('.').next().map(str::to_string))
             .filter(|host| !host.trim().is_empty())

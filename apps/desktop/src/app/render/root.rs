@@ -993,6 +993,17 @@ impl Render for GhostexGpuiApp {
             .on_action(cx.listener(|this, action: &CloseAgentsPane, _window, cx| {
                 this.close_agents_pane(WorkspacePaneId(action.pane_id), cx);
             }))
+            .on_action(cx.listener(
+                |this, action: &crate::app::actions::OpenAgentsPaneInNewWindow, _window, cx| {
+                    if let Some(session_id) = this
+                        .agents_workspace
+                        .find_leaf(WorkspacePaneId(action.pane_id))
+                        .and_then(|leaf| leaf.tab_group.active_session_id())
+                    {
+                        this.open_session_popup_for_shell(session_id, cx);
+                    }
+                },
+            ))
             .on_action(
                 cx.listener(|this, action: &ToggleFocusModeForPane, _window, cx| {
                     this.toggle_agents_focus_mode_for_pane(WorkspacePaneId(action.pane_id), cx);
@@ -1195,6 +1206,15 @@ impl Render for GhostexGpuiApp {
                     cx,
                 );
             }))
+            .on_action(cx.listener(|this, _: &ToggleAnnotate, window, cx| {
+                if this.active_mode == TitlebarMode::Browser {
+                    this.run_browser_feedback_tool_from_toolbar(
+                        this.browser_tabs.focused_pane,
+                        window,
+                        cx,
+                    );
+                }
+            }))
             .on_action(cx.listener(|this, _: &RunBrowserFeedbackTool, window, cx| {
                 this.run_browser_feedback_tool_from_toolbar(
                     this.browser_tabs.focused_pane,
@@ -1349,6 +1369,9 @@ impl Render for GhostexGpuiApp {
                     this.cancel_view_tab_drag(cx);
                 }),
             )
+            // Starts the frame's list of the sidebar extensions' web blocks on screen
+            // (extensions/web_blocks.rs); before anything that can draw one.
+            .child(self.extension_web_blocks_frame_start())
             .child(
                 /*
                 CDXC:Titlebar 2026-09-20 WHY:
@@ -1518,6 +1541,9 @@ impl Render for GhostexGpuiApp {
                         this
                     }),
             )
+            // Hides the sidebar extensions' web pages whose block this frame did not paint whole
+            // (extensions/web_blocks.rs); after everything that can draw one.
+            .child(self.extension_web_blocks_frame_end(cx))
             // Last child, so a resize drag in progress sees each mouse move
             // before the panes it is dragged across do.
             .child(self.render_resize_drag_pointer_tracker(cx))

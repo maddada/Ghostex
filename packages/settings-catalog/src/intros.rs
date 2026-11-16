@@ -8,6 +8,7 @@
 /// `(page id, intro)`, in rail order.
 pub const PAGE_INTROS: &[(&str, &str)] = &[
     ("updates", "Your Ghostex version, newer releases, and the tools Ghostex installs for you, such as Hex."),
+    ("experience", "How many buttons and details Ghostex shows: Chill, Regular or Advanced, for the whole app or each area."),
     ("chat", "How agent chats look and behave: the default view, transcript width, question cards and Ghostex pages."),
     ("sidebar", "How the sidebar lists your sessions, what each card shows, and parking and sleeping sessions."),
     ("terminal", "The terminal's look, scrolling and tab behavior."),
@@ -36,7 +37,7 @@ pub const PAGE_INTROS: &[(&str, &str)] = &[
     ("actions", "Buttons that run a command or open a page, for every project or just one."),
     ("openTargets", "The editors and apps a project or file can open in."),
     ("osIntegration", "Make Ghostex the default app for files and links, and check that it worked."),
-    ("debugging", "Debug controls and diagnostic logs, for tracking down a problem."),
+    ("debugging", "Debug controls, diagnostic logs and the Use agent hooks switch, for tracking down a problem."),
 ];
 
 /// The intro of the page with rail id `id`.

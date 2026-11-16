@@ -524,27 +524,22 @@ impl GhostexGpuiApp {
         self.browser_url = url.clone();
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
         /*
-        CDXC:Browser 2026-08-18:
-        Committing an address in an address-only "New Tab" is the moment that
-        tab first becomes a sidebar row (placeholders are deliberately not
-        projected as browser sessions), so it is a new tab as far as the sidebar
-        is concerned and gets the same reveal as any other new tab. Navigating
-        an already-loaded tab is not.
+        CDXC:Browser 2026-11-14 WHY:
+        Address-only "New Tab" placeholders already sit at their slot in the
+        view strip and in `browser_page_row`. Calling `reveal_new_browser_tab`
+        on commit calls `append_view_strip_tab`, which strips the tab from its
+        current index (e.g. slot 1) and pushes it to the very end of
+        `view_strip_layout.order`, making Enter appear to open the URL in the
+        last tab. Keep the tab in place and scroll to reveal it instead.
         */
-        let was_address_only_tab = self
-            .browser_tabs
-            .active_tab_for_pane(pane_id)
-            .is_some_and(|tab| tab.state != BrowserTabState::Loaded);
-        let Some((committed_tab_id, _profile_id)) = self
+        let Some((_committed_tab_id, _profile_id)) = self
             .browser_tabs
             .load_pane_active_tab_url(pane_id, url.clone())
         else {
             return;
         };
-        if was_address_only_tab {
-            self.reveal_new_browser_tab(committed_tab_id);
-        }
         self.browser_tabs.focus_pane(pane_id);
+        self.scroll_browser_pane_active_tab(pane_id);
         self.focus_shell_target(ShellFocusTarget::BrowserPane(pane_id), cx);
         self.load_browser_cef_url_for_pane(pane_id, &url, cx);
         self.request_browser_content_focus(pane_id);

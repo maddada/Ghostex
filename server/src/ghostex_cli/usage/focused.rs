@@ -42,6 +42,10 @@ Commands:
   install-local <path> [--json]         Install a local extension folder (the user only)
   uninstall <id> [--json]               Remove an installed extension
   state <id> [--set k=v] [--json]       Read or update extension state
+  panel get|set|patch|events <id>       Read, write or follow a sidebar extension's panel
+                                        (ghostex extensions panel --help)
+  message <id> <name> [<json>|-]        Inside an agent: send the extension a message about
+                                        this session and print its answer
 
 Only the user installs extensions, from Settings > Extensions, where Ghostex shows what each
 one may do before it is installed. The CLI, agents and other computers are refused: tell the
@@ -49,7 +53,8 @@ user which extension to install there.
 
 State keys:
   enabled, pinned, placement, terminalPlacement,
-  preferences.<name>, preferences, grantedPermissions
+  preferences.<name>, preferences, grantedPermissions,
+  sidebarModeHidden, sidebarSectionsHidden (a sidebar extension's mode and sections)
 Turning an extension on and granting it a permission are the user's too (Settings >
 Extensions); turning one off and the other keys stay open.
 "
@@ -295,7 +300,7 @@ Behavior:
   unless --allow-hidden is passed.
   --model and --effort start a new Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo or Antigravity CLI worker
   on that model and effort for this session only (a Pi, OMP or Empryo model is <provider>/<model>, a Pi or OMP effort a
-  thinking level; Cursor CLI and Gemini take --model only); your default
+  thinking level; Cursor CLI takes --model only); your default
   model is unchanged, and a resumed worker keeps them. A reused worker keeps
   whatever it already runs.
   Pass --project-path <repo> (or --project-id) to start the worker in the project the card is
@@ -536,6 +541,8 @@ Usage:
   gx settings hotkeys set <id> <keys> [--replace] [--terminal] [--json]
   gx settings hotkeys reset <id> [--terminal] [--json]
   gx settings hotkeys reset --all [--terminal] [--json]
+  gx settings export <file> [--json]
+  gx settings import <file> [--dry-run] [--json]
   gx settings --help
 
 Keys:
@@ -575,6 +582,16 @@ Hotkeys:
   left unassigned). Changes save through the running desktop app like the
   Hotkeys page and bind at once.
 
+Export and import:
+  export saves this computer's settings to a JSON file to bring them to another
+  computer (Settings > Sync > Export settings does the same). Secrets, sign-ins
+  and settings that belong to one computer (folders, the glass picture,
+  interface scale and zoom, the sync switches) are left out. import applies such
+  a file here through the running app like set does (or saves it when the app
+  isn't running) and lists what changed; --dry-run lists it without saving.
+  Settings this Ghostex doesn't know, values of the wrong type, and keyboard
+  shortcuts from another system are skipped and counted.
+
 Tabs (for --tab):
   settings integrations extensions osIntegration remote projects agents
   accounts actions openTargets hotkeys debugging about
@@ -610,7 +627,7 @@ pub fn visuals_usage() -> String {
 Usage:
   gx visual --help
   gx visual check <file.json|-> [--width N] [--light] [--out file.png]
-  gx visual check <page.html> [--width N] [--light] [--out file.png]
+  gx visual check <page.html> [--width N] [--text-scale P] [--light] [--out file.png]
   gx visual export <file.html|page id|page URL> [--out file.html] [--json]
   gx visual install-skill [--json]
 
@@ -699,11 +716,17 @@ check:
   \"skipped\", so move on and don't ask it again unless it blocks the work.
 
   Given a page (.html), check prepares it as `ghostex show` would and opens it
-  in headless Chrome (or Chromium, Edge, Brave; GHOSTEX_CHROME picks one) at a
-  phone's width, 390px, and a computer's, 1280px (--width N for one width).
-  It saves a full-page screenshot of each and lists what reaches past the
-  screen and what Ghostex had to fit for the phone (columns stacked, pills
-  kept on one line, blocks scrolling sideways), with how to fix the page.
+  in headless Chrome (or Chromium, Edge, Brave; GHOSTEX_CHROME picks one) at
+  360px (a phone), 600px, 900px (a foldable or tablet) and 1280px (a
+  computer), then at 360px and 900px with text at 130%, the way a phone's
+  large font setting draws it (--width N for one width, --text-scale 130 for
+  large text). It saves a full-page screenshot of each (in parts, -part2.png
+  and on, for a long page) and lists, by CSS
+  selector, every box whose content overflows it or is cut off, content a
+  sideways scroller can't reach, text drawn over other text, the answered
+  pill over text or a control with the page scrolled to its end, and what
+  Ghostex had to fit for the phone (columns stacked, pills kept on one line,
+  blocks scrolling sideways), with how to fix the page. It exits with an error while anything overflows or overlaps.
 "
     .to_string()
 }
@@ -862,6 +885,28 @@ the same way Send Bug / Feedback does. The issue starts with "Reported by @<name
 notifies that user, and Ghostex adds a line with its version and the operating system. Attach
 up to five PNG, JPEG or WebP screenshots of 5 MB each with --image. The issue is public.
 --dry-run prints the exact request (images shown by size) without posting it."#
+        .to_string()
+}
+
+pub fn needs_you_usage() -> String {
+    r#"Usage:
+  ghostex needs-you add "<what to do>" [--detail <text>] [--command <command>] [--answer <label>]...
+  ghostex needs-you list [--all]
+  ghostex needs-you done Q<n>
+  ghostex needs-you drop Q<n>
+
+add: when a step can only be done by the user (a sudo command, a tap on their phone, a sign-in,
+a check by eye), put it above this session's chat box as a to-do with a Done button, without
+being asked. It takes the session's next Q tag and stays until the user presses Done or you
+clear it, even if the chat is cleared. --command shows as a chip the user clicks to copy;
+--detail is one or two sentences under the title; --answer (repeated) offers choices such as
+"Works" and "Something's off" instead of a single Done. Also list it under Needs you in your
+reply. The user's answer arrives as a message: "Q61: Done" (or the answer they picked, or their
+own words). Inside a coordinator's thread the to-do goes to the coordinator's Needs you list,
+and the user's answer still reaches you.
+list: the open to-dos (--all adds the ones settled lately and how).
+done: you saw it happen yourself (the port answers now), so it leaves the user's list.
+drop: it is no longer needed."#
         .to_string()
 }
 

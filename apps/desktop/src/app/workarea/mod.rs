@@ -11,6 +11,7 @@
 // `impl GhostexGpuiApp { .. }` slice and needs no re-export. Add a new workarea concern to the
 // file that owns it, or to a new sibling; never to this barrel.
 pub(crate) mod code_windows;
+pub(crate) mod extension_side_panel;
 pub(crate) mod extension_views;
 pub(crate) mod runtime_surfaces;
 pub(crate) mod shell_state;

@@ -37,15 +37,19 @@ pub enum Scope {
     Sessions,
 }
 
-/// What Autopilot may do on its own.
+/// Which approval cards Autopilot approves while "Answer approval cards" (the page's "When it
+/// asks permission") is on.
+///
+/// CDXC:Autopilot 2026-11-14 DECISION:
+/// User, on the Autopilot design page: layout C (Off / Careful / Full presets over one row per situation, Q3030) and "merge" for the level and the two Answer switches that set the same thing (Q3031). The level is no longer a choice of its own: questions are "Wait for me" or a wait (`answer_questions`), approval cards are "Wait for me", "Safe steps" ([`Tier::Decide`]) or "All but limits" ([`Tier::Everything`]). Heal is kept only so an older phone or a saved file that sends it still reads: it becomes Decide with both answer choices on "Wait for me", which is what Heal did.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Tier {
-    /// Only what any human would do without thinking: carry on, interrupt, reload, switch account.
+    /// Old: questions and approvals wait for the user. Read as Decide with both answers off.
     Heal,
-    /// Heal, plus answer what the agent asks with its recommended choice.
+    /// Safe steps: reads, builds, tests, edits and local commits inside the project.
     Decide,
-    /// Decide, plus approve any prompt that is not a hard limit.
+    /// All but limits: any card that is not a hard limit.
     #[default]
     Everything,
 }
@@ -110,7 +114,13 @@ pub struct AutopilotConfig {
     pub limits: HardLimits,
     pub answer_questions: bool,
     pub answer_after_minutes: u64,
+    /// On unless the user turned it off ([`AutopilotConfig::answer_approvals_set`]).
     pub answer_approvals: bool,
+    /// The user set "Answer approval cards" themselves; until then it is on.
+    ///
+    /// CDXC:Autopilot 2026-11-13 DECISION:
+    /// User: "Make this enabled by default when Autopilot is enabled" for "Answer approval cards", which the 2026-11-07 decision had off by default; anyone who set the switch keeps their choice. A file written before this marker existed always held `answerApprovals: false`, whether or not the user touched it, so its `false` reads as never set (only `true` there was surely a choice). The hard limits keep their own switches, all off, and a read-only thread's cards are never approved (server/src/server/autopilot_answers.rs).
+    pub answer_approvals_set: bool,
     pub supervisor: SupervisorModel,
     pub sweep_seconds: u64,
     /// By project id; a worktree follows its main project.
@@ -129,7 +139,8 @@ impl Default for AutopilotConfig {
             limits: HardLimits::default(),
             answer_questions: false,
             answer_after_minutes: 10,
-            answer_approvals: false,
+            answer_approvals: true,
+            answer_approvals_set: false,
             supervisor: SupervisorModel::OpusMedium,
             sweep_seconds: SWEEP_DEFAULT_SECS,
             projects: BTreeMap::new(),
@@ -147,6 +158,15 @@ impl AutopilotConfig {
         self.sweep_seconds = self.sweep_seconds.clamp(SWEEP_MIN_SECS, SWEEP_MAX_SECS);
         if !ANSWER_WAITS.contains(&self.answer_after_minutes) {
             self.answer_after_minutes = 10;
+        }
+        if !self.answer_approvals_set {
+            self.answer_approvals = true;
+        }
+        if self.tier == Tier::Heal {
+            self.tier = Tier::Decide;
+            self.answer_questions = false;
+            self.answer_approvals = false;
+            self.answer_approvals_set = true;
         }
         self
     }
@@ -292,7 +312,10 @@ pub fn apply_patch(config: &mut AutopilotConfig, patch: &Value) {
     };
     let mut merged = serde_json::to_value(&*config).unwrap_or_default();
     for (key, value) in patch {
-        if matches!(key.as_str(), "projects" | "sessions" | "enabledAt") {
+        if matches!(
+            key.as_str(),
+            "projects" | "sessions" | "enabledAt" | "answerApprovalsSet"
+        ) {
             continue;
         }
         if key == "limits" {
@@ -312,7 +335,10 @@ pub fn apply_patch(config: &mut AutopilotConfig, patch: &Value) {
             *slot = value.clone();
         }
     }
-    if let Ok(next) = serde_json::from_value::<AutopilotConfig>(merged) {
+    if let Ok(mut next) = serde_json::from_value::<AutopilotConfig>(merged) {
+        if patch.get("answerApprovals").is_some_and(Value::is_boolean) {
+            next.answer_approvals_set = true;
+        }
         *config = next;
     }
 }

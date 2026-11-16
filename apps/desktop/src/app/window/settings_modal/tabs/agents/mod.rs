@@ -10,9 +10,11 @@
 //! Like the React tab panel, the page forgets its view state (open rows, the form, CLI answers,
 //! a dragged order) when another page is shown; hook status belongs to the modal and stays.
 mod chips;
+mod claude_context;
 mod cli;
 mod config;
 mod editor;
+mod folder_trust_switch;
 mod hooks_card;
 mod inline_input;
 pub(crate) mod logos;
@@ -93,6 +95,9 @@ pub(crate) struct AgentsTab {
     hook_status_loading: bool,
     /// Agent ids whose row is expanded (CDXC:AgentHooks 2026-08-28: every row starts collapsed).
     expanded: Vec<String>,
+    /// A search found a row of Claude Code's Context group, so its panel shows open
+    /// (claude_context.rs `search_opens_claude`).
+    search_opens_claude: bool,
     /// `draftAgentIds`: the order after a drop, until the synced roster catches up.
     draft_agent_ids: Option<Vec<String>>,
     synced_agent_ids: Vec<String>,
@@ -122,6 +127,8 @@ pub(crate) struct AgentsTab {
     inline_committed: HashMap<SharedString, String>,
     /// The Skip permissions? confirmation is open.
     confirming_bypass: bool,
+    /// Trust project folders automatically while it is being turned on (folder_trust_switch.rs).
+    folder_trust_switch: folder_trust_switch::FolderTrustSwitch,
     /// The Uninstall hooks for all agents? confirmation is open (shares `confirm_focus`).
     confirming_uninstall_hooks: bool,
     confirm_focus: FocusHandle,
@@ -179,6 +186,7 @@ impl AgentsTab {
             active: false,
             hook_status_loading: false,
             expanded: Vec::new(),
+            search_opens_claude: false,
             draft_agent_ids: None,
             synced_agent_ids: Vec::new(),
             editor: None,
@@ -194,6 +202,7 @@ impl AgentsTab {
             hooks_menu_open: false,
             hooks_menu_trigger: Rc::new(Cell::new(None)),
             confirming_bypass: false,
+            folder_trust_switch: Default::default(),
             confirming_uninstall_hooks: false,
             confirm_focus: cx.focus_handle(),
             cli: cli::CliModel::default(),
@@ -375,10 +384,11 @@ impl AgentsTab {
         };
         match state.as_str() {
             "agents-expanded" => self.expanded = vec!["codex".into(), "claude".into()],
+            "agents-off" => self.expanded = vec!["codex".into()],
             "agents-clis" => {
                 self.expanded = vec!["zcode".into(), "claude".into(), "pi".into(), "grok".into()]
             }
-            "agents-cli-running" => self.expanded = vec!["gemini".into()],
+            "agents-cli-running" => self.expanded = vec!["qoder".into()],
             "agents-cli-failed" => self.expanded = vec!["grok".into()],
             "agents-editor-new" => self.open_editor(None, window, cx),
             "agents-editor-edit" => self.expanded = vec!["codex".into()],
@@ -454,6 +464,7 @@ impl Render for AgentsTab {
                 matching,
             )
         };
+        self.search_opens_claude = claude_context::search_opens_claude(&search);
         let mut blocks: Vec<PageBlock> = Vec::new();
         if search.tab.is_searching && !search.tab.has_visible() {
             let store = self.store.clone();

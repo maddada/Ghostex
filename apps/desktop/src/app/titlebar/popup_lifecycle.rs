@@ -144,11 +144,9 @@ impl GhostexGpuiApp {
             is_minimizable: false,
             titlebar: None,
             // Under window glass the dropdown blurs what is behind it, rounded to its 8px panel.
-            // The usage panel opens without its glass and turns it on as it fades in, once it has
-            // fitted itself to its content (`reveal_popup_window` in account_usage/panel.rs).
-            window_background: if window_glass_active()
-                && !matches!(kind, GpuiTitlebarPopupKind::AccountUsage(_))
-            {
+            // A popover that fits itself opens without its glass and turns it on as it fades in,
+            // once it has fitted itself to its content (`reveal_titlebar_popup`).
+            window_background: if window_glass_active() && !kind.fits_itself_before_showing() {
                 WindowBackgroundAppearance::Blurred
             } else {
                 WindowBackgroundAppearance::Transparent
@@ -163,7 +161,9 @@ impl GhostexGpuiApp {
                 popup_window.set_background_corner_radius(px(POPUP_MENU_RADIUS));
                 apply_frosted_menu_blur(popup_window);
                 prepare_gpui_titlebar_popup_window_chrome(popup_window);
-                if matches!(kind, GpuiTitlebarPopupKind::Notifications) {
+                // Popover panels fade in as they open; one that fits itself fades in once fitted
+                // (CDXC:AppModal 2026-11-13 in popup_frame.rs). Menus open at once.
+                if kind.is_panel() && !kind.fits_itself_before_showing() {
                     crate::app::window::popup_frame::fade_in_popup_window(
                         popup_window,
                         cx.reduce_motion(),
@@ -191,6 +191,36 @@ impl GhostexGpuiApp {
         });
         self.titlebar_popup_window = Some(popup_window);
         cx.notify();
+    }
+
+    /// Shows the held popover `kind` once it has fitted itself: its glass and fade, on the next
+    /// frame of the popover's own window. The window is found by the app's own handle to it, never
+    /// by a window a callback was handed (CDXC:AgentProviders 2026-11-11 in
+    /// GpuiAppToastWindowChrome.m: the main window faded instead).
+    pub(crate) fn reveal_titlebar_popup(
+        &mut self,
+        kind: GpuiTitlebarPopupKind,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if !self
+            .titlebar_popup_menu
+            .as_ref()
+            .is_some_and(|state| state.kind == kind)
+        {
+            return;
+        }
+        let (Some(popup), Some(main)) = (self.titlebar_popup_window, self.main_window_handle)
+        else {
+            return;
+        };
+        if gpui::AnyWindowHandle::from(popup) == main {
+            return;
+        }
+        let _ = popup.update(cx, |_, window, _| {
+            window.on_next_frame(|window, cx| {
+                crate::app::window::popup_frame::reveal_popup_window(window, cx.reduce_motion());
+            });
+        });
     }
 
     pub(crate) fn cancel_gpui_titlebar_popup(

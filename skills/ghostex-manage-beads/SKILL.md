@@ -119,9 +119,16 @@ the same commands; never edit Beads files by hand.
   shows them); it shows pinned on top of the view. People answer it with `bd human respond <id> -r
   "<answer>"` (which comments and closes it) or `bd human dismiss <id>`. Flag a
   bead this way when you need the user to choose, instead of guessing.
+- **Links**: `bd update <id> --external-ref <url>` sets a bead's external link
+  (an issue or page) and `--spec-id <url-or-path>` its spec link; an empty value
+  clears it. The view's Links row shows and edits both. Beads has no file
+  attachments, so link to files instead.
 - **Sync**: `bd dolt pull` brings in changes from the user's other computers
-  and `bd dolt push --no-adopt` sends this computer's. Only sync when the user
-  asks; a rejected push means pull first, then push again.
+  and `bd dolt push --remote <name>` sends this computer's (the view names the
+  workspace's own Dolt remote). Only sync when the user
+  asks; a rejected push means pull first, then push again. When a Pull or Push
+  from the view failed, the gxserver log (`gxserver.jsonl`) has a
+  `beadsView.syncFailed` line with the kind, code and bd's first error line.
 
 ## Dispatch A Bead To A Worker Session (Coordinators)
 
@@ -144,8 +151,8 @@ gx board start-work <bead-id> [--agent <agentId>] [--model <model>] [--effort <l
   starting another worker. Calling it and then starting your own worker puts
   two workers on the same card.
 - **Pick the worker's model with `--model` and `--effort`** (Claude, Codex, Pi, OMP,
-  Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI workers, plus `--model` alone for Cursor CLI
-  and Gemini, when `start-work` creates a new worker; a Pi or
+  Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI workers, plus `--model` alone for Cursor CLI,
+  when `start-work` creates a new worker; a Pi or
   Empryo model is `<provider>/<model>`, a Pi effort is a thinking level such as `high`, and
   Ghostex releases before October 2026 refuse a Pi model). A reused linked worker
   keeps its existing model and effort. The choice applies to the new worker

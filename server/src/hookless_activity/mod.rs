@@ -23,8 +23,8 @@ pub(crate) use comparison::{note_session_closed, note_session_slept};
 pub(crate) use drive::{hook_superseded, OBSERVER_MARK};
 pub(crate) use hook::observe_hook_event;
 pub(crate) use hook_free_fallback::{
-    answer_codex_update, answer_fallback_notice, codex_update_notice, fallback_notice,
-    ACTION_RESTART_FOR_HOOK, ACTION_UPDATE_CODEX,
+    answer_ask_notice, answer_codex_update, answer_fallback_notice, codex_update_notice,
+    fallback_notice, ACTION_RESTART_FOR_HOOK, ACTION_TURN_ON_HOOK, ACTION_UPDATE_CODEX,
 };
 pub(crate) use opencode::{
     observe_stream_event as observe_opencode_stream_event,

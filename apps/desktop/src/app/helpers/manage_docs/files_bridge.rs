@@ -60,8 +60,9 @@ pub(crate) enum ManageFilesBridgeSideEffect {
     AddToSessionContext(String),
     CopyFullPath(String),
     OpenInCodeView(PathBuf),
-    /// The file, and the app to open it with when the user picked one under Open With.
-    OpenWithSystemApp(PathBuf, Option<PathBuf>),
+    /// The file, opened in the system's default app for it. The Files view's Open With opens a
+    /// file with an app the user picked in Ghostex's own menu (`native_docs_open_with_app`).
+    OpenWithSystemApp(PathBuf),
     RevealInFinder(PathBuf),
 }
 
@@ -102,15 +103,10 @@ pub(crate) fn manage_files_bridge_outcome(
                 .and_then(|object| object.remove("codeViewPath"))
                 .and_then(|value| value.as_str().map(PathBuf::from))
                 .map(ManageFilesBridgeSideEffect::OpenInCodeView),
-            "openWithSystemApp" => object.and_then(|object| {
-                let app = object
-                    .remove("appPath")
-                    .and_then(|value| value.as_str().map(PathBuf::from));
-                object
-                    .remove("openPath")
-                    .and_then(|value| value.as_str().map(PathBuf::from))
-                    .map(|path| ManageFilesBridgeSideEffect::OpenWithSystemApp(path, app))
-            }),
+            "openWithSystemApp" => object
+                .and_then(|object| object.remove("openPath"))
+                .and_then(|value| value.as_str().map(PathBuf::from))
+                .map(ManageFilesBridgeSideEffect::OpenWithSystemApp),
             _ => None,
         }
     };
@@ -175,6 +171,21 @@ pub(crate) fn manage_files_bridge_result(
     */
     let action = manage_request_string(request, "action").unwrap_or_default();
     let request_id = manage_request_string(request, "requestId").unwrap_or_default();
+    /*
+    CDXC:Docs 2026-11-14 DECISION:
+    The app a file opens with is chosen in Ghostex, never named by a request: Open With's menu is
+    built natively from the apps the system offers for the file and hands the chosen one to
+    `native_docs_open_with_app` as a value, not through this JSON. A request that names an app
+    (the old `appPath`) is refused rather than opened in the default app, so nothing that reaches
+    this bridge can pick the program that runs a project file.
+    */
+    if matches!(
+        action.as_str(),
+        "openWithSystemApp" | "resolveOpenWithTarget"
+    ) && request.get("appPath").is_some()
+    {
+        return Err("Open With chooses the app in Ghostex, not in the request.".to_string());
+    }
     let snapshot = snapshot.ok_or_else(|| "No active project root is available.".to_string())?;
     manage_validate_request_identity(request, snapshot)?;
     let chat_authorization = snapshot
@@ -209,7 +220,12 @@ pub(crate) fn manage_files_bridge_result(
         if action == "search" {
             return manage_search_project(context, request);
         }
-        if action == "openWithSystemApp" {
+        // `openWithSystemApp` opens the file in its default app (the side effect above);
+        // `resolveOpenWithTarget` only answers where the file is, for Open With's own app.
+        if matches!(
+            action.as_str(),
+            "openWithSystemApp" | "resolveOpenWithTarget"
+        ) {
             let path =
                 manage_docs_path(context, manage_request_string(request, "path").as_deref())?;
             let target = manage_existing_url(&path)?;
@@ -219,7 +235,6 @@ pub(crate) fn manage_files_bridge_result(
             }
             return Ok(serde_json::json!({
                 "action": action,
-                "appPath": manage_request_string(request, "appPath"),
                 "openPath": target.to_string_lossy(),
                 "requestId": request_id,
             }));
@@ -387,5 +402,71 @@ pub(crate) fn manage_files_bridge_result(
             Ok(answer)
         }
         _ => Err("Unsupported Files action.".to_string()),
+    }
+}
+
+#[cfg(test)]
+mod open_with_tests {
+    use super::*;
+
+    #[test]
+    fn a_request_that_names_an_app_is_refused() {
+        for action in ["openWithSystemApp", "resolveOpenWithTarget"] {
+            let payload = serde_json::json!({
+                "action": action,
+                "requestId": "r1",
+                "path": "docs/run.command",
+                "appPath": "/System/Applications/Utilities/Terminal.app",
+            })
+            .to_string();
+            let outcome =
+                run_manage_files_bridge_request_for_project_snapshot(&payload, None, "", "", true);
+            let error = outcome.response["error"].as_str().unwrap_or_default();
+            assert!(
+                error.contains("Open With chooses the app in Ghostex"),
+                "{action}: {}",
+                outcome.response
+            );
+            assert!(
+                outcome.side_effect.is_none(),
+                "{action} must not open anything"
+            );
+        }
+    }
+
+    #[test]
+    fn an_answer_never_hands_an_app_to_the_side_effect() {
+        // Even an answer that somehow carried an app opens the file in its default app only.
+        let outcome = manage_files_bridge_outcome(
+            "openWithSystemApp".to_string(),
+            "r2".to_string(),
+            Ok(serde_json::json!({
+                "action": "openWithSystemApp",
+                "appPath": "/System/Applications/Utilities/Terminal.app",
+                "openPath": "/project/docs/run.command",
+                "requestId": "r2",
+            })),
+        );
+        match outcome.side_effect {
+            Some(ManageFilesBridgeSideEffect::OpenWithSystemApp(path)) => {
+                assert_eq!(path, PathBuf::from("/project/docs/run.command"));
+            }
+            _ => panic!("expected the default-app open"),
+        }
+        // Resolving the file for Open With's own app has no side effect of its own.
+        let resolved = manage_files_bridge_outcome(
+            "resolveOpenWithTarget".to_string(),
+            "r3".to_string(),
+            Ok(serde_json::json!({
+                "action": "resolveOpenWithTarget",
+                "openPath": "/project/docs/run.command",
+                "requestId": "r3",
+            })),
+        );
+        assert!(resolved.side_effect.is_none());
+        assert_eq!(
+            resolved.response["openPath"].as_str(),
+            Some("/project/docs/run.command")
+        );
     }
 }

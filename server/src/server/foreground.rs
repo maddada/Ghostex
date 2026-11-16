@@ -443,6 +443,8 @@ pub async fn run_gxserver_foreground(
     super::security_http::start_security_events(state.clone());
     bot_sync::start_bot_project_sync(state.clone());
     close_after_done_runtime::start_close_after_done_runtime(state.clone());
+    // The Mode menu's "Restart in Bypass when idle" switches that were on when gxserver stopped.
+    crate::session_chat_mode_restart::resume_waiting_restarts(&state);
     coordinator_runtime::start_coordinator_runtime(state.clone());
     session_stall_runtime::start_session_stall_runtime(state.clone());
     network_status_runtime::start_network_status_runtime(state.clone());
@@ -456,6 +458,11 @@ pub async fn run_gxserver_foreground(
     crate::collab_shim::sidecar::start_supervisor(state.clone());
     coordinator_remote_runtime::start_coordinator_remote_runtime(state.clone());
     tokio::spawn(peer_http::start_peer_listener(state.clone()));
+    // A sidebar extension's own server runs while it is on (CDXC:Extensions in extensions/sidebar.rs).
+    {
+        let registry = state.extension_registry.clone();
+        std::thread::spawn(move || registry.start_sidebar_servers());
+    }
     agent_message_delivery_runtime::start_agent_message_delivery_runtime(state.clone());
     crate::agentbox::start_agentbox_activity_poller(state.clone());
     crate::cloud_boxes::start_cloud_boxes_scheduler(state.clone());
@@ -517,6 +524,8 @@ pub async fn run_gxserver_foreground(
     // Daemons of isolated gxservers whose state folder was deleted; their own server can never end them. See zmx/stranded_daemons.rs.
     #[cfg(unix)]
     crate::zmx::end_stranded_zmx_session_daemons(&logger, &metadata.server_id);
+    // App copies session daemons ran from that no daemon runs from any more. See zmx/session_host.rs.
+    crate::zmx::remove_unused_session_hosts();
     /*
     CDXC:RemotePairing 2026-09-01:
     The tailcat sidecar is a child of THIS daemon, so a restart has to bring it
@@ -533,6 +542,9 @@ pub async fn run_gxserver_foreground(
     sync_session_chat_followers_for_all_sessions(&state, "server-start");
     // After the wire cycle and the restart scan above: daemons those ended are never "seen alive".
     session_self_heal_runtime::start_session_self_heal_runtime(state.clone());
+    memory_guard_runtime::start_memory_guard_runtime(state.clone());
+    // Sessions an app update left without their folders: a card with Restart. See zmx/lost_folder_access.rs.
+    crate::zmx::start_lost_folder_access_watch(state.clone());
     crate::voice_agent::recover_voice_agent_memory(&state);
     // Secret request files are deleted a day after they were saved, even when no agent asks again.
     crate::secret_requests::sweep_saved_files(&state.paths);

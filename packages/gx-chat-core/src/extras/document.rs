@@ -44,6 +44,7 @@ pub fn document_with_board(
         state.session.coordinator_threads.as_deref(),
         extras.panels.threads_step,
         extras.panels.threads_all.as_ref().map(|(_, rows)| rows),
+        &state.transcript_view.session_directory,
     );
 
     let working = crate::session::working::presents_working(state);

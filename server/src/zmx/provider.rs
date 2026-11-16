@@ -297,6 +297,8 @@ pub(crate) fn start_session_provider_with_observed_state(
             "Cannot start session provider because the project directory is missing.".to_string(),
         ));
     };
+    // The daemon runs from a copy of the app that outlives updates (zmx/session_host.rs).
+    let zmx = super::session_daemon_zmx(zmx);
     // A daemon and its agent are launched from here on: whatever was seen of the agent before is
     // about one that is gone (CDXC:SessionStatus 2026-11-10 in session_chat_agent_gone_activity.rs).
     crate::session_chat_start_failure::forget_agent_gone(
@@ -706,8 +708,9 @@ pub fn read_zmx_session_process_identities(
             "Could not read the session process snapshot.".to_string(),
         ));
     }
-    // macOS reads the process rows in-process (process_table_macos.rs); the script ran `zmx list` only.
-    #[cfg(target_os = "macos")]
+    // macOS and Linux read the process rows in-process (process_table_macos.rs,
+    // session_tree.rs); the script ran `zmx list` only.
+    #[cfg(unix)]
     let mut identities = {
         let root_pids_by_session_name = parse_zmx_root_pids(&result.stdout, session_names);
         let mut root_pids = root_pids_by_session_name
@@ -715,10 +718,13 @@ pub fn read_zmx_session_process_identities(
             .copied()
             .collect::<Vec<_>>();
         root_pids.sort_unstable();
+        #[cfg(target_os = "macos")]
         let processes = super::process_table_macos::process_tree_rows(&root_pids);
+        #[cfg(not(target_os = "macos"))]
+        let processes = super::session_tree::linux_process_tree_rows(&root_pids);
         resolve_zmx_session_process_identities(processes, session_names, &root_pids_by_session_name)
     };
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
     let mut identities = {
         let (ps_output, zmx_list_output) = parse_zmx_process_snapshot_sections(&result.stdout);
         parse_zmx_session_process_identities(&ps_output, session_names, &zmx_list_output)
@@ -849,8 +855,10 @@ fn resolve_zmx_session_process_identities(
 pub(super) fn build_zmx_process_snapshot_command(zmx_executable_path: &str) -> String {
     #[cfg(windows)]
     return super::scripts_windows::process_snapshot_command(zmx_executable_path);
-    // macOS reads the process rows in-process (process_table_macos.rs), so its script lists sessions only.
-    #[cfg(target_os = "macos")]
+    // macOS and Linux read the process rows in-process (process_table_macos.rs, session_tree.rs), so
+    // the script lists sessions only. Linux used to append `ps -axo pid=,ppid=,tty=,command=` for
+    // the whole machine, which passed the 1 MiB cap with about 60 sessions (GitHub #630).
+    #[cfg(not(windows))]
     return format!(
         r#"
 zmx_bin={}
@@ -865,31 +873,9 @@ exec "$zmx_bin" list
     )
     .trim()
     .to_string();
-    #[cfg(all(not(windows), not(target_os = "macos")))]
-    /*
-    CDXC:SessionIdentity 2026-06-21-18:25:
-    Rust must copy TypeScript gxserver's live zmx process identity scan so sidebar rows are repaired from actual agent executables after cutover. Capture only bounded process metadata in memory, never persistent logs, and keep parsing centralized in server instead of client fallbacks.
-    */
-    format!(
-        r#"
-zmx_bin={}
-if [ ! -x "$zmx_bin" ]; then
-  printf '%s\n' 'session persistence is set to zmx, but Ghostex bundled zmx was not found.' >&2
-  exit 127
-fi
-unset ZMX_SESSION ZMX_SESSION_PREFIX
-printf '%s\n' '__GHOSTEX_ZMX_LIST__'
-"$zmx_bin" list
-printf '%s\n' '__GHOSTEX_PS__'
-ps -axo pid=,ppid=,tty=,command=
-"#,
-        shell_quote(zmx_executable_path)
-    )
-    .trim()
-    .to_string()
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
 pub(super) fn parse_zmx_process_snapshot_sections(stdout: &str) -> (String, String) {
     let zmx_marker = "__GHOSTEX_ZMX_LIST__";
     let ps_marker = "__GHOSTEX_PS__";

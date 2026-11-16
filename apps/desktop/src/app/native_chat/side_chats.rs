@@ -254,7 +254,7 @@ impl NativeChatView {
                 )
                 .child(
                     // The main session's name is the same pill as on a "Message from" card
-                    // (`session_pill`: dotted underline, hover fill, click opens that session).
+                    // (`session_pill`: dotted underline, click opens that session).
                     div()
                         .flex_1()
                         .min_w_0()

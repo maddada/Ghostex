@@ -68,6 +68,8 @@ pub fn assemble_with(
     document.work_dock = ghostex_gx_protocol::Tri::Value(crate::extras::work_cards::dock_with(
         state, context, &turns,
     ));
+    document.work_asks_settled =
+        ghostex_gx_protocol::Tri::Value(crate::extras::work_cards::settled_asks(state, context));
     document.work_ask_tags = ghostex_gx_protocol::Tri::Value(work_ask_tags(state, cache));
     composer::document(state, context, &mut document);
     menus::document_with(state, context, &mut document, &mut cache.model_menu);

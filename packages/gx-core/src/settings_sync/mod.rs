@@ -29,7 +29,7 @@ pub use lists::{
 };
 pub use settings_keys::{
     category_setting_keys, category_setting_values, describe_setting_key, setting_of_sync_key,
-    setting_sync_key, SIDEBAR_ORGANIZATION_KEYS,
+    setting_sync_key, APPEARANCE_LEFT_OUT, SIDEBAR_ORGANIZATION_KEYS,
 };
 pub use spaces::{
     apply_spaces_entries, derive_spaces_edits, describe_spaces_key, group_deleted_edit,
@@ -133,6 +133,10 @@ pub fn category_enabled(category: &SyncCategory, settings: Option<&Value>) -> bo
 
 /// The key prefix that always syncs: the members of the sync group and the removed computers.
 pub const GROUP_CATEGORY: &str = "group";
+
+/// The key prefix of the settings that sync on every computer of the group with no switch of their
+/// own in Settings > Sync (`ALWAYS_SYNCED_KEYS`: the memory guard's switches).
+pub const ALWAYS_CATEGORY: &str = "always";
 
 /// The sync group's id for a paired phone (`phone-<id>`), from the id the phone made for itself:
 /// 4 to 64 letters, digits or dashes.

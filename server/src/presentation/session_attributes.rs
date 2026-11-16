@@ -178,6 +178,24 @@ pub(crate) fn presentation_activity(session: &Value, generated_at: &str) -> Stri
     }
 }
 
+/// Whether the session's `working` (`presentation_activity`) is only background work its agent
+/// left running after its turn ended: a shell or monitor, or Antigravity's background task. A
+/// subagent fleet or a compaction is work, so such a session is not this. The stall watches and the
+/// coordinator's thread state read it as idle (CDXC:Coordinators 2026-11-13 in
+/// session_status/model.rs).
+pub(crate) fn working_only_in_background(session: &Value, generated_at: &str) -> bool {
+    if presentation_activity(session, generated_at) != "working"
+        || crate::session_chat_compacting::session_chat_fleet_detected_at(session).is_some()
+        || crate::session_chat_compacting::session_chat_compacting_detected_at(session).is_some()
+    {
+        return false;
+    }
+    let generated_at_ms = parse_iso_ms(generated_at).unwrap_or_else(now_ms);
+    let raw_activity = session.pointer("/runtimeSettings/agentActivity");
+    let effective = effective_agent_activity_value(raw_activity, "idle", generated_at_ms);
+    crate::session_status::is_background_only_working(Some(&effective))
+}
+
 /// The session's attention; its `kind` is `finished` only for a turn-complete attention while
 /// `turn_end_waits_on_user` is false.
 ///
@@ -261,6 +279,7 @@ pub(crate) fn attention_state(session: &Value, generated_at: &str) -> Value {
 pub(crate) fn turn_end_waits_on_user(session: &Value, generated_at: &str) -> bool {
     crate::session_chat_async_questions::pending_question_count(session)
         + crate::session_chat_open_questions::open_question_count(session)
+        + crate::session_needs_you::open_count(session)
         > 0
         || crate::session_approval::session_awaits_approval(session, generated_at)
         || crate::connectors::waiting_connector_card(session).is_some()

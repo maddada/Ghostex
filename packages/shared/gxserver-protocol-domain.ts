@@ -58,7 +58,10 @@ export type GxserverSessionTagFilter = GxserverSessionTag | 'untagged';
 export type GxserverDomainLifecycleState = 'running' | 'sleeping' | 'stopped' | 'missing' | 'unknown';
 export type GxserverProviderLifecycleState = 'exists' | 'missing' | 'unknown';
 export type GxserverStartupTextDisposition =
-  'discardExistingProvider' | 'discardUnknownProvider' | 'none' | 'queueAfterTerminalReady';
+  | 'discardExistingProvider'
+  | 'discardUnknownProvider'
+  | 'none'
+  | 'queueAfterTerminalReady';
 export type GxserverRestoreBlockReason = 'missingCwd';
 
 export interface GxserverProjectDomainState {

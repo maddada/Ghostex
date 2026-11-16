@@ -417,7 +417,14 @@ impl GpuiOnboardingWindow {
                 ),
             )
             .child(div().mb(s.px(14.0)).child(label(s, "Agent approvals")))
-            .child(self.render_agent_approvals(s, cx));
+            .child(self.render_agent_approvals(s, cx))
+            .child(
+                div()
+                    .mt(s.px(22.0))
+                    .mb(s.px(10.0))
+                    .child(label(s, "Preview")),
+            )
+            .child(self.render_look_preview(s));
         let look_card = self.render_look_card(s, now, cx);
         // CDXC:Onboarding 2026-11-11 DECISION:
         // User, on the first-run page (step 10, Get started): "remove the picking folder from here please no need", and (step 11) go straight to the app with no "You're set" summary. Setup asks for no folder and starts no session: Open Ghostex ends it, and an app with no project opens Add Project (onboarding_modal_lifecycle.rs) so it is never an empty shell. The "Start with" agent tiles went with the folder (they only chose the first session's agent there); the Agents panel's default agent decides it.
@@ -460,17 +467,11 @@ impl GpuiOnboardingWindow {
                 )
                 .into_any_element(),
         );
+        // CDXC:Onboarding 2026-11-13 DECISION: User, on the first-run showcase page (Q3048), picked
+        // "Remove it" for "Advanced settings later" (it finished setup and opened Settings at once,
+        // the opposite of what it said): Open Ghostex is the one way out of setup here.
         out.push(
             foot_actions(s, 5)
-                .child(self.control(
-                    s,
-                    ghost(s, "advanced-later", "Advanced settings later", 16.0, false),
-                    "advanced-later",
-                    interact::Ring::new(0.0, 0.0),
-                    interact::Keys::EnterSpace,
-                    cx,
-                    |this, _, cx| this.finish(FinishTarget::Settings(None), cx),
-                ))
                 .child(self.control(
                     s,
                     cta(
@@ -491,6 +492,187 @@ impl GpuiOnboardingWindow {
                 .into_any_element(),
         );
         out
+    }
+
+    /// CDXC:Onboarding 2026-11-13 DECISION:
+    /// User, on the first-run showcase page (Q3049), picked "Yes, live on Get started once they
+    /// pick": the first run stays dark, so picking Light (or a theme colour, Colourfulness or
+    /// Transparency) used to change nothing on screen. A small Ghostex window here follows every
+    /// choice at once: the appearance System resolves to, the theme colour at its Colourfulness,
+    /// the stage showing through when Transparency is on, and Chat or Terminal in its session.
+    fn render_look_preview(&self, s: S) -> AnyElement {
+        let settings = &self.settings;
+        let dark = match settings.sidebar_theme.as_str() {
+            "system" => !self.system_light,
+            theme => theme.starts_with("dark"),
+        };
+        let (presets, preset) = if dark {
+            (&self.theme.dark, &settings.dark_theme_preset)
+        } else {
+            (&self.theme.light, &settings.light_theme_preset)
+        };
+        let position = colourfulness_display_step(settings.sidebar_contrast);
+        let found = presets.iter().find(|candidate| &candidate.value == preset);
+        let chrome = found
+            .and_then(|preset| preset.chrome.get(position).copied())
+            .unwrap_or(if dark { 0x2b2d31 } else { 0xf2f2f4 });
+        let accent = found
+            .map(|preset| neutral_accent(&preset.value, dark).unwrap_or(preset.accent))
+            .unwrap_or(0x5a7deb);
+        let glass_on = dark && settings.window_glass != "opaque";
+        let (sidebar_alpha, work_alpha) = if glass_on {
+            (
+                (settings.glass_sidebar_dark / 100.0) as f32,
+                (settings.glass_work_area_dark / 100.0) as f32,
+            )
+        } else {
+            (1.0, 1.0)
+        };
+        let paint = |rgb: [f32; 3], alpha: f32| {
+            rgba(
+                rgb[0] as u8,
+                rgb[1] as u8,
+                rgb[2] as u8,
+                alpha.clamp(0.0, 1.0),
+            )
+        };
+        let sidebar = paint(channels(chrome), sidebar_alpha);
+        let work = paint(
+            mix_hex(
+                chrome,
+                if dark { 0xffffff } else { 0xffffff },
+                if dark { 0.04 } else { 0.55 },
+            ),
+            work_alpha,
+        );
+        let (text, muted, line) = if dark {
+            (hex(0xeef1f7), hex(0x9ea7b6), white(0.08))
+        } else {
+            (hex(0x1d2330), hex(0x5b6474), black(0.08))
+        };
+        let accent_color = paint(channels(accent), 1.0);
+        let accent_wash = paint(channels(accent), if dark { 0.28 } else { 0.18 });
+        let session = |agent: &str, name: &str, lit: bool| {
+            div()
+                .flex()
+                .items_center()
+                .gap(s.px(6.0))
+                .h(s.px(20.0))
+                .px(s.px(6.0))
+                .rounded(s.px(5.0))
+                .when(lit, |this| this.bg(accent_wash))
+                // The monochrome logos are drawn white, so a light window shows a dot instead.
+                .child(if dark {
+                    agent_logo(s, &self.catalog, agent, 10.0)
+                } else {
+                    div()
+                        .size(s.px(6.0))
+                        .mx(s.px(2.0))
+                        .rounded_full()
+                        .bg(muted)
+                        .into_any_element()
+                })
+                .child(
+                    sans(s, 10.0, 400.0, text)
+                        .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .child(name.to_string()),
+                )
+        };
+        let chat = settings.preferred_interface != "terminal";
+        let body: AnyElement = if chat {
+            div()
+                .flex()
+                .flex_col()
+                .gap(s.px(6.0))
+                .child(
+                    sans(s, 10.0, 400.0, text)
+                        .self_end()
+                        .py(s.px(4.0))
+                        .px(s.px(8.0))
+                        .rounded(s.px(7.0))
+                        .bg(accent_wash)
+                        .child("Add a dark mode toggle"),
+                )
+                .child(
+                    sans(s, 10.0, 400.0, muted)
+                        .py(s.px(4.0))
+                        .px(s.px(8.0))
+                        .rounded(s.px(7.0))
+                        .border_1()
+                        .border_color(line)
+                        .child("Edited 3 files. The toggle is in Settings."),
+                )
+                .into_any_element()
+        } else {
+            mono(s, 9.5, 400.0, muted)
+                .flex()
+                .flex_col()
+                .gap(s.px(3.0))
+                .child(
+                    div()
+                        .text_color(accent_color)
+                        .child("› Add a dark mode toggle"),
+                )
+                .child("Edited src/theme.ts")
+                .child("Edited src/settings/page.tsx")
+                .into_any_element()
+        };
+        div()
+            .h(s.px(118.0))
+            .flex()
+            .flex_col()
+            .rounded(s.px(10.0))
+            .overflow_hidden()
+            .border_1()
+            .border_color(if dark { white(0.12) } else { black(0.12) })
+            .child(
+                div()
+                    .flex_1()
+                    .flex()
+                    .child(
+                        div()
+                            .w(s.px(160.0))
+                            .flex_none()
+                            .bg(sidebar)
+                            .border_r_1()
+                            .border_color(line)
+                            .pt(s.px(8.0))
+                            .px(s.px(6.0))
+                            .flex()
+                            .flex_col()
+                            .gap(s.px(3.0))
+                            .child(lights(s, true).ml(s.px(4.0)).mb(s.px(6.0)))
+                            .child(session("claude", "dark-mode-toggle", true))
+                            .child(session("codex", "port-tests", false))
+                            .child(session("cursor", "landing-copy", false)),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .bg(work)
+                            .p(s.px(10.0))
+                            .flex()
+                            .flex_col()
+                            .justify_between()
+                            .child(body)
+                            .child(
+                                div()
+                                    .h(s.px(18.0))
+                                    .rounded(s.px(6.0))
+                                    .border_1()
+                                    .border_color(line)
+                                    .flex()
+                                    .items_center()
+                                    .justify_end()
+                                    .px(s.px(3.0))
+                                    .child(div().size(s.px(12.0)).rounded_full().bg(accent_color)),
+                            ),
+                    ),
+            )
+            .into_any_element()
     }
 
     /// CDXC:Onboarding 2026-10-11 DECISION:
@@ -568,6 +750,14 @@ impl GpuiOnboardingWindow {
                     interact::Keys::EnterSpace,
                     cx,
                     move |this, _, cx| {
+                        // The colour tab follows the pick, so the preview and the squares agree,
+                        // unless a tab was chosen by hand.
+                        if !this.get_started.scheme_picked {
+                            this.get_started.dark_scheme = match value {
+                                "system" => !this.system_light,
+                                theme => theme.starts_with("dark"),
+                            };
+                        }
                         this.update_one("sidebarTheme", Value::String(value.to_string()), cx);
                     },
                 )

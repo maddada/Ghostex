@@ -18,7 +18,12 @@ import type { GxserverSwitchableSessionAgent } from './gxserver-protocol-session
  * so a client can tell "the user's unsent text" apart from a real session title.
  */
 export type GxserverSessionTitleSource =
-  'browser-auto' | 'draft' | 'generated' | 'placeholder' | 'terminal-auto' | 'user';
+  | 'browser-auto'
+  | 'draft'
+  | 'generated'
+  | 'placeholder'
+  | 'terminal-auto'
+  | 'user';
 
 export interface GxserverSessionTitleProjection {
   displayTitle?: string;
@@ -497,7 +502,7 @@ export interface GxserverPresentationSession {
   awaitingApproval?: boolean;
   /** Since when a session has shown no progress (the not-moving red dot); absent when not stuck. */
   stuckSince?: string;
-  /** `autopilot` while Autopilot heals the stuck session, so its red dot does not alert yet. */
+  /** `autopilot` while Autopilot heals the stuck session, or `coordinator` for a coordinator's thread its coordinator heals, so its red dot does not alert yet. */
   stuckHandledBy?: string;
   /** Since when the session is blocked (out of usage on every account, an error recovery could not get past): the red dot. */
   blockedSince?: string;
@@ -891,6 +896,8 @@ export interface GxserverPresentationSnapshot {
   projects: readonly GxserverPresentationProject[];
   revision: GxserverPresentationRevision;
   sessions: readonly GxserverPresentationSession[];
+  /** Every enabled sidebar extension's panels; absent while none is on, and on older daemons. */
+  extensionPanels?: import('./ghostex-extensions').GhostexExtensionPanels;
   sidebarProjectCollections?: GxserverSidebarProjectCollectionsState;
   sidebarSpaces?: GxserverSidebarSpacesState;
   sidebarWorkspaces?: GxserverSidebarWorkspacesState;

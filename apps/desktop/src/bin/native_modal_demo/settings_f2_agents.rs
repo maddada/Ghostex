@@ -6,8 +6,8 @@
 //! failed).
 //!
 //! States: `agents` (the Agents story), `agents-hooks` (the `agentHooks` deep link),
-//! `agents-expanded` (Codex and Claude open), `agents-clis` (ZCode, Claude, Pi and Grok open),
-//! `agents-cli-running` (Gemini installing), `agents-cli-failed` (Grok's failed update),
+//! `agents-expanded` (Codex and Claude open), `agents-off` (Codex turned off, its panel open), `agents-clis` (ZCode, Claude, Pi and Grok open),
+//! `agents-cli-running` (Qoder installing), `agents-cli-failed` (Grok's failed update),
 //! `agents-editor-new`, `agents-editor-edit` (Claude), `agents-skip-confirm`, `agents-loading`
 //! (hook status never answers), `agents-empty` (no launchers), `agents-search` ("approval"),
 //! `agents-no-match` ("tailscale"), `agents-home` (scrolled to the Home folder card),
@@ -47,7 +47,6 @@ fn default_agent_buttons() -> Value {
         { "agentId": "cursor", "command": "cursor-agent", "icon": "cursor-cli", "isDefault": true, "name": "Cursor CLI" },
         { "agentId": "pi", "command": "pi", "icon": "pi", "isDefault": true, "name": "Pi Agent" },
         { "agentId": "opencode", "command": "opencode", "icon": "opencode", "isDefault": true, "name": "OpenCode" },
-        { "agentId": "gemini", "command": "gemini", "icon": "gemini", "isDefault": true, "name": "Gemini" },
         { "agentId": "copilot", "command": "copilot", "icon": "copilot", "isDefault": true, "name": "Copilot" },
         { "agentId": "droid", "command": "droid", "icon": "factory-droid", "isDefault": true, "name": "Factory Droid" },
         { "agentId": "grok", "command": "grok", "icon": "grok-build", "isDefault": true, "name": "Grok Build" },
@@ -65,6 +64,12 @@ pub(super) fn extend_sidebar_state(message: &mut Value) {
     } else {
         default_agent_buttons()
     };
+    // Codex turned off after it was used (so it stays in the list), its panel open: only the CLI
+    // group and the Agent actions show.
+    if state() == "agents-off" {
+        message["hud"]["agents"][0]["enabled"] = json!(false);
+        message["hud"]["agents"][0]["lastUsedAt"] = json!("2026-11-10T09:00:00Z");
+    }
 }
 
 pub(super) fn open_message(state: &str) -> Option<Value> {
@@ -90,7 +95,7 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
 pub(super) fn gxserver_rpc_available(state: &str) -> bool {
     !matches!(
         state,
-        "agents" | "agents-hooks" | "agents-expanded" | "agents-loading"
+        "agents" | "agents-hooks" | "agents-expanded" | "agents-off" | "agents-loading"
     )
 }
 
@@ -186,12 +191,12 @@ fn cli_state(agent_id: &str) -> Value {
                 npm("zcode-app-cli")
             ],
         }),
-        "gemini" if state() == "agents-cli-running" => json!({
-            "agentId": "gemini", "platform": "windows",
-            "methods": [npm("@google/gemini-cli")],
+        "qoder" if state() == "agents-cli-running" => json!({
+            "agentId": "qoder", "platform": "windows",
+            "methods": [npm("@qoder-ai/qodercli")],
             "job": {
-                "id": "gemini-install", "status": "running", "operation": "install",
-                "command": "npm install -g @google/gemini-cli@latest",
+                "id": "qoder-install", "status": "running", "operation": "install",
+                "command": "npm install -g @qoder-ai/qodercli@latest",
                 "output": "Downloading CLI package…\n\u{1b}[32madded 312 packages\u{1b}[0m in 9s\n",
             },
         }),
@@ -216,7 +221,6 @@ pub(super) fn rpc(params: &Value) -> Result<Value, String> {
                 "cursor",
                 "pi",
                 "opencode",
-                "gemini",
                 "copilot",
                 "droid",
                 "grok",

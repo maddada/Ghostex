@@ -124,6 +124,9 @@ struct TurnReading {
     last_words: Option<String>,
     /// What started the open turn, in a few words, for a turn with no words of its own yet.
     started_by: Option<String>,
+    /// The newest prompt it took is Ghostex's stall nudge: with the turn ended, it answered the
+    /// nudge and nothing new came after.
+    answered_stall_nudge: bool,
 }
 
 /// BLOCKING (a transcript tail read, only when the file changed since the last one).
@@ -184,11 +187,31 @@ fn read_turn(gate: &mut SessionChatTranscriptGate, session: &Value) -> TurnReadi
             format!("Picked up: {}", coordinators::report_headline(line, 120))
         })
     });
+    let answered_stall_nudge = !open
+        && tail
+            .messages
+            .iter()
+            .rev()
+            .filter(|message| message.role == SessionChatRole::User && !message.queued)
+            .filter(|message| {
+                !message
+                    .blocks
+                    .iter()
+                    .any(|block| matches!(block, SessionChatBlock::ToolResult { .. }))
+            })
+            .find_map(|message| {
+                message.blocks.iter().find_map(|block| match block {
+                    SessionChatBlock::Text { text } if !text.trim().is_empty() => Some(text),
+                    _ => None,
+                })
+            })
+            .is_some_and(|text| coordinators::is_stall_nudge_text(text));
     TurnReading {
         open,
         started_ms,
         last_words,
         started_by,
+        answered_stall_nudge,
     }
 }
 
@@ -590,6 +613,18 @@ fn supervise(
             // `missing` / `unknown`: the provider has not been probed or died; nothing to report yet.
             continue;
         }
+        // CDXC:Coordinators 2026-11-14 DECISION in coordinators/stopped_by_restart.rs (GitHub #608,
+        // Q3234): a thread a restart cut off gets no nudge and no report until it works again.
+        if coordinators::held_by_restart(&session) {
+            if coordinators::worked_since_restart(&session) {
+                coordinators::release_thread(repository, &session);
+            } else {
+                memory.not_working_since.remove(&key);
+                memory.stalls.remove(&key);
+                memory.idle_waits.remove(&key);
+                continue;
+            }
+        }
         // Its terminal ended under it: the self-heal restarts it and sends the one report about it,
         // so its stale "working" hooks neither count as quiet nor end as a finished turn.
         let heal_report = crate::session_self_heal::pending_report(&key);
@@ -673,6 +708,24 @@ fn supervise(
             memory.turns.insert(key.clone(), reading);
             if new_turn {
                 ThreadState::Working
+            } else {
+                hook_state
+            }
+        } else if hook_state == ThreadState::Working
+            && coordinators::thread_prompt(&session).is_none()
+        {
+            /*
+            CDXC:Coordinators 2026-11-13 DECISION:
+            Coordinator, after G2z88 was nudged again and again while idle (see CDXC:Coordinators 2026-11-13 in session_status/model.rs): "Never nudge the same session again after it answered a nudge with no new work, until something new happens (new output, a new message, its turn starts again)." A thread whose hooks still say working, but whose transcript's newest turn was started by Ghostex's stall nudge and has ended, answered the nudge and took nothing new since, so it is finished, not quiet: no second nudge and no second "no new output" report. Any new prompt (a message, a task notification) opens a new turn and makes it working again. The read is cached until the transcript changes.
+            */
+            let reading = read_turn(
+                memory.transcript_gates.entry(key.clone()).or_default(),
+                &session,
+            );
+            let answered = reading.answered_stall_nudge;
+            memory.turns.insert(key.clone(), reading);
+            if answered {
+                ThreadState::Finished
             } else {
                 hook_state
             }
@@ -2120,7 +2173,24 @@ pub(crate) fn handle_coordinator_http(
     {
         return Ok(answer);
     }
+    // A Needs you to-do's Done, answer, Reply or Dismiss (session_needs_you/), which its dock row
+    // sends as a coordinator ask's answer naming the to-do's tag.
+    if let Some(answer) =
+        crate::session_needs_you::route_board_answer(state, endpoint_path, db, repository, params)?
+    {
+        return Ok(answer);
+    }
+    // An ask a thread made with `ghostex needs-you add`: once the user answers it here, the
+    // thread hears the answer too (session_needs_you/thread.rs).
+    let thread_ask = crate::session_needs_you::thread_ask_of(db, endpoint_path, params);
     let output = coordinators::handle_coordinator_endpoint(endpoint_path, db, repository, params)?;
+    if let Some(ask) = thread_ask {
+        if let Some((project_id, session_id)) =
+            crate::session_needs_you::forward_answer(db, &ask, params)
+        {
+            republish_session_chat(state, &project_id, &session_id);
+        }
+    }
     for (project_id, session_id) in &output.changed_sessions {
         schedule_presentation_session_delta(state, db, repository, project_id, session_id)?;
     }

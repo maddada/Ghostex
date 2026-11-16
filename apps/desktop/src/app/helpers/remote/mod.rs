@@ -8,6 +8,7 @@
 // docs/2026-08-22/repo-restructure/SPLITS.md C1.
 pub(crate) mod attach;
 pub(crate) mod attach_terminal_process;
+pub(crate) mod browser_route;
 pub(crate) mod browser_sites;
 pub(crate) mod browser_tunnel;
 pub(crate) mod cloud_box_attach;
@@ -47,6 +48,7 @@ pub(crate) mod windows_terminal;
 
 pub(crate) use attach::*;
 pub(crate) use attach_terminal_process::*;
+pub(crate) use browser_route::*;
 pub(crate) use browser_sites::*;
 pub(crate) use browser_tunnel::*;
 pub(crate) use cloud_box_attach::*;

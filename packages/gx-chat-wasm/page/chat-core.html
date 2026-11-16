@@ -49,6 +49,9 @@
     cloud          [name, args]     -> the Cloud Boxes provider call's answer ({"ok": ...}; an
                                        {"error": ...} answer arrives as ok:false), packages/gx-cloud
                                        `json_api::call` (args is a JSON text)
+    beadsTree      [args]           -> the Beads view's Tree for the phone ({"ok": ...}), packages/gx-core
+                                       `beads_view::json_api::tree` (args is a JSON text)
+    beadsBead      [args]           -> one bead as the phone's Bead screen shows it, `json_api::bead`
   A core answer of {"error":{...}} (bad event, panicked core...) arrives as ok:false with that
   error, as the native module's `checked` throws it. Any op on a handle that was disposed or never
   created answers {"code":"disposed"}, as the native module's calls throw after dispose(). A success
@@ -99,6 +102,11 @@
 
   // Calls a text-answering export with string arguments (each passed as pointer, length).
   function callText(name, leading, strings) {
+    // A page newer than its wasm (an export the build lacks) answers like an unknown op instead of
+    // throwing inside the shared page.
+    if (typeof wasm[name] !== 'function') {
+      return JSON.stringify({ error: { code: 'unknownOp', message: 'This core has no ' + name + '.' } });
+    }
     var args = strings.map(put);
     try {
       var flat = leading.slice();
@@ -161,6 +169,10 @@
         return { value: wasm.gx_core_allocate_request_id(handle) };
       case 'cloud':
         return { raw: callText('gx_cloud_call', [], [str(args[0]), str(args[1])]) };
+      case 'beadsTree':
+        return { raw: callText('gx_beads_tree', [], [str(args[0])]) };
+      case 'beadsBead':
+        return { raw: callText('gx_beads_bead', [], [str(args[0])]) };
       default:
         return { error: { code: 'unknownOp', message: 'No op named ' + JSON.stringify(op) + '.' } };
     }

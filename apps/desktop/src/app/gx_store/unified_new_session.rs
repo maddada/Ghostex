@@ -279,12 +279,91 @@ impl GhostexGpuiApp {
             .position(|machine| machine.machine_id == start.machine_id)?;
         // The start can be a worktree the row doesn't point at; on that machine it is "here".
         projects[project].machines[machine].project_id = start.project_id.clone();
+        let marks = self.gx_store_new_thread_picker_marks();
+        let icons = self.gx_store_new_thread_picker_icons(&projects);
         Some(NewThreadPickerPlace {
             projects,
             project,
             machine,
             hotkey: crate::gpui_configured_hotkey_label("openNewThreadPalette"),
+            marks,
+            icons,
         })
+    }
+
+    /// Every machine's logo and name as the sidebar draws them, in the sidebar's order: the
+    /// picker's machine columns (CDXC:AgentLauncher 2026-11-15 in
+    /// window/new_thread_picker_place.rs). With only this computer the sidebar draws no mark, so
+    /// its logo is read the same way here: its picked icon, else its system's logo.
+    fn gx_store_new_thread_picker_marks(&self) -> Vec<crate::app::window::NewThreadPickerMark> {
+        let tabs = &self.gx_store.sidebar_list.last_inputs.host.machines;
+        let mut by_id = self.gx_store_computer_marks(tabs);
+        let mut marks: Vec<crate::app::window::NewThreadPickerMark> = tabs
+            .iter()
+            .filter_map(|tab| {
+                let mark = by_id.remove(&tab.machine_id)?;
+                Some(crate::app::window::NewThreadPickerMark {
+                    machine_id: tab.machine_id.clone(),
+                    asset: mark.asset,
+                    name: mark.name,
+                })
+            })
+            .collect();
+        if !marks.iter().any(|mark| mark.machine_id == LOCAL_MACHINE_ID) {
+            let facts =
+                super::computer_icons::computer_icon_facts(LOCAL_MACHINE_ID).unwrap_or_default();
+            let system = facts.platform.as_deref().or(match std::env::consts::OS {
+                "macos" => Some("macos"),
+                "windows" => Some("windows"),
+                _ => Some("linux"),
+            });
+            let asset = ghostex_gx_core::computer_icons::computer_icon_asset(
+                facts.icon.as_deref(),
+                facts.logo.as_deref(),
+                facts.kind.as_deref(),
+                system,
+            );
+            marks.insert(
+                0,
+                crate::app::window::NewThreadPickerMark {
+                    machine_id: LOCAL_MACHINE_ID.to_string(),
+                    asset,
+                    name: crate::host_name::local_computer_name(),
+                },
+            );
+        }
+        marks
+    }
+
+    /// Each project's own icon, as its sidebar row draws it: from the machine it starts on, else
+    /// the first of its machines that has one.
+    fn gx_store_new_thread_picker_icons(
+        &self,
+        projects: &[UnifiedProjectChoice],
+    ) -> std::collections::BTreeMap<String, String> {
+        let presentation = self.gx_store.core.presentation();
+        projects
+            .iter()
+            .filter_map(|project| {
+                let start = project.machines.get(project.selected);
+                let icon =
+                    start
+                        .into_iter()
+                        .chain(project.machines.iter())
+                        .find_map(|machine| {
+                            let id = if machine.machine_id == LOCAL_MACHINE_ID {
+                                MachineId::Local
+                            } else {
+                                MachineId::Remote(machine.machine_id.clone())
+                            };
+                            ghostex_gx_core::project_sidebar_icon_data_url(
+                                presentation.machine(&id)?,
+                                &machine.project_id,
+                            )
+                        })?;
+                Some((project.repo_key.clone(), icon))
+            })
+            .collect()
     }
 
     /// A picker command's pick: the group its launch goes to (the launch reads `picker_target`),

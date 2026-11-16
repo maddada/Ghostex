@@ -254,8 +254,8 @@ impl GhostexGpuiApp {
                                 );
                                 this.dispatch_gpui_app_modal_toast(
                                     "warning",
-                                    "Remote attach unavailable",
-                                    &message,
+                                    REMOTE_OPEN_FAILED_TITLE,
+                                    &remote_open_failure_text(&key.remote_machine_id, &message),
                                     cx,
                                 );
                             }
@@ -278,5 +278,34 @@ impl GhostexGpuiApp {
             });
         })
         .detach();
+    }
+}
+
+/// The title of every notice that something on another computer did not open.
+pub(crate) const REMOTE_OPEN_FAILED_TITLE: &str = "Couldn't open it";
+
+/// What a failed open of `machine_id`'s session says, in place of the transport's own words.
+///
+/// CDXC:RemoteMachines 2026-11-14 WHY: a pill click that could not open a thread on another computer toasted "Remote attach unavailable / Remote gxserver request failed." The plan's errors name the layer that failed for the support log, not for the user, so the notice now says which computer and what to do (AGENTS.md, card and notice wording); the cut-off sentences (`remote_cut_off_message`) are already plain and pass as they are.
+pub(crate) fn remote_open_failure_text(machine_id: &str, message: &str) -> String {
+    if message.starts_with("The answer from the remote computer")
+        || message.starts_with("The remote computer's answer")
+    {
+        return message.to_string();
+    }
+    let name = gpui_remote_machine_name_from_settings(machine_id)
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| "The other computer".to_string());
+    if message.contains("did not answer in time") {
+        format!("{name} took too long to answer. Try again.")
+    } else if message.contains("tunnel is not reachable") {
+        format!(
+            "Ghostex isn't connected to {name} right now. Reconnect it from the sidebar, then try again."
+        )
+    } else {
+        format!(
+            "{name} didn't let Ghostex open it. Check that Ghostex is running and up to date there, then try again."
+        )
     }
 }

@@ -24,6 +24,8 @@ use gpui_component::h_flex;
 use serde_json::{Value, json};
 use std::time::Duration;
 
+mod transfer;
+
 const READ_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub(crate) fn sync_tab_view(store: &Entity<SettingsStore>, cx: &mut App) -> AnyView {
@@ -39,6 +41,8 @@ pub(crate) struct SyncTab {
     loading: bool,
     /// The page was the active one at the last store change, to read again when it comes back.
     was_active: bool,
+    /// Export and import (transfer.rs).
+    transfer: transfer::TransferState,
 }
 
 impl SettingsPage for SyncTab {
@@ -83,6 +87,7 @@ impl SyncTab {
             error: None,
             loading: false,
             was_active: true,
+            transfer: transfer::TransferState::new(cx.focus_handle()),
         }
     }
 
@@ -338,7 +343,8 @@ impl SyncTab {
 }
 
 impl Render for SyncTab {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.apply_transfer_preview(window, cx);
         let (p, search, matching) = {
             let store = self.store.read(cx);
             let matching: Vec<SettingsTabId> = if store.is_searching() {
@@ -418,13 +424,29 @@ impl Render for SyncTab {
         {
             blocks.push(PageBlock::section("syncChanges", section));
         }
+        if shown("settingsTransfer")
+            && let Some(section) = self.transfer_section(&p, cx)
+        {
+            blocks.push(PageBlock::section("settingsTransfer", section));
+        }
         if unreachable {
             for block in &mut blocks[first_control_block..] {
                 let element = std::mem::replace(&mut block.element, gpui::Empty.into_any_element());
                 block.element = greyed_out(element);
             }
         }
-        settings_page(&self.store, SettingsTabId::Sync, &p, blocks, cx)
+        let dialog = self.render_import_dialog(&p, window, cx);
+        div()
+            .size_full()
+            .child(settings_page(
+                &self.store,
+                SettingsTabId::Sync,
+                &p,
+                blocks,
+                cx,
+            ))
+            .children(dialog)
+            .into_any_element()
     }
 }
 

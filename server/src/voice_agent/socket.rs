@@ -476,7 +476,17 @@ async fn start_conversation(
                 "voiceAgent.badKey",
                 json!({"provider": provider.id()}),
             );
-            fail(socket, "badKey", &bad_key_message(provider, client_remote)).await;
+            let message = if keys::uses_chatgpt_signin(&state.paths, provider) && client_remote {
+                format!(
+                    "On the computer this session runs on: {}",
+                    super::chatgpt_signin::EXPIRED
+                )
+            } else if keys::uses_chatgpt_signin(&state.paths, provider) {
+                super::chatgpt_signin::EXPIRED.to_string()
+            } else {
+                bad_key_message(provider, client_remote)
+            };
+            fail(socket, "badKey", &message).await;
             return None;
         }
         Err(ConnectError::Refused(message)) => {

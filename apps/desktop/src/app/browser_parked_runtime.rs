@@ -121,7 +121,9 @@ impl GhostexGpuiApp {
     ) {
         match event {
             cef::BrowserPageMetadataEvent::HistoryRequested
-            | cef::BrowserPageMetadataEvent::FindRequested => {}
+            | cef::BrowserPageMetadataEvent::FindRequested
+            | cef::BrowserPageMetadataEvent::AnnotateRequested
+            | cef::BrowserPageMetadataEvent::ContextMenuRequested(_) => {}
             cef::BrowserPageMetadataEvent::AddressChanged(url) => {
                 let Some(parked_tabs) = self.parked_browser_tabs_by_project.get_mut(project_id)
                 else {
@@ -426,7 +428,7 @@ impl GhostexGpuiApp {
 
     /// CDXC:Browser 2026-10-26 WHY:
     /// A CEF page is made 1×1 and only gets its frame when it is painted, so a page made in the background laid out in a 1px window and `ghostex_screenshot` returned a 2×2 blank image until the page had been shown once. It gets the size the Browser panel would give it instead: the side panel's width at its saved split and the window's height. The frame is set after this update, when the window can be read, and only while the page has still not been placed by a paint.
-    fn size_background_browser_page(
+    pub(crate) fn size_background_browser_page(
         &mut self,
         surface: Entity<CefSurface>,
         cx: &mut gpui::Context<Self>,

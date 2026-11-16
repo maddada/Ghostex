@@ -219,7 +219,7 @@ impl GhostexGpuiApp {
 
     /// Show in Finder for a GBot's memory file; only on the computer the file is on.
     fn reveal_gbot_memory_file(&mut self, remote: bool, path: &str, cx: &mut gpui::Context<Self>) {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(ghostex_web))]
         if !remote {
             if let Err(message) = gpui_reveal_path_in_finder(std::path::Path::new(path)) {
                 self.dispatch_gpui_app_modal_toast("warning", "Couldn't show it", &message, cx);
@@ -357,7 +357,7 @@ fn run_gbot_computer_op(
             // Letting the GBot do more asks for the owner's approval (server/src/server/
             // security_gates.rs `gbots_computer_action`): Touch ID shows while the call is out,
             // and the same call is made again once it was approved (the phone may approve it too).
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(ghostex_web))]
             if remote.is_none() {
                 if let Some(id) = answer
                     .as_ref()
@@ -422,7 +422,7 @@ fn run_gbot_api_op(
         );
         #[allow(unused_mut)]
         let mut answer = gx_rpc(remote.clone(), "/api/gbots", params.clone()).await;
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(ghostex_web))]
         if remote.is_none() {
             if let Some(id) = answer
                 .as_ref()

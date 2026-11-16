@@ -155,7 +155,7 @@ impl Render for ContextEditorWindow {
                 // The title's line is as tall as the X, so the X sits as far from the popup's top
                 // as from its side, and it leads the header on macOS (CDXC:AppModal 2026-11-10 in
                 // window/round_close_button.rs; CDXC:SessionChat 2026-11-11 in
-                // window/visual_page_modal/band_geometry.rs).
+                // window/page_band_geometry.rs).
                 let title = div()
                     .text_size(px(18.0 * s))
                     .line_height(px(24.0 * s))

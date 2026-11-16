@@ -415,7 +415,7 @@ fn sounds_section(
         let spec = g.spec(
             "attentionAlertsFor",
             "Alert me for",
-            "A coordinator's threads finishing, and a coordinator that only finished, stay quiet under both choices, and a red dot (an approval, a stuck or blocked session) always alerts. All plays the finished sound and shows the system notification whenever any other agent finishes; Needs you only does that only when it asks you something, waits for approval, or ends with Blocked or Needs you. The bell keeps every row either way.",
+            "A red dot (an approval, a stuck or blocked session) always alerts. All plays the finished sound and shows the system notification whenever an agent finishes, and for a coordinator only once none of its workers is still working; Needs you only does that only when it asks you something, waits for approval, or ends with Blocked or Needs you. Workers follow the Workers setting instead. The bell keeps a row either way.",
         );
         rows.extend(page.segmented(
             g,
@@ -424,6 +424,25 @@ fn sounds_section(
             spec,
             Some(reset_key::<GeneralTab>("attentionAlertsFor")),
             g.options("ATTENTION_ALERTS_FOR_OPTIONS"),
+            cx,
+        ));
+    }
+    // CDXC:Notifications 2026-11-14 DECISION: User (Q3247 on the worker-notifications page): one
+    // Workers choice under Alert me for, Off by default, brings a coordinator's workers' news back
+    // as rows (Silent) or alerts (Sound); gxserver applies it (server/src/worker_alerts.rs).
+    if g.visible(s, "workerNotifications") {
+        let spec = g.spec(
+            "workerNotifications",
+            "Workers",
+            "How a coordinator's workers reach you. Off: when they finish, ask a question, can't take a message, stop moving or hit an error, their coordinator is told and you see only their dot. Silent: they also show in the bell, without the sound or system notification. Sound: they alert like any other agent. An approval, every account out of usage and a sign-in that stopped working always reach you.",
+        );
+        rows.extend(page.segmented(
+            g,
+            s,
+            "workerNotifications",
+            spec,
+            Some(reset_key::<GeneralTab>("workerNotifications")),
+            g.options("WORKER_NOTIFICATIONS_OPTIONS"),
             cx,
         ));
     }
@@ -610,6 +629,7 @@ pub(super) fn power_sleep_sections(
 ) -> Vec<PageBlock> {
     [
         super::computer_startup::computer_startup_section(page, g, cx),
+        super::memory_guard::memory_guard_section(page, g, cx),
         auto_sleep_section(page, g, window, cx),
         power_section(page, g, window, cx),
     ]

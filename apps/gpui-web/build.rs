@@ -2,6 +2,9 @@
 use std::{collections::BTreeMap, env, fs, path::Path};
 
 fn main() {
+    // CDXC:WebGpui 2026-11-13 WHY: the shared desktop files chose their web branches with `cfg(target_arch = "wasm32")`, so this crate's native test target (`cargo xtask web-test`) took their desktop branches and failed on desktop-only items. `ghostex_web` names this crate whatever the target is; the desktop declares it (apps/desktop/build.rs) and never sets it.
+    println!("cargo::rustc-check-cfg=cfg(ghostex_web)");
+    println!("cargo:rustc-cfg=ghostex_web");
     let manifest = env::var("CARGO_MANIFEST_DIR").unwrap();
     let desktop = Path::new(&manifest).join("../desktop/src");
     let list_path = Path::new(&manifest).join("extracted-items.txt");
@@ -29,14 +32,44 @@ fn main() {
     }
     // libghostty-vt as a static wasm32 archive, built by `cargo xtask web-build` with the same Zig and the same flags the desktop uses (apps/desktop/scripts/build-libghostty-vt.sh) plus `-Dtarget=wasm32-freestanding`. Linked whole so `src/ghostty_vt/`, the desktop's FFI wrapper, resolves.
     let vt_archive = Path::new(&manifest).join("target/libghostty-vt-wasm/lib/libghostty-vt.a");
-    println!("cargo:rerun-if-changed={}", vt_archive.display());
     if env::var("CARGO_CFG_TARGET_FAMILY").is_ok_and(|family| family.contains("wasm")) {
+        // Watched only here: a native build never makes this archive, and a watched missing file reruns this script (and Zig) on every build.
+        println!("cargo:rerun-if-changed={}", vt_archive.display());
         assert!(
             vt_archive.exists(),
             "run `cargo xtask web-build`, which builds {}",
             vt_archive.display()
         );
         println!("cargo:rustc-link-arg={}", vt_archive.display());
+    } else {
+        // The native test target (`cargo xtask web-test`, macOS and Linux) links the desktop's own native build of the library, made by the desktop's script and rebuilt on the same inputs the desktop watches (apps/desktop/build.rs, emit_libghostty_vt_rerun_hints). Windows builds it with Zig directly in the desktop's build.rs, which this script does not repeat.
+        assert!(
+            env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows"),
+            "the GPUI web crate's native tests (cargo xtask web-test) run on macOS and Linux, not Windows"
+        );
+        let script = Path::new(&manifest).join("../desktop/scripts/build-libghostty-vt.sh");
+        println!("cargo:rerun-if-changed={}", script.display());
+        let ghostty = Path::new(&manifest).join("../../.dependencies/ghostty");
+        for input in ["build.zig", "build.zig.zon", "src", "include"] {
+            println!("cargo:rerun-if-changed={}", ghostty.join(input).display());
+        }
+        for variable in ["GHOSTEX_ZIG", "ZIG", "MISE_DATA_DIR"] {
+            println!("cargo:rerun-if-env-changed={variable}");
+        }
+        let prefix = Path::new(&env::var("OUT_DIR").unwrap()).join("libghostty-vt");
+        let status = std::process::Command::new(&script)
+            .arg(&prefix)
+            .status()
+            .unwrap_or_else(|e| panic!("{}: {e}", script.display()));
+        assert!(
+            status.success(),
+            "{} failed with {status}",
+            script.display()
+        );
+        println!(
+            "cargo:rustc-link-arg={}",
+            prefix.join("lib/libghostty-vt.a").display()
+        );
     }
 
     let out_dir = env::var("OUT_DIR").unwrap();

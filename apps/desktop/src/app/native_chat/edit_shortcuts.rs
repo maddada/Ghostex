@@ -579,7 +579,7 @@ impl NativeChatView {
 
 /// What the chat answers in the app's Edit menu this frame (`NativeChatView::edit_menu`).
 #[derive(Clone, Copy)]
-#[cfg_attr(target_family = "wasm", allow(dead_code))] // the web page has no app menu
+#[cfg_attr(ghostex_web, allow(dead_code))] // the web page has no app menu
 pub(super) struct ChatEditMenu {
     copy: bool,
     cut: bool,
@@ -592,12 +592,12 @@ pub(super) struct ChatEditMenu {
 /// fields and the transcript (gpui-component's `Root` copies the window selection) answer them
 /// the same way. The web page has no app menu.
 pub(super) trait ChatEditMenuActions: gpui::InteractiveElement + Sized {
-    #[cfg(target_family = "wasm")]
+    #[cfg(ghostex_web)]
     fn chat_edit_menu_actions(self, _: ChatEditMenu) -> Self {
         self
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(not(ghostex_web))]
     fn chat_edit_menu_actions(self, menu: ChatEditMenu) -> Self {
         use crate::app::actions::{
             GpuiEditMenuCopy, GpuiEditMenuCut, GpuiEditMenuPaste, GpuiEditMenuSelectAll,

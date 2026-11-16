@@ -201,6 +201,8 @@ fn macos_normal_bindings_keep_their_chords() {
         ("terminalSelectAll", "cmd-a"),
         ("openBrowserHistory", "cmd-y"),
         ("reloadBrowserPage", "cmd-r"),
+        // New on 2026-11-14: Files' HTML and Markdown files and the Browser only.
+        ("toggleAnnotate", "cmd-ctrl-a"),
         ("sleepFocusedSessionSecondKey", "alt-shift-s"),
         // New on 2026-10-27; one key in and out of the terminal.
         ("unfocusTerminal", "cmd-shift-m"),
@@ -376,6 +378,7 @@ fn windows_and_linux_normal_bindings_are_the_ones_the_app_always_had() {
         ("toggleAgentsFocusMode", "ctrl-alt-f"),
         ("openBrowserHistory", "ctrl-h"),
         ("reloadBrowserPage", "ctrl-r"),
+        ("toggleAnnotate", "alt-shift-a"),
         ("sleepFocusedSessionSecondKey", "alt-shift-s"),
         ("focusLastTerminal", "ctrl-shift-m"),
         ("focusSidebar", "ctrl-shift-j"),
@@ -423,6 +426,7 @@ fn macos_hotkeys_keep_their_app_actions() {
     let expected = [
         ("openBrowserHistory", "OpenBrowserHistory"),
         ("reloadBrowserPage", "ReloadFocusedBrowser"),
+        ("toggleAnnotate", "ToggleAnnotate"),
         ("pasteIntoTerminal", "PasteIntoFocusedTerminal"),
         ("findInFocusedView", "FindInFocusedTerminal"),
         ("findNextInBrowser", "FindNextInFocusedBrowser"),
@@ -829,7 +833,7 @@ fn every_surface_lets_the_terminal_binding_follow_a_customized_normal_key() {
 }
 
 /// Paste on Windows and Linux: Ctrl+Shift+V only while a terminal has the keyboard, Ctrl+V
-/// everywhere else (CDXC:Clipboard 2026-10-27 DECISION in src/hotkeys.rs). macOS keeps Cmd+V in
+/// everywhere else (CDXC:Clipboard 2026-11-14 DECISION in src/hotkeys.rs). macOS keeps Cmd+V in
 /// both sections.
 #[test]
 fn paste_is_ctrl_shift_v_in_a_terminal_and_ctrl_v_elsewhere_on_windows_and_linux() {

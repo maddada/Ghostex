@@ -147,7 +147,7 @@ const SHOWN_LINK_CHARS: usize = 2000;
 
 /// The link as its question shows it: cut short when very long, with control and
 /// direction-changing characters written out, so they cannot hide or reorder what the reader checks.
-fn shown_link(link: &str) -> String {
+pub(crate) fn shown_link(link: &str) -> String {
     let mut shown = String::new();
     for (index, character) in link.chars().enumerate() {
         if index == SHOWN_LINK_CHARS {

@@ -242,3 +242,35 @@ pub unsafe extern "C" fn gx_cloud_call(
     };
     finish(ghostex_gx_cloud::json_api::call(name, arguments))
 }
+
+/// The Beads view's Tree for the phone (`ghostex_gx_core::beads_view::json_api::tree`): the
+/// snapshot's rows and the screen's options in, the sections to draw out
+/// (apps/mobile/app/src/beads/tree.ts).
+///
+/// # Safety
+/// The arguments range must come from [`gx_alloc`].
+#[no_mangle]
+pub unsafe extern "C" fn gx_beads_tree(
+    arguments_ptr: *const u8,
+    arguments_len: usize,
+) -> *const u8 {
+    let Some(arguments) = text(arguments_ptr, arguments_len) else {
+        return finish(BAD_TEXT.to_string());
+    };
+    finish(ghostex_gx_core::beads_view::json_api::tree(arguments))
+}
+
+/// One bead as the phone's Bead screen shows it (`ghostex_gx_core::beads_view::json_api::bead`).
+///
+/// # Safety
+/// The arguments range must come from [`gx_alloc`].
+#[no_mangle]
+pub unsafe extern "C" fn gx_beads_bead(
+    arguments_ptr: *const u8,
+    arguments_len: usize,
+) -> *const u8 {
+    let Some(arguments) = text(arguments_ptr, arguments_len) else {
+        return finish(BAD_TEXT.to_string());
+    };
+    finish(ghostex_gx_core::beads_view::json_api::bead(arguments))
+}

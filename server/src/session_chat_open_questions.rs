@@ -27,7 +27,7 @@ use ghostex_gx_chat_core::transcript::open_questions::{
     asker_entries, askers, linkable_tags, mark_inherited, settle_askers, share_answers,
     tags_answered_in_words, AskerKind, Found, TagState,
 };
-use ghostex_gx_chat_core::transcript::page_answers::answers_page_id;
+use ghostex_gx_chat_core::transcript::page_answers::answers_page_ids;
 use ghostex_gx_chat_core::transcript::question_forms::{question_forms, QuestionForm};
 use rusqlite::OptionalExtension;
 use serde_json::{json, Map, Value};
@@ -85,6 +85,12 @@ fn expired(until: Option<&Value>) -> HashSet<String> {
 const REMOVED_KEY: &str = "sessionChatQuestionsRemoved";
 /// How many removals a session keeps at most; the oldest are dropped first.
 const REMOVED_LIMIT: usize = 500;
+/// Where the pages the user starred in this session's chat are kept (page ids). The chat lists
+/// them under Resources' Starred filter and marks their cards; the star of a page follows a newer
+/// `ghostex show` of the same file (gx-chat-core questions/later.rs `starred_page_ids`).
+const STARRED_KEY: &str = "sessionChatPagesStarred";
+/// How many starred pages a session keeps at most; the oldest stars are dropped first.
+const STARRED_LIMIT: usize = 500;
 /// How many For later marks a session keeps at most; answered ones are dropped as they settle.
 const LATER_LIMIT: usize = 500;
 /// The agent's last words reach its transcript a moment after the turn-end hook.
@@ -106,11 +112,23 @@ pub(crate) struct OpenAsker {
     latest_turn: bool,
     /// The question tags it asks, uppercased.
     tags: Vec<String>,
+    /// When the reply that asks it arrived (epoch ms), if the transcript says.
+    at: Option<i64>,
 }
 
 impl OpenAsker {
     fn count(&self) -> usize {
         self.waiting
+    }
+
+    /// The question tags it still asks (the coordinator's open questions note, send.rs).
+    pub(crate) fn waiting_tags(&self) -> Vec<String> {
+        self.tags.clone()
+    }
+
+    /// When it was asked (epoch ms), if the transcript says.
+    pub(crate) fn asked_at(&self) -> Option<i64> {
+        self.at
     }
 }
 
@@ -418,6 +436,81 @@ pub(crate) fn set_removed(
     Ok(())
 }
 
+/// The pages starred in this session's chat (`STARRED_KEY`), for the chat's frames
+/// (`starredPageIds`).
+pub(crate) fn read_starred_page_ids(
+    db: &rusqlite::Connection,
+    project_id: &str,
+    session_id: &str,
+) -> Vec<String> {
+    read_id_list(db, project_id, session_id, STARRED_KEY)
+}
+
+/// Whether `page_id` is a starred page or a version of a starred page's file (`sourcePath` on the
+/// page records), for the page window's ⋯ menu (`readVisualPageSource`'s `starred`).
+pub(crate) fn page_starred(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    project_id: &str,
+    session_id: &str,
+    page_id: &str,
+) -> bool {
+    let starred = read_starred_page_ids(db, project_id, session_id);
+    if starred.iter().any(|known| known == page_id) {
+        return true;
+    }
+    let root = &state.paths.root_dir;
+    let Some(file) = crate::visual_pages::page_source_path(root, page_id) else {
+        return false;
+    };
+    starred
+        .iter()
+        .any(|known| crate::visual_pages::page_source_path(root, known).as_deref() == Some(&file))
+}
+
+/// `answerSessionChatPrompt` with `kind: "pageStar"`: stars a page in this session's chat, or
+/// takes its star off. Taking it off also takes off the star of every other version of the same
+/// file (the same `sourcePath`), since the chat shows that star on the newest version. Nothing
+/// reaches the agent. Blocking.
+///
+/// CDXC:SessionChat 2026-11-16 DECISION:
+/// BANOZZ asked on Discord ("star resources", 2026-11-13) to star pages in a chat and find them in
+/// Resources; the user promised it and picked on the star-resources page: pages only (Q3540), a
+/// Starred entry in the Resources filter and no group of its own, starred rows staying in their
+/// groups (Q3541, Q3542), newest first (Q3543), stars per session (Q3548) that agents cannot read
+/// (Q3549), and a star that follows a newer version of the same file (Q3547).
+pub(crate) fn set_starred(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    page_id: &str,
+    starred: bool,
+) -> anyhow::Result<()> {
+    let db = open_gxserver_database(&state.paths)?;
+    let mut ids = read_starred_page_ids(&db, project_id, session_id);
+    let before = ids.len();
+    if starred {
+        if ids.iter().any(|known| known == page_id) {
+            return Ok(());
+        }
+        ids.push(page_id.to_string());
+        if ids.len() > STARRED_LIMIT {
+            ids.drain(..ids.len() - STARRED_LIMIT);
+        }
+    } else {
+        let root = &state.paths.root_dir;
+        let file = crate::visual_pages::page_source_path(root, page_id);
+        ids.retain(|known| {
+            known != page_id
+                && (file.is_none() || crate::visual_pages::page_source_path(root, known) != file)
+        });
+        if ids.len() == before {
+            return Ok(());
+        }
+    }
+    write_id_list(state, &db, project_id, session_id, STARRED_KEY, &ids)
+}
+
 /// When this session was forked from another, in epoch ms: the time Ghostex created it. The chat
 /// carries it as `forkedAt`, and questions asked before it belong to the parent
 /// (gx-chat-core's `mark_inherited`). `None` when the session is no fork.
@@ -475,17 +568,17 @@ impl Ledger {
                         continue;
                     }
                     self.turns += 1;
-                    let answers_id = answers_page_id(&text);
-                    if let Some(id) = answers_id.clone() {
+                    let answers_ids = answers_page_ids(&text);
+                    for id in &answers_ids {
                         if let Some(at) = message.byte_offset {
                             self.answers_at.entry(id.clone()).or_insert(at);
                         }
-                        self.answered.push(id);
+                        self.answered.push(id.clone());
                     }
                     // Answers in the user's own words ("Q12: yes"), and the tags an answers
                     // envelope names ("Q1277": …), settle questions asked before them whatever id
                     // they have now (gx-chat-core's `said_in`, which leaves out a thread's report).
-                    if answers_id.is_some() || !tags_answered_in_words(&text).is_empty() {
+                    if !answers_ids.is_empty() || !tags_answered_in_words(&text).is_empty() {
                         let converted = serde_json::to_value(&message)
                             .ok()
                             .and_then(|value| serde_json::from_value::<ChatMessage>(value).ok());
@@ -506,9 +599,17 @@ impl Ledger {
                     if !(inline || text.contains("```") || text.contains("~~~")) {
                         continue;
                     }
-                    // Only a fenced block naming questions can ask or withdraw any; one naming
+                    // Only a fenced block naming questions can ask or withdraw any, or a page that
+                    // waits to be seen (`awaitsSeen`, gx-chat-core's `Asker::seen_only`); one naming
                     // a drawing or a page is a resource too (the index lists them all).
-                    let asks = inline || text.contains("questions");
+                    //
+                    // CDXC:Coordinators 2026-11-14 WHY:
+                    // User: "when i do snooze 1h on this guy it keeps coming back omg pls fix!!!",
+                    // of a page published with `awaitsSeen` and no questions. Its reply was never
+                    // kept here, so the page was not open to gxserver while every client showed it
+                    // waiting, and each refresh forgot its snooze (`leave_out_later` keeps the
+                    // marks of open forms and pages only): it came back at the next turn.
+                    let asks = inline || text.contains("questions") || text.contains("awaitsSeen");
                     if !asks && !text.contains("visual") && !text.contains("vega") {
                         continue;
                     }
@@ -576,6 +677,7 @@ impl Ledger {
                         .iter()
                         .map(|tag| tag.to_ascii_uppercase())
                         .collect(),
+                    at: asker.at,
                     id: asker.id,
                     kind: asker.kind,
                 }
@@ -699,14 +801,6 @@ fn read_open(
     let read = ledger.index(&queued, forked_at, |id| {
         crate::visual_pages::page_answered(&state.paths.root_dir, id)
     });
-    crate::session_chat_resources::store(
-        state,
-        db,
-        project_id,
-        session_id,
-        &mut ledger.stored,
-        read,
-    );
     let newly: Vec<OpenAsker> = if notify_turn {
         open.iter()
             .filter(|asker| asker.latest_turn && ledger.notified.insert(asker.id.clone()))
@@ -715,6 +809,22 @@ fn read_open(
     } else {
         Vec::new()
     };
+    // Stored with the ledger let go: storing announces the resources on the chat's stream, which
+    // takes its emit order, and a chat frame being emitted can wait on the coordinator panels,
+    // whose refresh reads this ledger (`asked_question_tags`).
+    //
+    // CDXC:Coordinators 2026-11-16 WHY:
+    // gxserver hung right after a start, every request unanswered: this sweep held the ledger
+    // while waiting for the emit order; the followers held the emit order while waiting for the
+    // coordinator panels (`insert_coordinator_threads`); the coordinator runtime held the panels
+    // while waiting for this ledger (`work_value` → `asked_question_tags`). No lock is held here
+    // while another is taken now.
+    let mut stored = std::mem::take(&mut ledger.stored);
+    drop(ledger);
+    crate::session_chat_resources::store(state, db, project_id, session_id, &mut stored, read);
+    if let Ok(mut ledger) = entry.lock() {
+        ledger.stored = stored;
+    }
     Some((open, newly))
 }
 
@@ -789,7 +899,12 @@ because what the reading keeps may have changed with it; a change to what
 // 4: `observe` keeps every answers envelope (gx-chat-core's `Found::Answers`), so a tag's answer
 // settles only the copies asked before it (issue #579, `asks_alike`); a copy without them is read
 // again.
-const SAVED_LEDGER_FORMAT: u32 = 4;
+// 5: a work item ask's answer ("W358 Q2783: words") answers its tag (gx-chat-core's
+// `without_work_ref`), so `observe` keeps those messages; a copy without them is read again.
+// 6: `observe` keeps the replies whose page waits to be seen (`awaitsSeen`), so a copy without
+// them is read again (CDXC:Coordinators 2026-11-14 in `Ledger::observe`).
+// 7: `observe` keeps every answers envelope when multiple envelopes share one message (2026-11-14).
+const SAVED_LEDGER_FORMAT: u32 = 7;
 const SAVED_LEDGERS_DIR: &str = "open-questions";
 const SAVED_LEDGER_EVERY: Duration = Duration::from_secs(60);
 const SAVED_LEDGER_UNUSED_FOR: Duration = Duration::from_secs(14 * 24 * 60 * 60);
@@ -943,7 +1058,7 @@ fn queued_answers(db: &rusqlite::Connection, project_id: &str, session_id: &str)
         .queue
         .iter()
         .filter(|prompt| prompt.state != "failed")
-        .filter_map(|prompt| answers_page_id(&prompt.text))
+        .flat_map(|prompt| answers_page_ids(&prompt.text))
         .collect()
 }
 
@@ -1018,7 +1133,10 @@ pub(crate) fn read_question_tags(
         .flat_map(|item| item.asks.iter().map(|ask| ask.tag.to_ascii_uppercase()))
         .filter(|tag| !tag.is_empty())
         .collect();
-    let highest = highest_q_tag(states.keys()).max(highest_q_tag(item_tags.iter()));
+    // A Needs you to-do's tag is never given again either (session_needs_you/).
+    let highest = highest_q_tag(states.keys())
+        .max(highest_q_tag(item_tags.iter()))
+        .max(crate::session_needs_you::highest_tag(db, &key));
     let mut tags: Vec<Value> = states
         .iter()
         .map(|(tag, settled)| json!({ "tag": tag, "settled": settled, "where": "chat" }))
@@ -1146,10 +1264,12 @@ pub(crate) fn refresh(
         settle_board_items(state, &db, project_id, session_id);
     }
     // For later questions still wait, but they are not counted and never notify. A mark whose
-    // question was answered, withdrawn or asked again is forgotten.
+    // question was answered, withdrawn or asked again is forgotten; a snooze still running is
+    // kept until its end whatever this reading says (`leave_out_later`).
     let (open, newly) = leave_out_removed(open, newly, &removed_ids(&session));
     let later = later_ids(&session);
-    let (open, newly, still) = leave_out_later(open, newly, &later);
+    let snoozed = snoozes_running(session.pointer(&format!("/runtimeSettings/{LATER_UNTIL_KEY}")));
+    let (open, newly, still) = leave_out_later(open, newly, &later, &snoozed);
     if !is_thread && still.len() != later.len() {
         let _ = write_later(state, &db, project_id, session_id, &still);
     }
@@ -1188,16 +1308,37 @@ fn leave_out_removed(
     )
 }
 
+/// The ids whose snooze has not ended yet, from a `LATER_UNTIL_KEY` object.
+fn snoozes_running(until: Option<&Value>) -> HashSet<String> {
+    let now = now_ms();
+    until
+        .and_then(Value::as_object)
+        .map(|map| {
+            map.iter()
+                .filter(|(_, at)| at.as_i64().is_some_and(|at| at > now))
+                .map(|(id, _)| id.clone())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Splits the For later questions off: what is counted, what may notify, and the marks still worth
-/// keeping (those whose question still waits).
+/// keeping: those whose question still waits, and every snooze still running (`snoozed`), so a
+/// snooze holds until its end even for a form or page this reading does not hold (a reply a
+/// saved ledger read past, one it never kept); the clients drop an answered one themselves.
+///
+/// CDXC:Coordinators 2026-11-14 DECISION:
+/// User: "when i do snooze 1h on this guy it keeps coming back omg pls fix!!!". A snoozed row of
+/// any kind stays hidden until its time, on the computer and the phone.
 fn leave_out_later(
     open: Vec<OpenAsker>,
     newly: Vec<OpenAsker>,
     later: &[String],
+    snoozed: &HashSet<String>,
 ) -> (Vec<OpenAsker>, Vec<OpenAsker>, Vec<String>) {
     let still: Vec<String> = later
         .iter()
-        .filter(|id| open.iter().any(|asker| asker.id == **id))
+        .filter(|id| snoozed.contains(*id) || open.iter().any(|asker| asker.id == **id))
         .cloned()
         .collect();
     let counted = |asker: &OpenAsker| !later.contains(&asker.id);
@@ -1253,6 +1394,9 @@ pub(crate) fn observe_activity(state: &AppState, params: &Map<String, Value>, re
     std::thread::spawn(move || {
         std::thread::sleep(SETTLE_DELAY);
         refresh(&state, &project_id, &session_id, turn_end);
+        if let Some(ended_idle) = turn_end {
+            crate::session_needs_you::turn_ended(&state, &project_id, &session_id, ended_idle);
+        }
     });
 }
 
@@ -1357,8 +1501,31 @@ fn notify(
     newly: &[OpenAsker],
     raise_attention: bool,
 ) {
-    let body =
-        crate::notification_feed::store::bounded_notification_body(&notification_body(newly));
+    notify_waiting(
+        state,
+        db,
+        repository,
+        project_id,
+        session_id,
+        &notification_body(newly),
+        raise_attention,
+    );
+}
+
+/// A turn left something new waiting on the user (`body` says what): its Finished feed row turns
+/// into Needs input with `body`, and with `raise_attention` (the turn ended idle) the session is
+/// raised to attention once. Open questions and Needs you to-dos (session_needs_you/) both alert
+/// this way.
+pub(crate) fn notify_waiting(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+    body: &str,
+    raise_attention: bool,
+) {
+    let body = crate::notification_feed::store::bounded_notification_body(body);
     if raise_attention {
         // The turn ended without attention, so nothing sounded yet: raise it once, the way any
         // other wait for input is raised.
@@ -1422,6 +1589,7 @@ mod tests {
             waiting,
             latest_turn: true,
             tags: Vec::new(),
+            at: None,
         }
     }
 
@@ -1430,13 +1598,41 @@ mod tests {
         let open = vec![asker("a", 2), asker("b", 3)];
         let newly = vec![asker("b", 3)];
         let later = vec!["b".to_string(), "answered-since".to_string()];
-        let (counted, notify, still) = leave_out_later(open, newly, &later);
+        let (counted, notify, still) = leave_out_later(open, newly, &later, &HashSet::new());
         assert_eq!(counted.iter().map(OpenAsker::count).sum::<usize>(), 2);
         assert!(notify.is_empty());
         assert_eq!(
             still,
             vec!["b".to_string()],
             "a mark whose question settled is forgotten"
+        );
+    }
+
+    /// A snooze still running holds until its end even for a page this reading does not hold, so a
+    /// refresh (a new turn, the sweep) never brings it back early; one whose end passed is not kept
+    /// for that alone.
+    #[test]
+    fn a_running_snooze_is_kept_until_its_end_whatever_the_reading() {
+        let later = vec!["unread-page".to_string(), "ended".to_string()];
+        let until = json!({ "unread-page": now_ms() + 3_600_000, "ended": now_ms() - 1 });
+        let snoozed = snoozes_running(Some(&until));
+        let (_, _, still) = leave_out_later(Vec::new(), Vec::new(), &later, &snoozed);
+        assert_eq!(still, vec!["unread-page".to_string()]);
+    }
+
+    /// A page published to be marked seen (`awaitsSeen`, no questions) waits like a page that asks,
+    /// as every client shows it, so its For later mark and snooze are kept.
+    #[test]
+    fn a_page_that_waits_to_be_seen_is_open() {
+        let page = "```visual\n{\"page\":{\"title\":\"Report\",\"url\":\"http://127.0.0.1:1/visual/0123456789abcdef0123456789abcdef\",\"awaitsSeen\":true}}\n```";
+        let mut ledger = Ledger::default();
+        ledger.observe(vec![message("p", "assistant", 1, page)]);
+        let open = ledger.open(&[], None, |_| false);
+        assert_eq!(
+            open.iter()
+                .map(|asker| (asker.id.as_str(), asker.count()))
+                .collect::<Vec<_>>(),
+            vec![("0123456789abcdef0123456789abcdef", 1)]
         );
     }
 

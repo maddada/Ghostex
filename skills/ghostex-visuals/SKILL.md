@@ -372,46 +372,63 @@ carry the area, as in the skeleton). `ghostex show --title "…"` overrides
   and what it holds is centred as a group, so a heading lines up with the
   mockup under it. `<gx-wide size="full">` spans the whole window; it is
   rarely needed.
-- A mockup keeps its real size: give it a fixed width inside a `.gx-frame`,
-  which scrolls sideways on a narrow window instead of squeezing it. Put
-  notes and captions above or below it, never beside it.
+- A mockup keeps its real size: give the mockup itself a fixed width and put
+  it inside a `.gx-frame`, which scrolls sideways on a narrow window instead
+  of squeezing it. Put notes and captions above or below it, never beside it.
 
-### Phones
+### Phones, foldables and large text
 
-Every page must read well on a phone, 360 to 430px wide: readers often open
-pages in the Ghostex phone app. Write for one column first:
+Every page must read well at any width from a 360px phone through a 900px
+foldable or tablet to a computer, and with the phone's large text setting
+(it makes text bigger, not boxes). Readers often open pages in the Ghostex
+phone app. Design mobile-first: write one column, then let it widen.
 
-- Side by side only with a rule that stacks it on a phone: cards in a
-  `.gx-grid` (side by side when there is room, one per row on a phone; set
-  `style="--gx-grid-min:300px"` for wider cards), your own
-  `grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr))`,
-  or a `@media (max-width: 600px)` rule. Never a bare
-  `grid-template-columns: 1fr 1fr` or a row of fixed widths.
+- Side by side only in rows that wrap: options in a `.gx-options` row, cards
+  in a `.gx-grid`, stats in `.gx-stats`, or your own
+  `grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr))`.
+  Pick the minimum from the widest thing a column holds: a column with a
+  340px mockup needs 340px plus the card's padding (`style="--gx-option-min:380px"`
+  on the `.gx-options` row, `--gx-grid-min` on a `.gx-grid`). Never a bare
+  `grid-template-columns: 1fr 1fr`, a row of fixed widths, or a breakpoint
+  that only switches at 600px: a foldable is 700 to 900px wide.
+- Grid and flex children that hold text get `min-width: 0`, and their text
+  must wrap: no `white-space: nowrap` on anything longer than a pill, and
+  `overflow-wrap: anywhere` on long paths, URLs and commands.
 - Pills, chips, badges, keys and IDs get `white-space: nowrap` and
   `flex: none`, so `SPX-123` never breaks into `SPX-` over `123`.
-- Anything with a real, fixed width (a device frame, a toolbar or composer
-  mockup) goes in a `.gx-frame` with a `min-width` at its real size: it
-  scrolls sideways inside its own box, with a fade at the edge, instead of
-  being squashed or making the whole page wider.
+- Keep stat values short (a number or two or three words); `.gx-stats`
+  wraps them and puts fewer stats on a row when a word doesn't fit.
+- Anything with a real, fixed width (a device frame, a toolbar, a panel or
+  composer mockup) gets that width on itself and goes in a `.gx-frame`:
+  the frame stays inside its column and scrolls sideways, with a fade at the
+  edge, instead of the mockup being squashed or cut. Never give the
+  `.gx-frame` itself a `width` or `min-width`.
+- No `overflow: hidden` on text without `text-overflow: ellipsis`, no fixed
+  heights on boxes of text, and nothing placed over text (`position:
+  absolute` labels, negative margins).
 - Outside a `.gx-frame`: no `width` or `min-width` over 360px, no `100vw`,
   and no `white-space: nowrap` on a sentence.
 - Images shrink to the column by themselves; on the phone a tap opens them
   full size.
 
-Ghostex fits a page that misses one of these (it stacks the columns, keeps
-the pills whole and makes a too-wide block scroll sideways), but a page that
-needs it reads worse. Check every page before you publish it:
+Ghostex fits a page that misses some of these (it widens or stacks the
+columns, keeps frames inside their column, keeps the pills whole and makes a
+too-wide block scroll sideways), but a page that needs it reads worse, and
+some mistakes it can't fix. Check every page before you publish it:
 
 ```bash
-ghostex visual check page.html   # screenshots at 390px (phone) and 1280px, and what doesn't fit
+ghostex visual check page.html   # 360, 600, 900 and 1280px, then 360 and 900px with 130% text
 ```
 
-Look at both screenshots and fix everything it lists, including a "Pick
+It saves a screenshot of each size and lists, by CSS selector, every box
+whose content overflows it or is cut off, content a sideways scroller can't
+reach, and text drawn over other text; it ends with an error while any are
+left. Look at the screenshots and fix everything it lists, including a "Pick
 buttons" warning that a question sits under mockups with no Pick button tied
-(see Ghostex pages with questions). `ghostex show` runs the phone check again after
-publishing and lists anything left: fix it, run `ghostex show` again and reply
-with the new block. If `visual check` can't
-read an `.html` file, this Ghostex is older than the check: skip it.
+(see Ghostex pages with questions). `ghostex show` runs the narrow sizes
+again after publishing and lists anything left: fix it, run `ghostex show`
+again and reply with the new block. If `visual check` can't read an `.html`
+file, this Ghostex is older than the check: skip it.
 
 ### No page chrome of your own
 
@@ -487,8 +504,8 @@ colours, radii, fonts and sizes from the app's source.
 - **Nothing stray.** Every word inside the mockup is one the app shows: no
   notes, quotes or labels of your own in it, nothing peeking past its edges.
 - **Check it against the real thing.** Render it
-  (`ghostex visual check page.html --out page.png`, again with `--light` and
-  `--width 390`), open the PNG next to a screenshot of the real view, and
+  (`ghostex visual check page.html --out page.png`, again with `--light`),
+  open the PNGs next to a screenshot of the real view, and
   redo the mockup if it wouldn't pass for a screenshot of the app.
 
 ```css
@@ -605,6 +622,11 @@ works.
 
    Read the reply like any message from the reader. Do not add a button of
    your own for this.
+
+Publishing a newer version of the same file with `ghostex show` replaces its
+older cards by itself. To take back a page you replaced with another file or
+that is out of date, with its open questions, run `ghostex page retire <page>`
+(newer Ghostex; `ghostex page --help` says how).
 
 If `ghostex show` is an unknown command, say this Ghostex is too old to show
 pages and give the HTML file's path instead.

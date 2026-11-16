@@ -54,6 +54,15 @@ pub(crate) struct NativeSidebarState {
     /// The list's scroll offset the last frame of a drag drew (scroll.rs).
     pub(crate) drag_scroll_offset: Option<gpui::Point<gpui::Pixels>>,
     pub(crate) name_editor: Option<super::rename::SidebarNameEditor>,
+    /// The tab each extension panel shows and the text blocks expanded (extension_panel/).
+    pub(crate) extension_panel_ui: ghostex_gx_core::extension_panel::ExtensionPanelUiState,
+    /// The checklist an Add item field is open on, by `<extension>|<surface>|<block>`.
+    pub(crate) extension_add_item: Option<String>,
+    /// The side panel view's width as last drawn, which decides a map's layout there.
+    pub(crate) extension_side_panel_width: f32,
+    /// The hover texts of panels' project and session items (gx_store/panel_refs.rs).
+    pub(crate) extension_ref_hover:
+        std::cell::RefCell<Option<crate::app::gx_store::panel_refs::PanelRefHoverCache>>,
     pub(crate) pointer_inside: bool,
     /// Whether last frame's rows carried their hover tooltips; see `render_native_sidebar`.
     pub(crate) row_tooltips_attached: bool,
@@ -71,12 +80,12 @@ pub(crate) struct NativeSidebarState {
     /// The pointer is on the floating links card.
     pub(crate) links_card_hovered: bool,
     /// Where the web build drew the card last, for telling whether the pointer is on it.
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    #[cfg_attr(not(ghostex_web), allow(dead_code))]
     pub(crate) links_card_bounds: std::cell::Cell<Option<gpui::Bounds<gpui::Pixels>>>,
     /// The card's window on the desktop.
     pub(crate) links_card_window: Option<gpui::AnyWindowHandle>,
     /// The list the card shows (the web build draws it in its own page).
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    #[cfg_attr(not(ghostex_web), allow(dead_code))]
     pub(crate) links_card_list: Option<gpui::Entity<super::links_list::SessionLinksList>>,
     /// The Main Hub row the pointer rests on (its home header's group id, or `chief-row` for the
     /// row under the Spaces bar), and the top of that row in the window when its card opened
@@ -84,7 +93,7 @@ pub(crate) struct NativeSidebarState {
     pub(crate) main_hub_card_pending: Option<String>,
     pub(crate) main_hub_card_open: Option<(String, f32)>,
     /// The card's window on the desktop.
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    #[cfg_attr(ghostex_web, allow(dead_code))]
     pub(crate) main_hub_card_window: Option<gpui::AnyWindowHandle>,
     /// The session whose links list is open in the header dropdown (native_sidebar/links_list.rs).
     pub(crate) links_list_session: Option<ghostex_gx_core::SessionKey>,

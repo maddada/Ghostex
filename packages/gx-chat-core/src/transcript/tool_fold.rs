@@ -145,7 +145,21 @@ pub fn fold_tool_messages(
     let mut anchor_index: Option<usize> = None;
     let mut anchor_takes = false;
     for message in messages {
-        let step = tool_burst_step(message, is_transparent(message));
+        let passes_over = is_transparent(message);
+        if let Some(last) = output.len().checked_sub(1).filter(|last| {
+            joins_tool_card(
+                message,
+                &output[*last],
+                passes_over && anchor_takes && anchor_index == Some(*last),
+            )
+        }) {
+            let turned = crate::transcript::background_rows::background_task_source(message);
+            std::sync::Arc::make_mut(&mut output[last])
+                .blocks
+                .extend(turned.blocks.iter().cloned());
+            continue;
+        }
+        let step = tool_burst_step(message, passes_over);
         if step == ToolBurstStep::PassesOver {
             output.push(message.clone());
             continue;
@@ -164,6 +178,30 @@ pub fn fold_tool_messages(
         anchor_takes = takes_tool_burst_row(message);
     }
     output
+}
+
+/// Whether `message`, a harness `<task-notification>` row, joins the card of `previous`, the row
+/// right before it in the fold's output, as the tool calls it reports
+/// (`background_rows::background_task_source`): `previous` is another background task's end, or
+/// a row of calls alone that `takes_run` (the run's anchor, which the fold would pass the
+/// notification over to). Nothing the reader sees stands between them. A row that carries a
+/// collapsed section (`deferredWork`) on either side keeps its own place, so a turn's section is
+/// never lost; a notification after words or a reply keeps its own card, as before.
+///
+/// CDXC:SessionChat 2026-11-15 DECISION: User, of an opened Quiet View "Worked" line drawn as five
+/// "1 tool call" cards in a row: "Wtf is this why 1 card for each one its super bad". The five
+/// were a Monitor's events, each a `<task-notification>` row of its own: the fold passed over each
+/// one (a status row that did not wake the agent), so each was projected as a message with one
+/// call. Consecutive task ends, and a task end right after a row of calls alone, are now one card
+/// counting all of their calls ("5 tool calls"); the desktop, the web build and the phone draw it
+/// from the core.
+fn joins_tool_card(message: &ChatMessage, previous: &ChatMessage, takes_run: bool) -> bool {
+    use crate::transcript::background_rows::is_background_task_row;
+    message.role == ChatRole::User
+        && message.deferred_work.is_none()
+        && previous.deferred_work.is_none()
+        && is_background_task_row(message)
+        && (is_background_task_row(previous) || (takes_run && is_tool_only_message(previous)))
 }
 
 /// Per-message-block-list pairing: by call id when the result names one, else first in first out.

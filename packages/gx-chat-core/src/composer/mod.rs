@@ -6,7 +6,9 @@
 
 pub mod actions;
 pub mod attaching;
+pub mod attachment_moves;
 pub mod catch_up;
+pub mod compact_hint;
 pub mod delivery;
 pub mod delivery_card;
 pub mod document;
@@ -29,6 +31,7 @@ pub mod reference_menu;
 pub mod reference_pills;
 pub mod references;
 pub mod review_comments;
+pub mod row;
 pub mod side_chat;
 pub mod skill_invocation;
 pub mod slash_catalogs;

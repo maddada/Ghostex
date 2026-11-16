@@ -23,6 +23,22 @@ pub(super) async fn route_agents_http(
         | "/api/markAutomationRunRead" => {
             handle_automation_http(&state, endpoint.path, request_id, &body_json).await
         }
+        "/api/readMemoryGuard" => routed_json(
+            Some(endpoint.path),
+            StatusCode::OK,
+            rpc_success(
+                request_id,
+                crate::memory_guard::read_endpoint_value(&state.paths),
+            ),
+        ),
+        "/api/readClaudeCompaction" => routed_json(
+            Some(endpoint.path),
+            StatusCode::OK,
+            rpc_success(
+                request_id,
+                crate::agents::claude_idle_compaction::read_endpoint_value(),
+            ),
+        ),
         "/api/agentCliMaintenance" => {
             agent_cli_http::handle(&state, endpoint.path, request_id, &body_json).await
         }

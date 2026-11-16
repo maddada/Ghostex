@@ -82,7 +82,7 @@ pub(super) fn device_rows(
         Some(devices) if devices.is_empty() => vec![remote_row(
             detail(
                 t,
-                "None yet. Click Connect a Device and scan the code with the Ghostex app.",
+                "None yet. Click Connect a Phone and scan the code with the Ghostex app.",
                 false,
             )
             .into_any_element(),

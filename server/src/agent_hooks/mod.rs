@@ -32,7 +32,7 @@ pub(crate) mod tests;
 #[cfg(windows)]
 pub(crate) mod windows;
 #[cfg(any(windows, test))]
-mod wmx_pane;
+pub(crate) mod wmx_pane;
 mod zcode;
 
 pub(crate) use ancestor_session::adopt_ancestor_session_routing;

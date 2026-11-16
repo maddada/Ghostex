@@ -16,7 +16,6 @@ const AGENTS: &[(&str, &str, &str)] = &[
     ("cursor", "cursor-cli", "Cursor CLI"),
     ("pi", "pi", "Pi Agent"),
     ("opencode", "opencode", "OpenCode"),
-    ("gemini", "gemini", "Gemini"),
     ("copilot", "copilot", "Copilot"),
     ("droid", "factory-droid", "Factory Droid"),
     ("grok", "grok-build", "Grok Build"),

@@ -78,16 +78,19 @@ pub(crate) fn answered_by_index(state: &ChatState, id: &str) -> bool {
     state.session.resource_index.view().form_answered(id)
 }
 
-/// Whether the session's queue holds answers for the form.
+/// Whether the session's queue holds active answers for the form.
 pub(crate) fn queued_in_queue(state: &ChatState, id: &str) -> bool {
     state.session.queue_prompts.as_ref().is_some_and(|queue| {
         queue.iter().any(|prompt| {
-            prompt
-                .get("text")
-                .and_then(Value::as_str)
-                .and_then(crate::transcript::page_answers::answers_page_id)
-                .as_deref()
-                == Some(id)
+            prompt.get("state").and_then(Value::as_str) != Some("failed")
+                && prompt
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .is_some_and(|text| {
+                        crate::transcript::page_answers::answers_page_ids(text)
+                            .iter()
+                            .any(|page_id| page_id == id)
+                    })
         })
     })
 }
@@ -133,17 +136,24 @@ pub(crate) fn open(state: &ChatState, id: &str) -> bool {
 /// The reader took a form's answers out of the queue before they were typed, so the form is open
 /// again with its saved picks.
 pub fn reopen_after_removed_answers(state: &mut ChatState, queued_prompt_id: &str) {
-    let page = state
+    let pages = state
         .pending
         .sends
         .iter()
         .find(|entry| entry.queued_prompt_id.as_deref() == Some(queued_prompt_id))
-        .and_then(|entry| crate::transcript::page_answers::answers_page_id(&entry.text));
-    if let Some(entry) = page.and_then(|page| state.questions.forms.get_mut(&page)) {
-        entry.sent = None;
-        entry.sent_waiting_for_idle = false;
-        entry.confirmation_boundary = None;
-        entry.confirmed = false;
+        .map(|entry| crate::transcript::page_answers::answers_page_ids(&entry.text))
+        .unwrap_or_default();
+    let mut changed = false;
+    for page in pages {
+        if let Some(entry) = state.questions.forms.get_mut(&page) {
+            entry.sent = None;
+            entry.sent_waiting_for_idle = false;
+            entry.confirmation_boundary = None;
+            entry.confirmed = false;
+            changed = true;
+        }
+    }
+    if changed {
         state.core.request_publish();
     }
 }
@@ -464,11 +474,27 @@ pub(crate) fn dispatch_answers(
     form: &QuestionForm,
     answers: Value,
 ) -> Vec<Effect> {
+    let text = answers_message(form, &answers);
+    dispatch_answers_text(state, context, form, answers, text, None, false)
+}
+
+/// Sends `text` carrying `answers` for `form` (for example a single envelope, or a queued message
+/// whose other envelopes and prose are preserved when one inline answer changes) and records the
+/// send on `form`'s entry.
+pub(crate) fn dispatch_answers_text(
+    state: &mut ChatState,
+    context: &ChatContext,
+    form: &QuestionForm,
+    answers: Value,
+    text: String,
+    combined_pending_id: Option<String>,
+    combined_recovery: bool,
+) -> Vec<Effect> {
     let id = form.id.as_str();
     let queue_until_idle = state.core.answers_wait_for_idle;
     let request_id = state.core.allocate_request_id();
     let params = json!({
-        "text": answers_message(form, &answers),
+        "text": text,
         "sendRequestId": format!("question-form-{id}-{}", context.now_millis()),
     });
     let effect = Effect::SendRpc {
@@ -500,6 +526,19 @@ pub(crate) fn dispatch_answers(
         }),
         ..PendingSend::default()
     };
+    let combined_recovery = combined_recovery.then(|| crate::state::CombinedFormSend {
+        pending_id: combined_pending_id,
+        text: text.clone(),
+        echo_seed: PendingSend {
+            id: format!("answers-combined-{request_id}"),
+            text,
+            sent_at_ms: boundary.sent_at_ms,
+            after_message_id: boundary.after_message_id.clone(),
+            after_message_timestamp: boundary.after_message_timestamp,
+            matching_occurrence: boundary.matching_occurrence,
+            ..PendingSend::default()
+        },
+    });
     if let Some(entry) = state.questions.forms.get_mut(id) {
         entry.error = None;
         entry.confirmation_boundary = Some(boundary);
@@ -511,10 +550,42 @@ pub(crate) fn dispatch_answers(
             params,
             queue_until_idle,
             retry: Default::default(),
+            combined_recovery,
         });
     }
     state.core.request_publish();
     vec![effect]
+}
+
+/// Clears delivery state and restores user picks when a combined take-back resend fails.
+fn reopen_failed_combined_form(
+    state: &mut ChatState,
+    id: &str,
+    answers_override: Option<Value>,
+) {
+    let form_def = form(state, id).cloned();
+    let Some(entry) = state.questions.forms.get_mut(id) else {
+        return;
+    };
+    let taken_sent = entry.sent.take();
+    if let Some(form_def) = form_def.as_ref() {
+        let restore = answers_override.as_ref().or(taken_sent.as_ref());
+        if let Some(answers) = restore {
+            if answers_override.is_some()
+                || entry.drafts.len() != form_def.questions.len()
+                || (!entry.drafts.iter().any(answered) && entry.notes.trim().is_empty())
+            {
+                entry.drafts = drafts_from_answers(form_def, answers);
+                entry.notes = notes_from_answers(form_def, answers);
+                entry.touched = true;
+            }
+        }
+    }
+    entry.sent_waiting_for_idle = false;
+    entry.confirmation_boundary = None;
+    entry.confirmed = false;
+    entry.queued_prompt_id = None;
+    entry.error = None;
 }
 
 /// The send's answer, or `None` when the id is not a form's.
@@ -631,13 +702,87 @@ pub fn rpc_settled(
             // The queue answers with its whole new strip, which carries the answers' row: the card
             // the send drew keeps its place instead of waiting for the queue's broadcast.
             if let Some(queue) = result.get("queue").and_then(Value::as_array) {
-                *state.session.queue_prompts = Some(queue.clone());
-                state.messages.new_composition_identity();
+                let queue_version = result.get("queueVersion").and_then(Value::as_u64);
+                crate::session::apply::apply_server_queue_versioned(
+                    state,
+                    queue,
+                    queue_version,
+                    true,
+                );
             }
             Some(Vec::new())
         }
-        RpcOutcome::Err { message, .. } => {
-            if let Some(entry) = state.questions.forms.get_mut(&id) {
+        RpcOutcome::Err { message, code, .. } => {
+            if let Some(combined) = sent.combined_recovery {
+                let echo = combined
+                    .pending_id
+                    .as_deref()
+                    .and_then(|pending_id| {
+                        let found = state
+                            .pending
+                            .sends
+                            .iter()
+                            .find(|entry| entry.id == pending_id)
+                            .cloned();
+                        crate::session::sends::drop_send(state, pending_id);
+                        found
+                    })
+                    .unwrap_or(combined.echo_seed);
+                let answers_echo_id = format!("answers:{id}");
+                state
+                    .pending
+                    .sends
+                    .retain(|entry| entry.id != answers_echo_id);
+                reopen_failed_combined_form(state, &id, Some(sent.answers));
+                for sibling_id in
+                    crate::transcript::page_answers::answers_page_ids(&combined.text)
+                {
+                    if sibling_id == id {
+                        continue;
+                    }
+                    let should_reopen = state.questions.forms.get(&sibling_id).is_some_and(|entry| {
+                        !entry.confirmed && entry.send.is_none() && entry.sent.is_some()
+                    }) && !state.questions.form_answer_index.holds(&sibling_id)
+                        && !answered_by_index(state, &sibling_id)
+                        && !queued_in_queue(state, &sibling_id)
+                        && crate::questions::recorded_answers::answers(state, &sibling_id)
+                            .is_none()
+                        && crate::questions::resource_modal::fetched_answers(state, &sibling_id)
+                            .is_none();
+                    if should_reopen {
+                        let sibling_queued_id = state
+                            .questions
+                            .forms
+                            .get(&sibling_id)
+                            .and_then(|entry| entry.queued_prompt_id.clone());
+                        let sibling_echo_id = format!("answers:{sibling_id}");
+                        let sibling_startup_id = sibling_queued_id
+                            .as_deref()
+                            .map(|prompt_id| format!("startup:{prompt_id}"));
+                        state.pending.sends.retain(|entry| {
+                            entry.id != sibling_echo_id
+                                && sibling_startup_id
+                                    .as_deref()
+                                    .is_none_or(|startup_id| entry.id != startup_id)
+                        });
+                        reopen_failed_combined_form(state, &sibling_id, None);
+                    }
+                }
+                let send_request_id = sent
+                    .params
+                    .get("sendRequestId")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+                crate::composer::delivery::keep_failed_combined_send(
+                    state,
+                    echo,
+                    combined.text,
+                    sent.queue_until_idle,
+                    send_request_id,
+                    message,
+                    code.as_deref(),
+                );
+            } else if let Some(entry) = state.questions.forms.get_mut(&id) {
                 entry.error = Some(message.clone());
             }
             Some(Vec::new())
@@ -1331,6 +1476,7 @@ mod canceled_tests {
                 page_id: id.clone(),
                 title: String::new(),
                 answers,
+                tags: Vec::new(),
             });
         assert_eq!(project(&state)[&id]["state"], "queued");
         assert_eq!(project(&state)[&id]["canSend"], false);

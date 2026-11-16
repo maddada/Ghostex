@@ -72,12 +72,15 @@ pub(crate) async fn beads_view_snapshot(
     };
     let info = match discovered {
         Discovered::Workspace(info) => info,
-        Discovered::None => return Ok(workspace_less_reply(BeadsWorkspaceState::None, None)),
+        Discovered::None => {
+            let mut reply = workspace_less_reply(BeadsWorkspaceState::None, None);
+            reply.workspace.checked_folder = Some(cwd);
+            return Ok(reply);
+        }
         Discovered::Failed(message) => {
-            return Ok(workspace_less_reply(
-                BeadsWorkspaceState::Failed,
-                Some(message),
-            ))
+            let mut reply = workspace_less_reply(BeadsWorkspaceState::Failed, Some(message));
+            reply.workspace.checked_folder = Some(cwd);
+            return Ok(reply);
         }
     };
     let entry = cache::entry(&info.path);

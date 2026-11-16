@@ -29,6 +29,8 @@ pub(crate) struct AccountUsagePanel {
     pub(super) claimed: HashSet<String>,
     /// The last claim's `(outcome, message)`, shown above the reset list.
     pub(super) banner: Option<(String, String)>,
+    /// Refresh now is reading the account's usage.
+    refreshing: bool,
     /// One idempotency key per reset, minted when it first enters confirmation and reused for every retry, so a retried claim can never spend a second reset.
     request_ids: HashMap<String, String>,
     pub(super) model_focus: FocusHandle,
@@ -82,6 +84,7 @@ impl AccountUsagePanel {
             claiming: None,
             claimed: HashSet::new(),
             banner: None,
+            refreshing: false,
             request_ids: HashMap::new(),
             model_focus: cx.focus_handle().tab_index(0),
             reset_focus: cx.focus_handle().tab_index(0),
@@ -448,7 +451,7 @@ impl AccountUsagePanel {
 
     /// The account's section label: "THIS ACCOUNT", its email when the badge doesn't already
     /// name it, and Live limits (Last known when stale) with the reading's time as its tooltip.
-    fn render_account_label(&self) -> AnyElement {
+    fn render_account_label(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
         let p = self.palette;
         // CDXC:AgentProviders 2026-10-31 DECISION:
         // User: "please dont say live limits here, isntead just show updated how long ago (15 seconds ago etc). keep it short tho (not full actual time etc)". The row names the reading's age, so the clock-time tooltip goes. This keeps the 2026-10-11 rule that the card must not contradict itself: when gxserver marks the reading stale (refreshing has failed since it was taken) the same words show in amber.
@@ -457,20 +460,69 @@ impl AccountUsagePanel {
         } else {
             p.accent_text
         };
-        let age = updated_age(text(&self.account, "usageUpdatedAt"), self.now);
+        let age = if self.refreshing {
+            "Refreshing…".to_string()
+        } else {
+            updated_age(text(&self.account, "usageUpdatedAt"), self.now)
+        };
+        let reading = h_flex()
+            .id("account-usage-refresh")
+            .flex_shrink_0()
+            .items_center()
+            .gap(px(5.0))
+            .text_size(px(11.5))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(color)
+            .child(div().size(px(6.0)).rounded_full().bg(color))
+            .child(age);
+        // Refresh now (CDXC:AgentProviders 2026-11-13 in server/src/accounts/usage_screen.rs): a
+        // Claude account's limits are read off Claude Code's own usage screen, a Codex account's
+        // from its usage service.
+        let refreshable = !self.palette.provider.usage_only()
+            && self.account["registered"] == true
+            && self.account["status"] != "disabled";
+        let reading = if refreshable && !self.refreshing {
+            reading
+                .rounded(px(4.0))
+                .cursor_pointer()
+                .hover(move |this| this.text_color(p.ink))
+                .tooltip(|window, cx| Tooltip::new("Refresh now").build(window, cx))
+                .on_click(cx.listener(|this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.refresh_now(cx);
+                }))
+                .child(titlebar_svg_icon(
+                    "titlebar/rotate-clockwise.svg",
+                    11.0,
+                    color.opacity(0.85),
+                ))
+                .into_any_element()
+        } else {
+            reading.into_any_element()
+        };
         section_label(account_section_title(&self.account))
-            .child(
-                h_flex()
-                    .flex_shrink_0()
-                    .items_center()
-                    .gap(px(5.0))
-                    .text_size(px(11.5))
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(color)
-                    .child(div().size(px(6.0)).rounded_full().bg(color))
-                    .child(age),
-            )
+            .child(reading)
             .into_any_element()
+    }
+
+    /// Reads the account's usage again now, on its own computer's gxserver.
+    fn refresh_now(&mut self, cx: &mut gpui::Context<Self>) {
+        if self.refreshing {
+            return;
+        }
+        self.refreshing = true;
+        cx.notify();
+        let (id, app, panel) = (self.id, self.main_app.clone(), cx.entity().downgrade());
+        cx.defer(move |cx| {
+            let _ = app.update(cx, |app, cx| {
+                app.refresh_account_usage_now(id.as_str(), panel, cx);
+            });
+        });
+    }
+
+    pub(crate) fn finish_refresh(&mut self, cx: &mut gpui::Context<Self>) {
+        self.refreshing = false;
+        cx.notify();
     }
 
     /// The amber line under the account's card, Notifications' offline notice with its button.
@@ -650,7 +702,7 @@ impl Render for AccountUsagePanel {
             .w_full()
             .p(px(BODY_PADDING))
             .pt(px(BODY_PADDING_TOP))
-            .child(self.render_account_label())
+            .child(self.render_account_label(cx))
             .child(self.render_limits(cx))
             .children(notice)
             .when(!self.palette.provider.usage_only(), |body| {

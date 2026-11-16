@@ -1,5 +1,5 @@
 //! Preview of the Ghostex page window's top band: the round controls (open in browser, Hide,
-//! close) at the band's sizes and insets (`visual_page_modal/band_geometry.rs`), on the right as
+//! close) at the band's sizes and insets (`window/page_band_geometry.rs`), on the right as
 //! with Close buttons on the right, and on the left with the close button first as without it.
 //! Run it with `GHOSTEX_NATIVE_MODAL_DEMO=page-window-band`; dashed guides mark the inset from the
 //! top and from the side, which match.

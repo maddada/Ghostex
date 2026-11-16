@@ -362,8 +362,8 @@ pub fn detect_session_chat_terminal_state(
     CDXC:SessionChat 2026-08-26:
     Two independent reasons to spend a capture on this session now. The
     statusline grammar covers three agents; the composer signature table covers
-    nine, so an agent with only the latter (cursor, copilot, opencode, gemini,
-    omp) reaches the funnel through this second door and gets every reading the
+    more, so an agent with only the latter (cursor, copilot, opencode, omp)
+    reaches the funnel through this second door and gets every reading the
     capture can support — which for it is composer readiness alone, since the
     notice, activity and fleet classifiers are all keyed on the option agent.
     */
@@ -475,7 +475,8 @@ pub fn detect_session_chat_terminal_state(
     if notice.is_none() && agent == Some(SessionChatOptionAgent::Codex) {
         notice = crate::hookless_activity::codex_update_notice(project_id, session_id);
     }
-    // A session that went back to its agent's hook says so once (hook_free_fallback.rs).
+    // A session its watcher can't follow asks before its agent's hook goes back, and one that went
+    // back to it says so once (hook_free_fallback.rs).
     if notice.is_none() {
         notice = crate::hookless_activity::fallback_notice(project_id, session_id);
     }
@@ -531,6 +532,11 @@ pub fn detect_session_chat_terminal_state(
                 )
                 .is_some()
             });
+        if let Some((agent_name, folder)) = crate::session_chat_trust_memory::trust_card_place(
+            repository, project_id, session_id, agent_id,
+        ) {
+            crate::session_chat_trust_memory::word_trust_notice(notice, &agent_name, &folder);
+        }
         crate::session_chat_trust_memory::decorate_trust_notice(
             notice, remembered, answerable, project_id, session_id,
         );

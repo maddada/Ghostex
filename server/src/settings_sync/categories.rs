@@ -40,9 +40,10 @@ const SIDEBAR_ORGANIZATION: &str = "spaces";
 /// The categories that sync values here: every category above, and Sidebar organization's
 /// settings and Session Tags.
 fn value_categories() -> impl Iterator<Item = &'static str> {
-    VALUE_CATEGORIES
-        .into_iter()
-        .chain(std::iter::once(SIDEBAR_ORGANIZATION))
+    VALUE_CATEGORIES.into_iter().chain([
+        SIDEBAR_ORGANIZATION,
+        ghostex_gx_core::settings_sync::ALWAYS_CATEGORY,
+    ])
 }
 
 /// A key of category `prefix` that this file reads and writes: for Sidebar organization only its

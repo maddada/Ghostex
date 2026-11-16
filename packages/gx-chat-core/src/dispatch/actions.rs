@@ -84,8 +84,11 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::ImportPageAnswers
         | ActionKind::ExportPage
         | ActionKind::QuestionRemove
+        | ActionKind::PageStar
         | ActionKind::SnoozeQuestion
         | ActionKind::CancelQuestion
+        | ActionKind::MarkQuestionAnswered
+        | ActionKind::MarkPagesSeen
         | ActionKind::QuestionsReply
         | ActionKind::QuestionListFilter
         | ActionKind::OpenResource
@@ -162,6 +165,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::FilesLinksJump => Family::Composer,
 
         ActionKind::SelectOption
+        | ActionKind::RestartInMode
         | ActionKind::ModelMenuView
         | ActionKind::ModelMenuFavorite
         | ActionKind::ModelMenuPick

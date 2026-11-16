@@ -42,7 +42,7 @@ pub const GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     "ghostex-secrets",
     /*
     CDXC:AgentGuide 2026-11-02 WHY:
-    `$ghostex-agent-guide` carries the Ghostex note (agents/ghostex_note.rs) as its description, for agents Ghostex can't hand a system prompt at launch (OpenCode, Gemini, Cursor, Copilot, Amp and the rest), so it is the second bundled skill agents may pick up on their own. Its body only sends the agent to `ghostex agent-guide`, so it stays current with the CLI.
+    `$ghostex-agent-guide` carries the Ghostex note (agents/ghostex_note.rs) as its description, for agents Ghostex can't hand a system prompt at launch (OpenCode, Cursor, Copilot, Amp and the rest), so it is the second bundled skill agents may pick up on their own. Its body only sends the agent to `ghostex agent-guide`, so it stays current with the CLI.
     */
     "ghostex-agent-guide",
     /*
@@ -83,7 +83,6 @@ pub const GHOSTEX_SKILLS_CLI_AGENT_IDS: &[&str] = &[
     "claude-code",
     "codex",
     "cursor",
-    "gemini-cli",
     "opencode",
     "pi",
     "antigravity",
@@ -236,20 +235,9 @@ fn install_agent_skills_blocking(
                     },
                 )?,
             };
-        let mut installed_count = 0_usize;
-        let canonical_dir = target_roots[0].join(skill_name);
-        for (index, target_root) in target_roots.iter().enumerate() {
-            let destination = target_root.join(skill_name);
-            let written = if index == 0 {
-                copy_skill_directory_into_place(&source_dir, &destination)?
-            } else {
-                link_skill_into_agent_root(&canonical_dir, &destination)?
-            };
-            if written {
-                installed_paths.push(path_string(&destination));
-                installed_count += 1;
-            }
-        }
+        let written = place_skill(&source_dir, skill_name, &target_roots)?;
+        let installed_count = written.len();
+        installed_paths.extend(written);
         let source_label = if source_kind == "github" {
             format!("GitHub ({})", agent_skills_remote::AGENT_SKILLS_REMOTE_REF)
         } else {
@@ -285,6 +273,42 @@ fn install_agent_skills_blocking(
         json!(format!("{}\n", summary_lines.join("\n"))),
     );
     Ok(Value::Object(status))
+}
+
+/// Copies the skill folder into the first root (`~/.agents/skills`, the only real copy) and links
+/// it into every other root. Returns the paths that changed.
+fn place_skill(
+    source_dir: &Path,
+    skill_name: &str,
+    target_roots: &[PathBuf],
+) -> Result<Vec<String>, DomainStateError> {
+    let mut written = Vec::new();
+    let canonical_dir = target_roots[0].join(skill_name);
+    for (index, target_root) in target_roots.iter().enumerate() {
+        let destination = target_root.join(skill_name);
+        let changed = if index == 0 {
+            copy_skill_directory_into_place(source_dir, &destination)?
+        } else {
+            link_skill_into_agent_root(&canonical_dir, &destination)?
+        };
+        if changed {
+            written.push(path_string(&destination));
+        }
+    }
+    Ok(written)
+}
+
+/// Installs a skill folder that is not one of Ghostex's own (an extension's, extensions/skills.rs)
+/// into the same folders a bundled skill goes to with no agents named: `~/.agents/skills`, linked
+/// into every agent that doesn't read it itself.
+pub(crate) fn install_skill_folder(
+    home_dir: &Path,
+    source_dir: &Path,
+    skill_name: &str,
+) -> Result<Vec<String>, DomainStateError> {
+    let target_roots =
+        agent_skill_install_target_roots(home_dir, &normalize_agent_skill_agent_ids(None))?;
+    place_skill(source_dir, skill_name, &target_roots)
 }
 
 /// The equivalent CLI invocation, kept in the install result so clients that
@@ -324,7 +348,6 @@ pub fn agent_skill_global_dir(home_dir: &Path, agent_id: &str) -> Option<PathBuf
         "codex" => {
             return Some(ghostex_paths::agent_homes::codex_default_home(home_dir).join("skills"))
         }
-        "gemini-cli" => ".gemini/skills",
         "pi" => ".pi/agent/skills",
         "antigravity" => ".gemini/antigravity/skills",
         "antigravity-cli" => ".gemini/antigravity-cli/skills",
@@ -878,7 +901,7 @@ fn read_skill_name_candidates(directory_path: &Path, skill_file_path: &Path) -> 
     candidates
 }
 
-fn read_frontmatter_name(markdown: &str) -> Option<String> {
+pub(crate) fn read_frontmatter_name(markdown: &str) -> Option<String> {
     let mut lines = markdown.lines();
     if lines.next()?.trim() != "---" {
         return None;

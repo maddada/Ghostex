@@ -43,14 +43,14 @@ impl GhostexGpuiApp {
     ) {
         match command_type {
             // Never posted on the web build, which is not offered these rows.
-            #[cfg(not(target_family = "wasm"))]
+            #[cfg(not(ghostex_web))]
             ghostex_gx_core::APP_LIFECYCLE_MESSAGE_TYPE => {
                 if let Some(action) = command.get("action").and_then(Value::as_str) {
                     self.run_app_lifecycle_action(action, cx);
                 }
             }
             // An "Open <extension>" row (`extensions/launch.rs`); the web build lists none.
-            #[cfg(not(target_family = "wasm"))]
+            #[cfg(not(ghostex_web))]
             "launchExtension" => {
                 if let Some(extension_id) = command.get("extensionId").and_then(Value::as_str) {
                     self.launch_extension_from_quick_access(extension_id, window, cx);

@@ -465,7 +465,7 @@ impl GhostexGpuiApp {
                 "checked": on(CONFIRM_NEW_CHAT_SETTING, true),
                 "command": { "type": "chief", "op": "toggleSetting", "key": CONFIRM_NEW_CHAT_SETTING },
             }));
-            if cfg!(not(target_arch = "wasm32")) {
+            if cfg!(not(ghostex_web)) {
                 items.push(json!({ "label": "Folders Agents Can't Read…", "icon": "lock", "command": chief_command("homeSettings", machine_id) }));
             }
         }
@@ -536,7 +536,7 @@ impl GhostexGpuiApp {
         items.push(json!({ "label": "Goal & Instructions…", "icon": "target", "disabled": !has_chief, "command": chief_command("goal", &machine) }));
         items.push(json!({ "label": "Memory…", "icon": "brain", "disabled": !has_chief, "command": chief_command("memory", &machine) }));
         // The page has no settings file of its own to turn the extension off in.
-        if cfg!(not(target_arch = "wasm32")) && this_computer {
+        if cfg!(not(ghostex_web)) && this_computer {
             items.push(json!({ "separator": true }));
             items.push(json!({ "label": "Turn Off Main Hub", "icon": "power", "command": chief_command("disable", &machine) }));
         }
@@ -614,7 +614,7 @@ impl GhostexGpuiApp {
                 }
             }
             "homeSettings" => {
-                #[cfg(not(target_arch = "wasm32"))]
+                #[cfg(not(ghostex_web))]
                 self.open_gpui_settings_tab("agents", Some(window), cx);
             }
             _ => {}
@@ -745,7 +745,7 @@ impl GhostexGpuiApp {
         on: bool,
         cx: &mut gpui::Context<Self>,
     ) {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(ghostex_web))]
         {
             let mut patch = serde_json::Map::new();
             patch.insert(key.to_string(), json!(on));
@@ -758,7 +758,7 @@ impl GhostexGpuiApp {
                 cx,
             );
         }
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(ghostex_web)]
         {
             let _ = (key, on, cx);
         }
@@ -793,7 +793,7 @@ impl GhostexGpuiApp {
             json!({ "type": "selectSession", "sessionId": sidebar_session_id, "mode": "focus" }),
             cx,
         );
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(ghostex_web))]
         {
             let _ = self.react_to_native_sidebar_session_click(sidebar_session_id, cx);
         }
@@ -952,7 +952,7 @@ impl GhostexGpuiApp {
         enabled: bool,
         cx: &mut gpui::Context<Self>,
     ) {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(ghostex_web))]
         {
             self.handle_gpui_app_modal_update_settings_patch_message(
                 &json!({
@@ -966,7 +966,7 @@ impl GhostexGpuiApp {
                 self.show_chief_disabled_toast(cx);
             }
         }
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(ghostex_web)]
         {
             let _ = (enabled, cx);
         }

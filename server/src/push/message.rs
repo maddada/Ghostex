@@ -34,6 +34,10 @@ pub(crate) enum AlertKind {
     /// A thread under a coordinator finished a turn: the alert rule keeps it quiet on the computer,
     /// and only a phone whose Thread reports choice is not Off hears of it.
     ThreadReport,
+    /// The memory guard stopped a command, restarted an agent or stopped a session because the
+    /// computer was running out of memory (server/src/memory_guard/): the phone's Error switch, as
+    /// `failed`, so phones of every version show it.
+    OutOfMemory,
 }
 
 impl AlertKind {
@@ -43,7 +47,7 @@ impl AlertKind {
             Self::NeedsInput => "needsInput",
             // CDXC:Notifications 2026-11-08: the red dots ride the phone's existing `failed`
             // kind (its Error switch and Failed section); only the words differ.
-            Self::Failed | Self::Stuck | Self::Blocked => "failed",
+            Self::Failed | Self::Stuck | Self::Blocked | Self::OutOfMemory => "failed",
             Self::Security => "security",
             Self::ThreadReport => "threadReport",
         }
@@ -59,6 +63,7 @@ impl AlertKind {
             Self::Stuck => "Not moving: it may be stuck",
             Self::Blocked => "Blocked: out of usage on every account",
             Self::ThreadReport => "Reported to its coordinator",
+            Self::OutOfMemory => "Stopped to free memory",
         }
     }
 
@@ -67,7 +72,7 @@ impl AlertKind {
         match self {
             Self::Finished => kinds.finished,
             Self::NeedsInput => kinds.waiting,
-            Self::Failed | Self::Stuck | Self::Blocked => kinds.error,
+            Self::Failed | Self::Stuck | Self::Blocked | Self::OutOfMemory => kinds.error,
             // CDXC:Security 2026-11-08 WHY: the point of the notice is that the owner sees every sensitive action at once, so no per-kind switch turns it off.
             Self::Security => true,
             // A phone older than the choices never asked for thread reports.
@@ -92,7 +97,7 @@ impl AlertKind {
         match self {
             Self::Finished => alerts.finished,
             Self::NeedsInput => alerts.needs_you,
-            Self::Failed | Self::Stuck | Self::Blocked => alerts.errors,
+            Self::Failed | Self::Stuck | Self::Blocked | Self::OutOfMemory => alerts.errors,
             Self::ThreadReport => alerts.thread_reports,
             Self::Security => match alerts.needs_you {
                 AlertChoice::Off => AlertChoice::Silent,
@@ -117,9 +122,29 @@ pub(crate) struct AlertEvent {
     pub(crate) session_title: String,
     /// When the event happened, in wall-clock milliseconds; the alert expires an hour later.
     pub(crate) occurred_at_ms: i64,
+    /// A coordinator's thread's own news (its finished turn, question, stall, error or memory
+    /// stop): it goes by the phone's Workers choice (`threadReports` on the wire) instead of the
+    /// kind's, and a phone older than the choices never gets it (CDXC:Notifications 2026-11-14 in
+    /// server/src/worker_alerts.rs).
+    pub(crate) worker: bool,
+    /// The session a tap opens when it is not the event's own: a thread's approval opens its
+    /// coordinator, where the card is relayed (`openSessionId`; an older phone ignores it and
+    /// opens the thread).
+    pub(crate) open_session_id: Option<String>,
 }
 
 impl AlertEvent {
+    /// How `registration`'s phone wants this event: its Workers choice for a worker's news, else
+    /// its choice for the kind.
+    pub(crate) fn delivery(&self, registration: &PushRegistration) -> AlertChoice {
+        if !self.worker {
+            return self.kind.delivery(registration);
+        }
+        registration
+            .alerts
+            .map_or(AlertChoice::Off, |alerts| alerts.thread_reports)
+    }
+
     pub(crate) fn is_valid(&self) -> bool {
         is_printable_id(&self.session_id, SESSION_ID_MAX)
             && is_printable_id(&self.notification_id, NOTIFICATION_ID_MAX)
@@ -160,15 +185,22 @@ pub(crate) fn alert_message(
         json!(alert_title(leading_name, &event.project_name)),
     );
     message.insert("body".into(), json!(event.kind.words(has_question)));
-    message.insert(
-        "data".into(),
-        json!({
+    message.insert("data".into(), {
+        let mut data = json!({
             "kind": event.kind.wire(),
             "machineId": machine_id,
             "sessionId": event.session_id,
             "notificationId": event.notification_id,
-        }),
-    );
+        });
+        if let Some(open) = event.open_session_id.as_deref().filter(|id| !id.is_empty()) {
+            data["openSessionId"] = json!(open);
+        }
+        // A worker's news, which the phone shows by its Workers choice as it came.
+        if event.worker {
+            data["worker"] = json!(true);
+        }
+        data
+    });
     message.insert(CONTENT_AVAILABLE_FIELD.into(), json!(true));
     // A Silent kind, or a notice right after another one sounded, shows without the sound.
     if sound {

@@ -38,6 +38,18 @@ pub(crate) async fn restart(
     }
     match params.get("actionId").and_then(Value::as_str) {
         Some(SESSION_CHAT_NOTICE_ACTION_SIGN_IN) => return sign_in(state, params).await,
+        Some(crate::zmx::LOST_FOLDER_ACCESS_ACTION_RESTART) => {
+            return crate::zmx::restart_after_lost_folder_access(state, params).await
+        }
+        Some(crate::memory_guard::ACTION_RESUME) => {
+            return crate::server::resume_after_memory_stop(state, params).await
+        }
+        Some(crate::coordinators::CARRY_ON_STOPPED_THREADS) => {
+            return crate::coordinators::answer_stopped_threads(state, params, true).await
+        }
+        Some(crate::coordinators::DISMISS_STOPPED_THREADS) => {
+            return crate::coordinators::answer_stopped_threads(state, params, false).await
+        }
         Some(crate::session_chat_notice::SESSION_CHAT_NOTICE_ACTION_RECONNECT) => {
             return crate::session_chat_account_sign_in::reconnect(state, params).await
         }
@@ -58,6 +70,9 @@ pub(crate) async fn restart(
         }
         Some(crate::hookless_activity::ACTION_UPDATE_CODEX) => {
             return crate::hookless_activity::answer_codex_update(state, params).await
+        }
+        Some(crate::hookless_activity::ACTION_TURN_ON_HOOK) => {
+            return crate::hookless_activity::answer_ask_notice(state, params).await
         }
         Some(crate::hookless_activity::ACTION_RESTART_FOR_HOOK) => {
             return crate::hookless_activity::answer_fallback_notice(state, params).await

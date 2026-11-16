@@ -158,6 +158,28 @@ impl GhostexGpuiApp {
                 );
                 Ok(json!({ "accepted": true, "keys": keys, "ok": true }))
             }
+            // Connect both ways: gxserver paired this computer with the one that asked
+            // (server/src/remote_access/connect_back.rs); a page saves no computers.
+            #[cfg(not(ghostex_web))]
+            RendererVerb::AddRemoteMachine {
+                name,
+                easy_connect_address,
+                ssh_user,
+                ssh_port,
+            } => {
+                let id = self.save_easy_connect_machine(
+                    &crate::app::remote_conn::easy_connect_machines::EasyConnectMachine {
+                        name,
+                        easy_connect_address,
+                        ssh_user,
+                        ssh_port,
+                    },
+                    cx,
+                );
+                Ok(json!({ "ok": true, "remoteMachineId": id }))
+            }
+            #[cfg(ghostex_web)]
+            RendererVerb::AddRemoteMachine { .. } => Err(RendererCommandError::Unsupported),
             RendererVerb::OpenSettings { tab, search_query } => {
                 // `ghostex settings open [<key>]` lands on the Settings modal with the tab and
                 // search prefilled, the same open message the titlebar Tips rows use, so settings

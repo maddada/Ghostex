@@ -98,6 +98,11 @@ pub(crate) const SIDEBAR_MENU_ROW_HEIGHT: f32 = 34.0;
 pub(crate) const SIDEBAR_MENU_TWO_LINE_ROW_HEIGHT: f32 = 44.0;
 pub(crate) const SIDEBAR_MENU_HEADING_HEIGHT: f32 = 24.0;
 pub(crate) const SIDEBAR_MENU_SEPARATOR_HEIGHT: f32 = 13.0;
+/// The narrowest a quick row's button gets, before the zoom.
+pub(crate) const QUICK_BUTTON_MIN_WIDTH: f32 = 58.0;
+/// A row of icon buttons (`quick`, the session menu's Rename, Pin and Copy ID): an icon over a
+/// small label, with the row's own padding under it.
+pub(crate) const SIDEBAR_MENU_QUICK_ROW_HEIGHT: f32 = 54.0;
 
 /// How long a row's armed Remove button waits for its second click.
 pub(crate) const SIDEBAR_MENU_ARM_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(4);
@@ -266,7 +271,10 @@ impl SidebarMenuPanel {
 
     pub(crate) fn select_first_row(&mut self) {
         self.selected = self.items.iter().position(|item| {
-            item["separator"] != true && item["heading"] != true && item["disabled"] != true
+            item["separator"] != true
+                && item["heading"] != true
+                && item["disabled"] != true
+                && item.get("quick").is_none()
         });
     }
 
@@ -277,6 +285,8 @@ impl SidebarMenuPanel {
     pub(crate) fn item_height(&self, item: &Value) -> f32 {
         if item["separator"] == true {
             SIDEBAR_MENU_SEPARATOR_HEIGHT
+        } else if item.get("quick").is_some() {
+            SIDEBAR_MENU_QUICK_ROW_HEIGHT
         } else if item["heading"] == true {
             SIDEBAR_MENU_HEADING_HEIGHT
         } else if (self.search.is_some() || item["twoLineRow"] == true)
@@ -381,7 +391,10 @@ impl SidebarMenuPanel {
         self.narrow_rows();
         if let Some(selected) = selected {
             let enabled = |item: &Value| {
-                item["separator"] != true && item["heading"] != true && item["disabled"] != true
+                item["separator"] != true
+                    && item["heading"] != true
+                    && item["disabled"] != true
+                    && item.get("quick").is_none()
             };
             self.selected = self
                 .items
@@ -463,6 +476,12 @@ impl SidebarMenuPanel {
             .into_iter()
             .filter(|item| item["separator"] != true)
             .map(|item| {
+                // A quick row: its buttons side by side, each wide enough for a short label
+                // ("Copy ID") at 11px, 4px apart, inside the panel's padding and border.
+                if let Some(buttons) = item["quick"].as_array() {
+                    let count = buttons.len() as f32;
+                    return 14.0 + count * QUICK_BUTTON_MIN_WIDTH + (count - 1.0).max(0.0) * 4.0;
+                }
                 let label = item["label"].as_str().unwrap_or("");
                 let suffix = item["suffix"].as_str().unwrap_or("");
                 let mut extra = 0.0;
@@ -612,7 +631,10 @@ impl SidebarMenuPanel {
             .iter()
             .enumerate()
             .filter(|(_, item)| {
-                item["separator"] != true && item["heading"] != true && item["disabled"] != true
+                item["separator"] != true
+                    && item["heading"] != true
+                    && item["disabled"] != true
+                    && item.get("quick").is_none()
             })
             .map(|(index, _)| index)
             .collect();

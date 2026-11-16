@@ -69,6 +69,7 @@ pub mod simple;
 pub mod subagent;
 pub mod system_cards;
 pub mod text_strength;
+pub mod theme_cards;
 pub mod thinking_card;
 pub mod tool_apps;
 pub mod tool_card;

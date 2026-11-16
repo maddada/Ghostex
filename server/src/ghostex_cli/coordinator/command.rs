@@ -375,8 +375,7 @@ fn make_main(parsed: &ParsedArgs) -> CliResult<()> {
     Ok(())
 }
 
-/// What a New Coordinator form offers: the launchers an orchestrator can run on (Claude first, in launcher
-/// order), each with its model lineup from the catalog gxserver serves, the model it starts on, and
+/// What a New Coordinator form offers: every launcher (Claude first, in launcher order), each with its model lineup from the catalog gxserver serves, the model it starts on, and
 /// the efforts each model accepts.
 ///
 /// CDXC:Coordinators 2026-10-03 WHY:
@@ -403,7 +402,15 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
         .unwrap_or_default()
         .iter()
         .filter_map(|row| {
-            let family = agent_family(row)?;
+            // Any agent may run a coordinator (Q2980, COORDINATOR_AGENT_FAMILIES in gx-protocol):
+            // one outside the coordinator families is listed without a lineup and starts on its own
+            // model. The Claude (cloud) agent runs on claude.ai's computers, where no `ghostex` CLI
+            // runs, so it is left out.
+            let agent_id = agents::text(row, "agentId");
+            if agent_id.is_empty() || agent_id == "claude-cloud" {
+                return None;
+            }
+            let family = agent_family(row).unwrap_or_default();
             // An agent whose launch takes no model starts on its configured one, so its form shows
             // no model choice; one whose launch takes no effort shows no effort choice.
             let lineup = coordinator_launch_takes_model(family)
@@ -468,7 +475,7 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
                 family,
                 json!({
                     "agentId": agents::text(row, "agentId"),
-                    "name": row.get("name").and_then(Value::as_str).unwrap_or(family),
+                    "name": row.get("name").and_then(Value::as_str).unwrap_or(agent_id),
                     "family": family,
                     "models": models,
                     "defaultModel": default_model,

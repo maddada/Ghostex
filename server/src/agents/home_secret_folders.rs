@@ -138,30 +138,44 @@ fn with_claude_denies(command: &str, folders: &[String]) -> Option<String> {
 /// Adds Claude deny `rules` to the command's one `--settings` JSON, or appends one (as
 /// [`with_claude_denies`] does for the folders; gbot_computer_use.rs adds its tools the same way).
 pub(super) fn with_claude_deny_rules(command: &str, rules: Vec<Value>) -> Option<String> {
+    with_claude_settings(command, |settings| {
+        let permissions = settings
+            .entry("permissions")
+            .or_insert_with(|| json!({}))
+            .as_object_mut()?;
+        let deny = permissions
+            .entry("deny")
+            .or_insert_with(|| json!([]))
+            .as_array_mut()?;
+        for rule in rules {
+            if !deny.contains(&rule) {
+                deny.push(rule);
+            }
+        }
+        Some(())
+    })
+}
+
+/// Lets `edit` change the command's one `--settings` JSON (Claude keeps only the last
+/// `--settings`), or an empty one appended to the command. `None` when the command names a
+/// `--settings` that isn't inline JSON (a file of the user's), or `edit` gives up.
+pub(super) fn with_claude_settings(
+    command: &str,
+    edit: impl FnOnce(&mut Map<String, Value>) -> Option<()>,
+) -> Option<String> {
     let command = command.trim_end();
     let Some(start) = command.rfind("--settings ") else {
-        let settings = json!({ "permissions": { "deny": rules } });
+        let mut settings = Map::new();
+        edit(&mut settings)?;
         return Some(format!(
             "{command} --settings {}",
-            quote_shell_arg(&settings.to_string())
+            quote_shell_arg(&Value::Object(settings).to_string())
         ));
     };
     let value_start = start + "--settings ".len();
     let (text, end) = read_quoted_word(command, value_start)?;
     let mut settings: Map<String, Value> = serde_json::from_str(&text).ok()?;
-    let permissions = settings
-        .entry("permissions")
-        .or_insert_with(|| json!({}))
-        .as_object_mut()?;
-    let deny = permissions
-        .entry("deny")
-        .or_insert_with(|| json!([]))
-        .as_array_mut()?;
-    for rule in rules {
-        if !deny.contains(&rule) {
-            deny.push(rule);
-        }
-    }
+    edit(&mut settings)?;
     let settings = Value::Object(settings).to_string();
     Some(format!(
         "{}{}{}",

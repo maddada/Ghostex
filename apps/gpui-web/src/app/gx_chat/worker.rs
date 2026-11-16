@@ -108,7 +108,8 @@ fn run_wakes() {
 
 fn new_host() -> Host {
     let mut world = World::default();
-    // A socket event arrives on its own turn of the page, never inside one of the host's.
+    // A socket event arrives on its own turn of the page, never inside one of the host's. The native test target (`cargo xtask web-test`) gets gx-chat-client's thread transport, which a page never runs, so it installs none.
+    #[cfg(target_family = "wasm")]
     world.transport.install(ChatStreams::new(Rc::new(|inbound| {
         submit(Some(HostCommand::Inbound(inbound)));
     })));

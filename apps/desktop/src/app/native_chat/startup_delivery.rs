@@ -34,7 +34,39 @@ pub(super) struct DeliveryNote {
     pub end: bool,
 }
 
+/// The words under your message while it waits for its picture to upload (the chat core's
+/// `attachingMessages`, packages/gx-chat-core/src/composer/attaching.rs).
+///
+/// CDXC:Clipboard 2026-11-15 DECISION (issue #618, Q3273 A): the message shows right away and waits for its picture; the waiting words read exactly "Image is being uploaded", under the bubble, shown with the spinner once the wait has lasted a moment.
+/// SEE-ALSO: apps/mobile/app/src/chat/native/transcript/MessageActions.tsx (`IMAGE_UPLOADING_WORDS`, `AttachingLine`).
+pub(super) const IMAGE_UPLOADING_WORDS: &str = "Image is being uploaded";
+
 impl NativeChatView {
+    /// "Image is being uploaded" under message `id` while it waits for its picture, on the
+    /// bubble's side (`end`), in the muted 12px line.
+    pub(super) fn attaching_line(
+        &self,
+        id: &str,
+        end: bool,
+        p: &ChatAppearance,
+    ) -> Option<AnyElement> {
+        if !self.attaching_status(id) {
+            return None;
+        }
+        let s = p.scale;
+        Some(
+            div()
+                .id(gpui::SharedString::from(format!("attaching-line:{id}")))
+                .role(gpui::Role::Status)
+                .when(end, |line| line.text_right())
+                .text_size(px(12.0 * s))
+                .line_height(px(16.0 * s))
+                .text_color(p.muted)
+                .child(IMAGE_UPLOADING_WORDS)
+                .into_any_element(),
+        )
+    }
+
     /// The status line for a send the terminal has not taken yet. `waiting_line` keeps the
     /// "Waiting for agent…" sentence for cards that have no delivery indicator; without it only a
     /// failed send gets a line.
@@ -289,7 +321,7 @@ impl NativeChatView {
         // A held message waits for its computer, not for the agent: a clock, not a spinner.
         let held = delivery["state"] == "held";
         let label = if attaching {
-            "Attaching the picture"
+            IMAGE_UPLOADING_WORDS
         } else if held {
             "Waiting for the computer"
         } else if waiting {

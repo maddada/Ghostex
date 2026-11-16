@@ -7,8 +7,10 @@
 //! picked), `boxes-ssh` (the same, the SSH host picked: the chips scroll to it),
 //! `noboxes` (agentbox installed, no box ready: the Settings link), `many`
 //! (sixteen agents, so the list scrolls), `coordinator` (the New Coordinator form's agent step:
-//! titled, agents only, Grok highlighted with its weak-model warning). Every other state has no
-//! Run on row.
+//! titled, agents only, Grok highlighted with its weak-model warning), `projects-cloud` (the
+//! project list as on a Mac with a Windows machine that isn't connected, an Arch machine and Cloud
+//! Box on: logos in their columns, Ghostex with its own icon). Every other state has no Run on
+//! row.
 use super::new_thread_picker::*;
 use ghostex_gx_core::unified_sidebar::{UnifiedChoiceMachine, UnifiedProjectChoice};
 use gpui::{App, AppContext as _, Bounds, Entity, WindowHandle, point, px, size};
@@ -23,7 +25,7 @@ fn agent(light: bool, agent_id: &str, name: &str, icon: Option<&str>) -> NewThre
         Some("claude") => (Some("agent-icons/claude.svg"), 11.0, 0xd97757),
         Some("claude-cloud") => (Some("agent-icons/claude-cloud.svg"), 13.0, 0xd67556),
         Some("cursor-cli") => (Some("agent-icons/cursor-cli.svg"), 11.5, 0xedecec),
-        Some("grok-build") => (Some("agent-icons/grok-build.svg"), 11.5, 0xffffff),
+        Some("grok-build") => (Some("agent-icons/grok-build.svg"), 11.0, 0xffffff),
         Some("hermes-agent") => (Some("agent-icons/hermes-agent.svg"), 11.5, 0xf3c46b),
         Some("pi") => (Some("agent-icons/pi.svg"), 10.5, 0xc8ff62),
         Some("omp") => (Some("agent-icons/omp.svg"), 11.5, 0xc8ff62),
@@ -149,7 +151,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     };
     let agents = if state == "many" {
         let mut agents = agents;
-        for name in ["Gemini", "Copilot", "Kiro", "Qoder", "Amp", "Droid"] {
+        for name in ["Copilot", "Kiro", "Qoder", "Amp", "Droid", "Kimi"] {
             agents.push(agent(light, &name.to_lowercase(), name, None));
         }
         agents
@@ -244,7 +246,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         _ => NewThreadPickerBoxes::Unknown,
     };
     // The Cloud Box chip shows with the boxes states (Cloud Boxes on).
-    let cloud_box = state.starts_with("boxes");
+    let cloud_box = state.starts_with("boxes") || state == "projects-cloud";
     // `places` and `projects` draw the project row and machine chips (`projects` opens the list).
     let place = state.starts_with("places") || state.starts_with("projects");
     let run_on_shown = !place && (boxes.shows_run_on() || cloud_box);
@@ -271,7 +273,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         .map(|_| new_thread_picker_coordinator_height(agents.len()));
     let config = NewThreadPickerConfig {
         coordinator,
-        place: place.then(|| demo_place(state == "projects-long")),
+        place: place.then(|| demo_place(&state)),
         palette: demo.palette,
         agents: agents.clone(),
         agents_loaded: state != "loading",
@@ -351,8 +353,82 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     }
 }
 
+/// The `projects-cloud` list: the projects of a Mac, a Windows machine that isn't connected and an
+/// Arch machine, Ghostex with its own icon.
+fn demo_cloud_place() -> NewThreadPickerPlace {
+    use base64::Engine as _;
+    let machine = |id: &str, connected: bool| UnifiedChoiceMachine {
+        machine_id: id.to_string(),
+        label: match id {
+            "local" => "Local",
+            "windows" => "Windows",
+            _ => "m7-arch",
+        }
+        .to_string(),
+        connected,
+        project_id: format!("{id}-project"),
+    };
+    let project = |label: &str, detail: Option<&str>, recent: bool, ids: &[&str], selected| {
+        UnifiedProjectChoice {
+            repo_key: format!("github.com/maddada/{label}"),
+            label: label.to_string(),
+            has_sessions: true,
+            recent,
+            machines: ids.iter().map(|id| machine(id, *id != "windows")).collect(),
+            selected,
+            detail: detail.map(str::to_string),
+        }
+    };
+    let projects = vec![
+        project(
+            "Ghostex",
+            Some("maddada/ghostex"),
+            true,
+            &["local", "windows", "arch"],
+            2,
+        ),
+        project("madda", None, true, &["local", "windows", "arch"], 0),
+        project("AnyAppAgent", None, true, &["windows"], 0),
+        project("ghostex", Some("no remote"), true, &["local", "windows"], 0),
+        project("openusage", None, true, &["local"], 0),
+        project(".hermes", None, false, &["local"], 0),
+        project("2026-06-29", None, false, &["local"], 0),
+        project("cua-driver", None, false, &["local", "arch"], 0),
+    ];
+    let mark = |id: &str, asset: &'static str, name: &str| NewThreadPickerMark {
+        machine_id: id.to_string(),
+        asset,
+        name: name.to_string(),
+    };
+    let favicon = base64::engine::general_purpose::STANDARD.encode(include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../favicon.png"
+    )));
+    NewThreadPickerPlace {
+        projects,
+        project: 0,
+        machine: 2,
+        hotkey: Some("⌘N".to_string()),
+        marks: vec![
+            mark("local", "titlebar/brand-apple.svg", "MacBook Pro"),
+            mark("windows", "titlebar/brand-windows.svg", "Windows"),
+            mark("arch", "titlebar/brand-arch.svg", "m7-arch"),
+        ],
+        icons: [(
+            "github.com/maddada/Ghostex".to_string(),
+            format!("data:image/png;base64,{favicon}"),
+        )]
+        .into_iter()
+        .collect(),
+    }
+}
+
 /// Three projects on three machines, one machine not connected, for the `places` states.
-fn demo_place(long: bool) -> NewThreadPickerPlace {
+fn demo_place(state: &str) -> NewThreadPickerPlace {
+    if state == "projects-cloud" {
+        return demo_cloud_place();
+    }
+    let long = state == "projects-long";
     let machine = |id: &str, label: &str, connected: bool, project: &str| UnifiedChoiceMachine {
         machine_id: id.to_string(),
         label: label.to_string(),
@@ -418,5 +494,7 @@ fn demo_place(long: bool) -> NewThreadPickerPlace {
         project: 1,
         machine: 1,
         hotkey: Some("⌘N".to_string()),
+        marks: Vec::new(),
+        icons: Default::default(),
     }
 }

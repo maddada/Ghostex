@@ -49,6 +49,18 @@ async fn handle_http_request_inner(
         .get::<SocketAddr>()
         .map(|address| address.ip().to_string());
     let headers = request.headers().clone();
+    /*
+    CDXC:Docs 2026-11-14 DECISION:
+    A file link (`/open-file/`) answers with its own cross-origin rule (fonts and, by the user's
+    choice Q3119, `.js` and `.mjs` files so module scripts keep loading; file_links/serve.rs), never
+    the API's: the API lets the `null` origin read it for the app's own file:// pages, and an HTML
+    or Markdown page served from a link runs in a sandbox whose origin is `null` too, so it could
+    otherwise read every file of the link's folder.
+    */
+    let file_link = request
+        .uri()
+        .path()
+        .starts_with(crate::file_links::FILE_LINK_ROUTE_PREFIX);
     let request_id = request_id(&headers);
     let gzip_wanted = super::link_compression::wants_gzip(&headers);
     // Who asked, for the security log (server/src/audit/caller.rs).
@@ -65,7 +77,9 @@ async fn handle_http_request_inner(
         Box::pin(route_http(state.clone(), request, request_id)),
     )
     .await;
-    apply_cors_headers(&headers, &mut routed.response, &state.config);
+    if !file_link {
+        apply_cors_headers(&headers, &mut routed.response, &state.config);
+    }
     let status = routed.response.status().as_u16();
     let mut details = json!({
         "method": "http",
@@ -75,6 +89,11 @@ async fn handle_http_request_inner(
     if let Some(size) = routed.response.extensions().get::<BodySizeLimit>() {
         details["requestBytes"] = json!(size.size_bytes);
         details["limitBytes"] = json!(size.limit_bytes);
+    }
+    if let Some(failure) = routed.response.extensions().get::<BodyReadFailure>() {
+        details["errorCode"] = json!(failure.code);
+        details["receivedBytes"] = json!(failure.received_bytes);
+        details["declaredBytes"] = json!(failure.declared_bytes);
     }
     if let Some(size) = routed.response.extensions().get::<ImageSizeLimit>() {
         details["imageBytes"] = json!(size.size_bytes);

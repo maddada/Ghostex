@@ -57,7 +57,7 @@ fn demo_chat(agent: &str) -> &'static [(&'static str, &'static str)] {
             ),
         ],
         "cursor" => &[("bot", "Ready when you are.")],
-        _ => &[("bot", "Gemini CLI and OpenCode are ready in this project.")],
+        _ => &[("bot", "Copilot and OpenCode are ready in this project.")],
     }
 }
 

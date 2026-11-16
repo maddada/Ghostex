@@ -280,7 +280,10 @@ impl AgentsTab {
             .as_deref()
             .and_then(|hook| status.and_then(|status| status.item(hook)));
         let pending = loading && status.is_none();
-        let expanded = self.expanded.contains(&agent_id);
+        let expanded = self.expanded.contains(&agent_id)
+            || (self.search_opens_claude
+                && agent.is_default
+                && agent_id == super::claude_context::CLAUDE_AGENT_ID);
         let cli_agent = self.cli_agent_id(agent);
         let name = agent.name.clone();
         let grip = reorder_handle(

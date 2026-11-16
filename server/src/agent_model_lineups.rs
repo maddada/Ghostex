@@ -22,25 +22,24 @@ use std::{
 
 use serde_json::{json, Value};
 
-/// The agents whose lineup comes from their CLI.
-pub(crate) const RUNTIME_AGENTS: [&str; 5] = ["antigravity", "codex", "cursor", "grok", "opencode"];
+/// The agents whose lineup comes from their CLI. Claude Code's, Cursor's and Antigravity's also read
+/// the CLI's `/model` picker (`agent_model_pickers.rs`).
+pub(crate) const RUNTIME_AGENTS: [&str; 6] = [
+    "antigravity",
+    "claude",
+    "codex",
+    "cursor",
+    "grok",
+    "opencode",
+];
 const READ_TIMEOUT: Duration = Duration::from_secs(45);
 /// Every effort the three CLIs name, lowest first.
 const EFFORT_RANK: [&str; 8] = [
     "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra",
 ];
 
-/// CDXC:AgentProviders 2026-10-17 DECISION:
-/// User: GPT-5.6 Terra stays out of Codex's list ("Nobody is going to use that one"), and Cursor's Opus 5 and Sonnet 5 stay out now that Opus 5.5 and Sonnet 5.5 replace them, even though the CLIs still list all three.
-const EXCLUDED: [(&str, &str); 3] = [
-    ("codex", "gpt-5.6-terra"),
-    ("cursor", "claude-opus-5"),
-    ("cursor", "claude-sonnet-5"),
-];
-
-fn excluded(agent: &str, value: &str) -> bool {
-    EXCLUDED.contains(&(agent, value))
-}
+/// CDXC:AgentProviders 2026-11-13 DECISION:
+/// User (Q2984): GPT-5.6 Terra (Codex) and Opus 5 and Sonnet 5 (Cursor), kept out since 2026-10-17, are listed again, under Legacy models, so the menu matches the CLI's own /model row for row. Nothing is excluded any more.
 
 fn rank(effort: &str) -> usize {
     EFFORT_RANK
@@ -56,10 +55,16 @@ fn ranked(mut efforts: Vec<String>) -> Vec<String> {
 }
 
 /// Asks the agent's CLI for its lineup, as a catalog agent entry; `None` while the CLI is missing,
-/// logged out, or prints no model.
-pub(crate) fn read_lineup(agent: &str) -> Option<Value> {
+/// logged out, or prints no model. `cache_dir` keeps the picker reads (one per CLI version).
+pub(crate) fn read_lineup(agent: &str, cache_dir: &std::path::Path) -> Option<Value> {
     if agent == "opencode" {
         return opencode_lineup();
+    }
+    let home = crate::resume_lookup::home_dir();
+    if agent == "claude" {
+        let picker = crate::agent_model_pickers::picker_rows(agent, &home, cache_dir)?;
+        let published = crate::agent_model_catalog::published_agent(agent)?;
+        return crate::agent_model_pickers::claude_lineup(&picker, &published);
     }
     let (command, args): (&str, &[&str]) = match agent {
         "antigravity" => ("agy", &["models"]),
@@ -68,7 +73,6 @@ pub(crate) fn read_lineup(agent: &str) -> Option<Value> {
         "grok" => ("grok", &["models"]),
         _ => return None,
     };
-    let home = crate::resume_lookup::home_dir();
     let program = crate::agent_hooks::probing::resolve_probe_command(command, &home)?;
     let process = lineup_command(agent, program, args, &home);
     let output = run_to_end(process)?;
@@ -78,6 +82,21 @@ pub(crate) fn read_lineup(agent: &str) -> Option<Value> {
         "grok" => grok_lineup(&output, &home),
         _ => cursor_lineup(&output),
     }?;
+    // Cursor's and Antigravity's lists differ from their pickers in order and rows (Q2983, Q2986).
+    let entry = match agent {
+        "cursor" | "antigravity" => {
+            match crate::agent_model_pickers::picker_rows(agent, &home, cache_dir) {
+                Some(picker) => crate::agent_model_pickers::order_by_picker(
+                    agent,
+                    entry,
+                    &picker,
+                    crate::agent_model_catalog::published_agent(agent).as_ref(),
+                ),
+                None => entry,
+            }
+        }
+        _ => entry,
+    };
     entry
         .get("models")
         .and_then(Value::as_array)
@@ -220,12 +239,19 @@ fn antigravity_lineup(output: &str) -> Option<Value> {
         if id.is_empty() || label.is_empty() {
             continue;
         }
-        let split = ["low", "medium", "high"].into_iter().find_map(|effort| {
-            let base = id.strip_suffix(&format!("-{effort}"))?;
-            let title = format!("{}{}", effort[..1].to_uppercase(), &effort[1..]);
-            let name = label.strip_suffix(&format!(" ({title})"))?;
-            Some((base, name, effort))
-        });
+        // Gemini 4 Hydrogen adds `-xhigh`, labelled "(XHigh)" (Antigravity 1.5.6).
+        let split = ["low", "medium", "high", "xhigh"]
+            .into_iter()
+            .find_map(|effort| {
+                let base = id.strip_suffix(&format!("-{effort}"))?;
+                let title = if effort == "xhigh" {
+                    "XHigh".to_string()
+                } else {
+                    format!("{}{}", effort[..1].to_uppercase(), &effort[1..])
+                };
+                let name = label.strip_suffix(&format!(" ({title})"))?;
+                Some((base, name, effort))
+            });
         let (base, name, effort) = split.map_or((id, label, None), |(base, name, effort)| {
             (base, name, Some(effort))
         });
@@ -302,9 +328,6 @@ fn codex_lineup(output: &str) -> Option<Value> {
         .into_iter()
         .filter_map(|model| {
             let value = model.get("slug")?.as_str()?;
-            if excluded("codex", value) {
-                return None;
-            }
             let efforts: Vec<String> = model
                 .get("supported_reasoning_levels")
                 .and_then(Value::as_array)
@@ -549,7 +572,6 @@ fn cursor_lineup(output: &str) -> Option<Value> {
     }
     let rows = models
         .into_iter()
-        .filter(|model| !excluded("cursor", &model.base))
         .map(|model| {
             let has_efforts = model
                 .variants

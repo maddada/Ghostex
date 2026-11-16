@@ -31,8 +31,9 @@ use crate::workspace_groups::{SessionGroupOp, SessionGroupRequest};
 /// The tabs `ghostex settings open --tab` may name, each a `SettingsTabId` id
 /// (apps/desktop/src/app/window/settings_modal/model.rs). Keep in lockstep with
 /// `SETTINGS_MODAL_TABS` in server/src/ghostex_cli/settings.rs, which checks `--tab` first.
-pub const SETTINGS_MODAL_TABS: [&str; 29] = [
+pub const SETTINGS_MODAL_TABS: [&str; 30] = [
     "settings",
+    "experience",
     "chat",
     "sidebar",
     "terminal",
@@ -123,6 +124,15 @@ pub enum RendererVerb {
     UpdateSettingsPatch {
         patch: Map<String, Value>,
         keys: Vec<String>,
+    },
+    /// `addRemoteMachine`: gxserver paired this computer with another through Easy Connect for
+    /// Connect both ways (server/src/remote_access/connect_back.rs); the app adds that computer
+    /// to its saved computers, or updates the one with the same address.
+    AddRemoteMachine {
+        name: String,
+        easy_connect_address: String,
+        ssh_user: String,
+        ssh_port: u16,
     },
     /// `ghostex settings open`.
     OpenSettings {
@@ -247,6 +257,28 @@ pub fn plan_renderer_command(
         "readResourcesSnapshot" => Ok(RendererVerb::ReadResourcesSnapshot),
         "readFocusedSession" => Ok(RendererVerb::ReadFocusedSession),
         "updateSettingsPatch" => settings_patch(payload),
+        "addRemoteMachine" => {
+            let name = trimmed(payload, "name");
+            let address = trimmed(payload, "easyConnectAddress");
+            let user = trimmed(payload, "sshUser");
+            let port = payload
+                .get("sshPort")
+                .and_then(Value::as_u64)
+                .and_then(|port| u16::try_from(port).ok())
+                .filter(|port| *port > 0)
+                .unwrap_or(22);
+            match (name, address, user) {
+                (Some(name), Some(easy_connect_address), Some(ssh_user)) => {
+                    Ok(RendererVerb::AddRemoteMachine {
+                        name,
+                        easy_connect_address,
+                        ssh_user,
+                        ssh_port: port,
+                    })
+                }
+                _ => Err(RendererCommandError::Unsupported),
+            }
+        }
         "openSettings" => {
             let tab = trimmed(payload, "tab").unwrap_or_else(|| "settings".to_string());
             if !SETTINGS_MODAL_TABS.contains(&tab.as_str()) {
@@ -430,6 +462,10 @@ pub fn settings_patch_value_allowed(key: &str, value: &Value) -> bool {
         Value::Number(number) => number.as_f64().is_some_and(f64::is_finite),
         Value::Object(hotkeys) if key == "hotkeys" => {
             hotkeys.len() <= SETTINGS_PATCH_MAX_HOTKEYS && hotkeys.values().all(Value::is_string)
+        }
+        // The theme roles `ghostex theme set` saves whole (settings-catalog theme_roles.rs).
+        Value::Object(_) if key == ghostex_settings_catalog::theme_roles::THEME_ROLES_SETTING => {
+            ghostex_settings_catalog::theme_roles::theme_roles_value_allowed(value)
         }
         // CDXC:SettingsSync 2026-11-12 WHY: Sidebar organization carries the sidebar's two list
         // settings (gx-core settings_sync/settings_keys.rs), so they are the lists a patch takes.

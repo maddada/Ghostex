@@ -2,13 +2,14 @@
 //! Tree's options, the details panel, the new-bead form, the open menu, and every write. Drawing
 //! is in render.rs, tree.rs, details.rs, create.rs and menus.rs.
 //!
-//! CDXC:ProjectBoard 2026-11-11 DECISION:
-//! User: the Kanban view becomes the Beads view in the right side panel, with a Tree | Board switch in its header. Tree is the default: every bead under its epic, "Needs a decision" pinned on top, filters All / Needs a decision / Ready / In progress / Blocked / Deferred, dense two-line rows. Board is the existing Kanban board, muted to match Tree. Tapping a bead opens its details beside the tree, never over it; ✕ or Escape closes them. From the view a bead can be created (alone or as a child of an epic), claimed, closed, reopened, deferred and brought back, given a priority and labels, and commented on; decisions can be answered; Pull and Push sync. Starting an agent from a bead stays on the Board only.
+//! CDXC:ProjectBoard 2026-11-13 DECISION:
+//! User: the Kanban view becomes the Beads view in the right side panel, with a Tree | Board switch in its header. Tree is the default: every bead under its epic, "Needs a decision" pinned on top, filters All / Needs a decision / Ready / In progress / Blocked / Deferred, dense two-line rows. Board is the existing Kanban board, muted to match Tree. Tapping a bead opens its details beside the tree when the panel is wide, never over it, with a divider between them that can be dragged; in the panel's usual narrow width (below about 760px) the details and the New bead form take the whole panel instead, with a back bar, and ✕, ← or Escape return to the tree. From the view a bead can be created (alone or as a child of an epic), claimed, closed, reopened, deferred and brought back, given a priority, labels and links, and commented on; decisions can be answered; Pull and Push sync. Starting an agent from a bead stays on the Board only. This supersedes the 2026-11-11 wording that always put the details beside the tree.
 //! SEE-ALSO: server/src/beads_view/ (the snapshot and the cache), packages/gx-core/src/beads_view/ (the Tree's rules), apps/desktop/src/app/native_beads/host.rs (the app's side).
 
 use std::rc::Rc;
 use std::time::Duration;
 
+use ghostex_gx_core::MachineId;
 use ghostex_gx_core::beads_view::{
     BeadAgentSession, BeadAgents, BeadsClock, BeadsFilter, BeadsSort, BeadsTreeModel,
     BeadsTreeOptions, bead_agents, build_tree,
@@ -63,19 +64,61 @@ impl BeadsLayout {
     }
 }
 
-/// The project the view shows.
+/// The project the view shows, resolved from the same board context the Board uses
+/// (`native_kanban_bridge_context`), so Tree and Board always read the same project.
 #[derive(Clone)]
 pub(crate) struct BeadsTarget {
-    /// The store's scoped id (`remote:<machine>:<id>` for a remote project).
+    /// The store's scoped id (`remote:<machine>:project:<id>` for a remote project).
     pub(crate) project_key: String,
     pub(crate) rpc_project_id: String,
     pub(crate) project_path: String,
+    /// The computer that owns the project.
+    pub(crate) machine: MachineId,
     pub(crate) remote: Option<GpuiRemoteGxserverRequestTarget>,
+    /// A remote project whose computer has no connection right now. Its `remote` is `None`, which
+    /// would otherwise mean "this computer", so such a target is never used for a call
+    /// (`BeadsView::rpc_target`) and the view says the computer is not connected.
+    pub(crate) offline: bool,
 }
 
+impl std::fmt::Debug for BeadsTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BeadsTarget")
+            .field("project_key", &self.project_key)
+            .field("machine", &self.machine)
+            .finish_non_exhaustive()
+    }
+}
+
+impl BeadsTarget {
+    /// The project fields every Tree read and write sends, the same ones the Board sends.
+    pub(crate) fn rpc_params(&self) -> Value {
+        json!({
+            "projectId": self.rpc_project_id,
+            "projectPath": self.project_path,
+            "projectBoardScope": true,
+        })
+    }
+}
+
+/// Machine, project, folder, whether that computer is reachable, and the route to it (its tunnel's
+/// port and token): a change in any of them is another
+/// target, so the view starts over and menus opened for the old one never run.
 impl PartialEq for BeadsTarget {
     fn eq(&self, other: &Self) -> bool {
-        self.project_key == other.project_key && self.rpc_project_id == other.rpc_project_id
+        self.project_key == other.project_key
+            && self.rpc_project_id == other.rpc_project_id
+            && self.project_path == other.project_path
+            && self.machine == other.machine
+            && self.offline == other.offline
+            && self
+                .remote
+                .as_ref()
+                .map(|remote| (remote.local_port, remote.token.as_str()))
+                == other
+                    .remote
+                    .as_ref()
+                    .map(|remote| (remote.local_port, remote.token.as_str()))
     }
 }
 
@@ -101,6 +144,8 @@ pub(crate) enum BeadsRequest {
         session_id: String,
     },
     SaveLayout(BeadsLayout),
+    /// The details / New bead column's divider was dragged to this width.
+    SaveSideWidth(f32),
     /// The header's search, which the Board filters by too.
     Search(String),
     /// A write landed while the Board is shown: it reads Beads again (without its setup writes).
@@ -173,6 +218,12 @@ pub(crate) struct BeadsView {
     pub(crate) create_in_flight: bool,
     pub(crate) next_create_form_id: u64,
     pub(crate) hovered_row: Option<String>,
+    /// The details / New bead column's width beside the tree (wide layout), set by its divider.
+    pub(crate) side_width: f32,
+    /// A divider drag in progress: the pointer's x and the width when it started.
+    pub(crate) side_drag: Option<(f32, f32)>,
+    /// The narrow header's search field is open (its icon was pressed, or it holds a query).
+    pub(crate) search_open: bool,
     pub(crate) last_drawn: Option<Instant>,
     poll: Option<Task<()>>,
     /// The generation the running poll was started for; it stops itself when that moves on.
@@ -238,6 +289,9 @@ impl BeadsView {
             create_in_flight: false,
             next_create_form_id: 0,
             hovered_row: None,
+            side_width: super::layout::SIDE_DEFAULT_WIDTH,
+            side_drag: None,
+            search_open: false,
             last_drawn: None,
             poll: None,
             poll_generation: 0,
@@ -268,6 +322,14 @@ impl BeadsView {
             self.recompute_agents();
         }
         if self.target != target {
+            super::menus::menu_log(
+                "beadsView.targetReset",
+                json!({
+                    "from": self.target.as_ref().map(|target| target.project_key.clone()),
+                    "to": target.as_ref().map(|target| target.project_key.clone()),
+                    "menuOpen": self.menu.is_some(),
+                }),
+            );
             self.target = target;
             self.generation += 1;
             self.snapshot = None;
@@ -288,6 +350,12 @@ impl BeadsView {
         {
             self.start_polling(cx);
         }
+    }
+
+    /// The target calls may go to: `None` while there is none or its computer is not connected,
+    /// so a disconnected remote project never falls through to this computer's gxserver.
+    pub(crate) fn rpc_target(&self) -> Option<BeadsTarget> {
+        self.target.clone().filter(|target| !target.offline)
     }
 
     pub(crate) fn workspace_state(&self) -> Option<BeadsWorkspaceState> {
@@ -386,7 +454,7 @@ impl BeadsView {
     /// One `/api/beadsView` read (and the project records when they are due). `refresh` asks
     /// gxserver to look for the workspace again (the header's Refresh).
     pub(crate) fn fetch_now(&mut self, refresh: bool, cx: &mut Context<Self>) -> Option<Task<()>> {
-        let target = self.target.clone()?;
+        let target = self.rpc_target()?;
         let generation = self.generation;
         let known_revision = if refresh {
             None
@@ -402,7 +470,7 @@ impl BeadsView {
         if self.snapshot.is_none() {
             self.loading = true;
         }
-        let mut params = json!({ "projectId": target.rpc_project_id });
+        let mut params = target.rpc_params();
         if let Some(revision) = known_revision {
             params["knownRevision"] = json!(revision);
         }
@@ -576,15 +644,31 @@ impl BeadsView {
         cx: &mut Context<Self>,
         done: impl FnOnce(&mut Self, &Value, &mut Window, &mut Context<Self>) + 'static,
     ) {
-        let Some(target) = self.target.clone() else {
+        let Some(target) = self.rpc_target() else {
             return;
         };
         let generation = self.generation;
         let mut params = params;
-        params["projectId"] = json!(target.rpc_project_id);
-        params["projectPath"] = json!(target.project_path);
-        params["projectBoardScope"] = json!(true);
-        let is_create = params.get("action").and_then(Value::as_str) == Some("create");
+        if let (Some(params), Value::Object(scope)) = (params.as_object_mut(), target.rpc_params())
+        {
+            params.extend(scope);
+        }
+        // The workspace this write is meant for; gxserver refuses it if the project now points
+        // at another one (an older gxserver ignores the field).
+        if let Some(key) = self
+            .snapshot
+            .as_ref()
+            .map(|snapshot| snapshot.workspace.key.clone())
+            .filter(|key| !key.is_empty())
+        {
+            params["expectedWorkspaceKey"] = json!(key);
+        }
+        let action = params
+            .get("action")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let is_create = action == "create";
         self.writes_in_flight += 1;
         self.create_in_flight |= is_create;
         self.notice = None;
@@ -592,6 +676,14 @@ impl BeadsView {
         let window_handle = window.window_handle();
         cx.spawn(async move |this, cx| {
             let answer = gx_rpc(target.remote.clone(), "/api/runBeadsAction", params).await;
+            super::menus::menu_log(
+                "beadsView.writeResult",
+                json!({
+                    "action": action,
+                    "ok": answer.as_ref().is_ok_and(|reply| reply.get("exitCode").and_then(Value::as_i64) == Some(0)),
+                    "generation": generation,
+                }),
+            );
             let _ = cx.update_window(window_handle, |_, window, cx| {
                 let _ = this.update(cx, |this, cx| {
                     this.writes_in_flight = this.writes_in_flight.saturating_sub(1);

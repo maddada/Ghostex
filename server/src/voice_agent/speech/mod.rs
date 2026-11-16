@@ -1,4 +1,4 @@
-//! Dictate's engines: Hex 3 on this computer (`hex`), the per-computer settings (`settings`,
+//! Dictate's engines: Hex 3 on this computer (`hex`), Superwhisper on Linux (`superwhisper`), the per-computer settings (`settings`,
 //! `dictate`, `languages`), what is left of the retired local engine (`retired`) and their API
 //! (`http`).
 
@@ -8,6 +8,7 @@ mod http;
 mod languages;
 pub(super) mod retired;
 pub(super) mod settings;
+pub(super) mod superwhisper;
 
 #[cfg(test)]
 mod flow_tests;

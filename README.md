@@ -89,7 +89,7 @@
 
 <h3 align="center">🔀 Any agent, swap on&nbsp;the&nbsp;fly</h3>
 
-<p align="center">Claude Code, Codex, OpenCode, Pi, Gemini, Grok, Cursor, and more. Pick the model and effort from the chat box, or hand a session from one agent to&nbsp;another&nbsp;mid‑task.</p>
+<p align="center">Claude Code, Codex, OpenCode, Pi, Antigravity, Grok, Cursor, and more. Pick the model and effort from the chat box, or hand a session from one agent to&nbsp;another&nbsp;mid‑task.</p>
 
 <p align="center"><img src="media/readme/gx-agent-picker.png" alt="The model picker switching between agents" width="70%" /></p>
 
@@ -154,7 +154,6 @@ Works with **any coding agent**. Bring the one you already use.
   <a href="https://opencode.ai"><kbd><img src="https://www.google.com/s2/favicons?domain=opencode.ai&sz=64" alt="" width="16" valign="middle" /> OpenCode</kbd></a> &nbsp;
   <a href="https://pi.dev"><kbd><img src="https://pi.dev/favicon.svg" alt="" width="16" valign="middle" /> Pi</kbd></a> &nbsp;
   <a href="https://omp.sh"><kbd><img src="https://omp.sh/favicon.svg" alt="" width="16" valign="middle" /> oh-my-pi</kbd></a> &nbsp;
-  <a href="https://github.com/google-gemini/gemini-cli"><kbd><img src="https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64" alt="" width="16" valign="middle" /> Gemini CLI</kbd></a> &nbsp;
   <a href="https://x.ai/cli"><kbd><img src="https://www.google.com/s2/favicons?domain=x.ai&sz=64" alt="" width="16" valign="middle" /> Grok</kbd></a> &nbsp;
   <a href="https://cursor.com/cli"><kbd><img src="https://www.google.com/s2/favicons?domain=cursor.com&sz=64" alt="" width="16" valign="middle" /> Cursor</kbd></a> &nbsp;
   <a href="https://github.com/features/copilot/cli"><kbd><img src="https://www.google.com/s2/favicons?domain=github.com&sz=64" alt="" width="16" valign="middle" /> Copilot CLI</kbd></a> &nbsp;

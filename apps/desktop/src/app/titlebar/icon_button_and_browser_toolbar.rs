@@ -22,8 +22,8 @@ use gpui::Styled as _;
 use gpui::div;
 use gpui::prelude::FluentBuilder as _;
 use gpui::px;
-use gpui::rgb;
 use gpui_component::h_flex;
+use gpui_component::tooltip::{ManagedTooltipExt as _, ManagedTooltipPlacement};
 
 use crate::app::consts::*;
 use crate::app::helpers::*;
@@ -53,19 +53,31 @@ impl GhostexGpuiApp {
         The Browser feedback toolbar starts Agentation through CEF main-frame JavaScript injection. Keep github.com and *.github.com disabled before injection, and keep the toolbar surface status private by showing only bounded page-data-free notifications for missing CEF surfaces or frames.
         */
         let address_value = self.browser_tabs.address_value_for_pane(pane_id);
-        let remote_machine_name = self
+        /*
+        CDXC:Browser 2026-11-15 DECISION:
+        User (of the "From this computer" chip): "please just show the icon of the machine here,
+        don't show this text. tooltip should say the machine's name". A remote project's Browser
+        shows only the logo of the computer the page loads from (the remote's while the page goes
+        through it or has no page yet, this computer's while it opens from here, helpers/remote/
+        browser_route.rs), a cloud for a Cloud Box, and the computer's name as its tooltip.
+        */
+        let route_mark = self
             .browser_tabs
             .active_tab_for_pane(pane_id)
-            .and_then(|tab| tab.remote_machine_id.as_deref())
-            .map(|id| {
-                gpui_remote_machine_name_from_settings(id)
-                    .unwrap_or_else(|| "Remote computer".into())
+            .and_then(|tab| Some((tab.remote_machine_id.as_deref()?, tab.url.as_str())))
+            .map(|(id, url)| {
+                let from_this_computer = gpui_remote_browser_route_for_machine(id)
+                    .url_goes_through_machine(url)
+                    == Some(false);
+                self.browser_source_mark(if from_this_computer { None } else { Some(id) })
             });
         let feedback_tool_unavailable = browser_feedback_tool_unavailable_url(&address_value);
-        let feedback_tooltip = if feedback_tool_unavailable {
-            BROWSER_FEEDBACK_TOOL_UNAVAILABLE_TOOLTIP
+        let feedback_tooltip: gpui::SharedString = if feedback_tool_unavailable {
+            BROWSER_FEEDBACK_TOOL_UNAVAILABLE_TOOLTIP.into()
         } else {
-            BROWSER_FEEDBACK_TOOL_AGENTATION_LABEL
+            // The Annotate hotkey toggles it too (CDXC:Docs 2026-11-14 DECISION in
+            // packages/settings-catalog/src/hotkey_definitions.rs).
+            titlebar_tooltip_label(BROWSER_FEEDBACK_TOOL_AGENTATION_LABEL, "toggleAnnotate")
         };
         let (is_loading, runtime_can_go_back, runtime_can_go_forward) = self
             .browser_tabs
@@ -127,27 +139,23 @@ impl GhostexGpuiApp {
             .bg(browser_toolbar_background())
             .border_b_1()
             .border_color(chrome_color(0x252525, 0xd4d4d4))
-            .when_some(remote_machine_name, |bar, name| {
+            .when_some(route_mark, |bar, mark| {
+                let tooltip: gpui::SharedString = mark.name.into();
                 bar.child(
                     h_flex()
-                        .max_w(px(160.0))
+                        .id(format!("ghostex-gpui-browser-route-chip-{}", pane_id.0))
+                        .managed_tooltip_with_placement(
+                            ManagedTooltipPlacement::Below,
+                            move |window, cx| titlebar_tooltip(tooltip.clone(), window, cx),
+                        )
                         .flex_shrink_0()
                         .px(px(9.0))
-                        .gap(px(5.0))
                         .items_center()
                         .child(
                             svg()
-                                .path(BROWSER_ICON_WORLD)
-                                .size(px(13.0))
-                                .text_color(rgb(0x7acb9d)),
-                        )
-                        .child(
-                            div()
-                                .min_w_0()
-                                .truncate()
-                                .text_size(px(11.0))
-                                .text_color(chrome_color(0xb7b7b7, 0x525252))
-                                .child(name),
+                                .path(mark.asset)
+                                .size(px(14.0))
+                                .text_color(chrome_color(0xb7b7b7, 0x525252)),
                         ),
                 )
             })
@@ -230,7 +238,7 @@ impl GhostexGpuiApp {
                         "agentation",
                         BROWSER_ICON_POINTER,
                         !feedback_tool_unavailable,
-                        Some(feedback_tooltip.into()),
+                        Some(feedback_tooltip),
                         BrowserToolbarAction::FeedbackTool,
                         pane_id,
                         cx,

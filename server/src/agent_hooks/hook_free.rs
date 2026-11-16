@@ -272,7 +272,7 @@ mod tests {
             assert!(hook_free_with(false, agent, None), "{agent}");
             assert!(!hook_free_with(true, agent, None), "{agent}");
         }
-        for agent in ["pi", "cursor", "gemini", "omp"] {
+        for agent in ["pi", "cursor", "omp"] {
             assert!(!hook_free_with(false, agent, None), "{agent}");
         }
     }

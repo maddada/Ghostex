@@ -46,4 +46,7 @@ if [[ "${GHOSTEX_LOCAL_START:-0}" == "1" ]]; then
 fi
 
 cd "$GPUI_DIR"
+# The component signing key (release workflows set it on the steps that publish components) never
+# reaches cargo, build scripts or the compiler wrapper.
+unset GHOSTEX_COMPONENT_SIGNING_KEY
 exec cargo "${cargo_args[@]}"

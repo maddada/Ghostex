@@ -44,12 +44,11 @@ pub(super) fn run_button(
 
 /// The look an inline command span keeps once it is a link: the transcript's inline code chip, and
 /// the bar of Copy and Paste in terminal at its bottom right corner while the pointer is on it, in
-/// the sidebar tooltip bubble's look (`in_window_bubble`, CDXC:Tooltips 2026-10-25). `None` for any
-/// other link.
+/// the chat right-click menu's look (`hover_bar_look`). `None` for any other link.
 ///
 /// CDXC:SessionChat 2026-11-13 DECISION: User: "For the ones we show next to a command, please make those appear on the bottom right of the terminal command box, not the top left like we do now." The bar hangs below the span, right-aligned to its right edge (above it, still right-aligned, only when the transcript has no room below); the gpui-component fork places it (`text/inline_link.rs`, `text/inline_flow.rs`).
 ///
-/// CDXC:Tooltips 2026-10-25 WHY: The bar is drawn by the transcript's text element inside the chat's own window, whose hover moves between the span and the bar; a frosted host window would take the pointer off the span and drop the bar, so it takes the bubble's in-window fill instead of the frosted host.
+/// CDXC:Tooltips 2026-10-25 WHY: The bar is drawn by the transcript's text element inside the chat's own window, whose hover moves between the span and the bar; a frosted host window would take the pointer off the span and drop the bar, so it takes the menu's in-window fill (`ChatMenuGlass::in_window`) instead of a frosted host.
 pub(super) fn inline_presentation(
     href: &str,
     label: &str,
@@ -89,23 +88,25 @@ pub(super) fn inline_presentation(
 }
 
 /// The look of an inline command's hover bar, which the transcript selection's bar shares
-/// (`selection_bar.rs`): the sidebar tooltip bubble's in-window fill and edge, and icon buttons.
+/// (`selection_bar.rs`): the chat right-click menu's material drawn in the chat's window
+/// (`ChatMenuGlass::in_window`, CDXC:SessionChat 2026-11-13), and icon buttons in the menu's ink.
 pub(super) fn hover_bar_look(p: &ChatAppearance) -> InlineLinkBar {
     let s = p.scale;
-    let bubble = crate::app::native_sidebar::link_chips::in_window_bubble(p.window_glass);
+    let glass = super::option_menu::ChatMenuGlass::in_window(p);
     InlineLinkBar {
-        background: bubble.fill,
-        border_color: bubble.border,
+        background: glass.fill,
+        border_color: glass.edge,
         border_width: px(1.0),
-        radius: px(gpui_component::tooltip::TOOLTIP_RADIUS * s),
+        radius: glass.radius,
         padding: px(2.0 * s),
         gap: px(2.0 * s),
         spacing: px(2.0 * s),
         button_size: px(22.0 * s),
         button_radius: px(6.0 * s),
-        button_hover_background: crate::app::helpers::titlebar_popup_menu_foreground().opacity(0.1),
+        button_hover_background: glass.hover,
         icon_size: px(14.0 * s),
-        icon_color: bubble.secondary,
+        icon_color: glass.ink,
+        shadow: Vec::new(),
     }
 }
 

@@ -220,6 +220,9 @@ impl GhostexGpuiApp {
             }
         }
 
+        // Sidebar extensions' web blocks close after the Project Auto Sleep time (extensions/web_blocks.rs).
+        slept |= self.sleep_hidden_extension_web_blocks(view_limit, cx);
+
         // The pages Keep views loaded holds close after their view's Auto Sleep time like any other
         // hidden page, Code's after VS Code's.
         let parked_before = self.parked_project_workarea_surfaces.len();

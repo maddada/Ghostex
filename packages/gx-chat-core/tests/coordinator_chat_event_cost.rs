@@ -136,6 +136,7 @@ fn coordinator_chat(turns: usize, items: usize) -> ChatState {
             coordinators: true,
             chats: false,
             expand_last: false,
+            calm: false,
         },
     );
     state

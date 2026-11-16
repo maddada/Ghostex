@@ -81,6 +81,7 @@ static LOGOS: &[(&str, &str, &str)] = &[
         "#ff7a1a",
         include_str!("../../../core-ui/assets/factory-droid.svg"),
     ),
+    // Not an agent since Gemini CLI was dropped (2026-11-13): the Gemini usage account's logo.
     (
         "gemini",
         "#8b9aff",

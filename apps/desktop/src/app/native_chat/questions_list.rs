@@ -611,6 +611,7 @@ impl NativeChatView {
         &self,
         id: &str,
         status: &str,
+        starred: bool,
         age: &str,
         buttons: Vec<(&'static str, Value, &'static str)>,
         group: SharedString,
@@ -644,6 +645,19 @@ impl NativeChatView {
                             this.group_hover(group.clone(), |style| style.opacity(0.0))
                         })
                         .child(label),
+                )
+            })
+            // A starred page's star (gx-chat-core questions/later.rs `starred_page_ids`).
+            .when(starred, |this| {
+                this.child(
+                    svg()
+                        .path("titlebar/star-filled.svg")
+                        .size(px(12.0 * s))
+                        .flex_shrink_0()
+                        .text_color(gpui::Hsla::from(gpui::rgb(super::page_card::STAR_YELLOW)))
+                        .when(hide_for_buttons, |this| {
+                            this.group_hover(group.clone(), |style| style.opacity(0.0))
+                        }),
                 )
             })
             .when(!age.is_empty(), |this| {
@@ -690,7 +704,21 @@ impl NativeChatView {
         let age = row_age(row, crate::app::gx_chat::now_millis());
         let kind = text(row, "kind");
         let status = text(row, "status");
+        let starred = row["starred"] == true;
         let mut buttons: Vec<(&'static str, Value, &'static str)> = Vec::new();
+        // A page stars from its row (gx-chat-core questions/later.rs `starred_page_ids`).
+        if kind == "page" {
+            let (label, icon) = if starred {
+                ("Unstar page", "titlebar/star-filled.svg")
+            } else {
+                ("Star page", "titlebar/star.svg")
+            };
+            buttons.push((
+                label,
+                json!({"type": "pageStar", "id": id, "starred": !starred}),
+                icon,
+            ));
+        }
         if let Some((label, action)) = later_action(&status, &kind, &id) {
             buttons.push((label, action, later_icon(&status)));
         }
@@ -757,7 +785,7 @@ impl NativeChatView {
                         .child(thread),
                 )
             })
-            .child(self.row_trailing(&id, &status, &age, buttons, group, p, cx))
+            .child(self.row_trailing(&id, &status, starred, &age, buttons, group, p, cx))
             .on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
                 // A form or chart opens in the floating modal and the chat stays where it is; a

@@ -295,6 +295,7 @@ pub(crate) mod tests {
             screen_probed: Some(flag),
             agent_gone: Some(!flag),
             queue: Some(vec![json!(tag)]),
+            queue_version: Some(number as u64),
             draft: some(tag, "draft").map(Into::into),
             app_commands: Some(vec![json!(tag)]),
             returned_prompt: some(tag, "returnedPrompt"),
@@ -303,6 +304,7 @@ pub(crate) mod tests {
             side_chats: some(tag, "sideChats"),
             side_chat_of: some(tag, "sideChatOf"),
             secret_requests: some(tag, "secretRequests"),
+            needs_you: some(tag, "needsYou"),
             relayed_answers: some(tag, "relayedAnswers"),
             autopilot: some(tag, "autopilot"),
             collab: some(tag, "collab"),
@@ -322,8 +324,11 @@ pub(crate) mod tests {
             unavailable_modes: Some(vec![UnavailableMode {
                 value: "plan".into(),
                 why: tag.into(),
+                restart: None,
             }]),
             removed_question_ids: Some(vec![format!("removed {tag}")]),
+            retired_page_ids: Some(vec![format!("retired page {tag}")]),
+            starred_page_ids: Some(vec![format!("starred page {tag}")]),
             resource_index: Some(vec![json!(tag)].into()),
         };
         ReadSessionChatResult {
@@ -346,6 +351,7 @@ pub(crate) mod tests {
             send_on_pick: Some(true),
             answers_wait_for_idle: Some(false),
             all_orchestrator_efforts: Some(true),
+            varied_working_words: None,
             enabled_agent_icons: Some(vec!["claude".into()]),
             marked_heading_strength: Some(40.0),
             chat_text_strength: Some(72.5),
@@ -370,6 +376,7 @@ pub(crate) mod tests {
                 coordinators: Some(flag),
                 chats: Some(!flag),
                 expand_last: Some(true),
+                calm: Some(flag),
             }),
             status_line_pins: Some(
                 [(

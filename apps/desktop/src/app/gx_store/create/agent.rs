@@ -153,6 +153,7 @@ impl GhostexGpuiApp {
                 group_id,
                 None,
                 Some(run_location),
+                None,
                 cx,
             );
             return;
@@ -169,6 +170,21 @@ impl GhostexGpuiApp {
         account_id: Option<&str>,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.gx_store_request_agent_launch_with_draft(agent_id, group_id, account_id, None, cx);
+    }
+
+    /// [`Self::gx_store_request_agent_launch`] with text for the new agent's chat box (a sidebar
+    /// extension's `newAgent` action). The draft rides this launch alone, through the Hooks
+    /// Required dialog too, so a launch that stops early (the dialog closed, the agent missing)
+    /// takes it with it instead of leaving it for a later launch.
+    pub(crate) fn gx_store_request_agent_launch_with_draft(
+        &mut self,
+        agent_id: &str,
+        group_id: Option<&str>,
+        account_id: Option<&str>,
+        first_input_draft: Option<&str>,
+        cx: &mut gpui::Context<Self>,
+    ) {
         self.gx_store.create.counters.agent_launches += 1;
         let hud = self.gx_store_launch_hud();
         let normalized = agent_id.trim().to_string();
@@ -177,11 +193,25 @@ impl GhostexGpuiApp {
             .as_ref()
             .and_then(|agent| default_agent_id_for_icon(agent.icon.as_deref()));
         let (Some(agent), Some(hook_agent_id)) = (agent, hook_agent_id) else {
-            self.gx_store_launch_agent_from_sidebar(agent_id, group_id, account_id, None, cx);
+            self.gx_store_launch_agent_from_sidebar(
+                agent_id,
+                group_id,
+                account_id,
+                None,
+                first_input_draft,
+                cx,
+            );
             return;
         };
         if normalized.is_empty() || hook_agent_id == "zcode" {
-            self.gx_store_launch_agent_from_sidebar(agent_id, group_id, account_id, None, cx);
+            self.gx_store_launch_agent_from_sidebar(
+                agent_id,
+                group_id,
+                account_id,
+                None,
+                first_input_draft,
+                cx,
+            );
             return;
         }
         let remote = group_id
@@ -192,6 +222,7 @@ impl GhostexGpuiApp {
         let agent_id = agent_id.to_string();
         let group_id = group_id.map(str::to_string);
         let account_id = account_id.map(str::to_string);
+        let first_input_draft = first_input_draft.map(str::to_string);
         cx.spawn(async move |this, cx| {
             let answer = status.await;
             let _ = this.update(cx, |this, cx| {
@@ -236,6 +267,7 @@ impl GhostexGpuiApp {
                         group_id.as_deref(),
                         account_id.as_deref(),
                         None,
+                        first_input_draft.as_deref(),
                         cx,
                     );
                     return;
@@ -253,6 +285,9 @@ impl GhostexGpuiApp {
                 }
                 if let Some(account_id) = &account_id {
                     open["accountId"] = json!(account_id);
+                }
+                if let Some(draft) = &first_input_draft {
+                    open["firstInputDraft"] = json!(draft);
                 }
                 this.open_app_modal_from_bridge(open, cx);
             });
@@ -274,6 +309,7 @@ impl GhostexGpuiApp {
         };
         let group_id = text("groupId");
         let account_id = text("accountId");
+        let first_input_draft = text("firstInputDraft");
         let hud = self.gx_store_launch_hud();
         let agent_name = resolve_sidebar_agent(hud.as_deref(), &agent_id)
             .map(|agent| agent.name)
@@ -292,6 +328,7 @@ impl GhostexGpuiApp {
                 group_id.as_deref(),
                 account_id.as_deref(),
                 None,
+                first_input_draft.as_deref(),
                 cx,
             );
             return;
@@ -358,6 +395,7 @@ impl GhostexGpuiApp {
                     group_id.as_deref(),
                     account_id.as_deref(),
                     None,
+                    first_input_draft.as_deref(),
                     cx,
                 );
             });
@@ -408,10 +446,18 @@ impl GhostexGpuiApp {
         group_id: Option<&str>,
         account_id: Option<&str>,
         run_location: Option<&str>,
+        first_input_draft: Option<&str>,
         cx: &mut gpui::Context<Self>,
     ) {
-        self.gx_store_create_agent_session_at(agent_id, group_id, account_id, run_location, cx)
-            .detach();
+        self.gx_store_create_agent_session_at(
+            agent_id,
+            group_id,
+            account_id,
+            run_location,
+            first_input_draft,
+            cx,
+        )
+        .detach();
     }
 
     /// `createAgentSession(agentId, groupId = this.activeGroupId, accountId)`.
@@ -422,7 +468,7 @@ impl GhostexGpuiApp {
         account_id: Option<&str>,
         cx: &mut gpui::Context<Self>,
     ) -> gpui::Task<Result<(), String>> {
-        self.gx_store_create_agent_session_at(agent_id, group_id, account_id, None, cx)
+        self.gx_store_create_agent_session_at(agent_id, group_id, account_id, None, None, cx)
     }
 
     /// `createAgentSession` on this computer or, with `run_location`, in an agentbox box: gxserver
@@ -434,6 +480,7 @@ impl GhostexGpuiApp {
         group_id: Option<&str>,
         account_id: Option<&str>,
         run_location: Option<&str>,
+        first_input_draft: Option<&str>,
         cx: &mut gpui::Context<Self>,
     ) -> gpui::Task<Result<(), String>> {
         let group_id = group_id
@@ -509,13 +556,16 @@ impl GhostexGpuiApp {
             .gx_store_bot_name(&project_id, &agent.agent_id)
             .unwrap_or_else(|| agent.name.clone());
         let title = agent_session_default_title(Some(&title_name));
-        let params = with_moved_draft_text(
+        let mut params = with_moved_draft_text(
             replacing_empty_sessions(with_run_location(
                 local_agent_launch_params(&agent, &project_id, title_settings, account_id, &title),
                 run_location,
             )),
             &draft_move,
         );
+        if let Some(draft) = first_input_draft.filter(|draft| !draft.trim().is_empty()) {
+            params["runtimeSettings"]["firstUserInputDraft"] = json!(draft);
+        }
         let preferred_interface = if is_agentbox_run_location(run_location) {
             "terminal".to_string()
         } else {
@@ -700,14 +750,14 @@ impl GhostexGpuiApp {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 const HOOKS_DECLINED_DETAIL: &str = "Ghostex won't ask again when it starts. Install them in Settings > Agents for Chat View, resuming and the working and done indicators.";
-#[cfg(target_arch = "wasm32")]
+#[cfg(ghostex_web)]
 const HOOKS_DECLINED_DETAIL: &str = "Install and approve the hooks in order for Chat View to work correctly. Resuming and working/done indicators also require hooks.";
 
 /// Whether the Connect dialog for this agent was answered Not now on this computer. The web build
 /// (apps/gpui-web compiles this file) keeps no such memory and always asks.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 fn agent_hooks_declined(hook_agent_id: &str) -> bool {
     crate::app::helpers::load_gpui_first_run_onboarding_state()
         .agent_hooks_declined
@@ -715,13 +765,13 @@ fn agent_hooks_declined(hook_agent_id: &str) -> bool {
         .any(|id| id == hook_agent_id)
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(ghostex_web)]
 fn agent_hooks_declined(_hook_agent_id: &str) -> bool {
     false
 }
 
 /// Not now in the Connect dialog is remembered for that agent, and installing forgets it.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 fn remember_agent_hooks_answer(hook_agent_id: &str, install_hooks: bool) {
     use crate::app::helpers::{
         load_gpui_first_run_onboarding_state, persist_gpui_first_run_onboarding_state,
@@ -740,5 +790,5 @@ fn remember_agent_hooks_answer(hook_agent_id: &str, install_hooks: bool) {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(ghostex_web)]
 fn remember_agent_hooks_answer(_hook_agent_id: &str, _install_hooks: bool) {}

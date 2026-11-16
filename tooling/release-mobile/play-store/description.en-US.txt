@@ -1,6 +1,6 @@
 Ghostex puts the coding agents running on your computer in your pocket. Watch them work, answer their questions, approve their next step and start new work, wherever you are.
 
-This app is the companion to Ghostex, the free desktop workspace for command-line coding agents such as Claude Code, Codex, OpenCode and Gemini CLI. It connects to Ghostex on your own Mac, Windows or Linux computer, so install Ghostex there first: ghostex.dev.
+This app is the companion to Ghostex, the free desktop workspace for command-line coding agents such as Claude Code, Codex, OpenCode and Cursor. It connects to Ghostex on your own Mac, Windows or Linux computer, so install Ghostex there first: ghostex.dev.
 
 WATCH AND REPLY TO SESSIONS
 • Every agent session on every connected computer, grouped by project, with live status: working, done, or waiting for you.

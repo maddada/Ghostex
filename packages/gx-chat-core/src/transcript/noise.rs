@@ -715,13 +715,40 @@ fn harness_injected_turn_label(text: &str) -> Option<String> {
         .map(|(_, label)| (*label).to_string())
 }
 
-/// Also Claude's idle compaction notice ("Compacted while idle, before the prompt cache expired"),
-/// which gxserver keeps as a system row (`claude_idle_compaction_notice`).
+/// How Claude's idle compaction notice starts ("Compacted while idle, before the prompt cache
+/// expired · turn off with "idleCompaction": false in settings.json").
+const IDLE_COMPACTION_PREFIX: &str = "Compacted while idle";
+
+/// Also Claude's idle compaction notice, which gxserver keeps as a system row
+/// (`claude_idle_compaction_notice`).
 fn is_context_compaction_record(message: &ChatMessage, text: &str) -> bool {
     message.role == ChatRole::System
         && message.source == ChatSource::Transcript
         && (js_trim(text) == CONTEXT_COMPACTED_LABEL
-            || js_trim(text).starts_with("Compacted while idle"))
+            || js_trim(text).starts_with(IDLE_COMPACTION_PREFIX))
+}
+
+/// Claude's idle compaction: the "Context compacted" row, and under it a neutral line saying why
+/// and where Ghostex turns it off.
+///
+/// CDXC:SessionChat 2026-11-14 WHY:
+/// Claude's own notice ends "turn off with "idleCompaction": false in settings.json", but Ghostex
+/// has its own switch for it, which it hands to each launch and which wins over settings.json
+/// (server/src/agents/claude_idle_compaction.rs); the note points at that switch instead.
+fn idle_compaction_note(label: &str) -> Value {
+    json!({
+        "kind": "status",
+        "subject": "compaction",
+        "label": label,
+        "text": "",
+        "statuses": [
+            { "label": label, "tone": "ok" },
+            {
+                "label": "Compacted while idle, before the prompt cache expired. Turn off in Settings > Agents > Claude Code.",
+                "tone": "neutral",
+            },
+        ],
+    })
 }
 
 /// Whether the agent's transcript recorded a finished compaction here: Claude's `/compact` output,
@@ -1061,6 +1088,10 @@ pub fn suppressed_turn_presentation(message: &ChatMessage) -> Value {
 
     if kind == "collapsed" && label == "Local command output" {
         return command_output_note(&raw_text);
+    }
+
+    if kind == "status" && raw_text.starts_with(IDLE_COMPACTION_PREFIX) {
+        return idle_compaction_note(&label);
     }
 
     // Short harness turns read as prose; the body without its markup IS the sentence, so the inline

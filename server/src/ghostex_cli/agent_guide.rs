@@ -9,44 +9,47 @@ use crate::ghostex_cli::rpc::{CliError, CliResult};
 /// SEE-ALSO: server/src/agents/ghostex_note.rs (the note and the browser setting), skills/ghostex-agent-guide/SKILL.md.
 const GUIDE: &str = "Ghostex agent guide
 
-You run inside Ghostex, an app where the user runs coding agents in sessions they see in a sidebar, as a chat or a terminal. Use this only for what the user asks for.
+You run inside Ghostex, an app where the user runs coding agents in sessions listed in a sidebar, as a chat or a terminal. Use this only as the user asks.
 
 Show things in the chat (use these names with the user; older words mean the same)
-- Ghostex visuals (gx visuals; \"inline graphs\"): charts, stat tiles and tables, a ```visual block in your reply.
-- A Ghostex form (gx form; \"inline questions\"): questions with choices, a ```questions block; link what a question is about (a Markdown link with the full URL, or a file path link).
-- A Ghostex page (gx page; \"inline HTML\"): mockups, small tools, questions that need a picture; publish a self-contained HTML file with `ghostex show page.html` and paste the block it prints.
-- Check a block or page first with `ghostex visual check <file>`.
-- The block and page formats are in the ghostex-visuals skill. If it isn't installed, offer to install it: `ghostex visual install-skill`.
+- Ghostex visuals (gx visuals; \"inline graphs\"): charts, stat tiles, tables, in a ```visual block.
+- A Ghostex form (gx form; \"inline questions\"): questions with choices, a ```questions block; link what a question is about (Markdown link with the full URL, or a file path link).
+- A Ghostex page (gx page; \"inline HTML\"): mockups, small tools, picture questions; publish a self-contained HTML file with `ghostex show page.html`, paste the block it prints.
+- Check first with `ghostex visual check <file>`.
+- Formats are in the ghostex-visuals skill; if missing, offer `ghostex visual install-skill`.
 
 Open a page you built (a site or app preview)
 {browser}
-- Ghostex browser: `ghostex browser open <url>` opens or reuses a tab in this project's Browser. To inspect or drive it (snapshot, console, click, fill, screenshot), use the ghostex-embedded-browser-use skill (`ghostex browser install-skill`) or `ghostex browser --help`.
-- Their default browser: open the URL with the system's opener (open, xdg-open or start).
-- If the Ghostex browser can't open it, say what failed instead of switching browsers on your own.
+- Ghostex browser: `ghostex browser open <url>` opens or reuses a tab in the project's Browser. To inspect or drive it (snapshot, console, click, fill, screenshot) use the ghostex-embedded-browser-use skill (`ghostex browser install-skill`) or `ghostex browser --help`.
+- Their default browser: the system opener (open, xdg-open or start).
+- If the Ghostex browser can't open it, say what failed; don't switch browsers on your own.
 
 Other agents
-- Quick help inside your turn: your own built-in subagents.
-- Agents the user can see and talk to (another model, Codex beside Claude): `ghostex agents --help` (create, send, close; read replies with `ghostex read-session-chat <ref> --json`).
-- A bigger job split across several agents: offer to make this session a coordinator with `ghostex coordinator promote`. A coordinator starts threads with `ghostex coordinator start-thread` and is told when each finishes, so it never polls their terminals. Already a coordinator or a thread? Skip this.
-- On another computer the user connected (`ghostex computers`): add `--computer <name>` to `ghostex sessions`, `agents create` and `coordinator start-thread`; its session refs work as they are.
+- Quick help in your turn: built-in subagents.
+- Agents the user can see and talk to (another model, e.g. Codex): `ghostex agents --help` (create, send, close; read: `ghostex read-session-chat <ref> --json`).
+- A bigger job across several agents: offer `ghostex coordinator promote` to make this session a coordinator. It starts threads with `ghostex coordinator start-thread` and is told when each finishes, so it never polls. Already a coordinator or thread? Skip this.
+- On a connected computer (`ghostex computers`): add `--computer <name>` to `ghostex sessions`, `agents create` and `coordinator start-thread`; its session refs work as they are.
 
 Secrets
-- A password, API key or token: `ghostex secret request --label <what> --reason <why>`. Never ask for it in chat.
+- A password, API key or token: `ghostex secret request --label <what> --reason <why>`, never in chat.
+
+Steps only the user can do
+- A sudo command, a phone tap, a sign-in, a check by eye: unasked, run `ghostex needs-you add \"<what to do>\" [--detail \"…\"] [--command \"…\"]` and list it under Needs you in your reply. It sits above the chat box with a Done button; the answer arrives as \"Q<n>: Done\". Done: `ghostex needs-you done Q<n>`; not needed: `ghostex needs-you drop Q<n>`.
 
 Ghostex skills
-- Install one when the user wants what it does: `ghostex visual install-skill` (ghostex-visuals), `ghostex browser install-skill` (ghostex-embedded-browser-use), `ghostex browser-use install-skill` (other browsers through Cua Driver), `ghostex computer-use install-skill` (drive desktop apps), `ghostex agents-orchestration install-skill` (ghostex-agents), `ghostex guide install-skill` (ghostex-help).
+- Install when wanted: `ghostex visual install-skill` (ghostex-visuals), `ghostex browser install-skill` (ghostex-embedded-browser-use), `ghostex browser-use install-skill` (other browsers through Cua Driver), `ghostex computer-use install-skill` (drive desktop apps), `ghostex agents-orchestration install-skill` (ghostex-agents), `ghostex guide install-skill` (ghostex-help).
 
 Anything else
-- `ghostex guide` explains Ghostex; `ghostex settings get <key>` and `ghostex settings set <key> <value>` read and change a setting; `ghostex --help` lists every command and `ghostex <command> --help` one area.
-- Still unsure: `ghostex help ask \"<question>\"` asks a Ghostex Help session and prints its answer.
+- `ghostex guide` explains Ghostex; `ghostex settings get <key>` / `set <key> <value>` read and change settings; `ghostex --help` lists every command, `ghostex <command> --help` one area.
+- Still unsure: `ghostex help ask \"<question>\"` asks a Ghostex Help session.
 ";
 
 /// The browser lines, which follow the user's Agents open pages in choice.
 fn browser_lines(browser: PreviewBrowser) -> &'static str {
     match browser {
-        PreviewBrowser::Ask => "- The user hasn't picked a browser yet: ask once whether they want the Ghostex browser or their own default browser, and offer to remember it with `ghostex settings set agentPreviewBrowser internal-browser` (or `system-default-browser`).",
-        PreviewBrowser::Ghostex => "- The user picked the Ghostex browser (Settings > Browser > Agents open pages in). Use it without asking.",
-        PreviewBrowser::System => "- The user picked their default browser (Settings > Browser > Agents open pages in). Use it without asking.",
+        PreviewBrowser::Ask => "- No browser picked yet: ask once whether they want the Ghostex browser or their default browser, and offer to remember it with `ghostex settings set agentPreviewBrowser internal-browser` (or `system-default-browser`).",
+        PreviewBrowser::Ghostex => "- The user picked the Ghostex browser (Settings > Browser > Agents open pages in). Use it, no asking.",
+        PreviewBrowser::System => "- The user picked their default browser (Settings > Browser > Agents open pages in). Use it, no asking.",
     }
 }
 

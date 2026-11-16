@@ -251,6 +251,113 @@ fn session_choice(session: &KnownSession, elsewhere: bool) -> SessionChoice {
     }
 }
 
+/// What a session pill shows after its title (a state dot, a computer icon) and what its hover card
+/// says (long press on the phone), read live from the host's list at draw time, never from the
+/// settled transcript, whose sessions' activity changes would rebuild it (`KnownSession::same_names`).
+///
+/// CDXC:SessionChat 2026-11-13 DECISION:
+/// User, answering the session-mention design page: "the rich pill, in both the chat box and the sent message. But for a session on another computer, show only that computer's icon, not its whole name"; "hovering a session mention shows the hover card (long press on the phone)"; and "the same look spreads to message cards and the Workers popover, where they name a session". A session pill is the framed pill with the agent's logo, its title, a dot for its state (working, needs you, idle) and, for a session on another computer than the chat's home one, that computer's icon alone. Its hover card names the session, its state, agent, project and computer.
+/// CDXC:SessionChat 2026-11-15 DECISION: User: "i dont like the pill border around the name of different agents, when i hover then make the dotted line below show less faded ... but make sure to keep the status of the session there as a dot but only show status when running (red/yellow dots only should show, other ones dont matter to show here) ... (should be same look everywhere please when a thread is mentioned)". A mentioned session is its title with a faint dotted underline that grows stronger under the pointer, no frame and no fill, in a message, on a message card, in a work item or report row and in the Workers popover; after the title, a dot only while it is working (amber) or needs you (red), never for idle or sleeping, then the computer icon for a session on another computer. Supersedes the framed pill and the idle ring of the decision above. Asked about the chat box, the user chose the same look there too: a mention being written is plain text with the dotted underline, still one piece for the caret and Delete (desktop composer_references.rs `session_replacement`, phone ComposerInput.tsx).
+/// SEE-ALSO: apps/desktop/src/app/native_chat/markdown_links.rs and session_card.rs (desktop and web), apps/mobile/app/src/chat/native/transcript/SessionPill.tsx (phone, which reads the same rule from its own session list).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MentionCard {
+    pub title: String,
+    pub agent_icon: Option<String>,
+    pub agent_name: String,
+    pub coordinator: bool,
+    pub project_name: String,
+    /// The computer's name, as the host's machine tab spells it.
+    pub computer: String,
+    /// The session runs on another computer than the home one: its pill draws the computer icon.
+    pub elsewhere: bool,
+    /// The gxserver the session runs on (`S1u` of `S1u:P2alb:G5a3u`), which the renderers draw
+    /// that computer's own icon for; empty when its ref names none.
+    pub server_id: String,
+    /// `Working`, `Needs you`, `Idle` or `Sleeping`.
+    pub state: String,
+    /// The dot: `working` or `attention`; empty for idle and sleeping, which draw none.
+    pub dot: String,
+}
+
+/// The hover card's footer.
+pub const MENTION_CARD_HINT: &str = "Click to open";
+
+/// The session `global_ref` names in the host's list: the same ref, else (a list whose rows carry no
+/// server part, or a ref that omits it) the same project and session.
+pub fn find_known_session<'a>(
+    sessions: &'a [KnownSession],
+    global_ref: &str,
+) -> Option<&'a KnownSession> {
+    let target = ghostex_gx_protocol::parse_global_session_ref(js_trim(global_ref))?;
+    sessions
+        .iter()
+        .find(|session| session.global_ref == js_trim(global_ref))
+        .or_else(|| {
+            sessions.iter().find(|session| {
+                session.project_id == target.project_id
+                    && session.session_id == target.session_id
+                    && (target.server_id.is_empty()
+                        || session.global_ref.is_empty()
+                        || server_of(&session.global_ref) == target.server_id)
+            })
+        })
+}
+
+/// The pill's extras and card for `global_ref`, or `None` when the list does not have it.
+/// `home_server` is the gxserver the drawing side counts as here (the desktop's own, the phone's
+/// chat's computer); a session whose ref names another one is `elsewhere`. Empty knows no home, and
+/// nothing is elsewhere then.
+pub fn mention_card(
+    sessions: &[KnownSession],
+    global_ref: &str,
+    home_server: &str,
+) -> Option<MentionCard> {
+    let session = find_known_session(sessions, global_ref)?;
+    let server = server_of(&session.global_ref);
+    let elsewhere = !home_server.is_empty() && !server.is_empty() && server != home_server;
+    let choice = session_choice(session, elsewhere);
+    let dot = match choice.state.as_str() {
+        "Working" => "working",
+        "Needs you" => "attention",
+        _ => "",
+    };
+    Some(MentionCard {
+        title: choice.title,
+        agent_icon: choice.agent_icon,
+        agent_name: choice.agent_name,
+        coordinator: session.coordinator,
+        project_name: js_trim(&session.project_name).to_string(),
+        computer: js_trim(&session.computer).to_string(),
+        elsewhere,
+        server_id: server.to_string(),
+        state: choice.state,
+        dot: dot.to_string(),
+    })
+}
+
+/// The card's second line: agent, project and computer (`This computer` for one at home).
+pub fn mention_card_meta(card: &MentionCard) -> String {
+    let computer = if card.elsewhere {
+        if card.computer.is_empty() {
+            "Another computer"
+        } else {
+            card.computer.as_str()
+        }
+    } else {
+        "This computer"
+    };
+    [
+        card.agent_name.as_str(),
+        card.project_name.as_str(),
+        computer,
+    ]
+    .into_iter()
+    .filter(|part| !part.is_empty())
+    .collect::<Vec<_>>()
+    .join(" \u{b7} ")
+}
+
 /// The choices that have every word of the query in their title, project or computer, titles that
 /// start with it first.
 pub fn filter_session_choices(choices: &[SessionChoice], query: &str) -> Vec<SessionChoice> {
@@ -436,6 +543,30 @@ mod tests {
         assert_eq!(titles("omarchy"), vec!["Remote build"]);
         assert_eq!(titles("dotfiles build"), vec!["Remote build"]);
         assert!(titles("omarchy local").is_empty());
+    }
+
+    #[test]
+    fn a_mention_draws_a_dot_only_while_its_session_works_or_needs_you() {
+        let mut working = known("G1", "Busy", "1");
+        working.activity = "working".to_string();
+        let mut attention = known("G2", "Blocked", "1");
+        attention.activity = "attention".to_string();
+        let mut sleeping = known("G4", "Asleep", "1");
+        sleeping.lifecycle_state = "sleeping".to_string();
+        let sessions = vec![working, attention, known("G3", "Done", "1"), sleeping];
+        let dot = |id: &str| {
+            mention_card(&sessions, &format!("S90:P3lv0:{id}"), "S90")
+                .map(|card| (card.dot, card.state))
+                .expect("a card")
+        };
+        assert_eq!(dot("G1"), ("working".to_string(), "Working".to_string()));
+        assert_eq!(
+            dot("G2"),
+            ("attention".to_string(), "Needs you".to_string())
+        );
+        // Idle and sleeping sessions draw no dot; their card still says their state.
+        assert_eq!(dot("G3"), (String::new(), "Idle".to_string()));
+        assert_eq!(dot("G4"), (String::new(), "Sleeping".to_string()));
     }
 
     #[test]

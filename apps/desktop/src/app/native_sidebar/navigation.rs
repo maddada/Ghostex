@@ -230,6 +230,8 @@ impl GhostexGpuiApp {
         // With Spaces on, the Hermes button is the Space row's last slot instead.
         let bots_toggle =
             (snapshot.bots_enabled && !snapshot.spaces_enabled).then_some(snapshot.bots_mode);
+        // Each sidebar extension with a mode has its button here, after Bots (extension_panel/).
+        let extension_modes = self.native_extension_sidebar_view().modes;
         let bell_visible = self.titlebar_notification_bell_visible();
         let tooltip_label: gpui::SharedString = match shortcut.as_deref() {
             Some(shortcut) if !shortcut.is_empty() => format!("{label} ({shortcut})").into(),
@@ -295,7 +297,10 @@ impl GhostexGpuiApp {
             } else {
                 SIDEBAR_TOP_EDGE_INSET * scale
             };
-            let buttons = 3 + usize::from(bell_visible) + usize::from(bots_toggle.is_some());
+            let buttons = 3
+                + usize::from(bell_visible)
+                + usize::from(bots_toggle.is_some())
+                + extension_modes.len();
             top_row_fit(
                 width - leading - toggle,
                 buttons,
@@ -373,6 +378,9 @@ impl GhostexGpuiApp {
             .when_some(bots_toggle, |row, bots_mode| {
                 row.child(self.render_native_sidebar_bots_toggle(bots_mode, appearance, cx))
             })
+            .children(extension_modes.iter().map(|button| {
+                self.render_native_sidebar_extension_mode_button(button, appearance, cx)
+            }))
             // The Claude and Grok Bot buttons are not in this row or the bottom bar: they are in the workarea header, left of the Voice button (CDXC:Extensions 2026-11-10 in app/claude_web/header_buttons.rs).
             .child(
                 div()

@@ -94,7 +94,14 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     // claims a collapsed composer whose space is already owned by something else.
     into.composer_collapsed = collapse_eligible && composer.collapse.collapsed;
 
-    into.composer_overflow = composer.overflow.clone();
+    into.composer_row = crate::composer::row::document(state);
+    into.composer_overflow = crate::document::ComposerOverflow {
+        overflowed: crate::composer::row::with_folded(
+            composer.overflow.overflowed.clone(),
+            &into.composer_row,
+        ),
+        options_overflowed: composer.overflow.options_overflowed,
+    };
     // The actions read the host's own capability block, so a transport narrower than the
     // desktop's can clear one.
     into.composer_actions = ComposerActions {
@@ -155,6 +162,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         composer.incoming_draft.as_ref(),
         &composer.text,
     );
+    into.compact_hint = crate::composer::compact_hint::compact_hint(state, context);
     into.interaction = Interaction {
         queue_long_press_ms: QUEUE_LONG_PRESS_MS,
         stop_button_cooldown_ms: STOP_BUTTON_COOLDOWN_MS,
@@ -212,13 +220,13 @@ pub fn queue(state: &ChatState) -> Queue {
             // A startup send is drawn in the transcript with its own delivery status, not above the
             // composer, and a row an accepted send already echoes would be drawn twice.
             prompt.get("startupSend") != Some(&Value::Bool(true))
-                && crate::transcript::page_answers::answers_page_id(
+                && crate::transcript::page_answers::answers_page_ids(
                     prompt
                         .get("text")
                         .and_then(Value::as_str)
                         .unwrap_or_default(),
                 )
-                .is_none()
+                .is_empty()
                 && !state.pending.sends.iter().any(|entry| {
                     entry.queued_prompt_id.is_some()
                         && entry.queued_prompt_id.as_deref()
@@ -288,11 +296,21 @@ fn queued_prompt(prompt: &Value) -> QueuedPrompt {
     let mut row: QueuedPrompt = serde_json::from_value(prompt.clone()).unwrap_or_default();
     // Answers a page or question form queued (`transcript/page_answers.rs`) read as what they are,
     // not as their envelope.
-    row.preview = match crate::transcript::page_answers::split_page_answers(&row.text) {
-        Some((answers, rest)) if rest.is_empty() => {
-            queue_row_preview(&format!("Answers to \u{201c}{}\u{201d}", answers.title))
+    let (envelopes, rest) = crate::transcript::page_answers::split_all_page_answers(&row.text);
+    row.preview = if !envelopes.is_empty() && rest.is_empty() {
+        match envelopes.as_slice() {
+            [only] => queue_row_preview(&format!("Answers to \u{201c}{}\u{201d}", only.title)),
+            many => {
+                let titles = many
+                    .iter()
+                    .map(|answers| format!("\u{201c}{}\u{201d}", answers.title))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                queue_row_preview(&format!("Answers to {titles}"))
+            }
         }
-        _ => queue_row_preview(&row.text),
+    } else {
+        queue_row_preview(&row.text)
     };
     row.busy = is_queue_row_busy(&row.state);
     row

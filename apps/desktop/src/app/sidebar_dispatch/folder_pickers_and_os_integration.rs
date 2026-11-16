@@ -198,8 +198,80 @@ impl GhostexGpuiApp {
             else {
                 return;
             };
-            self.open_gpui_os_integration_paths(vec![PathBuf::from(path)], window, cx);
+            self.open_gpui_link_path_after_confirming(PathBuf::from(path), window, cx);
         }
+    }
+
+    /// A `ghostex://open` (or `edit`) link: a folder that is already a project opens as before;
+    /// one that is not asks before it is added.
+    ///
+    /// CDXC:Projects 2026-11-14 DECISION:
+    /// A link from a web page or another app used to add any existing folder as a project and
+    /// switch to it with no question. A link to a folder that is not a project yet now shows
+    /// "Add this folder as a project?" with the folder and Cancel (the default, so a stray Return
+    /// adds nothing) or Add Project. A link to an existing project, `ghostex open` in a terminal,
+    /// Finder's Open With and the Add Project button are unchanged. Windows and Linux do not
+    /// answer this link at all (`receive_gpui_os_integration_urls`).
+    #[cfg(target_os = "macos")]
+    fn open_gpui_link_path_after_confirming(
+        &mut self,
+        path: PathBuf,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let _ = window;
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let lookup = path.clone();
+            let root = background
+                .spawn(async move {
+                    let root = gpui_os_integration_project_root_for_path(&lookup)?;
+                    let canonical = std::fs::canonicalize(&root).ok();
+                    Some((root, canonical))
+                })
+                .await;
+            let _ = this.update_in(cx, |this, window, cx| {
+                // A path that does not exist goes the usual way, which reports it.
+                let Some((root, canonical)) = root else {
+                    this.open_gpui_os_integration_paths(vec![path], window, cx);
+                    return;
+                };
+                let existing = std::iter::once(&root)
+                    .chain(canonical.as_ref())
+                    .any(|candidate| {
+                        this.gx_store_local_project_at_path(&candidate.to_string_lossy())
+                            .is_some()
+                    });
+                if existing {
+                    this.open_gpui_os_integration_paths(vec![path], window, cx);
+                    return;
+                }
+                let detail = format!(
+                    "{}\n\nA link opened from another app wants to add it to Ghostex.",
+                    crate::app::session_chat::runnable_links::shown_link(&gpui_link_path_display(
+                        &root
+                    ))
+                );
+                let answer = window.prompt(
+                    gpui::PromptLevel::Info,
+                    "Add this folder as a project?",
+                    Some(&detail),
+                    &["Cancel", "Add Project"],
+                    cx,
+                );
+                cx.spawn_in(window, async move |this, cx| {
+                    if answer.await != Ok(1) {
+                        return;
+                    }
+                    // The folder the question showed, not the link's path again.
+                    let _ = this.update_in(cx, |this, window, cx| {
+                        this.open_gpui_os_integration_paths(vec![root], window, cx);
+                    });
+                })
+                .detach();
+            });
+        })
+        .detach();
     }
 
     #[cfg(target_os = "macos")]
@@ -485,5 +557,16 @@ impl GhostexGpuiApp {
             });
         })
         .detach();
+    }
+}
+
+/// `path` with the home folder shown as `~`, as the Add Project sheet names it.
+#[cfg(target_os = "macos")]
+fn gpui_link_path_display(path: &std::path::Path) -> String {
+    let home = home_dir();
+    match path.strip_prefix(&home) {
+        Ok(rest) if rest.as_os_str().is_empty() => "~".to_string(),
+        Ok(rest) => format!("~/{}", rest.to_string_lossy()),
+        Err(_) => path.to_string_lossy().into_owned(),
     }
 }

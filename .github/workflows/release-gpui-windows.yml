@@ -108,8 +108,9 @@ permissions:
 
 # Ghostex's component signing key (tooling/release-gpui/component-signing.mjs): publish-component.mjs
 # signs every component archive it records; GHOSTEX_REQUIRE_COMPONENT_SIGNATURES makes it, and the seal, refuse unsigned ones (#495).
+# The key itself is set only on the steps that publish or seal a component, never workflow-wide, so
+# third-party actions and other steps never see it.
 env:
-  GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
   # The app's sealed on-demand-resources.json must carry every archive's signature.
   GHOSTEX_REQUIRE_COMPONENT_SIGNATURES: '1'
 
@@ -175,7 +176,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       # signer: none when signing was not requested; else certum (both
@@ -423,6 +424,7 @@ jobs:
         if: ${{ ! inputs.runtime_artifacts_ready }}
         shell: bash
         env:
+          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
           GH_TOKEN: ${{ github.token }}
         run: |
           tooling/release-gpui/retry.sh 4 2 -- node tooling/release-gpui/publish-component.mjs \
@@ -502,6 +504,41 @@ jobs:
           done
           sha256sum server/target/release/gxserver.exe server/target/release/ghostex.exe \
             .dependencies/wmx/target/release/wmx.exe apps/editor/desktop/target/release/ghostex-editor.exe
+      - name: Stage the app
+        shell: pwsh
+        env:
+          GHOSTEX_COMPONENT_SIGNATURES_DEFERRED: '1'
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          GHOSTEX_WINDOWS_REQUIRE_WSL_RUNTIME: ${{ inputs.runtime_artifacts_ready && '1' || '0' }}
+          GHOSTEX_WINDOWS_WSL_GXSERVER_ARCHIVE: ${{ github.workspace }}\build\runtime-artifacts\${{ inputs.arch }}\gxserver-linux-${{ inputs.arch }}.tar.gz
+          GHOSTEX_CODE_SERVER_COMPONENT_VERSION: ${{ steps.code_server_identity.outputs.component_version }}
+          GHOSTEX_WINDOWS_WSL_CODE_SERVER_ARCHIVE: ${{ github.workspace }}\build\runtime-artifacts\${{ inputs.arch }}\${{ steps.code_server_identity.outputs.archive_name }}
+          GHOSTEX_WINDOWS_NATIVE_CODE_SERVER_ARCHIVE: ${{ inputs.runtime_artifacts_ready && format('{0}\build\runtime-artifacts\native-editor-{1}\{2}', github.workspace, inputs.arch, steps.code_server_native.outputs.archive_name) || '' }}
+          GHOSTEX_WINDOWS_BUILD_SILENCE_SECONDS: '900'
+        run: |
+          & (Join-Path $env:GITHUB_WORKSPACE 'tooling/release-gpui/windows-build-watchdog.ps1') -Phase stage -Version '${{ inputs.version }}' -Arch '${{ inputs.arch }}'
+      # CDXC:Release 2026-11-14 DECISION: user (Q3121): no step that runs build tooling holds the
+      # component signing key. The steps above record and seal the component archives unsigned
+      # (GHOSTEX_COMPONENT_SIGNATURES_DEFERRED); this step runs only Ghostex's signing code, and the
+      # uploads run in a step of their own (tooling/release-gpui/sign-component-records.mjs).
+      - name: Sign the component records
+        shell: bash
+        env:
+          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
+        run: |
+          node tooling/release-gpui/sign-component-records.mjs \
+            build/on-demand-components/components.json \
+            apps/desktop/build/windows/Ghostex/resources/on-demand-resources.json
+      - name: Publish the CEF and Source components
+        shell: pwsh
+        env:
+          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          COMPONENTS_GITHUB_TOKEN: ${{ secrets.COMPONENTS_GITHUB_TOKEN }}
+        run: |
+          & (Join-Path $env:GITHUB_WORKSPACE 'tooling/release-gpui/windows.ps1') -Phase publish-components -Version '${{ inputs.version }}' -Arch '${{ inputs.arch }}'
       # Certum's private key stays in its cloud; SimplySign Desktop mounts it
       # as a virtual smart card once logged in with the account e-mail and a
       # one-time code computed from the activation seed
@@ -526,14 +563,14 @@ jobs:
       # tree, vpk pack, bundle the launcher, and write manifest.json. Same env
       # as phase 1. Unsigned and Certum-signed builds run it as the single
       # `package` phase (GHOSTEX_WINDOWS_SIGNER=certum signs in place).
-      - name: Stage and package the installer and update packages
+      - name: Package the installer and update packages
         if: ${{ steps.signing.outputs.signer != 'signpath' }}
         shell: pwsh
         env:
+          GHOSTEX_WINDOWS_APP_STAGED: '1'
           GHOSTEX_WINDOWS_SIGNER: ${{ steps.signing.outputs.signer }}
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ github.token }}
-          COMPONENTS_GITHUB_TOKEN: ${{ secrets.COMPONENTS_GITHUB_TOKEN }}
           GHOSTEX_WINDOWS_REQUIRE_WSL_RUNTIME: ${{ inputs.runtime_artifacts_ready && '1' || '0' }}
           GHOSTEX_WINDOWS_WSL_GXSERVER_ARCHIVE: ${{ github.workspace }}\build\runtime-artifacts\${{ inputs.arch }}\gxserver-linux-${{ inputs.arch }}.tar.gz
           GHOSTEX_CODE_SERVER_COMPONENT_VERSION: ${{ steps.code_server_identity.outputs.component_version }}
@@ -551,13 +588,13 @@ jobs:
       #   3. the customer-facing installer (launcher + signed setup + trailer).
       # One artifact configuration (.signpath/artifact-configuration.xml)
       # covers all three uploads.
-      - name: Stage the app and collect its binaries for SignPath
+      - name: Collect the app binaries for SignPath
         if: ${{ steps.signing.outputs.signer == 'signpath' }}
         shell: pwsh
         env:
+          GHOSTEX_WINDOWS_APP_STAGED: '1'
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ github.token }}
-          COMPONENTS_GITHUB_TOKEN: ${{ secrets.COMPONENTS_GITHUB_TOKEN }}
           GHOSTEX_WINDOWS_REQUIRE_WSL_RUNTIME: ${{ inputs.runtime_artifacts_ready && '1' || '0' }}
           GHOSTEX_WINDOWS_WSL_GXSERVER_ARCHIVE: ${{ github.workspace }}\build\runtime-artifacts\${{ inputs.arch }}\gxserver-linux-${{ inputs.arch }}.tar.gz
           GHOSTEX_CODE_SERVER_COMPONENT_VERSION: ${{ steps.code_server_identity.outputs.component_version }}
@@ -577,7 +614,7 @@ jobs:
           retention-days: 1
       - name: Sign the binaries with SignPath
         if: ${{ steps.signing.outputs.signer == 'signpath' }}
-        uses: signpath/github-action-submit-signing-request@v3
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
@@ -609,7 +646,7 @@ jobs:
           retention-days: 1
       - name: Sign the Velopack setup with SignPath
         if: ${{ steps.signing.outputs.signer == 'signpath' }}
-        uses: signpath/github-action-submit-signing-request@v3
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
@@ -639,7 +676,7 @@ jobs:
           retention-days: 1
       - name: Sign the installer with SignPath
         if: ${{ steps.signing.outputs.signer == 'signpath' }}
-        uses: signpath/github-action-submit-signing-request@v3
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
@@ -759,7 +796,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       # Same Node.js as jobs.build, which pins it from the code-server checkout.

@@ -43,7 +43,7 @@ pub(crate) fn file_url_local_path(url: &str, local_hostname: Option<&str>) -> Op
 }
 
 /// `%XX` escapes decoded to bytes; `None` when the result is not UTF-8. A `%` without two hex digits stays as it is.
-fn file_url_percent_decode(path: &str) -> Option<String> {
+pub(crate) fn file_url_percent_decode(path: &str) -> Option<String> {
     let bytes = path.as_bytes();
     let hex = |index: usize| {
         bytes
@@ -71,7 +71,7 @@ pub(crate) fn terminal_local_hostname() -> Option<String> {
     static HOSTNAME: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
     HOSTNAME
         .get_or_init(|| {
-            #[cfg(all(unix, not(target_family = "wasm")))]
+            #[cfg(all(unix, not(ghostex_web)))]
             let host = {
                 let mut name = [0u8; 256];
                 // SAFETY: the buffer is writable for its whole length and stays alive for the call.
@@ -87,7 +87,7 @@ pub(crate) fn terminal_local_hostname() -> Option<String> {
             };
             #[cfg(windows)]
             let host = std::env::var("COMPUTERNAME").ok();
-            #[cfg(target_family = "wasm")]
+            #[cfg(ghostex_web)]
             let host: Option<String> = None;
             host.filter(|host| !host.is_empty())
         })

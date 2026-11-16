@@ -185,12 +185,12 @@ pub(crate) fn persist_export_transcript_modal_prefs(
     write_saved_prefs(path, &prefs.to_saved().to_string());
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 fn read_saved_prefs(path: &Path) -> Option<String> {
     std::fs::read_to_string(path).ok()
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 fn write_saved_prefs(path: &Path, text: &str) {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
@@ -199,7 +199,7 @@ fn write_saved_prefs(path: &Path, text: &str) {
 }
 
 /// A page has no files of its own, so its dialog remembers in the browser's storage.
-#[cfg(target_arch = "wasm32")]
+#[cfg(ghostex_web)]
 fn read_saved_prefs(path: &Path) -> Option<String> {
     web_sys::window()?
         .local_storage()
@@ -208,7 +208,7 @@ fn read_saved_prefs(path: &Path) -> Option<String> {
         .ok()?
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(ghostex_web)]
 fn write_saved_prefs(path: &Path, text: &str) {
     if let Some(Ok(Some(storage))) = web_sys::window().map(|window| window.local_storage()) {
         let _ = storage.set_item(&path.to_string_lossy(), text);
@@ -2252,6 +2252,8 @@ mod tests {
     }
 
     #[test]
+    // Desktop only: the web build keeps these preferences in the page, not in a file (the GPUI web build runs this file's tests too).
+    #[cfg(not(ghostex_web))]
     fn what_the_user_changes_round_trips_through_the_prefs_file() {
         let dir =
             std::env::temp_dir().join(format!("ghostex-export-modal-prefs-{}", std::process::id()));

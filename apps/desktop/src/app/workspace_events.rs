@@ -5,7 +5,6 @@
 // Cluster: project-workarea + sidebar bridge events, agents chat/find surfaces
 
 use crate::app::browser_parked_runtime::{TargetedBrowserOpenRoute, targeted_browser_open_route};
-use crate::app::helpers::web_bridge_types::AppModalHostBridgeEvent;
 use std::rc::Rc;
 
 // RefCell backs cross-platform runtime state (window frame persistence), not
@@ -72,24 +71,23 @@ impl GhostexGpuiApp {
                 ProjectWorkareaCefSurfaceSlotKey::Manage,
                 cef::ProjectWorkareaBridgeEvent::ManageFilesRequest(payload),
             ) => {
-                // CDXC:Docs 2026-09-06 SEE-ALSO: The shared Mermaid viewer opens through the same native child-window route as chat (packages/core-ui/mermaid/mermaid-diagram.tsx (deleted 2026-10-01)).
-                if let Ok(request) = serde_json::from_str::<serde_json::Value>(&payload)
-                    && request.get("action").and_then(serde_json::Value::as_str)
-                        == Some("openMermaidDiagram")
+                // The embed page shows one file and may only ask for what that takes
+                // (CDXC:Docs 2026-11-14 in app/helpers/manage_embed_page_rules.rs).
+                let Ok(request) = serde_json::from_str::<serde_json::Value>(&payload) else {
+                    return;
+                };
+                if let Err(reason) =
+                    crate::app::helpers::manage_embed_page_rules::manage_embed_request_allowed(
+                        &page.value,
+                        &request,
+                    )
                 {
-                    if let Some(source) = request.get("source").and_then(serde_json::Value::as_str)
-                    {
-                        self.receive_app_modal_host_bridge_event(
-                            AppModalHostBridgeEvent::Message(
-                                serde_json::json!({
-                                    "type": "open", "modal": "mermaidDiagram", "source": source,
-                                })
-                                .to_string(),
-                            ),
-                            window,
-                            cx,
-                        );
-                    }
+                    let response = serde_json::json!({
+                        "action": manage_request_string(&request, "action").unwrap_or_default(),
+                        "requestId": manage_request_string(&request, "requestId").unwrap_or_default(),
+                        "error": reason,
+                    });
+                    self.dispatch_manage_files_answer(&page, &response.to_string(), cx);
                     return;
                 }
                 // Native Docs' browser area: a link in an HTML file opens that file in Docs.
@@ -114,6 +112,22 @@ impl GhostexGpuiApp {
                     }
                     return;
                 }
+                // Annotate on an HTML file (native_docs/annotate.rs): its state, notes, Copy and
+                // switch are app state, answered here.
+                if let Some(action) = manage_request_string(&request, "action")
+                    && matches!(
+                        action.as_str(),
+                        "annotateLoad"
+                            | "annotateState"
+                            | "annotateNotes"
+                            | "annotateToggle"
+                            | "copyPageAnnotation"
+                    )
+                {
+                    let response = self.native_docs_annotate_request(&action, &request, cx);
+                    self.dispatch_manage_files_answer(&page, &response.to_string(), cx);
+                    return;
+                }
                 // Annotation feedback never touches the file system: the target
                 // session and the delivery are app state, so both requests are
                 // answered here instead of through the git-backed file bridge.
@@ -129,8 +143,13 @@ impl GhostexGpuiApp {
                     if action == "sendPageAnnotation" {
                         // Annotate's Send in an HTML file (app/page_annotations.rs); answered
                         // at once, the delivery reports itself (chat, terminal or clipboard).
-                        let annotation =
-                            crate::app::page_annotations::page_annotation_from_fields(&request);
+                        let path = manage_request_string(&request, "path").unwrap_or_default();
+                        let annotation = self
+                            .native_docs_annotate_on(&path)
+                            .then(|| {
+                                crate::app::page_annotations::page_annotation_from_fields(&request)
+                            })
+                            .flatten();
                         let response = match annotation {
                             Some(_) => {
                                 serde_json::json!({"action": action, "requestId": request_id})

@@ -20,7 +20,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:AgentProviders 2026-09-04 DECISION:
     // User: new installs must start with Agent approvals set to Keep default. Running supported agents without approval is an explicit opt-in.
     ("agentAcceptAllEnabled", J::Bool(false)),
-    ("trustProjectFoldersAutomatically", J::Bool(true)),
+    // CDXC:AgentProviders 2026-11-14 DECISION: off by default, and on only with its confirmation
+    // beside it (folder_trust.rs).
+    ("trustProjectFoldersAutomatically", J::Bool(false)),
+    ("trustProjectFoldersConfirmedAt", J::Str("")),
     ("agentHooksAutoInstall", J::Bool(false)),
     ("useAgentHooks", J::Bool(false)),
     ("agentsTidyUpOfferDismissed", J::Bool(false)),
@@ -44,6 +47,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:SessionLinks 2026-10-24 DECISION: User: "user can pick to open in embedded or external browser in settings (default to embedded)".
     ("sessionLinkOpenTarget", J::Str("embedded")),
     ("browserPagesInViewRow", J::Bool(false)),
+    // CDXC:Browser 2026-11-16 WHY: reloading the open project's Browser tabs on launch came with the file:// tab restore (PR #624); it is an Advanced toggle, off by default, because web panes sleep until clicked so launch never loads a page nobody asked for (model/project_editor_shell.rs).
+    ("reloadBrowserTabsOnStartup", J::Bool(false)),
     // CDXC:Extensions 2026-11-09 DECISION: User: "that url is mine but it should open grok.com usually please". The Grok page opens grok.com unless the user puts their own page (a Grok bot, say) here; no one's own page ships as a default.
     ("grokWebStartPage", J::Str("https://grok.com/")),
     // The Grok logins, each `{ "id", "name" }` with its own browser profile (apps/desktop/src/app/claude_web/grok.rs). Empty is one login named Grok.
@@ -333,6 +338,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("showSessionCardHoverButtonsInContextMenu", J::Bool(true)),
     // CDXC:Tooltips 2026-10-29 DECISION: User: "please let me disable the tooltip for sessions in the sidebar with a toggle (advanced setting)". Session tooltips stay on by default, as before; turning this off removes only the hover tooltip on a sidebar session row's title.
     ("showSidebarSessionTooltips", J::Bool(true)),
+    // CDXC:Coordinators 2026-11-15 DECISION (issue #618, Q3275): "no bold" (the user dislikes bold text). A coordinator and its threads stand apart by the crown, colour and dimmer thread text; Bold coordinator title (off by default) bolds the coordinator's title for people who want it. Same key as the phone's own setting (apps/mobile/app/src/settings/store.ts).
+    ("sessionsBoldCoordinatorTitle", J::Bool(false)),
     // CDXC:Sessions 2026-06-13-15:42
     // Recommended is the default sidebar style and hides session-card Last Active
     // timestamps by default. Settings still owns an explicit toggle for users who
@@ -508,6 +515,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("startServerAtLogin", J::Bool(false)),
     ("openAppAtLogin", J::Bool(false)),
     ("resumeSessionsAfterRestart", J::Bool(false)),
+    ("memoryGuardEnabled", J::Bool(true)),
+    ("memoryGuardNotify", J::Bool(true)),
     ("keepAwakeActivateOnExternalDisplay", J::Bool(false)),
     ("keepAwakeActivateOnLaunch", J::Bool(false)),
     ("keepAwakeAllowDisplaySleep", J::Bool(false)),
@@ -545,6 +554,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("showMacOSAttentionNotifications", J::Bool(true)),
     // CDXC:Notifications 2026-11-07 DECISION: All stays the default; Needs you only (approved with PR #457) is the rule in packages/gx-core/src/attention.rs.
     ("attentionAlertsFor", J::Str("all")),
+    ("workerNotifications", J::Str("off")),
     // CDXC:Notifications 2026-10-05 DECISION:
     // User: a banked reset that expires within 3 days, and again within 24 hours, also gets a system notification, which "can be switched off for the system" while the red bell row stays.
     ("resetExpirySystemNotifications", J::Bool(true)),
@@ -596,6 +606,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("sidebarSeparateByMachine", J::Bool(false)),
     // CDXC:RemoteMachines 2026-11-09 DECISION in gx-core sidebar_view/merged.rs: on by default.
     ("sidebarMergeRepositoryCopies", J::Bool(true)),
+    // CDXC:RemoteMachines 2026-11-15 DECISION in gx-core sidebar_view/merged.rs: off by default.
+    ("sidebarHideDisconnectedMachines", J::Bool(false)),
     // CDXC:Worktrees 2026-11-06 DECISION in gx-core sidebar_view/worktree_fold.rs.
     ("worktreeSessionsInProject", J::Bool(true)),
     // CDXC:Sidebar 2026-11-07 DECISION in gx-core sidebar_view/inputs.rs (Pinned order): Manual by default.
@@ -634,6 +646,13 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:SessionChat 2026-11-02 DECISION: User: "in settings i think we have setting for verbose, make that about defaulting to detailed view but make sure it's in advanced". Off, new chats open Normal (supersedes 2026-09-27's Simple mode by default, which this inherits as the off state); a saved `sessionChatVerboseMode` true or `sessionChatSimpleMode` false reads as on (`migrate_chat_view_default`).
     ("sessionChatDetailedView", J::Bool(false)),
     ("sessionChatFileEditPreviews", J::Bool(false)),
+    // CDXC:Experience 2026-11-15 SEE-ALSO: the chat box switches and Chill's Quiet View that Settings > Experience sets (packages/settings-catalog/src/experience.rs, where the user's decisions are). On by default except the calm Quiet View, so nothing moves on update (Q3287).
+    ("chatComposerModePicker", J::Bool(true)),
+    ("chatComposerTerminalButton", J::Bool(true)),
+    ("chatComposerContextRing", J::Bool(true)),
+    ("chatComposerMaximize", J::Bool(true)),
+    ("chatQuietViewCalm", J::Bool(false)),
+    ("chatVariedWorkingWords", J::Bool(false)),
     // CDXC:SessionChat 2026-10-16 DECISION: User, on a tester's request to draw the agent's thinking grey and its output white as terminals do: "Sure please do it as a toggle (disabled by default) so we can check how it looks." Off keeps the unified look; on, thinking takes the theme's muted text colour and replies its full foreground, in the desktop, web and phone chats.
     ("sessionChatMutedThinking", J::Bool(false)),
     ("sessionChatKeepComposerExpanded", J::Bool(false)),
@@ -643,6 +662,11 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:Onboarding 2026-11-11 SEE-ALSO: the tips card under a new chat's headline (packages/gx-chat-core/src/extras/new_chat_tips.rs, where the user's decision is); on by default, off from the card's Hide tips.
     ("newChatTips", J::Bool(true)),
     ("sessionDetailsClaudeTaskTools", J::Bool(true)),
+    // CDXC:AgentProviders 2026-11-14 SEE-ALSO: Claude Code's own idle compaction and prompt cache length, set per launch (server/src/agents/claude_idle_compaction.rs, where the user's decision is). Claude's defaults: on, 200K, its automatic cache length.
+    ("claudeIdleCompaction", J::Bool(true)),
+    ("claudeIdleCompactAbove", J::Str("200000")),
+    ("claudeOneHourPromptCache", J::Bool(false)),
+    ("compactWorkersBeforeReturn", J::Bool(true)),
     // CDXC:VoiceMode 2026-10-20 WHY:
     // xAI is the default provider: Grok Voice is billed per minute at a known price, and Grok dictation already needs the xAI key. Each provider keeps its own voice; the API keys are not settings (gxserver seals them, see server/src/voice_agent/keys.rs).
     ("voiceAgentProvider", J::Str("xai")),
@@ -751,6 +775,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("lightThemePreset", J::Str("gray")),
     ("themeSidebarContrast", J::Num(0.0)),
     ("themeWorkAreaContrast", J::Num(0.0)),
+    ("themeRoles", J::Obj(&[])),
     (
         "customSidebarTitlebarLightBackgroundTintColor",
         J::Str("#808080"),

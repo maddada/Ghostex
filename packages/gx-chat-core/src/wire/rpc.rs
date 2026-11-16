@@ -100,6 +100,8 @@ pub enum ChatRpcMethod {
     ReadSessionDetails,
     /// Ends one of the session's background commands (the Session details panel's stop button).
     StopSessionBackgroundTask,
+    /// The Mode menu's "Restart in Bypass when idle" switch (server/src/session_chat_mode_restart.rs).
+    RestartSessionInMode,
     /// Hold a message on THIS computer's gxserver for a session whose computer is offline
     /// (`session/computer.rs`). The host sends these three to its own gxserver, never the
     /// session's.
@@ -166,6 +168,7 @@ impl ChatRpcMethod {
             Self::ReadSessionFilesLinks => "readSessionFilesLinks",
             Self::ReadSessionDetails => "readSessionDetails",
             Self::StopSessionBackgroundTask => "stopSessionBackgroundTask",
+            Self::RestartSessionInMode => "restartSessionInMode",
             Self::HoldSessionChatSend => "holdSessionChatSend",
             Self::ListHeldSessionChatSends => "listHeldSessionChatSends",
             Self::CancelHeldSessionChatSend => "cancelHeldSessionChatSend",
@@ -228,6 +231,7 @@ impl ChatRpcMethod {
             "readSessionFilesLinks" => Self::ReadSessionFilesLinks,
             "readSessionDetails" => Self::ReadSessionDetails,
             "stopSessionBackgroundTask" => Self::StopSessionBackgroundTask,
+            "restartSessionInMode" => Self::RestartSessionInMode,
             "holdSessionChatSend" => Self::HoldSessionChatSend,
             "listHeldSessionChatSends" => Self::ListHeldSessionChatSends,
             "cancelHeldSessionChatSend" => Self::CancelHeldSessionChatSend,

@@ -58,11 +58,10 @@ fn lines(text: &str, char_width: f32, width: f32) -> f32 {
 fn footer_height(intro: &Value) -> f32 {
     FOOTER_FIXED
         + FOOTER_NOTE_LINE
-            * lines(
-                &text(intro, "dontShowAgainNote"),
-                FOOTER_NOTE_CHAR,
-                FOOTER_NOTE_WIDTH,
-            )
+            * text(intro, "dontShowAgainNote")
+                .split('\n')
+                .map(|line| lines(line, FOOTER_NOTE_CHAR, FOOTER_NOTE_WIDTH))
+                .sum::<f32>()
 }
 
 fn tips(intro: &Value) -> Vec<Value> {

@@ -246,6 +246,9 @@ impl NativeChatView {
         if wanted == self.sent_rows_listed {
             return false;
         }
+        if wanted > self.sent_rows_listed {
+            self.follow_tail_if_near_end();
+        }
         let rows = self.items.len();
         self.list.splice(rows..rows + self.sent_rows_listed, wanted);
         self.sent_rows_listed = wanted;

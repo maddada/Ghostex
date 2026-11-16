@@ -92,7 +92,7 @@ jobs:
             ~/.cache/zig
           key: zig-gxserver-${{ runner.os }}-${{ inputs.arch }}-${{ steps.cache_keys.outputs.zig }}
           restore-keys: zig-gxserver-${{ runner.os }}-${{ inputs.arch }}-
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       # kache (CDXC:ReleaseKache 2026-11-04, replacing sccache's GitHub Actions backend). The registry cache above

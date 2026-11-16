@@ -96,11 +96,69 @@ fn is_drift_reminder(paragraph: &str) -> bool {
     parts.peek().is_some() && parts.all(|part| order.by_ref().any(|words| words == part))
 }
 
-/// `rest` without the note gxserver added last: the fixed notes, or a drift reminder.
+/// The opening and closing words of the note under a user's message to a coordinator that lists
+/// the questions still waiting on the user (server/src/session_chat_queue_runtime/send.rs
+/// `open_questions_note`); its middle names each by its title with the tags the agent knows it by.
+///
+/// CDXC:Coordinators 2026-11-16 DECISION:
+/// User, on issue #627 (an answer typed in the normal chat box left the ask open, so he clicked a
+/// wrong answer to clear it), picked "Tell the coordinator what's still open": when he sends a
+/// message while questions wait on him, the coordinator is told which, by title, and closes any
+/// the message answered. The note is for the agent only; the chat hides it like the other notes.
+const OPEN_QUESTIONS_OPENING: &str = "Still open for the user: ";
+const OPEN_QUESTIONS_CLOSING: &str = " If this message answers any of them, close it: `ghostex coordinator item ask <W7> --done <Q12>` for a work item's question, \"withdraw\" in a ```questions block for a form's or page's.";
+/// The most questions the note names; the rest are counted ("and 3 more").
+const OPEN_QUESTIONS_NAMED: usize = 10;
+
+/// The note listing `open` (each a title and the tags the agent knows it by, "W7 Q12" or "Q12 to
+/// Q14"), `None` for none. Titles are kept to one line of at most 80 characters.
+pub fn open_questions_note(open: &[(String, String)]) -> Option<String> {
+    if open.is_empty() {
+        return None;
+    }
+    let mut named: Vec<String> = open
+        .iter()
+        .take(OPEN_QUESTIONS_NAMED)
+        .map(|(title, tags)| {
+            let title: String = title
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .replace(['\u{201c}', '\u{201d}'], "\"");
+            let title = if title.chars().count() > 80 {
+                format!("{}\u{2026}", title.chars().take(79).collect::<String>())
+            } else {
+                title
+            };
+            match (title.is_empty(), tags.trim().is_empty()) {
+                (true, _) => tags.trim().to_string(),
+                (false, true) => format!("\u{201c}{title}\u{201d}"),
+                (false, false) => format!("\u{201c}{title}\u{201d} ({})", tags.trim()),
+            }
+        })
+        .collect();
+    if open.len() > OPEN_QUESTIONS_NAMED {
+        named.push(format!("and {} more", open.len() - OPEN_QUESTIONS_NAMED));
+    }
+    Some(format!(
+        "{OPEN_QUESTIONS_OPENING}{}.{OPEN_QUESTIONS_CLOSING}",
+        named.join("; ")
+    ))
+}
+
+/// Whether `paragraph` is an open questions note gxserver wrote ([`open_questions_note`]).
+fn is_open_questions_note(paragraph: &str) -> bool {
+    !paragraph.contains('\n')
+        && paragraph.starts_with(OPEN_QUESTIONS_OPENING)
+        && paragraph.ends_with(OPEN_QUESTIONS_CLOSING)
+}
+
+/// `rest` without the note gxserver added last: the fixed notes, a drift reminder, or the open
+/// questions note.
 fn strip_last_note(rest: &str) -> Option<&str> {
     let drift = rest
         .rsplit_once('\n')
-        .filter(|(_, last)| is_drift_reminder(last))
+        .filter(|(_, last)| is_drift_reminder(last) || is_open_questions_note(last))
         .map(|(head, _)| &rest[..head.len() + 1]);
     let head = APPENDED_NOTES
         .iter()
@@ -112,9 +170,184 @@ fn strip_last_note(rest: &str) -> Option<&str> {
         .then_some(body)
 }
 
-/// `text` with `note` under it, a blank line apart: the shape gxserver types.
+/// `text` with `note` under it, a blank line apart: the shape gxserver typed before 11.8
+/// (`with_system_notes` now). Kept so such rows in transcripts are still read without it.
 pub fn with_note(text: &str, note: &str) -> String {
     format!("{}\n\n{note}", text.trim_end())
+}
+
+/// The block that carries Ghostex's own notes to the agent, after what the user wrote and apart
+/// from it: the playbook note, the drift reminder, the compaction note and the open questions.
+///
+/// CDXC:Coordinators 2026-11-16 DECISION:
+/// User, of "Still open for the user: …" drawn in his own bubble: "This is a system message. mark
+/// it as such and don't show these ghostex system messages in the chat view at all like this!
+/// also shouldn't be attached to a user's message should be sent on its own". Every note goes in
+/// one `<ghostex-system>` block, marked as Ghostex's and never part of the user's words, in the
+/// same submit (a second submit would land mid-turn as another user message on Claude Code and
+/// Codex alike, and could be lost or reordered by their queues). Every chat drops the block from
+/// the row it draws, wherever in the text it sits (`without_notes`).
+pub const SYSTEM_OPEN: &str = "<ghostex-system>";
+pub const SYSTEM_CLOSE: &str = "</ghostex-system>";
+
+/// Ghostex's `notes` as a message of their own: one `<ghostex-system>` block, sent to the agent
+/// right after the user's message as a separate submit; `None` for none.
+///
+/// CDXC:Coordinators 2026-11-16 DECISION:
+/// User (Q3557): the notes may show in the terminal, never in the chat view, and go "as their own
+/// separate message, not inside the user's message". The chat drops a user row that holds nothing
+/// but such a block ([`is_system_only`]).
+pub fn system_message(notes: &[&str]) -> Option<String> {
+    if notes.iter().all(|note| note.trim().is_empty()) {
+        return None;
+    }
+    let mut notes = notes.to_vec();
+    notes.push(NOTE_ONLY_REPLY);
+    let block = with_system_notes("", &notes);
+    let block = block.trim();
+    (!block.is_empty()).then(|| block.to_string())
+}
+
+/// The last line of a notes message: a note that reaches an idle agent opens a turn of its own,
+/// which the chat does not draw, so its answer should cost as little as it can.
+const NOTE_ONLY_REPLY: &str = "This message is from Ghostex, not the user, and needs no answer of its own: act on it if it asks something of you, and if there is nothing to do, reply with only \"ok\".";
+
+/// Whether `message` is a user row that holds only Ghostex's notes: no words of the user's, no
+/// picture. No chat draws it.
+pub fn is_system_only(message: &ChatMessage) -> bool {
+    message.role == ChatRole::User
+        && !message.blocks.is_empty()
+        && message.blocks.iter().all(|block| match block {
+            ChatBlock::Text { text } => {
+                text.contains(SYSTEM_OPEN) && without_notes(text).trim().is_empty()
+            }
+            _ => false,
+        })
+}
+
+/// The transcript as the chat draws it: without Ghostex's notes sent as messages of their own, and
+/// without the replies of a turn such a note opened.
+///
+/// A note typed while the agent works is taken into the running turn: Claude Code records it as a
+/// queued command right after a tool's result (or, where tool rows are left out, right after the
+/// user's message), and the reply after it is the reply to the user's message, so only the note
+/// goes; when in doubt nothing else is hidden. A note that reaches an agent whose turn already ended (a reply
+/// with no tool call ends before the note lands) opens a turn of its own, after a finished reply:
+/// that turn is Ghostex's, so it goes whole, up to the next message the user wrote.
+///
+/// CDXC:Coordinators 2026-11-16 DECISION:
+/// User picked "A. Separate message, and hide a reply only when the note opened its own turn"
+/// (Q3561), with "make sure in case 1 (note joins the user's turn) the real reply is never
+/// hidden". The note asks the agent to answer with only "ok" when it has nothing to do there.
+pub fn without_note_turns(rows: Vec<crate::state::ChatRow>) -> Vec<crate::state::ChatRow> {
+    without_note_turns_after(rows, &mut NoteTurns::default())
+}
+
+/// Where [`without_note_turns`] stood after the rows it last read, so rows pushed after them can
+/// be read on their own (`session/composition.rs` `refresh_boundaried`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct NoteTurns {
+    /// The role of the last row read that was not a system row.
+    previous: Option<ChatRole>,
+    /// Whether that row is in a turn a note opened.
+    in_note_turn: bool,
+}
+
+/// [`without_note_turns`] for `rows` coming right after the ones `turns` read.
+///
+/// CDXC:Coordinators 2026-11-16 WHY:
+/// The user still saw the open questions note as his own bubble, `<ghostex-system>` tags and all,
+/// on a coordinator that was mid-turn. The note was a system-only row, but the live chat builds its
+/// transcript in `refresh_boundaried`, whose whole rebuild and whose rows-pushed-at-the-end path
+/// never dropped notes; only the rarely used rebuild in `boundaried_transcript` did. Both now
+/// read every row through here, the pushed rows from where the last read stopped.
+pub fn without_note_turns_after(
+    rows: Vec<crate::state::ChatRow>,
+    turns: &mut NoteTurns,
+) -> Vec<crate::state::ChatRow> {
+    if !turns.in_note_turn && !rows.iter().any(|row| is_system_only(row)) {
+        if let Some(last) = rows.iter().rev().find(|row| row.role != ChatRole::System) {
+            turns.previous = Some(last.role.clone());
+        }
+        return rows;
+    }
+    let mut kept = Vec::with_capacity(rows.len());
+    for row in rows {
+        if row.role == ChatRole::System {
+            if !turns.in_note_turn {
+                kept.push(row);
+            }
+            continue;
+        }
+        if is_system_only(&row) {
+            // A note still waiting in the agent's queue says nothing about where it lands.
+            // Only right after the agent's own reply did its turn end before the note: after the
+            // user's message or a tool's result (a read that leaves tool rows out shows the note
+            // right after the message), or with nothing loaded before it, the note joined a
+            // running turn, and nothing is hidden.
+            if !row.queued {
+                turns.in_note_turn = matches!(
+                    turns.previous,
+                    Some(ChatRole::Assistant | ChatRole::Reasoning)
+                );
+            }
+            turns.previous = Some(row.role.clone());
+            continue;
+        }
+        if turns.in_note_turn && row.role == ChatRole::User {
+            // The user's own words end the note's turn, wherever they land.
+            turns.in_note_turn = false;
+        }
+        turns.previous = Some(row.role.clone());
+        if !turns.in_note_turn {
+            kept.push(row);
+        }
+    }
+    kept
+}
+
+/// `text` with Ghostex's `notes` after it in one `<ghostex-system>` block; `text` alone for none.
+pub fn with_system_notes(text: &str, notes: &[&str]) -> String {
+    let notes: Vec<&str> = notes
+        .iter()
+        .map(|note| note.trim())
+        .filter(|note| !note.is_empty())
+        .collect();
+    if notes.is_empty() {
+        return text.to_string();
+    }
+    format!(
+        "{}\n\n{SYSTEM_OPEN}\nGhostex system note, not written by the user:\n{}\n{SYSTEM_CLOSE}",
+        text.trim_end(),
+        notes.join("\n\n")
+    )
+}
+
+/// `text` without its `<ghostex-system>` blocks, or `None` when it has none.
+fn without_system_blocks(text: &str) -> Option<String> {
+    if !text.contains(SYSTEM_OPEN) {
+        return None;
+    }
+    let mut kept = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(open) = rest.find(SYSTEM_OPEN) {
+        let Some(close) = rest[open..].find(SYSTEM_CLOSE) else {
+            break;
+        };
+        kept.push_str(rest[..open].trim_end());
+        rest = &rest[open + close + SYSTEM_CLOSE.len()..];
+    }
+    kept.push_str(rest);
+    Some(kept.trim_end().to_string())
+}
+
+/// `text` without anything gxserver added for the agent: its `<ghostex-system>` blocks, and the
+/// bare notes of older versions under it (`without_appended_notes`). What the user sent.
+pub fn without_notes(text: &str) -> String {
+    match without_system_blocks(text) {
+        Some(plain) => without_appended_notes(&plain).to_string(),
+        None => without_appended_notes(text).to_string(),
+    }
 }
 
 /// `text` without the notes gxserver added under it: what the user sent.
@@ -170,7 +403,9 @@ fn without_thread_title_reminder(text: &str) -> Option<String> {
 ///
 /// `message` as the chat shows it, or `None` when it carries no added note.
 pub fn shown_message(message: &ChatMessage) -> Option<ChatMessage> {
-    if message.role != ChatRole::User {
+    // A message of nothing but Ghostex's notes stays whole: the transcript drops it, and the turn
+    // it opened, where it can tell the two apart (`without_note_turns`).
+    if message.role != ChatRole::User || is_system_only(message) {
         return None;
     }
     let mut changed = false;
@@ -179,9 +414,9 @@ pub fn shown_message(message: &ChatMessage) -> Option<ChatMessage> {
         .iter()
         .map(|block| match block {
             ChatBlock::Text { text } => {
-                let plain = without_appended_notes(text);
-                let plain = if plain.len() != text.trim_end().len() {
-                    plain.to_string()
+                let stripped = without_notes(text);
+                let plain = if stripped.len() != text.trim_end().len() {
+                    stripped
                 } else {
                     text.clone()
                 };

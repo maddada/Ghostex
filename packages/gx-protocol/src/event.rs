@@ -209,6 +209,8 @@ pub enum ServerEvent {
     SidebarSpacesChanged(SidebarSpacesChangedFrame),
     SidebarWorkspacesChanged(SidebarWorkspacesChangedFrame),
     CustomSessionTagsChanged(CustomSessionTagsChangedFrame),
+    /// The whole `extensionPanels` map after a sidebar extension's panel changed.
+    ExtensionPanelsChanged(Box<crate::extension_panel::ExtensionPanelsChangedFrame>),
     GlobalSidebarCommandsChanged(GlobalSidebarCommandsChangedFrame),
     /// No payload and no revision: refetch `/api/readNotificationFeed`.
     NotificationFeedChanged(EventHeader),
@@ -284,6 +286,9 @@ impl ServerEvent {
             Self::SidebarSpacesChanged(_) => "sidebarSpacesChanged",
             Self::SidebarWorkspacesChanged(_) => "sidebarWorkspacesChanged",
             Self::CustomSessionTagsChanged(_) => "customSessionTagsChanged",
+            Self::ExtensionPanelsChanged(_) => {
+                crate::extension_panel::EXTENSION_PANELS_CHANGED_EVENT_TYPE
+            }
             Self::GlobalSidebarCommandsChanged(_) => "globalSidebarCommandsChanged",
             Self::NotificationFeedChanged(_) => "notificationFeedChanged",
             Self::ConnectorsChanged(_) => "connectorsChanged",
@@ -317,6 +322,7 @@ impl ServerEvent {
             Self::SidebarSpacesChanged(frame) => &frame.header,
             Self::SidebarWorkspacesChanged(frame) => &frame.header,
             Self::CustomSessionTagsChanged(frame) => &frame.header,
+            Self::ExtensionPanelsChanged(frame) => &frame.header,
             Self::GlobalSidebarCommandsChanged(frame) => &frame.header,
             Self::ConnectorsChanged(frame) => &frame.header,
             Self::SettingsSyncNote(frame) => &frame.header,
@@ -372,6 +378,9 @@ impl ServerEvent {
             "sidebarSpacesChanged" => source.read().map(Self::SidebarSpacesChanged),
             "sidebarWorkspacesChanged" => source.read().map(Self::SidebarWorkspacesChanged),
             "customSessionTagsChanged" => source.read().map(Self::CustomSessionTagsChanged),
+            crate::extension_panel::EXTENSION_PANELS_CHANGED_EVENT_TYPE => {
+                source.read().map(Self::ExtensionPanelsChanged)
+            }
             "globalSidebarCommandsChanged" => source.read().map(Self::GlobalSidebarCommandsChanged),
             "notificationFeedChanged" => source.read().map(Self::NotificationFeedChanged),
             "connectorsChanged" => source.read().map(Self::ConnectorsChanged),

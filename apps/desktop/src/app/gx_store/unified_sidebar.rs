@@ -91,7 +91,7 @@ impl UnifiedSidebarHost {
     /// The store key of a row the Unified sidebar draws, which the Project sidebar's list may not
     /// hold (a session in another Space). The web build resolves a clicked row through it; the
     /// desktop parses the row id instead.
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    #[cfg_attr(not(ghostex_web), allow(dead_code))]
     pub(crate) fn session_key_for_row(&self, sidebar_session_id: &str) -> Option<SessionKey> {
         self.lanes
             .values()
@@ -116,7 +116,7 @@ impl UnifiedSidebarHost {
     /// The row id the Unified lists draw `key` under: a borrowed thread's copy in its coordinator's
     /// lane first, since that is the row nested under the card. The web build reveals it when it
     /// opens a session.
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    #[cfg_attr(not(ghostex_web), allow(dead_code))]
     pub(crate) fn row_for_session_key(&self, key: &SessionKey) -> Option<String> {
         let rows = || {
             self.lanes
@@ -1046,7 +1046,7 @@ impl GhostexGpuiApp {
 
     /// The Unified reveal of a session the web build opens by its key: now when a list holds its row,
     /// else once one does.
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    #[cfg_attr(not(ghostex_web), allow(dead_code))]
     pub(crate) fn gx_store_unified_reveal_session(
         &mut self,
         session: &SessionKey,
@@ -1388,7 +1388,7 @@ impl GhostexGpuiApp {
         order: Vec<String>,
         cx: &mut gpui::Context<Self>,
     ) {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(ghostex_web))]
         self.handle_gpui_app_modal_update_settings_patch_message(
             &serde_json::json!({
                 "type": "updateSettingsPatch",
@@ -1397,7 +1397,7 @@ impl GhostexGpuiApp {
             }),
             cx,
         );
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(ghostex_web)]
         let _ = (order, cx);
     }
 }

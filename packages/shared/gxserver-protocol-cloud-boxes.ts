@@ -28,12 +28,23 @@ export type GxserverCloudBoxState =
   | (string & {});
 
 export type GxserverCloudProviderConnectionState =
-  'notConnected' | 'connecting' | 'connected' | 'expired' | 'error' | (string & {});
+  | 'notConnected'
+  | 'connecting'
+  | 'connected'
+  | 'expired'
+  | 'error'
+  | (string & {});
 
 export type GxserverCloudConnectMethod = 'browser' | 'key' | 'none' | (string & {});
 export type GxserverCloudSnapshotStatus = 'pending' | 'ready' | 'failed' | (string & {});
 export type GxserverCloudBoxBootStep =
-  'checkCap' | 'create' | 'boot' | 'secrets' | 'prepareSession' | 'connect' | (string & {});
+  | 'checkCap'
+  | 'create'
+  | 'boot'
+  | 'secrets'
+  | 'prepareSession'
+  | 'connect'
+  | (string & {});
 export type GxserverCloudBoxStepState = 'waiting' | 'running' | 'done' | 'failed' | 'skipped' | (string & {});
 export type GxserverCloudSpendState = 'off' | 'ok' | 'warn' | 'reached' | (string & {});
 export type GxserverCloudSpendScope = 'account' | 'ghostexBoxes' | (string & {});

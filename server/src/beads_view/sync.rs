@@ -146,6 +146,9 @@ pub(crate) fn start_sync(
             }
         };
         let _ = &info;
+        if !result.ok {
+            super::log::warn("beadsView.syncFailed", &sync_failure_line(&result));
+        }
         let saved = {
             let mut state = entry.state();
             state.sync.running = None;
@@ -235,6 +238,29 @@ fn failed_to_run(kind: &str, error: TypedOperationError) -> BeadsSyncResult {
         output: error.message,
         at: now(),
     }
+}
+
+/// One line for the always-on log: the kind, the code and bd's first error line.
+///
+/// CDXC:ProjectBoard 2026-11-13 WHY: a Pull or Push that failed on a computer left no trace unless the Project board diagnostic area happened to be on, so a failure reported later could not be explained. Failures are rare and are errors, so they are logged unconditionally; the codes and the output the clients read are unchanged.
+fn sync_failure_line(result: &BeadsSyncResult) -> String {
+    let first_error = result
+        .output
+        .lines()
+        .map(str::trim)
+        .find(|line| {
+            let lower = line.to_lowercase();
+            lower.starts_with("error") || lower.contains("rejected") || lower.contains("fatal")
+        })
+        .or_else(|| {
+            result
+                .output
+                .lines()
+                .map(str::trim)
+                .find(|line| !line.is_empty())
+        })
+        .unwrap_or(result.message.as_str());
+    format!("{} failed ({}): {}", result.kind, result.code, first_error)
 }
 
 fn now() -> String {

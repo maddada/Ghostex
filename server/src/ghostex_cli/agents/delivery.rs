@@ -155,6 +155,7 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         }
     }
     let receipt = receipt(&result);
+    let compacted = compacted_first_note(&result);
     let (status, note) = if args.delivery == Delivery::Queue {
         (
             "queued",
@@ -174,6 +175,8 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         }
     } else if result["alreadyHeld"] == json!(true) {
         ("pending", "The same message is already waiting for the recipient to start, so Ghostex did not queue it again; it is typed once the recipient's input box appears.")
+    } else if let Some(note) = compacted.as_deref() {
+        ("pending", note)
     } else if transcript_shows(&read_payload, &body, &rows_before, &flags) {
         ("delivered", "The recipient's transcript shows the message.")
     } else if !receipt["queuedPromptId"].is_null() {
@@ -323,4 +326,33 @@ pub(super) fn receipt(result: &Value) -> Value {
         "sendRequestId": result["sendRequestId"],
         "queuedPromptId": result.get("queuedPromptId").or_else(|| result.pointer("/prompt/id")),
     })
+}
+
+/// What the send says when gxserver compacted the worker before the message
+/// (CDXC:Coordinators 2026-11-15 in server/src/carry_on_compaction.rs), so a coordinator does not
+/// take the wait for a lost message.
+fn compacted_first_note(result: &Value) -> Option<String> {
+    let compacted = result.get("compactedFirst")?.as_object()?;
+    let number = |key: &str| compacted.get(key).and_then(Value::as_u64).unwrap_or(0);
+    let tokens = number("tokens");
+    let size = if tokens >= 1_000_000 {
+        format!("{:.1}M", tokens as f64 / 1_000_000.0)
+    } else {
+        format!("{}K", (tokens + 500) / 1_000)
+    };
+    let span = |minutes: u64| match minutes {
+        0..=59 => format!("{minutes} min"),
+        60..=1439 => format!("{} h {} min", minutes / 60, minutes % 60),
+        _ => format!("{} days", minutes / 1440),
+    };
+    let cache = match number("cacheLifeMinutes") {
+        5 => "5-minute".to_string(),
+        60 => "1-hour".to_string(),
+        1440 => "1-day".to_string(),
+        other => format!("{other}-minute"),
+    };
+    Some(format!(
+        "Ghostex compacted this worker first ({size} of context, idle {}, past its {cache} prompt cache), to save tokens; your message waits in its queue and is typed as soon as the compaction ends. Do not send it again.",
+        span(number("idleMinutes"))
+    ))
 }

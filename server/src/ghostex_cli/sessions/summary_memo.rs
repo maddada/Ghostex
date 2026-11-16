@@ -37,6 +37,9 @@ use crate::ghostex_cli::rpc::gxserver_root;
 
 const MEMO_MS: u64 = 2_000;
 const MEMO_FILE: &str = "cli-mobile-summary-memo.txt";
+/// The `--icon-refs` answer's own memo, so a phone asking for refs and one asking for data URLs do
+/// not evict each other's.
+const ICON_REFS_MEMO_FILE: &str = "cli-mobile-summary-memo-icon-refs.txt";
 const CHANGE_MARK_FILE: &str = "cli-mobile-summary-memo.changed";
 
 /// The summary's own reads, and the session lookup that changes nothing; every other gxserver
@@ -61,13 +64,18 @@ pub(crate) fn now_ms() -> u64 {
 /// server the CLI is pointed at), when it started, and gxserver's database stamp at its start.
 pub(crate) struct SummaryRun {
     key: String,
+    file: &'static str,
     started_ms: u64,
     stamp: String,
 }
 
 /// The run about to start, or `None` when its answer must not be memoized (another computer's
 /// gxserver, whose database this CLI cannot stamp).
-pub(crate) fn begin_summary_run(args: &[String], local_gxserver: bool) -> Option<SummaryRun> {
+pub(crate) fn begin_summary_run(
+    args: &[String],
+    local_gxserver: bool,
+    icon_refs: bool,
+) -> Option<SummaryRun> {
     if !local_gxserver {
         return None;
     }
@@ -79,6 +87,11 @@ pub(crate) fn begin_summary_run(args: &[String], local_gxserver: bool) -> Option
     }
     Some(SummaryRun {
         key: key.replace('\n', " "),
+        file: if icon_refs {
+            ICON_REFS_MEMO_FILE
+        } else {
+            MEMO_FILE
+        },
         started_ms: now_ms(),
         stamp: database_stamp(),
     })
@@ -111,7 +124,7 @@ pub(crate) fn database_stamp() -> String {
 /// gxserver's database is still exactly as it was at that run's start and this CLI sent nothing
 /// to gxserver since.
 pub(crate) fn read_summary_memo(run: &SummaryRun) -> Option<String> {
-    let text = fs::read_to_string(memo_path()).ok()?;
+    let text = fs::read_to_string(memo_path(run.file)).ok()?;
     let (header, body) = text.split_once('\n')?;
     let (started, rest) = header.split_once(' ')?;
     let (stamp, memo_key) = rest.split_once(' ')?;
@@ -138,7 +151,10 @@ pub(crate) fn read_summary_memo(run: &SummaryRun) -> Option<String> {
 /// never sees half of it. Failing to write only loses the memo.
 pub(crate) fn write_summary_memo(run: &SummaryRun, printed: &str) {
     let header = format!("{} {} {}\n", run.started_ms, run.stamp, run.key);
-    write_atomically(&memo_path(), &[header.as_bytes(), printed.as_bytes()]);
+    write_atomically(
+        &memo_path(run.file),
+        &[header.as_bytes(), printed.as_bytes()],
+    );
 }
 
 fn write_atomically(path: &std::path::Path, parts: &[&[u8]]) {
@@ -175,8 +191,8 @@ pub(crate) fn note_gxserver_request(pathname: &str) {
     write_atomically(&change_mark_path(), &[now_ms().to_string().as_bytes()]);
 }
 
-fn memo_path() -> PathBuf {
-    gxserver_root().join(MEMO_FILE)
+fn memo_path(file: &str) -> PathBuf {
+    gxserver_root().join(file)
 }
 
 fn change_mark_path() -> PathBuf {

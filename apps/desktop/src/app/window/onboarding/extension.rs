@@ -16,22 +16,27 @@ use gpui::{
 };
 use std::time::{Duration, Instant};
 
-const INTEGRATION_LEAD: &str = "Ghostex adds a small helper to each agent's own settings, so it can show what every agent is doing.";
+/// CDXC:Onboarding 2026-11-13 DECISION: User, on the first-run showcase page (Q3046), picked "Built
+/// in for most, a helper only where needed". The tab used to promise a helper in every agent's
+/// settings, Claude's and Codex's included, which Ghostex no longer writes (CDXC:AgentHooks in
+/// server/src/agent_hooks/hook_free.rs); it now says which agents are followed from their own
+/// transcripts and where a helper goes for the rest.
+const INTEGRATION_LEAD: &str = "Ghostex follows most agents from their own transcripts, built in. A few, like Cursor Agent, need a small Ghostex helper in their own settings.";
 const INTEGRATION_TERMS: [(&str, &str); 4] = [
     (
-        "What's added",
-        "A small Ghostex helper in each agent's own settings.",
+        "Built in",
+        "Claude Code, Codex and OpenCode, read from their own transcripts.",
+    ),
+    (
+        "Helper",
+        "A small Ghostex helper in the settings of agents like Cursor Agent.",
     ),
     (
         "What you get",
         "Live status, alerts, session names, the chat view and resume.",
     ),
     (
-        "Your agent",
-        "Still runs as its normal CLI, and nothing goes through a Ghostex cloud.",
-    ),
-    (
-        "To remove it",
+        "To remove a helper",
         "Settings → Agents, one agent or all at once.",
     ),
 ];
@@ -39,7 +44,7 @@ const COMPUTER_USE_LEAD: &str = "This hands over the whole machine: supported ag
 const COMPUTER_USE_TERMS: [(&str, &str); 3] = [
     (
         "What's added",
-        "A Computer Use skill for your agents and a small helper app.",
+        "A Computer Use skill, the Browser's skill and a small helper app.",
     ),
     (
         "What agents can do",
@@ -52,10 +57,11 @@ const INTEGRATION_SESSIONS: [(&str, &str, &str); 3] = [
     ("codex", "codex", "port-tests"),
     ("cursor", "cursor-agent", "css-tokens"),
 ];
-const HELPER_FILES: [(&str, &str); 3] = [
-    ("claude", "~/.claude/settings.json"),
-    ("codex", "~/.codex/hooks.json"),
-    ("cursor", "~/.cursor/hooks.json"),
+/// Shown until detection answers: how Ghostex follows the three agents most people have.
+const DEFAULT_FOLLOWING: [(&str, &str, Option<&str>); 3] = [
+    ("claude", "Claude Code", None),
+    ("codex", "Codex CLI", None),
+    ("cursor", "Cursor Agent", Some("~/.cursor/hooks.json")),
 ];
 const CURSOR_PATH: [(f32, f32); 6] = [
     (500.0, 230.0),
@@ -231,29 +237,13 @@ impl GpuiOnboardingWindow {
                     }
                 })
                 .bg(rgba(10, 12, 20, 0.75))
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(sans(s, 13.5, 600.0, hex(0xeef1f7)).child(if with {
-                            "With the integration"
-                        } else {
-                            "Without it"
-                        }))
-                        .when(lit, |this| {
-                            this.child(tracked_text(
-                                s,
-                                "YOUR CHOICE",
-                                PLEX_MONO,
-                                500.0,
-                                10.0,
-                                13.0,
-                                0.1,
-                                hex(0x8fabff),
-                            ))
-                        }),
-                )
+                .child(div().flex().items_center().justify_between().child(
+                    sans(s, 13.5, 600.0, hex(0xeef1f7)).child(if with {
+                        "In Ghostex"
+                    } else {
+                        "In a plain terminal"
+                    }),
+                ))
                 .child(div().h(s.px(44.0)).child(alert))
                 .children(INTEGRATION_SESSIONS.iter().map(|(id, command, name)| {
                     let (kind, text) = if with {
@@ -309,37 +299,68 @@ impl GpuiOnboardingWindow {
                         }),
                 )
         };
+        // How Ghostex follows each installed agent: built in, or the file its helper goes into.
+        let detected: Vec<(String, String, Option<String>)> = self
+            .agents
+            .iter()
+            .filter(|agent| agent.installed)
+            .take(4)
+            .map(|agent| {
+                (
+                    agent.agent_id.clone(),
+                    agent.name.clone(),
+                    (!agent.built_in).then(|| {
+                        agent
+                            .helper_file
+                            .clone()
+                            .unwrap_or_else(|| "its settings".to_string())
+                    }),
+                )
+            })
+            .collect();
+        let following = if detected.is_empty() {
+            DEFAULT_FOLLOWING
+                .iter()
+                .map(|(id, name, file)| {
+                    (id.to_string(), name.to_string(), file.map(str::to_string))
+                })
+                .collect()
+        } else {
+            detected
+        };
         let files = div()
             .flex_none()
             .flex()
-            .flex_wrap()
-            .items_center()
-            .gap_x(s.px(18.0))
-            .gap_y(s.px(7.0))
+            .flex_col()
+            .gap(s.px(7.0))
             .py(s.px(11.0))
             .px(s.px(14.0))
             .rounded(s.px(12.0))
             .border_1()
             .border_color(white(0.07))
-            .bg(black(0.28))
-            .child(
+            .bg(white(0.025))
+            .child(label_sized(s, "How Ghostex follows each agent", 10.0))
+            .children(following.into_iter().map(|(id, name, file)| {
                 div()
-                    .w_full()
-                    .child(label_sized(s, "Where the helper goes", 10.0)),
-            )
-            .children(HELPER_FILES.iter().map(|(id, file)| {
-                mono(s, 12.0, 400.0, hex(0xc9d0dc))
                     .flex()
                     .items_center()
                     .gap(s.px(8.0))
-                    .child(agent_logo(s, &self.catalog, id, 14.0))
-                    .child(file.to_string())
-            }))
-            .child(
-                sans(s, 12.0, 400.0, hex(0x7f8aa0))
-                    .w_full()
-                    .child("…and the matching settings file of each other agent you connect."),
-            );
+                    .child(agent_logo(s, &self.catalog, &id, 14.0))
+                    .child(
+                        sans(s, 12.5, 500.0, hex(0xdfe4ee))
+                            .flex_1()
+                            .min_w_0()
+                            .child(name),
+                    )
+                    .child(match file {
+                        Some(file) => mono(s, 12.0, 400.0, hex(0xc9d0dc))
+                            .child(format!("Helper in {file}"))
+                            .into_any_element(),
+                        None => sans(s, 12.0, 500.0, hex(0x8fabff))
+                            .child("Built in")
+                            .into_any_element(),
+                    })
+            }));
         let preview = div()
             .size_full()
             .flex()

@@ -9,6 +9,9 @@ use crate::*;
 use ghostex_gx_core::MachineId;
 use std::time::Duration;
 
+/// How long an open waits for a just-made remote session's row before it opens without it.
+const REMOTE_ROW_WAIT: Duration = Duration::from_secs(10);
+
 impl GhostexGpuiApp {
     /*
     CDXC:SessionFork 2026-09-03:
@@ -69,8 +72,8 @@ impl GhostexGpuiApp {
                     None => {
                         self.dispatch_gpui_app_modal_toast(
                             "warning",
-                            "Could not open that worker",
-                            "This app isn't connected to the computer it runs on. Connect to it from the sidebar, then try again.",
+                            crate::app::remote_conn::attach_request::REMOTE_OPEN_FAILED_TITLE,
+                            "Ghostex here isn't connected to the computer it runs on. Connect to it from the sidebar, then try again.",
                             cx,
                         );
                         return;
@@ -146,7 +149,63 @@ impl GhostexGpuiApp {
 
     /// The same route the Find Prompts modal takes: the Rust store owns focus (gx_store/activation_focus.rs) and the reveal
     /// expands and scrolls the containers holding the row.
+    ///
+    /// CDXC:RemoteMachines 2026-11-16 WHY:
+    /// A session another computer has only just made (a new chat moved into a worktree there, a woken branch) can be named here before that computer's row for it reaches this app. Opened then, the remote open found no agent for the row and built a terminal tab instead of Chat View (`plan_remote_focus` reads the agent from the machine's live rows), and the store could not place the focus on a row it did not hold, so the workspace could fall back to the old project and go blank (Brewed Bytes on Discord, 2026-11-15). The open waits for the row, as briefly as it takes to arrive.
     fn focus_session_chat_fork_branch(
+        &mut self,
+        sidebar_session_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.remote_session_row_not_listed_yet(sidebar_session_id) {
+            self.focus_remote_session_once_listed(sidebar_session_id.to_string(), cx);
+            return;
+        }
+        self.focus_listed_session_chat_fork_branch(sidebar_session_id, cx);
+    }
+
+    /// Whether `sidebar_session_id` is a session on a connected remote computer whose live rows
+    /// don't hold it yet.
+    fn remote_session_row_not_listed_yet(&self, sidebar_session_id: &str) -> bool {
+        let Some(session) =
+            ghostex_gx_core::SessionKey::parse_remote_scoped_session_id(sidebar_session_id)
+        else {
+            return false;
+        };
+        let presentation = self.gx_store.core.presentation();
+        presentation.loaded_live(&session.machine).is_some()
+            && presentation.session(&session).is_none()
+    }
+
+    /// Opens the remote session once its row has arrived, or after `REMOTE_ROW_WAIT` as before.
+    fn focus_remote_session_once_listed(
+        &mut self,
+        sidebar_session_id: String,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        cx.spawn(async move |this, cx| {
+            let started = std::time::Instant::now();
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(100))
+                    .await;
+                let Ok(waiting) = this.update(cx, |this, _| {
+                    this.remote_session_row_not_listed_yet(&sidebar_session_id)
+                }) else {
+                    return;
+                };
+                if !waiting || started.elapsed() >= REMOTE_ROW_WAIT {
+                    let _ = this.update(cx, |this, cx| {
+                        this.focus_listed_session_chat_fork_branch(&sidebar_session_id, cx)
+                    });
+                    return;
+                }
+            }
+        })
+        .detach();
+    }
+
+    fn focus_listed_session_chat_fork_branch(
         &mut self,
         sidebar_session_id: &str,
         cx: &mut gpui::Context<Self>,

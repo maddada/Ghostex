@@ -19,9 +19,62 @@ struct Published {
     /// reads. The other fields are the composer's `+` picker's, live and always moving.
     names_revision: u64,
     sessions: Arc<Vec<KnownSession>>,
-    /// Each machine's daemon revision, row count, name and whether it is connected when the list
-    /// was built, so a pump that moved none of them builds nothing.
-    built_from: Vec<(String, i64, usize, String, bool)>,
+    /// This computer's gxserver id, which a session pill counts as home: one whose ref names
+    /// another draws that computer's icon (`mention_card` in gx-chat-core).
+    home_server: String,
+    /// Each machine's gxserver id, by that id: which machine a session pill's computer icon is
+    /// read for (`computer_icon`).
+    machines_by_server: std::collections::HashMap<String, String>,
+    /// Each machine's daemon revision, row count, name, whether it is connected and its gxserver id
+    /// when the list was built, so a pump that moved none of them builds nothing. The id is part of
+    /// it: a stream names the gxserver after a read of the cache did, at the same revision, and the
+    /// home computer and the rows' refs must follow it then.
+    built_from: Vec<(String, i64, usize, String, bool, String)>,
+}
+
+/// Each computer's icon drawing, by machine id, as the sidebar draws it (`gx_store_computer_marks`,
+/// gx-core computer_icons.rs); empty with only this computer, and in the web build.
+static COMPUTER_ICONS: Mutex<Option<std::collections::HashMap<String, &'static str>>> =
+    Mutex::new(None);
+
+/// Keeps every computer's icon drawing for the session pills, from the sidebar's marks. The web
+/// build has no computer marks and never calls it.
+#[cfg_attr(ghostex_web, allow(dead_code))]
+pub(crate) fn set_computer_icons(icons: std::collections::HashMap<String, &'static str>) {
+    *COMPUTER_ICONS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(icons);
+}
+
+/// The icon of the computer whose gxserver is `server_id`: the one picked for it (the sidebar's
+/// mark), else the plain computer.
+///
+/// CDXC:SessionChat 2026-11-14 DECISION:
+/// User, of a "Message to" card's pill for a session on their Linux computer: "i believe we agreed to show the logo of the machine here? it's not showing pls fix". A session pill for a session on another computer ends with that computer's own icon, the one the sidebar's rows and computer tile draw for it (picked in Settings > Remote, else its kind's or its system's), not one plain computer icon for every computer. A computer the sidebar has no mark for keeps the plain computer icon.
+pub(crate) fn computer_icon(server_id: &str) -> &'static str {
+    const PLAIN: &str = "titlebar/device-desktop.svg";
+    let machine = PUBLISHED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .as_ref()
+        .and_then(|published| published.machines_by_server.get(server_id).cloned());
+    let Some(machine) = machine else {
+        return PLAIN;
+    };
+    COMPUTER_ICONS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .as_ref()
+        .and_then(|icons| icons.get(&machine).copied())
+        .unwrap_or(PLAIN)
+}
+
+/// The id the computer tabs and marks key a machine by.
+fn machine_key(machine: &MachineId) -> &str {
+    match machine {
+        MachineId::Local => ghostex_gx_core::LOCAL_MACHINE_ID,
+        MachineId::Remote(id) => id.as_str(),
+    }
 }
 
 static PUBLISHED: Mutex<Option<Published>> = Mutex::new(None);
@@ -55,10 +108,7 @@ fn row_title(session: &ghostex_gx_core::protocol::PresentationSession) -> String
 
 /// The name a machine's tab carries (`tabs`, the host's machine tabs; the web build has none).
 fn machine_label(machine: &MachineId, tabs: &[MachineTabInput]) -> String {
-    let id = match machine {
-        MachineId::Local => ghostex_gx_core::LOCAL_MACHINE_ID,
-        MachineId::Remote(id) => id.as_str(),
-    };
+    let id = machine_key(machine);
     tabs.iter()
         .find(|tab| tab.machine_id == id)
         .map(|tab| tab.label.trim().to_string())
@@ -69,7 +119,7 @@ fn machine_label(machine: &MachineId, tabs: &[MachineTabInput]) -> String {
 /// `tabs` names each machine for the composer's `+` picker, which offers sessions on the other
 /// connected computers (`session_mentions.rs` in gx-chat-core).
 pub(crate) fn publish(store: &PresentationStore, tabs: &[MachineTabInput]) {
-    let built_from: Vec<(String, i64, usize, String, bool)> = store
+    let built_from: Vec<(String, i64, usize, String, bool, String)> = store
         .machines()
         .filter_map(|(machine, _)| {
             let loaded = store.loaded(machine)?;
@@ -79,6 +129,7 @@ pub(crate) fn publish(store: &PresentationStore, tabs: &[MachineTabInput]) {
                 loaded.session_count(),
                 machine_label(machine, tabs),
                 ghostex_gx_core::unified_sidebar::unified_shows_machine(store, machine),
+                loaded.server_id.clone(),
             ))
         })
         .collect();
@@ -90,10 +141,16 @@ pub(crate) fn publish(store: &PresentationStore, tabs: &[MachineTabInput]) {
         return;
     }
     let mut sessions = Vec::new();
+    let mut machines_by_server = std::collections::HashMap::new();
     for (machine, _) in store.machines() {
         let Some(loaded) = store.loaded(machine) else {
             continue;
         };
+        if !loaded.server_id.is_empty() {
+            machines_by_server
+                .entry(loaded.server_id.clone())
+                .or_insert_with(|| machine_key(machine).to_string());
+        }
         let computer = machine_label(machine, tabs);
         // The Unified sidebar's test: a computer whose rows are a kept copy, or whose stream is
         // down, shows no cards, and the `+` picker offers none of its sessions.
@@ -134,6 +191,11 @@ pub(crate) fn publish(store: &PresentationStore, tabs: &[MachineTabInput]) {
         }
     }
     current.built_from = built_from;
+    current.machines_by_server = machines_by_server;
+    current.home_server = store
+        .loaded(&MachineId::Local)
+        .map(|loaded| loaded.server_id.clone())
+        .unwrap_or_default();
     if *current.sessions != sessions || current.revision == 0 {
         if current.revision == 0 || !KnownSession::same_names(&current.sessions, &sessions) {
             current.names_revision += 1;
@@ -163,6 +225,16 @@ pub(super) fn current_named() -> (u64, u64, Arc<Vec<KnownSession>>) {
                 published.sessions.clone(),
             )
         })
+        .unwrap_or_default()
+}
+
+/// This computer's gxserver id, empty before the store has loaded it.
+pub(crate) fn home_server() -> String {
+    PUBLISHED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .as_ref()
+        .map(|published| published.home_server.clone())
         .unwrap_or_default()
 }
 

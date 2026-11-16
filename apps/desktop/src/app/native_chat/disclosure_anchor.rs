@@ -142,7 +142,8 @@ impl NativeChatView {
                 // reader still at the bottom keeps following, so rows arriving with this frame
                 // are not left below the fold.
                 let top = self.list.logical_scroll_top();
-                let at_bottom = !super::scroll_bottom::transcript_left_bottom(&self.list);
+                let scale = super::appearance::ChatAppearance::current(&self.snapshot).scale;
+                let at_bottom = !super::scroll_bottom::transcript_left_bottom(&self.list, scale);
                 self.list.set_follow_mode(FollowMode::Tail);
                 if !at_bottom {
                     self.list.scroll_to(top);

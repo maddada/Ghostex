@@ -1,5 +1,6 @@
 //! The General pages' search rows (layout.rs), one function per section.
 mod chat;
+mod experience;
 mod sidebar;
 mod system;
 mod terminal;
@@ -11,10 +12,12 @@ use crate::Platform;
 
 pub fn sections(platform: Platform) -> Vec<Section> {
     vec![
+        experience::experience(),
         tools::file_opening(),
         tools::browser(),
         tools::editor(),
         system::computer_startup(),
+        system::memory_guard(),
         system::auto_sleep(),
         system::power(),
         sidebar::session_cards(),

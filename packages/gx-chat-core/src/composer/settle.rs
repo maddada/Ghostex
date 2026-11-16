@@ -261,6 +261,7 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
         state.core.request_publish();
     }
     crate::composer::attaching::settle(state, context);
+    crate::composer::compact_hint::settle(state, context);
     match event {
         Event::ComposerBootRead(read) => adopt_boot_read(state, read),
         Event::RpcSettled {

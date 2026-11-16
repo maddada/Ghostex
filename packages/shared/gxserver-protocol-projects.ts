@@ -222,7 +222,13 @@ export type GxserverGitAction =
   | 'upstreamCounts'
   | 'verifyRef';
 export type GxserverWorktreeAction =
-  'create' | 'ensureBeadsHooks' | 'list' | 'pathExists' | 'prune' | 'remove' | 'switch';
+  | 'create'
+  | 'ensureBeadsHooks'
+  | 'list'
+  | 'pathExists'
+  | 'prune'
+  | 'remove'
+  | 'switch';
 export type GxserverBeadsAction =
   | 'addLabel'
   | 'board'
@@ -531,7 +537,11 @@ export interface GxserverTypedCommand {
 }
 
 export type GxserverTypedOperationFailureCode =
-  'aborted' | 'stderrLimitExceeded' | 'stdinFailed' | 'stdoutLimitExceeded' | 'timeout';
+  | 'aborted'
+  | 'stderrLimitExceeded'
+  | 'stdinFailed'
+  | 'stdoutLimitExceeded'
+  | 'timeout';
 
 export interface GxserverTypedOperationFailure {
   capturedBytes?: number;

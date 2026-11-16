@@ -1,4 +1,3 @@
-use super::cards::SINGLE_LINE_CARD;
 use super::disclosure_body::{DisclosureRail, disclosure_body};
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;
@@ -663,12 +662,39 @@ impl NativeChatView {
                 .into_any_element();
         }
         if message["role"] == "user" && message["pageAnswers"].is_object() {
-            row = row.child(self.page_answers_card(
-                &message["pageAnswers"],
-                &message["startupDelivery"],
-                p,
-                cx,
-            ));
+            let extra = message["extraPageAnswers"].as_array();
+            let has_extra = extra.is_some_and(|cards| !cards.is_empty());
+            let under_quiet_answers = !self.in_subagent
+                && message["id"]
+                    .as_str()
+                    .is_some_and(|id| self.quiet_answers(id).is_some());
+            // Under Quiet View's own line a single card opens straight onto its rows
+            // (`quiet_view.rs`); when one message holds several envelopes, keep each card's own
+            // header visible and opened under Quiet View so the forms stay distinct.
+            let body_only = under_quiet_answers && !has_extra;
+            let default_open = under_quiet_answers && has_extra;
+            let cards: Vec<&Value> = std::iter::once(&message["pageAnswers"])
+                .chain(extra.into_iter().flatten())
+                .filter(|card| card.is_object())
+                .collect();
+            let last = cards.len().saturating_sub(1);
+            for (index, card) in cards.into_iter().enumerate() {
+                let delivery = if index == last {
+                    &message["startupDelivery"]
+                } else {
+                    &Value::Null
+                };
+                row = row.child(self.page_answers_card(
+                    &id,
+                    index,
+                    card,
+                    delivery,
+                    body_only,
+                    default_open,
+                    p,
+                    cx,
+                ));
+            }
             // The user's own words besides the answers follow as their ordinary message.
             if message["pageAnswers"]["withText"] != true {
                 return row.into_any_element();
@@ -704,6 +730,7 @@ impl NativeChatView {
                             .items_end()
                             .gap(px(4.0 * s))
                             .children(indicator.map(|(icon, _)| icon))
+                            .children(self.attaching_line(&id, true, p))
                             .children(failed_delivery)
                             .children(actions),
                     )
@@ -726,7 +753,7 @@ impl NativeChatView {
                 .border(px(1.0 * s))
                 .border_color(gpui::transparent_black())
                 .p(px(12.0 * s))
-                .bg(p.input)
+                .bg(p.user_message)
                 // A slash command reads as one, in the chat's monospace (gx-chat-core `is_slash_command_line`).
                 .when(message["slashCommand"] == true, |bubble| {
                     bubble.font_family(super::fonts::CHAT_MONO)
@@ -753,6 +780,8 @@ impl NativeChatView {
                         .items_end()
                         .gap(px(4.0 * s))
                         .child(bubble)
+                        // "Image is being uploaded" while it waits for its picture.
+                        .children(self.attaching_line(&id, true, p))
                         .children(failed_delivery)
                         .children(actions),
                 )
@@ -1013,12 +1042,15 @@ impl NativeChatView {
             }
         }
         // The rows' own 8px part gap is already there; a card under a card adds the rest.
+        // On an opened Quiet View line's rail that is the rail's gap (`card_stack_gap`).
+        let stack_gap = self.card_stack_gap(p);
         let card_gap = |card_above: bool| {
-            px(
-                (SINGLE_LINE_CARD.gap_above(card_above, true, MESSAGE_PART_GAP, p)
-                    - MESSAGE_PART_GAP)
-                    * s,
-            )
+            px((if card_above {
+                stack_gap
+            } else {
+                MESSAGE_PART_GAP
+            } - MESSAGE_PART_GAP)
+                * s)
         };
         // Inside a turn's work fold the raw tool pairs stay plain rows and the cards are hoisted
         // onto the turn instead, so an answer is never rendered twice (the core's questions/hoisting.rs).

@@ -38,6 +38,9 @@ struct MachineRegistration {
     /// Sides whose request was denied or lapsed unanswered: not asked again until Agent access is
     /// turned off and on, or the app restarts.
     declined: HashSet<Side>,
+    /// The note that this machine shares this computer's server id was shown, so the renewal every
+    /// minute does not show it again.
+    shared_server_id_noted: bool,
 }
 
 /// Which gxserver a renewal call goes to: this computer's or the connected machine's.
@@ -80,6 +83,9 @@ struct RegistrationOutcome {
     reverse_failed: bool,
     /// The machine's own switch is off for this computer: the way back closes here too.
     close_reverse: bool,
+    /// Agent access is on, but the machine is another computer whose gxserver has this computer's
+    /// server id, so it was not registered: the machine's name and the shared id, for the note.
+    shared_server_id: Option<(String, String)>,
 }
 
 /// The gxserver server id of a connected remote machine, once its registration learned it.
@@ -210,6 +216,21 @@ impl GhostexGpuiApp {
                     }
                 }
                 for outcome in outcomes {
+                    if let Some((name, server_id)) = &outcome.shared_server_id {
+                        let first = state().get_mut(&outcome.machine_id).is_some_and(|machine| {
+                            !std::mem::replace(&mut machine.shared_server_id_noted, true)
+                        });
+                        if first {
+                            this.dispatch_gpui_app_modal_toast(
+                                "warning",
+                                &format!("Agents can't reach {name}"),
+                                &format!(
+                                    "{name} and this computer both use the Ghostex server id {server_id}, so their agents can't message each other. The connection itself works."
+                                ),
+                                cx,
+                            );
+                        }
+                    }
                     if outcome.close_reverse {
                         if let Some(connection) = this
                             .remote_gxserver_connections
@@ -400,6 +421,7 @@ fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
         opened_reverse: None,
         reverse_failed: false,
         close_reverse: false,
+        shared_server_id: None,
     };
     let Some(remote_server_id) = remote_server_id(&job.target) else {
         return outcome;
@@ -412,10 +434,19 @@ fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
     and a refused grant reads as "unsupported", which the next renewal tries again. The connect
     marks such a machine as this computer (connect.rs); this is the check where registering would
     happen, so a machine that names this computer's own server id never registers.
+
+    CDXC:RemoteMachines 2026-11-14 WHY:
+    The renewal skips a machine the connect found to be this computer, so a machine reaching this
+    line with this computer's server id is another computer that shares it (ids are short, PR #616).
+    Agents are routed by server id, so the pair cannot be registered and Agent access silently did
+    nothing. The outcome carries it so the user is told once why.
     */
     if crate::app::helpers::gpui_local_gxserver_server_id().as_deref()
         == Some(remote_server_id.as_str())
     {
+        if job.agent_access {
+            outcome.shared_server_id = Some((job.name.clone(), remote_server_id));
+        }
         return outcome;
     }
     if let Some(machine) = state().get_mut(&job.machine_id) {

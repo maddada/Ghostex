@@ -4,6 +4,43 @@ use gpui::{AnyElement, Div, FontWeight, Hsla, IntoElement, ParentElement as _, S
 use serde::Deserialize;
 use std::sync::LazyLock;
 
+/// The gap between a one-line card's row parts: its tile, title, time and pills (unscaled).
+pub(super) const TITLE_ROW_GAP: f32 = 10.0;
+
+/// What a one-line card's title keeps on its row ([`SingleLineCard::title_fit`]).
+#[derive(Clone, Copy)]
+pub(super) struct TitleFit {
+    pub show_time: bool,
+    pub show_marks: bool,
+}
+
+/// Records a one-line card's title width as painted, under `key` in `rooms` (unscaled), with
+/// `time_room` added back while the time shows, so [`SingleLineCard::title_fit`] reads the room
+/// the title has with the time stepped aside. A new width redraws the chat once. It goes inside
+/// the title, which must be `relative`.
+pub(super) fn title_room_probe(
+    rooms: std::rc::Rc<std::cell::RefCell<std::collections::HashMap<String, f32>>>,
+    key: String,
+    time_room: f32,
+    s: f32,
+    chat: gpui::EntityId,
+) -> AnyElement {
+    gpui::canvas(
+        move |bounds, _, cx| {
+            let room = f32::from(bounds.size.width) / s + time_room;
+            let mut rooms = rooms.borrow_mut();
+            if rooms.get(&key).is_none_or(|was| (was - room).abs() > 0.5) {
+                rooms.insert(key.clone(), room);
+                cx.notify(chat);
+            }
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .inset_0()
+    .into_any_element()
+}
+
 /// The fill a pressable card, or the pressable header of one, takes under the pointer.
 pub(super) fn card_hover_fill(p: &ChatAppearance) -> Hsla {
     p.foreground.opacity(0.04)
@@ -20,6 +57,9 @@ pub(super) struct SingleLineCard {
     pub title_size: f32,
     pub title_line_height: f32,
     pub title_weight: f32,
+    /// The least a title's name keeps before the time, then the name's marks, step aside
+    /// ([`SingleLineCard::title_fit`]).
+    name_min: f32,
     border_alpha: f32,
     fill_input_alpha: f32,
     pill: SingleLinePill,
@@ -93,9 +133,14 @@ impl SingleLineCard {
         (self.height - 2.0) * s
     }
 
-    /// The shell's hairline colour, for a divider inside an opened card.
+    /// The shell's hairline colour, for a divider inside an opened card: the Borders theme role
+    /// when it is set (helpers/theme_roles.rs).
     pub(super) fn hairline(&self, p: &ChatAppearance) -> gpui::Hsla {
-        p.foreground.opacity(self.border_alpha)
+        crate::app::helpers::theme_role_or(
+            "border",
+            p.light,
+            p.foreground.opacity(self.border_alpha),
+        )
     }
 
     /// The shell's fill laid over the transcript, for an edge fade inside the card.
@@ -109,7 +154,7 @@ impl SingleLineCard {
         element
             .rounded(px(self.radius * p.scale))
             .border(px(p.scale))
-            .border_color(p.foreground.opacity(self.border_alpha))
+            .border_color(self.hairline(p))
             .bg(p.input.opacity(self.fill_input_alpha))
     }
 
@@ -326,6 +371,52 @@ impl SingleLineCard {
             self.stack_gap(p)
         } else {
             gap
+        }
+    }
+
+    /// The least the name in a title keeps, so a lead and its name never collapse to nothing.
+    pub(super) fn name_min(&self) -> f32 {
+        self.name_min
+    }
+
+    /// What a title that names something (a "Message from" card's session, a work item card's
+    /// item) keeps on a tight row. `room` is the title's width with the time stepped aside, as last
+    /// painted ([`title_room_probe`]; `None` before the first paint, when everything shows and the
+    /// title clips); `lead` is the words before the name with their gap, `time` the time's own
+    /// width (0 with none), `marks` the name's logo, state dot and computer icon with their gaps.
+    /// All unscaled.
+    ///
+    /// CDXC:SessionChat 2026-11-15 DECISION: User, picking Q3300 A on the event cards page
+    /// (~/.local/share/agent-work/Ghostex/chat-event-cards/event-cards.html), of "Message from"
+    /// cards whose session name shrank to nothing while its agent logo, Arch logo and status dot
+    /// painted over "7:27 PM": cut the name, never collapse it. The name keeps at least `nameMin`
+    /// and ends in "…"; when the row is too tight the time steps aside first (the opened message
+    /// still has it), then the logo, dot and computer icon; the title clips, so nothing paints
+    /// over the time. The phone matches (`singleLineTitleFit`, singleLineCard.tsx).
+    pub(super) fn title_fit(
+        &self,
+        room: Option<f32>,
+        lead: f32,
+        time: f32,
+        marks: f32,
+    ) -> TitleFit {
+        let Some(room) = room else {
+            return TitleFit {
+                show_time: true,
+                show_marks: true,
+            };
+        };
+        let with_time =
+            room - if time > 0.0 {
+                time + TITLE_ROW_GAP
+            } else {
+                0.0
+            } - lead;
+        let show_time = time <= 0.0 || with_time - marks >= self.name_min;
+        let name_room = if show_time { with_time } else { room - lead };
+        TitleFit {
+            show_time,
+            show_marks: name_room - marks >= self.name_min,
         }
     }
 

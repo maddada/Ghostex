@@ -112,6 +112,12 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
+## Simple Icons (Linux distribution logos)
+
+The computer icons for Manjaro, EndeavourOS, CachyOS, Linux Mint, Pop!_OS, openSUSE and NixOS (`apps/desktop/assets/titlebar/brand-*.svg` and the phone's copies) are Simple Icons 16.36.0 glyphs, scaled. <https://github.com/simple-icons/simple-icons>, CC0 1.0 Universal; the logos stay their owners' trademarks and are used only to show which system a computer runs.
+
+The NixOS logo is the NixOS project's, from <https://brand.nixos.org/logos/nixos-logomark-black-flat-minimal.svg>, licensed CC BY 4.0 (<https://creativecommons.org/licenses/by/4.0/>); it was made monochrome and scaled.
+
 ## Sonora (sonora, sonora-aec3, sonora-agc2, sonora-ns, sonora-common-audio, sonora-simd, sonora-fft)
 
 Echo cancellation and noise suppression for the voice agent and Dictate on Windows and Linux. A Rust port of the WebRTC audio processing module. <https://github.com/dignifiedquire/sonora>, BSD-3-Clause:

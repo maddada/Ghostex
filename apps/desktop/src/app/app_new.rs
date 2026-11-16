@@ -99,6 +99,14 @@ impl GhostexGpuiApp {
         shell_layout_state
             .project_editor_shell
             .sleep_all_modes_for_launch(shell_layout_state.active_mode);
+        let reload_browser_tabs_on_startup =
+            shared_settings_snapshot.reload_browser_tabs_on_startup();
+        if reload_browser_tabs_on_startup && shell_layout_state.active_mode == TitlebarMode::Browser
+        {
+            shell_layout_state
+                .project_editor_shell
+                .mark_mode_awake(TitlebarMode::Browser, Some(&[]));
+        }
         // Claude (or Grok) comes back on with its page asleep until clicked, like every web view.
         if let Some(takeover) = &shell_layout_state.claude_takeover {
             let mode = takeover.view().mode();
@@ -293,6 +301,8 @@ impl GhostexGpuiApp {
                 next_code_window_handoff_generation: 0,
                 docs_open_files_as_tabs: shared_settings_snapshot.docs_open_files_as_tabs(),
                 browser_pages_in_view_row: shared_settings_snapshot.browser_pages_in_view_row(),
+                pending_startup_browser_reload: reload_browser_tabs_on_startup,
+                pending_startup_browser_remote_machines: HashSet::new(),
                 last_open_view_mode: shell_layout_state.last_open_view_mode,
                 view_pane_layouts: shell_layout_state.view_pane_layouts,
                 sidebar_visibility_memory,
@@ -533,11 +543,13 @@ impl GhostexGpuiApp {
                 pending_titlebar_popup_open: None,
                 titlebar_extension_popup_generation: 0,
                 titlebar_extension_popup: None,
+                extension_web_blocks: Default::default(),
                 agent_hook_status_request_in_flight: false,
                 agent_hook_status_request_queued: None,
                 native_sidebar: Default::default(),
                 native_docs: Default::default(),
                 native_kanban: Default::default(),
+                session_popups: Default::default(),
                 native_beads: None,
                 floating_reveal: Default::default(),
                 ghostex_capture: Default::default(),

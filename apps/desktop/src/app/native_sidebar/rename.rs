@@ -10,6 +10,24 @@ pub(crate) struct SidebarNameEditor {
     _subscription: Subscription,
 }
 
+impl SidebarNameEditor {
+    /// An editor opened outside this file (a sidebar extension's checklist item,
+    /// extension_panel/actions.rs).
+    pub(crate) fn new(
+        kind: &'static str,
+        id: String,
+        input: Entity<InputState>,
+        subscription: Subscription,
+    ) -> Self {
+        Self {
+            kind,
+            id,
+            input,
+            _subscription: subscription,
+        }
+    }
+}
+
 impl GhostexGpuiApp {
     pub(crate) fn begin_native_collection_rename(
         &mut self,
@@ -83,7 +101,9 @@ impl GhostexGpuiApp {
         };
         let title = editor.input.read(cx).value().trim().to_owned();
         if save && !title.is_empty() {
-            if editor.kind == "collection" {
+            if editor.kind.starts_with("extension") {
+                self.finish_native_panel_item_editor(editor.kind, &editor.id, &title, cx);
+            } else if editor.kind == "collection" {
                 self.dispatch_native_sidebar_ui(json!({"type": "collectionAction", "action": "rename", "collectionId": editor.id, "value": title}), cx);
             } else {
                 self.dispatch_native_sidebar_command(

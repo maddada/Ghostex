@@ -15,7 +15,7 @@ use tokio::task::JoinHandle;
 
 use crate::events::EventClientSender;
 use crate::ghostex_cli::args::parse_args;
-use crate::ghostex_cli::sessions::{database_stamp, mobile_summary_value};
+use crate::ghostex_cli::sessions::{database_stamp, mobile_summary_value, swap_icons_for_refs};
 use crate::server::AppState;
 use std::sync::Arc;
 
@@ -41,9 +41,14 @@ pub(crate) struct SessionsListStream {
 }
 
 impl SessionsListStream {
-    pub(crate) fn start(state: Arc<AppState>, outbound: EventClientSender) -> Self {
+    /// `icon_refs`: the socket asked for `iconRefs=1`, so projects carry `discoveredIconRef`.
+    pub(crate) fn start(
+        state: Arc<AppState>,
+        outbound: EventClientSender,
+        icon_refs: bool,
+    ) -> Self {
         let (reads, read_rx) = mpsc::unbounded_channel();
-        let task = tokio::spawn(run(state, outbound, read_rx));
+        let task = tokio::spawn(run(state, outbound, read_rx, icon_refs));
         Self { task, reads }
     }
 
@@ -63,12 +68,15 @@ impl Drop for SessionsListStream {
     }
 }
 
-async fn build() -> Option<Map<String, Value>> {
-    tokio::task::spawn_blocking(|| {
+async fn build(icon_refs: bool) -> Option<Map<String, Value>> {
+    tokio::task::spawn_blocking(move || {
         let flags = parse_args(&[]).flags;
         match mobile_summary_value(&flags, false) {
             Ok(Value::Object(mut map)) => {
                 keep_read_git_fields(&mut map);
+                if icon_refs {
+                    swap_icons_for_refs(&mut map);
+                }
                 Some(map)
             }
             _ => None,
@@ -113,6 +121,7 @@ async fn run(
     state: Arc<AppState>,
     outbound: EventClientSender,
     mut reads: mpsc::UnboundedReceiver<Value>,
+    icon_refs: bool,
 ) {
     let mut sent: Option<Map<String, Value>> = None;
     let mut sent_boxes: Option<Value> = None;
@@ -147,7 +156,7 @@ async fn run(
                     sent_boxes = Some(boxes);
                 }
             }
-            if let Some(next) = build().await {
+            if let Some(next) = build(icon_refs).await {
                 built_stamp = stamp;
                 built_at = now;
                 frame = match &sent {

@@ -1343,13 +1343,21 @@ fn literal_windows_line(line: &str) -> String {
 
 /// A work item ask's description as the dock rows and the Work panel draw it: an inline span
 /// holding a command becomes the `ghostex-run:` link the renderers draw with the transcript's Copy
-/// and Paste in terminal (`run_command.rs`), and a file reference becomes its pill, as in an
-/// agent's reply. A run link the author wrote is reduced to its text, as there. Block marks are
-/// left out: the dock draws the description as one Markdown view, not the transcript's segments.
+/// and Paste in terminal (`run_command.rs`), a fenced block holding one gets the transcript's Run
+/// in terminal button in its header (`fence_header_marks`), and a file reference becomes its pill,
+/// as in an agent's reply. A run link the author wrote is reduced to its text, as there. The other
+/// block marks are left out: the dock draws the description as one Markdown view, not the
+/// transcript's segments.
 ///
 /// CDXC:Coordinators 2026-11-12 DECISION:
 /// User, of a dock row whose description held a command: "please also show the same floating
 /// buttons that appear when i hover on a command that we have now in the chat transcript normally".
+///
+/// CDXC:Coordinators 2026-11-14 DECISION:
+/// User, of an ask's fenced `sudo pacman -U …` block that had only Wrap and Copy: "make the buttons
+/// shown next to code ones like this one show the button to send that text to terminal like we do
+/// for commands in the chat transcript". A fence in an ask is judged by the transcript's own rule
+/// (`run_command::fence_command`).
 pub fn ask_markdown(markdown: &str) -> String {
     if markdown.is_empty() {
         return String::new();
@@ -1362,10 +1370,52 @@ pub fn ask_markdown(markdown: &str) -> String {
         markdown
     };
     let commands = has_inline_code_command_evidence(markdown);
-    if !commands && !has_run_link_evidence(markdown) && !has_inline_code_path_evidence(markdown) {
+    let fences = markdown.contains("```") || markdown.contains("~~~");
+    let links =
+        commands || has_run_link_evidence(markdown) || has_inline_code_path_evidence(markdown);
+    if !links && !fences {
         return markdown.to_string();
     }
-    link_file_references(markdown, false, &[], commands)
+    let linked = if links {
+        link_file_references(markdown, false, &[], commands)
+    } else {
+        markdown.to_string()
+    };
+    if fences {
+        fence_header_marks(&linked)
+    } else {
+        linked
+    }
+}
+
+/// Only the fence headers of `mark_blocks` (a named file, a command's Run), for a Markdown view
+/// that draws every fence as a code block: diagrams, visuals, forms, tables and alerts stay as
+/// written. A fence never closed offers no Run.
+fn fence_header_marks(markdown: &str) -> String {
+    let lines = split_lf(markdown);
+    let mut result: Vec<String> = Vec::with_capacity(lines.len());
+    let mut fence: Option<(u8, usize)> = None;
+    for (index, line) in lines.iter().enumerate() {
+        if let Some((character, length)) = fence {
+            if fence_close(line).is_some_and(|(closing, run)| closing == character && run >= length)
+            {
+                fence = None;
+            }
+            result.push((*line).to_string());
+            continue;
+        }
+        if let Some((character, run, info)) = fence_open(line) {
+            fence = Some((character, run));
+            let command = fence_command_of(&lines, index, character, run, info);
+            result.push(match fence_header(info, command) {
+                Some(header) => format!("{line} {header}"),
+                None => (*line).to_string(),
+            });
+            continue;
+        }
+        result.push((*line).to_string());
+    }
+    result.join("\n")
 }
 
 /// The Markdown the GPUI transcript renders for one message.

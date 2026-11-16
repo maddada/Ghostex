@@ -212,6 +212,14 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         .removed_question_ids
         .clone()
         .or_else(|| previous_side.and_then(|state| state.removed_question_ids.clone()));
+    folded.result.state.retired_page_ids = side
+        .retired_page_ids
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.retired_page_ids.clone()));
+    folded.result.state.starred_page_ids = side
+        .starred_page_ids
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.starred_page_ids.clone()));
 
     folded.result.state.unavailable_modes = side
         .unavailable_modes
@@ -294,6 +302,11 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         .clone()
         .or_else(|| previous_side.and_then(|state| state.secret_requests.clone()));
 
+    folded.result.state.needs_you = side
+        .needs_you
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.needs_you.clone()));
+
     folded.result.state.side_chat_of = side
         .side_chat_of
         .clone()
@@ -323,10 +336,25 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         present => present.clone(),
     };
 
-    folded.result.state.queue = side
-        .queue
-        .clone()
-        .or_else(|| previous_side.and_then(|state| state.queue.clone()));
+    let stale_queue_version = match (
+        previous_side.and_then(|state| state.queue_version),
+        side.queue_version,
+    ) {
+        (Some(prev), Some(inc)) => inc < prev,
+        _ => false,
+    };
+    if stale_queue_version {
+        folded.result.state.queue = previous_side.and_then(|state| state.queue.clone());
+        folded.result.state.queue_version = previous_side.and_then(|state| state.queue_version);
+    } else {
+        folded.result.state.queue = side
+            .queue
+            .clone()
+            .or_else(|| previous_side.and_then(|state| state.queue.clone()));
+        folded.result.state.queue_version = side
+            .queue_version
+            .or_else(|| previous_side.and_then(|state| state.queue_version));
+    }
 
     let previous_draft = previous_side.and_then(|state| state.draft.as_ref());
     folded.result.state.draft = match &side.draft {
@@ -633,6 +661,7 @@ fn empty_result() -> ReadSessionChatResult {
         send_on_pick: None,
         answers_wait_for_idle: None,
         all_orchestrator_efforts: None,
+        varied_working_words: None,
         enabled_agent_icons: None,
         marked_heading_strength: None,
         chat_text_strength: None,

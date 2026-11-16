@@ -23,7 +23,7 @@ struct Published {
 static PUBLISHED: Mutex<Option<Published>> = Mutex::new(None);
 
 /// Replaces the published machines when anything about them changed.
-#[cfg_attr(target_family = "wasm", allow(dead_code))]
+#[cfg_attr(ghostex_web, allow(dead_code))]
 pub(crate) fn publish(computers: BTreeMap<String, SessionComputer>) {
     let mut published = PUBLISHED
         .lock()
@@ -34,7 +34,7 @@ pub(crate) fn publish(computers: BTreeMap<String, SessionComputer>) {
     }
     published.revision += 1;
     published.computers = Arc::new(computers);
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(not(ghostex_web))]
     super::worker::nudge_computers();
 }
 

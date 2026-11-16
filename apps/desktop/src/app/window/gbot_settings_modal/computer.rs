@@ -315,41 +315,37 @@ impl GpuiGbotSettingsModalWindow {
         let on_box = text(current, "kind") == "cloudBox";
         let computer_use = current["computerUse"] == true;
         let busy = self.computer.busy;
-        let use_label = "Use the screen and apps";
-        let use_row = h_flex()
-            .id("gbot-computer-use")
-            .role(gpui::Role::Switch)
-            .aria_toggled(a11y_toggled(computer_use))
-            .aria_label(use_label)
-            .w_full()
-            .switch_row_press(
-                switch_row_wash(p.foreground),
-                busy || on_box,
-                bind_press(cx, |this: &mut Self, window, cx| {
-                    this.toggle_computer_use(window, cx)
-                }),
-            )
-            .child(row(
-                &p,
-                use_label,
-                modal_switch(&kit, computer_use, busy || on_box),
-            ))
-            .into_any_element();
-        column = column.child(section(&p, "Computer use", vec![use_row])).child(
-            div()
-                .px(px(2.0))
-                .mt(px(-14.0))
-                .text_size(px(12.5))
-                .line_height(px(17.5))
-                .text_color(hsla(p.muted))
-                .child(if on_box {
-                    "A Cloud Box has no screen to use.".to_string()
-                } else {
-                    format!(
+        // CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): a Cloud Box has no screen, so
+        // Computer use is hidden there instead of greyed out.
+        if !on_box {
+            let use_label = "Use the screen and apps";
+            let use_row = h_flex()
+                .id("gbot-computer-use")
+                .role(gpui::Role::Switch)
+                .aria_toggled(a11y_toggled(computer_use))
+                .aria_label(use_label)
+                .w_full()
+                .switch_row_press(
+                    switch_row_wash(p.foreground),
+                    busy,
+                    bind_press(cx, |this: &mut Self, window, cx| {
+                        this.toggle_computer_use(window, cx)
+                    }),
+                )
+                .child(row(&p, use_label, modal_switch(&kit, computer_use, busy)))
+                .into_any_element();
+            column = column.child(section(&p, "Computer use", vec![use_row])).child(
+                div()
+                    .px(px(2.0))
+                    .mt(px(-14.0))
+                    .text_size(px(12.5))
+                    .line_height(px(17.5))
+                    .text_color(hsla(p.muted))
+                    .child(format!(
                         "{bot_name} may open and drive apps on the computer it works on, on its own virtual display (SpaceO) or in the background (cua-driver). macOS only. Off starts its chats without those tools; a Codex GBot at Full access can still run their command-line tools from a shell."
-                    )
-                }),
-        );
+                    )),
+            );
+        }
         let elsewhere = answer["remoteChats"].as_array().map(Vec::len).unwrap_or(0);
         if elsewhere > 0 {
             column = column.child(

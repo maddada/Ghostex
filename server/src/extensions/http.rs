@@ -69,6 +69,13 @@ pub(crate) async fn handle_extensions_http(
                 "/api/uninstallExtension" => crate::telemetry::extension_uninstalled(),
                 _ => {}
             }
+            // A sidebar extension added, removed, turned on or off changes what clients draw.
+            if matches!(
+                endpoint_path.as_str(),
+                "/api/installExtension" | "/api/uninstallExtension" | "/api/updateExtensionState"
+            ) {
+                super::ext_api::publish_extension_panels(state);
+            }
             routed_json(
                 Some(endpoint_path),
                 StatusCode::OK,
@@ -112,8 +119,20 @@ fn dispatch_extension_operation(
         "/api/extensionsCatalog" => serde_json::to_value(registry.catalog()?).map_err(|error| {
             ExtensionError::internal(format!("Could not encode catalog: {error}"))
         }),
+        "/api/extensionStoreContent" => {
+            reject_extension_token(token_extension_id)?;
+            let id = required_text(&params, "id")?;
+            let content = registry.store_entry_content(&id)?;
+            Ok(json!({
+                "id": id,
+                "readme": content.readme,
+                "changelog": content.changelog,
+                "icon": content.icon,
+            }))
+        }
         "/api/installExtension" => {
             let installed = install_extension(registry, &params)?;
+            registry.start_sidebar_server(&installed.id, &installed.manifest, &installed.state);
             Ok(json!({ "extension": installed }))
         }
         "/api/uninstallExtension" => {
@@ -128,7 +147,9 @@ fn dispatch_extension_operation(
                     .map_err(|error| {
                     ExtensionError::bad_request(format!("Invalid extension state patch: {error}"))
                 })?;
-            Ok(json!({ "extension": registry.update_state(&id, patch)? }))
+            let updated = registry.update_state(&id, patch)?;
+            registry.start_sidebar_server(&updated.id, &updated.manifest, &updated.state);
+            Ok(json!({ "extension": updated }))
         }
         "/api/startExtension" => {
             reject_extension_token(token_extension_id)?;

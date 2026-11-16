@@ -84,7 +84,7 @@ impl NativeChatView {
                     .border(px(1.0 * s))
                     .border_color(gpui::transparent_black())
                     .p(px(super::chat_text_look::USER_BUBBLE_PADDING * s))
-                    .bg(p.input)
+                    .bg(p.user_message)
                     .child(prompt)
                     .children(indicator)
             }
@@ -114,6 +114,8 @@ impl NativeChatView {
                     .items_start()
                     .gap(px(4.0 * s))
                     .child(frame)
+                    // "Image is being uploaded" while it waits for its picture, on its own side.
+                    .children(self.attaching_line(id, false, p))
                     .children(failed_delivery)
                     .children(actions),
             )

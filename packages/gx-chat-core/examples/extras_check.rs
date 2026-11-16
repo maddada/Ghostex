@@ -401,6 +401,8 @@ fn save_markdown(checks: &mut Checks) {
 
 fn working_word(checks: &mut Checks) {
     let mut core = Core::new();
+    // Off (the default), the strip says Thinking; these checks are about the drawn word.
+    core.state_mut().core.varied_working_words = true;
     checks.eq(
         "an idle session shows no word",
         core.document()["workingStrip"]["label"].clone(),

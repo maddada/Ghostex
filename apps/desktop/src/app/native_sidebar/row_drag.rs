@@ -34,13 +34,13 @@ pub(crate) struct RowDragPreview {
 
 /// CDXC:Sidebar 2026-10-08 DECISION:
 /// User: "when i drag a project header it's showing below my cursor which is wrong" (2026-10-06) and "when i drag a session card in the sidebar it's not aligned with my cursor pls fix". Every dragged row sits under the pointer exactly where it was grabbed; a project or collection row keeps its column, a session follows the pointer both ways so it can be carried onto a pane. This supersedes the 2026-10-01 rule that hung a dragged session 26px below and 14px right of the pointer to keep the drop line clear: the session's fill is see-through instead, so the line beside the pointer still shows through it.
-const SESSION_DRAG_OPACITY: f32 = 0.78;
+/// The see-through look is `drag_ghost`'s, which every other drag ghost in the app shares.
 
 impl RowDragPreview {
     pub(crate) fn render(&self, title: &str, window: &Window) -> AnyElement {
         let appearance = &self.appearance;
         let scale = appearance.scale;
-        let session_backing = titlebar_background().blend(gpui::rgb(0xffffff).opacity(0.06).into());
+        let session_backing = drag_ghost_fill();
         let row = div()
             .flex()
             .items_center()
@@ -48,7 +48,7 @@ impl RowDragPreview {
             .min_w_0()
             .font_family(crate::ui_fonts::UI_FONT)
             .font_weight(FontWeight::LIGHT)
-            .text_size(px(15.55 * scale))
+            .text_size(px(DRAG_GHOST_TEXT_SIZE * scale))
             .text_color(appearance.foreground);
         let row = match &self.identity {
             // The header box's own insets, so the icon and name stay where they were grabbed.
@@ -99,9 +99,9 @@ impl RowDragPreview {
                     * scale))
                 .pr(px(6.0 * scale))
                 .gap(px(6.0 * scale))
-                .rounded(px(5.0 * scale))
+                .rounded(px(DRAG_GHOST_RADIUS * scale))
                 .bg(session_backing)
-                .opacity(SESSION_DRAG_OPACITY)
+                .opacity(DRAG_GHOST_OPACITY)
                 .when(session.is_focused, |row| {
                     row.bg(session_backing.blend(appearance.session_selected))
                 })

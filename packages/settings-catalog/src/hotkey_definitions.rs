@@ -123,7 +123,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     HotkeyDefinition {
         id: "newChatPickBranch",
         title: "New Chat: Branch",
-        description: "While a new chat's message box has focus, open the last part of the bar above it: a new worktree's base branch, the existing worktree, or the Cloud Box pick. It takes Option+B from the message box on a Mac (no ∫ there): if your keyboard types a letter with Option+B, pick another key.",
+        description: "While a new chat's message box has focus, open the last part of the bar above it: This folder's branch, a new worktree's base branch, the existing worktree, or the Cloud Box pick. It takes Option+B from the message box on a Mac (no ∫ there): if your keyboard types a letter with Option+B, pick another key.",
         default_key: "alt+b",
         windows_linux_default_key: None,
         alternate_default_keys: &[],
@@ -1583,6 +1583,18 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
         alternate_default_keys: &[],
         retired_default_keys: &[],
         action: J::Obj(&[("id", J::Str("reloadBrowserPage")), ("kind", J::Str("shellAction"))]),
+    },
+    // CDXC:Docs 2026-11-14 DECISION:
+    // User, choosing Annotate's key (Q47): "on mac needs to be cmd + ctrl + shift + a, also would prefer if we can reduce the modifiers but make it only apply when files html file or browser is focused", then "also use the same hotkey we use for annotate for the annotation in the md files in files sidepanel so i can select text with my kb then do that hotkey to just add a comment on that text that i selected". It acts only while an HTML or Markdown file in Files or the Browser has the keyboard, so it takes the fewest modifiers nothing there uses: Cmd+Ctrl+A on the Mac and Alt+Shift+A on Windows and Linux (Cmd+Shift+A sleeps a session, Cmd+Alt+A shows agent actions, Option and Option+Shift type letters on the Mac). Rebindable; the Annotate buttons' tooltips show it.
+    HotkeyDefinition {
+        id: "toggleAnnotate",
+        title: "Annotate",
+        description: "Turn Annotate on or off for the HTML file in Files or the Browser page you are on, or comment on the text you selected in a Markdown file in Files.",
+        default_key: "cmd+ctrl+a",
+        windows_linux_default_key: Some("alt+shift+a"),
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("toggleAnnotate")), ("kind", J::Str("shellAction"))]),
     },
     HotkeyDefinition {
         id: "sleepFocusedSessionSecondKey",

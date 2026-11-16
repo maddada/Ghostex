@@ -82,6 +82,7 @@ impl GhostexGpuiApp {
             .clone();
         if changed {
             self.native_docs_restyle_live_editors(cx);
+            self.native_docs_annotate_send_theme(signature.1, cx);
         }
         palette
     }
@@ -182,6 +183,11 @@ impl GhostexGpuiApp {
                 .track_focus(&focus)
                 .key_context("NativeDocs")
                 .on_key_down(cx.listener(Self::native_docs_key_down))
+                .on_action(
+                    cx.listener(|this, _: &crate::app::actions::ToggleAnnotate, _, cx| {
+                        this.native_docs_annotate_hotkey(cx);
+                    }),
+                )
                 .on_action(cx.listener(
                     |this, _: &crate::app::actions::FindInFocusedTerminal, window, cx| {
                         this.native_docs_find_shortcut(window, cx);

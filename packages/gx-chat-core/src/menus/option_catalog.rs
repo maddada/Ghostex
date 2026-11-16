@@ -1099,6 +1099,18 @@ fn copilot_catalog() -> SessionOptionCatalog {
     }
 }
 
+/// CDXC:AgentProviders 2026-11-13 DECISION:
+/// User: for Amp "the composer's model control should just switch the user to the CLI (terminal view) to pick a model there, since it has ~0 users". Amp has no model list Ghostex reads, so its pill is a terminal handoff: its menu's one row says where to pick, and a click opens Terminal view.
+fn amp_catalog() -> SessionOptionCatalog {
+    let mut model = handoff("model", "Model", OptionCategory::Model, None);
+    model.action_label = Some("Pick the model in Amp".to_string());
+    SessionOptionCatalog {
+        model,
+        model_icon: "amp-cli".to_string(),
+        options: CatalogOptions::Fixed(Vec::new()),
+    }
+}
+
 /// CDXC:AgentProviders 2026-09-30 DECISION:
 /// User: "set up for me the model selector for these 3 in chat view" (OpenCode, Pi and OMP, each
 /// logged in with their Codex subscription). Pi and OMP list every model their own CLI can reach
@@ -1174,6 +1186,7 @@ pub fn session_option_catalog(
         "grok" | "grok-build" => ("grok", build_grok_catalog),
         "antigravity" | "antigravity-cli" => ("antigravity", build_antigravity_catalog),
         "copilot" => return Some(copilot_catalog()),
+        "amp" | "amp-cli" => return Some(amp_catalog()),
         "hermes" | "hermes-agent" => {
             return Some(match catalog.agents.get("hermes") {
                 Some(agent) => build_hermes_catalog(catalog, agent),

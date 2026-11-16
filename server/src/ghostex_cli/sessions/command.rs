@@ -14,6 +14,9 @@ use super::*;
 pub fn sessions_command(args: &[String]) -> CliResult<()> {
     let parsed = parse_args(args);
     let flags = &parsed.flags;
+    if flags.contains("projectIcons") {
+        return project_icons_command(flags);
+    }
     /*
      * CDXC:AgentLauncher 2026-07-12-00:00:
      * The mobile summary is the one poll React Native Android makes, so it also carries
@@ -22,14 +25,22 @@ pub fn sessions_command(args: &[String]) -> CliResult<()> {
      * hides the launcher rows until the next poll.
      */
     if flags.truthy("json") && flags.truthy("mobileSummary") {
+        let icon_refs = flags.truthy("iconRefs");
         // A repeat while gxserver's state is unchanged is answered from the last run's printed text
         // (summary_memo.rs).
-        let run = begin_summary_run(args, should_use_local_gxserver_state_fallback(flags));
+        let run = begin_summary_run(
+            args,
+            should_use_local_gxserver_state_fallback(flags),
+            icon_refs,
+        );
         if let Some(printed) = run.as_ref().and_then(read_summary_memo) {
             print!("{printed}");
             return Ok(());
         }
-        let merged = mobile_summary_value(flags, true)?;
+        let mut merged = mobile_summary_value(flags, true)?;
+        if let (true, Value::Object(map)) = (icon_refs, &mut merged) {
+            swap_icons_for_refs(map);
+        }
         let printed = format!("{}\n", render_json(&merged));
         if let Some(run) = &run {
             write_summary_memo(run, &printed);

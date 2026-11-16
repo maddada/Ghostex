@@ -981,7 +981,7 @@ impl Render for SessionLinksList {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // The card and the dropdown are windows of their own that follow what the list shows; the
         // web page sizes its card from `fitted_height` as it draws.
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(ghostex_web))]
         {
             // Its rows' hover cards are often taller than this window, so they draw in the tooltip
             // host window rather than inside it (window/frosted_host.rs).
@@ -1016,7 +1016,7 @@ impl Render for SessionLinksList {
                 });
             }
         }
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(ghostex_web)]
         let _ = window;
         let links = self.shown_links().unwrap_or_default();
         // CDXC:SessionLinks 2026-11-08 WHY: The count is what Open and Pinned list as not finished, so it agrees with them. Counting only links with a state said "0 open" over "Open 1" for a Linear ticket Ghostex cannot read (no Linear key for its workspace), which is never loading and never gets a state; one still loading waits under Loading and is not counted.

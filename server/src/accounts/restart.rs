@@ -104,16 +104,16 @@ pub(crate) fn plan(
         super::default_login::route_around_signed_out_default(&resume_command),
     )?;
     let zmx_name = crate::zmx::provider_zmx_session_name(session)?;
-    let identities = crate::zmx::read_zmx_session_process_identities(
-        std::slice::from_ref(&zmx_name),
-        &state.paths.home_dir,
-    )
-    .map_err(|_| {
-        DomainStateError::bad_request(
-            "Could not inspect the current agent before switching accounts.",
-        )
-    })?;
-    let current_process = identities.get(&zmx_name);
+    // CDXC:AgentProviders 2026-11-16 WHY: this read of the session's own processes is the check
+    // before anything is stopped (GitHub #630); the exit loop reads the same way
+    // (zmx/session_tree.rs), so a session this read answers for is one the switch can follow.
+    let current_process = crate::zmx::read_zmx_session_tree(&zmx_name)
+        .map_err(|_| {
+            DomainStateError::bad_request(
+                "Could not inspect the current agent before switching accounts. Nothing was stopped.",
+            )
+        })?
+        .and_then(|tree| tree.agent_identity());
     let previous_process_id = current_process.and_then(|identity| identity.process_id);
     let background = if agent == "claude" {
         previous_process_id.and_then(|pid| {
@@ -345,7 +345,7 @@ async fn finish(
     cycle: Cycle,
 ) {
     let (result, account_settings) = match result {
-        Err(error) if super::exit::did_not_exit(&error) => {
+        Err(error) if super::exit::reload_recovers(&error) => {
             let reload_state = state.clone();
             let (project, session, reload_attempt) =
                 (project_id.clone(), session_id.clone(), attempt.clone());

@@ -1,10 +1,16 @@
 //! Whether a phone asking to pair over its own SSH login is the owner's own Tailscale device, so
 //! its Easy Connect pairing needs no click (`/api/pairOverSsh` with Easy Connect keys).
 //!
-//! CDXC:RemotePairing 2026-11-12 DECISION:
-//! User (Q2716 = A, Q2719): a phone that connects over Tailscale also gets Easy Connect, inside the
-//! same pairing, and "no click needed when the phone is the user's own Tailscale device". gxserver
-//! approves it by itself only when both hold: the SSH session the request came through is from a
+//! CDXC:RemotePairing 2026-11-13 DECISION:
+//! Supersedes 2026-11-12 (Q2716 = A, Q2719: "a phone that connects over Tailscale also gets Easy
+//! Connect, inside the same pairing", asked by the phone at its first sign-in), after an SSH-only
+//! iPhone was added this way: Easy Connect is strictly opt-in, and nothing moves a phone onto it
+//! without the person's own ask; only the route they chose is used. A phone paired over SSH asks for Easy Connect only when the person says yes to Fall
+//! back to Easy Connect on it, or turns that switch on (capability `pairOverSshEasyConnectOnRequest`; the old `pairOverSshEasyConnect`
+//! that 11.6.0 phones asked by themselves on is no longer offered), and only while Easy Connect is
+//! on here (refused otherwise, `EASY_CONNECT_OFF_REFUSAL`). That tap is the person's own ask, so
+//! the 2026-11-12 "no click needed when the phone is the user's own Tailscale device" still holds
+//! for it: gxserver approves it by itself only when both hold: the SSH session the request came through is from a
 //! tailnet address (100.64.0.0/10 or fd7a:115c:a1e0::/48) that is not this computer's own address
 //! or loopback, and Tailscale's whois says that node belongs to the same Tailscale user as this
 //! computer (not tagged, not shared in from another tailnet). Any check that fails or can't be

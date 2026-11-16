@@ -23,6 +23,9 @@ pub struct LaterState {
     pub pending: BTreeMap<String, (bool, u64)>,
     /// The removals set here that the wire has not confirmed yet, by id, and the call that set them.
     pub removing: BTreeMap<String, u64>,
+    /// The stars set or taken off here that the wire has not confirmed yet, by page id: whether it
+    /// is starred, and the call that set it (`star`).
+    pub starring: BTreeMap<String, (bool, u64)>,
 }
 
 /// The forms and pages put off For later: gxserver's list with this client's changes on top.
@@ -52,6 +55,142 @@ pub fn removed_ids(state: &ChatState) -> BTreeSet<String> {
         .chain(state.questions.later.removing.keys())
         .cloned()
         .collect()
+}
+
+/// Every page the chat knows of (its loaded rows and its stored index): id, the file it was
+/// published from, and when.
+fn known_pages(state: &ChatState) -> Vec<(String, Option<String>, Option<i64>)> {
+    use crate::transcript::open_questions::AskerKind;
+    let mut pages: Vec<(String, Option<String>, Option<i64>)> = Vec::new();
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut add = |id: &str, source: Option<&String>, at: Option<i64>| {
+        if seen.insert(id.to_string()) {
+            pages.push((id.to_string(), source.cloned(), at));
+        }
+    };
+    for asker in state.transcript_view.askers.iter() {
+        if asker.kind == AskerKind::Page {
+            add(&asker.id, asker.source.as_ref(), asker.at);
+        }
+    }
+    for item in state.questions.content.items.iter() {
+        if item.kind == crate::transcript::question_forms::ContentKind::Page {
+            add(&item.id, item.source.as_ref(), item.at);
+        }
+    }
+    let view = state.session.resource_index.view();
+    for entry in view.records().iter() {
+        if entry.kind == "page" {
+            add(&entry.id, entry.source.as_ref(), entry.at_ms);
+        }
+    }
+    pages
+}
+
+/// The pages shown starred: gxserver's list with this client's changes on top, each star moved
+/// to the newest version of its page's file (a newer `ghostex show` of the same file, whose old
+/// card reads Replaced). Taking a star off takes it off every version of that file.
+///
+/// CDXC:SessionChat 2026-11-16 DECISION:
+/// BANOZZ asked on Discord ("star resources", 2026-11-13) to star pages in a chat and find them in
+/// Resources; the user promised it and picked on the star-resources page (Q3540 to Q3549): pages
+/// only; a Starred entry in the Resources filter (no group of its own; starred rows stay in
+/// their groups), newest first; on the desktop a star in the page card's window bar, a row's hover
+/// button and Star page in the page window's ⋯ menu; on the phone Star in the ⋯ menus of the
+/// page card and the page sheet, and a star on starred rows; stars per session, which agents
+/// cannot read; and when a newer version of the same file replaces a starred page, the star
+/// follows it.
+/// SEE-ALSO: server/src/session_chat_open_questions.rs (`set_starred`, the stored list),
+/// questions/open_questions.rs (the Starred filter), apps/desktop/src/app/native_chat/page_card.rs,
+/// apps/desktop/src/app/window/visual_page_modal/more_menu.rs,
+/// apps/mobile/app/src/chat/native/cards/CardMoreMenu.tsx.
+pub fn starred_page_ids(state: &ChatState) -> BTreeSet<String> {
+    let starring = &state.questions.later.starring;
+    if state.session.starred_page_ids.is_empty() && starring.values().all(|(on, _)| !on) {
+        return BTreeSet::new();
+    }
+    let pages = known_pages(state);
+    let source_of = |id: &str| -> Option<&String> {
+        pages
+            .iter()
+            .find(|(page, _, _)| page == id)
+            .and_then(|(_, source, _)| source.as_ref())
+    };
+    // The files a star was taken off here: every version of them is off.
+    let cleared: BTreeSet<&String> = starring
+        .iter()
+        .filter(|(_, (on, _))| !on)
+        .filter_map(|(id, _)| source_of(id))
+        .collect();
+    let mut ids: BTreeSet<String> = state.session.starred_page_ids.iter().cloned().collect();
+    for (id, (on, _)) in starring {
+        if *on {
+            ids.insert(id.clone());
+        } else {
+            ids.remove(id);
+        }
+    }
+    let mut shown = BTreeSet::new();
+    let mut files: BTreeSet<&String> = BTreeSet::new();
+    for id in &ids {
+        match source_of(id) {
+            Some(source) if cleared.contains(source) => {}
+            Some(source) => {
+                files.insert(source);
+            }
+            None => {
+                shown.insert(id.clone());
+            }
+        }
+    }
+    // Each starred file's newest version (the last one listed wins a tie, as the transcript's
+    // order puts the newer one later).
+    for file in files {
+        let newest = pages
+            .iter()
+            .filter(|(_, source, _)| source.as_ref() == Some(file))
+            .fold(
+                None::<&(String, Option<String>, Option<i64>)>,
+                |best, page| match best {
+                    Some(best) if best.2 > page.2 => Some(best),
+                    _ => Some(page),
+                },
+            );
+        if let Some((id, _, _)) = newest {
+            shown.insert(id.clone());
+        }
+    }
+    shown
+}
+
+/// `pageStar {id, starred}`: stars a page in this chat, or takes its star off (every version of
+/// its file). Only a page: a form or chart is not starred (Q3540).
+pub fn star(state: &mut ChatState, id: &str, starred: bool) -> Vec<Effect> {
+    let id = id.trim();
+    if id.is_empty() || starred_page_ids(state).contains(id) == starred {
+        return Vec::new();
+    }
+    if !known_pages(state).iter().any(|(page, _, _)| page == id) {
+        return Vec::new();
+    }
+    let request_id = state.core.allocate_request_id();
+    state
+        .questions
+        .later
+        .starring
+        .insert(id.to_string(), (starred, request_id));
+    state.core.request_publish();
+    vec![Effect::SendRpc {
+        request_id,
+        method: ChatRpcMethod::AnswerSessionChatPrompt,
+        params: Box::new(json!({
+            "kind": "pageStar",
+            "questionId": id,
+            "starred": starred,
+            "projectId": state.identity.project_id,
+            "sessionId": state.identity.session_id,
+        })),
+    }]
 }
 
 /// `questionRemove {id}`: removes a form or page without answering it.
@@ -158,7 +297,7 @@ pub fn cancel(state: &mut ChatState, id: &str) -> Vec<Effect> {
     } else {
         format!(
             "I dismissed {}: no need to ask {} again.",
-            tags.join(", "),
+            crate::transcript::open_questions::tag_range(&tags),
             if tags.len() == 1 { "it" } else { "them" }
         )
     };
@@ -174,9 +313,66 @@ pub fn cancel(state: &mut ChatState, id: &str) -> Vec<Effect> {
     effects
 }
 
+/// `markQuestionAnswered {id}`: a dock row's ⋯ Mark answered on a form, page or one-click question
+/// the reader already answered in their own words in the chat box. It leaves the dock as `remove`
+/// takes it off, and the agent is told it was answered there, by its title with the tags it still
+/// asks after it, as a Reply names it ("Settings layout (Q12): …").
+///
+/// CDXC:Coordinators 2026-11-16 DECISION:
+/// User, on issue #627 (an ask answered in the normal chat box stays under Needs you until he
+/// clicks a wrong answer to clear it): add "Mark answered" next to Dismiss in each question row's
+/// ⋯ menu, on the desktop dock and the phone, which closes the ask by hand.
+pub fn mark_answered(state: &mut ChatState, id: &str) -> Vec<Effect> {
+    let (tags, title) = state
+        .transcript_view
+        .askers
+        .iter()
+        .find(|asker| asker.id == id)
+        .map(|asker| (asker.waiting_tags(), asker.title.clone()))
+        .unwrap_or_default();
+    let mut effects = remove(state, id);
+    if effects.is_empty() {
+        return effects;
+    }
+    let title = title.replace(['[', ']'], "");
+    let name = match (title.trim().is_empty(), tags.is_empty()) {
+        (false, false) => format!(
+            "{} ({})",
+            title.trim(),
+            crate::transcript::open_questions::tag_range(&tags)
+        ),
+        (false, true) => title.trim().to_string(),
+        (true, false) => crate::transcript::open_questions::tag_range(&tags),
+        (true, true) => "Your questions there".to_string(),
+    };
+    let request_id = state.core.allocate_request_id();
+    effects.push(Effect::SendRpc {
+        request_id,
+        method: ChatRpcMethod::SendSessionChatMessage,
+        params: Box::new(json!({
+            "text": format!("{name}: I answered this in the chat."),
+            "sendRequestId": format!("question-answered-{}-{id}", state.identity.session_id),
+        })),
+    });
+    effects
+}
+
+/// `markPagesSeen {ids}`: the dock's Mark all seen. Each page that waits only to be looked at
+/// ("not seen yet") is removed as `remove` does, so it leaves the dock, the counts and the
+/// sidebar's dot on every client and gxserver keeps it across restarts. Nothing reaches the agent:
+/// a page's own Mark as seen tells it, but one message per page would bury it.
+///
+/// CDXC:Coordinators 2026-11-16 DECISION:
+/// User picked "reply and build" on issue #626 (a dock with 16 page cards "not seen yet", most of
+/// them already read): the dock gets Mark all seen, on the desktop and the phone. A page cleared
+/// this way reads Seen on its card, as one marked seen on the page does.
+pub fn mark_seen(state: &mut ChatState, ids: &[&str]) -> Vec<Effect> {
+    ids.iter().flat_map(|id| remove(state, id)).collect()
+}
+
 /// `questionsReply {id, text}`: the reader's own words on a whole form or page, from its dock
 /// row's Reply, sent to the agent as a message without touching the chat box. `text` comes already
-/// tagged with the questions it still asks ("Q12 Q13: words", `extras::work_cards`), as a work
+/// after its title and the questions it still asks ("Triage (Q12 to Q14): words", `extras::work_cards`), as a work
 /// item ask's Reply comes as "W7 Q12: words". The form or page stays open: the words answer none
 /// of its questions by themselves.
 pub fn reply(state: &mut ChatState, id: &str, text: &str) -> Vec<Effect> {
@@ -224,13 +420,23 @@ pub fn rpc_settled(
         .iter()
         .find(|(_, request)| **request == request_id)
         .map(|(id, _)| id.clone());
-    if marked.is_none() && removed.is_none() {
+    let star = state
+        .questions
+        .later
+        .starring
+        .iter()
+        .find(|(_, (_, request))| *request == request_id)
+        .map(|(id, _)| id.clone());
+    if marked.is_none() && removed.is_none() && star.is_none() {
         return None;
     }
     let RpcOutcome::Err { message, .. } = outcome else {
         return Some(Vec::new());
     };
-    let what = if let Some(id) = marked {
+    let what = if let Some(id) = star {
+        state.questions.later.starring.remove(&id);
+        "change the page's star"
+    } else if let Some(id) = marked {
         state.questions.later.pending.remove(&id);
         "change For later"
     } else {
@@ -246,8 +452,50 @@ pub fn rpc_settled(
     }])
 }
 
+/// Forgets the stars the wire now carries: a star once its page is on gxserver's list, a star
+/// taken off once neither the page nor another version of its file is.
+fn settle_stars(state: &mut ChatState) {
+    let starred = &state.session.starred_page_ids;
+    let pages = if state.questions.later.starring.values().any(|(on, _)| !on) {
+        known_pages(state)
+    } else {
+        Vec::new()
+    };
+    let source_of = |id: &str| -> Option<&String> {
+        pages
+            .iter()
+            .find(|(page, _, _)| page == id)
+            .and_then(|(_, source, _)| source.as_ref())
+    };
+    let settled: Vec<String> = state
+        .questions
+        .later
+        .starring
+        .iter()
+        .filter(|(id, (on, _))| {
+            if *on {
+                return starred.contains(id);
+            }
+            let file = source_of(id);
+            !starred
+                .iter()
+                .any(|known| known == *id || (file.is_some() && source_of(known) == file))
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+    if settled.is_empty() {
+        return;
+    }
+    for id in settled {
+        state.questions.later.starring.remove(&id);
+    }
+}
+
 /// Forgets the changes the wire now carries.
 pub fn settle(state: &mut ChatState) {
+    if !state.questions.later.starring.is_empty() {
+        settle_stars(state);
+    }
     let wire = &state.session.later_question_ids;
     let removed = &state.session.removed_question_ids;
     // Runs on every event: the state is only borrowed mutably when a mark actually settles, so its

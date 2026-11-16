@@ -665,6 +665,28 @@ fn is_composer_rule(line: &str) -> bool {
         >= SESSION_CHAT_PERMISSION_PROMPT_MIN_RULE_CHARS
 }
 
+/// True for the rule that carries a named session's title at its right end
+/// (`────── Big Chungus ─`).
+///
+/// CDXC:AgentScreenDetection 2026-11-15 WHY:
+/// User: "I couldn't go through this :((" on a Bash permission prompt from the Mac app and the Android app. Claude Code 2.1.325 draws a named session's title in a rule under its live permission prompt, the same rule that tops the composer once the prompt is answered. The permission check took that rule for the composer, so the live prompt read as answered scrollback: no approval card, only the generic dialog card with the rule in its text. The composer always also has a plain rule under its `❯` line, so an answered prompt is still told apart by that one.
+/// SEE-ALSO: server/src/session_chat_claude_dialog.rs (`detect_claude_dialog` leaves the rule out of its card).
+pub(crate) fn is_claude_session_title_rule(line: &str) -> bool {
+    let line = line.trim();
+    let lead = line.chars().take_while(|ch| *ch == '\u{2500}').count();
+    if lead < SESSION_CHAT_PERMISSION_PROMPT_MIN_RULE_CHARS {
+        return false;
+    }
+    let rest = line.trim_start_matches('\u{2500}');
+    let Some(title) = rest
+        .strip_suffix('\u{2500}')
+        .map(|rest| rest.trim_end_matches('\u{2500}'))
+    else {
+        return false;
+    };
+    rest.starts_with(' ') && title.ends_with(' ') && !title.trim().is_empty()
+}
+
 /// The tool permission prompt: its heading painted directly above the rows, a
 /// Yes row and a No row, the run at the bottom of the capture, and no composer
 /// frame after it (see the kind's comment for why that proves liveness).
@@ -688,7 +710,7 @@ fn permission_prompt_run_kind(
     }
     if window[last_row_line + 1..]
         .iter()
-        .any(|line| is_composer_rule(line))
+        .any(|line| is_composer_rule(line) && !is_claude_session_title_rule(line))
     {
         return None;
     }

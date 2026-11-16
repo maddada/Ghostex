@@ -75,8 +75,9 @@ impl AgentActivityReport {
 /// own `needsInput` alerts. An attention an older daemon publishes without a kind alerts as before;
 /// a session that already left attention when its alert would play does not, since nothing waits.
 /// CDXC:Notifications 2026-11-08 SEE-ALSO: the rule itself is now `alert_rule::should_alert`
-/// (alert_rule.rs), which makes a thread's and a coordinator's plain finished turn quiet under All
-/// too; this setting only narrows what that rule lets through.
+/// (alert_rule.rs), which makes a thread's plain finished turn quiet under All too (a
+/// coordinator's is kept from attention by gxserver while its threads work, CDXC:Notifications
+/// 2026-11-14); this setting only narrows what that rule lets through.
 /// SEE-ALSO: apps/mobile/app/src/notifications/attentionAlerts.ts (the phone's copy of this rule).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum AttentionAlerts {

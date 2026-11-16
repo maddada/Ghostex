@@ -98,6 +98,10 @@ pub struct Document {
     pub final_ids: Vec<String>,
     /// The published pages (`ghostex show`) whose answers arrived, so their cards read Answered.
     pub answered_pages: Vec<String>,
+    /// The forms and pages whose answers card is the next row after the reply asking them, so
+    /// their own Answered line is left out (`transcript::page_answers::answers_below`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub answers_below: Vec<String>,
     /// The question pages not answered whose questions were withdrawn, some or all, by page id,
     /// so their cards say so (`transcript::open_questions::withdrawn_pages`).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -106,6 +110,10 @@ pub struct Document {
     /// cards say so and offer "Back to unanswered" (`questions::later`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub later_questions: Vec<String>,
+    /// The pages the reader starred, by page id, each star on the newest version of its file
+    /// (`questions::later::starred_page_ids`), so their cards show the star.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub starred_pages: Vec<String>,
     /// Per completed-work row: the read is in flight, or it failed and offers a retry.
     pub deferred_work: Shared<BTreeMap<String, DeferredWorkRow>>,
     /// Claude Code workflow runs drawn as cards, by Workflow call id
@@ -156,6 +164,9 @@ pub struct Document {
     pub composer_collapsed: bool,
     pub composer_overflow: ComposerOverflow,
     pub composer_actions: ComposerActions,
+    /// What the chat box row leaves out (Settings > Experience, `composer/row.rs`).
+    #[serde(default)]
+    pub composer_row: crate::composer::row::ComposerRow,
     pub composer_chrome: ComposerChrome,
     /// The slash command the composer would complete to, or `null`. Family d.
     pub composer_command: Option<String>,
@@ -168,6 +179,10 @@ pub struct Document {
     /// Family d.
     #[serde(default)]
     pub saved_draft_pill: Option<super::panels::SavedDraftPill>,
+    /// The "Option + Enter to compact then send" hint on a Codex chat idle for over a day, pinned
+    /// at the left of the pill strip, or absent (`composer::compact_hint`). Family d.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compact_hint: Option<super::panels::CompactHint>,
     pub note: Note,
     /// The Catch me up button and card. Family d.
     #[serde(default)]
@@ -322,6 +337,9 @@ pub struct Document {
     /// The dock above a coordinator's chat box (`extras::work_cards::dock`): `{cards, line}`, or
     /// `null` for a chat with no work. Family f.
     pub work_dock: Tri<Value>,
+    /// How each ask settled in the last hour went, by dock row key
+    /// (`extras::work_cards::settled_asks`): `"answered"` or `"withdrawn"`. Family f.
+    pub work_asks_settled: Tri<Value>,
     /// The background tasks the agent left running (`extras::background_tasks`), which the
     /// Background pill's menu lists, or `null`. Family f.
     pub background_tasks_panel: Tri<Value>,

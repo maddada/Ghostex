@@ -146,6 +146,23 @@ fn now_ms() -> i64 {
         .unwrap_or_default()
 }
 
+/// A computer this one has been connected to, and when it last was: `(server id, name, ms)`.
+/// Read from the file, so the CLI on this computer can list the ones that are offline now
+/// (`ghostex project status`) without a newer gxserver; gxserver writes it at least every
+/// `KNOWN_WRITE_EVERY_MS` while a computer stays connected.
+pub(crate) fn read_known_computers(state_dir: &Path) -> Vec<(String, String, i64)> {
+    std::fs::read_to_string(state_dir.join(FILE_NAME))
+        .ok()
+        .and_then(|text| serde_json::from_str::<HeldFile>(&text).ok())
+        .map(|file| {
+            file.known
+                .into_iter()
+                .map(|(server_id, known)| (server_id, known.name, known.last_seen_ms))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Loads the file the first time this gxserver touches it.
 fn opened(state_dir: &Path) -> MutexGuard<'static, Store> {
     let mut store = store();

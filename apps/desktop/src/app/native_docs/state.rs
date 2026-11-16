@@ -339,8 +339,13 @@ pub(crate) struct DocsDocument {
     pub(crate) page_saves_in_flight: u32,
     pub(crate) mode: DocsMarkdownMode,
     pub(crate) size: Option<u64>,
-    /// HTML files: the page's annotation tool (Agentation) is on.
+    /// HTML files: Annotate is on (Agentation is active in the page). Starts as saved for the file
+    /// (`annotate_storage.rs`), read when its page loads.
     pub(crate) html_annotate: bool,
+    /// The saved Annotate state was read for this document (its page asked, or the user toggled).
+    pub(crate) html_annotate_loaded: bool,
+    /// What the page last reported for the header's Annotate buttons.
+    pub(crate) html_annotate_state: super::annotate::DocsAnnotateState,
     /// SVG images: the source is showing in the code editor instead of the picture.
     pub(crate) svg_source: bool,
     /// Bumped by Reload so the browser area loads the file again.
@@ -411,7 +416,9 @@ impl DocsDocument {
             page_saves_in_flight: 0,
             mode: DocsMarkdownMode::default(),
             size: None,
-            html_annotate: true,
+            html_annotate: false,
+            html_annotate_loaded: false,
+            html_annotate_state: Default::default(),
             svg_source: false,
             origin_session: None,
             page: None,
@@ -480,9 +487,9 @@ pub(crate) struct NativeDocsState {
     /// shown file's tab moving, without undoing a scroll by hand.
     pub(crate) tab_scroll: ScrollHandle,
     pub(crate) tab_revealed: Option<(String, usize)>,
-    /// What the browser area last showed (file, annotate, revision) and whether it was covered.
+    /// What the browser area last showed (file, revision) and whether it was covered.
     #[allow(clippy::type_complexity)]
-    pub(crate) browser_area_key: Option<(Option<(SharedString, bool, u64)>, bool)>,
+    pub(crate) browser_area_key: Option<(Option<(SharedString, u64)>, bool)>,
     /// The poll that watches the open file and the files list.
     pub(crate) watch_task: Option<Task<()>>,
     pub(crate) stat_in_flight: bool,
@@ -571,6 +578,8 @@ pub(crate) struct NativeDocsState {
     pub(crate) appearance_signature: Option<(bool, bool)>,
     /// Unsaved drafts by path, as stored (`docsDrafts`).
     pub(crate) drafts: BTreeMap<String, super::storage::DocsDraft>,
+    /// Annotate's saved state as this run knows it (`annotate.rs`).
+    pub(crate) annotate: super::annotate::DocsAnnotateStore,
     /// The pending debounced draft write.
     pub(crate) draft_write: Option<Task<()>>,
     /// The full-window picture viewer, while it is open (`picture_viewer.rs`).
@@ -672,6 +681,8 @@ impl NativeDocsState {
         self.type_filter = std::mem::take(&mut from.type_filter);
         self.tree_scroll = from.tree_scroll.clone();
         self.pending_open = from.pending_open.take();
+        // Annotate's saved state names its project per entry, and its writes may still be on the way.
+        self.annotate = std::mem::take(&mut from.annotate);
         // CDXC:Docs 2026-11-11 WHY: a chat link that opens a remote file outside the project
         // records its session here and then switches Files to that project, which swaps this state;
         // left behind, the read went out without `sessionId`, the remote refused it and Files showed

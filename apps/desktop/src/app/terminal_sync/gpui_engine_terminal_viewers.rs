@@ -40,6 +40,12 @@ pub(crate) struct GpuiTerminalChatClaimState {
 
 impl GhostexGpuiApp {
     pub(crate) fn agents_terminal_chat_is_visible(&self, session_id: TerminalSessionId) -> bool {
+        // A chat in its own window is on screen whatever its pane shows (app/session_popup/).
+        if self.agents_chat_mode_sessions.contains(&session_id)
+            && self.session_popup_shows(session_id)
+        {
+            return true;
+        }
         self.agents_chat_mode_sessions.contains(&session_id)
             && self.agents_workspace_visible()
             && self
@@ -170,6 +176,10 @@ impl GhostexGpuiApp {
     pub(crate) fn agents_terminal_viewer_is_visible(&self, session_id: TerminalSessionId) -> bool {
         if self.agents_chat_mode_sessions.contains(&session_id) {
             return false;
+        }
+        // A terminal in its own window is on screen whatever its pane shows (app/session_popup/).
+        if self.session_popup_shows(session_id) {
+            return true;
         }
         self.agents_workspace_visible()
             && self

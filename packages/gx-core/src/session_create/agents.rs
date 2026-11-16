@@ -72,7 +72,6 @@ pub fn default_agent_id_for_icon(icon: Option<&str>) -> Option<&'static str> {
         "cursor-cli" => "cursor",
         "pi" => "pi",
         "opencode" => "opencode",
-        "gemini" => "gemini",
         "copilot" => "copilot",
         "factory-droid" => "droid",
         "grok-build" => "grok",
@@ -155,7 +154,6 @@ pub fn built_in_agent_id_for_command(command: &str) -> Option<&'static str> {
         "kiro-cli" => "kiro",
         "claude" | "cswap" => "claude",
         "copilot" => "copilot",
-        "gemini" => "gemini",
         "codex" | "xswap" => "codex",
         "zcode" | "zcode-cli" => "zcode",
         "droid" => "droid",
@@ -227,7 +225,7 @@ mod coordinator_family_tests {
     #[test]
     fn a_launcher_no_orchestrator_runs_on_has_no_family() {
         assert_eq!(
-            coordinator_launcher_family("custom-g-1", Some("gemini"), Some("gemini")),
+            coordinator_launcher_family("custom-k-1", Some("kiro"), Some("kiro-cli")),
             None
         );
         assert_eq!(
@@ -313,7 +311,6 @@ fn default_session_agent_title_name(lowercased: &str) -> Option<&'static str> {
         "empryo" | "em" => "Empryo",
         "freebuff" => "Freebuff",
         "dsh" | "dsh-tui" => "DeepSeek Harness",
-        "gemini" => "Gemini",
         "grok" | "grok-build" => "Grok Build",
         "hermes" | "hermes-agent" => "Hermes Agent",
         "kimi" | "kimi-code" => "Kimi Code",

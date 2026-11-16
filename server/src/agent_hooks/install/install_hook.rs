@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use crate::domain::DomainStateError;
 
 use crate::agent_hooks::codex_status_line::ensure_codex_status_line_names_model;
-use crate::agent_hooks::codex_trust::{trust_ghostex_codex_hooks, CodexTrustWriteMode};
+use crate::agent_hooks::codex_trust::{follow_codex_hook_trust, CodexTrustWriteMode};
 #[cfg(test)]
 use crate::agent_hooks::config::all_hook_events;
 use crate::agent_hooks::config::{hook_format, HookDefinition, HookFormat, HookPaths};
@@ -92,7 +92,7 @@ pub(crate) fn install_agent_hook(
         | HookFormat::NestedEventsJson => {
             let mut installed_paths = Vec::new();
             for config_path in config_paths {
-                merge_json_hook(&config_path, definition, hook_paths, &command)?;
+                let codex_before = merge_json_hook(&config_path, definition, hook_paths, &command)?;
                 installed_paths.push(path_string(&config_path));
                 if definition.agent_id == "zcode" {
                     let mut data = read_json_object(&read_file_text(&config_path));
@@ -110,11 +110,12 @@ pub(crate) fn install_agent_hook(
                 // user's approval of the Ghostex hooks, so record it where Codex
                 // reads it or Codex never runs them.
                 if definition.agent_id == "codex"
-                    && trust_ghostex_codex_hooks(
+                    && follow_codex_hook_trust(
                         &config_path,
                         hook_paths,
                         &command,
-                        CodexTrustWriteMode::Explicit,
+                        &codex_before,
+                        Some(CodexTrustWriteMode::Explicit),
                     )?
                 {
                     let config_toml = super::codex_trust::codex_config_path_for_hooks(&config_path);
@@ -195,18 +196,19 @@ pub(crate) fn repair_agent_hook_paths(
             let command = command_for_agent(definition, &hook_paths.notify_hook_path);
             let mut repaired_paths = Vec::new();
             for config_path in config_paths {
-                merge_json_hook(&config_path, definition, hook_paths, &command)?;
+                let codex_before = merge_json_hook(&config_path, definition, hook_paths, &command)?;
                 repaired_paths.push(path_string(&config_path));
                 // CDXC:AgentHooks 2026-09-02: a repaired command changes the
                 // hash Codex checks, so a slot the user already approved is
                 // re-approved; a slot Codex never saw approved stays untrusted
                 // until the user presses Update Hooks.
                 if definition.agent_id == "codex"
-                    && trust_ghostex_codex_hooks(
+                    && follow_codex_hook_trust(
                         &config_path,
                         hook_paths,
                         &command,
-                        CodexTrustWriteMode::RefreshExisting,
+                        &codex_before,
+                        Some(CodexTrustWriteMode::RefreshExisting),
                     )?
                 {
                     let config_toml = super::codex_trust::codex_config_path_for_hooks(&config_path);

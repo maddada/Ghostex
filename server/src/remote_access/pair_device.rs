@@ -119,7 +119,8 @@ pub struct PairDeviceParams {
     pub secret: String,
     pub device_name: String,
     pub platform: String,
-    /// The phone's SSH key; a computer sends none (it signs in with its own SSH login).
+    /// The phone's SSH key, or a computer's own key from `computer_ssh_key.rs` (a computer on
+    /// Ghostex before 2026-11-14 sends none and signs in with its saved SSH login).
     #[serde(default)]
     pub ssh_public_key: String,
     /// `phone` (the default) or `computer`.
@@ -135,9 +136,9 @@ pub struct PairDeviceParams {
 }
 
 /*
-CDXC:RemotePairing 2026-11-08 DECISION:
-User (GitHub #495): "Computers connecting through Easy Connect must not need their key added by hand under Advanced: give them the same flow as phones." A computer pairs like a phone (the Show QR sheet's code, its own device key, Pending with three matching words, the owner's signed approval), and what the approval grants is only what a connecting computer needs: its tailcat client key on the Easy Connect allow-list, so its tunnel gets through. It keeps signing in with its own SSH login (password or key) and reaches gxserver through the connected-computer grants, so no SSH key line is written and no device token is issued (a device token is a phone's, and a phone is one of the owner's devices). Revoking it takes the key off the allow-list.
-SEE-ALSO: server/src/remote_access/computer_pairing.rs (the connecting computer's side).
+CDXC:RemotePairing 2026-11-14 DECISION:
+User (GitHub #495): "Computers connecting through Easy Connect must not need their key added by hand under Advanced: give them the same flow as phones." A computer pairs like a phone (the Connect a computer window's code, its own device key, Pending with three matching words, the owner's approval). The approval puts its tailcat client key on the Easy Connect allow-list and, since the user's Q3 on the Easy Connect page ("Key first, password fallback": "computers connected with Easy Connect sign in with a key from pairing, like the phone does"), writes the SSH key it sent as a `ghostex-paired:` line with the phone's restrictions, so it signs in without a password; the answer says `sshKeyInstalled`. A computer that sends no key (Ghostex before 2026-11-14) keeps signing in with its saved SSH login. It reaches gxserver through the connected-computer grants, so no device token is issued (a device token is a phone's). Revoking it takes the key off the allow-list and its line out of authorized_keys. Supersedes the 2026-11-08 rule that a computer gets no SSH key line.
+SEE-ALSO: server/src/remote_access/computer_pairing.rs (the connecting computer's side), server/src/remote_access/computer_ssh_key.rs (its key).
 */
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -248,11 +249,8 @@ pub fn parse_pair_device_params(body: &Value) -> Result<PairDeviceParams, PairDe
         secret: params.secret.trim().to_string(),
         device_name,
         platform,
-        // A computer's SSH login is its own; a key it sends is ignored.
-        ssh_public_key: match params.kind {
-            PairingDeviceKind::Phone => params.ssh_public_key,
-            PairingDeviceKind::Computer => String::new(),
-        },
+        // A computer's key is optional: one from before 2026-11-14 signs in with its own login.
+        ssh_public_key: params.ssh_public_key,
         kind: params.kind,
         tailcat_client_key,
         device_key: Some(device_key),
@@ -385,10 +383,17 @@ fn approval_action(
                 "Let a {} computer that calls itself \"{}\" connect through Easy Connect",
                 params.platform, params.device_name
             ),
-            format!(
-                "Approve only if that computer shows the same three words: {}. Approving lets its Easy Connect tunnel reach this computer; it still needs this computer's SSH login to sign in.",
-                words.join(" · ")
-            ),
+            if params.ssh_public_key.trim().is_empty() {
+                format!(
+                    "Approve only if that computer shows the same three words: {}. Approving lets its Easy Connect tunnel reach this computer; it still needs this computer's SSH login to sign in.",
+                    words.join(" · ")
+                )
+            } else {
+                format!(
+                    "Approve only if that computer shows the same three words: {}. Approving lets it open your chats and terminals here through Easy Connect, signing in with its own key, until you remove it in Settings › Remote.",
+                    words.join(" · ")
+                )
+            },
         ),
     };
     // The same device asking again (a new QR scan, or Ask again) replaces its waiting request.
@@ -425,7 +430,10 @@ pub fn begin_pairing(
         PairingDeviceKind::Phone => parse_ssh_public_key(&params.ssh_public_key)
             .map_err(|error| PairDeviceError::BadRequest(format!("{error:#}")))?
             .fingerprint(),
-        PairingDeviceKind::Computer => String::new(),
+        PairingDeviceKind::Computer if params.ssh_public_key.trim().is_empty() => String::new(),
+        PairingDeviceKind::Computer => parse_ssh_public_key(&params.ssh_public_key)
+            .map_err(|error| PairDeviceError::BadRequest(format!("sshPublicKey: {error:#}")))?
+            .fingerprint(),
     };
     let device_key = params
         .device_key
@@ -1001,17 +1009,27 @@ fn finish_pairing(
     pending: &PendingPairing,
 ) -> Result<Value, PairDeviceError> {
     let phone = pending.kind == PairingDeviceKind::Phone;
-    // A computer gets neither an SSH key line nor a token (CDXC:RemotePairing 2026-11-08 above); a
-    // phone that paired over its own SSH login gets the token only (`begin_ssh_pairing`), and the
-    // key line too when it paired for Easy Connect (it sent its SSH key).
-    let key = if phone && (!pending.over_ssh || !pending.ssh_public_key.is_empty()) {
-        Some(
-            parse_ssh_public_key(&pending.ssh_public_key)
-                .map_err(|error| PairDeviceError::BadRequest(format!("{error:#}")))?,
-        )
-    } else {
-        None
-    };
+    // Nothing is written for a pairing that would add a key while Easy Connect is off
+    // (CDXC:RemotePairing 2026-11-13 in tailcat/status.rs).
+    if pending.tailcat_client_key.is_some() && !crate::tailcat::easy_connect_turned_on(context.db)?
+    {
+        return Err(PairDeviceError::BadRequest(
+            crate::tailcat::EASY_CONNECT_OFF_REFUSAL.to_string(),
+        ));
+    }
+    // A computer gets no token, and its key line only when it sent a key (CDXC:RemotePairing
+    // 2026-11-14 above); a phone that paired over its own SSH login gets the token only
+    // (`begin_ssh_pairing`), and the key line too when it paired for Easy Connect (it sent its key).
+    let computer_key = !phone && !pending.ssh_public_key.trim().is_empty();
+    let key =
+        if computer_key || (phone && (!pending.over_ssh || !pending.ssh_public_key.is_empty())) {
+            Some(
+                parse_ssh_public_key(&pending.ssh_public_key)
+                    .map_err(|error| PairDeviceError::BadRequest(format!("{error:#}")))?,
+            )
+        } else {
+            None
+        };
     let device_id = uuid::Uuid::new_v4().simple().to_string();
     let device_api_token = phone.then(mint_device_api_token);
     let token_expires_at = chrono::Utc::now() + DEVICE_API_TOKEN_TTL;
@@ -1053,50 +1071,90 @@ fn finish_pairing(
     fails, and no token is live before `reload_device_api_tokens` below), and the earlier entries are
     retired after it (their key lines, the push store, the allow-list).
     */
-    let earlier = {
-        let transaction = rusqlite::Transaction::new_unchecked(
-            context.db,
-            rusqlite::TransactionBehavior::Immediate,
-        )
-        .map_err(anyhow::Error::from)?;
-        // Checked again here: a device may have paired with that key while this one waited.
-        if let Some(client_key) = pending.tailcat_client_key.as_deref() {
-            if let Some(holder) = super::paired_devices::tailcat_key_held_by_another_device(
-                context.db,
-                client_key,
-                &pending.device_key.public_key,
-            )? {
-                return Err(key_held_by(&holder));
-            }
-        }
-        repository.insert_device(&record)?;
-        let mut earlier = super::paired_devices::earlier_pairings_of_same_device(
-            context.db,
-            &device_id,
-            pending.tailcat_client_key.as_deref(),
-            // Proven: `pairing_status` checked this key's signature before finishing the pairing.
-            &pending.device_key.public_key,
-        )?;
-        // A phone trusted over SSH earlier and now pairing for Easy Connect too: this entry replaces
-        // its SSH-only one, so Settings › Remote lists the phone once.
-        if pending.over_ssh && pending.tailcat_client_key.is_some() {
-            for device in super::paired_devices::earlier_ssh_trusts_of_same_device(
-                context.db,
-                &device_id,
-                &pending.device_key.public_key,
-            )? {
-                if !earlier.iter().any(|known| known.id == device.id) {
-                    earlier.push(device);
+    // The holder check, the new entry and the entries it retires, read in one IMMEDIATE transaction.
+    let save_entry =
+        || -> Result<Result<Vec<RemotePairedDeviceRecord>, PairDeviceError>, anyhow::Error> {
+            // Checked again here: a device may have paired with that key while this one waited.
+            if let Some(client_key) = pending.tailcat_client_key.as_deref() {
+                if let Some(holder) = super::paired_devices::tailcat_key_held_by_another_device(
+                    context.db,
+                    client_key,
+                    &pending.device_key.public_key,
+                )? {
+                    return Ok(Err(key_held_by(&holder)));
                 }
             }
+            repository.insert_device(&record)?;
+            let mut earlier = super::paired_devices::earlier_pairings_of_same_device(
+                context.db,
+                &device_id,
+                pending.tailcat_client_key.as_deref(),
+                // Proven: `pairing_status` checked this key's signature before finishing the pairing.
+                &pending.device_key.public_key,
+            )?;
+            // A phone trusted over SSH earlier and now pairing for Easy Connect too: this entry replaces
+            // its SSH-only one, so Settings › Remote lists the phone once.
+            if pending.over_ssh && pending.tailcat_client_key.is_some() {
+                for device in super::paired_devices::earlier_ssh_trusts_of_same_device(
+                    context.db,
+                    &device_id,
+                    &pending.device_key.public_key,
+                )? {
+                    if !earlier.iter().any(|known| known.id == device.id) {
+                        earlier.push(device);
+                    }
+                }
+            }
+            Ok(Ok(earlier))
+        };
+    let earlier = match pending.tailcat_client_key.as_deref() {
+        // With an Easy Connect key, the entry and its allow-list line are one write under the
+        // tailcat lock, refused whole while Easy Connect is off (CDXC:RemotePairing 2026-11-13 in
+        // tailcat/status.rs), so a pairing refused there leaves no entry behind.
+        Some(client_key) => crate::tailcat::with_tailcat_state(
+            context.paths,
+            context.db,
+            Some(context.tailcat_runtime),
+            |state| {
+                if !state.enabled {
+                    return Ok(Err(PairDeviceError::BadRequest(
+                        crate::tailcat::EASY_CONNECT_OFF_REFUSAL.to_string(),
+                    )));
+                }
+                let earlier = save_entry()?;
+                if earlier.is_ok() {
+                    state.allowed_client_keys = super::paired_devices::allow_list_adding(
+                        &state.allowed_client_keys,
+                        client_key,
+                    );
+                }
+                Ok(earlier)
+            },
+        )??,
+        None => {
+            let transaction = rusqlite::Transaction::new_unchecked(
+                context.db,
+                rusqlite::TransactionBehavior::Immediate,
+            )
+            .map_err(anyhow::Error::from)?;
+            let earlier = save_entry()??;
+            transaction.commit().map_err(anyhow::Error::from)?;
+            earlier
         }
-        transaction.commit().map_err(anyhow::Error::from)?;
-        earlier
     };
     if let Some(key) = &key {
         if let Err(error) = (context.append_key)(key, &device_id, &pending.name) {
-            // No key line, no entry.
+            // No key line, no entry, and no allow-list line for it.
             let _ = repository.remove_device(&device_id);
+            if let Some(client_key) = pending.tailcat_client_key.as_deref() {
+                let _ = super::paired_devices::remove_tailcat_client_key(
+                    context.paths,
+                    context.db,
+                    context.tailcat_runtime,
+                    client_key,
+                    Some(&pending.device_key.public_key),
+                );
+            }
             return Err(if error.is::<AdministratorApprovalDeclined>() {
                 PairDeviceError::ApprovalDeclined
             } else {
@@ -1141,14 +1199,6 @@ fn finish_pairing(
 
     super::paired_devices::reload_device_api_tokens(context.db, context.device_tokens)?;
 
-    if let Some(client_key) = pending.tailcat_client_key.as_deref() {
-        super::paired_devices::add_tailcat_client_key_when_allow_listed(
-            context.paths,
-            context.db,
-            context.tailcat_runtime,
-            client_key,
-        )?;
-    }
     if let Some(approver_key) = approver_key {
         // The same approval that let the phone in enrolls its Face ID / fingerprint key, saved
         // with the other approver keys (`SecurityState::add_approver_key`).
@@ -1206,6 +1256,10 @@ fn finish_pairing(
     if let Some(token) = device_api_token {
         answer["deviceApiToken"] = json!(token);
         answer["deviceTokenExpiresAtMs"] = json!(token_expires_at.timestamp_millis());
+    }
+    // The connecting computer signs in with its key from now on; an older one never asks.
+    if computer_key {
+        answer["sshKeyInstalled"] = json!(true);
     }
     Ok(answer)
 }
@@ -1337,6 +1391,9 @@ pub fn register_computer_keys_signed(
         Err(super::paired_devices::LinkKeyError::HeldByAnotherDevice { name, paired }) => {
             Err(PairDeviceError::KeyHeldByAnotherDevice { name, paired })
         }
+        Err(super::paired_devices::LinkKeyError::EasyConnectOff) => Err(
+            PairDeviceError::BadRequest(crate::tailcat::EASY_CONNECT_OFF_REFUSAL.to_string()),
+        ),
         Err(_) => Err(PairDeviceError::BadRequest(
             "keys must name app or server, each with a nodekey: public key.".to_string(),
         )),

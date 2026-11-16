@@ -89,6 +89,9 @@ impl HubPalette {
         };
         let foreground = modal.foreground;
         let muted = modal.muted;
+        // The Borders theme role, when set (helpers/theme_roles.rs); the modal's own hairline
+        // already carries it.
+        let line = crate::app::helpers::theme_role_or_rgba("border", light, line);
         let hairline = if glass {
             modal.hairline
         } else if light {
@@ -96,6 +99,7 @@ impl HubPalette {
         } else {
             modal_rgba(0xffffff, 0.08)
         };
+        let hairline = crate::app::helpers::theme_role_or_rgba("border", light, hairline);
         let editor = if light {
             EditorColors {
                 background: if glass { panel } else { rgb(0xfffffe) },

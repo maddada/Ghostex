@@ -55,11 +55,19 @@ pub(crate) fn pin_gpui_x11_scale_factor() {
         .ok()
         .filter(|value| !value.trim().is_empty())
     {
+        let automatic = parse_scale(&scale);
         let _ = DETECTED_SCALE.set(DetectedScale {
-            automatic: parse_scale(&scale),
+            automatic,
             source: ScaleSource::Environment,
             fixed: None,
         });
+        /*
+        CDXC:PlatformSupport 2026-11-14 WHY:
+        Ghostex sets GPUI_X11_SCALE_FACTOR for itself, so everything it starts inherits it: the Ghostex that Restart or an update relaunches, and one started from a Ghostex terminal. Such a Ghostex took the variable as given and pinned nothing for Chromium, which then drew at GDK_SCALE (2 on Omarchy) while GPUI placed its pages at 1.6, so a Ghostex page laid out for a view twice its window's size and ran off the right edge. Chromium gets the GPUI scale whatever chose it.
+        */
+        if let Some(scale) = automatic {
+            let _ = PINNED_SCALE_FACTOR.set(scale);
+        }
         return;
     }
     let Some(server) = XServerScaleHints::read() else {

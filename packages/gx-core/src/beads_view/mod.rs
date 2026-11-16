@@ -3,6 +3,7 @@
 //! only arranges them.
 
 mod agents;
+pub mod json_api;
 mod time;
 mod tree;
 
@@ -13,7 +14,7 @@ pub use time::{
     local_date_after, parse_bd_time_ms, relative_age, relative_ago, short_date, BeadsClock,
 };
 pub use tree::{
-    build_tree, matches_filter, status_label, type_label, BeadGlyph, BeadMeta, BeadRowModel,
-    BeadsFilter, BeadsFilterCounts, BeadsSection, BeadsSectionKind, BeadsSort, BeadsTreeModel,
-    BeadsTreeOptions, EpicSummary,
+    bead_details, build_tree, matches_filter, status_label, type_label, BeadDetailsModel,
+    BeadGlyph, BeadMeta, BeadRowModel, BeadsFilter, BeadsFilterCounts, BeadsSection,
+    BeadsSectionKind, BeadsSort, BeadsTreeModel, BeadsTreeOptions, EpicSummary,
 };

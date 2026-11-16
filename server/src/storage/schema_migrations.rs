@@ -1360,4 +1360,16 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         id: "0077_coordinator_thread_idle_rounds",
         sql: include_str!("migrations/0077_coordinator_thread_idle_rounds.sql"),
     },
+    Migration {
+        id: "0078_drop_gemini_cli_agent",
+        sql: include_str!("migrations/0078_drop_gemini_cli_agent.sql"),
+    },
+    Migration {
+        id: "0079_unpark_done_coordinator_threads",
+        sql: include_str!("migrations/0079_unpark_done_coordinator_threads.sql"),
+    },
+    Migration {
+        id: "0080_session_chat_queue_version",
+        sql: include_str!("migrations/0080_session_chat_queue_version.sql"),
+    },
 ];

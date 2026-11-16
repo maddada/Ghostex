@@ -24,7 +24,9 @@ pub(crate) struct MenuRow {
 }
 
 /// The menu's rows, in order: Snooze first, shown only while the page waits for answers.
-pub(crate) fn menu_rows(snooze: bool) -> Vec<MenuRow> {
+/// `star`: whether the page is starred (Unstar page) or not (Star page), `None` when the page's
+/// session is not known, which leaves the row out.
+pub(crate) fn menu_rows(snooze: bool, star: Option<bool>) -> Vec<MenuRow> {
     let row = |label, icon| MenuRow {
         label,
         icon: Some(icon),
@@ -38,6 +40,14 @@ pub(crate) fn menu_rows(snooze: bool) -> Vec<MenuRow> {
             icon: Some("titlebar/alarm.svg"),
             submenu: true,
         });
+    }
+    // CDXC:SessionChat 2026-11-16 DECISION: the user picked the ⋯ menu for the page window's
+    // star (Q3545 on the star-resources page); the rest is on gx-chat-core questions/later.rs
+    // `starred_page_ids`. It follows Snooze, which stays first so its lengths line up with it.
+    match star {
+        Some(true) => rows.push(row("Unstar page", "titlebar/star-filled.svg")),
+        Some(false) => rows.push(row("Star page", "titlebar/star.svg")),
+        None => {}
     }
     rows.extend([
         row("Export page", "titlebar/download.svg"),

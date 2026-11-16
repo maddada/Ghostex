@@ -4,6 +4,8 @@
 use std::collections::{BTreeMap, HashSet};
 use std::sync::{Mutex, OnceLock};
 
+#[cfg(test)]
+use ghostex_gx_protocol::ModeRestart;
 use ghostex_gx_protocol::UnavailableMode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -95,7 +97,11 @@ fn mode_label(mode: &str) -> String {
     }
 }
 
-const CLAUDE_BYPASS_HOW_TO: &str = "This session wasn't started with the skip-permissions flag. To use Bypass, set Agent approvals to Accept all in Settings, Agents, and start a new session.";
+/// A greyed Bypass whose switch below it can restart Claude in it (session_chat_mode_restart.rs).
+const CLAUDE_BYPASS_NEEDS_RESTART: &str = "Claude has to restart to use Bypass.";
+/// A greyed Bypass with no switch: a side chat or read-only thread, or a refusal from a Claude
+/// whose command Ghostex can't read.
+const CLAUDE_BYPASS_HOW_TO: &str = "Claude wasn't started with Bypass allowed. New chats can have it: Settings > Agents > Agent approvals > Accept all.";
 
 /// How to turn a refused mode on, saying only what is true of that agent. Claude's flag is the
 /// one switch known to bring a mode back. Antigravity CLI 1.4 offered Auto with and without its
@@ -160,19 +166,53 @@ pub(crate) fn unavailable_modes(session: &Value) -> Vec<UnavailableMode> {
         .pointer("/launchSettings/agentLaunchPlan/command")
         .and_then(Value::as_str)
         .unwrap_or_default();
+    let started_in_bypass = session
+        .get("runtimeSettings")
+        .and_then(Value::as_object)
+        .is_some_and(crate::session_chat_mode_restart::starts_in_bypass);
     if agent == "claude"
         && command_runs_claude(launched)
         && !claude_command_offers_bypass(launched)
         && !session_showed_bypass(session)
+        && !started_in_bypass
     {
         modes
             .entry("bypass".to_string())
             .or_insert_with(|| CLAUDE_BYPASS_HOW_TO.to_string());
     }
+    let restart = (agent == "claude" && bypass_restart_offered(session))
+        .then(|| crate::session_chat_mode_restart::read_restart(session));
     modes
         .into_iter()
-        .map(|(value, why)| UnavailableMode { value, why })
+        .map(|(value, why)| match (&restart, value.as_str()) {
+            (Some(restart), "bypass") => UnavailableMode {
+                value,
+                why: CLAUDE_BYPASS_NEEDS_RESTART.to_string(),
+                restart: Some(restart.clone()),
+            },
+            _ => UnavailableMode {
+                value,
+                why,
+                restart: None,
+            },
+        })
         .collect()
+}
+
+/// Whether the Mode menu offers "Restart in Bypass when idle" for this session: a Claude whose
+/// own command Ghostex reads, and that a restart can put in Bypass.
+pub(crate) fn bypass_restart_offered(session: &Value) -> bool {
+    let launched = session
+        .pointer("/launchSettings/agentLaunchPlan/command")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    crate::agents::identity::normalize_agent_id(
+        crate::session_chat_follower::session_chat_agent_for_session(session).as_deref(),
+    )
+    .as_deref()
+        == Some("claude")
+        && command_runs_claude(launched)
+        && crate::session_chat_mode_restart::restart_offered(session)
 }
 
 fn session_showed_bypass(session: &Value) -> bool {
@@ -297,8 +337,8 @@ mod tests {
         let modes = unavailable_modes(&session("claude", "claude --model haiku"));
         assert_eq!(modes.len(), 1);
         assert_eq!(modes[0].value, "bypass");
-        assert!(modes[0].why.contains("skip-permissions flag"));
-        assert!(modes[0].why.contains("Accept all"));
+        assert_eq!(modes[0].why, CLAUDE_BYPASS_NEEDS_RESTART);
+        assert_eq!(modes[0].restart, Some(ModeRestart::default()));
     }
 
     #[test]

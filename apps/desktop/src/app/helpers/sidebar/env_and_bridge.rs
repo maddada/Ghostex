@@ -124,7 +124,6 @@ pub(crate) fn gpui_sidebar_agent_icon(value: Option<&str>) -> Option<&'static st
         "cursor" | "cursor cli" | "cursor-cli" => Some("cursor-cli"),
         "pi" | "pi agent" => Some("pi"),
         "opencode" | "open code" => Some("opencode"),
-        "gemini" => Some("gemini"),
         "copilot" => Some("copilot"),
         "droid" | "factory droid" | "factory-droid" => Some("factory-droid"),
         "grok" | "grok build" | "grok-build" => Some("grok-build"),

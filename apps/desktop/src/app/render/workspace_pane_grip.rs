@@ -3,7 +3,6 @@
 
 use gpui::AnyElement;
 use gpui::AppContext as _;
-use gpui::FontWeight;
 use gpui::InteractiveElement as _;
 use gpui::IntoElement;
 use gpui::ParentElement as _;
@@ -16,7 +15,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::px;
 use gpui_component::ElementExt as _;
 
-use crate::app::actions::{CloseAgentsPane, MergeAllTabsForPane};
+use crate::app::actions::{CloseAgentsPane, MergeAllTabsForPane, OpenAgentsPaneInNewWindow};
 use crate::app::context_menu::GpuiContextMenu;
 use crate::app::helpers::*;
 use crate::app::model::*;
@@ -58,28 +57,7 @@ fn workspace_pane_drag_chip_inset(
 
 impl Render for WorkspacePaneDragPreview {
     fn render(&mut self, _window: &mut Window, _cx: &mut gpui::Context<Self>) -> impl IntoElement {
-        let chip = div()
-            .flex()
-            .items_center()
-            .h(px(28.0))
-            .max_w(px(240.0))
-            .px(px(10.0))
-            .rounded(px(6.0))
-            .border_1()
-            .border_color(workspace_drop_feedback_border_color())
-            .bg(workspace_tab_drag_preview_color())
-            .shadow_md()
-            .text_size(px(12.5))
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(titlebar_active_text_color())
-            .child(
-                div()
-                    .min_w_0()
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .text_ellipsis()
-                    .child(self.title.clone()),
-            );
+        let chip = drag_ghost(self.title.clone(), None, None, 1.0);
         div()
             .pl(self.chip_inset.x)
             .pt(self.chip_inset.y)
@@ -182,6 +160,11 @@ impl GhostexGpuiApp {
             .menu(
                 "Merge All Panes",
                 Box::new(MergeAllTabsForPane { pane_id: pane_id.0 }),
+            )
+            // The pane's session in a window of its own (app/session_popup/).
+            .menu(
+                "Open in New Window",
+                Box::new(OpenAgentsPaneInNewWindow { pane_id: pane_id.0 }),
             );
         match grip {
             Some(grip) => menu.toggle_below(grip, window, cx),

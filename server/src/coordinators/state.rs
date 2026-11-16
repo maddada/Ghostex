@@ -9,7 +9,9 @@ use serde_json::Value;
 use super::records::SessionKey;
 
 use crate::agents::session_chat_prompt_setting;
-use crate::presentation::{effective_lifecycle_state, presentation_activity};
+use crate::presentation::{
+    effective_lifecycle_state, presentation_activity, working_only_in_background,
+};
 use crate::session_chat_interactive::{
     parse_stored_session_chat_prompt, SessionChatInteractivePrompt,
 };
@@ -122,7 +124,10 @@ pub fn classify_thread_session(
         return ThreadState::Working;
     }
     let activity = presentation_activity(session, now_iso);
-    let working = activity == "working" || transcript_working;
+    // A turn that ended with only a background job still running is idle for the thread
+    // (CDXC:Coordinators 2026-11-13 in session_status/model.rs).
+    let working = (activity == "working" && !working_only_in_background(session, now_iso))
+        || transcript_working;
     if applicable_screen_wait(session, working).is_some() {
         return ThreadState::Waiting;
     }

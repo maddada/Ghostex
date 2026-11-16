@@ -143,6 +143,14 @@ pub(crate) struct CloseAgentsPane {
     pub(crate) pane_id: u64,
 }
 
+/// The split-pane grip's Open in New Window: the pane's session in a window of its own
+/// (app/session_popup/).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct OpenAgentsPaneInNewWindow {
+    pub(crate) pane_id: u64,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct SelectAgentsWorkspaceTab {
@@ -364,6 +372,12 @@ pub(crate) struct SleepBrowserTabInPane {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct RunBrowserFeedbackTool;
+
+/// The Annotate hotkey: Files answers it for an HTML or Markdown file (`native_docs/annotate.rs`),
+/// the root for the Browser page.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct ToggleAnnotate;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]

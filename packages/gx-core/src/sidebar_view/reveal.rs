@@ -92,8 +92,8 @@ impl SidebarRevealPlan {
             });
         }
         // The mode next, before the Space, because picking a Space also leaves Bots mode.
-        if let Some(mode) = self.select_mode {
-            intents.push(SidebarUiIntent::SetSidebarMode { mode });
+        if let Some(mode) = &self.select_mode {
+            intents.push(SidebarUiIntent::SetSidebarMode { mode: mode.clone() });
         }
         // The Space next: it decides which groups the section draws at all, which is what the
         // TypeScript does by running `rememberNativeSidebarFocus` before everything else.
@@ -175,8 +175,8 @@ pub fn reveal_plan(
         true => SidebarMode::Bots,
         false => SidebarMode::Projects,
     };
-    let select_mode =
-        (row_mode != effective_sidebar_mode(&inputs.settings, &inputs.ui)).then_some(row_mode);
+    let select_mode = (row_mode != effective_sidebar_mode(&inputs.settings, &inputs.ui))
+        .then(|| row_mode.clone());
     let mut built: Option<SidebarView> = None;
     // The drawn list is the OTHER machine's, or the other mode's, when the reveal moves either, so
     // it is not asked at all.

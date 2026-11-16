@@ -10,7 +10,7 @@ mod drafts_and_attachments;
 mod file_open;
 mod host_actions;
 mod run_in_terminal;
-mod runnable_links;
+pub(crate) mod runnable_links;
 pub(crate) mod session_details;
 
 pub(crate) use drafts_and_attachments::*;

@@ -20,7 +20,6 @@ use crate::session_chat::{
     SessionChatBlock, SessionChatMessage, SessionChatRole, SessionChatTailPage,
 };
 use crate::session_chat_follower::session_chat_agent_for_session;
-use crate::session_status::TURN_COMPLETE_ATTENTION_SOURCE;
 
 /// How many resend messages may follow one another before gxserver stops asking.
 const MAX_IN_A_ROW: usize = 2;
@@ -40,12 +39,7 @@ fn asked() -> &'static Mutex<HashSet<String>> {
 /// Called from every place an agent's activity changes (beside the notification feed): when the
 /// change is a finished turn, checks it on a background thread.
 pub(crate) fn observe_turn_end(state: &AppState, params: &Map<String, Value>, result: &Value) {
-    if result.get("enteredAttention").and_then(Value::as_bool) != Some(true)
-        || result
-            .pointer("/activity/attentionSource")
-            .and_then(Value::as_str)
-            != Some(TURN_COMPLETE_ATTENTION_SOURCE)
-    {
+    if !crate::session_status::result_ended_turn(result) {
         return;
     }
     let Some(session) = result.get("session").cloned() else {

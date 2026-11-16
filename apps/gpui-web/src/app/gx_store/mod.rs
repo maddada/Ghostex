@@ -4,6 +4,7 @@
 mod client_document;
 mod cloud_boxes;
 mod collection_menu;
+mod computer_icons;
 mod coordinator_actions;
 mod create;
 mod custom_tags_sync;
@@ -22,6 +23,7 @@ pub(crate) mod git;
 pub(crate) mod host;
 mod hud;
 pub(crate) mod machine_short_names;
+pub(crate) mod panel_refs;
 mod primary_launcher;
 mod project_docs;
 mod quick_access_data;

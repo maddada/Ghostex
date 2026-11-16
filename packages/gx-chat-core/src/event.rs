@@ -333,6 +333,10 @@ pub struct ChatSettings {
     /// The Show all effort levels setting (`orchestratorAllEfforts`), the same way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub all_orchestrator_efforts: Option<bool>,
+    /// The Varied thinking words setting (`chatVariedWorkingWords`), the same way: off, the
+    /// working strip says Thinking.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub varied_working_words: Option<bool>,
     /// The Handover heading color strength setting (`markedHandoversHeadingStrength`, 0 to 100),
     /// the same way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -361,6 +365,10 @@ pub struct ChatSettings {
     /// the web build, an older phone) keeps this host's own line.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status_line_from_computer: Option<bool>,
+    /// The chat box row switches (`composer/row.rs`): the desktop's from its settings file, the
+    /// phone's from its own settings. Absent keeps the whole row (an older host).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub composer_row: Option<crate::composer::row::ComposerRowSettings>,
 }
 
 /// A size or position only the renderer can know, folded back into the document.

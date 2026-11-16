@@ -42,10 +42,13 @@ impl AccountsTab {
         let mut rows: Vec<AnyElement> =
             vec![self.render_new_session_row(p, provider, data, busy, hide, window, cx)];
         let mut limit_rows = self.render_limit_rows(p, provider, &policy, busy, window, cx);
-        if provider == "claude" {
-            // Under the limit choice and Try first, above Retry after temporary errors.
+        let switching = policy["enabled"].as_bool() == Some(true)
+            && policy["atLimit"].as_str() == Some("switch");
+        if provider == "claude" && switching {
+            // Under the limit choice and Try first, above Retry after temporary errors (shown
+            // while switching).
             let at = limit_rows.len().saturating_sub(1);
-            limit_rows.insert(at, self.render_fable_fallback_row(p, &policy, cx));
+            limit_rows.insert(at, self.render_fable_fallback_row(p, cx));
         }
         rows.extend(limit_rows);
         rows.extend(self.render_auto_redeem_rows(p, provider, cx));
@@ -287,33 +290,33 @@ impl AccountsTab {
                 cx,
             ));
         }
-        rows.push(setting_row(
-            p,
-            SharedString::from(format!("accounts-{provider}-policy-retry")),
-            RowSpec::new("Retry after temporary errors")
-                .description(
-                    "A lost connection or server error retries once the network is back, after 5s, 15s, 1m, 2m and 5m, then after 5, 10, 20, 40, then every 60 minutes. Other temporary errors use the slower schedule. Login and permission requests need your attention. Stop cancels recovery for the current task.",
-                )
-                .inset_x(0.0),
-            None,
-            switch_control(
+        // CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): hidden while At a limit is Do
+        // nothing, no longer greyed out.
+        if enabled {
+            rows.push(setting_row(
                 p,
-                SharedString::from(format!("accounts-{provider}-policy-retry-switch")),
-                "Retry after temporary errors",
-                policy["retryErrors"].as_bool() == Some(true),
-                busy || !enabled,
-                Some(if busy {
-                    "Accounts are being updated.".into()
-                } else {
-                    "Choose Switch accounts or Wait for reset first.".into()
-                }),
-                move |page: &mut Self, next, _window, cx| {
-                    save(page, vec![("retryErrors", json!(next))], cx)
-                },
+                SharedString::from(format!("accounts-{provider}-policy-retry")),
+                RowSpec::new("Retry after temporary errors")
+                    .description(
+                        "A lost connection or server error retries once the network is back, after 5s, 15s, 1m, 2m and 5m, then after 5, 10, 20, 40, then every 60 minutes. Other temporary errors use the slower schedule. Login and permission requests need your attention. Stop cancels recovery for the current task.",
+                    )
+                    .inset_x(0.0),
+                None,
+                switch_control(
+                    p,
+                    SharedString::from(format!("accounts-{provider}-policy-retry-switch")),
+                    "Retry after temporary errors",
+                    policy["retryErrors"].as_bool() == Some(true),
+                    busy,
+                    Some("Accounts are being updated.".into()),
+                    move |page: &mut Self, next, _window, cx| {
+                        save(page, vec![("retryErrors", json!(next))], cx)
+                    },
+                    cx,
+                ),
                 cx,
-            ),
-            cx,
-        ));
+            ));
+        }
         rows
     }
 
@@ -321,16 +324,14 @@ impl AccountsTab {
     /// (server/src/accounts/model_fallback.rs).
     ///
     /// CDXC:AgentProviders 2026-11-13 DECISION:
-    /// User: "we also need a new toggle that continues on any open Opus when Fable runs out on all accounts, in Settings for Claude accounts, since that's the most common case. If the user is using Fable then we switch to another account that has Fable usage of course." Claude only, on by default, and only meaningful while At a limit is Switch accounts, so it is dimmed otherwise.
+    /// User: "we also need a new toggle that continues on any open Opus when Fable runs out on all accounts, in Settings for Claude accounts, since that's the most common case. If the user is using Fable then we switch to another account that has Fable usage of course." Claude only, on by default, and only meaningful while At a limit is Switch accounts.
+    /// CDXC:Settings 2026-11-14 DECISION (AGENTS.md; Q3110, user: "fix all these too but make sure ux makes sense after fix"): supersedes "dimmed otherwise" above. The row shows only while At a limit is Switch accounts, under Try first, and is hidden otherwise.
     fn render_fable_fallback_row(
         &mut self,
         p: &SettingsPalette,
-        policy: &Value,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         const KEY: &str = "claudeFableFallbackToOpus";
-        let switching = policy["enabled"].as_bool() == Some(true)
-            && policy["atLimit"].as_str() == Some("switch");
         let on = self.store.read(cx).bool(KEY);
         setting_row(
             p,
@@ -347,8 +348,8 @@ impl AccountsTab {
                 SharedString::from("accounts-claude-fable-fallback-switch"),
                 "Continue on Opus when Fable runs out",
                 on,
-                !switching,
-                (!switching).then(|| SharedString::from("Choose Switch accounts first.")),
+                false,
+                None,
                 move |page: &mut Self, next: bool, _window: &mut Window, cx: &mut Context<Self>| {
                     let store = page.store.clone();
                     store.update(cx, |store, cx| store.update_setting(KEY, json!(next), cx));
@@ -387,8 +388,7 @@ impl AccountsTab {
                 store.update(cx, |store, cx| store.update_setting(key, json!(next), cx));
             }
         };
-        vec![
-            setting_row(
+        let mut rows = vec![setting_row(
                 p,
                 SharedString::from(format!("accounts-{provider}-auto-redeem")),
                 RowSpec::new("Auto-redeem expiring resets")
@@ -408,8 +408,11 @@ impl AccountsTab {
                     cx,
                 ),
                 cx,
-            ),
-            setting_row(
+            )];
+        // CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): hidden while Auto-redeem expiring
+        // resets is off, no longer greyed out.
+        if on {
+            rows.push(setting_row(
                 p,
                 SharedString::from(format!("accounts-{provider}-auto-redeem-at-limit")),
                 RowSpec::new("Also at a limit")
@@ -424,13 +427,14 @@ impl AccountsTab {
                     SharedString::from(format!("accounts-{provider}-auto-redeem-at-limit-switch")),
                     "Also use it when I hit a limit",
                     at_limit,
-                    !on,
-                    (!on).then(|| SharedString::from("Turn on Auto-redeem expiring resets first.")),
+                    false,
+                    None,
                     save(at_limit_key),
                     cx,
                 ),
                 cx,
-            ),
-        ]
+            ));
+        }
+        rows
     }
 }

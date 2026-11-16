@@ -113,6 +113,12 @@ fn parse_page(page: &Value) -> Result<PageRef, String> {
         .map(str::trim)
         .filter(|f| !f.is_empty())
         .map(str::to_string);
+    let source = page
+        .get("source")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|source| !source.is_empty())
+        .map(str::to_string);
     let popup = match page.get("open").and_then(Value::as_str).map(str::trim) {
         None | Some("browser") => false,
         Some("popup") => true,
@@ -146,6 +152,7 @@ fn parse_page(page: &Value) -> Result<PageRef, String> {
         title: title.to_string(),
         url: url.to_string(),
         file,
+        source,
         popup,
         questions,
         awaits_seen,
