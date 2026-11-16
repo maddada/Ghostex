@@ -181,8 +181,8 @@ pub(super) fn merge_machines(
         cache.machines.insert(guest.machine.clone(), machine);
     }
 
-    // Every repository the list holds, so one spelled two ways (an SSH alias, no origin yet) is
-    // still one entry (`merge_repo_identities`).
+    // Every repository the list holds, so one spelled two ways (an SSH alias) is still
+    // one entry (`merge_repo_identities`).
     let mut identities: Vec<RepoIdentity> = Vec::new();
     for plan in plans.iter() {
         if let Some(project) = mergeable(plan.kind, plan.project.as_deref()) {
@@ -199,12 +199,18 @@ pub(super) fn merge_machines(
     }
     identities.retain(|identity| identity.key != HOME_KEY);
     let canonical = merge_repo_identities(identities.iter());
-    let key_of = |project: &ProjectContextInput| -> String {
+    // CDXC:RemoteMachines 2026-11-16 DECISION:
+    // User: "/Users/madda/dev/shortpoint this project on my windows and mac is the same name but one is actually git project and 1 isn't. why are we grouping them in the sidebar of ghostex?" A project with no git origin (a plain folder, or a repository with no `origin` remote) is only itself in this list: its key names its computer and project id, so it never joins another computer's project, a repository whose name is its folder's name, or another folder of that name on this computer. Only an origin proves two copies are one project; projects with origins still merge by `owner/repo` whatever the host (`merge_repo_identities`), so Ghostex on this Mac, Windows and m7-arch stays one entry. Before this, the Mac's plain `shortpoint` folder (`dir:shortpoint`) joined Windows' `C:\dev\sp` clone of ShortPoint/shortpoint by name.
+    let key_of = |machine: &MachineId, project: &ProjectContextInput| -> String {
         if project.is_home {
             return HOME_KEY.to_string();
         }
         let identity = identity_of(project);
         let from_origin = !identity.key.starts_with("dir:");
+        if !from_origin {
+            let computer = machine.remote_id().unwrap_or(LOCAL_MACHINE_ID);
+            return format!("{}@{computer}#{}", identity.key, project.project_id);
+        }
         let key = canonical
             .get(&identity.key)
             .map_or(identity.key, |merged| merged.key.clone());
@@ -239,7 +245,7 @@ pub(super) fn merge_machines(
             continue;
         };
         let project = Arc::new(project.clone());
-        let key = key_of(&project);
+        let key = key_of(&MachineId::Local, &project);
         let subgroups = subgroups_after(plans, index);
         let copy = Copy {
             machine: MachineId::Local,
@@ -379,7 +385,7 @@ pub(super) fn merge_machines(
                         entry_for(
                             &entry_of_key,
                             &copies,
-                            &key_of(parent),
+                            &key_of(&guest.machine, parent),
                             &guest.machine,
                             parent,
                         )
@@ -424,7 +430,7 @@ pub(super) fn merge_machines(
                 entry_for(
                     &entry_of_key,
                     &copies,
-                    &key_of(project),
+                    &key_of(&guest.machine, project),
                     &guest.machine,
                     project,
                 )
@@ -533,7 +539,10 @@ pub(super) fn merge_machines(
                 });
             }
             if let Some(project) = mergeable(GroupKind::Project, Some(project)) {
-                entry_of_key.entry(key_of(project)).or_default().push(entry);
+                entry_of_key
+                    .entry(key_of(&guest.machine, project))
+                    .or_default()
+                    .push(entry);
             }
             entry_of_copy.insert(project_id.clone(), entry);
             copies.insert(entry, vec![copy]);
