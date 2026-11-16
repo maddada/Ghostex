@@ -181,7 +181,12 @@ impl Engine<'_> {
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_string();
-            repository.update_project(&update)?;
+            let updated = repository.update_project(&update)?;
+            // A parked project is in no client's snapshot (its delta would only say
+            // `projectRemoved`); restoring it sends the row with the new roster.
+            if !crate::presentation::should_include_presentation_project(&updated) {
+                continue;
+            }
             crate::server::schedule_presentation_project_delta(
                 self.state,
                 self.db,

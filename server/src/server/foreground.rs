@@ -427,6 +427,8 @@ pub async fn run_gxserver_foreground(
     startup_gate.step("loading ticket sources");
     crate::work_mode::load_work_source_store_at_startup(&paths, &logger);
     crate::work_mode::replace_project_workspaces_at_startup(&paths, &metadata.server_id);
+    // What the first snapshots show of Issues Workflow, so the first pass sends only real changes.
+    super::work_mode_sync::record_work_mode_baseline_at_startup(&state);
     startup_gate.step("starting its background runtimes");
     state.automation_runtime.attach_app_state(&state);
     state.automation_runtime.start(shutdown_tx.subscribe());

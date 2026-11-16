@@ -15,6 +15,13 @@ use super::*;
 /// pass that follows knows which projects are on.
 pub(crate) fn refresh_issues_workflow_setup(paths: &GxserverPaths, projects: &[Value]) {
     gh_cli_is_available();
+    remember_issues_workflow_linear_setup(paths, projects);
+}
+
+/// The Linear half of [`refresh_issues_workflow_setup`]: which key applies to each project and
+/// whether it creates tickets there. Local files and the database only, so startup runs it before
+/// the first snapshot (`record_work_mode_baseline_at_startup`).
+pub(crate) fn remember_issues_workflow_linear_setup(paths: &GxserverPaths, projects: &[Value]) {
     let credentials = WorkCredentials::new(paths);
     let workspaces = crate::storage::open_gxserver_database(paths)
         .ok()

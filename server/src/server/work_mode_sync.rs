@@ -13,7 +13,8 @@ use crate::logging::{GxserverLogInput, LogLevel};
 use crate::storage::open_gxserver_database;
 use crate::work_mode::{
     issues_workflow_settings, presentation_session_work, project_work_mode, published_project_work,
-    refresh_issues_workflow_setup, refresh_work_caches, work_display_title, PublishedProjectWork,
+    refresh_issues_workflow_setup, refresh_work_caches, remember_issues_workflow_linear_setup,
+    work_display_title, PublishedProjectWork,
 };
 
 /// What each project last published of Issues Workflow (which parts it has, its tracker and its
@@ -47,6 +48,64 @@ fn work_fingerprint(project: &Value, session: &Value) -> String {
         "title": work_display_title(project, session, title_source.as_deref()),
     })
     .to_string()
+}
+
+/// CDXC:WorkMode 2026-11-16 WHY: what this pass compares with started empty at every gxserver
+/// start, so its first pass sent a delta for every project with anything set up, parked ones
+/// included, and one for every open session of them (498 project deltas on one computer after each
+/// restart; the app read its whole HUD once per project delta, which ran it out of open files,
+/// gpui-host-lifecycle.log 2026-11-16). Before the startup gate opens, and so before any snapshot,
+/// the facts the projection reads are loaded (the last run's `gh` answer, each project's Linear
+/// setup; the ticket sources are loaded just before) and what each project and open session shows
+/// is recorded as published: that is what every client's first snapshot carries. A pass then sends
+/// only what differs from it, so a client still gets every real change and nothing else.
+pub(crate) fn record_work_mode_baseline_at_startup(state: &Arc<AppState>) {
+    crate::session_git_status::seed_gh_cli_available_from_last_run(&state.paths);
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let Ok(projects) = repository.list_projects_without_session_history() else {
+        return;
+    };
+    remember_issues_workflow_linear_setup(&state.paths, &projects);
+    let titles = issues_workflow_settings().title_sessions_by_branch;
+    if let Ok(mut published) = published_titles().lock() {
+        *published = Some(titles);
+    }
+    let mut sessions = Vec::new();
+    if let Ok(mut published) = published_linear_projects().lock() {
+        for project in &projects {
+            let Some(project_id) = project.get("projectId").and_then(Value::as_str) else {
+                continue;
+            };
+            published.insert(
+                project_id.to_string(),
+                published_project_work(project_id, project),
+            );
+            if (titles || project_work_mode(project))
+                && crate::presentation::should_include_presentation_project(project)
+            {
+                if let Ok(open) = repository.list_sessions_excluding_stopped(Some(project_id)) {
+                    sessions.extend(open.into_iter().map(|session| (project, session)));
+                }
+            }
+        }
+    }
+    if let Ok(mut published) = published_work().lock() {
+        for (project, session) in sessions {
+            let (Some(project_id), Some(session_id)) = (
+                session.get("projectId").and_then(Value::as_str),
+                session.get("sessionId").and_then(Value::as_str),
+            ) else {
+                continue;
+            };
+            published.insert(
+                (project_id.to_string(), session_id.to_string()),
+                work_fingerprint(project, &session),
+            );
+        }
+    }
 }
 
 /// One pass: refresh the caches every open work-mode session reads, then publish the rows whose
@@ -124,6 +183,17 @@ pub(crate) fn run_work_mode_refresh_once(state: &Arc<AppState>) -> Result<(), Do
     // all went out, for the pass's log line.
     let mut first_error = None;
     for (project_id, parts) in linear_changed {
+        // A parked or hidden project is in no client's snapshot: its delta would only say
+        // `projectRemoved`. What it has is recorded; restoring it sends the row as it is then.
+        if !all_projects.iter().any(|project| {
+            project.get("projectId").and_then(Value::as_str) == Some(project_id.as_str())
+                && crate::presentation::should_include_presentation_project(project)
+        }) {
+            if let Ok(mut published) = published_linear_projects().lock() {
+                published.insert(project_id, parts);
+            }
+            continue;
+        }
         match send_project_delta(state, &db, &repository, &project_id) {
             Ok(()) => {
                 if let Ok(mut published) = published_linear_projects().lock() {
@@ -166,8 +236,15 @@ pub(crate) fn run_work_mode_refresh_once(state: &Arc<AppState>) -> Result<(), Do
             };
             let fingerprint = work_fingerprint(project, session);
             let key = (project_id.to_string(), session_id.to_string());
-            if published.get(&key) != Some(&fingerprint) {
+            if published.get(&key) == Some(&fingerprint) {
+                continue;
+            }
+            // A parked project's sessions are in no snapshot either (their delta would only say
+            // `sessionRemoved`), so what they show is recorded without one.
+            if crate::presentation::should_include_presentation_project(project) {
                 changed.push((key, fingerprint));
+            } else {
+                published.insert(key, fingerprint);
             }
         }
     }

@@ -1,5 +1,6 @@
 use super::*;
 use crate::platform::process::COMMAND_READER_GRACE;
+use std::sync::atomic::AtomicBool;
 
 const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 const GH_COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
@@ -92,7 +93,36 @@ pub(crate) fn cached_gh_cli_available() -> bool {
         .lock()
         .ok()
         .and_then(|cache| cache.map(|(_, is_available)| is_available))
-        .unwrap_or(false)
+        .unwrap_or_else(|| GH_LAST_RUN_ANSWER.load(Ordering::Relaxed))
+}
+
+/// CDXC:WorkMode 2026-11-16 WHY: `gh` being signed in turns Issues Workflow on for every project,
+/// and gxserver knew it only from the first `gh auth status` after a start, seconds after the first
+/// snapshots went out without it. So every restart re-published every project and every open
+/// session of them once that answer came in (498 project deltas on one computer, and the app read
+/// its whole HUD once per delta, gpui-host-lifecycle.log 2026-11-16). The last answer is kept in a
+/// file and seeds [`cached_gh_cli_available`] at start, so the first snapshots already say what the
+/// last run knew; the first real check still runs as before, and a different answer is published
+/// like any change.
+static GH_LAST_RUN_ANSWER: AtomicBool = AtomicBool::new(false);
+static GH_LAST_RUN_ANSWER_FILE: OnceLock<std::path::PathBuf> = OnceLock::new();
+
+/// Reads the last run's `gh auth status` answer (`state/gh-signed-in`, `1` or `0`) before the
+/// first snapshot, and has every later answer written there when it changes.
+pub(crate) fn seed_gh_cli_available_from_last_run(paths: &crate::paths::GxserverPaths) {
+    let file = paths.app_state_dir.join("gh-signed-in");
+    let last = std::fs::read_to_string(&file).is_ok_and(|text| text.trim() == "1");
+    GH_LAST_RUN_ANSWER.store(last, Ordering::Relaxed);
+    let _ = GH_LAST_RUN_ANSWER_FILE.set(file);
+}
+
+fn remember_gh_answer_for_next_run(is_available: bool) {
+    if GH_LAST_RUN_ANSWER.swap(is_available, Ordering::Relaxed) == is_available {
+        return;
+    }
+    if let Some(file) = GH_LAST_RUN_ANSWER_FILE.get() {
+        let _ = std::fs::write(file, if is_available { "1" } else { "0" });
+    }
 }
 
 #[cfg(test)]
@@ -149,6 +179,7 @@ pub(crate) fn gh_cli_is_available() -> bool {
     if let Ok(mut cache) = cache.lock() {
         *cache = Some((Instant::now(), is_available));
     }
+    remember_gh_answer_for_next_run(is_available);
     is_available
 }
 
