@@ -1236,7 +1236,9 @@ where they are while you open, change and close views.
   to reopen its settings and **Disable Delayed Send** to cancel the pending send.
 - Project icons: Ghostex finds favicons in the project and nested app folders.
   Projects without artwork show a square with the first letter of their name.
-  Toggle them in Settings > Sidebar & Sessions > Sidebar (`showProjectIcons`).
+  Your home folder always shows a house and a drive (C:\, /, a mounted disk)
+  always shows a drive, never an icon from an app inside it; an icon you set
+  yourself still wins. Toggle them in Settings > Sidebar & Sessions > Sidebar (`showProjectIcons`).
 - Session cards: agent icon, favicon, last-active time, git stats, colored
   icons, and rename-on-double-click are all toggles.
 - Session hover buttons (click to toggle, drag to reorder), under Sidebar & Sessions >
