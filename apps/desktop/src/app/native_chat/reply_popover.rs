@@ -542,8 +542,11 @@ impl NativeChatView {
             {
                 let mut kept = kept_replies();
                 let shared = format!("{scope}{SESSION_REPLY_ROW}");
-                if let Some(text) = drafts[SESSION_REPLY_ROW]
-                    .as_str()
+                // `get`, never `drafts[..]`: a `Map` index panics on a missing row, and a session
+                // with no Reply draft yet (`{}`) or only older per-question ones has none.
+                if let Some(text) = drafts
+                    .get(SESSION_REPLY_ROW)
+                    .and_then(serde_json::Value::as_str)
                     .filter(|text| !text.trim().is_empty())
                 {
                     kept.entry(shared.clone()).or_insert_with(|| KeptReply {
