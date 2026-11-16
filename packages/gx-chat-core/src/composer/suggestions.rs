@@ -410,6 +410,36 @@ pub fn complete_composer_mention(
     ))
 }
 
+/// Replaces the `+` mention under the caret with a session's `replacement`, kept apart from the
+/// words beside it by a real space on each side: one before it when the character before is not
+/// whitespace, one after it unless the text after already starts with one, the caret past that
+/// space (CDXC:SessionChat 2026-11-16 on `mention_card` in transcript/session_mentions.rs).
+pub fn complete_spaced_mention(
+    draft: &str,
+    caret: usize,
+    replacement: &str,
+) -> Option<(String, usize)> {
+    let trigger = detect_composer_trigger(draft, Some(caret))?;
+    let indexed = Utf16Text::new(draft);
+    let start = indexed.index_of_offset(trigger.start);
+    let end = indexed.index_of_offset(trigger.end);
+    let before = indexed.slice(0, start);
+    let after = indexed.slice(end, indexed.len());
+    let lead = if before.chars().last().is_some_and(|c| !c.is_whitespace()) {
+        " "
+    } else {
+        ""
+    };
+    let trail = if after.starts_with(char::is_whitespace) {
+        ""
+    } else {
+        " "
+    };
+    let inserted = format!("{lead}{replacement}{trail}");
+    let caret = trigger.start + inserted.encode_utf16().count() + usize::from(trail.is_empty());
+    Some((format!("{before}{inserted}{after}"), caret))
+}
+
 /// The composer-native completion for a typed `/name`, when the catalog has one.
 pub fn composer_native_command(agent: Option<&str>, text: &str) -> Option<&'static str> {
     slash_commands_for_agent(agent)

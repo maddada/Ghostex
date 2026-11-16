@@ -14,8 +14,8 @@ use crate::composer::reference_pills::{composer_references, ReferenceKind};
 use crate::composer::references::{insert_path_references, remove_reference};
 use crate::composer::submission::{restore_undelivered_text, SubmissionMode};
 use crate::composer::suggestions::{
-    complete_composer_mention, composer_native_command, suggestion_popup, suggestion_replacement,
-    SuggestionKind,
+    complete_composer_mention, complete_spaced_mention, composer_native_command, suggestion_popup,
+    suggestion_replacement, SuggestionKind,
 };
 use crate::composer::transcript_menu::append_draft_text;
 use crate::composer::view::{current_matches, suggestion_sources};
@@ -538,11 +538,20 @@ fn suggestion_command(state: &mut ChatState, action: &UserAction) -> Vec<Effect>
     ) else {
         return Vec::new();
     };
-    match complete_composer_mention(
-        &state.composer.suggestions.text,
-        state.composer.suggestions.caret,
-        &format!("{replacement} "),
-    ) {
+    let completed = if popup.kind == SuggestionKind::Session {
+        complete_spaced_mention(
+            &state.composer.suggestions.text,
+            state.composer.suggestions.caret,
+            &replacement,
+        )
+    } else {
+        complete_composer_mention(
+            &state.composer.suggestions.text,
+            state.composer.suggestions.caret,
+            &format!("{replacement} "),
+        )
+    };
+    match completed {
         Some((content, caret)) => vec![Effect::SetComposerText {
             content,
             caret: Some(caret),

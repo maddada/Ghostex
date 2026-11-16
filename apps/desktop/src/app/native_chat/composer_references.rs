@@ -156,16 +156,16 @@ pub(super) fn replacements(
         .collect()
 }
 
-/// A mention of another session in the chat box: the sent mention's look (`session_pill_link` in
-/// markdown_links.rs), the agent's logo in its colour and the title in the line's colour and weight
-/// with a faint dotted underline that is full strength under the pointer, no frame; then its state
-/// dot while it works or needs you and, for a session on another computer, that computer's icon
-/// (`session_card.rs`). It stays one piece for the caret and Delete, as every replacement does.
-/// Hovering it shows the session's hover card, which the card builder finds by the Global Ref the
-/// tooltip carries. The user's decision is CDXC:SessionChat 2026-11-15 on `mention_card` in
-/// gx-chat-core; answering the follow-up, they asked for the chat box to drop its frame too. The
-/// marks' room is spaces after the core's pill text, because the input lays the replacement out as
-/// text.
+/// A mention of another session in the chat box: the sent mention's soft chip (`session_pill_link`
+/// in markdown_links.rs), a faint fill with rounded corners and no border, holding the computer's
+/// icon for a session on another computer, the agent's logo in its colour and the title, cut with
+/// an ellipsis past `SESSION_TITLE_MAX_CHARACTERS`; no state dot and no underline. The box stays
+/// `SESSION_CHIP_MARGIN` inside the replacement on both sides, so it never touches the words beside
+/// it. It stays one piece for the caret and Delete, as every replacement does. Hovering it shows the
+/// session's hover card, which the card builder finds by the Global Ref the tooltip carries. The
+/// user's decision is CDXC:SessionChat 2026-11-16 on `mention_card` in gx-chat-core. The input lays
+/// the replacement out as text, so the room for the margin, padding and icons is no-break spaces
+/// (about a quarter of the 14px line each) around the title.
 fn session_replacement(
     reference: &ComposerReference,
     icon: &str,
@@ -184,32 +184,46 @@ fn session_replacement(
     let marks = super::session_card::card(&reference.path)
         .map(|card| super::session_card::marks(&card, appearance))
         .unwrap_or_default();
-    // Each mark takes its size and a 4px gap after the core's thin space; a no-break space is about
-    // a quarter of the 14px line.
-    let trailing_px = marks
+    let gap = 4.0;
+    let margin = markdown_links::SESSION_CHIP_MARGIN;
+    let padding = 5.0;
+    let computer: f32 = marks
         .iter()
         .map(|mark| match mark {
-            super::session_card::PillMark::Dot { size, .. }
-            | super::session_card::PillMark::Icon { size, .. } => 4.0 + f32::from(*size) / s,
+            super::session_card::PillMark::Icon { size, .. } => f32::from(*size) / s + gap,
         })
-        .sum::<f32>();
-    let trailing = "\u{a0}".repeat((trailing_px / 3.6).ceil() as usize);
-    let text = format!("{}{trailing}", reference.pill);
+        .sum();
+    let spaces = |room: f32| "\u{a0}".repeat((room / NBSP_PX).ceil() as usize);
+    let icon_inset = margin + padding + computer;
+    // The logo, its gap to the title and the room before it, in place of the core's own icon room.
+    let lead = spaces(icon_inset + SESSION_ICON_PX + gap);
+    let text = format!(
+        "{lead}{}{}",
+        session_title(&reference.label),
+        spaces(padding + margin)
+    );
     InlineReplacement::new(reference.range.clone(), text)
         .color(appearance.foreground)
+        .font_weight(gpui::FontWeight::MEDIUM)
         .icon(
             icon.to_string(),
             gpui::px(SESSION_ICON_PX * s),
-            gpui::px(0.0),
+            gpui::px(icon_inset * s),
         )
         .icon_color(icon_color)
-        // The core's room for the logo (four no-break spaces and a thin space) ends about 5px past
-        // it, where the title and its underline start.
-        .underline(super::inter_agent_message::session_name_input_underline(
-            SESSION_ICON_PX + 5.0,
-            s,
-        ))
-        .trailing(
+        .frame(gpui_component::input::InlineReplacementFrame {
+            border_color: gpui::transparent_black(),
+            border_width: gpui::px(0.0),
+            background: Some(appearance.foreground.opacity(0.08)),
+            hover_background: Some(appearance.foreground.opacity(0.15)),
+            radius: gpui::px(6.0 * s),
+            inset_y: gpui::px(1.0 * s),
+            inset_x: gpui::px(margin * s),
+            padding_left: gpui::px(padding * s),
+            padding_right: gpui::px(padding * s),
+            gap: gpui::px(gap * s),
+        })
+        .leading(
             marks
                 .into_iter()
                 .map(super::session_card::PillMark::into_replacement_mark)
@@ -217,6 +231,28 @@ fn session_replacement(
         )
         .pointer(false)
         .tooltip(reference.path.clone())
+}
+
+/// About how wide one no-break space is in the 14px chat box, unscaled.
+const NBSP_PX: f32 = 3.6;
+
+/// The most of a session's title a chip in the chat box shows; a longer one ends in `…`.
+const SESSION_TITLE_MAX_CHARACTERS: usize = 30;
+
+/// A session's title as its chip shows it: cut to `SESSION_TITLE_MAX_CHARACTERS` with `…`, its
+/// spaces no-break so the chip never wraps.
+fn session_title(label: &str) -> String {
+    let label = label.trim();
+    let title: String = if label.chars().count() > SESSION_TITLE_MAX_CHARACTERS {
+        let cut: String = label
+            .chars()
+            .take(SESSION_TITLE_MAX_CHARACTERS - 1)
+            .collect();
+        format!("{}\u{2026}", cut.trim_end())
+    } else {
+        label.to_string()
+    };
+    title.replace(' ', "\u{a0}")
 }
 
 /// The draft with `·` inserted before the reference's destination, and the caret that follows it.

@@ -1,5 +1,6 @@
-//! A mentioned session's live extras and its hover card: the state dot (working or needs you) and,
-//! for a session on another computer, that computer's icon after the title, and the card hovering the pill shows. The rule
+//! A mentioned session's live extras and its hover card: for a session on another computer, that
+//! computer's icon (before the agent's logo in a chat's soft chip), and the card hovering the pill
+//! shows. No state dot (CDXC:SessionChat 2026-11-16 on `mention_card`). The rule
 //! (which state, which computer counts as another, what the card says) is gx-chat-core's
 //! `mention_card` (transcript/session_mentions.rs, where the user's decision lives); this file reads
 //! it from the host's session list at draw time and gives it the chat's colours.
@@ -12,19 +13,10 @@ use super::appearance::ChatAppearance;
 use ghostex_gx_chat_core::transcript::session_mentions::{
     MENTION_CARD_HINT, MentionCard, mention_card, mention_card_meta,
 };
-use gpui::{AnyView, App, Hsla, Pixels, SharedString, Window, px, rgb};
+use gpui::{AnyView, App, Hsla, Pixels, SharedString, Window, px};
 
-/// The sidebar's working colour, as the Workers menu draws a working thread
-/// (coordinator_threads.rs `WORKING_COLOR`).
-const WORKING_COLOR: u32 = 0xc68a06;
-
-/// One mark after a pill's title.
+/// One mark beside a pill's title: the icon of the computer its session is on.
 pub(super) enum PillMark {
-    Dot {
-        size: Pixels,
-        color: Hsla,
-        ring: Pixels,
-    },
     Icon {
         path: SharedString,
         size: Pixels,
@@ -36,7 +28,6 @@ impl PillMark {
     pub(super) fn into_link_mark(self) -> gpui_component::text::InlineLinkMark {
         use gpui_component::text::InlineLinkMark;
         match self {
-            Self::Dot { size, color, ring } => InlineLinkMark::Dot { size, color, ring },
             Self::Icon { path, size, color } => InlineLinkMark::Icon { path, size, color },
         }
     }
@@ -44,7 +35,6 @@ impl PillMark {
     pub(super) fn into_replacement_mark(self) -> gpui_component::input::InlineReplacementMark {
         use gpui_component::input::InlineReplacementMark;
         match self {
-            Self::Dot { size, color, ring } => InlineReplacementMark::Dot { size, color, ring },
             Self::Icon { path, size, color } => InlineReplacementMark::Icon { path, size, color },
         }
     }
@@ -52,19 +42,6 @@ impl PillMark {
     pub(super) fn element(self) -> gpui::AnyElement {
         use gpui::{IntoElement as _, Styled as _};
         match self {
-            Self::Dot { size, color, ring } if ring > Pixels::ZERO => gpui::div()
-                .size(size)
-                .flex_shrink_0()
-                .rounded_full()
-                .border(ring)
-                .border_color(color)
-                .into_any_element(),
-            Self::Dot { size, color, .. } => gpui::div()
-                .size(size)
-                .flex_shrink_0()
-                .rounded_full()
-                .bg(color)
-                .into_any_element(),
             Self::Icon { path, size, color } => gpui::svg()
                 .path(path)
                 .size(size)
@@ -100,33 +77,19 @@ pub(super) fn card_for(server_id: &str, project_id: &str, session_id: &str) -> O
     card(&session.global_ref)
 }
 
-/// The marks after a session's title: its state dot only while it works or needs you (the core
-/// leaves `dot` empty otherwise, CDXC:SessionChat 2026-11-15 on `mention_card`), then the computer
-/// icon for a session on another computer.
+/// The marks beside a session's title: the computer icon for a session on another computer, and
+/// nothing else (no state dot, CDXC:SessionChat 2026-11-16 on `mention_card` in gx-chat-core).
 pub(super) fn marks(card: &MentionCard, p: &ChatAppearance) -> Vec<PillMark> {
     let s = p.scale;
-    let dot: Option<Hsla> = match card.dot.as_str() {
-        "working" => Some(rgb(WORKING_COLOR).into()),
-        "attention" => Some(rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into()),
-        _ => None,
-    };
-    let mut marks: Vec<PillMark> = dot
-        .map(|color| PillMark::Dot {
-            size: px(6.0 * s),
-            color,
-            ring: Pixels::ZERO,
-        })
-        .into_iter()
-        .collect();
-    if card.elsewhere {
-        marks.push(PillMark::Icon {
+    card.elsewhere
+        .then(|| PillMark::Icon {
             // That computer's own icon (CDXC:SessionChat 2026-11-14 in session_directory.rs).
             path: crate::app::gx_chat::session_directory::computer_icon(&card.server_id).into(),
             size: px(11.0 * s),
             color: p.muted,
-        });
-    }
-    marks
+        })
+        .into_iter()
+        .collect()
 }
 
 /// The hover card's text: the title, then its state, agent, project and computer, then what a

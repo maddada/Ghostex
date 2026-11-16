@@ -251,13 +251,14 @@ fn session_choice(session: &KnownSession, elsewhere: bool) -> SessionChoice {
     }
 }
 
-/// What a session pill shows after its title (a state dot, a computer icon) and what its hover card
+/// What a session pill shows beside its title (the computer icon) and what its hover card
 /// says (long press on the phone), read live from the host's list at draw time, never from the
 /// settled transcript, whose sessions' activity changes would rebuild it (`KnownSession::same_names`).
 ///
 /// CDXC:SessionChat 2026-11-13 DECISION:
 /// User, answering the session-mention design page: "the rich pill, in both the chat box and the sent message. But for a session on another computer, show only that computer's icon, not its whole name"; "hovering a session mention shows the hover card (long press on the phone)"; and "the same look spreads to message cards and the Workers popover, where they name a session". A session pill is the framed pill with the agent's logo, its title, a dot for its state (working, needs you, idle) and, for a session on another computer than the chat's home one, that computer's icon alone. Its hover card names the session, its state, agent, project and computer.
-/// CDXC:SessionChat 2026-11-15 DECISION: User: "i dont like the pill border around the name of different agents, when i hover then make the dotted line below show less faded ... but make sure to keep the status of the session there as a dot but only show status when running (red/yellow dots only should show, other ones dont matter to show here) ... (should be same look everywhere please when a thread is mentioned)". A mentioned session is its title with a faint dotted underline that grows stronger under the pointer, no frame and no fill, in a message, on a message card, in a work item or report row and in the Workers popover; after the title, a dot only while it is working (amber) or needs you (red), never for idle or sleeping, then the computer icon for a session on another computer. Supersedes the framed pill and the idle ring of the decision above. Asked about the chat box, the user chose the same look there too: a mention being written is plain text with the dotted underline, still one piece for the caret and Delete (desktop composer_references.rs `session_replacement`, phone ComposerInput.tsx).
+/// CDXC:SessionChat 2026-11-15 DECISION (superseded 2026-11-16): a mentioned session was its title with a faint dotted underline, no frame or fill, a state dot while working (amber) or needing you (red), then the computer icon.
+/// CDXC:SessionChat 2026-11-16 DECISION: User, on the session-tag design page (option A, "Soft chip"), with notes: "put the computer icon to the LEFT of the agent icon", "don't show the status dot on session tags at all", and always a space before and after every tag (a tag at the start of a message, or typed against text in the chat box, stuck to the next word: "⊞why did u use..."). A mentioned session, in a message and in the chat box, is a soft chip: a faint fill with rounded corners and no border, then, for a session on another computer, that computer's icon, then the agent's logo, then the title, cut with an ellipsis past about 30 characters (the full title is in the hover card). No state dot anywhere a session is named, and no underline on the chip. The chip keeps clear room on both sides even when the text has none, and the chat box inserts a real space after a picked mention and before it when the character before is not a space (desktop composer_references.rs `session_replacement` and markdown_links.rs `session_pill_link`, phone SessionPill.tsx and ComposerInput.tsx).
 /// SEE-ALSO: apps/desktop/src/app/native_chat/markdown_links.rs and session_card.rs (desktop and web), apps/mobile/app/src/chat/native/transcript/SessionPill.tsx (phone, which reads the same rule from its own session list).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -276,8 +277,6 @@ pub struct MentionCard {
     pub server_id: String,
     /// `Working`, `Needs you`, `Idle` or `Sleeping`.
     pub state: String,
-    /// The dot: `working` or `attention`; empty for idle and sleeping, which draw none.
-    pub dot: String,
 }
 
 /// The hover card's footer.
@@ -317,11 +316,6 @@ pub fn mention_card(
     let server = server_of(&session.global_ref);
     let elsewhere = !home_server.is_empty() && !server.is_empty() && server != home_server;
     let choice = session_choice(session, elsewhere);
-    let dot = match choice.state.as_str() {
-        "Working" => "working",
-        "Needs you" => "attention",
-        _ => "",
-    };
     Some(MentionCard {
         title: choice.title,
         agent_icon: choice.agent_icon,
@@ -332,7 +326,6 @@ pub fn mention_card(
         elsewhere,
         server_id: server.to_string(),
         state: choice.state,
-        dot: dot.to_string(),
     })
 }
 
@@ -543,30 +536,6 @@ mod tests {
         assert_eq!(titles("omarchy"), vec!["Remote build"]);
         assert_eq!(titles("dotfiles build"), vec!["Remote build"]);
         assert!(titles("omarchy local").is_empty());
-    }
-
-    #[test]
-    fn a_mention_draws_a_dot_only_while_its_session_works_or_needs_you() {
-        let mut working = known("G1", "Busy", "1");
-        working.activity = "working".to_string();
-        let mut attention = known("G2", "Blocked", "1");
-        attention.activity = "attention".to_string();
-        let mut sleeping = known("G4", "Asleep", "1");
-        sleeping.lifecycle_state = "sleeping".to_string();
-        let sessions = vec![working, attention, known("G3", "Done", "1"), sleeping];
-        let dot = |id: &str| {
-            mention_card(&sessions, &format!("S90:P3lv0:{id}"), "S90")
-                .map(|card| (card.dot, card.state))
-                .expect("a card")
-        };
-        assert_eq!(dot("G1"), ("working".to_string(), "Working".to_string()));
-        assert_eq!(
-            dot("G2"),
-            ("attention".to_string(), "Needs you".to_string())
-        );
-        // Idle and sleeping sessions draw no dot; their card still says their state.
-        assert_eq!(dot("G3"), (String::new(), "Idle".to_string()));
-        assert_eq!(dot("G4"), (String::new(), "Sleeping".to_string()));
     }
 
     #[test]

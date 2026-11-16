@@ -257,36 +257,54 @@ fn board_mention_link(
 }
 
 /// Another session named in a message (`session` references, gx-chat-core
-/// `transcript/session_mentions.rs`, where the user's decisions live): the agent's logo and the
-/// title in the line's own type, with no frame and a faint dotted underline that grows stronger
-/// under the pointer (the "Message to" card's, `session_name_chip_underline`), then its state dot
-/// while it works or needs you and, for a session on another computer, that computer's icon
-/// (`session_card.rs`, read from the host's list now); muted and without an underline when the
-/// session is gone. Its tooltip is the session's hover card, which the card builder finds by the
-/// Global Ref the title carries. A click goes to the core as any link does, which switches to it.
+/// `transcript/session_mentions.rs`, where the user's decisions live): a soft chip, a faint fill
+/// with rounded corners and no border, holding the computer's icon for a session on another
+/// computer, the agent's logo and the title, cut with an ellipsis past `SESSION_CHIP_MAX_WIDTH`
+/// (the full title is the hover card's). No state dot and no underline. The chip keeps
+/// `SESSION_CHIP_MARGIN` clear on both sides, so it never touches the words beside it even when the
+/// message has no space there (CDXC:SessionChat 2026-11-16). Muted when the session is gone. Its
+/// tooltip is the session's hover card, which the card builder finds by the Global Ref the title
+/// carries. A click goes to the core as any link does, which switches to it.
 fn session_pill_link(reference: &Value, appearance: &ChatAppearance, missing: bool) -> InlineLink {
+    let s = appearance.scale;
     let mut link = session_pill_frame(reference, appearance, missing);
-    link.frame = None;
-    link.font_weight = None;
+    link.frame = Some(session_chip_frame(appearance, missing));
     link.font_scale = None;
+    link.margin_x = px(SESSION_CHIP_MARGIN * s);
+    link.max_width = Some(px(SESSION_CHIP_MAX_WIDTH * s));
     let href = reference["href"].as_str().unwrap_or_default();
-    if !missing {
-        link.underline = Some(super::inter_agent_message::session_name_chip_underline(
-            appearance.foreground,
-            appearance.scale,
-        ));
-    }
     if let Some(card) = (!missing)
         .then(|| super::session_card::card(href))
         .flatten()
     {
         link.title = href.to_owned().into();
-        link.trailing = super::session_card::marks(&card, appearance)
+        link.leading = super::session_card::marks(&card, appearance)
             .into_iter()
             .map(super::session_card::PillMark::into_link_mark)
             .collect();
     }
     link
+}
+
+/// The clear room each side of a session chip, unscaled.
+pub(super) const SESSION_CHIP_MARGIN: f32 = 3.0;
+/// The widest a session chip grows, unscaled: about 30 characters of title with its icons.
+pub(super) const SESSION_CHIP_MAX_WIDTH: f32 = 270.0;
+
+/// A session chip's box: a faint fill in the text's colour, stronger under the pointer, no border.
+pub(super) fn session_chip_frame(
+    appearance: &ChatAppearance,
+    missing: bool,
+) -> gpui_component::text::InlineLinkFrame {
+    let s = appearance.scale;
+    gpui_component::text::InlineLinkFrame {
+        padding_x: px(5.0 * s),
+        border_width: px(0.0),
+        border_color: gpui::transparent_black(),
+        radius: px(6.0 * s),
+        hover_background: (!missing).then(|| appearance.foreground.opacity(0.15)),
+        background: Some(appearance.foreground.opacity(0.08)),
+    }
 }
 
 /// The framed chip a board card's mention draws (`board_mention_link`): the working card's pill
