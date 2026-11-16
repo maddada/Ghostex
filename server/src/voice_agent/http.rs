@@ -156,7 +156,8 @@ async fn set_key(state: &AppState, body: &Value) -> Result<Value, DomainStateErr
         .map_err(|error| failure("internalError", error.to_string()))?
         .map(|()| json!({"provider": provider.id(), "configured": true, "reference": true}));
     }
-    if key.len() > 512 || key.chars().any(char::is_whitespace) {
+    // A ChatGPT sign-in token (a JWT, about 1,700 characters) is a key OpenAI Realtime takes too.
+    if key.len() > 8192 || key.chars().any(char::is_whitespace) {
         return Err(failure(
             "invalidParams",
             "That does not look like an API key.",
