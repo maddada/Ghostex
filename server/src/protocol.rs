@@ -966,6 +966,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         A secret request is created and waited for by the `ghostex secret request` an agent runs on this computer, and answered from any chat that shows the session, the phone included (the value only travels to this computer). Secret providers are a setting of this computer's: only its own clients list, change or test them.
         */
         "/api/answerSecretRequest" => remote_allowed(path),
+        // A session's to-dos for the user (session_needs_you/): kept by the `ghostex needs-you`
+        // an agent runs on this computer. The user's Done arrives as `/api/coordinatorBoard`.
+        "/api/sessionNeedsYou" => full_local(path),
         "/api/createSecretRequest"
         | "/api/waitSecretRequest"
         | "/api/cancelSecretRequest"

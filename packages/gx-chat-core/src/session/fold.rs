@@ -298,6 +298,11 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         .clone()
         .or_else(|| previous_side.and_then(|state| state.secret_requests.clone()));
 
+    folded.result.state.needs_you = side
+        .needs_you
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.needs_you.clone()));
+
     folded.result.state.side_chat_of = side
         .side_chat_of
         .clone()

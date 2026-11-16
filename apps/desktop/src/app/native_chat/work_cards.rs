@@ -1209,7 +1209,78 @@ impl NativeChatView {
             .child(press.on_click(cx.listener(move |this, _, window, cx| {
                 this.open_dock_ask_modal(&shown, window, cx);
             })))
+            .children(self.dock_command_chip(&key, &text(row, "command"), p, cx))
             .into_any_element()
+    }
+
+    /// A Needs you to-do's command (`ghostex needs-you add --command`) under its title, as one
+    /// quiet chip in the chat's monospace that copies it on a click; `None` for a row with none.
+    /// Its own click target beside the row's, never over it (gx-chat-core `extras::needs_you`).
+    fn dock_command_chip(
+        &self,
+        key: &str,
+        command: &str,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let command = command.trim();
+        if command.is_empty() {
+            return None;
+        }
+        let s = p.scale;
+        let copied = command.to_string();
+        Some(
+            div()
+                .pl(px((DOCK_ROW_PAD_X + DOCK_LEAD) * s))
+                .pr(px(DOCK_ROW_PAD_X * s))
+                .pb(px(6.0 * s))
+                .flex()
+                .min_w_0()
+                .child(
+                    div()
+                        .id(gpui::SharedString::from(format!("dock-row-command:{key}")))
+                        .role(gpui::Role::Button)
+                        .aria_label("Copy command")
+                        .chat_cursor_pointer()
+                        .min_w_0()
+                        .max_w_full()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.0 * s))
+                        .px(px(8.0 * s))
+                        .py(px(3.0 * s))
+                        .rounded(px(6.0 * s))
+                        .bg(p.foreground.opacity(0.05))
+                        .hover(|style| style.bg(p.foreground.opacity(0.09)))
+                        .child(
+                            svg()
+                                .path("titlebar/copy.svg")
+                                .flex_shrink_0()
+                                .size(px(12.0 * s))
+                                .text_color(p.card_muted),
+                        )
+                        .child(
+                            div()
+                                .min_w_0()
+                                .truncate()
+                                .font_family(super::fonts::CHAT_MONO)
+                                .text_size(px(PROSE_SIZE * 0.9 * s))
+                                .text_color(p.strengthened(p.prose))
+                                .child(copied.clone()),
+                        )
+                        .tooltip(|window, cx| {
+                            gpui_component::tooltip::Tooltip::new("Copy command").build(window, cx)
+                        })
+                        .on_click(cx.listener(move |_, _, _, cx| {
+                            cx.stop_propagation();
+                            crate::app::helpers::gpui_copy_to_clipboard(
+                                gpui::ClipboardItem::new_string(copied.clone()),
+                                cx,
+                            );
+                        })),
+                )
+                .into_any_element(),
+        )
     }
 
     /// A dock row's clickable surface: its one line.
@@ -1234,6 +1305,17 @@ impl NativeChatView {
     /// now.
     pub(super) fn row_menu(&self, row: &Value, cx: &Context<Self>) -> Vec<Value> {
         let mut rows = page_row_menu(row);
+        // A Needs you to-do's command, the chip's copy in the menu too.
+        let command = text(row, "command");
+        if !command.trim().is_empty() {
+            rows.insert(
+                0,
+                json!({
+                    "label": "Copy command",
+                    "command": { "type": "copyText", "text": command.trim() },
+                }),
+            );
+        }
         let markdown = row_markdown(row, &self.snapshot["questionForms"]);
         if !markdown.is_empty() {
             rows.push(json!({

@@ -135,6 +135,9 @@ pub fn apply_state_frame(
     if let Some(requests) = frame.state.secret_requests.clone() {
         crate::extras::secret_requests::receive(state, requests);
     }
+    if let Some(needs_you) = frame.state.needs_you.clone() {
+        state.session.needs_you = Some(needs_you);
+    }
     if let Some(answers) = frame.state.relayed_answers.clone() {
         state.session.relayed_answers = Some(answers);
     }
@@ -680,6 +683,9 @@ pub fn apply_authoritative(
     }
     if let Some(requests) = result.state.secret_requests.clone() {
         crate::extras::secret_requests::receive(state, requests);
+    }
+    if let Some(needs_you) = result.state.needs_you.clone() {
+        state.session.needs_you = Some(needs_you);
     }
     if let Some(answers) = result.state.relayed_answers.clone() {
         state.session.relayed_answers = Some(answers);

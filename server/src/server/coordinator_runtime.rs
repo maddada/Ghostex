@@ -2173,7 +2173,24 @@ pub(crate) fn handle_coordinator_http(
     {
         return Ok(answer);
     }
+    // A Needs you to-do's Done, answer, Reply or Dismiss (session_needs_you/), which its dock row
+    // sends as a coordinator ask's answer naming the to-do's tag.
+    if let Some(answer) =
+        crate::session_needs_you::route_board_answer(state, endpoint_path, db, repository, params)?
+    {
+        return Ok(answer);
+    }
+    // An ask a thread made with `ghostex needs-you add`: once the user answers it here, the
+    // thread hears the answer too (session_needs_you/thread.rs).
+    let thread_ask = crate::session_needs_you::thread_ask_of(db, endpoint_path, params);
     let output = coordinators::handle_coordinator_endpoint(endpoint_path, db, repository, params)?;
+    if let Some(ask) = thread_ask {
+        if let Some((project_id, session_id)) =
+            crate::session_needs_you::forward_answer(db, &ask, params)
+        {
+            republish_session_chat(state, &project_id, &session_id);
+        }
+    }
     for (project_id, session_id) in &output.changed_sessions {
         schedule_presentation_session_delta(state, db, repository, project_id, session_id)?;
     }

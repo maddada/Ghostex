@@ -235,6 +235,14 @@ pub struct WorkAsk {
     /// Snoozed by the user until this moment (ISO): out of the dock and the Needs you count until
     /// then, still listed in the Work panel (`snooze` below).
     pub snoozed_until: Option<String>,
+    /// A command the user runs for it, which its dock row shows as a chip that copies it
+    /// (`ghostex needs-you add --command`), "" for none.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub command: String,
+    /// The thread whose `ghostex needs-you add` made this ask: the user's answer goes to that
+    /// thread too (server/src/session_needs_you/thread.rs).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_thread: Option<WorkThread>,
 }
 
 impl WorkAsk {
@@ -947,6 +955,7 @@ fn ask_value(ask: &WorkAsk) -> Value {
         ("detail", &ask.detail),
         ("steps", &ask.steps),
         ("answered", &ask.answered),
+        ("command", &ask.command),
     ] {
         if !value.is_empty() {
             out[key] = json!(value);
@@ -1712,6 +1721,12 @@ pub fn handle_work_request(
                 holds: params.get("holds").and_then(Value::as_bool) == Some(true),
                 steps: param_text(params, "steps").unwrap_or_default(),
                 asked_at: now.clone(),
+                command: param_text(params, "command").unwrap_or_default(),
+                // Set only by gxserver itself (session_needs_you/thread.rs), never by the CLI's
+                // own params: `fromThread` is the thread whose to-do this ask is.
+                from_thread: params
+                    .get("fromThread")
+                    .and_then(|thread| serde_json::from_value(thread.clone()).ok()),
                 ..WorkAsk::default()
             });
             item.finished_at = None;

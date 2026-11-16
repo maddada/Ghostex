@@ -25,12 +25,28 @@ const RESUME_RETRY_DELAY: Duration = Duration::from_secs(30);
 pub(crate) struct SessionToResume {
     project_id: String,
     session_id: String,
+    /// Its agent was working when the computer shut down (its last recorded activity).
+    was_working: bool,
 }
 
 impl SessionToResume {
     pub(crate) fn key(&self) -> (String, String) {
         (self.project_id.clone(), self.session_id.clone())
     }
+
+    pub(crate) fn was_working(&self) -> bool {
+        self.was_working
+    }
+}
+
+/// The agent's last recorded activity is working. A shutdown takes gxserver down with the agents,
+/// so no hook rewrites it: the row still says what the agent was doing when the computer went off.
+fn was_working(session: &Value) -> bool {
+    session
+        .pointer("/runtimeSettings/agentActivity/activity")
+        .or_else(|| session.pointer("/runtimeSettings/activity"))
+        .and_then(Value::as_str)
+        == Some("working")
 }
 
 /// CDXC:ComputerStartup 2026-11-06 WHY: the record of what was running is the session rows themselves. While gxserver runs, the provider pass marks a session whose daemon ended `missing` (session_state_sync.rs), sleeping writes `sleeping` and closing writes `stopped`. A shutdown or power loss takes gxserver down with the daemons, so nothing marks those rows: they still say `running` with the daemon `exists`. On the first start after the computer restarted (`boot_mark.rs`), before any client can trigger that pass, the agent rows still saying so whose daemon is gone are the sessions that were running. A session the user closed, slept or that ended by itself before the shutdown is already marked otherwise and is never picked, and nothing is picked when gxserver merely restarted, since the daemons outlive that.
@@ -78,6 +94,7 @@ pub(crate) fn find_sessions_to_resume(
             Some(SessionToResume {
                 project_id,
                 session_id,
+                was_working: was_working(session),
             })
         })
         .collect()

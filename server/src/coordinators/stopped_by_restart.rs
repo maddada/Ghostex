@@ -1,25 +1,38 @@
 //! Coordinator threads a restart cut off: held until the user carries them on or dismisses them.
 //!
-//! CDXC:Coordinators 2026-11-14 DECISION:
+//! CDXC:Coordinators 2026-11-16 DECISION:
 //! GitHub #608: after Ghostex was closed overnight, launching it set an orchestrator's threads
 //! working on their own (the thread watch counts its rounds from each thread's last report, so a
 //! night off made every thread that owed work due at the first tick: a carry-on nudge to the
 //! thread and a report to its coordinator, both waking their sessions). From the restart page
 //! (i608-fix/restart.html) the user picked "Ask on the coordinator" (Q3234): after a restart
-//! Ghostex types nothing into a thread a restart cut off (its agent was running and its terminal
-//! is gone when gxserver starts); its coordinator's chat shows a card listing them, with Carry on
-//! and Not now. Their note: "show red dot on these sessions pls", so each such thread has the red
-//! dot, its hover and row saying "Stopped when Ghostex closed" (Q3240), until it is carried on or
-//! dismissed. With Settings > General "Resume sessions after a restart" on, nothing is held: the
-//! switch opts in to carrying on without the card (Q3235). Carrying on compacts first the threads
-//! at or above the compaction size (server/src/carry_on_compaction.rs), from the card's checkbox,
-//! or by itself when the switch carried them on.
+//! Ghostex types nothing into a thread a restart cut off; its coordinator's chat shows a card
+//! listing them, with Carry on and Not now. Their note: "show red dot on these sessions pls", so
+//! each such thread has the red dot, its hover and row saying "Stopped when Ghostex closed"
+//! (Q3240), until it is carried on or dismissed. With Settings > General "Resume sessions after a
+//! restart" on, nothing is held: the switch opts in to carrying on without the card (Q3235).
+//! A cut-off thread is one whose agent was working when the computer shut down and whose terminal
+//! is gone when gxserver starts: "Leave them out" (Q67, 2026-11-16, after a card woke four threads
+//! that had already reported): "Only list threads that were working when the computer shut down.
+//! Finished ones just stay idle." This supersedes the 2026-11-14 rule (Q3237 "Above a size") that
+//! showed the Compact first checkbox only when a thread was at or above Compact chats above: the
+//! user picked "Always show the checkbox" (Q66): "Offer it whenever a listed thread can be
+//! compacted, ticked only for the ones above the limit.", then "A tick per thread" (Q68): the card
+//! has one "Compact <thread> first (312K)" checkbox per listed thread whose agent has a compact
+//! command, ticked at or above the size and unticked below, and Carry on compacts exactly the
+//! ticked ones. Those rows are `checkboxes`, optional, which the chat core draws instead of the one
+//! `checkbox` that clients from before them still get ("Compact the ones above 200K first",
+//! ticked while any thread is, a click ticking or unticking the threads it covers). Threads the
+//! switch carries on compact first by themselves when at or above the size
+//! (server/src/carry_on_compaction.rs).
 //! The hold is the thread's `runtimeSettings.stoppedByRestart` (`at`, `tokens`, `dismissed`), so it
 //! survives another restart; the thread watch skips a held thread until it works again (the user
 //! opened it and sent something), which ends the hold.
 //! SEE-ALSO: server/src/computer_startup/watch.rs (where cut-off sessions are found),
 //! server/src/server/coordinator_runtime.rs (the skip, Carry on), server/src/presentation/attention_alerts.rs
-//! (the red dot), server/src/session_chat_notice/watchdog_store.rs (the card).
+//! (the red dot), server/src/session_chat_notice/watchdog_store.rs (the card),
+//! packages/gx-chat-core/src/questions/notice_checkboxes.rs, apps/desktop/src/app/native_chat/notice.rs
+//! and apps/mobile/app/src/chat/native/cards/NoticeCard.tsx (the rows).
 
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
@@ -50,6 +63,9 @@ pub const DISMISS_STOPPED_THREADS: &str = "dismissStoppedThreads";
 pub const CARRY_ON_AFTER_RESTART: &str =
     "Ghostex closed while you were working. Carry on where you left off, or say you're finished.";
 
+/// The card's words after the names of the threads it lists.
+const CARRY_ON_DETAIL: &str = "Ghostex didn't carry them on by itself; Carry on wakes each one and tells it to pick up where it stopped.";
+
 /// One held thread, as its coordinator's card lists it.
 #[derive(Clone, Debug)]
 pub struct StoppedThread {
@@ -57,13 +73,45 @@ pub struct StoppedThread {
     pub title: String,
     pub tokens: Option<u64>,
     pub at: String,
+    /// Its agent has a compact command.
+    pub compactable: bool,
 }
 
 #[derive(Clone, Debug)]
 struct HeldThreads {
     threads: Vec<StoppedThread>,
-    /// The card's Compact first checkbox, ticked until the user unticks it.
-    compact: bool,
+    /// The user's ticks on the card's per-thread Compact first checkboxes; a thread they have not
+    /// touched is ticked when it is at or above the size (`ticked`).
+    ticks: HashMap<SessionKey, bool>,
+}
+
+impl HeldThreads {
+    /// Whether a thread is at or above the size, so the checkbox covers only those.
+    fn any_above(&self, threshold: u64) -> bool {
+        self.threads
+            .iter()
+            .any(|thread| thread.compactable && is_above(thread, threshold))
+    }
+
+    /// Whether the older clients' single checkbox, when ticked, covers this thread: with a thread
+    /// above the size only those, otherwise every one that can be.
+    fn covered_by_single(&self, thread: &StoppedThread, threshold: u64) -> bool {
+        thread.compactable && (!self.any_above(threshold) || is_above(thread, threshold))
+    }
+
+    /// Whether Carry on compacts this thread first: its tick.
+    fn ticked(&self, thread: &StoppedThread, threshold: u64) -> bool {
+        thread.compactable
+            && self
+                .ticks
+                .get(&thread.key)
+                .copied()
+                .unwrap_or_else(|| is_above(thread, threshold))
+    }
+}
+
+fn is_above(thread: &StoppedThread, threshold: u64) -> bool {
+    thread.tokens.is_some_and(|tokens| tokens >= threshold)
 }
 
 /// The threads each coordinator's card lists, by coordinator.
@@ -136,7 +184,7 @@ pub fn take_compact_after_resume(key: &SessionKey) -> bool {
 }
 
 /// At gxserver start, before any client connects: `cut_off` are the agent sessions whose agent
-/// was running when gxserver went down and whose terminal is gone. Held (`hold`) unless the
+/// was working when gxserver went down and whose terminal is gone. Held (`hold`) unless the
 /// restart switch is carrying them on. Then every held thread, new or from before, is listed on its
 /// coordinator's card.
 pub fn note_restart(repository: &DomainRepository<'_>, cut_off: &[SessionKey], hold: bool) {
@@ -206,7 +254,7 @@ pub fn note_restart(repository: &DomainRepository<'_>, cut_off: &[SessionKey], h
             .entry(thread.coordinator_key())
             .or_insert_with(|| HeldThreads {
                 threads: Vec::new(),
-                compact: true,
+                ticks: HashMap::new(),
             })
             .threads
             .push(StoppedThread {
@@ -219,6 +267,7 @@ pub fn note_restart(repository: &DomainRepository<'_>, cut_off: &[SessionKey], h
                     .to_string(),
                 tokens: record["tokens"].as_u64(),
                 at: record["at"].as_str().unwrap_or_default().to_string(),
+                compactable: crate::carry_on_compaction::compact_command(&session).is_some(),
             });
     }
     if let Ok(mut held) = held().lock() {
@@ -286,10 +335,7 @@ pub fn stopped_threads_card(
             None => thread.title.clone(),
         })
         .collect();
-    let detail = format!(
-        "{}. Ghostex didn't carry them on by itself; Carry on wakes each one and tells it to pick up where it stopped.",
-        names.join(", ")
-    );
+    let detail = format!("{}. {CARRY_ON_DETAIL}", names.join(", "));
     let action = |id: &str, label: &str| SessionChatTerminalNoticeAction {
         id: id.to_string(),
         label: label.to_string(),
@@ -308,21 +354,74 @@ pub fn stopped_threads_card(
         action(DISMISS_STOPPED_THREADS, "Not now"),
     ])
     .with_input_blocking(false);
-    if card
-        .threads
-        .iter()
-        .any(|thread| thread.tokens.is_some_and(|tokens| tokens >= threshold))
-    {
-        notice.checkbox = Some(json!({
-            "id": "compactFirst",
-            "label": format!(
+    if card.threads.iter().any(|thread| thread.compactable) {
+        // Clients older than the per-thread rows draw this one checkbox (Q66): ticked while any
+        // thread is, and a click ticks or unticks all it covers.
+        let label = if card.any_above(threshold) {
+            format!(
                 "Compact the ones above {} first",
                 crate::carry_on_compaction::short_tokens(threshold)
-            ),
-            "checked": card.compact,
+            )
+        } else if card.threads.len() == 1 {
+            "Compact it first".to_string()
+        } else {
+            "Compact them first".to_string()
+        };
+        let any_ticked = card
+            .threads
+            .iter()
+            .any(|thread| card.ticked(thread, threshold));
+        notice.checkbox = Some(json!({
+            "id": "compactFirst",
+            "label": label,
+            "checked": any_ticked,
             "hint": crate::carry_on_compaction::COMPACT_HINT,
-            "answer": { "kind": "compactFirst", "checked": !card.compact },
+            "answer": { "kind": "compactFirst", "checked": !any_ticked },
         }));
+        // Q68: one tick per thread that can be compacted, the (i) on the first.
+        let rows: Vec<Value> = card
+            .threads
+            .iter()
+            .filter(|thread| thread.compactable)
+            .enumerate()
+            .map(|(index, thread)| {
+                let ticked = card.ticked(thread, threshold);
+                let label = match thread.tokens {
+                    Some(tokens) => format!(
+                        "Compact {} first ({})",
+                        thread.title,
+                        crate::carry_on_compaction::short_tokens(tokens)
+                    ),
+                    None => format!("Compact {} first", thread.title),
+                };
+                json!({
+                    "id": format!("compactFirst:{}:{}", thread.key.0, thread.key.1),
+                    "label": label,
+                    "checked": ticked,
+                    "hint": (index == 0).then_some(crate::carry_on_compaction::COMPACT_HINT),
+                    "answer": {
+                        "kind": "compactFirst",
+                        "checked": !ticked,
+                        "threadProjectId": thread.key.0,
+                        "threadSessionId": thread.key.1,
+                    },
+                })
+            })
+            .collect();
+        notice.checkboxes = Some(Value::Array(rows));
+        // The rows name the threads they cover; the words name only the others.
+        let others: Vec<&str> = card
+            .threads
+            .iter()
+            .zip(&names)
+            .filter(|(thread, _)| !thread.compactable)
+            .map(|(_, name)| name.as_str())
+            .collect();
+        notice.checkboxes_detail = Some(if others.is_empty() {
+            CARRY_ON_DETAIL.to_string()
+        } else {
+            format!("{}. {CARRY_ON_DETAIL}", others.join(", "))
+        });
     }
     notice.detected_at = card
         .threads
@@ -333,13 +432,33 @@ pub fn stopped_threads_card(
     Some(notice)
 }
 
-/// The card's Compact first checkbox on this coordinator; false when it shows no card.
-pub fn set_stopped_threads_compact(coordinator: &SessionKey, checked: bool) -> bool {
-    held()
-        .lock()
-        .ok()
-        .and_then(|mut held| held.get_mut(coordinator).map(|card| card.compact = checked))
-        .is_some()
+/// A Compact first tick on this coordinator's card: one thread's (`thread`), or, from the single
+/// checkbox older clients draw, every thread it covers. False when it shows no card.
+pub fn set_stopped_threads_compact(
+    coordinator: &SessionKey,
+    thread: Option<&SessionKey>,
+    checked: bool,
+) -> bool {
+    let Ok(mut held) = held().lock() else {
+        return false;
+    };
+    let Some(card) = held.get_mut(coordinator) else {
+        return false;
+    };
+    let threshold = crate::carry_on_compaction::threshold();
+    let ticks: Vec<(SessionKey, bool)> = card
+        .threads
+        .iter()
+        .filter_map(|listed| match thread {
+            Some(key) => (&listed.key == key).then(|| (listed.key.clone(), checked)),
+            None => Some((
+                listed.key.clone(),
+                checked && card.covered_by_single(listed, threshold),
+            )),
+        })
+        .collect();
+    card.ticks.extend(ticks);
+    true
 }
 
 /// Takes the coordinator's held threads for Carry on: each, and whether to compact it first.
@@ -353,10 +472,10 @@ pub fn take_stopped_threads(coordinator: &SessionKey) -> Vec<(StoppedThread, boo
     };
     let threshold = crate::carry_on_compaction::threshold();
     card.threads
-        .into_iter()
+        .iter()
         .map(|thread| {
-            let compact = card.compact && thread.tokens.is_some_and(|tokens| tokens >= threshold);
-            (thread, compact)
+            let compact = card.ticked(thread, threshold);
+            (thread.clone(), compact)
         })
         .collect()
 }
@@ -394,8 +513,8 @@ pub fn dismiss_stopped_threads(repository: &DomainRepository<'_>, coordinator: &
     }
 }
 
-/// The card's Carry on: each held thread loses its hold, is compacted first when the checkbox says
-/// so and it is at or above the size, and is told to carry on (which wakes it). Not now dismisses.
+/// The card's Carry on: each held thread loses its hold, is compacted first when its checkbox is
+/// ticked, and is told to carry on (which wakes it). Not now dismisses.
 pub async fn answer_stopped_threads(
     state: &crate::server::AppState,
     params: &Map<String, Value>,

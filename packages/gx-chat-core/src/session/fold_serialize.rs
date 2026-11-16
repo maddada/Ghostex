@@ -304,6 +304,7 @@ pub(crate) mod tests {
             side_chats: some(tag, "sideChats"),
             side_chat_of: some(tag, "sideChatOf"),
             secret_requests: some(tag, "secretRequests"),
+            needs_you: some(tag, "needsYou"),
             relayed_answers: some(tag, "relayedAnswers"),
             autopilot: some(tag, "autopilot"),
             collab: some(tag, "collab"),

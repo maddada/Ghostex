@@ -43,6 +43,7 @@ pub fn fold_state_frame(mut folded: FoldedSnapshot, frame: &ChatStateFrame) -> F
         returned_prompt: _,
         side_chats: _,
         secret_requests: _,
+        needs_you: _,
         side_chat_of: _,
         agent_message_deliveries: _,
         queue: _,
@@ -109,6 +110,7 @@ pub fn fold_state_frame(mut folded: FoldedSnapshot, frame: &ChatStateFrame) -> F
         returned_prompt,
         side_chats,
         secret_requests,
+        needs_you,
         side_chat_of,
         agent_message_deliveries,
     );

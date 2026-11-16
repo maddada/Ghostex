@@ -13,6 +13,16 @@ use crate::paths::GxserverPaths;
 /// SEE-ALSO: server/src/agents/marked_handovers.rs (the launch channel it shares), skills/ghostex-agent-guide/SKILL.md (the same text for agents without a launch flag), server/src/ghostex_cli/agent_guide.rs.
 pub const GHOSTEX_NOTE: &str = "You are running inside Ghostex. Ghostex can show Ghostex pages (gx page: HTML), Ghostex forms (gx form: questions) and Ghostex visuals (gx visuals: charts, graphs) in this chat, open pages you build in its own browser, run other agents, and install Ghostex skills for the user (such as ghostex-visuals or ghostex-embedded-browser-use). When the user asks for one of these, or about Ghostex, run `ghostex agent-guide` first; otherwise don't bring it up.";
 
+/// The paragraph after the Ghostex note that has agents keep a to-do for each step only the user
+/// can do (server/src/session_needs_you/).
+///
+/// CDXC:AgentGuide 2026-11-16 DECISION:
+/// User (Q60 "always"): agents add a Needs you to-do without being asked whenever a step only the
+/// user can do blocks their work, matching "always, in this kind of case, put a needs you work
+/// item for me so I can do it". One short paragraph in the note every session's prompt carries,
+/// and the same in `ghostex agent-guide`; it is not behind a setting.
+pub const NEEDS_YOU_NOTE: &str = "When a step can only be done by the user (a sudo command, a tap on their phone, a sign-in, a check by eye), add it with `ghostex needs-you add \"<what to do>\" [--command \"…\"]` and also list it under Needs you in your reply. Their answer arrives as \"Q<n>: Done\". If you see it done yourself, run `ghostex needs-you done Q<n>`.";
+
 const NOTE_SETTING_KEY: &str = "agentGhostexNote";
 pub(crate) const PREVIEW_BROWSER_SETTING_KEY: &str = "agentPreviewBrowser";
 
@@ -69,11 +79,11 @@ pub(crate) fn agent_preview_browser(paths: &GxserverPaths) -> PreviewBrowser {
     )
 }
 
-/// The note with the browser sentence the user's choice adds.
+/// The note with the browser sentence the user's choice adds, then the Needs you paragraph.
 pub(crate) fn ghostex_note_text(browser: PreviewBrowser) -> String {
     match browser.note_sentence() {
-        Some(sentence) => format!("{GHOSTEX_NOTE} {sentence}"),
-        None => GHOSTEX_NOTE.to_string(),
+        Some(sentence) => format!("{GHOSTEX_NOTE} {sentence}\n\n{NEEDS_YOU_NOTE}"),
+        None => format!("{GHOSTEX_NOTE}\n\n{NEEDS_YOU_NOTE}"),
     }
 }
 
@@ -129,7 +139,7 @@ mod tests {
         assert_eq!(launch_note_text(None, false), None);
         assert_eq!(
             launch_note_text(Some(&note), false).as_deref(),
-            Some(GHOSTEX_NOTE)
+            Some(note.as_str())
         );
         assert_eq!(
             launch_note_text(None, true).as_deref(),
@@ -147,14 +157,17 @@ mod tests {
             PreviewBrowser::from_setting(Some("ask")),
             PreviewBrowser::Ask
         );
-        assert_eq!(ghostex_note_text(PreviewBrowser::Ask), GHOSTEX_NOTE);
+        assert_eq!(
+            ghostex_note_text(PreviewBrowser::Ask),
+            format!("{GHOSTEX_NOTE}\n\n{NEEDS_YOU_NOTE}")
+        );
         assert!(
             ghostex_note_text(PreviewBrowser::from_setting(Some("internal-browser")))
-                .ends_with("opened in the Ghostex browser.")
+                .contains("opened in the Ghostex browser.\n\n")
         );
         assert!(
             ghostex_note_text(PreviewBrowser::from_setting(Some("system-default-browser")))
-                .ends_with("opened in their default browser.")
+                .contains("opened in their default browser.\n\n")
         );
     }
 

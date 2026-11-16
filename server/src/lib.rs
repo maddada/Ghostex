@@ -282,6 +282,7 @@ pub(crate) mod session_identity_log;
 pub mod session_keep_awake;
 pub mod session_lifecycle;
 pub(crate) mod session_links;
+pub(crate) mod session_needs_you;
 pub mod session_parking;
 pub mod session_reply_drafts;
 pub mod session_self_heal;

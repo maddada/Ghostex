@@ -348,10 +348,27 @@ impl NativeChatView {
             body.push(rows.into_any_element());
         }
         // CDXC:AgentProviders 2026-11-14 DECISION in server/src/carry_on_compaction.rs (GitHub #608,
-        // Q3238): a card Ghostex makes itself can carry a checkbox (Compact first) with an (i) whose
-        // quick tooltip says why; a click sends its `answer`, and gxserver redraws the card.
-        if !collapsed && notice["checkbox"].is_object() {
-            body.push(self.notice_checkbox(&notice["checkbox"], p, cx));
+        // Q3238): a card Ghostex makes itself can carry checkboxes (Compact first; one per thread
+        // on the stopped-threads card, Q68) with an (i) whose quick tooltip says why; a click sends
+        // its `answer`, and gxserver redraws the card. The chat core gives them as `checkboxes`
+        // (gx-chat-core questions/notice_checkboxes.rs).
+        if let Some(rows) = notice["checkboxes"].as_array().filter(|_| !collapsed) {
+            let rows: Vec<AnyElement> = rows
+                .iter()
+                .filter(|row| row.is_object())
+                .enumerate()
+                .map(|(index, row)| self.notice_checkbox(index, row, p, cx))
+                .collect();
+            if !rows.is_empty() {
+                body.push(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(6.0 * p.scale))
+                        .children(rows)
+                        .into_any_element(),
+                );
+            }
         }
         if !collapsed && !rate_limit && !panel && notice["dialog"].is_object() {
             let (dialog_body, dialog_actions) =
@@ -653,6 +670,7 @@ impl NativeChatView {
     /// A notice's checkbox row: the box, its label, and an (i) with the `hint` tooltip.
     fn notice_checkbox(
         &mut self,
+        index: usize,
         checkbox: &Value,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
@@ -709,7 +727,9 @@ impl NativeChatView {
         if !hint.is_empty() {
             row = row.child(
                 div()
-                    .id("notice-checkbox-info")
+                    .id(gpui::SharedString::from(format!(
+                        "notice-checkbox-info:{index}"
+                    )))
                     .role(gpui::Role::Button)
                     .aria_label(hint.clone())
                     .size(px(18.0 * s))

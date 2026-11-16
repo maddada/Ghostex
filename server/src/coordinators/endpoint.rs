@@ -103,10 +103,15 @@ pub fn handle_coordinator_endpoint(
             resolve_coordinator(db, &key)?;
             let threads = super::panel::cached_thread_rows(&key);
             let chat_tags = crate::session_chat_open_questions::asked_question_tags(&key.0, &key.1);
+            // A coordinator's own Needs you to-dos hold their tags too (session_needs_you/).
             let ask_floor =
-                crate::session_chat_open_questions::highest_question_tag(&key.0, &key.1);
+                crate::session_chat_open_questions::highest_question_tag(&key.0, &key.1)
+                    .max(crate::session_needs_you::highest_tag(db, &key));
+            // `fromThread` is gxserver's own mark (session_needs_you/thread.rs), never a caller's.
+            let mut params = params.clone();
+            params.remove("fromThread");
             let (result, _) = super::work::handle_work_request(
-                db, &key, &threads, params, ask_floor, &chat_tags,
+                db, &key, &threads, &params, ask_floor, &chat_tags,
             )?;
             Ok(CoordinatorEndpointOutput {
                 result,

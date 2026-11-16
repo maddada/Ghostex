@@ -888,6 +888,28 @@ up to five PNG, JPEG or WebP screenshots of 5 MB each with --image. The issue is
         .to_string()
 }
 
+pub fn needs_you_usage() -> String {
+    r#"Usage:
+  ghostex needs-you add "<what to do>" [--detail <text>] [--command <command>] [--answer <label>]...
+  ghostex needs-you list [--all]
+  ghostex needs-you done Q<n>
+  ghostex needs-you drop Q<n>
+
+add: when a step can only be done by the user (a sudo command, a tap on their phone, a sign-in,
+a check by eye), put it above this session's chat box as a to-do with a Done button, without
+being asked. It takes the session's next Q tag and stays until the user presses Done or you
+clear it, even if the chat is cleared. --command shows as a chip the user clicks to copy;
+--detail is one or two sentences under the title; --answer (repeated) offers choices such as
+"Works" and "Something's off" instead of a single Done. Also list it under Needs you in your
+reply. The user's answer arrives as a message: "Q61: Done" (or the answer they picked, or their
+own words). Inside a coordinator's thread the to-do goes to the coordinator's Needs you list,
+and the user's answer still reaches you.
+list: the open to-dos (--all adds the ones settled lately and how).
+done: you saw it happen yourself (the port answers now), so it leaves the user's list.
+drop: it is no longer needed."#
+        .to_string()
+}
+
 pub fn secret_usage() -> String {
     r#"Usage:
   ghostex secret request --label <text> --reason <text> [--placeholder <text>] [--timeout-minutes N]

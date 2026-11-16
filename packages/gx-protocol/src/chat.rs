@@ -298,7 +298,7 @@ pub struct TurnLifecycle {
 /// | Key | Absent means |
 /// | --- | --- |
 /// | `prompt`, `terminalNotice`, `terminalActivity`, `agentFleet`, `agentTasks`, `agentGone` | CLEARED |
-/// | `selectedOptions`, `draft`, `appCommands`, `returnedPrompt`, `coordinatorThreads`, `sideChats`, `agentMessageDeliveries`, `secretRequests` | UNCHANGED |
+/// | `selectedOptions`, `draft`, `appCommands`, `returnedPrompt`, `coordinatorThreads`, `sideChats`, `agentMessageDeliveries`, `secretRequests`, `needsYou` | UNCHANGED |
 /// | `queue` | the daemon has no queue support (present even when empty otherwise) |
 /// | `screenProbed` | not probed yet (sticky once true) |
 /// | `agentSessionId` | snapshot or replaced: cleared; state: unchanged |
@@ -371,6 +371,12 @@ pub struct ChatSideState {
     /// its composer. gxserver writes it on every frame. Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secret_requests: Option<Value>,
+    /// The to-dos for the user this session's agent added with `ghostex needs-you add`
+    /// (`{ items: [{ tag, title, detail, command, answers, askedAt }] }`,
+    /// server/src/session_needs_you/); rows of the dock above its composer. gxserver writes it on
+    /// every frame since 2026-11-16. Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub needs_you: Option<Value>,
     /// For a coordinator's thread, the approvals its coordinator's chat answered for it in the
     /// last 12 hours (`[{ at, label, from, question }]`, server/src/coordinators/relay.rs), drawn
     /// where its card was. Absent means unchanged.
