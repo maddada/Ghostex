@@ -46,6 +46,8 @@ pub struct ActionRequest {
     /// the same key from the same asker replaces the one still waiting. `None`: the action and
     /// its target (see [`ActionRequest::replace_key`]).
     pub replaces: Option<String>,
+    /// The request's nonce when the asker made it ([`ActionRequest::nonce`]); random otherwise.
+    pub nonce: Option<String>,
 }
 
 impl ActionRequest {
@@ -59,7 +61,14 @@ impl ActionRequest {
             shared: false,
             pending_ttl_ms: None,
             replaces: None,
+            nonce: None,
         }
+    }
+
+    /// The request gets `nonce` (random, made by the asker), which words on its card come from.
+    pub fn nonce(mut self, nonce: impl Into<String>) -> Self {
+        self.nonce = Some(nonce.into());
+        self
     }
 
     /// A newer request with the same `key` from the same asker replaces the one still waiting
@@ -333,7 +342,7 @@ impl ApprovalStore {
             summary: action.summary.clone(),
             detail: action.detail.clone(),
             params_digest: digest,
-            nonce: random_b64(32),
+            nonce: action.nonce.clone().unwrap_or_else(|| random_b64(32)),
             requested_by,
             created_at_ms: now_ms,
             expires_at_ms: now_ms + action.pending_ttl_ms.unwrap_or(PENDING_TTL_MS),
@@ -693,7 +702,7 @@ fn strip_approval_id(mut params: Value) -> Value {
     params
 }
 
-fn random_b64(bytes: usize) -> String {
+pub(crate) fn random_b64(bytes: usize) -> String {
     let mut random = vec![0_u8; bytes];
     rand::rng().fill_bytes(&mut random);
     URL_SAFE_NO_PAD.encode(random)

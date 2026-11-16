@@ -96,11 +96,16 @@ open nothing else). Such a session is kept apart from the owner sessions (`doorS
 `security.json`), lapses after 12 hours (`DOOR_SESSION_TTL_MS`, the app opens another), and is
 known only on `DOOR_SESSION_ENDPOINTS` (pairing codes, approvals, paired devices, the connect-back
 signature, `securityStatus`); every other route, socket and relay answers 401. The "act as you"
-card ends with three words from the key id (`approval::key_words`), which the asking app shows too,
-says what the key may do (door only, or everything for an older app's key without a scope), and the
-token file keeps one such request at a time. Each connected computer gets its own owner key in the
+card ends with three words from SHA-256 of the request's own nonce (made by gxserver for that
+request) and the key id (`approval::owner_key_words_input`); the asking app gets the request back
+and shows the same words. The card says what the key may do (door only, or everything for an
+older app's key without a scope). Requests don't replace each other; at most three for other keys
+wait at once (`OWNER_KEY_REQUESTS_WAITING`), and a fourth key is refused until they are answered. Each connected computer gets its own owner key in the
 app (`load_or_create_scoped_owner_key`), so its signature opens nothing on another computer (review
-B1).
+B1). The key, the cached session and the server-id pin are named after the app's own id for
+that machine (its settings) mixed with a salt kept in the key store, never after anything the
+machine hands over; the pins are saved in `owner-session-pins.json` in Ghostex's state folder, and a
+server id pinned to one machine is refused for another.
 
 Phones: once the computer has an owner device, `/api/removePairedDevice` removes a paired phone
 (a row with its own token) only for the door's keepers (the owner session, a paired phone); an

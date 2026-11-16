@@ -243,6 +243,9 @@ listing requests, `owner_security::quiet_owner_session`) send
 `askOwner: false`, which enrolls a key that needs no approval and otherwise answers
 `ownerApprovalNeeded` without making a request. A call without the field asks, as before.
 */
+/// How many "act as you" requests (`addApproverKey`) for other keys may wait at once
+/// (review round 2, R2-2).
+const OWNER_KEY_REQUESTS_WAITING: usize = 3;
 /// `/api/enrollOwnerKey`'s and `/api/openOwnerSession`'s scope (`approval::OWNER_SCOPE_DOOR`).
 const OWNER_SCOPE_PARAM: &str = "scope";
 /// `/api/enrollOwnerKey`'s flag: `false` enrolls only when no approval is needed.
@@ -352,9 +355,34 @@ fn enroll_key(
         }
         /*
         CDXC:Security 2026-11-16 FIX:
-        Review M1 and M2 of the owner-only door: the card's words came from the key's own label, which any caller writes, so an agent's request looked like the app's, and it said "show codes and approve devices" while the key opened a full owner session. The card now ends with three words from the key's id (`approval::key_words`), which the app that asks shows too, says what the key may really do (door sessions only with `scope: "door"`, which this app sends; an older app's key acts as you for everything here), and the token file keeps one such request at a time (`replaces`): a newer one replaces its older one.
+        Review M1 and M2 of the owner-only door: the card's words came from the key's own label, which any caller writes, so an agent's request looked like the app's, and it said "show codes and approve devices" while the key opened a full owner session. The card now ends with three words, which the app that asks shows too (from the request's own nonce since round 2, below), and says what the key may really do (door sessions only with `scope: "door"`, which this app sends; an older app's key acts as you for everything here).
         */
-        let words = ghostex_gx_protocol::approval::key_words(&key_id);
+        /*
+        CDXC:Security 2026-11-16 FIX:
+        Review round 2 (R2-2): words from the key id alone were 24 bits a caller chooses (grind keys offline until the words match the app's), and `replaces` let the token file's newer request replace the app's waiting card. The words now come from a nonce gxserver makes for each request, hashed with the key id (`approval::owner_key_words_input`); the request carries that nonce back to the app that asked, which works the words out and shows them. Requests no longer replace each other; instead at most `OWNER_KEY_REQUESTS_WAITING` such requests wait at once, and another key gets a plain refusal until those are answered.
+        */
+        let pending_others = security
+            .approvals
+            .list_pending(now)
+            .iter()
+            .filter(|request| {
+                request.action == ghostex_gx_protocol::approval::SensitiveAction::AddApproverKey
+                    && request.target.as_deref() != Some(key_id.as_str())
+            })
+            .count();
+        if pending_others >= OWNER_KEY_REQUESTS_WAITING {
+            return Err(EnrollRefusal::Reply(
+                "rateLimited",
+                "Other apps already wait to act as you here. Approve or deny those first, in Ghostex or on your phone.".to_string(),
+            ));
+        }
+        let nonce = security::random_b64(32);
+        let words = {
+            use sha2::{Digest, Sha256};
+            ghostex_gx_protocol::approval::owner_key_words(&Sha256::digest(
+                ghostex_gx_protocol::approval::owner_key_words_input(&nonce, &key_id),
+            ))
+        };
         let (summary, detail) = if door_only {
             (
                 format!(
@@ -378,7 +406,7 @@ fn enroll_key(
         )
         .target(key_id.clone())
         .detail(detail)
-        .replaces("ownerKey")
+        .nonce(nonce)
         .params(json!({
             "key": serde_json::to_value(&key).unwrap_or(Value::Null),
             "doorOnly": door_only,

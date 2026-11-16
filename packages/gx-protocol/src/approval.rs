@@ -430,18 +430,22 @@ pub struct OpenOwnerSessionParams {
 /// server/src/security/policy.rs). A key enrolled with it opens only such sessions.
 pub const OWNER_SCOPE_DOOR: &str = "door";
 
-/// Three words naming an owner key by its `keyId` (hex of the first 16 bytes of SHA-256 over the
-/// public key), from [`crate::pairing::PAIRING_WORDS`]: the "act as you" card and the app that
-/// asks both show them, so the person can tell the app's request from another one. Empty for an
-/// id that isn't hex.
-pub fn key_words(key_id: &str) -> String {
-    let bytes: Vec<u8> = (0..key_id.len() / 2)
-        .map_while(|index| u8::from_str_radix(key_id.get(index * 2..index * 2 + 2)?, 16).ok())
-        .collect();
-    if bytes.len() < 3 {
-        return String::new();
-    }
-    crate::pairing::pairing_match_words(&bytes).join(" ")
+/// First line of what [`owner_key_words`] hashes.
+pub const OWNER_KEY_WORDS_DOMAIN: &str = "ghostex-owner-key-words-v1";
+
+/// What the "act as you" card's three words come from: the request's own `nonce` (random, made
+/// by gxserver for that request) and the key's `keyId`. Hash it with SHA-256 and pass the digest
+/// to [`owner_key_words`]. The card and the app that asked (which gets the request back) both
+/// show the words; nobody can choose a key whose words match another request's (review round 2,
+/// R2-2 in server/src/server/security_http.rs).
+pub fn owner_key_words_input(request_nonce: &str, key_id: &str) -> Vec<u8> {
+    format!("{OWNER_KEY_WORDS_DOMAIN}\n{request_nonce}\n{key_id}").into_bytes()
+}
+
+/// The three words of an "act as you" request, from the SHA-256 digest of
+/// [`owner_key_words_input`].
+pub fn owner_key_words(digest: &[u8]) -> String {
+    crate::pairing::pairing_match_words(digest).join(" ")
 }
 
 /// `/api/openOwnerSession` → the owner session token, held only in the desktop app's memory.

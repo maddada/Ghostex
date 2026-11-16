@@ -23,6 +23,7 @@ mod policy;
 mod presence;
 mod session_tokens;
 
+pub(crate) use approvals::random_b64;
 pub use approvals::{
     expired_message, params_digest, ActionRequest, ApprovalError, ApprovalStore, Created,
     APPROVED_TTL_MS, GONE_MESSAGE, PENDING_TTL_MS,

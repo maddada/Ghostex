@@ -83,8 +83,8 @@ struct OwnerSession {
     door_only: bool,
     /// When `token` was opened: a door session lapses (`DOOR_SESSION_REFRESH`).
     opened_at: Option<Instant>,
-    /// The three words of the key this app signs with there, which the "act as you" card there
-    /// shows too (`approval::key_words`).
+    /// The three words of this app's waiting "act as you" request there, which its card shows too
+    /// (from the request's nonce and the key id, `approval::owner_key_words_input`).
     key_words: Option<String>,
 }
 
@@ -551,8 +551,6 @@ fn open_owner_session(transport: &Transport, may_ask: bool) -> Result<String, St
         let key = owner_key_for(transport)?;
         let public_key = key.public_key_b64();
         remember_own_owner_key(&public_key);
-        let words = key_id_of(&public_key).map(|id| ghostex_gx_protocol::approval::key_words(&id));
-        with_session(&transport.key(), |session| session.key_words = words);
         // Door sessions only: pairing codes, approvals and paired devices (review M2 in
         // server/src/security/policy.rs); a gxserver from before it ignores the field.
         let mut params = json!({
@@ -856,7 +854,11 @@ fn enroll_owner_key(transport: &Transport, params: Value) -> Result<Value, Strin
     let mut params = params;
     if let Some(id) = waiting {
         match request_state(transport, &id) {
-            RequestState::Pending(_) | RequestState::Unknown => return Err(WAITING.to_string()),
+            RequestState::Pending(request) => {
+                note_key_words(transport, &request);
+                return Err(WAITING.to_string());
+            }
+            RequestState::Unknown => return Err(WAITING.to_string()),
             RequestState::Approved => {
                 params = with_approval_id(&params, &id).unwrap_or(params);
             }
@@ -893,6 +895,7 @@ fn enroll_owner_key(transport: &Transport, params: Value) -> Result<Value, Strin
         );
     }
     if let Some(request) = waiting_request_in(status, &body) {
+        note_key_words(transport, &request);
         plain::note_own_request(&request.id);
         with_session(&key, |session| {
             session.waiting_approval = Some(request.id.clone())
@@ -906,6 +909,21 @@ fn enroll_owner_key(transport: &Transport, params: Value) -> Result<Value, Strin
     }
     Err(text(&envelope, "message")
         .unwrap_or_else(|| format!("gxserver request failed with HTTP {status}.")))
+}
+
+/// Keeps the three words of this app's own "act as you" request on `transport`, worked out here
+/// from the request's nonce and the key id it names (review round 2, R2-2 in
+/// server/src/server/security_http.rs), for the waiting messages.
+fn note_key_words(transport: &Transport, request: &ApprovalRequest) {
+    let Some(key_id) = request.target.as_deref() else {
+        return;
+    };
+    let digest = ring::digest::digest(
+        &ring::digest::SHA256,
+        &ghostex_gx_protocol::approval::owner_key_words_input(&request.nonce, key_id),
+    );
+    let words = ghostex_gx_protocol::approval::owner_key_words(digest.as_ref());
+    with_session(&transport.key(), |session| session.key_words = Some(words));
 }
 
 /// One call on `transport`, answered as HTTP status and body (the app's own transport: it sends
