@@ -547,6 +547,8 @@ impl GhostexGpuiApp {
         self.new_thread_picker_visible = false;
         self.remove_gpui_new_thread_picker_window(cx);
         self.restore_keyboard_focus_after_app_modal(cx);
+        // Same as the release path below: a held-back keyboard handoff drains on this render.
+        cx.notify();
         self.ensure_gpui_new_thread_picker_preloaded(cx);
     }
 
