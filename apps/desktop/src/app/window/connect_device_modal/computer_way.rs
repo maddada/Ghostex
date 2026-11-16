@@ -232,7 +232,7 @@ impl GpuiConnectDeviceWindow {
                 flow.step = JoinStep::Failed(JoinFailure {
                     title: format!("{name} said no"),
                     message: format!(
-                        "Someone turned this computer down there (Not my computer, or n in its terminal). {}",
+                        "Someone turned this computer down there (Not my computer, Deny on a phone, or n in its terminal). {}",
                         new_code_hint(&name)
                     ),
                     fix: JoinFix::NewCode,
@@ -864,7 +864,7 @@ impl GpuiConnectDeviceWindow {
                 )
                 .child(pairing_words(&p, &words, false))
                 .child(self.muted(format!(
-                    "{name} shows three words now. Click Approve there only if they are the same as these. A computer with no screen asks you to type y in its terminal instead."
+                    "{name} shows three words now. Click Approve there only if they are the same as these. A computer with no screen asks you to type y in its terminal instead, or to approve on your phone once one is paired with it."
                 )))
                 .child(self.progress_list(vec![
                     (format!("Waiting for Approve on {name}"), Some(false)),

@@ -46,6 +46,8 @@ pub struct ActionRequest {
     /// the same key from the same asker replaces the one still waiting. `None`: the action and
     /// its target (see [`ActionRequest::replace_key`]).
     pub replaces: Option<String>,
+    /// The request's nonce when the asker made it ([`ActionRequest::nonce`]); random otherwise.
+    pub nonce: Option<String>,
 }
 
 impl ActionRequest {
@@ -59,7 +61,14 @@ impl ActionRequest {
             shared: false,
             pending_ttl_ms: None,
             replaces: None,
+            nonce: None,
         }
+    }
+
+    /// The request gets `nonce` (random, made by the asker), which words on its card come from.
+    pub fn nonce(mut self, nonce: impl Into<String>) -> Self {
+        self.nonce = Some(nonce.into());
+        self
     }
 
     /// A newer request with the same `key` from the same asker replaces the one still waiting
@@ -333,7 +342,7 @@ impl ApprovalStore {
             summary: action.summary.clone(),
             detail: action.detail.clone(),
             params_digest: digest,
-            nonce: random_b64(32),
+            nonce: action.nonce.clone().unwrap_or_else(|| random_b64(32)),
             requested_by,
             created_at_ms: now_ms,
             expires_at_ms: now_ms + action.pending_ttl_ms.unwrap_or(PENDING_TTL_MS),
@@ -575,6 +584,23 @@ impl ApprovalStore {
         }
     }
 
+    /// Retires request `id` if it still waits, as replaced by `newer` (its card closes; whoever
+    /// asked reads `replacedBy` and may ask again). Returns it, now `expired`.
+    pub fn push_out(&self, id: &str, newer: &str, now_ms: u64) -> Option<ApprovalRequest> {
+        let mut requests = self.lock();
+        let stored = requests.get_mut(id)?;
+        if stored.request.status != ApprovalStatus::Pending {
+            return None;
+        }
+        stored.request.status = ApprovalStatus::Expired;
+        stored.request.decided_at_ms = Some(now_ms);
+        stored.request.replaced_by = Some(newer.to_string());
+        stored.resume = None;
+        let pushed = stored.request.clone();
+        self.save(&requests);
+        Some(pushed)
+    }
+
     /// Withdraws `requester`'s requests still waiting, because what asked went away (`why`, as
     /// in "the session that asked was closed"); returns them, now `expired`.
     pub fn withdraw_by(
@@ -693,7 +719,7 @@ fn strip_approval_id(mut params: Value) -> Value {
     params
 }
 
-fn random_b64(bytes: usize) -> String {
+pub(crate) fn random_b64(bytes: usize) -> String {
     let mut random = vec![0_u8; bytes];
     rand::rng().fill_bytes(&mut random);
     URL_SAFE_NO_PAD.encode(random)

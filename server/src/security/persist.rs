@@ -40,6 +40,14 @@ pub struct PersistedSecurity {
     /// with when (ms). Older gxservers ignore it.
     #[serde(default)]
     pub remembered_approvals: std::collections::BTreeMap<String, u64>,
+    /// Owner keys that open door sessions only (enrolled with `scope: "door"`, review M2 in
+    /// security/policy.rs). Older gxservers ignore it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub door_only_keys: Vec<String>,
+    /// Door sessions (hashes only, with their device and when they lapse). Kept apart from
+    /// `ownerSessions`, so an older gxserver started on this file knows none of them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub door_sessions: Vec<PersistedDoorSession>,
     // 11.1.1 and 11.1.2 also saved `approvedProjectReach` (the retired "reach another project"
     // approvals); an old file still loads, the field is ignored, and the next save drops it.
 }
@@ -49,6 +57,14 @@ pub struct PersistedSecurity {
 pub struct PersistedOwnerSession {
     pub hash: String,
     pub device_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedDoorSession {
+    pub hash: String,
+    pub device_id: String,
+    pub until_ms: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

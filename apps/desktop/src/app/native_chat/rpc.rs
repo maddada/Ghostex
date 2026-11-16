@@ -216,6 +216,7 @@ mod tests {
             execution_target: GpuiRemoteExecutionTarget::PosixHost,
             local_port: 43_210,
             token: "t".into(),
+            machine_id: "m".into(),
         };
         let params = json!({"projectId":"p","sessionId":"s","limit":300});
         assert!(shared_read_key(Some(&target), "/api/readSessionChat", &params).is_some());

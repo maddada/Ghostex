@@ -71,6 +71,8 @@ impl GhostexGpuiApp {
                     .and_then(|machine| self.gpui_remote_gxserver_request_target(machine))
                 {
                     super::note_owner_key_approved(&Transport::Remote(target));
+                    // Its requests that were notices ("Approve on …") can be approved here now.
+                    self.owner_security_show_pending_requests(machine_id.clone(), cx);
                 }
             }
             self.remove_gpui_app_toast(&id, cx);
@@ -227,17 +229,28 @@ impl GhostexGpuiApp {
         let Some(target) = self.gpui_remote_gxserver_request_target(&machine) else {
             return;
         };
-        let checked = cx
-            .background_executor()
-            .spawn(async move { super::answerer(&Transport::Remote(target)) });
+        let checked = cx.background_executor().spawn({
+            let request = request.clone();
+            async move { super::answerer_for(&Transport::Remote(target), &request) }
+        });
         cx.spawn(async move |this, cx| {
             let answerer = checked.await;
             let _ = this.update(cx, |this, cx| match answerer {
                 super::Answerer::ThisApp => {
                     this.owner_security_show_approvable_card(machine_id, request, cx)
                 }
-                super::Answerer::Elsewhere { devices, asked } => this
-                    .owner_security_show_approve_elsewhere(&machine, &request, &devices, asked, cx),
+                super::Answerer::Elsewhere {
+                    devices,
+                    asked,
+                    note,
+                } => this.owner_security_show_approve_elsewhere(
+                    &machine,
+                    &request,
+                    &devices,
+                    asked,
+                    note.as_deref(),
+                    cx,
+                ),
             });
         })
         .detach();
@@ -251,13 +264,14 @@ impl GhostexGpuiApp {
         request: &ApprovalRequest,
         devices: &[String],
         asked: bool,
+        note: Option<&str>,
         cx: &mut gpui::Context<Self>,
     ) {
         let computer = crate::app::helpers::gpui_remote_machine_name_from_settings(machine_id)
             .unwrap_or_else(|| machine_id.to_string());
         let summary = request.summary.trim().trim_end_matches('.');
         let where_to = match devices {
-            [] => format!("in Ghostex on {computer}"),
+            [] => format!("in Ghostex on {computer} or on a phone paired with it"),
             several => format!("on {}", several.join(" or ")),
         };
         let then = if asked {
@@ -266,6 +280,10 @@ impl GhostexGpuiApp {
             )
         } else {
             String::new()
+        };
+        let then = match note.filter(|note| !note.is_empty()) {
+            Some(note) => format!("{then} {note}"),
+            None => then,
         };
         self.upsert_gpui_app_toast(
             GpuiAppToast {

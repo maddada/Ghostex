@@ -47,10 +47,10 @@ every route as `RouteHttpRequest::caller`.
 
 | Principal | Token | Notes |
 | --- | --- | --- |
-| `Owner { device_id }` | `gxo_…`, in the desktop app's memory only | Opened with the owner key (`/api/openOwnerSession`). gxserver keeps only its hash (newest four per device), so it survives a gxserver restart. |
+| `Owner { device_id }` | `gxo_…`, in the desktop app's memory only | Opened with the owner key (`/api/openOwnerSession`). gxserver keeps only its hash (newest four per device), so it survives a gxserver restart. Since the owner-only door (below), the app opens it on its own computer's gxserver and sends it only with pairing codes and Approve (`owner_security::door_token`); its other calls use the token file. |
 | `Device { device_id }` | `gxd_…`, bound to the phone's device key | A paired phone; `device_id` is its row in Paired devices (pairing v2, see below). |
 | `Session { project_id, session_id, role }` | `gxs_…`, in the session's `GHOSTEX_SESSION_TOKEN` | Issued when an agent or terminal starts (zmx and wmx), the same token again when that session starts again, revoked when the session is deleted (and by a 5-minute sweep for sessions deleted another way). `role` from the coordinator markers: `agent`, `coordinator`, `thread`; `head` is never stored (see "Chief's head role" below). The `ghostex` CLI inside a session sends it. |
-| `LocalAgent` | the token file `gxserver/auth/token` | You: the desktop app (it opens no owner session on a gxserver that approves plainly), the GPUI web build, the CLI in your own terminal, a phone on its SSH login, and another computer's app through its SSH tunnel. Hooks, plugins and older sessions use it too. |
+| `LocalAgent` | the token file `gxserver/auth/token` | You: the desktop app (for every call but pairing codes and Approve), the GPUI web build, the CLI in your own terminal, a phone on its SSH login, and another computer's app through its SSH tunnel. Hooks, plugins and older sessions use it too, and any agent can read it, so once the computer has an owner device it no longer keeps the door (below). |
 | `Peer { server_id, name }` | a connected computer's grant | Keeps `PEER_ALLOWED_ENDPOINTS`. |
 | `Guest { share_id }` | `gxshare_…` | Keeps `GUEST_ENDPOINTS`. |
 | `Extension { extension_id }` | an extension's API token | Keeps the extension registry's scope. |
@@ -67,6 +67,80 @@ session sends it for `ghostex voice` and `ghostex browser mcp`. No client in a s
 others, so they keep refusing it. A cloud box attach (`ghostex_cli/cloud_attach.rs`) sends the
 box's own token file, peers and extensions open no socket. Test:
 `server/src/server/tests/socket_tokens.rs`.
+
+## The owner-only door (W524, 16 Nov)
+
+The user: only the Ghostex app on this computer or a paired phone makes pairing codes and approves
+new devices; agents running as the user must not (CDXC:Security 2026-11-16 in
+`server/src/security/policy.rs`). `SecurityState::keeps_door(caller)`: the owner session and paired
+phones always; the token file only while the computer has no owner device (`has_owner_device`: an
+owner key is enrolled, or a phone paired with its own token, remembered for good as `ownerDevice` in
+`rememberedApprovals`). Once it has one, the token file:
+
+- gets the code from `/api/remotePairingCode` with `openTunnel` only after an Approve of a
+  `pairingShowCode` request on the app or a phone (`ghostex computer-code` waits for it), then for
+  ten minutes (`TOKEN_FILE_CODE_WINDOW_MS`, in memory);
+- can't approve `pairingApproveDevice`, `pairingShowCode` or `addApproverKey` requests
+  (`opens_door`; `/api/approveApprovalRequest` answers `forbidden`); it still lists and denies;
+- adds a new owner key (`/api/enrollOwnerKey`) only with an approved `addApproverKey` (the desktop
+  waits on it and repeats with `approvalId`; `askOwner: false` answers `ownerApprovalNeeded`). The
+  first key on a computer with no owner key and no paired phone goes in at once only with the
+  one-time value the app hands gxserver as it starts it (`auth/first-key-handoff`, written by the
+  app just before the launch, read and deleted by gxserver first thing, never in an environment;
+  `firstKeySecret` on the enroll). Without it no key is added there, so on a computer where the
+  app never starts gxserver the token file keeps the door until a phone pairs. Known same-user
+  limit: whoever starts gxserver picks that value. Any program running as the user can write the
+  file and start gxserver itself, then add the first key; on a computer without the app and
+  without a phone, that leaves the user locked out until the reset below. It could also read the
+  file in the moment before gxserver deletes it. The app deletes a handoff gxserver didn't take
+  (a failed launch, or a gxserver already running). A computer upgraded
+  with a phone but without the app's key asks the phone once.
+
+`/api/securityStatus` says `mayApproveDevices` for the caller. Everything else the token file does is
+unchanged.
+
+Door sessions (review M2): the app opens its owner session with `scope: "door"` on
+`/api/openOwnerSession` (and enrolls its keys with `scope: "door"`, kept in `doorOnlyKeys`, which then
+open nothing else). Such a session is kept apart from the owner sessions (`doorSessions` in
+`security.json`), lapses after 12 hours (`DOOR_SESSION_TTL_MS`, the app opens another), and is
+known only on `DOOR_SESSION_ENDPOINTS` (pairing codes, approvals, paired devices, the connect-back
+signature, `securityStatus`); every other route, socket and relay answers 401. The "act as you"
+card ends with four words from SHA-256 of the request's own nonce (made by gxserver for that
+request) and the key id (`approval::owner_key_words_input`); the asking app gets the request back
+and shows the same words. The card says what the key may do (door only, or everything for an
+older app's key without a scope). It names the computer and its server id, and the asking app names the
+computer and id it means. A request carrying this start's one-time value (this computer's app) is
+never capped or pushed out; past three waiting (`OWNER_KEY_REQUESTS_WAITING`) a new request pushes
+out the oldest one that isn't the app's (as replaced, so its asker may ask again), and the token
+file makes at most 12 new ones an hour (`OWNER_KEY_REQUESTS_PER_HOUR`); past that it is refused
+with plain words the asking app shows, and the security log notes `ownerKey.flood` once an hour. Each connected computer gets its own owner key in the
+app (`load_or_create_scoped_owner_key`), so its signature opens nothing on another computer (review
+B1). The key, the cached session and the server-id pin are named after the app's own id for
+that machine (its settings) mixed with a salt kept in the key store, never after anything the
+machine hands over; the pins are saved in `owner-session-pins.json` in Ghostex's state folder, and a
+server id pinned to one machine is refused for another.
+
+Phones: once the computer has an owner device, `/api/removePairedDevice` removes a paired phone
+(a row with its own token) only for the door's keepers (the owner session, a paired phone); an
+agent's session token or the token file can still deny a pending one and remove a computer, which
+only close doors. Recovery when no owner device is left (the app's key is gone and no phone is
+paired): stop gxserver (`gxserver stop`; quitting the app leaves it running), move
+`auth/security.json` aside, delete the rows of `remote_paired_devices` in `state.db` and the
+`ghostex-paired:` lines in `~/.ssh/authorized_keys`, then open the app: it starts gxserver with its
+one-time value and its key is the first again. Help says the same (features.md, Connect a
+Computer). Moving only `security.json` aside reopens nothing while a phone row remains: a paired
+phone in the database marks the computer as owned at every start.
+
+Connected computers: the desktop reaches another computer through its SSH tunnel with that
+computer's token file, so there it is the token file too. Where that computer says
+`mayApproveDevices: false`, the app enrolls its owner key there at connect: one `addApproverKey`
+card ("Let <computer> (Ghostex app) act as you on this computer") on that computer's app or a phone
+paired with it, reused while it waits; denied or lapsed, it asks again only after the app restarts.
+Once approved, its owner session there (which survives that gxserver's restarts) goes only with that
+computer's codes and Approve (`owner_security::remote_door_token`), and that computer's pairing cards
+are approvable here (`answerer_for`); until then they show as "Approve on <computer>". Where that
+computer's token file still keeps the door, nothing is enrolled. A same-user program that rewrites `security.json` or the paired devices database can still
+undo this.
 
 ## What they may do: `Capability`
 
@@ -311,9 +385,10 @@ announces the result; a denial or a lapse is announced too. Test:
 
 Code: `server/src/remote_access/pair_device.rs`, `packages/gx-protocol/src/pairing.rs`.
 
-- `/api/remotePairingCode` gives a code (the one-time nonce) only to `Principal::Owner` with
-  `openTunnel: true` (the desktop's Show QR sheet is open); everyone else gets the Easy Connect
-  details with empty `payload`/`text` and no `secret`. A code lives 5 minutes and is single-use.
+- `/api/remotePairingCode` gives a code (the one-time nonce) with `openTunnel: true` (the desktop's
+  Show QR sheet is open) to the owner session and paired phones, and to the token file as the
+  owner-only door says; everyone else gets the Easy Connect details with empty `payload`/`text` and
+  no `secret`. A code lives 5 minutes and is single-use.
 - How a new device gets past Easy Connect's allow-list to ask at all (`server/src/tailcat/door.rs`):
   while a code is shown or a device waits as Pending, a third Easy Connect helper (lane `door` in
   `easyConnect.helper` log lines) runs open and the QR carries its address; the two helpers paired

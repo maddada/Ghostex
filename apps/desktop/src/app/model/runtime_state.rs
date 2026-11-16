@@ -90,6 +90,8 @@ pub(crate) struct GpuiRemoteGxserverConnection {
     pub(crate) presentation_stream_cancel: Option<Arc<AtomicBool>>,
     pub(crate) presentation_stream_generation: Option<u64>,
     pub(crate) token: String,
+    /// This app's own id for the machine (its settings), never anything the machine said.
+    pub(crate) machine_id: String,
     /// The tunnel's ssh process, which owns the forward; `None` when the forward lives in the
     /// user's own SSH master (GitHub #496).
     pub(crate) child: Option<Child>,
@@ -114,6 +116,7 @@ impl GpuiRemoteGxserverConnection {
             execution_target: self.execution_target.clone(),
             local_port: self.local_port,
             token: self.token.clone(),
+            machine_id: self.machine_id.clone(),
         }
     }
 
@@ -142,6 +145,9 @@ pub(crate) struct GpuiRemoteGxserverRequestTarget {
     pub(crate) execution_target: GpuiRemoteExecutionTarget,
     pub(crate) local_port: u16,
     pub(crate) token: String,
+    /// This app's own id for the machine (its settings), which names the app's owner key and
+    /// owner session there (app/owner_security); never taken from the machine.
+    pub(crate) machine_id: String,
 }
 
 impl GpuiRemoteGxserverRequestTarget {

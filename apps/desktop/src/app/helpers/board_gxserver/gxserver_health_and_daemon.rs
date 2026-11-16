@@ -831,7 +831,7 @@ also covers the color-blocker and session-identity stripping the nohup path
 performed; CLICOLOR mirrors terminal_environment's color opt-in.
 */
 #[cfg(target_os = "macos")]
-pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<Vec<String>, String> {
+fn gpui_spawn_local_gxserver_daemon_for_platform(binary: &Path) -> Result<Vec<String>, String> {
     // CDXC:ServerDaemon 2026-09-16 WHY:
     // Two reloads can both inspect an empty label before either bootstraps it; serialize the complete inspect/bootout/bootstrap sequence so one cannot remove the other's new job.
     static LAUNCH_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -1116,7 +1116,7 @@ fn gpui_spawn_local_gxserver_launchd_job(
 /// survives quitting Ghostex, while the app keeps the process to see how it ends.
 /// (Linux has no Dock background-attribution concern, so a detached child stays correct there.)
 #[cfg(target_os = "linux")]
-pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<Vec<String>, String> {
+fn gpui_spawn_local_gxserver_daemon_for_platform(binary: &Path) -> Result<Vec<String>, String> {
     use std::os::unix::process::CommandExt as _;
 
     let launch_log = gpui_prepare_gxserver_launch_log()?;
@@ -1181,7 +1181,7 @@ pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<Vec<Stri
 /// gxserver gets its own windowless console (CREATE_NO_WINDOW), never DETACHED_PROCESS. Windows ignores CREATE_NO_WINDOW next to DETACHED_PROCESS, so gxserver ran with no console at all and every console program it started without its own flag (tailcat, gh, git probes) got a fresh console that Windows 11 opens in a Windows Terminal window. Children now inherit the hidden console.
 /// SEE-ALSO: `spawn_server` in server/src/platform/process.rs, gxserver's own relaunch, must use the same flags.
 #[cfg(target_os = "windows")]
-pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<Vec<String>, String> {
+fn gpui_spawn_local_gxserver_daemon_for_platform(binary: &Path) -> Result<Vec<String>, String> {
     use crate::app::helpers::{CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW};
     use std::os::windows::process::CommandExt;
 
@@ -1592,4 +1592,16 @@ mod launch_outcome_tests {
             .collect();
         assert_eq!(finals, [false, false, false, false, false, true]);
     }
+}
+
+/// Launches gxserver, handing it this app's one-time value for its first owner key first
+/// (app/owner_security, review round 2, R2-3), and deleting that value again when the launch
+/// fails, so no file is left for anyone to read or load later (review round 3, R3-1).
+pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<Vec<String>, String> {
+    crate::app::owner_security::hand_first_key_secret_to_gxserver();
+    let launched = gpui_spawn_local_gxserver_daemon_for_platform(binary);
+    if launched.is_err() {
+        crate::app::owner_security::forget_untaken_first_key_secret();
+    }
+    launched
 }

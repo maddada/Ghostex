@@ -11,6 +11,15 @@
 //! the pairing window stays open, and shows each computer or phone that then waits with its three
 //! words to approve or deny here. It lives in `ghostex` beside `tailcat` and `computers` because
 //! gxserver makes the code; `gxserver computer-code` runs the same thing (one program, `main.rs`).
+//!
+//! CDXC:Security 2026-11-16 DECISION:
+//! User (W524, "Owner only"): only the Ghostex app or a paired phone makes pairing codes and lets
+//! new devices in. Once this computer has either, the token file this command uses (which any agent
+//! can read) gets the code only after you approve "Show this computer's pairing code" there (the
+//! CLI's usual wait, then ten minutes of codes), and it can't approve a device: each one that waits
+//! is shown here with its words to approve in the app or on your phone, and the command follows its
+//! answer. On a computer with neither yet, nothing asks and y/n here works as before
+//! (`mayApproveDevices` in `/api/securityStatus`; CDXC:Security 2026-11-16 in security/policy.rs).
 
 use std::collections::HashSet;
 use std::io::{BufRead, IsTerminal, Write};
@@ -36,14 +45,19 @@ or Add a computer). Paste it into Connect a Computer on the other computer to co
 one. It works on a server without the Ghostex app too: gxserver must be running here and Easy
 Connect on (ghostex tailcat enable).
 
-It keeps running so the other computer can reach this one, and shows each computer (or phone)
-that then asks to connect with its three words. Check they match the words on that computer,
-then answer y to approve it or n to deny it. Press Ctrl+C when you are done.
+Once this computer has the Ghostex app or a paired phone, only they let a new device in:
+  - First you approve \"Show this computer's pairing code\" in the Ghostex app or on your phone;
+    then the code prints. After 10 minutes it asks again.
+  - Each computer or phone that uses the code shows here with its three words. Approve it in the
+    app or on your phone, where it shows with the same words.
+On a computer with neither yet, nothing asks: check the words match the ones on the other
+computer, then answer y to approve it or n to deny it here.
 
-A code works once and lapses after five minutes; a new one is printed when it does. It stops by
-itself after 10 minutes with no computer waiting, and after the first computer you approve.
+It keeps running so the other computer can reach this one. A code works once and lapses after
+five minutes; a new one is printed when it does. It stops by itself after 10 minutes with no
+computer waiting, and once the first computer is approved. Press Ctrl+C to stop sooner.
 
-  --once   Print the code and exit (connect within a minute, or approve in the app)
+  --once   Print the code and exit (connect within a minute, then approve in the app or phone)
   --json   Print the code as JSON and exit: { ok, computerName, code }
   --copy   Also copy each code to the clipboard (over SSH, your terminal's clipboard when it
            allows that), so you don't have to select the long text
@@ -81,8 +95,11 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
     }
     println!("Waiting for the other computer. Press Ctrl+C when you are done.");
     let interactive = std::io::stdin().is_terminal();
+    let answers_here = may_approve_here(&parsed.flags);
     let mut shown_code = code.text;
     let mut seen = HashSet::new();
+    // Devices to approve in the app or on a phone: approval id → name, followed until answered.
+    let mut approved_elsewhere: Vec<(String, String)> = Vec::new();
     let mut last_waiting = Instant::now();
     loop {
         std::thread::sleep(POLL_EVERY);
@@ -103,6 +120,10 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             }
         };
         let waiting = waiting_devices(&answer);
+        if let Some(done) = follow_answers(&mut approved_elsewhere, &waiting, &parsed.flags) {
+            println!("{done}");
+            return Ok(());
+        }
         if waiting
             .iter()
             .any(|device| !seen.contains(&device.approval_id))
@@ -121,8 +142,11 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                 device.name,
                 device.words.join(" ")
             );
-            if !interactive {
-                println!("Approve it in the Ghostex app or on your phone.");
+            if !answers_here || !interactive {
+                println!(
+                    "Approve it in the Ghostex app on this computer or on your phone, where it shows with the same words."
+                );
+                approved_elsewhere.push((device.approval_id.clone(), device.name.clone()));
                 continue;
             }
             let approve =
@@ -149,6 +173,52 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             }
         }
     }
+}
+
+/// Whether y/n here may approve a device: gxserver says so for the token file only while this
+/// computer has no owner device (`mayApproveDevices`); a gxserver from before it always let it.
+fn may_approve_here(flags: &super::args::Flags) -> bool {
+    call_gxserver_rpc(crate::security::SECURITY_STATUS_ENDPOINT, &json!({}), flags)
+        .ok()
+        .and_then(|status| status.get("mayApproveDevices").and_then(Value::as_bool))
+        .unwrap_or(true)
+}
+
+/// Follows the devices waiting for an Approve in the app or on a phone: says how each one that is
+/// no longer waiting ended, and returns the last words once one was approved.
+fn follow_answers(
+    asked: &mut Vec<(String, String)>,
+    waiting: &[WaitingDevice],
+    flags: &super::args::Flags,
+) -> Option<String> {
+    let mut approved = None;
+    asked.retain(|(id, name)| {
+        if waiting.iter().any(|device| &device.approval_id == id) {
+            return true;
+        }
+        let status = call_gxserver_rpc(
+            crate::security::APPROVALS_READ_ENDPOINT,
+            &json!({ "id": id }),
+            flags,
+        )
+        .ok()
+        .and_then(|read| {
+            read.pointer("/request/status")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        });
+        match status.as_deref() {
+            Some("approved" | "consumed") => {
+                approved = Some(format!(
+                    "Approved: {name}. Stopped after the first computer. Run ghostex computer-code to connect another."
+                ));
+            }
+            Some("denied") => println!("Denied: {name}."),
+            _ => println!("{name} is no longer waiting (it lapsed or was removed)."),
+        }
+        false
+    });
+    approved
 }
 
 struct ComputerCode {

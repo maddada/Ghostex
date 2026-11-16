@@ -5362,18 +5362,48 @@ sessions, so any client can control agents on any machine.
   computer-code` on A and leave it running; on B open Connect a Computer, paste
   A's code into "The other computer's code" and click Connect; B shows "Check the
   words" with three words; A's terminal then prints "<B> wants to connect. Its
-  words: a b c" and asks "Approve it? [y/N]"; if the words are the same on both,
-  type y (n turns it down). The command stops after the first computer you
+  words: a b c". While A has neither the Ghostex app nor a paired phone, it asks
+  "Do they match the words on that computer? Approve it? [y/N]"; if the words
+  are the same on both, type y (n turns it down). Once A has the Ghostex app or
+  a paired phone, only they make codes and let devices in: the command first
+  waits for you to approve "Show this computer's pairing code" in the app or on
+  your phone (then it gets codes for ten minutes), and B waits there to be
+  approved, with the same three words; A's terminal says so and follows that
+  answer. The command stops after the first computer you
   approve (run it again to connect another), after 10 minutes with nobody
   waiting, or when you press Ctrl+C, and B then finishes signing in as usual.
   `--copy` also puts each code on the clipboard (on a server reached over SSH,
   your terminal's clipboard, when your terminal allows that), so the long text
   needn't be selected by hand. On B, the words screen tells you to click
-  Approve on A, or to type y in A's terminal when A has no screen.
+  Approve on A, or to type y in A's terminal when A has no screen (or to
+  approve on your phone, once one is paired with A).
   `--once` or `--json` only print the code and exit, so approve the new computer
   in the Ghostex app (or on a paired phone) within a minute instead. In a
   terminal that can't answer (no keyboard input), it says to approve in the app
   or on a phone.
+  Only the Ghostex app on a computer, or a phone paired with it, makes its
+  pairing codes, approves new phones and computers and removes a paired phone.
+  Another of your computers' apps can do it too once you approved "Let <that
+  computer> (Ghostex app) show the pairing code of <this computer> (Ghostex
+  server …)" there; that card and the app that asks show the same four key
+  words and name the same computer and server id, so approve it only when they
+  match. Too many such asks from that computer's terminal in an hour are
+  refused for the rest of the hour (the asking app says so), and the security
+  log notes it. If the app here no
+  longer counts as you (its key is gone: a new Keychain, a reinstall) and no
+  paired phone is left to approve it, reset who owns that computer in your own
+  terminal there: stop Ghostex's server with `gxserver stop` (quitting the app
+  leaves it running), move `gxserver/auth/security.json` out of Ghostex's state folder
+  (`~/.local/state/ghostex` on macOS and Linux), run `sqlite3 <state
+  folder>/gxserver/state.db "DELETE FROM remote_paired_devices"` (this unpairs
+  every phone and computer paired
+  to it), delete the lines with `ghostex-paired:` in `~/.ssh/authorized_keys`,
+  then open Ghostex: it starts the server again and its key becomes the owner,
+  and you pair your phones and computers again. On a computer without the app,
+  that computer's own terminal keeps pairing (as `ghostex computer-code` does)
+  until a phone pairs with it. A program running as you there could still make
+  itself that computer's owner before you pair a phone (by starting Ghostex's
+  server with a first-key value of its own); then use this reset.
   Easy Connect meets the phone on a relay. Relay (Settings > Remote > Advanced) picks
   which: Ghostex relay (the default) has phones try Ghostex's own relay first
   and Tailscale's public relays second; Public relays only uses Tailscale's;

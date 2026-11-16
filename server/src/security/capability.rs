@@ -114,7 +114,10 @@ impl Principal {
 
     /// You: the desktop app (its owner session, or the token file it reads), the GPUI web build and
     /// the `ghostex` CLI in your own terminal (the token file), and your paired phones. These approve
-    /// what still asks and answer secret requests (CDXC:Security 2026-11-10 in security/policy.rs).
+    /// what still asks and answer secret requests (CDXC:Security 2026-11-10 in security/policy.rs),
+    /// except that pairing codes, new devices and new owners are kept by the owner session and
+    /// paired phones once this computer has one (`SecurityState::keeps_door`, CDXC:Security
+    /// 2026-11-16 in security/policy.rs).
     pub fn is_owner_device(&self) -> bool {
         matches!(
             self,

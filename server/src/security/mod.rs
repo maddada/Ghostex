@@ -23,6 +23,7 @@ mod policy;
 mod presence;
 mod session_tokens;
 
+pub(crate) use approvals::random_b64;
 pub use approvals::{
     expired_message, params_digest, ActionRequest, ApprovalError, ApprovalStore, Created,
     APPROVED_TTL_MS, GONE_MESSAGE, PENDING_TTL_MS,
@@ -34,7 +35,10 @@ pub use capability::{route_access, Capability, Principal, RouteAccess, SessionRo
 pub use events::SecurityEvent;
 pub use ghostex_gx_protocol::approval::{ApprovalRequest, SensitiveAction};
 pub use owner::{OwnerChallenges, OwnerError, OWNER_CHALLENGE_TTL_MS};
-pub use policy::EASY_CONNECT_ENABLE;
+pub use policy::{
+    opens_door, DOOR_SESSION_ENDPOINTS, DOOR_SESSION_TTL_MS, EASY_CONNECT_ENABLE,
+    FIRST_KEY_HANDOFF_FILE, TOKEN_FILE_CODE_WINDOW_MS,
+};
 pub use presence::{requester_for, PresenceGrant, PresenceOutcome};
 pub use session_tokens::{
     SessionTokens, OWNER_TOKEN_PREFIX, SESSION_TOKEN_ENV, SESSION_TOKEN_PREFIX,
@@ -105,6 +109,16 @@ pub struct SecurityState {
     persist_path: Option<Arc<PathBuf>>,
     save_lock: Arc<std::sync::Mutex<()>>,
     events: broadcast::Sender<SecurityEvent>,
+    /// When the token file made its "act as you" requests in the last hour (review round 3, R3-2).
+    owner_key_requests: Arc<std::sync::Mutex<Vec<u64>>>,
+    /// The app's own "act as you" requests (they carried this start's value), never pushed out.
+    app_owner_key_requests: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    /// SHA-256 of the one-time value the app handed over at start (review round 2, R2-3 in `policy.rs`).
+    first_key_secret_hash: Arc<std::sync::Mutex<Option<Vec<u8>>>>,
+    /// Owner keys that open door sessions only (review M2 in `policy.rs`).
+    door_only_keys: Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>,
+    /// Until when (ms) the token file gets pairing codes after an Approve (`policy.rs`).
+    token_file_code_until: Arc<std::sync::Mutex<u64>>,
 }
 
 impl SecurityState {
@@ -122,6 +136,11 @@ impl SecurityState {
             persist_path: None,
             save_lock: Arc::default(),
             events: broadcast::channel(256).0,
+            token_file_code_until: Arc::default(),
+            door_only_keys: Arc::default(),
+            first_key_secret_hash: Arc::default(),
+            owner_key_requests: Arc::default(),
+            app_owner_key_requests: Arc::default(),
         }
     }
 
@@ -134,6 +153,12 @@ impl SecurityState {
         state.approver_keys.restore(saved.approver_keys);
         state.session_tokens.restore(saved.session_tokens);
         state.session_tokens.restore_owner(saved.owner_sessions);
+        state.session_tokens.restore_door(saved.door_sessions);
+        *state
+            .door_only_keys
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+            saved.door_only_keys.into_iter().collect();
         *state
             .approved_computers
             .lock()
@@ -201,6 +226,14 @@ impl SecurityState {
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
                     .clone(),
+                door_only_keys: self
+                    .door_only_keys
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .iter()
+                    .cloned()
+                    .collect(),
+                door_sessions: self.session_tokens.door_snapshot(),
             },
         )
     }
@@ -329,8 +362,9 @@ pub fn install(state: &SecurityState) {
 }
 
 /// The token a session starting now exports as [`SESSION_TOKEN_ENV`]; `None` before
-/// [`install`] (tests) or when it can't be saved (the session then runs with the token file's
-/// agent level only). `coordinator_environment` is the session's coordinator variables
+/// [`install`] (tests) or when it can't be saved (the session then has no token of its own; the
+/// `ghostex` CLI in it falls back to the token file, which may do what you may, except keep the
+/// door once this computer has an owner device: `SecurityState::keeps_door` in policy.rs). `coordinator_environment` is the session's coordinator variables
 /// (`coordinators::coordinator_launch_environment`), which give its role.
 pub fn session_token_for_launch(
     project_id: &str,

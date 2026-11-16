@@ -130,6 +130,37 @@ pub fn load_or_create_owner_key() -> Result<DeviceKey, KeyError> {
     load_or_create(KeyRole::Owner)
 }
 
+/*
+CDXC:Security 2026-11-16 FIX:
+Review B1 of the owner-only door: with one owner key for every computer, whatever answered on a connected computer's tunnel could hand the app this computer's server id and a challenge from here, and the app's signature opened an owner session here. Each connected computer now gets an owner key of its own (`scope` names it), enrolled only there, so a signature the app makes for one computer opens nothing anywhere else. This computer keeps [`load_or_create_owner_key`].
+*/
+/// A random value made once and kept in the key store, never sent anywhere: the app mixes it into
+/// the names it gives connected computers' keys and sessions (review round 2, R2-1), so those names
+/// can't be worked out or lined up from outside.
+pub fn local_salt() -> Result<Vec<u8>, KeyError> {
+    const ACCOUNT: &str = "owner-key-salt";
+    if let Some(salt) = platform::read_secret(ACCOUNT)? {
+        return Ok(salt);
+    }
+    let mut salt = vec![0_u8; 32];
+    ring::rand::SecureRandom::fill(&SystemRandom::new(), &mut salt)
+        .map_err(|_| KeyError::KeyStore("no random numbers".to_string()))?;
+    platform::write_secret(ACCOUNT, &salt)?;
+    match platform::read_secret(ACCOUNT)? {
+        Some(saved) => Ok(saved),
+        None => Err(KeyError::KeyStore("the salt wasn't saved".to_string())),
+    }
+}
+
+/// The owner key for one connected computer (`scope`: a short name for it, letters, digits and
+/// `-` only), made and saved the first time.
+pub fn load_or_create_scoped_owner_key(scope: &str) -> Result<DeviceKey, KeyError> {
+    if scope.is_empty() || !scope.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err(KeyError::KeyStore("invalid key name".to_string()));
+    }
+    load_or_create_account(&format!("{}-{scope}", KeyRole::Owner.account()))
+}
+
 /// The approver key, made and saved the first time, after the presence prompt shows `reason`
 /// (the approval card's summary). Returns what proved the user was there.
 pub fn unlock_approver_key(reason: &str) -> Result<(DeviceKey, Presence), KeyError> {
@@ -183,13 +214,17 @@ pub fn default_presence() -> Presence {
 }
 
 fn load_or_create(role: KeyRole) -> Result<DeviceKey, KeyError> {
-    if let Some(pkcs8) = platform::read_secret(role.account())? {
+    load_or_create_account(role.account())
+}
+
+fn load_or_create_account(account: &str) -> Result<DeviceKey, KeyError> {
+    if let Some(pkcs8) = platform::read_secret(account)? {
         return DeviceKey::from_pkcs8(&pkcs8);
     }
     let (key, pkcs8) = DeviceKey::generate()?;
-    platform::write_secret(role.account(), &pkcs8)?;
+    platform::write_secret(account, &pkcs8)?;
     // Read it back, so a key store that dropped the write never leaves two keys in play.
-    match platform::read_secret(role.account())? {
+    match platform::read_secret(account)? {
         Some(saved) if saved == pkcs8 => Ok(key),
         _ => Err(KeyError::KeyStore("the new key wasn't saved".to_string())),
     }

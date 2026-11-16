@@ -29,6 +29,9 @@ pub(crate) struct ServerApprovals {
     pub(crate) plain: bool,
     /// Settings > Security there: ask for Touch ID or the password first (`requirePresence`).
     pub(crate) require_presence: bool,
+    /// What this app sent may make codes and approve devices there (`mayApproveDevices`; a
+    /// gxserver from before the owner-only door doesn't say, and lets it).
+    pub(crate) may_approve_devices: bool,
 }
 
 static STATUS: Mutex<Option<HashMap<String, (Instant, ServerApprovals)>>> = Mutex::new(None);
@@ -56,6 +59,8 @@ pub(crate) fn server_approvals(transport: &Transport) -> Option<ServerApprovals>
     let read = ServerApprovals {
         plain: answer.get("plainApprovals").and_then(Value::as_bool) == Some(true),
         require_presence: answer.get("requirePresence").and_then(Value::as_bool) == Some(true),
+        may_approve_devices: answer.get("mayApproveDevices").and_then(Value::as_bool)
+            != Some(false),
     };
     with_status(|status| status.insert(key, (Instant::now(), read)));
     Some(read)
@@ -99,15 +104,36 @@ pub(crate) fn approve_plain(
         ghostex_owner_keys::confirm_presence(&request.summary)
             .map_err(|error| error.to_string())?;
     }
-    in_security_flow(|| {
-        rpc(
-            transport,
-            "/api/approveApprovalRequest",
-            json!({ "id": request.id }),
-        )
-    })
-    .map(|_| ())
-    .map_err(|(_, message)| message)
+    let approve = || {
+        in_security_flow(|| {
+            rpc(
+                transport,
+                "/api/approveApprovalRequest",
+                json!({ "id": request.id }),
+            )
+        })
+        .map(|_| ())
+        .map_err(|(_, message)| message)
+    };
+    // A new device, a terminal's pairing code or another owner: gxserver takes it only from this
+    // app's owner session once that computer has an owner device (CDXC:Security 2026-11-16 in
+    // `super::is_door_call`), on this computer and on a connected one.
+    if opens_door(&request.action) {
+        return super::door_call(transport, approve);
+    }
+    approve()
+}
+
+/// The requests gxserver lets only the owner session or a paired phone approve once this computer
+/// has one (`opens_door` in server/src/security/policy.rs).
+pub(crate) fn opens_door(action: &ghostex_gx_protocol::approval::SensitiveAction) -> bool {
+    use ghostex_gx_protocol::approval::SensitiveAction;
+    matches!(
+        action,
+        SensitiveAction::PairingApproveDevice
+            | SensitiveAction::PairingShowCode
+            | SensitiveAction::AddApproverKey
+    )
 }
 
 /*

@@ -233,10 +233,25 @@ pub async fn run_gxserver_foreground(
 
     let security = load_security_state(&paths, metadata.server_id.as_str(), &logger);
     crate::security::install(&security);
+    let device_api_tokens = load_device_api_tokens(&paths);
+    // Who keeps the door (CDXC:Security 2026-11-16 in security/policy.rs): a phone paired before
+    // this start counts, also when `security.json` was unreadable and started empty.
+    if device_api_tokens.names_any_device() {
+        security.note_owner_device(crate::security::now_ms());
+    }
+    // The app's one-time value for the first owner key, read and deleted before anything starts a
+    // session (review round 2, R2-3 in security/policy.rs).
+    let handoff = paths.auth_dir.join(crate::security::FIRST_KEY_HANDOFF_FILE);
+    if let Ok(secret) = std::fs::read_to_string(&handoff) {
+        let _ = std::fs::remove_file(&handoff);
+        if !secret.trim().is_empty() {
+            security.set_first_key_secret(&secret);
+        }
+    }
     let state = Arc::new(AppState {
         accounts: Arc::new(crate::accounts::runtime::AccountRuntime::default()),
         auth_token: auth.token,
-        device_api_tokens: load_device_api_tokens(&paths),
+        device_api_tokens,
         security,
         cef_devtools: Default::default(),
         automation_runtime,

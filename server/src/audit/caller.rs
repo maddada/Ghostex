@@ -83,7 +83,11 @@ impl Caller {
                 .map(str::to_string);
             return Self::SharedToken { claimed_session };
         }
-        if let Some(principal) = session_tokens.resolve(token) {
+        // A door session names the owner too (review M2 in security/policy.rs).
+        if let Some(principal) = session_tokens
+            .resolve(token)
+            .or_else(|| session_tokens.resolve_door(token, crate::security::now_ms()))
+        {
             return Self::Principal(principal);
         }
         if device_tokens.accepts(token) {

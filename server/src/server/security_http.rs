@@ -221,6 +221,7 @@ pub(crate) fn route_security_http(
                 Err(EnrollRefusal::Reply(code, message)) => {
                     reply(StatusCode::OK, Err((code, message)))
                 }
+                Err(EnrollRefusal::Response(response)) => response,
             },
         );
     }
@@ -242,6 +243,70 @@ listing requests, `owner_security::quiet_owner_session`) send
 `askOwner: false`, which enrolls a key that needs no approval and otherwise answers
 `ownerApprovalNeeded` without making a request. A call without the field asks, as before.
 */
+/// `/api/enrollOwnerKey`'s one-time value from the app for the first key (review round 2, R2-3).
+const FIRST_KEY_SECRET_PARAM: &str = "firstKeySecret";
+/// How many "act as you" requests (`addApproverKey`) may wait at once before a new one pushes
+/// out the oldest that isn't the app's (review rounds 2 and 3, R2-2 and R3-2).
+const OWNER_KEY_REQUESTS_WAITING: usize = 3;
+/// The answer when the token file made too many "act as you" requests this hour (R3-2).
+pub(crate) const OWNER_KEY_FLOODED: &str = "ownerKeyRequestsFlooded";
+
+/// This computer's name and server id as the "act as you" card names them (review round 3, R3-4).
+fn this_computer_label(state: &AppState) -> String {
+    let name = crate::remote_access::cached_remote_access_identity()
+        .map(|identity| identity.computer_name)
+        .unwrap_or_else(|_| "this computer".to_string());
+    format!("{name} (Ghostex server {})", &*state.security.server_id)
+}
+
+/// A new "act as you" request beyond `OWNER_KEY_REQUESTS_WAITING` pushes out the oldest waiting
+/// one that isn't the app's own (review round 3, R3-2 in security/policy.rs); its card closes.
+fn push_out_oldest_owner_key_request(state: &AppState, newest: &str, now: u64) {
+    let security = &state.security;
+    let mut waiting: Vec<_> = security
+        .approvals
+        .list_pending(now)
+        .into_iter()
+        .filter(|request| {
+            request.action == ghostex_gx_protocol::approval::SensitiveAction::AddApproverKey
+                && request.id != newest
+        })
+        .collect();
+    if waiting.len() < OWNER_KEY_REQUESTS_WAITING {
+        return;
+    }
+    waiting.sort_by_key(|request| request.created_at_ms);
+    if let Some(oldest) = waiting
+        .iter()
+        .find(|request| !security.is_app_owner_key_request(&request.id))
+    {
+        if let Some(pushed) = security.approvals.push_out(&oldest.id, newest, now) {
+            security.publish(security::SecurityEvent::ApprovalExpired { request: pushed });
+        }
+    }
+}
+
+/// The security log notes, once an hour, that the token file asked to act as you too often.
+fn note_owner_key_flood(state: &AppState, caller: &Principal, now: u64) {
+    static LAST: std::sync::Mutex<u64> = std::sync::Mutex::new(0);
+    let mut last = LAST.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if *last + 60 * 60 * 1000 > now {
+        return;
+    }
+    *last = now;
+    let _ = state;
+    crate::audit::record(
+        crate::audit::Action::new(
+            "ownerKey.flood",
+            "Too many apps asked to act as you on this computer within an hour",
+        ),
+        crate::audit::Actor::from(caller),
+        crate::audit::Outcome::Refused("More asks wait until the hour is over".to_string()),
+        None,
+    );
+}
+/// `/api/enrollOwnerKey`'s and `/api/openOwnerSession`'s scope (`approval::OWNER_SCOPE_DOOR`).
+const OWNER_SCOPE_PARAM: &str = "scope";
 /// `/api/enrollOwnerKey`'s flag: `false` enrolls only when no approval is needed.
 const ASK_OWNER_PARAM: &str = "askOwner";
 /// The answer to `askOwner: false` when the key needs the owner's approval.
@@ -256,7 +321,14 @@ const APPROVER_KEY_PARAM: &str = "approverKey";
 
 enum EnrollRefusal {
     Reply(&'static str, String),
+    /// The owner's Approve is needed first (`approvalRequired`, `approvalDenied`).
+    Response(RoutedResponse),
 }
+
+/// What `/api/approveApprovalRequest` answers the token file (or anyone else but the app's owner
+/// session and paired phones) for a new device, a terminal's pairing code or another owner, once
+/// this computer has an owner device (CDXC:Security 2026-11-16 in security/policy.rs).
+const DOOR_REFUSAL: &str = "Approve this in the Ghostex app on this computer or on your phone. A terminal or an agent can't approve a new device here.";
 
 /// `/api/enrollOwnerKey` and `/api/enrollApproverKey`. The first key of each kind is taken on
 /// the owner's word (first owner key: the token file only; first approver key: the desktop's owner
@@ -265,18 +337,30 @@ fn enroll_key(
     state: &AppState,
     caller: &Principal,
     endpoint_path: &str,
-    _request_id: &str,
-    _body: &Value,
+    request_id: &str,
+    body: &Value,
     params: Map<String, Value>,
 ) -> Result<Value, EnrollRefusal> {
     use ghostex_gx_protocol::approval::EnrollKeyParams;
     let security = &state.security;
     let now = security::now_ms();
-    // Older apps send `askOwner` and `approvalId`; nothing asks any more, so both are ignored.
+    // `askOwner: false` (the app's quiet opener): never make a request, answer
+    // `ownerApprovalNeeded` instead. `approvalId` is read from the body by the gate below.
+    let ask_owner = params.get(ASK_OWNER_PARAM).and_then(Value::as_bool) != Some(false);
     let mut params = params;
+    // The app's one-time value for the first key (review round 2, R2-3 in security/policy.rs).
+    let first_key_secret = params
+        .remove(FIRST_KEY_SECRET_PARAM)
+        .and_then(|value| value.as_str().map(str::to_string));
     params.remove(ASK_OWNER_PARAM);
     params.remove(ghostex_gx_protocol::approval::APPROVAL_ID_PARAM);
     let owner = endpoint_path == security::OWNER_KEY_ENROLL_ENDPOINT;
+    // `scope: "door"`: the key opens door sessions only (review M2 in security/policy.rs).
+    let door_only = params
+        .remove(OWNER_SCOPE_PARAM)
+        .and_then(|scope| scope.as_str().map(str::to_string))
+        .as_deref()
+        == Some(ghostex_gx_protocol::approval::OWNER_SCOPE_DOOR);
     // The same app's approver key, sent with its owner key (see `APPROVER_KEY_PARAM`).
     let approver_key = match params.get(APPROVER_KEY_PARAM).filter(|_| owner) {
         Some(value) => Some(
@@ -297,7 +381,7 @@ fn enroll_key(
     .map_err(|(code, message)| EnrollRefusal::Reply(code, message))?;
     /*
     CDXC:Security 2026-11-10 WHY:
-    An owner key opens an owner session, which is one of your devices (it approves pairings and answers secret requests). Only the token file or an owner session may add one, as since 8 Nov: an agent's session token must not make itself yours. With approvals plain (security/policy.rs) nothing else is asked: a key from your own app goes in at once, on this computer and on another computer through its SSH tunnel, so the "act as the owner" card (#532) is gone; apps from before 11.2.3 still enroll and open their owner sessions as they always did.
+    An owner key opens an owner session, which is one of your devices (it approves pairings and answers secret requests). Only the token file or an owner session may add one, as since 8 Nov: an agent's session token must not make itself yours. With approvals plain (security/policy.rs) nothing else is asked: a key from your own app goes in at once, on this computer and on another computer through its SSH tunnel, so the "act as the owner" card (#532) is gone; apps from before 11.2.3 still enroll and open their owner sessions as they always did. Narrowed on 2026-11-16 for the token file once this computer has an owner device (below).
     */
     if owner && !matches!(caller, Principal::LocalAgent | Principal::Owner { .. }) {
         return Err(EnrollRefusal::Reply(
@@ -319,8 +403,118 @@ fn enroll_key(
     if let Some(known) = registry.get(&key_id) {
         return Ok(json!({ "key": known }));
     }
+    /*
+    CDXC:Security 2026-11-16 DECISION:
+    User (W524, "Owner only"): an owner key opens the owner session, which makes pairing codes and approves new devices, so once this computer has an owner device the token file (every program of the user, agents included) adds one only with an Approve on the app's owner session or a paired phone: one `addApproverKey` card, reused while it waits, that the desktop already waits on and repeats its call with (`owner_security::enroll_owner_key`). Before that (no owner key and no paired phone: the first key) it goes in at once only with the one-time value the app handed gxserver at start (review round 2, R2-3 in security/policy.rs). An owner session adding a key is the owner. Another computer's app reaching this one through its SSH tunnel (the same token file) asks the same way, once per computer, so it can approve this computer's devices from there (CDXC:Security 2026-11-16 at `is_door_call` in apps/desktop/src/app/owner_security/mod.rs).
+    */
+    if owner
+        && matches!(caller, Principal::LocalAgent)
+        && !security.has_owner_device()
+        && !security.take_first_key(first_key_secret.as_deref())
+    {
+        // No owner device yet, so nobody could approve a card: the first key comes only from the
+        // app that started gxserver; until then the token file keeps the door.
+        return Err(EnrollRefusal::Reply(
+            OWNER_APPROVAL_NEEDED,
+            "The first owner key here is taken only from the Ghostex app as it starts Ghostex's server. Until then this computer's pairing works as it does without the app."
+                .to_string(),
+        ));
+    }
+    if owner && matches!(caller, Principal::LocalAgent) && security.has_owner_device() {
+        if !ask_owner {
+            return Err(EnrollRefusal::Reply(
+                OWNER_APPROVAL_NEEDED,
+                "This computer already has an owner: approve this app in Ghostex there or on your phone first."
+                    .to_string(),
+            ));
+        }
+        /*
+        CDXC:Security 2026-11-16 FIX:
+        Review M1 and M2 of the owner-only door: the card's words came from the key's own label, which any caller writes, so an agent's request looked like the app's, and it said "show codes and approve devices" while the key opened a full owner session. The card now ends with key words (four since round 3), which the app that asks shows too (from the request's own nonce since round 2, below), and says what the key may really do (door sessions only with `scope: "door"`, which this app sends; an older app's key acts as you for everything here).
+        */
+        /*
+        CDXC:Security 2026-11-16 FIX:
+        Review round 2 (R2-2): words from the key id alone were 24 bits a caller chooses (grind keys offline until the words match the app's), and `replaces` let the token file's newer request replace the app's waiting card. The words now come from a nonce gxserver makes for each request, hashed with the key id (`approval::owner_key_words_input`); the request carries that nonce back to the app that asked, which works the words out and shows them. Requests no longer replace each other; instead at most `OWNER_KEY_REQUESTS_WAITING` such requests wait at once, and another key gets a plain refusal until those are answered.
+        */
+        // Review round 3 (R3-2 in security/policy.rs): this computer's app (it carries this
+        // start's one-time value) is never capped or pushed out; the same key asking again, or
+        // coming back with its approval, makes no new request.
+        let app_request = security.is_first_key_secret(first_key_secret.as_deref());
+        let pending = security.approvals.list_pending(now);
+        let returning = body
+            .pointer("/params/approvalId")
+            .and_then(Value::as_str)
+            .is_some_and(|id| !id.trim().is_empty())
+            || pending.iter().any(|request| {
+                request.action == ghostex_gx_protocol::approval::SensitiveAction::AddApproverKey
+                    && request.target.as_deref() == Some(key_id.as_str())
+            });
+        if !app_request && !returning && !security.note_owner_key_request(now) {
+            note_owner_key_flood(state, caller, now);
+            return Err(EnrollRefusal::Reply(
+                OWNER_KEY_FLOODED,
+                "Too many apps asked to act as you on this computer in the last hour, so this one can't ask yet. Deny the requests you don't know there (in Ghostex or on your phone) and try again in an hour.".to_string(),
+            ));
+        }
+        let nonce = security::random_b64(32);
+        let words = {
+            use sha2::{Digest, Sha256};
+            ghostex_gx_protocol::approval::owner_key_words(&Sha256::digest(
+                ghostex_gx_protocol::approval::owner_key_words_input(&nonce, &key_id),
+            ))
+        };
+        // Review round 3 (R3-4): the card names this computer and its server id, so a request
+        // that reached it through another computer's connection shows a name the app didn't ask
+        // for (the asking app shows the computer it means).
+        let here = this_computer_label(state);
+        let (summary, detail) = if door_only {
+            (
+                format!(
+                    "Let {} show the pairing code of {here} and approve new phones and computers there (key words: {words})",
+                    key.label
+                ),
+                format!("Approve only if it is your own Ghostex app, on this computer or on one of your computers connected to it, and it shows the same four words and names {here}."),
+            )
+        } else {
+            (
+                format!(
+                    "Let {} act as you on {here} (key words: {words})",
+                    key.label
+                ),
+                format!("It can then do everything you can do there: show the pairing code, approve new phones and computers, answer secret requests. Approve only if it is your own Ghostex app and it shows the same four words and names {here}."),
+            )
+        };
+        let action = ActionRequest::new(
+            ghostex_gx_protocol::approval::SensitiveAction::AddApproverKey,
+            summary,
+        )
+        .target(key_id.clone())
+        .detail(detail)
+        .nonce(nonce)
+        .params(json!({
+            "key": serde_json::to_value(&key).unwrap_or(Value::Null),
+            "doorOnly": door_only,
+        }));
+        let outcome = presence_outcome(state, caller, action, body);
+        if let security::PresenceOutcome::Pending(request) = &outcome {
+            // New, not one that already waited (`pending` was read before asking).
+            if !pending.iter().any(|waiting| waiting.id == request.id) {
+                if app_request {
+                    security.note_app_owner_key_request(&request.id);
+                } else {
+                    push_out_oldest_owner_key_request(state, &request.id, now);
+                }
+            }
+        }
+        if let Err(response) = presence_outcome_response(outcome, endpoint_path, request_id) {
+            return Err(EnrollRefusal::Response(response));
+        }
+    }
     if let Some(approver) = approver_key {
         enroll_approved_key(state, caller, false, approver, now);
+    }
+    if owner && door_only {
+        security.mark_door_only_key(&key_id);
     }
     enroll_approved_key(state, caller, owner, key, now);
     registry
@@ -430,6 +624,19 @@ fn handle(
             // older app's `keyId` and signature are accepted and not checked (CDXC:Security
             // 2026-11-10 in security/policy.rs).
             let ApproveApprovalParams { id, key_id, .. } = parse(params)?;
+            // A new device, a terminal's pairing code or another owner: only the door's keepers
+            // (CDXC:Security 2026-11-16 in security/policy.rs).
+            if let Some(asked) = security.approvals.read(&id, caller, now) {
+                if security::opens_door(&asked.action) && !security.keeps_door(caller) {
+                    crate::audit::record(
+                        crate::audit::Action::from_approval(&asked),
+                        crate::audit::Actor::from(caller),
+                        crate::audit::Outcome::Refused(DOOR_REFUSAL.to_string()),
+                        Some(crate::audit::ApprovalRef::from(&asked)),
+                    );
+                    return Err(("forbidden", DOOR_REFUSAL.to_string()));
+                }
+            }
             let request = security
                 .approvals
                 .approve_plain(&id, caller, now)
@@ -517,9 +724,11 @@ fn handle(
                 key_id,
                 challenge,
                 signature,
+                scope,
             } = parse(params)?;
+            let door = scope.as_deref() == Some(ghostex_gx_protocol::approval::OWNER_SCOPE_DOOR);
             security
-                .open_owner_session(&key_id, &challenge, &signature, now)
+                .open_owner_session(&key_id, &challenge, &signature, door, now)
                 .map(|opened| json!(opened))
                 .map_err(|error| ("forbidden", error.to_string()))
         }
@@ -531,6 +740,11 @@ fn handle(
             // password or the phone's Face ID first (`approvalsRequirePresence`, off by default).
             "requirePresence": approvals_require_presence(state),
             "caller": caller,
+            // Whether this caller may make pairing codes and approve new devices here (the token
+            // file only until this computer has an owner device): `ghostex computer-code` asks
+            // y/n only when it may (CDXC:Security 2026-11-16 in security/policy.rs). Older
+            // clients don't read it.
+            "mayApproveDevices": security.keeps_door(caller),
             "ownerKeys": security.owner_keys.list(),
             "approverKeys": security.approver_keys.list(),
             "pendingApprovals": if caller.has(security::Capability::DecideApprovals) {

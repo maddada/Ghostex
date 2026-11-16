@@ -418,6 +418,43 @@ pub struct OpenOwnerSessionParams {
     pub challenge: String,
     /// The signature over [`owner_session_signing_payload`], base64 standard with padding.
     pub signature: String,
+    /// [`OWNER_SCOPE_DOOR`]: a session for pairing codes and approvals only, that lapses
+    /// ([`OpenOwnerSessionResult::expires_at_ms`]). Absent (older apps): a full owner session,
+    /// unless the key may open door sessions only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+}
+
+/// `scope` on `/api/enrollOwnerKey` and `/api/openOwnerSession`: pairing codes, approvals and
+/// paired devices only (the owner-only door, CDXC:Security 2026-11-16 in
+/// server/src/security/policy.rs). A key enrolled with it opens only such sessions.
+pub const OWNER_SCOPE_DOOR: &str = "door";
+
+/// First line of what [`owner_key_words`] hashes.
+pub const OWNER_KEY_WORDS_DOMAIN: &str = "ghostex-owner-key-words-v1";
+
+/// What the "act as you" card's words come from: the request's own `nonce` (random, made
+/// by gxserver for that request) and the key's `keyId`. Hash it with SHA-256 and pass the digest
+/// to [`owner_key_words`]. The card and the app that asked (which gets the request back) both
+/// show the words; nobody can choose a key whose words match another request's (review round 2,
+/// R2-2 in server/src/server/security_http.rs).
+pub fn owner_key_words_input(request_nonce: &str, key_id: &str) -> Vec<u8> {
+    format!("{OWNER_KEY_WORDS_DOMAIN}\n{request_nonce}\n{key_id}").into_bytes()
+}
+
+/// How many words an "act as you" request shows (review round 3, R3-3: four, so guessing a
+/// match by making and denying requests takes about 2^32 tries, past the hourly cap).
+pub const OWNER_KEY_WORD_COUNT: usize = 4;
+
+/// The four words of an "act as you" request, from the SHA-256 digest of
+/// [`owner_key_words_input`].
+pub fn owner_key_words(digest: &[u8]) -> String {
+    digest
+        .iter()
+        .take(OWNER_KEY_WORD_COUNT)
+        .map(|byte| crate::pairing::PAIRING_WORDS[usize::from(*byte)])
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// `/api/openOwnerSession` → the owner session token, held only in the desktop app's memory.
@@ -426,6 +463,9 @@ pub struct OpenOwnerSessionParams {
 pub struct OpenOwnerSessionResult {
     pub token: String,
     pub device_id: String,
+    /// When a door session lapses (ms since the epoch); absent for a full owner session.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at_ms: Option<u64>,
 }
 
 /// `/api/enrollOwnerKey` and `/api/enrollApproverKey`: the public key to add. gxserver

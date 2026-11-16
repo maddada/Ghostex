@@ -28,6 +28,9 @@ struct Tokens {
     session_token: HashMap<String, String>,
     /// Owner session hashes, oldest first, with their device.
     owner_sessions: Vec<(String, String)>,
+    /// Door sessions (review M2 in security/policy.rs): hash, device, lapses at (ms). Never in
+    /// `by_hash`, so only [`SessionTokens::resolve_door`] knows them.
+    door_sessions: Vec<(String, String, u64)>,
 }
 
 /// Owner sessions kept per device; opening another drops the oldest (an app restart opens one).
@@ -104,6 +107,78 @@ impl SessionTokens {
             kept -= 1;
         }
         token
+    }
+
+    /// A door session for the desktop app on `device_id` (pairing codes, approvals and paired
+    /// devices only), lapsing at `until_ms`. Like owner sessions, the newest few per device stay.
+    pub fn mint_door(&self, device_id: &str, until_ms: u64, now_ms: u64) -> String {
+        let token = mint(OWNER_TOKEN_PREFIX);
+        let mut tokens = self.write();
+        tokens.door_sessions.retain(|(_, _, until)| *until > now_ms);
+        tokens
+            .door_sessions
+            .push((hash_token(&token), device_id.to_string(), until_ms));
+        while tokens
+            .door_sessions
+            .iter()
+            .filter(|(_, device, _)| device == device_id)
+            .count()
+            > OWNER_SESSIONS_PER_DEVICE
+        {
+            let Some(index) = tokens
+                .door_sessions
+                .iter()
+                .position(|(_, device, _)| device == device_id)
+            else {
+                break;
+            };
+            tokens.door_sessions.remove(index);
+        }
+        token
+    }
+
+    /// The owner behind door session `token`, while it hasn't lapsed. Only the door's routes ask
+    /// (`security::DOOR_SESSION_ENDPOINTS`).
+    pub fn resolve_door(&self, token: &str, now_ms: u64) -> Option<Principal> {
+        if !token.starts_with(OWNER_TOKEN_PREFIX) {
+            return None;
+        }
+        let hash = hash_token(token);
+        self.inner
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .door_sessions
+            .iter()
+            .find(|(known, _, until)| *known == hash && *until > now_ms)
+            .map(|(_, device_id, _)| Principal::Owner {
+                device_id: device_id.clone(),
+            })
+    }
+
+    /// The door sessions to save (hashes only).
+    pub fn door_snapshot(&self) -> Vec<super::persist::PersistedDoorSession> {
+        self.inner
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .door_sessions
+            .iter()
+            .map(
+                |(hash, device_id, until_ms)| super::persist::PersistedDoorSession {
+                    hash: hash.clone(),
+                    device_id: device_id.clone(),
+                    until_ms: *until_ms,
+                },
+            )
+            .collect()
+    }
+
+    /// Puts back the door sessions saved before a restart.
+    pub fn restore_door(&self, saved: Vec<super::persist::PersistedDoorSession>) {
+        self.write().door_sessions.extend(
+            saved
+                .into_iter()
+                .map(|entry| (entry.hash, entry.device_id, entry.until_ms)),
+        );
     }
 
     /// The owner sessions to save (hashes only).

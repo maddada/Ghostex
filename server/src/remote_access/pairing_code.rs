@@ -402,6 +402,18 @@ impl RemotePairingRuntime {
         Ok(fresh)
     }
 
+    /// Whether `secret` is this computer's pairing code shown now (not lapsed, not used).
+    pub fn is_live_secret(&self, secret: &str) -> bool {
+        self.live_secret
+            .lock()
+            .expect("remote pairing secret lock")
+            .as_ref()
+            .is_some_and(|live| {
+                live.expires_at > Utc::now()
+                    && live.secret_hash == hash_remote_pairing_secret(secret)
+            })
+    }
+
     /// Drops the in-memory plaintext, e.g. after `/api/pairDevice` consumed
     /// the stored row, so the next poll mints a new code.
     pub fn forget_secret(&self) {
