@@ -209,9 +209,51 @@ fn owner_refusal(transport: &Transport) -> Option<String> {
     }
 }
 
+/// The one-time value this app handed gxserver as it started it, for its first owner key there
+/// (review round 2, R2-3 in server/src/security/policy.rs).
+static FIRST_KEY_SECRET: Mutex<Option<String>> = Mutex::new(None);
+
+/// Just before this app starts gxserver: a fresh one-time value in `auth/first-key-handoff`
+/// (0600), which gxserver reads and deletes at start, and which this app keeps to send with its
+/// first owner key. Never in any environment, so no session inherits it.
+pub(crate) fn hand_first_key_secret_to_gxserver() {
+    let mut bytes = [0_u8; 32];
+    if ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut bytes).is_err() {
+        return;
+    }
+    let secret = hex::encode(bytes);
+    let path = crate::shared_settings::ghostex_storage_paths()
+        .gxserver_state_dir()
+        .join("auth")
+        .join("first-key-handoff");
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::remove_file(&path);
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.mode(0o600);
+    }
+    let written = options.open(&path).and_then(|mut file| {
+        use std::io::Write as _;
+        file.write_all(secret.as_bytes())
+    });
+    match written {
+        Ok(()) => {
+            *FIRST_KEY_SECRET
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(secret);
+        }
+        Err(error) => log::info!("first-key handoff not written: {error}"),
+    }
+}
+
 /// At start: the owner session on this computer's gxserver when it opens without anyone's
-/// Approve (the first owner key, or this app's key already enrolled). Makes no request; a door call
-/// asks later if needed.
+/// Approve (the first owner key, with the one-time value this app handed gxserver as it started it,
+/// or this app's key already enrolled). Makes no request; a door call asks later if needed.
 fn open_local_owner_session_quietly() {
     if with_session(LOCAL, |session| session.token.is_some()) {
         return;
@@ -565,6 +607,16 @@ fn open_owner_session(transport: &Transport, may_ask: bool) -> Result<String, St
         }
         if !may_ask {
             params["askOwner"] = json!(false);
+        }
+        // The first key on this computer goes in only with the value handed to gxserver at start.
+        if matches!(transport, Transport::Local) {
+            if let Some(secret) = FIRST_KEY_SECRET
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .clone()
+            {
+                params["firstKeySecret"] = json!(secret);
+            }
         }
         let enrolled = enroll_owner_key(transport, params)?;
         let key_id = enrolled

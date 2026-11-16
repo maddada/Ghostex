@@ -5367,14 +5367,16 @@ sessions, so any client can control agents on any machine.
   same three key words, so approve it only when they match. If the app here no
   longer counts as you (its key is gone: a new Keychain, a reinstall) and no
   paired phone is left to approve it, reset who owns that computer in your own
-  terminal there: quit Ghostex (on a server without the app, `gxserver stop`),
-  move `gxserver/auth/security.json` out of Ghostex's state folder
+  terminal there: stop Ghostex's server with `gxserver stop` (quitting the app
+  leaves it running), move `gxserver/auth/security.json` out of Ghostex's state folder
   (`~/.local/state/ghostex` on macOS and Linux), run `sqlite3 <state
   folder>/gxserver/state.db "DELETE FROM remote_paired_devices"` (this unpairs
   every phone and computer paired
   to it), delete the lines with `ghostex-paired:` in `~/.ssh/authorized_keys`,
-  then open Ghostex: its key becomes the owner again, and you pair your phones
-  and computers again.
+  then open Ghostex: it starts the server again and its key becomes the owner,
+  and you pair your phones and computers again. On a computer without the app,
+  that computer's own terminal keeps pairing (as `ghostex computer-code` does)
+  until a phone pairs with it.
   Easy Connect meets the phone on a relay. Relay (Settings > Remote > Advanced) picks
   which: Ghostex relay (the default) has phones try Ghostex's own relay first
   and Tailscale's public relays second; Public relays only uses Tailscale's;

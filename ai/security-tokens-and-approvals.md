@@ -84,8 +84,12 @@ owner key is enrolled, or a phone paired with its own token, remembered for good
   (`opens_door`; `/api/approveApprovalRequest` answers `forbidden`); it still lists and denies;
 - adds a new owner key (`/api/enrollOwnerKey`) only with an approved `addApproverKey` (the desktop
   waits on it and repeats with `approvalId`; `askOwner: false` answers `ownerApprovalNeeded`). The
-  first key on a computer with no owner key and no paired phone goes in at once; a computer
-  upgraded with a phone but without the app's key asks the phone once.
+  first key on a computer with no owner key and no paired phone goes in at once only with the
+  one-time value the app hands gxserver as it starts it (`auth/first-key-handoff`, written by the
+  app just before the launch, read and deleted by gxserver first thing, never in an environment;
+  `firstKeySecret` on the enroll). Without it no key is added there, so on a computer where the
+  app never starts gxserver the token file keeps the door until a phone pairs. A computer upgraded
+  with a phone but without the app's key asks the phone once.
 
 `/api/securityStatus` says `mayApproveDevices` for the caller. Everything else the token file does is
 unchanged.
@@ -111,9 +115,10 @@ Phones: once the computer has an owner device, `/api/removePairedDevice` removes
 (a row with its own token) only for the door's keepers (the owner session, a paired phone); an
 agent's session token or the token file can still deny a pending one and remove a computer, which
 only close doors. Recovery when no owner device is left (the app's key is gone and no phone is
-paired): with Ghostex quit, move `auth/security.json` aside, delete the rows of
-`remote_paired_devices` in `state.db` and the `ghostex-paired:` lines in `~/.ssh/authorized_keys`,
-then start the app: its key is the first again. Help says the same (features.md, Connect a
+paired): stop gxserver (`gxserver stop`; quitting the app leaves it running), move
+`auth/security.json` aside, delete the rows of `remote_paired_devices` in `state.db` and the
+`ghostex-paired:` lines in `~/.ssh/authorized_keys`, then open the app: it starts gxserver with its
+one-time value and its key is the first again. Help says the same (features.md, Connect a
 Computer). Moving only `security.json` aside reopens nothing while a phone row remains: a paired
 phone in the database marks the computer as owned at every start.
 

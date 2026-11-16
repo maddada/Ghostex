@@ -832,6 +832,8 @@ performed; CLICOLOR mirrors terminal_environment's color opt-in.
 */
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<Vec<String>, String> {
+    // The one-time value for this app's first owner key there (app/owner_security).
+    crate::app::owner_security::hand_first_key_secret_to_gxserver();
     // CDXC:ServerDaemon 2026-09-16 WHY:
     // Two reloads can both inspect an empty label before either bootstraps it; serialize the complete inspect/bootout/bootstrap sequence so one cannot remove the other's new job.
     static LAUNCH_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -1117,6 +1119,8 @@ fn gpui_spawn_local_gxserver_launchd_job(
 /// (Linux has no Dock background-attribution concern, so a detached child stays correct there.)
 #[cfg(target_os = "linux")]
 pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<Vec<String>, String> {
+    // The one-time value for this app's first owner key there (app/owner_security).
+    crate::app::owner_security::hand_first_key_secret_to_gxserver();
     use std::os::unix::process::CommandExt as _;
 
     let launch_log = gpui_prepare_gxserver_launch_log()?;
@@ -1182,6 +1186,8 @@ pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<Vec<Stri
 /// SEE-ALSO: `spawn_server` in server/src/platform/process.rs, gxserver's own relaunch, must use the same flags.
 #[cfg(target_os = "windows")]
 pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<Vec<String>, String> {
+    // The one-time value for this app's first owner key there (app/owner_security).
+    crate::app::owner_security::hand_first_key_secret_to_gxserver();
     use crate::app::helpers::{CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW};
     use std::os::windows::process::CommandExt;
 

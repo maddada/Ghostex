@@ -239,6 +239,15 @@ pub async fn run_gxserver_foreground(
     if device_api_tokens.names_any_device() {
         security.note_owner_device(crate::security::now_ms());
     }
+    // The app's one-time value for the first owner key, read and deleted before anything starts a
+    // session (review round 2, R2-3 in security/policy.rs).
+    let handoff = paths.auth_dir.join(crate::security::FIRST_KEY_HANDOFF_FILE);
+    if let Ok(secret) = std::fs::read_to_string(&handoff) {
+        let _ = std::fs::remove_file(&handoff);
+        if !secret.trim().is_empty() {
+            security.set_first_key_secret(&secret);
+        }
+    }
     let state = Arc::new(AppState {
         accounts: Arc::new(crate::accounts::runtime::AccountRuntime::default()),
         auth_token: auth.token,

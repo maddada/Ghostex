@@ -37,7 +37,7 @@ pub use ghostex_gx_protocol::approval::{ApprovalRequest, SensitiveAction};
 pub use owner::{OwnerChallenges, OwnerError, OWNER_CHALLENGE_TTL_MS};
 pub use policy::{
     opens_door, DOOR_SESSION_ENDPOINTS, DOOR_SESSION_TTL_MS, EASY_CONNECT_ENABLE,
-    TOKEN_FILE_CODE_WINDOW_MS,
+    FIRST_KEY_HANDOFF_FILE, TOKEN_FILE_CODE_WINDOW_MS,
 };
 pub use presence::{requester_for, PresenceGrant, PresenceOutcome};
 pub use session_tokens::{
@@ -109,6 +109,8 @@ pub struct SecurityState {
     persist_path: Option<Arc<PathBuf>>,
     save_lock: Arc<std::sync::Mutex<()>>,
     events: broadcast::Sender<SecurityEvent>,
+    /// SHA-256 of the one-time value the app handed over at start (review round 2, R2-3 in `policy.rs`).
+    first_key_secret_hash: Arc<std::sync::Mutex<Option<Vec<u8>>>>,
     /// Owner keys that open door sessions only (review M2 in `policy.rs`).
     door_only_keys: Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>,
     /// Until when (ms) the token file gets pairing codes after an Approve (`policy.rs`).
@@ -132,6 +134,7 @@ impl SecurityState {
             events: broadcast::channel(256).0,
             token_file_code_until: Arc::default(),
             door_only_keys: Arc::default(),
+            first_key_secret_hash: Arc::default(),
         }
     }
 

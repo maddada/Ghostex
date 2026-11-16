@@ -21,6 +21,13 @@ Review B2 of the owner-only door: the two minutes after the first start with thi
 /// Remembered once this computer has an owner device (a paired phone; an owner key counts by
 /// itself): from then on the token file alone no longer keeps the door.
 pub const OWNER_DEVICE: &str = "ownerDevice";
+/*
+CDXC:Security 2026-11-16 FIX:
+Review round 2 (R2-3): on a computer without the app, the first owner key went in from the token file with no card, so an agent could make itself the only keeper of the door and `ghostex computer-code` would then wait for an app or phone that doesn't exist. The first key now needs a one-time value the app hands gxserver as it starts it: the app writes it to `auth/first-key-handoff` (0600) just before it launches gxserver, gxserver reads and deletes that file first thing at start (server/foreground.rs), keeps only its hash in memory, never puts it in any environment, and spends it on the first key (`take_first_key`). On a computer where the app never starts gxserver, no key can be added without an Approve, so the token file keeps the door until a phone pairs and `ghostex computer-code` works there as before. Where gxserver was started by something else (the CLI, a restart outside the app), the app stays on the token file, which still keeps the door there, until the app next starts gxserver. Same-user limit: a program running as the user could read that file in the moment between the app writing it and gxserver deleting it.
+*/
+/// The file the app writes its one-time value to just before it starts gxserver (in `auth/`).
+pub const FIRST_KEY_HANDOFF_FILE: &str = "first-key-handoff";
+
 /// How long one Approve lets the token file get pairing codes (`ghostex computer-code`'s idle limit).
 pub const TOKEN_FILE_CODE_WINDOW_MS: u64 = 10 * 60 * 1000;
 
@@ -98,10 +105,42 @@ impl SecurityState {
         }
     }
 
-    /// Whether the token file may add an owner key without a card now: only while this computer
-    /// has no owner key and no paired phone (the first key; review B2 above).
-    pub fn token_file_may_add_owner_key(&self) -> bool {
-        !self.has_owner_device()
+    /// Keeps the one-time value the app handed over as it started gxserver (`FIRST_KEY_HANDOFF_FILE`).
+    pub fn set_first_key_secret(&self, secret: &str) {
+        use sha2::{Digest, Sha256};
+        *self
+            .first_key_secret_hash
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+            Some(Sha256::digest(secret.trim().as_bytes()).to_vec());
+    }
+
+    /// Whether the token file may add an owner key without a card now (review round 2, R2-3
+    /// below): only while this computer has no owner key and no paired phone, and only with the
+    /// one-time value the app handed gxserver as it started it, which this spends.
+    pub fn take_first_key(&self, presented: Option<&str>) -> bool {
+        use sha2::{Digest, Sha256};
+        if self.has_owner_device() {
+            return false;
+        }
+        let Some(presented) = presented.map(str::trim).filter(|value| !value.is_empty()) else {
+            return false;
+        };
+        let mut stored = self
+            .first_key_secret_hash
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let matches = stored.as_deref().is_some_and(|hash| {
+            ring::constant_time::verify_slices_are_equal(
+                hash,
+                &Sha256::digest(presented.as_bytes()),
+            )
+            .is_ok()
+        });
+        if matches {
+            *stored = None;
+        }
+        matches
     }
 
     /// One Approve of a terminal's pairing code: the token file gets codes for a while.

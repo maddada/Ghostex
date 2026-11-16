@@ -243,6 +243,8 @@ listing requests, `owner_security::quiet_owner_session`) send
 `askOwner: false`, which enrolls a key that needs no approval and otherwise answers
 `ownerApprovalNeeded` without making a request. A call without the field asks, as before.
 */
+/// `/api/enrollOwnerKey`'s one-time value from the app for the first key (review round 2, R2-3).
+const FIRST_KEY_SECRET_PARAM: &str = "firstKeySecret";
 /// How many "act as you" requests (`addApproverKey`) for other keys may wait at once
 /// (review round 2, R2-2).
 const OWNER_KEY_REQUESTS_WAITING: usize = 3;
@@ -289,6 +291,10 @@ fn enroll_key(
     // `ownerApprovalNeeded` instead. `approvalId` is read from the body by the gate below.
     let ask_owner = params.get(ASK_OWNER_PARAM).and_then(Value::as_bool) != Some(false);
     let mut params = params;
+    // The app's one-time value for the first key (review round 2, R2-3 in security/policy.rs).
+    let first_key_secret = params
+        .remove(FIRST_KEY_SECRET_PARAM)
+        .and_then(|value| value.as_str().map(str::to_string));
     params.remove(ASK_OWNER_PARAM);
     params.remove(ghostex_gx_protocol::approval::APPROVAL_ID_PARAM);
     let owner = endpoint_path == security::OWNER_KEY_ENROLL_ENDPOINT;
@@ -342,10 +348,22 @@ fn enroll_key(
     }
     /*
     CDXC:Security 2026-11-16 DECISION:
-    User (W524, "Owner only"): an owner key opens the owner session, which makes pairing codes and approves new devices, so once this computer has an owner device the token file (every program of the user, agents included) adds one only with an Approve on the app's owner session or a paired phone: one `addApproverKey` card, reused while it waits, that the desktop already waits on and repeats its call with (`owner_security::enroll_owner_key`). Before that (no owner key and no paired phone: the first key) it goes in at once as before (review B2 in security/policy.rs). An owner session adding a key is the owner. Another computer's app reaching this one through its SSH tunnel (the same token file) asks the same way, once per computer, so it can approve this computer's devices from there (CDXC:Security 2026-11-16 at `is_door_call` in apps/desktop/src/app/owner_security/mod.rs).
+    User (W524, "Owner only"): an owner key opens the owner session, which makes pairing codes and approves new devices, so once this computer has an owner device the token file (every program of the user, agents included) adds one only with an Approve on the app's owner session or a paired phone: one `addApproverKey` card, reused while it waits, that the desktop already waits on and repeats its call with (`owner_security::enroll_owner_key`). Before that (no owner key and no paired phone: the first key) it goes in at once only with the one-time value the app handed gxserver at start (review round 2, R2-3 in security/policy.rs). An owner session adding a key is the owner. Another computer's app reaching this one through its SSH tunnel (the same token file) asks the same way, once per computer, so it can approve this computer's devices from there (CDXC:Security 2026-11-16 at `is_door_call` in apps/desktop/src/app/owner_security/mod.rs).
     */
-    if owner && matches!(caller, Principal::LocalAgent) && !security.token_file_may_add_owner_key()
+    if owner
+        && matches!(caller, Principal::LocalAgent)
+        && !security.has_owner_device()
+        && !security.take_first_key(first_key_secret.as_deref())
     {
+        // No owner device yet, so nobody could approve a card: the first key comes only from the
+        // app that started gxserver; until then the token file keeps the door.
+        return Err(EnrollRefusal::Reply(
+            OWNER_APPROVAL_NEEDED,
+            "The first owner key here is taken only from the Ghostex app as it starts Ghostex's server. Until then this computer's pairing works as it does without the app."
+                .to_string(),
+        ));
+    }
+    if owner && matches!(caller, Principal::LocalAgent) && security.has_owner_device() {
         if !ask_owner {
             return Err(EnrollRefusal::Reply(
                 OWNER_APPROVAL_NEEDED,
