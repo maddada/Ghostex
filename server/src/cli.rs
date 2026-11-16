@@ -754,7 +754,7 @@ Usage:
   gxserver stop-all  Stop gxserver and kill tracked zmx sessions
   gxserver status    Print gxserver runtime state
   gxserver endpoint  Print the running daemon's port and auth token as JSON (for SSH clients; --no-token leaves the token out)
-  gxserver computer-code [--once] [--json]
+  gxserver computer-code [--once] [--json] [--copy]
                      Print this computer's pairing code for Connect a Computer on another
                      computer, then approve that computer here (same as ghostex computer-code)
   gxserver agent-skills status [skill...] [--json]

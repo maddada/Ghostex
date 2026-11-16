@@ -230,8 +230,8 @@ pub fn usage() -> String {
             "Update this or a connected computer's Ghostex app",
         ),
         format_help_command(
-            "computer-code [--once] [--json]",
-            "Print this computer's pairing code (the one Connect a Computer shows) to paste into Connect a Computer on another computer, then approve that computer here when its three words match; works on a server without the app; run it in your own terminal, not in a Ghostex session",
+            "computer-code [--once] [--json] [--copy]",
+            "Print this computer's pairing code (the one Connect a Computer shows) to paste into Connect a Computer on another computer, then approve that computer here when its three words match; --copy also puts the code on the clipboard; works on a server without the app; run it in your own terminal, not in a Ghostex session",
         ),
         format_help_command(
             "computers [--json]",

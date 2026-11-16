@@ -28,8 +28,8 @@ const POLL_EVERY: Duration = Duration::from_secs(3);
 /// How long it keeps the pairing window open with no computer or phone waiting.
 const IDLE_LIMIT: Duration = Duration::from_secs(10 * 60);
 
-pub(crate) const HELP: &str = "Usage: ghostex computer-code [--once] [--json]
-       gxserver computer-code [--once] [--json]
+pub(crate) const HELP: &str = "Usage: ghostex computer-code [--once] [--json] [--copy]
+       gxserver computer-code [--once] [--json] [--copy]
 
 Prints this computer's pairing code, the same code Connect a Computer shows (Settings > Remote,
 or Add a computer). Paste it into Connect a Computer on the other computer to connect it to this
@@ -45,6 +45,8 @@ itself after 10 minutes with no computer waiting, and after the first computer y
 
   --once   Print the code and exit (connect within a minute, or approve in the app)
   --json   Print the code as JSON and exit: { ok, computerName, code }
+  --copy   Also copy each code to the clipboard (over SSH, your terminal's clipboard when it
+           allows that), so you don't have to select the long text
 
 Run ghostex computer-code in your own terminal, not in a Ghostex session.";
 
@@ -72,7 +74,8 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         }));
         return Ok(());
     }
-    print_code(&code, true);
+    let copy = parsed.flags.truthy("copy");
+    print_code(&code, true, copy);
     if parsed.flags.truthy("once") {
         return Ok(());
     }
@@ -86,7 +89,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         // A used or lapsed code comes back as a new one.
         match read_code(&parsed.flags) {
             Ok(code) if code.text != shown_code => {
-                print_code(&code, false);
+                print_code(&code, false, copy);
                 shown_code = code.text;
             }
             Ok(_) => {}
@@ -189,7 +192,7 @@ fn read_code(flags: &super::args::Flags) -> CliResult<ComputerCode> {
     })
 }
 
-fn print_code(code: &ComputerCode, first: bool) {
+fn print_code(code: &ComputerCode, first: bool, copy: bool) {
     if first {
         println!(
             "{}'s code. Paste it into Connect a Computer on the other computer:\n",
@@ -199,6 +202,52 @@ fn print_code(code: &ComputerCode, first: bool) {
         println!("\nThe last code was used or lapsed. The new code:\n");
     }
     println!("{}\n", code.text);
+    if copy {
+        println!("{}\n", copy_to_clipboard(&code.text));
+    }
+}
+
+/// Puts `text` on the clipboard and says how it went: this computer's clipboard tool when it has
+/// one that works, else the terminal's own clipboard (OSC 52, which most terminals accept even over
+/// SSH, and which has no answer to wait for).
+fn copy_to_clipboard(text: &str) -> String {
+    let tools: &[(&str, &[&str])] = if cfg!(target_os = "macos") {
+        &[("pbcopy", &[])]
+    } else if cfg!(target_os = "windows") {
+        &[("clip", &[])]
+    } else {
+        &[
+            ("wl-copy", &[]),
+            ("xclip", &["-selection", "clipboard"]),
+            ("xsel", &["--clipboard", "--input"]),
+        ]
+    };
+    for (tool, args) in tools {
+        let Ok(mut child) = std::process::Command::new(tool)
+            .args(*args)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        else {
+            continue;
+        };
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(text.as_bytes());
+        }
+        if child.wait().is_ok_and(|status| status.success()) {
+            return "Copied to the clipboard.".to_string();
+        }
+    }
+    if std::io::stdout().is_terminal() {
+        use base64::Engine as _;
+        let encoded = base64::engine::general_purpose::STANDARD.encode(text);
+        print!("\x1b]52;c;{encoded}\x07");
+        let _ = std::io::stdout().flush();
+        return "Asked your terminal to copy it. If it didn't, select the code above instead."
+            .to_string();
+    }
+    "Could not copy it here. Select the code above instead.".to_string()
 }
 
 struct WaitingDevice {

@@ -5366,6 +5366,10 @@ sessions, so any client can control agents on any machine.
   type y (n turns it down). The command stops after the first computer you
   approve (run it again to connect another), after 10 minutes with nobody
   waiting, or when you press Ctrl+C, and B then finishes signing in as usual.
+  `--copy` also puts each code on the clipboard (on a server reached over SSH,
+  your terminal's clipboard, when your terminal allows that), so the long text
+  needn't be selected by hand. On B, the words screen tells you to click
+  Approve on A, or to type y in A's terminal when A has no screen.
   `--once` or `--json` only print the code and exit, so approve the new computer
   in the Ghostex app (or on a paired phone) within a minute instead. In a
   terminal that can't answer (no keyboard input), it says to approve in the app
