@@ -363,6 +363,20 @@ impl GhostexGpuiApp {
                 self.export_visual_page_to_file(url, cx);
                 return;
             }
+            VisualPageModalCommand::ContextMenu {
+                menu,
+                window: page_window,
+                position,
+            } => {
+                let app = cx.entity();
+                cx.defer(move |cx| {
+                    let _ = page_window.update(cx, |_, window, cx| {
+                        crate::app::workspace_reconcile::browser_page_gpui_context_menu(menu)
+                            .show_for_app(app, position, window, cx);
+                    });
+                });
+                return;
+            }
             VisualPageModalCommand::Notice {
                 level,
                 title,

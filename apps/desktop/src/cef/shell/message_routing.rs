@@ -106,7 +106,9 @@ pub type ProjectWorkareaBridgeEventHandler = StdRc<dyn Fn(ProjectWorkareaBridgeE
 
 /// Plain Rust shared with the native app, which names no CEF type; see
 /// `app/helpers/web_bridge_types.rs`.
-pub use crate::app::helpers::web_bridge_types::PageLoadEndHandler;
+pub use crate::app::helpers::web_bridge_types::{
+    BrowserPageContextMenu, BrowserPageContextMenuEntry, PageLoadEndHandler,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExtensionBridgeEvent {
@@ -157,6 +159,8 @@ pub enum BrowserPageMetadataEvent {
     TitleChanged(String),
     /// A page context-menu copy (link/image address, or the image itself).
     CopyToClipboard(gpui::ClipboardItem),
+    /// A right-click on the page, shown in Ghostex's own menu instead of CEF's.
+    ContextMenuRequested(BrowserPageContextMenu),
 }
 
 pub type BrowserPageMetadataHandler = StdRc<dyn Fn(BrowserPageMetadataEvent)>;

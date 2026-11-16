@@ -43,3 +43,24 @@ page data (no URL, title, or content), only the "this browser finished loading
 its main frame" edge.
 */
 pub type PageLoadEndHandler = Rc<dyn Fn()>;
+
+/// One row of a Browser page's right-click menu (`BrowserPageContextMenu`).
+pub enum BrowserPageContextMenuEntry {
+    Item {
+        /// CEF's command id for the row (`cef_menu_id_t`, or one of Ghostex's own ids).
+        command_id: i32,
+        label: String,
+        enabled: bool,
+    },
+    Separator,
+}
+
+/// A right-click on a Browser page, for Ghostex's own menu to show: the rows to offer, where the
+/// click landed in the page's view (logical pixels from its top-left corner), and what runs the
+/// chosen row's command on that page.
+pub struct BrowserPageContextMenu {
+    pub x: f32,
+    pub y: f32,
+    pub entries: Vec<BrowserPageContextMenuEntry>,
+    pub run: Rc<dyn Fn(i32)>,
+}

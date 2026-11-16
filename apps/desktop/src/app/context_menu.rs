@@ -3,6 +3,7 @@ use gpui_component::{
     Root, Side,
     menu::{PopupMenu, PopupMenuItem},
 };
+use std::rc::Rc;
 
 use crate::app::helpers::*;
 use crate::app::titlebar::popup_menu_builders::titlebar_popup_menu_with_scroll_behavior;
@@ -17,6 +18,9 @@ struct ContextMenuRow {
     /// Drawn in the destructive red and bold: an armed "Confirm delete" (see `destructive`).
     destructive: bool,
     action: Box<dyn gpui::Action>,
+    /// Runs instead of `action` when set: a row that acts on something an action cannot carry
+    /// (a Browser page's CEF menu, `menu_with_callback`).
+    callback: Option<Rc<dyn Fn(&mut Window, &mut App)>>,
 }
 
 impl ContextMenuRow {
@@ -28,6 +32,7 @@ impl ContextMenuRow {
             disabled: self.disabled,
             destructive: self.destructive,
             action: self.action.boxed_clone(),
+            callback: self.callback.clone(),
         }
     }
 }
@@ -119,6 +124,7 @@ impl GpuiContextMenu {
             disabled,
             destructive: false,
             action,
+            callback: None,
         }));
         self
     }
@@ -137,6 +143,27 @@ impl GpuiContextMenu {
             disabled,
             destructive: false,
             action,
+            callback: None,
+        }));
+        self
+    }
+
+    /// A row that runs `callback` in the window the menu opened from, for rows that act on
+    /// something an action cannot carry (a Browser page's CEF menu).
+    pub(crate) fn menu_with_callback(
+        mut self,
+        label: impl Into<SharedString>,
+        disabled: bool,
+        callback: impl Fn(&mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.entries.push(ContextMenuEntry::Row(ContextMenuRow {
+            label: label.into(),
+            icon: None,
+            checked: false,
+            disabled,
+            destructive: false,
+            action: Box::new(gpui::NoAction {}),
+            callback: Some(Rc::new(callback)),
         }));
         self
     }
@@ -166,6 +193,7 @@ impl GpuiContextMenu {
             disabled: false,
             destructive: false,
             action,
+            callback: None,
         }));
         self
     }
@@ -186,6 +214,7 @@ impl GpuiContextMenu {
             disabled,
             destructive: false,
             action,
+            callback: None,
         }));
         self
     }
@@ -213,6 +242,7 @@ impl GpuiContextMenu {
                         disabled: false,
                         destructive: false,
                         action,
+                        callback: None,
                     })
                 })
                 .collect(),
@@ -416,6 +446,7 @@ impl GpuiContextMenu {
                         disabled: false,
                         destructive: false,
                         action: Box::new(gpui::NoAction {}),
+                        callback: None,
                     },
                     window,
                     18.0,
@@ -499,6 +530,7 @@ impl GpuiContextMenu {
     /// longer contains the rest of the body.
     fn popup_menu_item(&self, row: &ContextMenuRow) -> PopupMenuItem {
         let action = row.action.boxed_clone();
+        let callback = row.callback.clone();
         let source_window = self.source_window;
         let source_focus = self.source_focus.clone();
         let app = self.app.clone();
@@ -513,6 +545,7 @@ impl GpuiContextMenu {
         .checked(row.checked)
         .on_click(move |_, _, cx| {
             let action = action.boxed_clone();
+            let callback = callback.clone();
             let source_focus = source_focus.clone();
             let app = app.clone();
             // PopupMenu dismisses after this callback; dispatch afterward so an action
@@ -521,6 +554,10 @@ impl GpuiContextMenu {
                 let Some(source_window) = source_window else {
                     return;
                 };
+                if let Some(callback) = callback {
+                    let _ = source_window.update(cx, |_, window, cx| callback(window, cx));
+                    return;
+                }
                 let _ = source_window.update(cx, |_, window, cx| {
                     // Only the window the app itself draws has the handle to fall back to.
                     let root_focus = app.and_then(|app| app.upgrade()).filter(|app| {

@@ -47,12 +47,16 @@ pub enum BrowserPageMetadataEvent {
     TitleChanged(String),
     /// A page context-menu copy (link/image address, or the image itself).
     CopyToClipboard(gpui::ClipboardItem),
+    /// A right-click on the page, shown in Ghostex's own menu instead of CEF's.
+    ContextMenuRequested(BrowserPageContextMenu),
 }
 
 pub type BrowserPageMetadataHandler = Rc<dyn Fn(BrowserPageMetadataEvent)>;
 
 /// Plain Rust shared with the native app; see `app/helpers/web_bridge_types.rs`.
-pub use crate::app::helpers::web_bridge_types::PageLoadEndHandler;
+pub use crate::app::helpers::web_bridge_types::{
+    BrowserPageContextMenu, BrowserPageContextMenuEntry, PageLoadEndHandler,
+};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct BrowserMediaAccessKinds {
@@ -248,6 +252,10 @@ impl CefBrowser {
     pub fn set_bounds(&self, _bounds: Bounds<Pixels>, _scale_factor: f32) {}
 
     pub fn set_visible(&self, _visible: bool) {}
+
+    pub fn view_origin(&self) -> Option<gpui::Point<Pixels>> {
+        None
+    }
 
     pub fn bounds_differ(&self, _bounds: Bounds<Pixels>, _scale_factor: f32) -> bool {
         false
