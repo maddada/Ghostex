@@ -73,6 +73,9 @@ pub(crate) fn read_zmx_session_tree(zmx_name: &str) -> Result<Option<SessionTree
     platform::read(zmx_name)
 }
 
+#[cfg(all(unix, not(target_os = "macos")))]
+pub(crate) use platform::process_tree_rows as linux_process_tree_rows;
+
 #[cfg(target_os = "macos")]
 mod platform {
     use super::*;
@@ -121,19 +124,7 @@ mod platform {
     }
 
     pub(super) fn read(zmx_name: &str) -> Result<Option<SessionTree>, ()> {
-        let mut stats = HashMap::new();
-        for entry in std::fs::read_dir("/proc").map_err(|_| ())?.flatten() {
-            let Some(pid) = entry
-                .file_name()
-                .to_str()
-                .and_then(|name| name.parse::<i64>().ok())
-            else {
-                continue;
-            };
-            if let Some(stat) = stat(pid) {
-                stats.insert(pid, stat);
-            }
-        }
+        let stats = all_stats().ok_or(())?;
         let Some(root) = stats
             .iter()
             .filter(|(_, stat)| stat.name == "zmx")
@@ -145,13 +136,63 @@ mod platform {
         else {
             return Ok(None);
         };
+        Ok(Some(SessionTree {
+            root,
+            processes: walk(&stats, &[root]),
+        }))
+    }
+
+    /// Every process at or below `root_pids`, roots included, as `ps -axo pid,ppid,tty,command`
+    /// rows, for the session identity scan (provider.rs).
+    ///
+    /// CDXC:SessionIdentity 2026-11-16 WHY:
+    /// Linux built the identity scan from `ps -axo pid=,ppid=,tty=,command=` over the whole
+    /// machine, capped at 1 MiB. With about 60 sessions open each daemon's startup script in its
+    /// command line passes the cap, so the scan failed, and with it the wait for the new login
+    /// after an account switch (GitHub #630). Only the session roots' trees are read now, from
+    /// `/proc`, the way macOS reads them (process_table_macos.rs).
+    pub(crate) fn process_tree_rows(root_pids: &[i64]) -> Vec<ProcessRow> {
+        let Some(stats) = all_stats() else {
+            return Vec::new();
+        };
+        walk(&stats, root_pids)
+            .into_iter()
+            .map(|process| {
+                ProcessRow::new(process.pid, process.ppid, process.terminal, process.command)
+            })
+            .collect()
+    }
+
+    fn all_stats() -> Option<HashMap<i64, Stat>> {
+        let mut stats = HashMap::new();
+        for entry in std::fs::read_dir("/proc").ok()?.flatten() {
+            let Some(pid) = entry
+                .file_name()
+                .to_str()
+                .and_then(|name| name.parse::<i64>().ok())
+            else {
+                continue;
+            };
+            if let Some(stat) = stat(pid) {
+                stats.insert(pid, stat);
+            }
+        }
+        Some(stats)
+    }
+
+    /// The processes at and below `roots`, argv read only for those.
+    fn walk(stats: &HashMap<i64, Stat>, roots: &[i64]) -> Vec<SessionProcess> {
         let mut children = HashMap::<i64, Vec<i64>>::new();
-        for (pid, stat) in &stats {
+        for (pid, stat) in stats {
             children.entry(stat.ppid).or_default().push(*pid);
         }
         let mut processes = Vec::new();
         let mut seen = HashSet::new();
-        let mut queue = VecDeque::from([root]);
+        let mut queue = roots
+            .iter()
+            .copied()
+            .filter(|pid| *pid > 0)
+            .collect::<VecDeque<_>>();
         while let Some(pid) = queue.pop_front() {
             if processes.len() >= MAX_TREE_PROCESSES || !seen.insert(pid) {
                 continue;
@@ -175,7 +216,7 @@ mod platform {
                 queue.extend(kids.iter().copied());
             }
         }
-        Ok(Some(SessionTree { root, processes }))
+        processes
     }
 
     /// `/proc/<pid>/stat`: the name in parentheses (it may hold spaces), then state(3) ppid(4)
