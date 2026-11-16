@@ -419,7 +419,7 @@ impl Render for GpuiTitlebarPopupWindow {
                 |this, action: &DismissGpuiTitlebarUpdateFailure, _window, cx| {
                     let (id, error) = (action.id.clone(), action.error.clone());
                     this.update_main_window(cx, move |app, _main_window, cx| {
-                        app.dismiss_update_failure(&id, &error, cx);
+                        app.dismiss_titlebar_update(&id, &error, cx);
                     });
                 },
             ))

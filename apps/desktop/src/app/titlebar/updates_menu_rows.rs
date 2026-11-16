@@ -251,7 +251,7 @@ pub(crate) fn updates_menu_item_row(item: &Value, menu_width: f32) -> AnyElement
                         })
                         .child(item_trailing(item)),
                 )
-                .when(failed, |this| {
+                .when(!updating, |this| {
                     let dismiss = DismissGpuiTitlebarUpdateFailure {
                         id: id.clone(),
                         error: error.clone(),
