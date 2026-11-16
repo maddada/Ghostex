@@ -815,10 +815,12 @@ pub fn local_gxserver_api_port() -> u16 {
         .and_then(|value| value.parse::<u16>().ok())
         .filter(|port| *port != 0)
         .or_else(|| ghostex_paths::portable::ports().map(|ports| ports.gxserver))
-        .unwrap_or(if cfg!(windows) {
-            58_746
-        } else {
-            GXSERVER_LOCAL_API_PORT
+        .unwrap_or_else(|| {
+            if cfg!(windows) {
+                ghostex_paths::windows_gxserver_port::current()
+            } else {
+                GXSERVER_LOCAL_API_PORT
+            }
         })
 }
 

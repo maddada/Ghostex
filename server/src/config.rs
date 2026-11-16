@@ -114,7 +114,7 @@ pub fn read_selected_local_api_port() -> Result<u16> {
             return Ok(ports.gxserver);
         }
         return Ok(if cfg!(windows) {
-            58_746
+            ghostex_paths::windows_gxserver_port::current()
         } else {
             GXSERVER_LOCAL_API_PORT
         });
@@ -128,6 +128,32 @@ pub fn read_selected_local_api_port() -> Result<u16> {
         ));
     }
     Ok(port)
+}
+
+/// Whether the local port is the one native Windows gxserver manages itself (no
+/// `GHOSTEX_GXSERVER_DEV_PORT`, not a portable copy): 58746, or the free port it moves to while
+/// Windows reserves 58746 (CDXC:ServerDaemon 2026-11-17 in packages/paths/src/windows_gxserver_port.rs).
+fn uses_windows_managed_port() -> bool {
+    cfg!(windows)
+        && env::var(GXSERVER_DEV_LOCAL_API_PORT_ENV)
+            .ok()
+            .is_none_or(|value| value.trim().is_empty())
+        && ghostex_paths::portable::ports().is_none()
+}
+
+/// Picks this start's port before anything reads it; `None` where the port is not managed.
+pub fn resolve_local_api_port_for_start() -> Option<ghostex_paths::windows_gxserver_port::StartPort>
+{
+    uses_windows_managed_port().then(ghostex_paths::windows_gxserver_port::resolve_for_start)
+}
+
+/// A `config.json` written while gxserver used one of its own Windows ports is not an override.
+fn is_windows_managed_port(value: &Value) -> bool {
+    uses_windows_managed_port()
+        && value
+            .as_u64()
+            .and_then(|port| u16::try_from(port).ok())
+            .is_some_and(ghostex_paths::windows_gxserver_port::is_own_port)
 }
 
 fn merge_gxserver_config(value: serde_json::Value) -> Result<GxserverConfig> {
@@ -192,7 +218,7 @@ fn validate_local_listener_config(value: &Value, defaults: &ListenerConfig) -> R
         }
     }
     if let Some(port) = local.get("port") {
-        if json_port_equals(port, defaults.port) != Some(true) {
+        if json_port_equals(port, defaults.port) != Some(true) && !is_windows_managed_port(port) {
             bail!(
                 "Local gxserver listener port is fixed at {}; remove listeners.local.port from config.json.",
                 defaults.port

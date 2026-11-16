@@ -62,6 +62,8 @@ pub async fn run_gxserver_foreground(
         .build_identity
         .unwrap_or_else(|| create_source_build_identity(&version));
     let paths = get_gxserver_paths(options.home_dir);
+    // Before anything reads the port: native Windows moves off a port Windows reserved (#639).
+    let start_port = crate::config::resolve_local_api_port_for_start();
 
     let existing_auth = read_gxserver_auth_token(&paths)?;
     if let Some(existing) = http_client::fetch_server_health(
@@ -185,6 +187,25 @@ pub async fn run_gxserver_foreground(
             duration_ms: None,
             error: None,
             details: Some(details),
+        });
+    }
+    if let Some(start_port) = start_port.filter(|start_port| start_port.reserved_default) {
+        let _ = logger.log(GxserverLogInput {
+            level: crate::logging::LogLevel::Warn,
+            event: "localPortReservedByWindows".to_string(),
+            server_id: None,
+            request_id: None,
+            client: None,
+            duration_ms: None,
+            error: Some(format!(
+                "Windows reserved port {}, so gxserver listens on {} instead.",
+                ghostex_paths::windows_gxserver_port::DEFAULT_PORT,
+                start_port.port
+            )),
+            details: Some(json!({
+                "defaultPort": ghostex_paths::windows_gxserver_port::DEFAULT_PORT,
+                "port": start_port.port,
+            })),
         });
     }
     crate::agent_skills_remote::spawn_startup_skill_refresh(paths.clone(), logger.clone());

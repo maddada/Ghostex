@@ -370,7 +370,10 @@ pub(crate) fn gpui_local_gxserver_api_port() -> u16 {
             if crate::windows_terminal_backend::current_preference()
                 == crate::windows_terminal_backend::WindowsTerminalBackendPreference::PowerShell
             {
-                return ghostex_paths::portable::ports().map_or(58_746, |ports| ports.gxserver);
+                return ghostex_paths::portable::ports()
+                    .map_or_else(ghostex_paths::windows_gxserver_port::current, |ports| {
+                        ports.gxserver
+                    });
             }
             GPUI_GXSERVER_LOCAL_API_PORT
         })
