@@ -113,12 +113,15 @@ impl GhostexGpuiApp {
                         .into_iter()
                         .filter_map(|agent| Some((agent.agent_id, agent.warning?)))
                         .collect();
+                    // The step's project row starts on the copy the form picked.
+                    let place = app.new_coordinator_picker_place(&group_id);
                     let step = NewThreadPickerCoordinatorStep {
-                        group_id,
+                        group_id: group_id.clone(),
                         name,
                         warnings,
                     };
-                    app.open_coordinator_agent_picker(step, rows, remote, cx);
+                    app.open_coordinator_agent_picker(step, rows, remote, place, cx);
+                    app.read_coordinator_picker_accounts(&group_id, cx);
                     return;
                 }
                 // The dialog stays open until gxserver answers the save.
@@ -406,15 +409,158 @@ impl GhostexGpuiApp {
             .unwrap_or_default()
     }
 
-    /// The agent picker's pick: creates the coordinator, or says why not in a notice (the dialog
-    /// is closed by now).
-    pub(crate) fn create_coordinator_from_pick(
+    /// The agent step's project row: the projects the New Thread picker offers, starting on the
+    /// project and computer `group_id` names (`None` when the list does not have it, which leaves
+    /// the row out).
+    fn new_coordinator_picker_place(&mut self, group_id: &str) -> Option<NewThreadPickerPlace> {
+        let project = ProjectKey::parse_sidebar_group_id(group_id)?;
+        let repo_key = self.gx_store_repo_key_of(&project.machine, &project.project_id)?;
+        let machine_id = project
+            .machine
+            .remote_id()
+            .unwrap_or(LOCAL_MACHINE_ID)
+            .to_string();
+        self.gx_store.unified_sidebar.picker_start =
+            Some(ghostex_gx_core::unified_sidebar::UnifiedNewSessionTarget {
+                repo_key,
+                machine_id,
+                project_id: project.project_id,
+            });
+        self.gx_store_new_thread_picker_place()
+    }
+
+    /// The agent step's project row moved to `target`: that computer's agents with their
+    /// warnings (another computer's once its models are read), and its accounts.
+    pub(crate) fn follow_coordinator_picker_place(
         &mut self,
-        step: NewThreadPickerCoordinatorStep,
-        agent_id: String,
-        account_id: Option<String>,
+        target: NewThreadPickerTarget,
         cx: &mut gpui::Context<Self>,
     ) {
+        let group_id = crate::app::gx_store::unified_new_session::group_id_of(
+            &target.machine_id,
+            &target.project_id,
+        );
+        let (rows, remote) = self.new_coordinator_launchers(&group_id);
+        let agents = self.coordinator_picker_agents(&rows, remote);
+        let warnings_of = |agents: Vec<NewCoordinatorAgent>| -> BTreeMap<String, String> {
+            agents
+                .into_iter()
+                .filter_map(|agent| Some((agent.agent_id, agent.warning?)))
+                .collect()
+        };
+        let warnings = if remote {
+            BTreeMap::new()
+        } else {
+            warnings_of(self.gx_store_coordinator_agents())
+        };
+        self.update_coordinator_picker(cx, |picker, window, cx| {
+            picker.set_coordinator_agents(agents, warnings, window, cx)
+        });
+        self.read_coordinator_picker_accounts(&group_id, cx);
+        if !remote {
+            return;
+        }
+        // Another computer's warnings come from its own models, read through its connection.
+        let machine_id = target.machine_id.clone();
+        let read = self.gpui_remote_model_catalog(&machine_id, cx);
+        cx.spawn(async move |this, cx| {
+            let catalog = match read.await {
+                RemoteModelCatalog::Served(catalog) => Some(catalog),
+                RemoteModelCatalog::NoneServed => None,
+                RemoteModelCatalog::Unreachable => return,
+            };
+            let _ = this.update(cx, |app, cx| {
+                let warnings = app
+                    .gx_store_remote_coordinator_agents(&machine_id, catalog.as_ref())
+                    .map(warnings_of)
+                    .unwrap_or_default();
+                app.update_coordinator_picker(cx, |picker, _window, cx| {
+                    if picker.coordinator_target().as_ref() == Some(&target) {
+                        picker.set_coordinator_warnings(warnings, cx);
+                    }
+                });
+            });
+        })
+        .detach();
+    }
+
+    /// Reads the accounts of the computer `group_id` names for the agent step's Tab lists, with
+    /// the Default mark a session started in that project would use; dropped when the step has
+    /// moved elsewhere since.
+    pub(crate) fn read_coordinator_picker_accounts(
+        &self,
+        group_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some((remote, project_id)) = self.new_coordinator_playbook_target(group_id) else {
+            self.update_coordinator_picker(cx, |picker, _window, cx| {
+                picker.set_accounts(Err("That computer isn't connected.".to_string()), cx)
+            });
+            return;
+        };
+        let machine_id = machine_id_of(group_id);
+        cx.spawn(async move |this, cx| {
+            let read = crate::app::gx_store::gx_rpc(
+                remote,
+                "/api/agentAccounts",
+                serde_json::json!({ "operation": "list", "projectId": project_id }),
+            )
+            .await;
+            let _ = this.update(cx, |app, cx| {
+                let accounts = read
+                    .as_ref()
+                    .map(Self::coordinator_picker_accounts)
+                    .map_err(|error| error.message.clone());
+                app.update_coordinator_picker(cx, |picker, _window, cx| {
+                    // A step without a project row stays on the copy it opened with.
+                    let here = picker.coordinator_target().is_none_or(|target| {
+                        target.machine_id == machine_id && target.project_id == project_id
+                    });
+                    if here {
+                        picker.set_accounts(accounts, cx);
+                    }
+                });
+            });
+        })
+        .detach();
+    }
+
+    /// The coordinator step's Try again on its accounts: read again from the computer it is on.
+    /// `false` when the picker is not the coordinator step.
+    pub(crate) fn retry_coordinator_picker_accounts(&self, cx: &mut gpui::Context<Self>) -> bool {
+        let Some(group_id) =
+            self.update_coordinator_picker(cx, |picker, _window, _cx| {
+                match picker.coordinator_target() {
+                    Some(target) => crate::app::gx_store::unified_new_session::group_id_of(
+                        &target.machine_id,
+                        &target.project_id,
+                    ),
+                    None => picker.coordinator_group_id().to_string(),
+                }
+            })
+        else {
+            return false;
+        };
+        self.read_coordinator_picker_accounts(&group_id, cx);
+        true
+    }
+
+    /// The agent picker's pick: creates the coordinator in the project and computer its project
+    /// row names, or says why not in a notice (the dialog is closed by now).
+    pub(crate) fn create_coordinator_from_pick(
+        &mut self,
+        mut step: NewThreadPickerCoordinatorStep,
+        agent_id: String,
+        account_id: Option<String>,
+        target: Option<NewThreadPickerTarget>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if let Some(target) = target {
+            step.group_id = crate::app::gx_store::unified_new_session::group_id_of(
+                &target.machine_id,
+                &target.project_id,
+            );
+        }
         self.gx_store_create_coordinator(
             &step.group_id,
             &agent_id,

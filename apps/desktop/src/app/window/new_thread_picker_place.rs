@@ -423,7 +423,7 @@ impl GpuiNewThreadPickerWindow {
     }
 
     /// The frame's height while the project list is open: its rows up to the visible maximum and
-    /// its headings, under the top row and the search field.
+    /// its headings, under the top row and the search field (and the coordinator step's title).
     pub(super) fn project_list_height(&self) -> f32 {
         let rows = self.project_rows();
         let headings = if self.project_sections(&rows) {
@@ -431,7 +431,13 @@ impl GpuiNewThreadPickerWindow {
         } else {
             0.0
         };
+        let title = if self.coordinator.is_some() {
+            COORDINATOR_TITLE_HEIGHT
+        } else {
+            0.0
+        };
         PROJECT_LIST_CHROME_HEIGHT
+            + title
             + NEW_THREAD_PICKER_PLACE_HEIGHT
             + rows.len().clamp(1, NEW_THREAD_PICKER_MAX_AGENT_ROWS) as f32 * PROJECT_ROW_HEIGHT
             + headings * SECTION_HEIGHT
@@ -597,6 +603,7 @@ impl GpuiNewThreadPickerWindow {
         place.project = index;
         place.machine = machine;
         let was_in_box = self.run_on.in_box();
+        let was_target = self.launch_target();
         if !same_project {
             self.apply_place_machines(machine);
         }
@@ -606,6 +613,14 @@ impl GpuiNewThreadPickerWindow {
             self.run_location_changed(window, cx);
         }
         self.reveal_selected_run_location();
+        // The coordinator step lists the agents and accounts of the computer it now starts on.
+        if self.coordinator.is_some()
+            && let Some(target) = self
+                .launch_target()
+                .filter(|target| Some(target) != was_target.as_ref())
+        {
+            (self.host)(NewThreadPickerCommand::CoordinatorPlace { target }, cx);
+        }
     }
 
     /// `In [P] project [logo] ⌘N ⌄`: the project the thread starts in and the logo of the place it
