@@ -192,14 +192,13 @@ fn coordinator_playbook_note(
     let playbook = crate::coordinators::playbook_update_note(&db, &repository, &key)
         .ok()
         .flatten();
-    let drift = repository
-        .get_session(project_id, session_id)
-        .ok()
-        .flatten()
-        .and_then(|session| {
-            crate::coordinators::coordinator_drift_delivery(&db, &state.paths, &key, &session)
-        });
-    let open_questions = open_questions_note(state, &db, &key, text);
+    let session = repository.get_session(project_id, session_id).ok().flatten();
+    let drift = session.as_ref().and_then(|session| {
+        crate::coordinators::coordinator_drift_delivery(&db, &state.paths, &key, session)
+    });
+    let open_questions = session
+        .as_ref()
+        .and_then(|session| open_questions_note(state, &db, &key, session, text));
     (playbook.is_some() || drift.is_some() || open_questions.is_some()).then_some(
         CoordinatorNotes {
             playbook,
@@ -220,10 +219,19 @@ fn coordinator_playbook_note(
 /// normal chat box left its ask under Needs you because the coordinator did not connect the message
 /// to it. The words of the note and how the chat hides it are gx-chat-core's
 /// (`session::appended_notes::open_questions_note`).
+///
+/// CDXC:Coordinators 2026-11-16 DECISION:
+/// User, of two messages in a row carrying the same list: "we already told the agent about this
+/// no need to spam him like this". The note goes only when the list differs from the last one the
+/// agent was sent (`OPEN_QUESTIONS_SENT`, recorded on delivery): a question added or one closed.
+/// And of "Which of these is what you meant?" (Q985), a form from weeks before that the dock no
+/// longer showed: a form or page put off For later, removed, or asked more than
+/// `OPEN_QUESTIONS_MAX_AGE` ago is not listed; a work item's ask always is, as the dock shows it.
 fn open_questions_note(
     state: &AppState,
     db: &rusqlite::Connection,
     key: &(String, String),
+    session: &Value,
     text: &str,
 ) -> Option<String> {
     if text
@@ -260,9 +268,17 @@ fn open_questions_note(
         }
     }
     use ghostex_gx_chat_core::transcript::open_questions::AskerKind;
+    let put_off: Vec<String> = crate::session_chat_open_questions::later_ids(session)
+        .into_iter()
+        .chain(crate::session_chat_open_questions::removed_ids(session))
+        .collect();
+    let oldest = chrono::Utc::now().timestamp_millis() - OPEN_QUESTIONS_MAX_AGE_MS;
     for asker in crate::session_chat_open_questions::open_askers(state, &key.0, &key.1) {
         let tags = asker.waiting_tags();
-        if tags.is_empty() {
+        if tags.is_empty()
+            || put_off.contains(&asker.id)
+            || asker.asked_at().is_some_and(|at| at < oldest)
+        {
             continue;
         }
         let title = match (&asker.kind, &asker.form) {
@@ -282,7 +298,44 @@ fn open_questions_note(
             ghostex_gx_chat_core::transcript::open_questions::tag_range(&tags),
         ));
     }
-    ghostex_gx_chat_core::session::appended_notes::open_questions_note(&open)
+    let note = ghostex_gx_chat_core::session::appended_notes::open_questions_note(&open);
+    let sent = read_open_questions_sent(db, key);
+    if note.is_none() && sent.is_some() {
+        // Nothing open now: the next list, whatever it is, is news again.
+        write_open_questions_sent(db, key, None);
+    }
+    note.filter(|note| sent.as_deref() != Some(note.as_str()))
+}
+
+/// A form or page asked longer ago than this is not listed in the open questions note.
+const OPEN_QUESTIONS_MAX_AGE_MS: i64 = 3 * 24 * 60 * 60 * 1000;
+
+/// The last open questions note a coordinator was sent, by session, in gxserver's `metadata`.
+const OPEN_QUESTIONS_SENT: &str = "coordinatorOpenQuestionsSent";
+
+fn open_questions_sent_key(key: &(String, String)) -> String {
+    format!("{OPEN_QUESTIONS_SENT}:{}:{}", key.0, key.1)
+}
+
+fn read_open_questions_sent(db: &rusqlite::Connection, key: &(String, String)) -> Option<String> {
+    db.query_row(
+        "SELECT value FROM metadata WHERE key = ?1",
+        [open_questions_sent_key(key)],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+}
+
+fn write_open_questions_sent(db: &rusqlite::Connection, key: &(String, String), note: Option<&str>) {
+    let metadata_key = open_questions_sent_key(key);
+    let _ = match note {
+        Some(note) => db.execute(
+            "INSERT INTO metadata (key, value, updatedAt) VALUES (?1, ?2, ?3) \
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt",
+            rusqlite::params![metadata_key, note, chrono::Utc::now().to_rfc3339()],
+        ),
+        None => db.execute("DELETE FROM metadata WHERE key = ?1", [metadata_key]),
+    };
 }
 
 fn record_coordinator_playbook_note(
@@ -302,6 +355,9 @@ fn record_coordinator_playbook_note(
         if let Some(drift) = &notes.drift {
             crate::coordinators::record_coordinator_drift(&db, &key, drift);
         }
+        if let Some(note) = &notes.open_questions {
+            write_open_questions_sent(&db, &key, Some(note));
+        }
     }
 }
 
@@ -309,9 +365,10 @@ fn with_playbook_note(text: &str, notes: Option<&CoordinatorNotes>) -> String {
     let Some(notes) = notes else {
         return text.to_string();
     };
-    // The chat core reads the recorded turn without them again, so the user's echo still matches.
-    let mut noted = text.to_string();
-    for note in notes
+    // One marked `<ghostex-system>` block after the user's words, never mixed into them; the chat
+    // core reads the recorded turn without it, so the user's echo still matches and no chat draws
+    // it (CDXC:Coordinators 2026-11-16 DECISION on `with_system_notes`).
+    let all: Vec<&str> = notes
         .playbook
         .iter()
         .map(|(note, _)| note.as_str())
@@ -322,10 +379,8 @@ fn with_playbook_note(text: &str, notes: Option<&CoordinatorNotes>) -> String {
                 .flat_map(|drift| drift.notes.iter().map(String::as_str)),
         )
         .chain(notes.open_questions.as_deref())
-    {
-        noted = ghostex_gx_chat_core::session::appended_notes::with_note(&noted, note);
-    }
-    noted
+        .collect();
+    ghostex_gx_chat_core::session::appended_notes::with_system_notes(text, &all)
 }
 
 /// One lock per session, held by a chat message send from its screen read to its last retype.

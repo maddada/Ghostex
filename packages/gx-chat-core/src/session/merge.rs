@@ -28,9 +28,22 @@ fn shown(raw: &ChatRow) -> ChatRow {
         .unwrap_or_else(|| Arc::clone(raw))
 }
 
-/// Rows from the wire, each held once from here on ([`ChatRow`]).
+/// Rows from the wire, each held once from here on ([`ChatRow`]), as the list keeps them: a user
+/// row without the notes gxserver added for the agent ([`shown_row`]).
 pub fn rows_of(messages: &[ChatMessage]) -> Vec<ChatRow> {
-    messages.iter().cloned().map(Arc::new).collect()
+    messages.iter().map(shown_row).collect()
+}
+
+/// One row from the wire as every reader of the chat sees it: a user row without the notes added
+/// under it for the agent (`session/appended_notes.rs`).
+///
+/// CDXC:Coordinators 2026-11-16 WHY:
+/// The notes showed in the user's bubble on a coordinator chat (issue #627's open questions note,
+/// "Reminder: …", the playbook note) although the appended rows dropped them: a transcript read
+/// that replaced the list (opening the chat, a resync, `session/apply.rs`) and the fold's frames
+/// took the wire's rows as they came. Every row from the wire now passes here.
+pub fn shown_row(message: &ChatMessage) -> ChatRow {
+    Arc::new(shown_message(message).unwrap_or_else(|| message.clone()))
 }
 
 /// Points each of `rows` that is equal to the list's row of the same id at the list's row, so the
