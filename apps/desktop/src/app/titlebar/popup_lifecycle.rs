@@ -143,6 +143,9 @@ impl GhostexGpuiApp {
             is_resizable: false,
             is_minimizable: false,
             titlebar: None,
+            // Without the app's class Omarchy's Hyprland lets clicks raise the main window over it
+            // (CDXC:PlatformSupport 2026-11-17 on `gpui_platform_window_app_id`).
+            app_id: crate::gpui_platform_window_app_id(),
             // Under window glass the dropdown blurs what is behind it, rounded to its 8px panel.
             // A popover that fits itself opens without its glass and turns it on as it fades in,
             // once it has fitted itself to its content (`reveal_titlebar_popup`).

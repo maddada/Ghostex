@@ -104,6 +104,7 @@ impl GhostexGpuiApp {
             is_resizable: false,
             is_minimizable: false,
             titlebar: None,
+            app_id: crate::gpui_platform_window_app_id(),
             window_background: if window_glass_active() {
                 WindowBackgroundAppearance::Blurred
             } else {
