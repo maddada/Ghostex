@@ -22,6 +22,7 @@
 //!
 //! SEE-ALSO: packages/gx-core/src/hud/, apps/desktop/src/app/gx_store/runtime_facts.rs.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use ghostex_gx_core::hud::{HudSources, compose_sidebar_hud};
@@ -43,6 +44,45 @@ pub(crate) struct HudHost {
     /// The Global Actions payload last handed to the tab strip.
     posted_global_actions: Option<String>,
     pub(crate) counters: HudCounters,
+    /// This computer's HUD read, its recent projects read and each remote machine's HUD read: at
+    /// most one of each in flight (`HudRead`).
+    local_read: HudRead,
+    recent_read: HudRead,
+    remote_reads: HashMap<String, HudRead>,
+}
+
+/// CDXC:Sidebar 2026-11-16 WHY: every gxserver restart was followed, a few seconds later, by
+/// hundreds of "gxserver is not reachable" in the same millisecond (gpui-host-lifecycle.log,
+/// 2026-11-16, 456 to 580 per restart, none on a launch with gxserver already up). gxserver's first
+/// work-mode pass after a start re-publishes every project (its record of what it published starts
+/// empty, server/src/server/work_mode_sync.rs), 498 of them on that computer, 468 parked, and each
+/// project delta started its own `/api/readSidebarHud`, plus `/api/listRecentProjects` for a parked
+/// one: close to a thousand calls at once, each on its own thread and socket, which ran the app out
+/// of open files. Every read answers with the whole HUD or the whole list, so one in flight is
+/// enough: a request while one runs only asks for one more read after it, which still sees every
+/// change that came before it.
+#[derive(Default)]
+struct HudRead {
+    in_flight: bool,
+    again: bool,
+}
+
+impl HudRead {
+    /// Whether to start a read now; otherwise one more is owed when the running one ends.
+    fn begin(&mut self) -> bool {
+        if self.in_flight {
+            self.again = true;
+            return false;
+        }
+        self.in_flight = true;
+        true
+    }
+
+    /// The read ended: whether the one owed meanwhile should start now.
+    fn finish(&mut self) -> bool {
+        self.in_flight = false;
+        std::mem::take(&mut self.again)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -104,6 +144,9 @@ impl GhostexGpuiApp {
     }
 
     fn gx_store_read_local_sidebar_hud(&mut self, cx: &mut gpui::Context<Self>) {
+        if !self.gx_store.hud.local_read.begin() {
+            return;
+        }
         self.gx_store.hud.counters.local_reads += 1;
         let active_project_id = self
             .gx_store
@@ -115,12 +158,17 @@ impl GhostexGpuiApp {
             .map(|project| project.project_id.clone());
         cx.spawn(async move |this, cx| {
             let hud = read_local_sidebar_hud(active_project_id).await;
-            let _ = this.update(cx, |this, cx| match hud {
-                // A failed read keeps the previous HUD (`CDXC:AgentLauncher 2026-06-24-20:34`).
-                None => this.gx_store.hud.counters.failed_reads += 1,
-                Some(hud) => {
-                    this.gx_store.hud.sources.sidebar_hud = Some(hud);
-                    this.gx_store_hud_sources_changed(cx);
+            let _ = this.update(cx, |this, cx| {
+                match hud {
+                    // A failed read keeps the previous HUD (`CDXC:AgentLauncher 2026-06-24-20:34`).
+                    None => this.gx_store.hud.counters.failed_reads += 1,
+                    Some(hud) => {
+                        this.gx_store.hud.sources.sidebar_hud = Some(hud);
+                        this.gx_store_hud_sources_changed(cx);
+                    }
+                }
+                if this.gx_store.hud.local_read.finish() {
+                    this.gx_store_read_local_sidebar_hud(cx);
                 }
             });
         })
@@ -128,14 +176,22 @@ impl GhostexGpuiApp {
     }
 
     fn gx_store_read_recent_projects(&mut self, cx: &mut gpui::Context<Self>) {
+        if !self.gx_store.hud.recent_read.begin() {
+            return;
+        }
         self.gx_store.hud.counters.recent_reads += 1;
         cx.spawn(async move |this, cx| {
             let rows = read_recent_projects().await;
-            let _ = this.update(cx, |this, cx| match rows {
-                None => this.gx_store.hud.counters.failed_reads += 1,
-                Some(rows) => {
-                    this.gx_store.hud.sources.recent_projects = rows;
-                    this.gx_store_hud_sources_changed(cx);
+            let _ = this.update(cx, |this, cx| {
+                match rows {
+                    None => this.gx_store.hud.counters.failed_reads += 1,
+                    Some(rows) => {
+                        this.gx_store.hud.sources.recent_projects = rows;
+                        this.gx_store_hud_sources_changed(cx);
+                    }
+                }
+                if this.gx_store.hud.recent_read.finish() {
+                    this.gx_store_read_recent_projects(cx);
                 }
             });
         })
@@ -151,19 +207,40 @@ impl GhostexGpuiApp {
         else {
             return;
         };
+        if !self
+            .gx_store
+            .hud
+            .remote_reads
+            .entry(machine_id.to_string())
+            .or_default()
+            .begin()
+        {
+            return;
+        }
         self.gx_store.hud.counters.remote_reads += 1;
         let machine_id = machine_id.to_string();
         cx.spawn(async move |this, cx| {
             let hud = read_remote_sidebar_hud(target).await;
-            let _ = this.update(cx, |this, cx| match hud {
-                None => this.gx_store.hud.counters.failed_reads += 1,
-                Some(hud) => {
-                    this.gx_store
-                        .hud
-                        .sources
-                        .remote_sidebar_huds
-                        .insert(machine_id, hud);
-                    this.gx_store_hud_sources_changed(cx);
+            let _ = this.update(cx, |this, cx| {
+                match hud {
+                    None => this.gx_store.hud.counters.failed_reads += 1,
+                    Some(hud) => {
+                        this.gx_store
+                            .hud
+                            .sources
+                            .remote_sidebar_huds
+                            .insert(machine_id.clone(), hud);
+                        this.gx_store_hud_sources_changed(cx);
+                    }
+                }
+                let again = this
+                    .gx_store
+                    .hud
+                    .remote_reads
+                    .remove(&machine_id)
+                    .is_some_and(|mut read| read.finish());
+                if again {
+                    this.gx_store_read_remote_sidebar_hud(&machine_id, cx);
                 }
             });
         })
