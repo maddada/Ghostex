@@ -40,8 +40,24 @@ pub(crate) fn gxserver_post_typed_operation(
     params: &serde_json::Value,
     timeout: Duration,
 ) -> Result<(u16, String), String> {
-    let answer =
-        gxserver_post_typed_operation_across_restart(path, params, timeout, Duration::ZERO);
+    gxserver_post_typed_operation_waiting_out_restart(path, params, timeout, Duration::ZERO)
+}
+
+/// How long a call made off the main thread rides out a gxserver that is not up yet: the app
+/// opening before gxserver (a rebuild restarts it and opens the app in the same seconds), or a
+/// restart while the app runs. The chat's calls use the same 20 s (`native_chat/rpc.rs`).
+pub(crate) const GXSERVER_BACKGROUND_RESTART_WAIT: Duration = Duration::from_secs(20);
+
+/// [`gxserver_post_typed_operation`] that waits up to `restart_wait` for gxserver to come up
+/// (`gxserver_post_typed_operation_across_restart`), keeping the approval step. Only for callers
+/// off the main thread.
+pub(crate) fn gxserver_post_typed_operation_waiting_out_restart(
+    path: &str,
+    params: &serde_json::Value,
+    timeout: Duration,
+    restart_wait: Duration,
+) -> Result<(u16, String), String> {
+    let answer = gxserver_post_typed_operation_across_restart(path, params, timeout, restart_wait);
     let Ok((status, body)) = &answer else {
         return answer;
     };
@@ -51,12 +67,7 @@ pub(crate) fn gxserver_post_typed_operation(
     if let Some(params) = crate::app::owner_security::approve_own_call(&transport, *status, body)
         .and_then(|approval_id| crate::app::owner_security::with_approval_id(params, &approval_id))
     {
-        return gxserver_post_typed_operation_across_restart(
-            path,
-            &params,
-            timeout,
-            Duration::ZERO,
-        );
+        return gxserver_post_typed_operation_across_restart(path, &params, timeout, restart_wait);
     }
     answer
 }
@@ -326,8 +337,22 @@ fn gxserver_read_failure_message(
     }
 }
 
+/// CDXC:ServerDaemon 2026-11-16 WHY: every launch logged hundreds of "gxserver is not reachable"
+/// in one millisecond two or three seconds after the sidebar went live, with gxserver up and
+/// answering (gpui-host-lifecycle.log, 2026-11-16, each launch from 09:48 to 15:14). A burst of
+/// calls at once fills gxserver's listen queue, which macOS caps at `kern.ipc.somaxconn` (128), and
+/// macOS turns each connect past it away at once with a reset (measured on a listener that did not
+/// accept: 17 connects taken, the next 23 reset in under a millisecond); running out of open files
+/// or local ports fails a connect the same instant. None of these reached gxserver, so the connect
+/// is tried again for a moment, at a spread of times so the retries do not crowd it again, even for
+/// a caller that does not wait out a restart.
+const GXSERVER_CROWDED_CONNECT_WAIT: Duration = Duration::from_secs(2);
+
 fn connect_local_gxserver(address: &str, restart_wait: Duration) -> Result<TcpStream, String> {
-    let deadline = Instant::now() + restart_wait;
+    let started = Instant::now();
+    let deadline = started + restart_wait;
+    let crowded_deadline = started + restart_wait.max(GXSERVER_CROWDED_CONNECT_WAIT);
+    let mut crowded_attempts = 0_u32;
     loop {
         match TcpStream::connect(address) {
             Ok(stream) => return Ok(stream),
@@ -336,9 +361,41 @@ fn connect_local_gxserver(address: &str, restart_wait: Duration) -> Result<TcpSt
             {
                 std::thread::sleep(Duration::from_millis(100));
             }
+            Err(error)
+                if gxserver_connect_was_crowded_out(&error)
+                    && Instant::now() < crowded_deadline =>
+            {
+                crowded_attempts += 1;
+                std::thread::sleep(gxserver_crowded_connect_delay(crowded_attempts));
+            }
             Err(_) => return Err(format!("gxserver is not reachable on {address}.")),
         }
     }
+}
+
+/// A connect turned away before it reached gxserver: its listen queue was full (a reset), or this
+/// app had no file or local port left for it.
+fn gxserver_connect_was_crowded_out(error: &std::io::Error) -> bool {
+    if matches!(
+        error.kind(),
+        ErrorKind::ConnectionReset | ErrorKind::AddrNotAvailable
+    ) {
+        return true;
+    }
+    #[cfg(unix)]
+    if matches!(error.raw_os_error(), Some(libc::EMFILE | libc::ENFILE)) {
+        return true;
+    }
+    false
+}
+
+/// 20 to 120 ms on the first retry, growing to 250 ms, with a spread taken from the clock so the
+/// calls of one burst come back at different moments.
+fn gxserver_crowded_connect_delay(attempt: u32) -> Duration {
+    let spread = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| u64::from(elapsed.subsec_nanos() / 1_000) % 100);
+    Duration::from_millis((20 * u64::from(attempt.min(7)) + spread).min(250))
 }
 
 pub(crate) fn gxserver_get_typed_operation(

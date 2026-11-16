@@ -184,8 +184,35 @@ pub(crate) use crate::app::core::*;
 // The per-view scope keys are read from workarea.rs and the titlebar modules.
 pub(crate) use crate::app::view_scopes::*;
 
+/// CDXC:ServerDaemon 2026-11-16 WHY: macOS opens the app with a soft limit of 256 open files, and
+/// the app holds about 200 of them once its windows, CEF and terminals are up. Every launch logged
+/// hundreds of "gxserver is not reachable" in one millisecond with gxserver up and answering
+/// (gpui-host-lifecycle.log, 2026-11-16): the sidebar's burst of calls ran out of files, and each
+/// connect that found none was reported as gxserver gone. A check firing 442 calls at once at a test
+/// gxserver at that limit lost 189 of them with "Too many open files". The soft limit is raised to
+/// the hard limit, at most 8,192, as gxserver does for itself (`raise_open_file_limit` in
+/// server/src/main.rs).
+#[cfg(unix)]
+fn raise_open_file_limit() {
+    const WANTED: libc::rlim_t = 8192;
+    let mut limit = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    // SAFETY: getrlimit and setrlimit only read and write `limit`.
+    unsafe {
+        if libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) != 0 || limit.rlim_cur >= WANTED {
+            return;
+        }
+        limit.rlim_cur = WANTED.min(limit.rlim_max);
+        let _ = libc::setrlimit(libc::RLIMIT_NOFILE, &limit);
+    }
+}
+
 fn main() {
     support_logs::note_launch();
+    #[cfg(unix)]
+    raise_open_file_limit();
     #[cfg(windows)]
     if gpui_run_windows_remote_ssh_askpass() {
         return;

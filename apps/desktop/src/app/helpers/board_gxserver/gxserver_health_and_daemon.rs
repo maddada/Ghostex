@@ -54,12 +54,38 @@ pub(crate) fn gpui_gxserver_rpc_result(
     params: &serde_json::Value,
     timeout: Duration,
 ) -> Result<serde_json::Value, String> {
+    gpui_gxserver_rpc_result_after(endpoint, params, timeout, Duration::ZERO)
+}
+
+/// [`gpui_gxserver_rpc_result`] for a caller off the main thread: it waits for a gxserver that is
+/// not up yet (starting, or restarting) within `timeout`, at most
+/// [`GXSERVER_BACKGROUND_RESTART_WAIT`], before the error.
+pub(crate) fn gpui_gxserver_rpc_result_waiting_out_restart(
+    endpoint: &str,
+    params: &serde_json::Value,
+    timeout: Duration,
+) -> Result<serde_json::Value, String> {
+    gpui_gxserver_rpc_result_after(
+        endpoint,
+        params,
+        timeout,
+        timeout.min(GXSERVER_BACKGROUND_RESTART_WAIT),
+    )
+}
+
+fn gpui_gxserver_rpc_result_after(
+    endpoint: &str,
+    params: &serde_json::Value,
+    timeout: Duration,
+    restart_wait: Duration,
+) -> Result<serde_json::Value, String> {
     /*
     CDXC:StatusPet 2026-06-24-11:48:
     Settings status/actions share the typed-operation transport and may expose only the validated gxserver `result` object to the modal host. Transport, status, envelope, and parse failures stay as local errors so callers can clear loading with explicit empty status payloads without logging private daemon data.
     */
-    let (status_code, body) = gxserver_post_typed_operation(endpoint, params, timeout)
-        .map_err(|message| gxserver_error_for_people(endpoint, message))?;
+    let (status_code, body) =
+        gxserver_post_typed_operation_waiting_out_restart(endpoint, params, timeout, restart_wait)
+            .map_err(|message| gxserver_error_for_people(endpoint, message))?;
     if !(200..300).contains(&status_code) {
         return Err(gpui_gxserver_rpc_error_message(status_code, &body));
     }

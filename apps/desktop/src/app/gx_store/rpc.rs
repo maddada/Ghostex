@@ -25,7 +25,8 @@ use serde_json::Value;
 
 use super::rpc_types::GxRpcError;
 use crate::app::helpers::{
-    gpui_remote_gxserver_post_typed_operation, gxserver_post_typed_operation,
+    GXSERVER_BACKGROUND_RESTART_WAIT, gpui_remote_gxserver_post_typed_operation,
+    gxserver_post_typed_operation_waiting_out_restart,
 };
 use crate::app::model::GpuiRemoteGxserverRequestTarget;
 
@@ -62,7 +63,16 @@ pub(crate) async fn gx_rpc_with_timeout(
                     &params,
                     timeout,
                 ),
-                None => gxserver_post_typed_operation(&owned_path, &params, timeout),
+                // CDXC:ServerDaemon 2026-11-16 WHY: the app draws its saved sidebar and starts
+                // its calls before gxserver is up after a rebuild (the warm start), and a closed
+                // port failed each of them at once although gxserver answered seconds later. This
+                // call has a thread of its own, so it waits for gxserver within its own limit.
+                None => gxserver_post_typed_operation_waiting_out_restart(
+                    &owned_path,
+                    &params,
+                    timeout,
+                    timeout.min(GXSERVER_BACKGROUND_RESTART_WAIT),
+                ),
             };
             let result = match response {
                 Ok((status, body)) => match serde_json::from_str::<Value>(&body) {
@@ -102,7 +112,8 @@ pub(crate) async fn gx_rpc_with_timeout(
 /// pushes) predate `gx_rpc` and blocked a background thread on the helper inline, which a page
 /// cannot do. Moving that one expression behind this name lets the GPUI web build compile the
 /// same files with a `fetch` twin of the same signature (`apps/gpui-web/src/app/gx_store/rpc.rs`)
-/// while the desktop keeps the call, the error strings and the timeout it had.
+/// while the desktop keeps the call, the error strings and the timeout it had. It runs off the main
+/// thread, so it also waits out a gxserver that is not up yet within that timeout.
 pub(crate) fn gxserver_rpc_result_task(
     background: &gpui::BackgroundExecutor,
     path: &str,
@@ -111,7 +122,7 @@ pub(crate) fn gxserver_rpc_result_task(
 ) -> gpui::Task<Result<Value, String>> {
     let path = path.to_string();
     background.spawn(async move {
-        crate::app::helpers::gpui_gxserver_rpc_result(&path, &params, timeout)
+        crate::app::helpers::gpui_gxserver_rpc_result_waiting_out_restart(&path, &params, timeout)
     })
 }
 
@@ -131,8 +142,12 @@ pub(crate) fn agent_accounts_local_task(
     timeout: Duration,
 ) -> gpui::Task<Result<Value, String>> {
     background.spawn(async move {
-        let (status, body) =
-            gxserver_post_typed_operation(ghostex_gx_core::AGENT_ACCOUNTS_PATH, &params, timeout)?;
+        let (status, body) = gxserver_post_typed_operation_waiting_out_restart(
+            ghostex_gx_core::AGENT_ACCOUNTS_PATH,
+            &params,
+            timeout,
+            timeout.min(GXSERVER_BACKGROUND_RESTART_WAIT),
+        )?;
         ghostex_gx_core::agent_accounts_http_answer(status, &body)
     })
 }

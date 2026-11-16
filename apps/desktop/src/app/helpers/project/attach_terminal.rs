@@ -25,6 +25,52 @@ pub(crate) fn gpui_prepare_local_workspace_attach_terminal_plan_with_startup_tex
         .map_err(|error| error.message)
 }
 
+/// CDXC:Workarea 2026-11-16 WHY: User, after a rebuild: "why do i see this error pls fix". The app
+/// now draws its saved sidebar before gxserver is up (the warm start) and opens the selected
+/// session's terminal right away, while a rebuild's gxserver is still seconds from opening its port,
+/// so the attach met a closed port and showed "Couldn't open this terminal" (with "gxserver is not
+/// reachable on 127.0.0.1:58744." under Copy details) although gxserver answered four seconds
+/// later. An attach now waits for a gxserver that is not up yet (closed port, no token yet, still
+/// starting, a connection dropped while it restarted), showing the terminal's loading skeleton as
+/// before, and fails only when gxserver stays down past this limit.
+const GXSERVER_NOT_UP_ATTACH_WAIT: Duration = Duration::from_secs(20);
+const GXSERVER_NOT_UP_ATTACH_RETRY_DELAY: Duration = Duration::from_millis(250);
+
+/// [`gpui_prepare_local_workspace_attach_terminal_plan_with_code`] that waits out a gxserver that
+/// is not up yet. Blocks for up to 20 s, so only for callers off the main thread.
+pub(crate) fn gpui_prepare_local_workspace_attach_terminal_plan_waiting_for_gxserver(
+    reference: &GpuiLocalWorkspaceSessionKey,
+    intent: GpuiLocalWorkspaceAttachIntent,
+) -> Result<GpuiLocalWorkspaceAttachTerminalPlan, GpuiGxserverRpcError> {
+    let deadline = std::time::Instant::now() + GXSERVER_NOT_UP_ATTACH_WAIT;
+    loop {
+        let answer =
+            gpui_prepare_local_workspace_attach_terminal_plan_with_code(reference, None, intent);
+        match &answer {
+            Err(error)
+                if error
+                    .code
+                    .as_deref()
+                    .is_none_or(|code| code == ghostex_gx_protocol::SERVER_STARTING_ERROR)
+                    && gxserver_failure_is_not_up_yet(&error.message)
+                    && std::time::Instant::now() + GXSERVER_NOT_UP_ATTACH_RETRY_DELAY
+                        < deadline =>
+            {
+                std::thread::sleep(GXSERVER_NOT_UP_ATTACH_RETRY_DELAY);
+            }
+            _ => return answer,
+        }
+    }
+}
+
+/// Whether a failed call only met a gxserver that is not up yet: what an attach after a rebuild
+/// waits out (`gpui_command_terminal_attach_startup_not_ready`), or any of the transport's own
+/// "gxserver did not answer" failures.
+fn gxserver_failure_is_not_up_yet(message: &str) -> bool {
+    gpui_command_terminal_attach_startup_not_ready(message)
+        || gxserver_transport_failure_is_unreachable(message)
+}
+
 /// The attach plan, or the refusal with gxserver's error code (`accountUnavailable` is a
 /// refusal no retry can fix until the session's account changes).
 pub(crate) fn gpui_prepare_local_workspace_attach_terminal_plan_with_code(

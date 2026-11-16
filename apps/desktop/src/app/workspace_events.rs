@@ -987,9 +987,8 @@ impl GhostexGpuiApp {
             let prepare_key = key.clone();
             let result = background
                 .spawn(async move {
-                    gpui_prepare_local_workspace_attach_terminal_plan_with_code(
+                    gpui_prepare_local_workspace_attach_terminal_plan_waiting_for_gxserver(
                         &prepare_key,
-                        None,
                         attach_intent,
                     )
                 })
