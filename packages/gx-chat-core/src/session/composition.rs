@@ -289,10 +289,7 @@ pub fn compose_cached(state: &mut ChatState, preview_text: Option<&str>, working
 /// This is `boundaried` in the TypeScript, and it is what every later step measures against.
 /// [`refresh_boundaried`] keeps the answer on the state; this is the rebuild.
 pub fn boundaried_transcript(state: &ChatState) -> Vec<ChatRow> {
-    // Ghostex's notes, and a turn one opened, are never drawn (`session/appended_notes.rs`).
-    let surfaced = surface_skill_invocation_user_turns_in(
-        crate::session::appended_notes::without_note_turns(assembled_messages(&state.messages.list)),
-    );
+    let surfaced = surface_skill_invocation_user_turns_in(assembled_messages(&state.messages.list));
     apply_marker_boundaries_in(surfaced, &state.pending.markers)
 }
 

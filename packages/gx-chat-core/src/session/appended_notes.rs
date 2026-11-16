@@ -190,92 +190,6 @@ pub fn with_note(text: &str, note: &str) -> String {
 pub const SYSTEM_OPEN: &str = "<ghostex-system>";
 pub const SYSTEM_CLOSE: &str = "</ghostex-system>";
 
-/// Ghostex's `notes` as a message of their own: one `<ghostex-system>` block, sent to the agent
-/// right after the user's message as a separate submit; `None` for none.
-///
-/// CDXC:Coordinators 2026-11-16 DECISION:
-/// User (Q3557): the notes may show in the terminal, never in the chat view, and go "as their own
-/// separate message, not inside the user's message". The chat drops a user row that holds nothing
-/// but such a block ([`is_system_only`]).
-pub fn system_message(notes: &[&str]) -> Option<String> {
-    if notes.iter().all(|note| note.trim().is_empty()) {
-        return None;
-    }
-    let mut notes = notes.to_vec();
-    notes.push(NOTE_ONLY_REPLY);
-    let block = with_system_notes("", &notes);
-    let block = block.trim();
-    (!block.is_empty()).then(|| block.to_string())
-}
-
-/// The last line of a notes message: a note that reaches an idle agent opens a turn of its own,
-/// which the chat does not draw, so its answer should cost as little as it can.
-const NOTE_ONLY_REPLY: &str = "This message is from Ghostex, not the user, and needs no answer of its own: act on it if it asks something of you, and if there is nothing to do, reply with only \"ok\".";
-
-/// Whether `message` is a user row that holds only Ghostex's notes: no words of the user's, no
-/// picture. No chat draws it.
-pub fn is_system_only(message: &ChatMessage) -> bool {
-    message.role == ChatRole::User
-        && !message.blocks.is_empty()
-        && message.blocks.iter().all(|block| match block {
-            ChatBlock::Text { text } => text.contains(SYSTEM_OPEN) && without_notes(text).trim().is_empty(),
-            _ => false,
-        })
-}
-
-/// The transcript as the chat draws it: without Ghostex's notes sent as messages of their own, and
-/// without the replies of a turn such a note opened.
-///
-/// A note typed while the agent works is taken into the running turn: Claude Code records it as a
-/// queued command right after a tool's result (or, where tool rows are left out, right after the
-/// user's message), and the reply after it is the reply to the user's message, so only the note
-/// goes; when in doubt nothing else is hidden. A note that reaches an agent whose turn already ended (a reply
-/// with no tool call ends before the note lands) opens a turn of its own, after a finished reply:
-/// that turn is Ghostex's, so it goes whole, up to the next message the user wrote.
-///
-/// CDXC:Coordinators 2026-11-16 DECISION:
-/// User picked "A. Separate message, and hide a reply only when the note opened its own turn"
-/// (Q3561), with "make sure in case 1 (note joins the user's turn) the real reply is never
-/// hidden". The note asks the agent to answer with only "ok" when it has nothing to do there.
-pub fn without_note_turns(rows: Vec<crate::state::ChatRow>) -> Vec<crate::state::ChatRow> {
-    if !rows.iter().any(|row| is_system_only(row)) {
-        return rows;
-    }
-    let mut kept = Vec::with_capacity(rows.len());
-    let mut previous: Option<ChatRole> = None;
-    let mut in_note_turn = false;
-    for row in rows {
-        if row.role == ChatRole::System {
-            if !in_note_turn {
-                kept.push(row);
-            }
-            continue;
-        }
-        if is_system_only(&row) {
-            // A note still waiting in the agent's queue says nothing about where it lands.
-            // Only right after the agent's own reply did its turn end before the note: after the
-            // user's message or a tool's result (a read that leaves tool rows out shows the note
-            // right after the message), or with nothing loaded before it, the note joined a
-            // running turn, and nothing is hidden.
-            if !row.queued {
-                in_note_turn =
-                    matches!(previous, Some(ChatRole::Assistant | ChatRole::Reasoning));
-            }
-            previous = Some(row.role.clone());
-            continue;
-        }
-        if in_note_turn && row.role == ChatRole::User {
-            // The user's own words end the note's turn, wherever they land.
-            in_note_turn = false;
-        }
-        previous = Some(row.role.clone());
-        if !in_note_turn {
-            kept.push(row);
-        }
-    }
-    kept
-}
-
 /// `text` with Ghostex's `notes` after it in one `<ghostex-system>` block; `text` alone for none.
 pub fn with_system_notes(text: &str, notes: &[&str]) -> String {
     let notes: Vec<&str> = notes
@@ -373,9 +287,7 @@ fn without_thread_title_reminder(text: &str) -> Option<String> {
 ///
 /// `message` as the chat shows it, or `None` when it carries no added note.
 pub fn shown_message(message: &ChatMessage) -> Option<ChatMessage> {
-    // A message of nothing but Ghostex's notes stays whole: the transcript drops it, and the turn
-    // it opened, where it can tell the two apart (`without_note_turns`).
-    if message.role != ChatRole::User || is_system_only(message) {
+    if message.role != ChatRole::User {
         return None;
     }
     let mut changed = false;
