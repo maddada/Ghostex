@@ -35,6 +35,9 @@ impl GhostexGpuiApp {
         // rows of the last seconds of a session are still only in memory, and this app must be the
         // later writer of a key the sidebar page still writes too (gx_store/remote_last_seen.rs).
         self.gx_store_flush_last_seen_writes();
+        // This computer's own copy, which the next launch's first frame is drawn from
+        // (gx_store/local_last_seen.rs).
+        self.gx_store_flush_local_last_seen();
     }
 
     pub(crate) fn project_scoped_workarea_availability(&self) -> ProjectScopedWorkareaAvailability {

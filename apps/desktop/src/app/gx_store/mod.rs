@@ -84,6 +84,7 @@ mod hud;
 mod indicators;
 mod layout_persist;
 mod live_snapshot;
+mod local_last_seen;
 mod local_delayed_sends;
 mod local_focus;
 pub(crate) mod machine_short_names;

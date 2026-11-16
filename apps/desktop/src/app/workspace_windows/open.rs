@@ -265,6 +265,9 @@ pub(crate) fn open_workspace_window(
                         "sinceLaunchMs": support_logs::ms_since_launch(),
                     }),
                 );
+                // What the sidebar showed on that frame (gx_store/local_last_seen.rs).
+                let facts = view_for_cef.read(cx).gx_store_startup_sidebar_facts();
+                support_logs::append_startup_timing("firstFrame", facts);
             }
             view_for_cef.update(cx, |app, cx| {
                 if reopen_popups {

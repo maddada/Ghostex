@@ -313,6 +313,11 @@ impl GhostexGpuiApp {
                 let Some(loaded) = entry.loaded() else {
                     continue;
                 };
+                // This computer's rows seeded from the last run's copy (local_last_seen.rs) may
+                // lack a session gxserver started since; its groups wait for the live rows.
+                if machine.is_local() && loaded.last_seen {
+                    continue;
+                }
                 for project in loaded.projects() {
                     let key = ProjectKey {
                         machine: machine.clone(),
