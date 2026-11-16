@@ -113,18 +113,8 @@ fn system_logo() -> &'static str {
             let release = std::fs::read_to_string("/etc/os-release")
                 .or_else(|_| std::fs::read_to_string("/usr/lib/os-release"))
                 .unwrap_or_default();
-            let field = |name: &str| {
-                release
-                    .lines()
-                    .find_map(|line| line.strip_prefix(name)?.strip_prefix('='))
-                    .unwrap_or_default()
-                    .trim()
-                    .trim_matches('"')
-                    .to_string()
-            };
-            return ghostex_gx_core::computer_icons::linux_distribution_logo(
-                &field("ID"),
-                &field("ID_LIKE"),
+            return ghostex_gx_core::computer_icons::linux_distribution_logo_from_os_release(
+                &release,
             );
         }
         ghostex_gx_core::computer_icons::system_logo(Some(platform()), None).unwrap_or("linux")

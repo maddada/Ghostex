@@ -79,10 +79,17 @@ impl GhostexGpuiApp {
         // Only explicit remote-machine UI and sidebar ordering saves may replace the
         // saved machine list; broad Settings saves keep the stored value. Mirrors
         // canSettingsUpdateSourceChangeRemoteMachines in packages/shared/ghostex-settings.ts (deleted 2026-10-01).
+        // A computer's icon kept on its saved machine may too (CDXC:RemoteMachines 2026-11-16 in
+        // gx_store/computer_icons.rs): without it that copy was never written.
+        let source = message
+            .get("source")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
         let source_can_change_remote_machines = matches!(
-            message.get("source").and_then(serde_json::Value::as_str),
-            Some("settings:remoteMachines") | Some("sidebar:remoteMachineOrder")
-        );
+            source,
+            "settings:remoteMachines" | "sidebar:remoteMachineOrder"
+        ) || source
+            == crate::app::gx_store::COMPUTER_ICON_SETTINGS_SOURCE;
         if !source_can_change_remote_machines {
             match previous_settings_object.get("remoteMachines") {
                 Some(previous_remote_machines) => {

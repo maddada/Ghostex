@@ -174,6 +174,7 @@ pub(crate) use activation_focus::{
     menu_bar_session_focus_id, palette_session_focus_id, system_notification_session,
 };
 pub(crate) use added_project::{NewProjectChoice, NewProjectStart, read_new_project_start};
+pub(crate) use computer_icons::COMPUTER_ICON_SETTINGS_SOURCE;
 pub(crate) use agentbox::{
     AGENTBOX_STATUS_ON_OPEN, cached_agentbox_locations, invalidate_agentbox_status,
 };

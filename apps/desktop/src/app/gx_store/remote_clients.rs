@@ -685,6 +685,7 @@ impl GhostexGpuiApp {
     ) {
         // Its icon may have been picked from another device while it was away.
         self.gx_store.remote.icons_asked.remove(machine_id);
+        super::computer_icons::forget_computer_icon_read_failures(machine_id);
         self.gx_store
             .remote
             .clients
