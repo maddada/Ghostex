@@ -134,10 +134,21 @@ pub(crate) fn claim_for_account(
                             == Some(account.selector.as_str())
                     })
                 })
-                .filter(|row| row["accountId"].as_str() == Some(account.identity.as_str()))
+                // CDXC:AgentProviders 2026-11-17 WHY:
+                // A saved Codex identity is `accountId:userId` since members were told apart (codex_identity.rs), and Codex Swap lists the two separately. Comparing the bare `accountId` to it refused every Codex reset with "The saved account changed" while the account was unchanged; the row's identity is built and matched the way launch and usage reads do.
+                .filter(|row| {
+                    super::codex_identity::identity_matches(
+                        Provider::Codex,
+                        &account.identity,
+                        &super::codex_identity::codex_identity(
+                            row["accountId"].as_str().unwrap_or(""),
+                            row["userId"].as_str(),
+                        ),
+                    )
+                })
                 .ok_or_else(|| {
                     DomainStateError::bad_request(
-                        "The saved account changed. Refresh Accounts before using a reset.",
+                        "This account's Codex login changed. Reconnect it in Settings > Accounts before using a reset.",
                     )
                 })?;
             reset_credits::claim(row, credit_id, request_id)
