@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 11.8.1 - 2026-11-16
+
+**Ghostex 11.8.1 is out.** It fixes a freeze that could follow an update or restart.
+
+### 🩹 Fixes and polish
+
+- **Fixes Ghostex sometimes freezing right after an update or restart when a coordinator chat was open.**
+
 ## 11.8.0 - 2026-11-16
 
 **Ghostex 11.8.0 is out.** Chill, Regular or Advanced in the new Experience settings, to-dos your agents leave you under Needs you, starred pages, a newer page that replaces its older cards, Reply with voice and pictures, switching a folder's branch from the new chat, OpenAI voice with your ChatGPT sign-in, `ghostex computer-code` for a server without the app, the Thread brief extension, the framed work area on Linux and Windows, and Ghostex for iPhone moving from TestFlight to the App Store.
