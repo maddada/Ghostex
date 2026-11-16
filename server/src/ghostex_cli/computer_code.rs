@@ -14,7 +14,7 @@
 
 use std::collections::HashSet;
 use std::io::{BufRead, IsTerminal, Write};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
@@ -24,6 +24,9 @@ use super::rpc::{call_gxserver_rpc, CliError, CliResult};
 
 /// As often as the Connect a Computer window asks; the pairing window stays open 60 s after each.
 const POLL_EVERY: Duration = Duration::from_secs(3);
+
+/// How long it keeps the pairing window open with no computer or phone waiting.
+const IDLE_LIMIT: Duration = Duration::from_secs(10 * 60);
 
 pub(crate) const HELP: &str = "Usage: ghostex computer-code [--once] [--json]
        gxserver computer-code [--once] [--json]
@@ -37,12 +40,13 @@ It keeps running so the other computer can reach this one, and shows each comput
 that then asks to connect with its three words. Check they match the words on that computer,
 then answer y to approve it or n to deny it. Press Ctrl+C when you are done.
 
-A code works once and lapses after five minutes; a new one is printed when it does.
+A code works once and lapses after five minutes; a new one is printed when it does. It stops by
+itself after 10 minutes with no computer waiting, and after the first computer you approve.
 
   --once   Print the code and exit (connect within a minute, or approve in the app)
   --json   Print the code as JSON and exit: { ok, computerName, code }
 
-Run it in your own terminal: an agent's session can't make a pairing code.";
+Run ghostex computer-code in your own terminal, not in a Ghostex session.";
 
 pub(crate) fn run(args: &[String]) -> CliResult<()> {
     if args
@@ -76,6 +80,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
     let interactive = std::io::stdin().is_terminal();
     let mut shown_code = code.text;
     let mut seen = HashSet::new();
+    let mut last_waiting = Instant::now();
     loop {
         std::thread::sleep(POLL_EVERY);
         // A used or lapsed code comes back as a new one.
@@ -94,7 +99,17 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                 continue;
             }
         };
-        for device in waiting_devices(&answer) {
+        let waiting = waiting_devices(&answer);
+        if waiting
+            .iter()
+            .any(|device| !seen.contains(&device.approval_id))
+        {
+            last_waiting = Instant::now();
+        } else if last_waiting.elapsed() >= IDLE_LIMIT {
+            println!("Stopped: no computer waited for 10 minutes. Run ghostex computer-code to start again.");
+            return Ok(());
+        }
+        for device in waiting {
             if !seen.insert(device.approval_id.clone()) {
                 continue;
             }
@@ -119,6 +134,13 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                 &json!({ "id": device.approval_id }),
                 &parsed.flags,
             ) {
+                Ok(_) if approve => {
+                    println!(
+                        "{done}: {}. Stopped after the first computer. Run ghostex computer-code to connect another.",
+                        device.name
+                    );
+                    return Ok(());
+                }
                 Ok(_) => println!("{done}: {}.", device.name),
                 Err(error) => eprintln!("{error}"),
             }
@@ -154,7 +176,7 @@ fn read_code(flags: &super::args::Flags) -> CliResult<ComputerCode> {
     let (payload, text) = (text_of("payload"), text_of("text"));
     if payload.is_empty() || text.is_empty() {
         return Err(CliError::Other(
-            "Only you can make a pairing code: run ghostex computer-code in your own terminal, not from an agent's session.".to_string(),
+            "ghostex computer-code does not run inside a Ghostex session. Run ghostex computer-code in your own terminal.".to_string(),
         ));
     }
     Ok(ComputerCode {
