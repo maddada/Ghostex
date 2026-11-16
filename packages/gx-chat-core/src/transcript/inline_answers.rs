@@ -50,13 +50,24 @@ pub struct InlineChoice {
 pub struct InlineQuestion {
     pub tag: String,
     pub question: String,
+    /// The lines between the question and its links: what a pop-up shows under the title.
+    pub detail: String,
+    /// The question as replies were titled before the question was read from its tag line (see
+    /// [`asking_line_with`]): the form's id is hashed from it, so answers already sent keep
+    /// matching their question. Empty when it is `question`.
+    id_question: String,
     pub choices: Vec<InlineChoice>,
 }
 
 impl InlineQuestion {
     /// The form's body: what [`parse_form`] reads, and what the form's id is hashed from. The
     /// `inline` key keeps the id apart from a ```questions block that asks the same thing.
-    fn form_body(&self) -> String {
+    fn form_body(&self, legacy: bool) -> String {
+        let title = if legacy && !self.id_question.is_empty() {
+            &self.id_question
+        } else {
+            &self.question
+        };
         let choices: Vec<Value> = self
             .choices
             .iter()
@@ -68,23 +79,32 @@ impl InlineQuestion {
                 })
             })
             .collect();
+        let mut question = json!({
+            "tag": self.tag,
+            "name": self.tag,
+            "title": title,
+            "choices": choices,
+        });
+        if !legacy && !self.detail.is_empty() {
+            question["detail"] = json!(self.detail);
+        }
         json!({
             "inline": true,
-            "title": self.question,
+            "title": title,
             "submit": "Send",
-            "questions": [{
-                "tag": self.tag,
-                "name": self.tag,
-                "title": self.question,
-                "choices": choices,
-            }],
+            "questions": [question],
         })
         .to_string()
     }
 
-    /// The one-question form this question is.
+    /// The one-question form this question is. Its id is the one the question had before its title
+    /// was read from the tag line, so an answer sent under that id still answers it.
     pub fn form(&self) -> QuestionForm {
-        parse_form(&self.form_body())
+        let mut form = parse_form(&self.form_body(false));
+        if !self.id_question.is_empty() {
+            form.id = parse_form(&self.form_body(true)).id;
+        }
+        form
     }
 
     /// What the marked line carries: the form's id, the tag, and the answers in order.
@@ -317,12 +337,62 @@ const ASKING_REACH: usize = 40;
 /// right above. `None` when nothing above them has words.
 ///
 /// CDXC:SessionChat 2026-11-07 WHY:
-/// The coordinator wrote Q1652's answer links as the last sub-bullet under "Q1652: Include an iOS TestFlight build with 11.0.0?", after a sibling sub-bullet "First I'd apply the saved iOS 27 crash fix."; the line right above the links became the question, so the reader's answer card was titled with that sentence. The question is now the line that holds the tag, as the reader sees it.
+/// The coordinator wrote Q1652's answer links as the last sub-bullet under "Include an iOS TestFlight build with 11.0.0?", after a sibling sub-bullet "First I'd apply the saved iOS 27 crash fix."; the line right above the links became the question, so the reader's answer card was titled with that sentence. The question is now the line that holds the tag, as the reader sees it.
 pub fn asking_line(lines: &[&str], index: usize, tag: &str) -> Option<usize> {
+    asking_line_with(lines, index, tag, true)
+}
+
+/// `words` without a leading `tag` (as a word of its own, in any case) and the `:`, `.`, `)` or
+/// `-` after it: `Q3578: What?` and `Q3578. What?` ask "What?". `None` when `words` does not start
+/// with the tag.
+fn without_tag(words: &str, tag: &str) -> Option<String> {
+    let head = words.get(..tag.len())?;
+    if !head.eq_ignore_ascii_case(tag) {
+        return None;
+    }
+    let rest = &words[tag.len()..];
+    if rest
+        .chars()
+        .next()
+        .is_some_and(|next| next.is_alphanumeric() || next == '_')
+    {
+        return None;
+    }
+    Some(
+        rest.trim_start_matches(|next: char| {
+            next.is_whitespace() || matches!(next, ':' | '.' | ')' | '-')
+        })
+        .trim()
+        .to_string(),
+    )
+}
+
+/// The nearest line above `lines[index]` whose words start with `tag` (`Q3578: …`, `**Q3578** …`,
+/// `Q3578. …`), however far up in the message and past blank lines; another line of answers is
+/// not one.
+fn tag_led_line(lines: &[&str], index: usize, tag: &str) -> Option<usize> {
+    (0..index.min(lines.len())).rev().find(|at| {
+        let line = lines[*at];
+        !line.contains(ANSWER_SCHEME) && without_tag(&line_words(line), tag).is_some()
+    })
+}
+
+/// [`asking_line`], or with `modern` off the way it found the line before the question was read
+/// from its tag line: the tag line and the nearest line ending in "?" are skipped.
+///
+/// CDXC:SessionChat 2026-11-16 DECISION:
+/// The coordinator wrote "Q3578: What should the project menu's "Add to Group" row say, ...?", a bulleted list of options and then the links on a line of their own; the dock row and the pop-up were titled with the last bullet ("Group Membership: exact but long."). User: "the title of each question must be clear in the title shown in the dock". The question is, in order: the line in the message that starts with the tag; the words before the links on their own line; the nearest line above ending in "?"; then the line that names the tag, the parent bullet, the line above.
+fn asking_line_with(lines: &[&str], index: usize, tag: &str, modern: bool) -> Option<usize> {
+    if modern {
+        if let Some(at) = tag_led_line(lines, index, tag) {
+            return Some(at);
+        }
+    }
     let indent = |line: &str| line.len() - line.trim_start_matches(' ').len();
     let own = indent(lines.get(index)?);
     let mut above: Option<usize> = None;
     let mut parent: Option<usize> = None;
+    let mut asks: Option<usize> = None;
     for at in (index.saturating_sub(ASKING_REACH)..index).rev() {
         let line = lines[at];
         if line.trim().is_empty() {
@@ -343,28 +413,70 @@ pub fn asking_line(lines: &[&str], index: usize, tag: &str) -> Option<usize> {
         if names_tag(&line_words(line), tag) {
             return Some(at);
         }
+        if modern && asks.is_none() && line_words(line).ends_with('?') {
+            asks = Some(at);
+        }
         if indent(line) < own {
             parent.get_or_insert(at);
             // Past the parent bullet the lines belong to other items.
             break;
         }
     }
-    parent.or(above)
+    asks.or(parent).or(above)
 }
 
-/// The words [`asking_line`] finds for `tag`, or none.
-fn asked_words(lines: &[&str], index: usize, tag: &str) -> String {
-    asking_line(lines, index, tag)
+/// What the lines above `lines[index]` say about the question `tag` asks with links there.
+#[derive(Default)]
+struct Asked {
+    /// The question: the line's words, without the tag when the line starts with it.
+    question: String,
+    /// The lines between it and the links.
+    detail: String,
+    /// The line holding the question starts with the tag.
+    led: bool,
+    /// What the question was before it was read from the tag line.
+    legacy: String,
+}
+
+/// What [`asking_line`] finds for `tag`, or nothing.
+fn asked(lines: &[&str], index: usize, tag: &str) -> Asked {
+    let Some(at) = asking_line(lines, index, tag) else {
+        return Asked::default();
+    };
+    let legacy = asking_line_with(lines, index, tag, false)
         .map(|at| line_words(lines[at]))
-        .unwrap_or_default()
+        .unwrap_or_default();
+    let words = line_words(lines[at]);
+    let (mut question, led) = match without_tag(&words, tag) {
+        Some(rest) => (rest, true),
+        None => (words, false),
+    };
+    // The lines between it and the links: the detail (and the question itself when its own line
+    // only holds the tag).
+    let mut detail: Vec<String> = Vec::new();
+    for line in &lines[at + 1..index.max(at + 1).min(lines.len())] {
+        let words = line_words(line);
+        if words.is_empty() || line.contains(ANSWER_SCHEME) || fence_open(line).is_some() {
+            continue;
+        }
+        if question.is_empty() {
+            question = words;
+        } else {
+            detail.push(words);
+        }
+    }
+    Asked {
+        question,
+        detail: detail.join("\n"),
+        led,
+        legacy,
+    }
 }
 
-/// One line's questions: each tag's answers, the question its words ask (`fallback` of the tag
-/// when the line holds only the links), and the line with every answer link taken out.
-fn read_line(
-    line: &str,
-    fallback: impl Fn(&str) -> String,
-) -> Option<(Vec<InlineQuestion>, String)> {
+/// One line's questions: each tag's answers, the question they ask (the line that starts with the
+/// tag; else the line's own words before the link; else what `look` finds for the tag when the line
+/// holds only the links), and the line with every answer link taken out.
+fn read_line(line: &str, look: impl Fn(&str) -> Asked) -> Option<(Vec<InlineQuestion>, String)> {
     let links = answer_links(line);
     if links.is_empty() {
         return None;
@@ -387,13 +499,26 @@ fn read_line(
             }
             None => {
                 let words = question_words(line, link.start);
+                let above = look(&link.tag);
+                let legacy = if words.is_empty() {
+                    above.legacy.clone()
+                } else {
+                    words.clone()
+                };
+                let (question, detail) = if above.led || words.is_empty() {
+                    (above.question, above.detail)
+                } else {
+                    (words, String::new())
+                };
                 questions.push(InlineQuestion {
                     tag: link.tag.clone(),
-                    question: if words.is_empty() {
-                        fallback(&link.tag)
+                    id_question: if legacy == question {
+                        String::new()
                     } else {
-                        words
+                        legacy
                     },
+                    question,
+                    detail,
                     choices: vec![link.choice.clone()],
                 });
             }
@@ -446,7 +571,7 @@ pub fn inline_questions(markdown: &str) -> Vec<InlineQuestion> {
     }
     let mut questions: Vec<InlineQuestion> = Vec::new();
     each_prose_line(markdown, |lines, index| {
-        if let Some((found, _)) = read_line(lines[index], |tag| asked_words(lines, index, tag)) {
+        if let Some((found, _)) = read_line(lines[index], |tag| asked(lines, index, tag)) {
             for question in found {
                 if !questions
                     .iter()
@@ -477,7 +602,7 @@ pub fn inline_forms(message: &ChatMessage) -> Vec<QuestionForm> {
 /// own ([`asking_line`]).
 pub fn mark_line(lines: &[&str], index: usize) -> Option<Vec<String>> {
     let line = *lines.get(index)?;
-    let (questions, kept) = read_line(line, |tag| asked_words(lines, index, tag))?;
+    let (questions, kept) = read_line(line, |tag| asked(lines, index, tag))?;
     let mut lines = Vec::with_capacity(questions.len() + 1);
     // A line that held only the links (beside its list marker or not) leaves nothing to show.
     let column = content_column(&kept).min(kept.len());
@@ -503,7 +628,7 @@ pub fn tags_asked_by(lines: &[&str], index: usize) -> Vec<String> {
     let Some(line) = lines.get(index) else {
         return Vec::new();
     };
-    let mut tags: Vec<String> = read_line(line, |_| String::new())
+    let mut tags: Vec<String> = read_line(line, |_| Asked::default())
         .map(|(questions, _)| questions.into_iter().map(|question| question.tag).collect())
         .unwrap_or_default();
     let end = lines.len().min(index + 1 + ASKING_REACH);
@@ -677,7 +802,7 @@ pub(crate) mod tests {
         assert_eq!(questions.len(), 1);
         assert_eq!(
             questions[0].question,
-            "Q1652: Include an iOS TestFlight build with 11.0.0?"
+            "Include an iOS TestFlight build with 11.0.0?"
         );
         // The pill's marked line carries the same form the answers card is titled from.
         let marked = crate::transcript::native_markdown::native_markdown(Q1652_FIRST, false);

@@ -1591,7 +1591,7 @@ mod tests {
         let old_form = state.transcript_view.question_forms[0].clone();
         assert_eq!(
             old_form.questions[0].title,
-            "Q1652: Include an iOS TestFlight build with 11.0.0?"
+            "Include an iOS TestFlight build with 11.0.0?"
         );
         // The reader answered the first copy, and the answers are in the transcript.
         state
