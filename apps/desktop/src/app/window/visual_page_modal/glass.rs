@@ -175,9 +175,15 @@ fn page_glass(window: &Window, cx: &mut App) -> Option<Glass> {
                 )
             })
             .ok()
-        })
-        .and_then(|(snapshot, main_bounds)| Some((snapshot?, main_bounds)))?;
+        })?;
     let bounds = window.bounds();
+    let tint = Rgba::from(
+        crate::app::helpers::workspace_background_color()
+            .opacity(crate::app::helpers::work_area_glass_alpha()),
+    );
+    let Some(snapshot) = snapshot else {
+        return remembered_glass(bounds.size, tint);
+    };
     // Held against the screen (and always under the live blur, which is the screen behind the
     // window), the page window shows the part of the screen it sits over, like the main window
     // does; attached to the window, the picture covers the page window. The page window and the
@@ -189,15 +195,89 @@ fn page_glass(window: &Window, cx: &mut App) -> Option<Glass> {
         let offset: Point<Pixels> = bounds.origin - main_bounds.origin;
         snapshot.window.origin + offset
     });
-    let tint = Rgba::from(
-        crate::app::helpers::workspace_background_color()
-            .opacity(crate::app::helpers::work_area_glass_alpha()),
-    );
+    let jpeg = softened(&snapshot.jpeg, f32::from(snapshot.screen.width));
+    remember_picture(&jpeg);
     Some(Glass {
-        jpeg: softened(&snapshot.jpeg, f32::from(snapshot.screen.width)),
+        jpeg,
         rect: picture_rect(bounds.size, snapshot.screen, on_screen),
         tint,
     })
+}
+
+/// CDXC:SessionChat 2026-11-16 DECISION:
+/// User: "why dont i see the bg show here in the ghostex page pls? we implemented this before but i dont see it now anymore". The page window's picture comes from the main window's snapshot of the desktop picture, and that snapshot is `None` whenever macOS names a desktop picture file that cannot be opened. That is what happened on 2026-11-16: a wallpaper changer left the desktop on `$TMPDIR/StaticWallpaper/<n>_static.jpg`, which was gone by the afternoon (the system log showed Ghostex's once-a-second check failing on it, "can't open ... fileExists == false"). The main window's live blur kept working, since the system blurs what is on screen, but the page window fell back to the painted dusk. So the last picture the page window was handed is kept (in memory, and in the cache folder for the next launch) and used while the desktop picture can't be read, placed covering the window; the real picture takes over again as soon as one can be read. A video or a live style is not this: there the glass shows no picture on purpose, so the page keeps the painted dusk or dawn.
+fn remembered_glass(window_size: Size<Pixels>, tint: Rgba) -> Option<Glass> {
+    if crate::app::helpers::window_glass_live::window_glass_live_mode() {
+        return None;
+    }
+    let (jpeg, screen) = remembered_picture()?;
+    Some(Glass {
+        jpeg,
+        rect: picture_rect(window_size, screen, None),
+        tint,
+    })
+}
+
+/// The last picture the page window was handed, and its size (only its shape matters, to cover
+/// the window); read from the cache folder once per launch.
+struct Remembered {
+    jpeg: Vec<u8>,
+    screen: Size<Pixels>,
+}
+
+static REMEMBERED: std::sync::Mutex<Option<Option<Remembered>>> = std::sync::Mutex::new(None);
+
+fn remembered_path() -> std::path::PathBuf {
+    crate::shared_settings::ghostex_storage_paths()
+        .cache_dir
+        .join("page-window-glass.jpg")
+}
+
+/// Keeps `jpeg` for the times the desktop picture can't be read; written only when it changed.
+fn remember_picture(jpeg: &[u8]) {
+    let Ok(mut remembered) = REMEMBERED.lock() else {
+        return;
+    };
+    if matches!(&*remembered, Some(Some(known)) if known.jpeg == jpeg) {
+        return;
+    }
+    let Some(screen) = picture_size(jpeg) else {
+        return;
+    };
+    *remembered = Some(Some(Remembered {
+        jpeg: jpeg.to_vec(),
+        screen,
+    }));
+    drop(remembered);
+    let path = remembered_path();
+    if let Some(folder) = path.parent() {
+        let _ = std::fs::create_dir_all(folder);
+    }
+    let partial = path.with_extension("jpg.partial");
+    if std::fs::write(&partial, jpeg).is_ok() {
+        let _ = std::fs::rename(&partial, &path);
+    }
+}
+
+/// The kept picture, from memory or else from the cache folder.
+fn remembered_picture() -> Option<(Vec<u8>, Size<Pixels>)> {
+    let mut remembered = REMEMBERED.lock().ok()?;
+    let known = remembered.get_or_insert_with(|| {
+        let jpeg = std::fs::read(remembered_path()).ok()?;
+        let screen = picture_size(&jpeg)?;
+        Some(Remembered { jpeg, screen })
+    });
+    known
+        .as_ref()
+        .map(|known| (known.jpeg.clone(), known.screen))
+}
+
+fn picture_size(jpeg: &[u8]) -> Option<Size<Pixels>> {
+    let picture = image::load_from_memory_with_format(jpeg, image::ImageFormat::Jpeg).ok()?;
+    Some(size(
+        px(picture.width() as f32),
+        px(picture.height() as f32),
+    ))
 }
 
 /// `jpeg`, the main window's picture of a screen `screen_width` points wide, softened for the page
