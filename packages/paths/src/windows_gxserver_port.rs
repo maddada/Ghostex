@@ -29,7 +29,8 @@ use crate::GhostexPaths;
 pub const DEFAULT_PORT: u16 = 58_746;
 /// The block a reserved 58746 moves into: below Windows' dynamic range (49152 and up), which the
 /// boot-time reservations come from, and below the portable copies' block (41000 and up).
-const FALLBACK_FIRST: u16 = 38_746;
+/// The first port of that block, the one a moved gxserver nearly always takes.
+pub const FALLBACK_FIRST: u16 = 38_746;
 const FALLBACK_LAST: u16 = 40_745;
 const RECORD_FILE: &str = "local-port";
 /// WSAEACCES: the port is in an excluded range (or held with SO_EXCLUSIVEADDRUSE).

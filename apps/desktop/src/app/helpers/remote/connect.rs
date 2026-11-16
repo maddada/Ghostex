@@ -347,6 +347,15 @@ pub(crate) fn gpui_connect_remote_gxserver_platform_inner(
         );
     }
     let token = token.unwrap_or_default();
+    if matches!(
+        execution_target,
+        GpuiRemoteExecutionTarget::WindowsPowerShell
+    ) {
+        gpui_remote_note_windows_gxserver_port(
+            &config.remote_machine_id,
+            token_result.stdout.as_str(),
+        );
+    }
     // Saved off this thread: a keychain that waits on a system prompt must not hold the connect,
     // which goes on with the token it has here (CDXC:RemoteMachines 2026-11-10 in
     // token_keychain_save.rs).

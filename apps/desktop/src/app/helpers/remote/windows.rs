@@ -116,8 +116,11 @@ if (!(Test-Path -LiteralPath $gxToken)) {{ exit 126 }}
 Write-Output '__GHOSTEX_REMOTE_TOKEN_START__'
 [Console]::Write([IO.File]::ReadAllText($gxToken))
 Write-Output "`n__GHOSTEX_REMOTE_TOKEN_END__"
+$gxPort=Join-Path $gxState 'gxserver/runtime/local-port'
+if (Test-Path -LiteralPath $gxPort -PathType Leaf) {{ Write-Output ('{}'+(Get-Content -LiteralPath $gxPort -Raw).Trim()) }}
 "#,
-        gpui_remote_windows_cli_setup()
+        gpui_remote_windows_cli_setup(),
+        super::machine_urls::GPUI_REMOTE_WINDOWS_GXSERVER_PORT_MARKER
     )
 }
 

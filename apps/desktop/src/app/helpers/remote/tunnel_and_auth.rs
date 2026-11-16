@@ -123,7 +123,7 @@ pub(crate) fn gpui_spawn_remote_gxserver_tunnel(
     local_port: u16,
 ) -> Result<GpuiRemoteSpawnedTunnel, String> {
     let mut arguments = Vec::new();
-    let remote_port = gpui_remote_gxserver_port(execution_target);
+    let remote_port = gpui_remote_gxserver_port(&config.remote_machine_id, execution_target);
     // Bound to 127.0.0.1 explicitly, like the code-server tunnel: without a bind address ssh can
     // succeed on ::1 alone while another account already holds 127.0.0.1:<port>, which is where
     // the health probe then sends the token. The registry matches this exact `-L` value.

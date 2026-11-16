@@ -16,12 +16,53 @@ pub(crate) enum GpuiRemoteMachineUrl {
     AsWritten,
 }
 
+/// The line the Windows token read prints when that computer's gxserver moved off 58746
+/// (`gpui_remote_windows_token_read_command`).
+pub(crate) const GPUI_REMOTE_WINDOWS_GXSERVER_PORT_MARKER: &str =
+    "__GHOSTEX_REMOTE_GXSERVER_PORT__";
+
+/// The port each native Windows machine's gxserver reported on its last connect, by machine id.
+static GPUI_REMOTE_WINDOWS_GXSERVER_PORTS: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<String, u16>>,
+> = std::sync::LazyLock::new(Default::default);
+
+/// CDXC:ServerDaemon 2026-11-17 WHY:
+/// A Windows computer's gxserver leaves 58746 while Windows reserves it (GitHub #639,
+/// packages/paths/src/windows_gxserver_port.rs) and records the port it moved to. The token read
+/// that every connect runs prints that record, so the tunnel's far end and the machine's own links
+/// follow it; a computer that prints none (not moved, or a Ghostex from before the move) is on 58746.
+pub(crate) fn gpui_remote_note_windows_gxserver_port(machine_id: &str, token_read_stdout: &str) {
+    let port = token_read_stdout.lines().find_map(|line| {
+        line.trim()
+            .strip_prefix(GPUI_REMOTE_WINDOWS_GXSERVER_PORT_MARKER)?
+            .trim()
+            .parse::<u16>()
+            .ok()
+            .filter(|port| *port != 0)
+    });
+    let mut ports = GPUI_REMOTE_WINDOWS_GXSERVER_PORTS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    match port {
+        Some(port) => ports.insert(machine_id.to_string(), port),
+        None => ports.remove(machine_id),
+    };
+}
+
 /// The port the machine's gxserver listens on, on its own loopback: the far end of the SSH tunnel
 /// every request for the machine goes through. Native Windows and WSL can run side by side, so
 /// their ports differ.
-pub(crate) fn gpui_remote_gxserver_port(execution_target: &GpuiRemoteExecutionTarget) -> u16 {
+pub(crate) fn gpui_remote_gxserver_port(
+    machine_id: &str,
+    execution_target: &GpuiRemoteExecutionTarget,
+) -> u16 {
     match execution_target {
-        GpuiRemoteExecutionTarget::WindowsPowerShell => 58_746,
+        GpuiRemoteExecutionTarget::WindowsPowerShell => GPUI_REMOTE_WINDOWS_GXSERVER_PORTS
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(machine_id)
+            .copied()
+            .unwrap_or(58_746),
         GpuiRemoteExecutionTarget::PosixHost | GpuiRemoteExecutionTarget::WindowsWsl { .. } => {
             GPUI_GXSERVER_LOCAL_API_PORT
         }
@@ -55,7 +96,10 @@ pub(crate) fn gpui_remote_machine_url(
     if parsed.scheme() != "http"
         || !gxserver_host
         || parsed.port_or_known_default()
-            != Some(gpui_remote_gxserver_port(&target.execution_target))
+            != Some(gpui_remote_gxserver_port(
+                &target.machine_id,
+                &target.execution_target,
+            ))
     {
         return GpuiRemoteMachineUrl::MachineLoopback;
     }

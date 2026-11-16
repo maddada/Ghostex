@@ -55,9 +55,14 @@ const REGISTER_TIMEOUT: Duration = Duration::from_secs(15);
 const ANSWER_LOST: &str = "no answer";
 /// How long after a lost answer the request is sent again: that computer's helper restart.
 const ANSWER_LOST_RETRY_AFTER: Duration = Duration::from_secs(4);
-/// The ports a computer's Easy Connect serves its gxserver on: its usual local API port, then
-/// native Windows Ghostex's.
-const GXSERVER_PORTS: [u16; 2] = [crate::constants::GXSERVER_LOCAL_API_PORT, 58_746];
+/// The ports a computer's Easy Connect serves its gxserver on: its usual local API port, native
+/// Windows Ghostex's, then the port native Windows gxserver moves to while Windows reserves its
+/// own (CDXC:ServerDaemon 2026-11-17 in packages/paths/src/windows_gxserver_port.rs).
+const GXSERVER_PORTS: [u16; 3] = [
+    crate::constants::GXSERVER_LOCAL_API_PORT,
+    ghostex_paths::windows_gxserver_port::DEFAULT_PORT,
+    ghostex_paths::windows_gxserver_port::FALLBACK_FIRST,
+];
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -145,7 +150,6 @@ pub fn computer_link_key(
     let paired = super::computer_pairing::read_paired_computers(paths)
         .into_iter()
         .find(|computer| computer.address.trim() == address.trim())?;
-    let port_known = paired.gxserver_port.is_some();
     let port_hint = paired.gxserver_port.or(port_hint);
     // A computer that never paired with pairing v2 has no device key to sign with.
     let device_key = std::fs::read(pairing_dir(paths).join(DEVICE_KEY_FILE)).ok()?;
@@ -167,7 +171,7 @@ pub fn computer_link_key(
             _ => {}
         }
     }
-    let outcome = register(paths, &device_key, &id, address, port_hint, port_known);
+    let outcome = register(paths, &device_key, &id, address, port_hint);
     let entry = match outcome {
         Ok(keys) => LinkKeyEntry {
             state: "registered".to_string(),
@@ -210,7 +214,6 @@ fn register(
     id: &str,
     address: &str,
     port_hint: Option<u16>,
-    port_known: bool,
 ) -> std::result::Result<BTreeMap<String, PathBuf>, Registration> {
     let binary = crate::tailcat::resolve_client_tailcat_binary()
         .ok_or_else(|| Registration::Failed("no Easy Connect helper".to_string()))?;
@@ -245,16 +248,16 @@ fn register(
             "keys": public.iter().cloned().collect::<BTreeMap<String, String>>(),
         }))
     };
-    // A recorded port is the one; an older pairing record has none, so the usual ports are tried.
+    // A recorded port is tried first; an older pairing record has none. The usual ports follow,
+    // also after a recorded one that did not answer: a Windows computer moves its gxserver while
+    // Windows reserves its port (GitHub #639), so the port it paired on can change.
     let mut ports: Vec<u16> = port_hint.into_iter().collect();
-    if !port_known {
-        ports.extend(
-            GXSERVER_PORTS
-                .iter()
-                .copied()
-                .filter(|port| Some(*port) != port_hint),
-        );
-    }
+    ports.extend(
+        GXSERVER_PORTS
+            .iter()
+            .copied()
+            .filter(|port| Some(*port) != port_hint),
+    );
     let mut last = Registration::Failed("no port answered".to_string());
     for port in ports {
         match post_signed(&binary, address, port, &signed()?) {
