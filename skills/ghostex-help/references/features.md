@@ -2259,7 +2259,13 @@ ends with a "Reply about this page" box and a Mark as seen button, and until you
 press it the page sits in the list above the chat box of things that need you
 ("Page, not seen yet") and counts in its "need you". Pressing it tells the agent
 you saw the page, with your reply if you wrote one, and the page's card then
-says Seen. Pages an agent showed before this came in don't wait. A page with
+says Seen. Pages an agent showed before this came in don't wait. When two or
+more pages wait only to be seen, Mark all seen at the bottom of that list clears
+them all at once (their cards say Seen, and nothing is sent to the agent). When
+an agent shows a newer version of the same file, the older cards say Replaced
+and stop counting: the newest card is the page. An agent can also retire a page
+it replaced or no longer needs, with its questions, using `ghostex page retire`
+(`ghostex page --help`). A page with
 questions shows "N of M answered" in a small pill at its bottom right (green
 once every question has an answer). In the
 floating window, clicking outside it, its Hide button beside the close button,
@@ -2358,7 +2364,8 @@ card that asks a single choice question right away, without Send answers
 answers still wait for Send). Commands:
 `ghostex show <file.html>`
 publishes a page and prints the block that shows its card, which opens where
-Open Ghostex pages in says. Opening a page's HTML file itself (from the Files
+Open Ghostex pages in says; `ghostex page retire <page>` takes back a page the
+agent replaced. Opening a page's HTML file itself (from the Files
 view, a file link in the chat, Open in browser, or the phone) shows it styled
 the same way: it answers to the chat that published that file, or, when no
 agent sent it, opens read-only with a note saying so. Other HTML files open as

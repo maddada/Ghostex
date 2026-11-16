@@ -49,6 +49,7 @@ pub mod launchers;
 mod mcp_stdio;
 pub mod notify;
 pub mod output;
+mod page;
 pub mod paired_device;
 pub mod picker;
 mod port_web_metadata;
@@ -485,6 +486,7 @@ fn is_known_command(name: &str) -> bool {
         "secret",
         "secrets",
         "show",
+        "page",
         "visual",
         "install-help-skill",
         "settings",
@@ -1038,6 +1040,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "secret" | "secrets" => secret::secret_command(args),
         "feedback" => feedback::feedback_command(args),
         "show" => show::show_command(args),
+        "page" => page::page_command(args),
         "visual" => visual::visual_command(args),
         "server" => server_command(args),
         "tailcat" => tailcat::tailcat_command(args),

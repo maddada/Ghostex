@@ -17,6 +17,7 @@ mod notice;
 mod prepare;
 mod publish;
 mod questions;
+mod retire;
 mod scroll;
 mod serve;
 mod source;
@@ -45,6 +46,9 @@ pub(crate) use publish::{
     PUBLISH_VISUAL_PAGE_ENDPOINT,
 };
 pub(crate) use questions::{page_answered, page_questions};
+pub(crate) use retire::{
+    handle_retire_visual_pages_http, page_id_of, RETIRE_VISUAL_PAGES_ENDPOINT,
+};
 pub(crate) use scroll::{handle as page_scroll, is_scroll_route};
 pub(crate) use serve::{serve, PAGE_SCRIPT_QUERY, VISUAL_PAGE_ROUTE_PREFIX};
 pub(crate) use source::{
