@@ -6,6 +6,7 @@
 //! CDXC:Build 2026-11-09 WHY: the home is in /tmp because a socket path is capped at 103 bytes, and on a computer whose home sits on another volume (`/Volumes/<disk>/<user>`) `<home>/zmx` was already too long for any `--name`, so no test server could start. Keeping the zmx folder inside GHOSTEX_HOME also keeps gxserver's own ownership rule (`zmx_socket_directory_is_shared`: ZMX_DIR inside GHOSTEX_HOME) true, so its unowned-daemon cleanup works without any change in gxserver. /tmp is shared by every account, so the folder is named after the user id and is used only while it is a real directory of this user that nobody else can open (`create_private_home`). A /tmp home disappears when the computer restarts, which is fine for a throwaway server: `remove` still clears its record. The checks stop another account's folder or a link from being used; they do not defend against another process of the same user swapping the folder between check and use, since that process can already read the token file and stop any server directly.
 //! The server starts with every inherited GHOSTEX_*/ZMX_* variable removed: an agent's shell carries its own session's identity and the real server's base URL and token file, which would otherwise reach the CLI and the sessions it starts.
 //! CDXC:Build 2026-11-06 WHY: the agent CLIs' own variables are removed too (`INHERITED_PREFIXES`). A test server started from a Claude thread inherited its `CLAUDE_CONFIG_DIR` (that thread's claude-swap account folder) and `CLAUDECODE`/`CLAUDE_CODE_*`, so every Claude session it started ran on the thread's account folder instead of the plain login; Codex's `CODEX_HOME` and `CODEX_*` sandbox variables would do the same for Codex.
+//! CDXC:Build 2026-11-16 WHY: a thread loaded a test server's variables with `source <(cargo xtask test-server env <name> 2>/dev/null | grep -v '^#')`. macOS /bin/bash 3.2 reads a process substitution given to `source` as empty and reports nothing, so the shell kept its own session's GHOSTEX_* variables (port 58744, its session token) and the Homebrew `ghostex`: `ghostex computer-code --once` put a pending approval on the user's real gxserver, and its security status showed the real owner keys. The test server itself never touched the real `auth/` (its security.json and approval-requests.json are under its GHOSTEX_HOME, `GxserverPaths::auth_dir`). `env` printed the help around the lines, so on a shell that does read it the `ghostex sessions` and `ghostex web` lines ran before the exports, against the real server. `env` now prints only the env lines on stdout and the help on stderr, so `eval "$(cargo xtask test-server env <name>)"` is safe on every shell.
 //! SEE-ALSO: server/src/server/macos_login_recovery.rs (an isolated profile installs no login-recovery agent), AGENTS.md "Test against a throwaway gxserver".
 
 use std::fs;
@@ -28,7 +29,9 @@ const USAGE: &str = "Usage: cargo xtask test-server <command>
   network <name> online|offline|probe
                 switch what a running test server's online check sees: offline holds Autopilot and
                 coordinator reports as a real outage does, online brings them back, probe uses the real check
-  env <name>    print those env lines again
+  env <name>    print those env lines again: only them on stdout (the help goes to stderr), so
+                `eval \"$(cargo xtask test-server env <name>)\"` loads them; never `source <(...)`,
+                which macOS /bin/bash 3.2 reads as empty
   stop <name>   close its sessions, stop it, and remove any LaunchAgent it created
   remove <name> stop it and delete its folder
   list          show the test servers and whether they run";
@@ -48,7 +51,8 @@ pub fn run(args: &[String]) -> Res<i32> {
         "start" => start(rest),
         "env" => {
             let server = Server::load(single_name(rest)?)?;
-            print_env(&server);
+            print!("{}", env_lines(&server)?);
+            eprint!("{}", env_help(&server));
             Ok(0)
         }
         "stop" => {
@@ -1061,18 +1065,42 @@ fn add_projects(server: &Server, projects: &[PathBuf]) -> Res {
     Ok(())
 }
 
+/// The help and the env lines, after `start` (all on stdout).
 fn print_env(server: &Server) {
+    print!("{}", env_help(server));
+    println!(
+        "\nThe env lines ({}):\n{}",
+        server.folder.join("env.sh").display(),
+        fs::read_to_string(server.folder.join("env.sh"))
+            .unwrap_or_default()
+            .trim_end()
+    );
+}
+
+/// The contents of `env.sh`, refused when the file is missing or empty: an `eval` of nothing would
+/// leave the shell on the real gxserver without a word.
+fn env_lines(server: &Server) -> Res<String> {
     let env_file = server.folder.join("env.sh");
-    println!(
-        "\nUse it from any shell (each agent Bash call is a new shell, so prefix every call):\n  source {}\n  ghostex sessions\n  ghostex create-agent claude --project-id <id>\n  ghostex web --dist-dir \"$PWD/apps/gpui-web/www/dist\" --no-open --port <free port>\n\nThe env lines ({}):\n{}",
-        shell_quote(&env_file.display().to_string()),
-        env_file.display(),
-        fs::read_to_string(&env_file).unwrap_or_default().trim_end()
-    );
-    println!(
-        "\nWhen done: cargo xtask test-server stop {0}   (or remove {0} to delete its folder too)",
-        server.name
-    );
+    let lines = fs::read_to_string(&env_file).unwrap_or_default();
+    if !lines
+        .lines()
+        .any(|line| line.starts_with("export GHOSTEX_HOME="))
+    {
+        bail!(
+            "{} is missing or has no GHOSTEX_HOME line. Run `cargo xtask test-server start --name {}` to write it again.",
+            env_file.display(),
+            server.name
+        );
+    }
+    Ok(lines)
+}
+
+fn env_help(server: &Server) -> String {
+    let env_file = shell_quote(&server.folder.join("env.sh").display().to_string());
+    format!(
+        "\nUse it from any shell (each agent Bash call is a new shell, so prefix every call):\n  source {env_file}\n  ghostex sessions\n  ghostex create-agent claude --project-id <id>\n  ghostex web --dist-dir \"$PWD/apps/gpui-web/www/dist\" --no-open --port <free port>\nOr: eval \"$(cargo xtask test-server env {name})\". Never source <(...): macOS /bin/bash 3.2 reads it as empty, and the shell stays on the real gxserver.\n\nWhen done: cargo xtask test-server stop {name}   (or remove {name} to delete its folder too)\n",
+        name = server.name
+    )
 }
 
 /// Closes the server's sessions, stops it, and clears any launchd job or LaunchAgent left under its label prefix, then any zmx daemon still serving one of its sessions.
