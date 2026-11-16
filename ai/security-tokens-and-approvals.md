@@ -90,6 +90,28 @@ owner key is enrolled, or a phone paired with its own token, remembered for good
 `/api/securityStatus` says `mayApproveDevices` for the caller. Everything else the token file does is
 unchanged.
 
+Door sessions (review M2): the app opens its owner session with `scope: "door"` on
+`/api/openOwnerSession` (and enrolls its keys with `scope: "door"`, kept in `doorOnlyKeys`, which then
+open nothing else). Such a session is kept apart from the owner sessions (`doorSessions` in
+`security.json`), lapses after 12 hours (`DOOR_SESSION_TTL_MS`, the app opens another), and is
+known only on `DOOR_SESSION_ENDPOINTS` (pairing codes, approvals, paired devices, the connect-back
+signature, `securityStatus`); every other route, socket and relay answers 401. The "act as you"
+card ends with three words from the key id (`approval::key_words`), which the asking app shows too,
+says what the key may do (door only, or everything for an older app's key without a scope), and the
+token file keeps one such request at a time. Each connected computer gets its own owner key in the
+app (`load_or_create_scoped_owner_key`), so its signature opens nothing on another computer (review
+B1).
+
+Phones: once the computer has an owner device, `/api/removePairedDevice` removes a paired phone
+(a row with its own token) only for the door's keepers (the owner session, a paired phone); an
+agent's session token or the token file can still deny a pending one and remove a computer, which
+only close doors. Recovery when no owner device is left (the app's key is gone and no phone is
+paired): with Ghostex quit, move `auth/security.json` aside, delete the rows of
+`remote_paired_devices` in `state.db` and the `ghostex-paired:` lines in `~/.ssh/authorized_keys`,
+then start the app: its key is the first again. Help says the same (features.md, Connect a
+Computer). Moving only `security.json` aside reopens nothing while a phone row remains: a paired
+phone in the database marks the computer as owned at every start.
+
 Connected computers: the desktop reaches another computer through its SSH tunnel with that
 computer's token file, so there it is the token file too. Where that computer says
 `mayApproveDevices: false`, the app enrolls its owner key there at connect: one `addApproverKey`

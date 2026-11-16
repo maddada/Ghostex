@@ -249,6 +249,22 @@ pub(crate) async fn handle_remote_access_http(
                         "pending": waiting_devices(&pairing_runtime, &security),
                     }));
                 }
+                /*
+                CDXC:Security 2026-11-16 FIX:
+                Review M3 of the owner-only door: removing a paired phone needed nothing, so any agent's session token could remove every phone, and on a computer without the app's key nobody would be left to approve anything. Once this computer has an owner device, a paired phone (a row with its own token) is removed only by the door's keepers: the app's owner session or a paired phone. Denying a phone still waiting and removing a computer stay open to anyone here: they only close doors. Recovery when no owner device is left is in ai/security-tokens-and-approvals.md and Help.
+                */
+                if security.has_owner_device() && !security.keeps_door(&caller) {
+                    let is_phone = super::repository::RemotePairingRepository::new(&db)
+                        .find_device(&device_id)?
+                        .is_some_and(|device| device.api_token_hash.is_some());
+                    if is_phone {
+                        return Err(RemoteAccessHttpError {
+                            status: StatusCode::FORBIDDEN,
+                            code: "forbidden",
+                            message: "Remove a phone in the Ghostex app on this computer or on one of your paired phones.".to_string(),
+                        });
+                    }
+                }
                 let Some(device) = remove_paired_device(
                     &paths,
                     &db,

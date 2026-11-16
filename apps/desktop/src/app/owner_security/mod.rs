@@ -114,11 +114,15 @@ User (W524, "Owner only"): only this app or a paired phone makes pairing codes a
 CDXC:Security 2026-11-16 DECISION:
 User (after W524: "build the cross-computer fix first"): this app gets owner power on each connected computer after one Approve per computer, so approving that computer's pairing requests from here keeps working through its connection. Where a connected computer's gxserver says its token file no longer keeps the door there (`mayApproveDevices: false` in `/api/securityStatus`, which this app reaches it with), this app enrolls its owner key there at connect: one "Let <this computer> (Ghostex app) show this computer's pairing code and approve new phones and computers here (key words: …)" card on that computer's own app or a phone paired with it, reused while it waits; denied or lapsed, it isn't asked again until this app restarts (`enroll_owner_key`). Once approved, its owner session there goes only with that computer's door calls ([`remote_door_token`]), as here. Where that computer's token file still keeps the door (it has no owner device yet) nothing is enrolled, so connecting never makes this app the owner of another computer by itself.
 */
-/// A call that makes a pairing code (`openTunnel`) or approves: it goes with the owner session.
+/// A call that makes a pairing code (`openTunnel`), approves, removes a paired device or signs the
+/// ask that has another computer connect back here: it goes with the owner session, which
+/// gxserver asks for these once the computer has an owner device.
 fn is_door_call(path: &str, params: &Value) -> bool {
     match path {
         "/api/remotePairingCode" => params.get("openTunnel").and_then(Value::as_bool) == Some(true),
-        "/api/approveApprovalRequest" => true,
+        "/api/approveApprovalRequest"
+        | "/api/removePairedDevice"
+        | "/api/signComputerConnectBack" => true,
         _ => false,
     }
 }
