@@ -21,6 +21,7 @@ pub mod controls;
 pub mod dispatch_run;
 pub mod document;
 pub mod draft_worktree;
+pub mod folder_branch;
 pub mod lifecycle;
 pub mod mode_restart;
 pub mod native_accounts;

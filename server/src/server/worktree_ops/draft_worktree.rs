@@ -348,7 +348,7 @@ async fn source_branch(context: &ProjectWorktreeOperationContext) -> Option<Stri
         .and_then(normalize_branch_name)
 }
 
-/// `/api/draftWorktree {projectId, sessionId, light?, remember?, start?, finish?}`.
+/// `/api/draftWorktree {projectId, sessionId, light?, remember?, start?, finish?, folderBranch?}`.
 ///
 /// The answer is `{available, currentBranch, branches, worktrees, remembered, move}`; a `light`
 /// read (the client's poll while a move runs) carries only `move`.
@@ -386,6 +386,16 @@ pub(crate) async fn draft_worktree(
         return Ok(json!({ "move": move_value(&project_id, &session_id) }));
     }
     let (project, session) = read_draft(state, &project_id, &session_id)?;
+    if let Some(request) = params.get("folderBranch").filter(|value| value.is_object()) {
+        if !tray_applies(&project, &session) {
+            return Err(DomainStateError::bad_request(
+                "This chat has started, so its folder's branch is no longer picked here.",
+            )
+            .into());
+        }
+        return super::folder_branch::switch_folder_branch(state, &project, &session, request)
+            .await;
+    }
     if let Some(remember) = params.get("remember").and_then(Value::as_object) {
         let cloud =
             super::draft_cloud_box::remember_cloud_choice(state, &project, &session, remember)
@@ -494,7 +504,7 @@ fn remember_choice(
     Ok(())
 }
 
-async fn read_tray(
+pub(super) async fn read_tray(
     state: &AppState,
     project: &Value,
     session: &Value,
@@ -544,6 +554,16 @@ async fn read_tray(
     .ok()
     .flatten()
     .map(|branch| branch.name);
+    let recent_branches = {
+        let path = context.source_path.clone();
+        let branches = branches.clone();
+        let current = current_branch.clone();
+        tokio::task::spawn_blocking(move || {
+            super::folder_branch::recent_branches(&path, &branches, current.as_deref())
+        })
+        .await
+        .unwrap_or(Value::Array(Vec::new()))
+    };
     let worktrees: Vec<Value> = options
         .into_iter()
         .filter(|option| !option.is_current_project)
@@ -562,6 +582,7 @@ async fn read_tray(
         "currentBranch": current_branch,
         "defaultBranch": default_branch,
         "branches": branches,
+        "recentBranches": recent_branches,
         "worktrees": worktrees,
         "remembered": memory.to_value(),
         "move": move_value(&project_id, &session_id),

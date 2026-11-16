@@ -6418,8 +6418,17 @@ base branch you pick in the last part, the project's current branch to start
 with; that list has a search field and shows the branch picked first, then the
 project's default branch),
 **Existing** (a worktree the project already has, picked in the last part) or
-**Cloud Box** (once Cloud Boxes is set up). With This folder the last part just
-shows the folder's branch. With a worktree picked, sending the first message
+**Cloud Box** (once Cloud Boxes is set up). With This folder the last part is
+the folder's branch, and clicking it switches the folder to another branch
+right away: Recent (the branches the folder was on lately), Local and Remote (a
+remote branch with no local copy yet, which becomes a local branch tracking
+it), with a search; typing a name no branch has offers "Create <name> from
+<current branch>". If another session of the project is working right then, the
+folder stays put and the line under the bar offers New worktree from that
+branch instead. If the folder has uncommitted changes it asks first: Switch and
+take them (git carries them along, or says why it can't), New worktree from that
+branch, or Cancel. Idle sessions of the project simply find the new branch on
+their next turn. With a worktree picked, sending the first message
 creates it (Add Worktree's folder and setup command) and starts the chat there;
 the sidebar shows the chat under its project, with the worktree's branch on its row. The
 branch is named for you from the message: `spx-123-fix-copy-link` when it names

@@ -18,16 +18,16 @@
 //! 4-way switch are gone; the bar reads as one path whose parts open their own menus, with no border
 //! of their own (a hover wash shows what can be clicked). A part cut short shows its full words in
 //! its tooltip, with its hotkey (Q1228).
-use super::tray_layout::{NARROW_WIDTH, PartSize, TrayLayout, tray_layout};
+use super::tray_layout::{tray_layout, PartSize, TrayLayout, NARROW_WIDTH};
 use super::{appearance::ChatAppearance, composer::hotkey_chord, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Bounds, Context, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
-    StatefulInteractiveElement as _, Styled as _, Window, div, px, rgb, svg,
+    div, px, rgb, svg, AnyElement, Bounds, Context, InteractiveElement as _, IntoElement,
+    ParentElement as _, Pixels, StatefulInteractiveElement as _, Styled as _, Window,
 };
 use gpui_component::ElementExt as _;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -174,6 +174,9 @@ impl NativeChatView {
             let list_kind = match detail["kind"].as_str() {
                 Some("baseBranch") => Some(super::draft_project_picker::DraftListKind::BaseBranch),
                 Some("worktree") => Some(super::draft_project_picker::DraftListKind::Worktree),
+                Some("folderBranch") => {
+                    Some(super::draft_project_picker::DraftListKind::FolderBranch)
+                }
                 _ => None,
             };
             choice.push(Part {
@@ -186,10 +189,15 @@ impl NativeChatView {
                 tooltip: detail["tooltip"].as_str().unwrap_or(label).to_owned(),
                 hotkey: has_menu.then_some("newChatPickBranch"),
                 action: if let (true, Some(kind)) = (has_menu, list_kind) {
-                    PartAction::List {
-                        kind,
-                        rows: menu_rows(&detail["menu"]),
+                    let mut rows = menu_rows(&detail["menu"]);
+                    // The search's "Create <typed> from <branch>" (This folder's branch only).
+                    if let Some(from) = detail["create"]["from"].as_str() {
+                        rows.push(json!({
+                            "createFrom": from,
+                            "command": detail["create"]["command"].clone(),
+                        }));
                     }
+                    PartAction::List { kind, rows }
                 } else if has_menu {
                     PartAction::Menu {
                         trigger: if cloud { CLOUD_TRIGGER } else { DETAIL_TRIGGER },
@@ -573,6 +581,7 @@ impl NativeChatView {
             }
             _ => None,
         };
+        let folder_prompt = self.render_folder_prompt(&tray["folderPrompt"], p, cx);
         /*
         CDXC:Worktrees 2026-10-31 DECISION:
         User: "the bar above the composer must be transparent like it". The tray is part of the
@@ -604,10 +613,101 @@ impl NativeChatView {
                         .bg(p.composer_background)
                         .children(breadcrumb)
                         .children(status_line)
+                        .children(folder_prompt)
                         .when(status["card"].is_object(), |tray| {
                             tray.child(self.render_cloud_box_card(&status["card"], p))
                         }),
                 )
+                .into_any_element(),
+        )
+    }
+}
+
+impl NativeChatView {
+    /// The line under the bar about This folder's branch switch (`menus/folder_branch.rs` in
+    /// gx-chat-core): how it went, or why it waits, with the ways on as buttons. Its words wrap
+    /// instead of being cut, so the reason always reads whole.
+    fn render_folder_prompt(
+        &self,
+        prompt: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let message = prompt["message"].as_str()?.to_owned();
+        let s = p.scale;
+        let tone = prompt["tone"].as_str().unwrap_or_default();
+        let (icon, color) = match tone {
+            "busy" => ("titlebar/loader2.svg", p.muted),
+            "done" => ("titlebar/check.svg", p.muted),
+            "error" => ("titlebar/alert-triangle.svg", rgb(FAILED_COLOR).into()),
+            _ => ("titlebar/alert-triangle.svg", p.muted),
+        };
+        let actions: Vec<AnyElement> = prompt["actions"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .enumerate()
+            .filter_map(|(index, action)| {
+                let label = action["label"].as_str()?.to_owned();
+                let command = action["command"].clone();
+                Some(
+                    div()
+                        .id(("chat-folder-branch-action", index))
+                        .role(gpui::Role::Button)
+                        .aria_label(label.clone())
+                        .flex_shrink_0()
+                        .h(px(PART_HEIGHT * s))
+                        .px(px(8.0 * s))
+                        .flex()
+                        .items_center()
+                        .rounded(px(6.0 * s))
+                        .text_color(if index == 0 { p.primary } else { p.foreground })
+                        .chat_cursor_pointer()
+                        .hover(|style| style.bg(p.border))
+                        .child(label)
+                        .on_click(cx.listener(move |chat, _, window, cx| {
+                            chat.handle_action(
+                                &super::actions::NativeChatAction {
+                                    command: command.clone(),
+                                },
+                                window,
+                                cx,
+                            );
+                        }))
+                        .into_any_element(),
+                )
+            })
+            .collect();
+        Some(
+            div()
+                .id("chat-folder-branch-prompt")
+                .w_full()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap(px(4.0 * s))
+                .px(px(PART_PADDING * s))
+                .text_size(px(12.5 * s))
+                .child(
+                    div()
+                        .flex()
+                        .items_start()
+                        .gap(px(6.0 * s))
+                        .min_w_0()
+                        .flex_1()
+                        .py(px(4.0 * s))
+                        .text_color(if tone == "error" { color } else { p.muted })
+                        .child(
+                            svg()
+                                .path(icon)
+                                .size(px(13.0 * s))
+                                .mt(px(1.0 * s))
+                                .flex_shrink_0()
+                                .text_color(color),
+                        )
+                        .child(div().min_w_0().child(message)),
+                )
+                .children(actions)
                 .into_any_element(),
         )
     }
