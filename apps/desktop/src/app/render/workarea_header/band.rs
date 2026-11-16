@@ -54,13 +54,32 @@ impl GhostexGpuiApp {
         } else {
             WORKAREA_HEADER_HEIGHT
         };
+        /*
+        CDXC:Titlebar 2026-11-16 DECISION:
+        User, on Linux: the transcript scrolled up behind minimise, maximise and close and showed through them, because the header row paints its colour but the caption controls beside it painted none. They take the colour of the band region they sit in: the header row's over the sessions column, the tab strip's over a view panel, the reserve's over a right-docked command pane. Windows draws the same controls through this code.
+        */
         #[cfg(any(target_os = "windows", target_os = "linux"))]
-        let mut window_controls = app_draws_window_caption(window).then(|| {
+        let window_controls_view = app_draws_window_caption(window).then(|| {
             self.render_titlebar_window_controls(window, cx)
                 .into_any_element()
         });
         #[cfg(not(any(target_os = "windows", target_os = "linux")))]
-        let mut window_controls: Option<gpui::AnyElement> = None;
+        let window_controls_view: Option<gpui::AnyElement> = None;
+        let controls_background = if trailing_reserve > 0.0 {
+            workspace_nested_background()
+        } else if hosts_tab_strip {
+            glass_clear(project_editor_shell_background_color())
+        } else {
+            self.workarea_header_surface_color()
+        };
+        let mut window_controls = window_controls_view.map(|controls| {
+            h_flex()
+                .flex_shrink_0()
+                .h_full()
+                .bg(controls_background)
+                .child(controls)
+                .into_any_element()
+        });
         h_flex()
             .absolute()
             .top_0()
