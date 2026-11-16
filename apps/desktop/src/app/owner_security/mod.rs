@@ -525,8 +525,7 @@ fn key_json(public_key: &str, device_public_key: &str, role: &str) -> Value {
 /// owner session with it.
 fn open_owner_session(transport: &Transport, may_ask: bool) -> Result<String, String> {
     in_security_flow(|| {
-        let key =
-            ghostex_owner_keys::load_or_create_owner_key().map_err(|error| error.to_string())?;
+        let key = owner_key_for(transport)?;
         let public_key = key.public_key_b64();
         remember_own_owner_key(&public_key);
         let mut params = json!({ "key": key_json(&public_key, &public_key, "Ghostex app") });
@@ -547,6 +546,7 @@ fn open_owner_session(transport: &Transport, may_ask: bool) -> Result<String, St
         let status =
             rpc(transport, "/api/securityStatus", json!({})).map_err(|(_, message)| message)?;
         let server_id = text(&status, "serverId").ok_or("gxserver didn't say its id")?;
+        check_server_id(transport, &server_id)?;
         let challenge =
             rpc(transport, "/api/ownerChallenge", json!({})).map_err(|(_, message)| message)?;
         let challenge = text(&challenge, "challenge").ok_or("gxserver gave no challenge")?;
@@ -564,19 +564,70 @@ fn open_owner_session(transport: &Transport, may_ask: bool) -> Result<String, St
 }
 
 /*
+CDXC:Security 2026-11-16 FIX:
+Review B1 of the owner-only door: the app signed an owner session for whatever server id and challenge a computer's tunnel answered with, using the one owner key it enrolls everywhere, so whatever answered there could get a signature that opened an owner session on this computer (or another one). Each connected computer now has its own owner key (`ghostex_owner_keys::load_or_create_scoped_owner_key`, named after that computer's token, which this app read over SSH), enrolled only there, so its signature opens nothing elsewhere. On top, a connection never signs this computer's own server id, and the server id a connection first signed for is pinned for the rest of the app's run. A computer still on a gxserver from before plain approvals (11.2.2 and earlier) asks once more to let this app act as the owner there, for its new key.
+*/
+/// The owner key this app signs with on `transport`: this computer's, or the one of that
+/// connected computer.
+fn owner_key_for(transport: &Transport) -> Result<ghostex_owner_keys::DeviceKey, String> {
+    match transport {
+        Transport::Local => ghostex_owner_keys::load_or_create_owner_key(),
+        Transport::Remote(target) => {
+            let digest = ring::digest::digest(
+                &ring::digest::SHA256,
+                format!("ghostex-remote-owner-key\n{}", target.token).as_bytes(),
+            );
+            ghostex_owner_keys::load_or_create_scoped_owner_key(&format!(
+                "remote-{}",
+                hex::encode(&digest.as_ref()[..8])
+            ))
+        }
+    }
+    .map_err(|error| error.to_string())
+}
+
+/// The server id each connection signed its owner session for, kept for the app's run.
+static SIGNED_FOR: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
+
+/// Refuses to sign an owner session for `server_id` on `transport` when it is this computer's own
+/// id over a connection to another computer, or not the id that connection signed for before.
+fn check_server_id(transport: &Transport, server_id: &str) -> Result<(), String> {
+    const REFUSED: &str = "That computer's Ghostex answered as another computer, so this app didn't sign in there as you.";
+    if matches!(transport, Transport::Remote(_))
+        && crate::app::helpers::gpui_local_gxserver_server_id().as_deref() == Some(server_id)
+    {
+        log::warn!("owner session not signed: a connection named this computer's server id");
+        return Err(REFUSED.to_string());
+    }
+    let mut pinned = SIGNED_FOR
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let pinned = pinned
+        .get_or_insert_with(HashMap::new)
+        .entry(transport.key())
+        .or_insert_with(|| server_id.to_string());
+    if pinned != server_id {
+        log::warn!("owner session not signed: a connection changed its server id");
+        return Err(REFUSED.to_string());
+    }
+    Ok(())
+}
+
+/*
 CDXC:Security 2026-11-08 WHY:
 When another owner key is already enrolled on a computer (a second computer connecting to it), enrolling this app's owner key there asks for that owner's approval. The owner session is retried every minute, and each request lapsed after ten minutes, so the Mac's log gained a new "Let M7-DESKTOP (Ghostex app) (windows) act as the owner of Ghostex on this computer" request every ten minutes all day (30 on 8 Nov). The app now asks once: it waits on that request, sends its key again with the approval once it is approved, and stops asking there until it restarts when it is denied or lapses.
 */
-/// The key id gxserver gives this app's owner key (hex of the first 16 bytes of SHA-256 over the
-/// public key), learned the first time the app sends it anywhere.
-static OWN_OWNER_KEY_ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+/// The key ids gxserver gives this app's owner keys (hex of the first 16 bytes of SHA-256 over
+/// the public key; one per computer), learned the first time the app sends each anywhere.
+static OWN_OWNER_KEY_IDS: Mutex<Option<std::collections::HashSet<String>>> = Mutex::new(None);
 
 fn remember_own_owner_key(public_key_b64: &str) {
-    if OWN_OWNER_KEY_ID.get().is_some() {
-        return;
-    }
     if let Some(key_id) = key_id_of(public_key_b64) {
-        let _ = OWN_OWNER_KEY_ID.set(key_id);
+        OWN_OWNER_KEY_IDS
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get_or_insert_with(Default::default)
+            .insert(key_id);
     }
 }
 
@@ -602,7 +653,13 @@ pub(crate) fn asked_by_this_app(request: &ApprovalRequest) -> bool {
 pub(crate) fn asks_for_this_app(request: &ApprovalRequest) -> bool {
     request.action == ghostex_gx_protocol::approval::SensitiveAction::AddApproverKey
         && request.target.is_some()
-        && request.target.as_deref() == OWN_OWNER_KEY_ID.get().map(String::as_str)
+        && request.target.as_deref().is_some_and(|target| {
+            OWN_OWNER_KEY_IDS
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .as_ref()
+                .is_some_and(|ids| ids.contains(target))
+        })
 }
 
 /*
@@ -931,7 +988,7 @@ pub(crate) fn answerer(transport: &Transport) -> Answerer {
         // The owner there let this app in before its approver key came along with it: ask for
         // that key once (a card there, `addApproverKey`), and send people there meanwhile.
         if let (Ok(owner_key), Ok(approver)) = (
-            ghostex_owner_keys::load_or_create_owner_key(),
+            owner_key_for(transport),
             ghostex_owner_keys::approver_public_key_or_create(),
         ) {
             let wire_key = key_json(&approver, &owner_key.public_key_b64(), "approvals");
@@ -967,8 +1024,7 @@ pub(crate) fn approve_request(
     }
     in_security_flow(|| {
         require_owner_session(transport)?;
-        let owner_key =
-            ghostex_owner_keys::load_or_create_owner_key().map_err(|error| error.to_string())?;
+        let owner_key = owner_key_for(transport)?;
         let (key, presence) = ghostex_owner_keys::unlock_approver_key(&request.summary)
             .map_err(|error| error.to_string())?;
         let mut wire_key = key_json(
