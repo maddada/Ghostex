@@ -385,11 +385,20 @@ impl NativeChatView {
                     .text_color(p.muted)
                     .child(bar_label),
             )
-            // Balances the dots so the name sits in the middle of the bar.
+            // Balances the dots so the name sits in the middle of the bar, and holds the page's
+            // star at its right end (gx-chat-core questions/later.rs `starred_page_ids`).
             .child(
                 div()
                     .flex_shrink_0()
-                    .w(px((v.dot_size * 3.0 + v.dot_gap * 2.0) * s)),
+                    .w(px((v.dot_size * 3.0 + v.dot_gap * 2.0) * s))
+                    .flex()
+                    .justify_end()
+                    .when_some(page_id.clone(), |this, page_id| {
+                        let starred = self.snapshot["starredPages"]
+                            .as_array()
+                            .is_some_and(|ids| ids.iter().any(|id| id == page_id.as_str()));
+                        this.child(star_button(key, &page_id, starred, p, cx))
+                    }),
             );
         let preview = div()
             .relative()
@@ -599,6 +608,56 @@ impl NativeChatView {
             .into_any_element()
     }
 }
+
+/// The star at the right end of the card's window bar: yellow and filled once the page is starred,
+/// a quiet outline otherwise. Its press never opens the page behind it.
+///
+/// CDXC:SessionChat 2026-11-16 DECISION:
+/// The user picked the window bar for the card's star (Q3544 on the star-resources page); the rest
+/// of the decision is on gx-chat-core questions/later.rs `starred_page_ids`.
+fn star_button(
+    key: &str,
+    page_id: &str,
+    starred: bool,
+    p: &ChatAppearance,
+    cx: &Context<NativeChatView>,
+) -> AnyElement {
+    let s = p.scale;
+    let label = if starred { "Unstar page" } else { "Star page" };
+    let action = json!({"type": "pageStar", "id": page_id, "starred": !starred});
+    let (icon, color) = if starred {
+        (
+            "titlebar/star-filled.svg",
+            gpui::Hsla::from(gpui::rgb(STAR_YELLOW)),
+        )
+    } else {
+        ("titlebar/star.svg", p.muted)
+    };
+    let hover = p.foreground;
+    div()
+        .id(SharedString::from(format!("visual-page-star:{key}")))
+        .role(gpui::Role::Button)
+        .aria_label(label)
+        .flex_shrink_0()
+        .size(px(22.0 * s))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(5.0 * s))
+        .chat_cursor_pointer()
+        .hover(move |style| style.bg(hover.opacity(0.08)))
+        .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(label).build(window, cx))
+        .child(svg().path(icon).size(px(14.0 * s)).text_color(color))
+        .on_click(cx.listener(move |this, _, _, cx| {
+            cx.stop_propagation();
+            this.invoke(action.clone(), cx)
+        }))
+        .into_any_element()
+}
+
+/// The star yellow of a starred page (the settings' favourite star,
+/// window/settings_modal/fields/tag_list.rs).
+pub(super) const STAR_YELLOW: u32 = 0xf3cd5f;
 
 /// The filled button the card opens its page with (also the hover label over the picture).
 /// "For later" on a page still waiting, "Back to unanswered" on one put off: the question form's

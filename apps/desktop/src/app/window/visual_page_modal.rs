@@ -135,6 +135,9 @@ pub(crate) struct GpuiVisualPageModalWindow {
     /// The project and session that published the page, as gxserver names them
     /// (`readVisualPageSource`, `source.rs`), for the menu's Snooze.
     page_session: Option<(String, String)>,
+    /// Whether the page is starred in that session's chat (`readVisualPageSource`'s `starred`, a
+    /// gxserver from 2026-11-16 on), for the menu's Star page; `None` until it says.
+    page_starred: Option<bool>,
     /// The press in another window counted last, so the same press is never counted twice.
     counted_press: Option<Instant>,
     _source_watch: Option<Task<()>>,
@@ -232,6 +235,7 @@ impl GpuiVisualPageModalWindow {
             source_changed: false,
             more_menu: None,
             page_session: None,
+            page_starred: None,
             more_button: Rc::default(),
             refreshing: false,
             counted_press: None,
