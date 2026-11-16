@@ -4,7 +4,7 @@
 //! only from the user's click (the notice's button or Settings > Integrations > SpaceO).
 
 use std::{
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -218,8 +218,33 @@ impl GhostexGpuiApp {
         );
     }
 
-    /// Repair, from the user's click only (the notice's Repair, Settings' Repair button). Runs as
-    /// SpaceO's background job so Settings shows each step, then says whether it worked.
+    /// Repair's own toast, updated in place: while it runs it spins with the current step, and
+    /// its result replaces it (`spaceo_repair_result_toast`).
+    fn show_gpui_spaceo_repair_step(&mut self, step: &str, cx: &mut gpui::Context<Self>) {
+        self.upsert_gpui_app_toast(
+            GpuiAppToast {
+                id: NOTICE_ID.to_string(),
+                level: GpuiAppToastLevel::Info,
+                title: "Repairing SpaceO".to_string(),
+                description: Some(step.to_string()),
+                copy_text: None,
+                action: None,
+                loading: true,
+                persistent: true,
+                duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
+                epoch: 0,
+            },
+            cx,
+        );
+    }
+
+    /// CDXC:ManagedTools 2026-11-16 DECISION:
+    /// User: the toast said "Settings shows each step" and he only saw a toast. Repair's toast is
+    /// its progress: one toast (the stuck notice's id) shows each step as it runs and then becomes
+    /// the result, so nothing sends the user to Settings. Settings keeps its job row for whoever
+    /// has it open. "SpaceO is still stuck" carries Repair again, so it ends the toast and waits
+    /// in the notice modal instead (toasts never carry buttons).
+    /// Repair, from the user's click only (the notice's Repair, Settings' Repair button).
     pub(crate) fn repair_gpui_spaceo(&mut self, cx: &mut gpui::Context<Self>) {
         let Some(spaceo) = gpui_spaceo_heal_target() else {
             self.dispatch_gpui_app_modal_toast(
@@ -234,25 +259,35 @@ impl GhostexGpuiApp {
             self.dispatch_gpui_app_modal_toast("warning", "SpaceO is busy", &message, cx);
             return;
         }
-        self.remove_gpui_app_toast(NOTICE_ID, cx);
         self.dispatch_gpui_install_job_progress(cx);
-        self.dispatch_gpui_app_modal_toast(
-            "info",
-            "Repairing SpaceO",
-            "SpaceO stops for a moment, clears its stop and starts again. Settings shows each step.",
-            cx,
-        );
+        let first_step = "Checking SpaceO…";
+        self.show_gpui_spaceo_repair_step(first_step, cx);
+        let current_step = Arc::new(Mutex::new(first_step.to_string()));
         let background = cx.background_executor().clone();
         let pump = background.clone();
+        let pump_step = current_step.clone();
         cx.spawn(async move |this, cx| {
+            let mut shown = first_step.to_string();
             loop {
-                pump.timer(Duration::from_secs(1)).await;
-                let running = SPACEO_JOB.running();
-                let updated =
-                    this.update(cx, |this, cx| this.dispatch_gpui_install_job_progress(cx));
-                if !running || updated.is_err() {
+                pump.timer(Duration::from_millis(250)).await;
+                if !SPACEO_JOB.running() {
                     break;
                 }
+                let step = pump_step
+                    .lock()
+                    .map(|step| step.clone())
+                    .unwrap_or_default();
+                let changed = step != shown;
+                let updated = this.update(cx, |this, cx| {
+                    this.dispatch_gpui_install_job_progress(cx);
+                    if changed {
+                        this.show_gpui_spaceo_repair_step(&step, cx);
+                    }
+                });
+                if updated.is_err() {
+                    break;
+                }
+                shown = step;
             }
         })
         .detach();
@@ -261,6 +296,9 @@ impl GhostexGpuiApp {
                 .spawn(async move {
                     let outcome = ghostex_spaceo_heal::repair(&spaceo, "app", &mut |step| {
                         SPACEO_JOB.append_line(step);
+                        if let Ok(mut current) = current_step.lock() {
+                            *current = step.to_string();
+                        }
                     });
                     SPACEO_JOB.append_line(outcome.message());
                     SPACEO_JOB.finish(&if outcome.ok() {
@@ -278,45 +316,8 @@ impl GhostexGpuiApp {
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
-                match &outcome {
-                    Outcome::Fixed(message) => this.dispatch_gpui_app_modal_toast(
-                        "success",
-                        "SpaceO repaired",
-                        message,
-                        cx,
-                    ),
-                    Outcome::NothingToDo(message) => this.dispatch_gpui_app_modal_toast(
-                        "info",
-                        "SpaceO was already working",
-                        message,
-                        cx,
-                    ),
-                    Outcome::Refused(message) => this.dispatch_gpui_app_modal_toast(
-                        "warning",
-                        "SpaceO wasn't repaired",
-                        message,
-                        cx,
-                    ),
-                    Outcome::StillStuck(message) => {
-                        let mut details = notice_details(&health);
-                        details.push_str(&format!("\nRepair result: {message}"));
-                        this.upsert_gpui_app_toast(
-                            GpuiAppToast {
-                                id: NOTICE_ID.to_string(),
-                                level: GpuiAppToastLevel::Error,
-                                title: "SpaceO is still stuck".to_string(),
-                                description: Some(message.clone()),
-                                copy_text: Some(details),
-                                action: Some(GpuiAppToastAction::RepairSpaceo),
-                                loading: false,
-                                persistent: true,
-                                duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
-                                epoch: 0,
-                            },
-                            cx,
-                        );
-                    }
-                }
+                this.dispatch_gpui_install_job_progress(cx);
+                this.upsert_gpui_app_toast(spaceo_repair_result_toast(&outcome, &health), cx);
                 this.run_gpui_app_modal_and_titlebar_status_task(
                     || gpui_ghostex_cli_status_message(None),
                     cx,
@@ -324,5 +325,29 @@ impl GhostexGpuiApp {
             });
         })
         .detach();
+    }
+}
+
+/// What Repair's toast becomes when Repair ends.
+fn spaceo_repair_result_toast(outcome: &Outcome, health: &Health) -> GpuiAppToast {
+    let (level, title, still_stuck) = match outcome {
+        Outcome::Fixed(_) => (GpuiAppToastLevel::Success, "SpaceO repaired", false),
+        Outcome::NothingToDo(_) => (GpuiAppToastLevel::Info, "SpaceO was already working", false),
+        Outcome::Refused(_) => (GpuiAppToastLevel::Warning, "SpaceO wasn't repaired", false),
+        Outcome::StillStuck(_) => (GpuiAppToastLevel::Error, "SpaceO is still stuck", true),
+    };
+    let message = outcome.message().to_string();
+    GpuiAppToast {
+        id: NOTICE_ID.to_string(),
+        level,
+        title: title.to_string(),
+        description: Some(message.clone()),
+        copy_text: still_stuck
+            .then(|| format!("{}\nRepair result: {message}", notice_details(health))),
+        action: still_stuck.then_some(GpuiAppToastAction::RepairSpaceo),
+        loading: false,
+        persistent: still_stuck,
+        duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
+        epoch: 0,
     }
 }
