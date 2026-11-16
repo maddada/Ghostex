@@ -498,3 +498,56 @@ pub fn owner_session_signing_payload(
     }
     Ok(payload.into_bytes())
 }
+
+/*
+CDXC:Security 2026-11-17 FIX:
+User (after the review of the m7-arch unlock: "add a gxserver op where the old shared key's signature approves exactly one pending request"): computers connected before 16 Nov list only this app's old shared owner key as their owner, and the app's per-computer key there waits for an Approve nobody can give. A door session opened with the old key, relayed by whatever answered on a connection, worked on any computer that lists that key. Instead the old key now signs one approval: this server id, this request's id and gxserver-made nonce, and the new key it lets in, door-only. Relayed elsewhere, such a signature can only let this app's own new key in, for door sessions, and nothing else (`/api/approveWithOwnerKey`, server/src/server/security_http.rs).
+*/
+/// First line of what an owner key signs to approve one "act as you" request for a new owner key.
+pub const OWNER_KEY_APPROVAL_SIGNING_DOMAIN: &str = "ghostex-owner-key-approval-v1";
+
+/// `/api/approveWithOwnerKey`: an owner key enrolled there approves one waiting `addApproverKey`
+/// request (a new owner key) with its signature over [`owner_key_approval_signing_payload`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApproveWithOwnerKeyParams {
+    /// The waiting request.
+    pub id: String,
+    /// The owner key that signs (already enrolled there).
+    pub key_id: String,
+    /// Base64 standard with padding.
+    pub signature: String,
+    /// The new owner key exactly as its request sent it (`/api/enrollOwnerKey`'s `key`):
+    /// gxserver checks it is the one the request asks for, door-only, and enrolls it in the same
+    /// step, so a lost answer leaves nothing half done.
+    pub key: ApproverKey,
+}
+
+/// The exact bytes an owner key signs to approve request `request_id` (its `nonce`) on gxserver
+/// `server_id`, which lets in `new_key_id` for door sessions only:
+/// `ghostex-owner-key-approval-v1\n<server id>\n<request id>\n<nonce>\n<new key id>\ndoor\napprove`.
+pub fn owner_key_approval_signing_payload(
+    server_id: &str,
+    request_id: &str,
+    nonce: &str,
+    new_key_id: &str,
+) -> Result<Vec<u8>, SigningPayloadError> {
+    let fields: [(&'static str, &str); 4] = [
+        ("serverId", server_id),
+        ("id", request_id),
+        ("nonce", nonce),
+        ("newKeyId", new_key_id),
+    ];
+    let mut payload = String::from(OWNER_KEY_APPROVAL_SIGNING_DOMAIN);
+    for (field, value) in fields {
+        if value.is_empty() || value.contains(['\n', '\r']) {
+            return Err(SigningPayloadError { field });
+        }
+        payload.push('\n');
+        payload.push_str(value);
+    }
+    payload.push('\n');
+    payload.push_str(OWNER_SCOPE_DOOR);
+    payload.push_str("\napprove");
+    Ok(payload.into_bytes())
+}

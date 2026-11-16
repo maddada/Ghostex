@@ -208,7 +208,9 @@ pub fn route_access(path: &str) -> RouteAccess {
         // trust on first use) and opens its owner session from there.
         super::OWNER_KEY_ENROLL_ENDPOINT
         | super::OWNER_CHALLENGE_ENDPOINT
-        | super::OWNER_SESSION_ENDPOINT => RouteAccess::Needs(Capability::RequestSensitiveAction),
+        | super::OWNER_SESSION_ENDPOINT
+        // The owner key's signature is the approval; whoever carries it only delivers it.
+        | super::APPROVE_WITH_OWNER_KEY_ENDPOINT => RouteAccess::Needs(Capability::RequestSensitiveAction),
         super::SECURITY_STATUS_ENDPOINT => RouteAccess::Needs(Capability::OwnSession),
         // Answering a secret request may read a 1Password reference, and checking a reference
         // reads it; `/api/setVoiceAgentKey` with a reference is refused in security_gates.rs.

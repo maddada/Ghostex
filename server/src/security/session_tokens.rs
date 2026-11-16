@@ -155,6 +155,16 @@ impl SessionTokens {
             })
     }
 
+    /// Ends every door session of device `device_id` (an owner key retired here); how many.
+    pub fn drop_door_sessions_of(&self, device_id: &str) -> usize {
+        let mut tokens = self.write();
+        let before = tokens.door_sessions.len();
+        tokens
+            .door_sessions
+            .retain(|(_, device, _)| device != device_id);
+        before - tokens.door_sessions.len()
+    }
+
     /// The door sessions to save (hashes only).
     pub fn door_snapshot(&self) -> Vec<super::persist::PersistedDoorSession> {
         self.inner
@@ -195,18 +205,14 @@ impl SessionTokens {
             .collect()
     }
 
-    /// Puts back the owner sessions saved before a restart.
-    pub fn restore_owner(&self, saved: Vec<super::persist::PersistedOwnerSession>) {
-        let mut tokens = self.write();
-        for entry in saved {
-            tokens.by_hash.insert(
-                entry.hash.clone(),
-                Principal::Owner {
-                    device_id: entry.device_id.clone(),
-                },
-            );
-            tokens.owner_sessions.push((entry.hash, entry.device_id));
-        }
+    /*
+    CDXC:Security 2026-11-17 FIX:
+    Second review of the m7-arch unlock (finding 2): every new owner session is a door session (CDXC:Security 2026-11-17 in security/owner.rs), yet full owner sessions saved before the update were put back at start and kept every capability and the door for good, one obtained through the old relay included. The user: "Drop saved full owner_sessions on load (restore_owner), so pre-update full sessions die." Nothing is put back; the next save writes the list empty. An app holding one gets 401 and opens a door session, as for any other lapsed session.
+    */
+    /// Full owner sessions saved before a restart are dropped, never put back (above). Returns how
+    /// many were dropped.
+    pub fn restore_owner(&self, saved: Vec<super::persist::PersistedOwnerSession>) -> usize {
+        saved.len()
     }
 
     pub fn resolve(&self, token: &str) -> Option<Principal> {

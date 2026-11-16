@@ -95,6 +95,18 @@ pub(crate) fn gpui_remote_machine_server_id(remote_machine_id: &str) -> Option<S
         .and_then(|machine| machine.server_id.clone())
 }
 
+/// Whether a connected remote machine other than `remote_machine_id` reported `server_id` when it
+/// registered (owner_security's check before it signs: CDXC:Security 2026-11-17 at
+/// `check_server_id`).
+pub(crate) fn gpui_other_remote_machine_has_server_id(
+    remote_machine_id: &str,
+    server_id: &str,
+) -> bool {
+    state().iter().any(|(machine_id, machine)| {
+        machine_id != remote_machine_id && machine.server_id.as_deref() == Some(server_id)
+    })
+}
+
 /// The connected remote machine whose gxserver has `server_id`, the way gxserver names another
 /// computer's session (`serverId:projectId:sessionId`).
 pub(crate) fn gpui_remote_machine_for_server_id(server_id: &str) -> Option<String> {
@@ -201,15 +213,34 @@ impl GhostexGpuiApp {
         }
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let outcomes = background
+            let (outcomes, unlock_offers) = background
                 .spawn(async move {
                     // Never the system prompt from here: a request waits as a card instead.
                     crate::app::owner_security::without_prompts(|| {
-                        jobs.into_iter().map(register_machine).collect::<Vec<_>>()
+                        let targets: Vec<_> = jobs
+                            .iter()
+                            .map(|job| (job.machine_id.clone(), job.target.clone()))
+                            .collect();
+                        let outcomes = jobs.into_iter().map(register_machine).collect::<Vec<_>>();
+                        // A full pass: every connected machine's server id is known now, so the
+                        // old owner key may be offered (never signed) for a locked computer
+                        // (CDXC:Security 2026-11-17 at `owner_security::approve_with_shared_owner_key`).
+                        crate::app::owner_security::note_registration_pass();
+                        let offers = targets
+                            .into_iter()
+                            .filter_map(|(machine_id, target)| {
+                                crate::app::owner_security::old_key_unlock_offer(&target)
+                                    .map(|request| (machine_id, request))
+                            })
+                            .collect::<Vec<_>>();
+                        (outcomes, offers)
                     })
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
+                for (machine, request) in unlock_offers {
+                    this.owner_security_show_unlock_card(machine, request, cx);
+                }
                 for outcome in &outcomes {
                     for (machine, request) in &outcome.waiting {
                         this.owner_security_show_waiting_request(machine.clone(), request, cx);

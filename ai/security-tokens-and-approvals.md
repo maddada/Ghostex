@@ -101,7 +101,9 @@ unchanged.
 
 Door sessions (review M2): the app opens its owner session with `scope: "door"` on
 `/api/openOwnerSession` (and enrolls its keys with `scope: "door"`, kept in `doorOnlyKeys`, which then
-open nothing else). Such a session is kept apart from the owner sessions (`doorSessions` in
+open nothing else). Since 17 Nov every owner session is a door session, whatever `scope` says and
+whenever its key was enrolled, because the scope isn't signed (CDXC:Security 2026-11-17 in
+`security/owner.rs`); an app from before 16 Nov falls back to the token file for its other calls. Such a session is kept apart from the owner sessions (`doorSessions` in
 `security.json`), lapses after 12 hours (`DOOR_SESSION_TTL_MS`, the app opens another), and is
 known only on `DOOR_SESSION_ENDPOINTS` (pairing codes, approvals, paired devices, the connect-back
 signature, `securityStatus`); every other route, socket and relay answers 401. The "act as you"
@@ -139,7 +141,7 @@ paired with it, reused while it waits; denied or lapsed, it asks again only afte
 Once approved, its owner session there (which survives that gxserver's restarts) goes only with that
 computer's codes and Approve (`owner_security::remote_door_token`), and that computer's pairing cards
 are approvable here (`answerer_for`); until then they show as "Approve on <computer>". Where that
-computer's token file still keeps the door, nothing is enrolled. A same-user program that rewrites `security.json` or the paired devices database can still
+computer's token file still keeps the door, nothing is enrolled. A computer connected before 16 Nov may list only this app's old shared owner key (apps then enrolled one key everywhere). There the app may use that key once, for its own waiting ask for its new key there (`approve_with_shared_owner_key`, CDXC:Security 2026-11-17), and only on the user's click: after a full connected-computers registration pass the background only checks, then shows one card, "Let this Mac in on <computer>?", naming the SSH host the app connected to and quoting what the computer there says it is (`old_key_unlock_offer`, `old_key_unlock_card`); the old key signs only inside that card's Approve, for that request (`unlock_with_old_key`), after Touch ID where this Mac's own Settings > Security switch asks. Where that computer's `securityStatus` says `approveWithOwnerKey`, the old key signs that one approval (`/api/approveWithOwnerKey`: `ghostex-owner-key-approval-v1`, server id, request id, its nonce, the new key id, `door`); The call also carries the new key exactly as its request sent it; gxserver checks it against its own server id, that request and the request's own parameters (that key, door-only), approves it, enrolls the new key door-only in the same step, and only then retires the old key there (`retiredOwnerKeys`: it opens no session and approves nothing there again, its door sessions end, and `securityStatus` stops listing it, while it still counts as an owner device). A lost answer leaves nothing half done: the app's next `enrollOwnerKey` finds its key there. A key this computer's own app enrolled with the one-time value it hands gxserver at start (`appOwnerKeys`) is never retired, so a Mac cloned from this one (same Keychain key) keeps its own computer. On an older gxserver (LEGACY-SHARED-KEY-SESSION, to delete once all have updated) it opens one door session with the old key and approves with it, and first needs the server id to be the one the app registered for that machine and one this computer's gxserver lists (`recorded_server_id_matches`). Both ways the server id must not be this computer's, pinned to another machine, or (for a machine not pinned yet) reported by another connected machine at its registration (`check_server_id`), and the pin is written only right before the signature. Full owner sessions saved before 17 Nov are dropped when gxserver loads `security.json` (`restore_owner`). A same-user program that rewrites `security.json` or the paired devices database can still
 undo this.
 
 ## What they may do: `Capability`
@@ -272,8 +274,9 @@ let grant = match require_owner_presence(&state, &caller, action, &body_json, &p
 | `/api/readApprovalRequest` | `{ id }` | its requester, you | `{ request, current? }`: `current` is the newest request that replaced this one; an unknown id is `notFound` "This request expired." |
 | `/api/approveApprovalRequest` | `{ id }` (older apps add `keyId` and `signature`, accepted and not checked) | you, never the requester | `{ request }` (status `approved`) |
 | `/api/denyApprovalRequest` | `{ id }` | you | `{ request }` (`denied`) |
-| `/api/securityStatus` | none | any but guests | `{ serverId, caller, plainApprovals: true, requirePresence, ownerKeys, approverKeys, pendingApprovals }` |
+| `/api/securityStatus` | none | any but guests | `{ serverId, caller, plainApprovals: true, approveWithOwnerKey: true, requirePresence, mayApproveDevices, ownerKeys, approverKeys, pendingApprovals }` |
 | `/api/listApproverKeys`, `/api/enrollApproverKey`, `/api/removeApproverKey` | as before | you | kept for older apps: an approver key enrolls at once and is listed, but approving checks no signature |
+| `/api/approveWithOwnerKey` | `{ id, keyId, signature }` | any caller that may ask, on the loopback listener or its tunnels; the enrolled owner key's signature over that one `addApproverKey` request is the approval | since 17 Nov; `securityStatus` says `approveWithOwnerKey: true` |
 | `/api/enrollOwnerKey`, `/api/ownerChallenge`, `/api/openOwnerSession` | as before (`askOwner`, `approverKey` accepted) | the token file or an owner session (an agent's session token can't add an owner key) | kept for desktops from before plain approvals: a key enrolls at once, no "act as the owner" card (#532) |
 
 Statuses: `pending`, `approved`, `denied`, `expired`, `consumed` (a replaced request is `expired`

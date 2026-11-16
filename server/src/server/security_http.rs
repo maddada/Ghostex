@@ -352,6 +352,12 @@ fn enroll_key(
     let first_key_secret = params
         .remove(FIRST_KEY_SECRET_PARAM)
         .and_then(|value| value.as_str().map(str::to_string));
+    // This computer's own app (it carries this start's one-time value): its owner key is never
+    // retired here (CDXC:Security 2026-11-17 at `SecurityState::retire_owner_key`). Read before
+    // the first key spends the value.
+    let from_this_app = endpoint_path == security::OWNER_KEY_ENROLL_ENDPOINT
+        && matches!(caller, Principal::LocalAgent)
+        && security.is_first_key_secret(first_key_secret.as_deref());
     params.remove(ASK_OWNER_PARAM);
     params.remove(ghostex_gx_protocol::approval::APPROVAL_ID_PARAM);
     let owner = endpoint_path == security::OWNER_KEY_ENROLL_ENDPOINT;
@@ -401,6 +407,9 @@ fn enroll_key(
     // about who sends it (gregg-thread-1110). Approvals are plain now, so approver keys only keep
     // older apps' lists whole.
     if let Some(known) = registry.get(&key_id) {
+        if from_this_app {
+            security.note_app_owner_key(&key_id);
+        }
         return Ok(json!({ "key": known }));
     }
     /*
@@ -517,6 +526,9 @@ fn enroll_key(
         security.mark_door_only_key(&key_id);
     }
     enroll_approved_key(state, caller, owner, key, now);
+    if from_this_app && registry.get(&key_id).is_some() {
+        security.note_app_owner_key(&key_id);
+    }
     registry
         .get(&key_id)
         .map(|known| json!({ "key": known }))
@@ -720,22 +732,113 @@ fn handle(
         }
         security::OWNER_CHALLENGE_ENDPOINT => Ok(json!(security.owner_challenge(now))),
         security::OWNER_SESSION_ENDPOINT => {
+            // `scope` is read and changes nothing: every owner session is a door session
+            // (CDXC:Security 2026-11-17 in security/owner.rs).
             let ghostex_gx_protocol::approval::OpenOwnerSessionParams {
                 key_id,
                 challenge,
                 signature,
-                scope,
+                ..
             } = parse(params)?;
-            let door = scope.as_deref() == Some(ghostex_gx_protocol::approval::OWNER_SCOPE_DOOR);
             security
-                .open_owner_session(&key_id, &challenge, &signature, door, now)
+                .open_owner_session(&key_id, &challenge, &signature, now)
                 .map(|opened| json!(opened))
                 .map_err(|error| ("forbidden", error.to_string()))
+        }
+        security::APPROVE_WITH_OWNER_KEY_ENDPOINT => {
+            // One waiting request for a new owner key, approved by an enrolled owner key's
+            // signature over this server id, the request's id and nonce and the new key
+            // (CDXC:Security 2026-11-17 in packages/gx-protocol/src/approval.rs). The signature
+            // is the approval, so it stands in for the door's keepers here.
+            let ghostex_gx_protocol::approval::ApproveWithOwnerKeyParams {
+                id,
+                key_id,
+                signature,
+                key: new_key,
+            } = parse(params)?;
+            let signer_principal = |device_id: String| Principal::Owner { device_id };
+            let reader = security
+                .owner_keys
+                .get(&key_id)
+                .map(|key| signer_principal(key.device_id))
+                .ok_or((
+                    "forbidden",
+                    security::OwnerError::Key(security::ApproverKeyError::UnknownKey).to_string(),
+                ))?;
+            let asked = security
+                .approvals
+                .read(&id, &reader, now)
+                .ok_or(("notFound", security::GONE_MESSAGE.to_string()))?;
+            let signer =
+                match security.check_owner_key_approval(&asked, &key_id, &signature, &new_key) {
+                    Ok(signer) => signer,
+                    Err(error) => {
+                        crate::audit::record(
+                            crate::audit::Action::from_approval(&asked),
+                            crate::audit::Actor::from(caller),
+                            crate::audit::Outcome::Refused(error.to_string()),
+                            Some(crate::audit::ApprovalRef::from(&asked)),
+                        );
+                        return Err(("forbidden", error.to_string()));
+                    }
+                };
+            let by = signer_principal(signer.device_id.clone());
+            let request = security
+                .approvals
+                .approve_plain(&id, &by, now)
+                .map_err(|error| approval_error(&error))?;
+            /*
+            CDXC:Security 2026-11-17 FIX:
+            Third review of the m7-arch unlock, finding 1, user: "approveWithOwnerKey enrolls the new key itself (from the request's own params: key, doorOnly) and only then retires the old key, in one step, so a dropped answer or a quit app can't lock the computer out. A retried click must still finish." The old key was retired on approval while the new key went in only on the app's next call within the approval's two minutes, so a lost answer or a quit app left a computer with no key that could sign. The new key (checked against the request's own parameters) is now enrolled here, door-only, before the old key is retired; if it couldn't be kept, the old key isn't retired. The app's later `enrollOwnerKey` finds the key already there, whenever it comes.
+            */
+            enroll_approved_key(state, &by, true, new_key, now);
+            let Some(enrolled) = asked
+                .target
+                .as_deref()
+                .and_then(|target| security.owner_keys.get(target))
+            else {
+                return Err((
+                    "internalError",
+                    "Ghostex could not keep the new owner key here, so the old one still works. Try again."
+                        .to_string(),
+                ));
+            };
+            // It signs nothing here again, unless this computer's own app enrolled it
+            // (CDXC:Security 2026-11-17 at `retire_owner_key`).
+            let retired = security.retire_owner_key(&signer);
+            let mut logged =
+                crate::audit::Action::new("approval.approved", request.summary.clone());
+            if let Some(target) = &request.target {
+                logged = logged.target(target.clone());
+            }
+            crate::audit::record(
+                logged,
+                crate::audit::Actor::from(&by),
+                crate::audit::Outcome::ApprovedBy(format!(
+                    "Approved with the owner key {} ({}), signed for this one request; {}",
+                    signer.label,
+                    signer.key_id,
+                    if retired {
+                        "that key signs nothing here any more"
+                    } else {
+                        "that key is this computer's own app's, so it stays"
+                    }
+                )),
+                Some(crate::audit::ApprovalRef::from(&request)),
+            );
+            security.publish(security::SecurityEvent::ApprovalApproved {
+                request: request.clone(),
+                key_id: signer.key_id,
+            });
+            Ok(json!({ "request": request, "key": enrolled, "retired": retired }))
         }
         security::SECURITY_STATUS_ENDPOINT => Ok(json!({
             "serverId": &*security.server_id,
             // Approvals need no signature here; newer apps stop signing (older ones still may).
             "plainApprovals": true,
+            // An owner key here may approve a new owner key's waiting request by signature
+            // (`/api/approveWithOwnerKey`, CDXC:Security 2026-11-17); older gxservers don't say.
+            "approveWithOwnerKey": true,
             // Settings > Security: the approving device checks Touch ID, Windows Hello, its
             // password or the phone's Face ID first (`approvalsRequirePresence`, off by default).
             "requirePresence": approvals_require_presence(state),
@@ -745,7 +848,8 @@ fn handle(
             // y/n only when it may (CDXC:Security 2026-11-16 in security/policy.rs). Older
             // clients don't read it.
             "mayApproveDevices": security.keeps_door(caller),
-            "ownerKeys": security.owner_keys.list(),
+            // Retired keys (`retire_owner_key`) aren't listed: they sign nothing here.
+            "ownerKeys": security.listed_owner_keys(),
             "approverKeys": security.approver_keys.list(),
             "pendingApprovals": if caller.has(security::Capability::DecideApprovals) {
                 security.approvals.list_pending(now).len()

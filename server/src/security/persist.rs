@@ -48,6 +48,14 @@ pub struct PersistedSecurity {
     /// `ownerSessions`, so an older gxserver started on this file knows none of them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub door_sessions: Vec<PersistedDoorSession>,
+    /// Owner keys retired by `/api/approveWithOwnerKey` (they sign nothing here again). Older
+    /// gxservers ignore it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub retired_owner_keys: Vec<String>,
+    /// Owner keys this computer's own app enrolled (it carried the one-time value the app hands
+    /// gxserver as it starts it): never retired. Older gxservers ignore it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub app_owner_keys: Vec<String>,
     // 11.1.1 and 11.1.2 also saved `approvedProjectReach` (the retired "reach another project"
     // approvals); an old file still loads, the field is ignored, and the next save drops it.
 }

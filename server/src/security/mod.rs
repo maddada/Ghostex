@@ -71,6 +71,9 @@ pub const OWNER_KEY_ENROLL_ENDPOINT: &str = "/api/enrollOwnerKey";
 pub const OWNER_CHALLENGE_ENDPOINT: &str = "/api/ownerChallenge";
 /// `{ keyId, challenge, signature }` → `{ token, deviceId }`: the desktop's owner session.
 pub const OWNER_SESSION_ENDPOINT: &str = "/api/openOwnerSession";
+/// `{ id, keyId, signature }`: an enrolled owner key approves one waiting request for a new owner
+/// key by signature (CDXC:Security 2026-11-17 in packages/gx-protocol/src/approval.rs).
+pub const APPROVE_WITH_OWNER_KEY_ENDPOINT: &str = "/api/approveWithOwnerKey";
 /// Whether an owner key and approver keys are enrolled, and who the caller is (any caller).
 pub const SECURITY_STATUS_ENDPOINT: &str = "/api/securityStatus";
 
@@ -85,6 +88,7 @@ pub const SECURITY_ENDPOINTS: &[&str] = &[
     OWNER_KEY_ENROLL_ENDPOINT,
     OWNER_CHALLENGE_ENDPOINT,
     OWNER_SESSION_ENDPOINT,
+    APPROVE_WITH_OWNER_KEY_ENDPOINT,
     SECURITY_STATUS_ENDPOINT,
 ];
 
@@ -117,6 +121,11 @@ pub struct SecurityState {
     first_key_secret_hash: Arc<std::sync::Mutex<Option<Vec<u8>>>>,
     /// Owner keys that open door sessions only (review M2 in `policy.rs`).
     door_only_keys: Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>,
+    /// Owner keys that signed `/api/approveWithOwnerKey` here: they sign nothing here again
+    /// (CDXC:Security 2026-11-17 in `owner.rs`).
+    retired_owner_keys: Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>,
+    /// Owner keys this computer's own app enrolled: never retired (`owner.rs`).
+    app_owner_keys: Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>,
     /// Until when (ms) the token file gets pairing codes after an Approve (`policy.rs`).
     token_file_code_until: Arc<std::sync::Mutex<u64>>,
 }
@@ -138,6 +147,8 @@ impl SecurityState {
             events: broadcast::channel(256).0,
             token_file_code_until: Arc::default(),
             door_only_keys: Arc::default(),
+            retired_owner_keys: Arc::default(),
+            app_owner_keys: Arc::default(),
             first_key_secret_hash: Arc::default(),
             owner_key_requests: Arc::default(),
             app_owner_key_requests: Arc::default(),
@@ -152,13 +163,26 @@ impl SecurityState {
         state.owner_keys.restore(saved.owner_keys);
         state.approver_keys.restore(saved.approver_keys);
         state.session_tokens.restore(saved.session_tokens);
-        state.session_tokens.restore_owner(saved.owner_sessions);
+        let dropped = state.session_tokens.restore_owner(saved.owner_sessions);
+        if dropped > 0 {
+            eprintln!("[gxserver] dropped {dropped} saved full owner session(s): only door sessions are kept");
+        }
         state.session_tokens.restore_door(saved.door_sessions);
         *state
             .door_only_keys
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) =
             saved.door_only_keys.into_iter().collect();
+        *state
+            .retired_owner_keys
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+            saved.retired_owner_keys.into_iter().collect();
+        *state
+            .app_owner_keys
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+            saved.app_owner_keys.into_iter().collect();
         *state
             .approved_computers
             .lock()
@@ -234,6 +258,20 @@ impl SecurityState {
                     .cloned()
                     .collect(),
                 door_sessions: self.session_tokens.door_snapshot(),
+                retired_owner_keys: self
+                    .retired_owner_keys
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .iter()
+                    .cloned()
+                    .collect(),
+                app_owner_keys: self
+                    .app_owner_keys
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .iter()
+                    .cloned()
+                    .collect(),
             },
         )
     }

@@ -83,14 +83,20 @@ pub(crate) fn asks_presence_first(transport: &Transport) -> bool {
         Some(answer) => !answer.plain || answer.require_presence,
         None => match transport {
             // This computer's gxserver is this app's own version: its switch is in our settings.
-            Transport::Local => crate::shared_settings::shared_sidebar_settings_snapshot()
-                .object()
-                .get("approvalsRequirePresence")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
+            Transport::Local => this_computer_requires_presence(),
             Transport::Remote(_) => true,
         },
     }
+}
+
+/// This computer's own Settings > Security switch: Touch ID, Windows Hello or the password before
+/// an Approve here, and before this app uses its own keys (`approvalsRequirePresence`).
+pub(crate) fn this_computer_requires_presence() -> bool {
+    crate::shared_settings::shared_sidebar_settings_snapshot()
+        .object()
+        .get("approvalsRequirePresence")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
 }
 
 /// Approves `request` on `transport` with one click: the system prompt first when that computer

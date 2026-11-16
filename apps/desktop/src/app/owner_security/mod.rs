@@ -33,7 +33,7 @@ use std::{
 
 use ghostex_gx_protocol::approval::{
     APPROVAL_REQUIRED_ERROR, ApprovalRequest, approval_signing_payload,
-    owner_session_signing_payload,
+    owner_key_approval_signing_payload, owner_session_signing_payload,
 };
 use serde_json::{Value, json};
 
@@ -91,6 +91,9 @@ struct OwnerSession {
     server_id: Option<String>,
     /// That computer refused this app's ask because too many asked this hour (R3-2): its words.
     flooded: Option<String>,
+    /// This app's own waiting "act as you" request there, which its old shared owner key may let
+    /// in once the user approves it on the unlock card ([`old_key_unlock_offer`]).
+    old_key_offer: Option<ApprovalRequest>,
 }
 
 /// A door session is opened again after this, well before gxserver lets it lapse (12 hours,
@@ -106,6 +109,54 @@ thread_local! {
     /// Set while this thread runs work the user didn't just start (a renewal, a retry loop), so
     /// an `approvalRequired` answer never shows the system prompt ([`without_prompts`]).
     static NO_PROMPTS: Cell<bool> = const { Cell::new(false) };
+    /// Part of LEGACY-SHARED-KEY-SESSION: the old shared owner key's door session and the
+    /// machine (its [`Transport::key`]) it is for, held only around its one Approve on this thread
+    /// ([`SharedKeyDoorToken`]).
+    static SHARED_KEY_DOOR_TOKEN: std::cell::RefCell<Option<(String, String)>> =
+        const { std::cell::RefCell::new(None) };
+    /// The request whose unlock card the user just approved, while this thread runs that click
+    /// ([`unlock_with_old_key`]): the old shared owner key signs only for it.
+    static OLD_KEY_CLICK: std::cell::RefCell<Option<String>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Set once the connected-computers renewal finished a full pass, so every connected machine's
+/// server id is known before the old owner key signs anything ([`note_registration_pass`]).
+static REGISTRATION_PASS_DONE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// The connected-computers renewal finished a full pass (`remote_conn/connected_computers.rs`).
+pub(crate) fn note_registration_pass() {
+    REGISTRATION_PASS_DONE.store(true, std::sync::atomic::Ordering::Release);
+}
+
+/// Part of LEGACY-SHARED-KEY-SESSION (see [`approve_with_shared_key_session`]): holds the old
+/// shared key's door session in this thread's slot for one machine, and empties the slot when
+/// dropped, on a panic too (review finding 6).
+struct SharedKeyDoorToken;
+
+impl SharedKeyDoorToken {
+    fn hold(transport: &Transport, token: String) -> Self {
+        SHARED_KEY_DOOR_TOKEN.with(|slot| *slot.borrow_mut() = Some((transport.key(), token)));
+        Self
+    }
+
+    /// The held session when it is for `transport`'s machine; never another machine's.
+    fn for_transport(transport: &Transport) -> Option<String> {
+        let key = transport.key();
+        SHARED_KEY_DOOR_TOKEN.with(|slot| {
+            slot.borrow()
+                .as_ref()
+                .filter(|(machine, _)| *machine == key)
+                .map(|(_, token)| token.clone())
+        })
+    }
+}
+
+impl Drop for SharedKeyDoorToken {
+    fn drop(&mut self) {
+        let _ = SHARED_KEY_DOOR_TOKEN.try_with(|slot| *slot.borrow_mut() = None);
+    }
 }
 
 /// How soon after a failed attempt a door call tries to open the owner session again.
@@ -161,6 +212,10 @@ fn door_token_for(
     if !is_door_call(path, params) {
         return None;
     }
+    // Part of LEGACY-SHARED-KEY-SESSION: the old key's door session, for its one Approve there.
+    if let Some(token) = SharedKeyDoorToken::for_transport(transport) {
+        return Some(Ok(token));
+    }
     ensure_owner_session(transport);
     match with_session(&transport.key(), |session| session.token.clone()) {
         Some(token) => Some(Ok(token)),
@@ -186,20 +241,29 @@ pub(crate) fn door_call<R>(
 /// Why this app can't make a code or approve on `transport`'s gxserver yet: its owner key waits
 /// for an Approve there, or that Approve was denied or lapsed. `None` when neither.
 fn owner_refusal(transport: &Transport) -> Option<String> {
-    let (open, waiting, gave_up, words, flooded) = with_session(&transport.key(), |session| {
-        (
-            session.token.is_some(),
-            session.waiting_approval.is_some(),
-            session.gave_up,
-            session.key_words.clone().unwrap_or_default(),
-            session.flooded.clone(),
-        )
-    });
+    let (open, waiting, gave_up, words, flooded, offered) =
+        with_session(&transport.key(), |session| {
+            (
+                session.token.is_some(),
+                session.waiting_approval.is_some(),
+                session.gave_up,
+                session.key_words.clone().unwrap_or_default(),
+                session.flooded.clone(),
+                session.old_key_offer.is_some(),
+            )
+        });
     let me = this_computer_name();
     let local = matches!(transport, Transport::Local);
     let there = expected_computer(transport);
     match (open, waiting, gave_up) {
         (true, ..) => None,
+        // The old owner key may let this app in there: only on the user's Approve of its card.
+        (false, true, _) if offered => {
+            let (computer, host) = machine_and_host(transport);
+            Some(format!(
+                "First approve \"Let this Mac in on {computer}?\" on this Mac (it names the SSH host {host}); then you can show its code and approve its devices from here."
+            ))
+        }
         (false, false, _) if flooded.is_some() => flooded,
         (false, true, _) if local => Some(format!(
             "This computer already has an owner. On your phone, approve \"Let {me} (Ghostex app) show the pairing code of …\" once, only if it shows the key words {words}; then Ghostex here can show the code and approve devices."
@@ -469,6 +533,11 @@ fn cached_token(transport: &Transport) -> Option<String> {
                     with_session(&transport.key(), |session| {
                         session.opening = false;
                         session.plain = true;
+                        /*
+                        CDXC:Security 2026-11-17 FIX:
+                        The ask at connect never ran: this thread's start stamped `last_attempt` a moment ago, so `ensure_owner_session` below took it for a try made under `DOOR_RETRY_AFTER` and did nothing, and a connected computer with its own owner was asked only once something there waited for an Approve (m7-arch had no request at all on 16 Nov). This stamp is for the token renewal, which a plain gxserver never runs; the door's own retry starts here.
+                        */
+                        session.last_attempt = None;
                     });
                     // The owner-only door: enroll this app's key quietly now, while gxserver may
                     // still take it without a card (CDXC:Security 2026-11-16 at `door_token`).
@@ -644,7 +713,27 @@ fn open_owner_session(transport: &Transport, may_ask: bool) -> Result<String, St
                 params["firstKeySecret"] = json!(secret);
             }
         }
-        let enrolled = enroll_owner_key(transport, params)?;
+        let enrolled = match enroll_owner_key(transport, params.clone()) {
+            // That computer's only owner may be this app's old shared key (an app before
+            // 16 Nov enrolled it there): offer, or on the user's Approve of the unlock card do,
+            // the one approval with it (CDXC:Security 2026-11-17 at
+            // `approve_with_shared_owner_key`), then send the key again with that Approve.
+            Err(waiting) if waiting == OWNER_WAITING_ERROR => {
+                match approve_with_shared_owner_key(transport, &public_key, &params["key"]) {
+                    Ok(true) => enroll_owner_key(transport, params)?,
+                    Ok(false) => return Err(waiting),
+                    // The user's own click hears why; the background only logs it.
+                    Err(error) if OLD_KEY_CLICK.with(|click| click.borrow().is_some()) => {
+                        return Err(error);
+                    }
+                    Err(error) => {
+                        log::warn!("old owner key didn't let the new one in: {error}");
+                        return Err(waiting);
+                    }
+                }
+            }
+            other => other?,
+        };
         let key_id = enrolled
             .get("key")
             .and_then(|key| text(key, "keyId"))
@@ -652,7 +741,7 @@ fn open_owner_session(transport: &Transport, may_ask: bool) -> Result<String, St
         let status =
             rpc(transport, "/api/securityStatus", json!({})).map_err(|(_, message)| message)?;
         let server_id = text(&status, "serverId").ok_or("gxserver didn't say its id")?;
-        check_server_id(transport, &server_id)?;
+        check_server_id(transport, &server_id, true)?;
         let challenge =
             rpc(transport, "/api/ownerChallenge", json!({})).map_err(|(_, message)| message)?;
         let challenge = text(&challenge, "challenge").ok_or("gxserver gave no challenge")?;
@@ -682,6 +771,354 @@ Review B1 of the owner-only door: the app signed an owner session for whatever s
 CDXC:Security 2026-11-16 FIX:
 Review round 2 (R2-1): the per-computer key, the cached owner session and the server-id pin were named after the connected computer's token, which that computer hands over, so an agent on one computer that set its token file to another computer's token got that computer's cached session, or a signature with its key. They are now named after this app's own id for the machine (its settings, `GpuiRemoteGxserverRequestTarget::machine_id`) mixed with a random salt kept in the key store (`ghostex_owner_keys::local_salt`). The pin is saved (`owner-session-pins.json` in Ghostex's state folder): each machine id keeps the server id it first signed for, and a server id already pinned to another machine is refused. Two computers that happen to share a server id (360 values) therefore can't both act as you from here; removing one and adding it again names it anew.
 */
+/*
+CDXC:Security 2026-11-17 FIX:
+User (Q3603, "fix Ghostex first"): review B1's own key per connected computer left every computer connected before 16 Nov locked. Apps before it enrolled this app's one shared owner key there (m7-arch: its only owner key, no phone, its own app not enrolled), so gxserver there keeps the door from its token file, the new key waits for an Approve, and no device that could give it signs there any more: no phone or computer could be let in. Where that computer lists the shared key as an owner, this app uses it once, for its own waiting "act as you" ask for its new key there and nothing else.
+*/
+/*
+CDXC:Security 2026-11-17 FIX:
+User (after the first review): "add a gxserver op where the old shared key's signature approves exactly one pending request (covering server id, request id + nonce, and the new key id)", "the app uses that op when the computer's gxserver supports it", "keep a fallback for computers still on an older gxserver". A gxserver that says `approveWithOwnerKey` gets the old key's signature over that one approval (`/api/approveWithOwnerKey`), and retires the old key there once it succeeds; an older one gets the old door session (LEGACY-SHARED-KEY-SESSION below).
+*/
+/*
+CDXC:Security 2026-11-17 FIX:
+User (after the second review, whose finding 1 is a relay: an agent turns one connected computer's gxserver into a forwarder to another computer that lists the old key, and anything gxserver reports, the forwarder reports too): "Old-key signatures (new op and legacy) run only inside the user's own click (Approve / show pairing code / Settings action), never in the background, and the UI names the SSH host the app connected to. Also wait for one full connected-computers registration pass before any old-key signature." In the background this app only checks and offers: once a full registration pass is done (so every connected machine's server id is known to `check_server_id`), the renewal shows one card, "Let this Mac in on <computer>?", naming the SSH host this app reached and quoting what the computer there says it is (`old_key_unlock_offer`, `owner_security_show_unlock_card` in ui.rs). The old key signs only inside the Approve of that very card (`unlock_with_old_key`), for that one request, after Touch ID where this computer's own switch asks for it (this Mac's key, so this Mac's setting, not the remote's answer: finding 6), and only then is the server id pinned. A pairing code or Approve for that computer meanwhile says to approve that card first.
+*/
+/// What the old shared owner key may do for this app's waiting ask on `transport` (checked, not
+/// signed): the request, the key, the server id it would sign for and whether that gxserver takes
+/// the one signed approval. `None` when there is nothing to do that way, or not yet.
+struct OldKeyUnlock {
+    request: ApprovalRequest,
+    new_key_id: String,
+    shared: ghostex_owner_keys::DeviceKey,
+    shared_key_id: String,
+    server_id: String,
+    signs_one_approval: bool,
+}
+
+fn check_old_key_unlock(
+    transport: &Transport,
+    new_public_key: &str,
+) -> Result<Option<OldKeyUnlock>, String> {
+    use ghostex_gx_protocol::approval::SensitiveAction;
+    if matches!(transport, Transport::Local)
+        || !REGISTRATION_PASS_DONE.load(std::sync::atomic::Ordering::Acquire)
+    {
+        return Ok(None);
+    }
+    let Some(request_id) =
+        with_session(&transport.key(), |session| session.waiting_approval.clone())
+    else {
+        return Ok(None);
+    };
+    let RequestState::Pending(request) = request_state(transport, &request_id) else {
+        return Ok(None);
+    };
+    let new_key_id = key_id_of(new_public_key).ok_or("this app's owner key couldn't be read")?;
+    if request.action != SensitiveAction::AddApproverKey
+        || request.target.as_deref() != Some(new_key_id.as_str())
+    {
+        return Ok(None);
+    }
+    let shared =
+        ghostex_owner_keys::load_or_create_owner_key().map_err(|error| error.to_string())?;
+    let shared_key_id =
+        key_id_of(&shared.public_key_b64()).ok_or("the old owner key couldn't be read")?;
+    let status =
+        rpc(transport, "/api/securityStatus", json!({})).map_err(|(_, message)| message)?;
+    let lists_shared_key = status
+        .get("ownerKeys")
+        .and_then(Value::as_array)
+        .is_some_and(|keys| {
+            keys.iter()
+                .any(|key| text(key, "keyId").as_deref() == Some(shared_key_id.as_str()))
+        });
+    if !lists_shared_key {
+        return Ok(None);
+    }
+    let server_id = text(&status, "serverId").ok_or("gxserver didn't say its id")?;
+    check_server_id(transport, &server_id, false)?;
+    let signs_one_approval =
+        status.get("approveWithOwnerKey").and_then(Value::as_bool) == Some(true);
+    if !signs_one_approval {
+        // Part of LEGACY-SHARED-KEY-SESSION: the door session needs both records first.
+        recorded_server_id_matches(transport, &server_id)?;
+    }
+    Ok(Some(OldKeyUnlock {
+        request,
+        new_key_id,
+        shared,
+        shared_key_id,
+        server_id,
+        signs_one_approval,
+    }))
+}
+
+/// Lets this app's owner key for `transport` (`new_public_key`) in with the old shared owner key,
+/// only inside the user's Approve on that request's unlock card ([`unlock_with_old_key`]); any
+/// other time it only keeps the offer for the card. `Ok(false)` when it didn't sign.
+fn approve_with_shared_owner_key(
+    transport: &Transport,
+    new_public_key: &str,
+    new_key: &Value,
+) -> Result<bool, String> {
+    let Some(unlock) = check_old_key_unlock(transport, new_public_key)? else {
+        return Ok(false);
+    };
+    let clicked =
+        OLD_KEY_CLICK.with(|click| click.borrow().as_deref() == Some(unlock.request.id.as_str()));
+    if !clicked {
+        with_session(&transport.key(), |session| {
+            session.old_key_offer = Some(unlock.request.clone());
+        });
+        return Ok(false);
+    }
+    presence_for_unlock(transport)?;
+    // The pin only now, right before the signature (first review, finding 4).
+    check_server_id(transport, &unlock.server_id, true)?;
+    if !unlock.signs_one_approval {
+        return approve_with_shared_key_session(
+            transport,
+            &unlock.shared,
+            &unlock.shared_key_id,
+            &unlock.server_id,
+            &unlock.request,
+        );
+    }
+    let payload = owner_key_approval_signing_payload(
+        &unlock.server_id,
+        &unlock.request.id,
+        &unlock.request.nonce,
+        &unlock.new_key_id,
+    )
+    .map_err(|error| error.to_string())?;
+    let signature = unlock
+        .shared
+        .sign_b64(&payload)
+        .map_err(|error| error.to_string())?;
+    rpc(
+        transport,
+        "/api/approveWithOwnerKey",
+        json!({
+            "id": unlock.request.id,
+            "keyId": unlock.shared_key_id,
+            "signature": signature,
+            // gxserver enrolls it in the same step, so a lost answer leaves nothing half done.
+            "key": new_key,
+        }),
+    )
+    .map_err(|(_, message)| message)?;
+    Ok(true)
+}
+
+/// Touch ID, Windows Hello or the password before the old owner key signs, when this computer's
+/// own Settings > Security switch asks for it (it is this computer's key; second review, finding
+/// 6): one prompt at a time (`PROMPT_OPEN`), naming the computer and the SSH host.
+fn presence_for_unlock(transport: &Transport) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+    if !plain::this_computer_requires_presence() {
+        return Ok(());
+    }
+    if PROMPT_OPEN
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return Err("Another approval prompt is open. Finish it, then approve again.".to_string());
+    }
+    let (computer, host) = machine_and_host(transport);
+    let confirmed = ghostex_owner_keys::confirm_presence(&format!(
+        "let this Mac in on {computer} (SSH {host}) with its old owner key"
+    ));
+    PROMPT_OPEN.store(false, Ordering::Release);
+    confirmed.map(|_| ()).map_err(|error| error.to_string())
+}
+
+/// The name this app keeps for `transport`'s machine and the SSH host it connects to there, as
+/// saved in Settings > Remote (what a forwarder on that connection can't change).
+fn machine_and_host(transport: &Transport) -> (String, String) {
+    let Transport::Remote(target) = transport else {
+        return ("this computer".to_string(), "this computer".to_string());
+    };
+    let computer = crate::app::helpers::gpui_remote_machine_name_from_settings(&target.machine_id)
+        .unwrap_or_else(|| "That computer".to_string());
+    let snapshot = crate::shared_settings::shared_sidebar_settings_snapshot();
+    let saved = snapshot
+        .object()
+        .get("remoteMachines")
+        .and_then(Value::as_array)
+        .and_then(|machines| {
+            machines.iter().find(|machine| {
+                crate::app::helpers::gpui_remote_machine_id_from_value(machine).as_deref()
+                    == Some(target.machine_id.as_str())
+            })
+        })
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let field = |key: &str| crate::app::helpers::gpui_remote_machine_string_field(&saved, key);
+    let host = match (field("sshUser"), field("sshHost")) {
+        (Some(user), Some(host)) => format!("{user}@{host}"),
+        (None, Some(host)) => host,
+        _ => field("easyConnectAddress")
+            .map(|address| format!("Easy Connect {address}"))
+            .unwrap_or_else(|| "an unknown host".to_string()),
+    };
+    (computer, host)
+}
+
+/// The unlock card's offer for `target`'s machine, checked in the background after a full
+/// registration pass (`remote_conn/connected_computers.rs`): this app's waiting "act as you"
+/// request there, when its old shared owner key may let it in. Never signs.
+pub(crate) fn old_key_unlock_offer(
+    target: &GpuiRemoteGxserverRequestTarget,
+) -> Option<ApprovalRequest> {
+    let transport = Transport::Remote(target.clone());
+    let key = transport.key();
+    if with_session(&key, |session| session.token.is_some() || session.gave_up) {
+        return None;
+    }
+    let new_public_key = owner_key_for(&transport).ok()?.public_key_b64();
+    let checked = in_security_flow(|| check_old_key_unlock(&transport, &new_public_key));
+    match checked {
+        Ok(Some(unlock)) => {
+            with_session(&key, |session| {
+                session.old_key_offer = Some(unlock.request.clone());
+            });
+            Some(unlock.request)
+        }
+        Ok(None) => None,
+        Err(error) => {
+            log::info!("old owner key not offered: {error}");
+            None
+        }
+    }
+}
+
+/// The unlock card's title and words for `request` on `target`'s machine: what it does, the SSH
+/// host this app reached, and what the computer there says it is (the request's own summary,
+/// which names it and its server id).
+pub(crate) fn old_key_unlock_card(
+    target: &GpuiRemoteGxserverRequestTarget,
+    request: &ApprovalRequest,
+) -> (String, String) {
+    let (computer, host) = machine_and_host(&Transport::Remote(target.clone()));
+    (
+        format!("Let this Mac in on {computer}?"),
+        format!(
+            "{computer}'s Ghostex has only this Mac's old owner key (from before 16 Nov) as its owner, so nobody can let new phones or computers in there. Approve lets this Mac's new key in there, once, with that old key. This Mac reached {computer} over SSH at {host}, and the computer there says: \"{}\". Approve only if that names {computer}.",
+            request.summary.trim().trim_end_matches('.')
+        ),
+    )
+}
+
+/// Approve on the unlock card for `request`, the user's own click: the old shared owner key
+/// signs for that request alone, then this app's key there opens its door session.
+pub(crate) fn unlock_with_old_key(
+    transport: &Transport,
+    request: &ApprovalRequest,
+) -> Result<(), String> {
+    let outer = OLD_KEY_CLICK.with(|click| click.replace(Some(request.id.clone())));
+    let opened = in_security_flow(|| open_owner_session(transport, true));
+    OLD_KEY_CLICK.with(|click| *click.borrow_mut() = outer);
+    let token = opened.map_err(|error| {
+        if error == OWNER_WAITING_ERROR {
+            let (computer, _) = machine_and_host(transport);
+            format!(
+                "This Mac's old owner key couldn't let it in on {computer} now. Try again in a minute; if this keeps happening, approve this Mac in Ghostex on {computer} or on a phone paired with it."
+            )
+        } else {
+            error
+        }
+    })?;
+    with_session(&transport.key(), |session| {
+        session.token = Some(token);
+        session.door_only = true;
+        session.opened_at = Some(Instant::now());
+        session.old_key_offer = None;
+    });
+    Ok(())
+}
+
+/*
+LEGACY-SHARED-KEY-SESSION (CDXC:Security 2026-11-17): the fallback for a connected computer whose gxserver doesn't say `approveWithOwnerKey` yet (before 17 Nov). Delete it once every connected computer runs a newer gxserver; the user will ask. Delete together: this function, `recorded_server_id_matches`, `SharedKeyDoorToken` with `SHARED_KEY_DOOR_TOKEN` and its check in `door_token_for`, and the two `!signs_one_approval` branches in `check_old_key_unlock` and `approve_with_shared_owner_key` (a computer without the op then gets no unlock card).
+It opens a door session with the old shared key (door routes only; 12 hours on gxserver, this app drops it after the one Approve) and approves the request with it. On a gxserver from before 17 Nov the scope isn't signed and the old key isn't retired, so such a signature, relayed, could open a session on any computer listing that key: only the user's click on a card naming the SSH host, the server-id checks and the records below stand in the way.
+*/
+/// Part of LEGACY-SHARED-KEY-SESSION (above): approves `request` with a door session of the old
+/// shared key `shared`, held only for this one call to `transport`'s machine.
+fn approve_with_shared_key_session(
+    transport: &Transport,
+    shared: &ghostex_owner_keys::DeviceKey,
+    shared_key_id: &str,
+    server_id: &str,
+    request: &ApprovalRequest,
+) -> Result<bool, String> {
+    let challenge =
+        rpc(transport, "/api/ownerChallenge", json!({})).map_err(|(_, message)| message)?;
+    let challenge = text(&challenge, "challenge").ok_or("gxserver gave no challenge")?;
+    let payload = owner_session_signing_payload(server_id, &challenge, shared_key_id)
+        .map_err(|error| error.to_string())?;
+    let signature = shared
+        .sign_b64(&payload)
+        .map_err(|error| error.to_string())?;
+    let opened = rpc(
+        transport,
+        "/api/openOwnerSession",
+        json!({
+            "keyId": shared_key_id,
+            "challenge": challenge,
+            "signature": signature,
+            "scope": ghostex_gx_protocol::approval::OWNER_SCOPE_DOOR,
+        }),
+    )
+    .map_err(|(_, message)| message)?;
+    let token = text(&opened, "token").ok_or("gxserver opened no owner session")?;
+    let held = SharedKeyDoorToken::hold(transport, token);
+    let approved = rpc(
+        transport,
+        "/api/approveApprovalRequest",
+        json!({ "id": request.id }),
+    );
+    drop(held);
+    approved.map_err(|(_, message)| message)?;
+    Ok(true)
+}
+
+/*
+CDXC:Security 2026-11-17 FIX:
+User (1A, "match against what the local gxserver recorded for that computer; refuse to sign with the old key when there is no recorded match"): part of LEGACY-SHARED-KEY-SESSION. Before the old key signs a door session, the server id it would sign for must be the one this app registered for that machine (`connected_computers`, from its `/api/health/server` at each renewal) and one this computer's gxserver lists among its connected computers (`/api/listConnectedComputers`, any entry with that id); with no record or a different one, nothing is offered or signed, and the next registration pass checks again. Both records come from that machine's own answers on its connection, so this makes the answers agree with each other, not with an independent record: none was kept before 16 Nov. The local list alone could be written by an agent here, which is why this app's own record must match too.
+*/
+/// Part of LEGACY-SHARED-KEY-SESSION: refuses to sign a door session with the old shared owner
+/// key for `server_id` unless this app's registration of `transport`'s machine and this
+/// computer's gxserver both record that server id.
+fn recorded_server_id_matches(transport: &Transport, server_id: &str) -> Result<(), String> {
+    const REFUSED: &str = "That computer's server id doesn't match the one recorded for it here, so this app didn't use its old owner key there.";
+    let Transport::Remote(target) = transport else {
+        return Err(REFUSED.to_string());
+    };
+    let registered = crate::app::remote_conn::connected_computers::gpui_remote_machine_server_id(
+        &target.machine_id,
+    );
+    if registered.as_deref() != Some(server_id) {
+        log::warn!("old owner key not used: the app's record of that machine's server id differs");
+        return Err(REFUSED.to_string());
+    }
+    let listed =
+        gpui_gxserver_rpc_result_with_code("/api/listConnectedComputers", &json!({}), CALL_TIMEOUT)
+            .map_err(|error| error.message)?;
+    let recorded_here = listed
+        .get("computers")
+        .and_then(Value::as_array)
+        .is_some_and(|computers| {
+            computers
+                .iter()
+                .any(|computer| text(computer, "serverId").as_deref() == Some(server_id))
+        });
+    if !recorded_here {
+        log::warn!("old owner key not used: this computer's gxserver records no such computer");
+        return Err(REFUSED.to_string());
+    }
+    Ok(())
+}
+
 /// The owner key this app signs with on `transport`: this computer's, or the one of that
 /// connected computer.
 fn owner_key_for(transport: &Transport) -> Result<ghostex_owner_keys::DeviceKey, String> {
@@ -720,8 +1157,9 @@ static PINS_LOCK: Mutex<()> = Mutex::new(());
 
 /// Refuses to sign an owner session for `server_id` on `transport` when it is this computer's own
 /// id over a connection to another computer, not the id that machine signed for before, or the id
-/// another machine signed for.
-fn check_server_id(transport: &Transport, server_id: &str) -> Result<(), String> {
+/// another machine signed for. `pin`: keep `server_id` as that machine's from now on; only right
+/// before a signature, so an attempt refused or cancelled before it pins nothing (review finding 4).
+fn check_server_id(transport: &Transport, server_id: &str, pin: bool) -> Result<(), String> {
     const REFUSED: &str = "That computer's Ghostex answered as another computer, so this app didn't sign in there as you.";
     let Transport::Remote(target) = transport else {
         return Ok(());
@@ -743,11 +1181,28 @@ fn check_server_id(transport: &Transport, server_id: &str) -> Result<(), String>
             log::warn!("owner session not signed: a machine answered with another server id");
             return Err(REFUSED.to_string());
         }
+        // Pinned before: another machine reporting the same id later doesn't lock it out
+        // (second review, finding 4).
         return Ok(());
     }
     if pins.values().any(|pinned| pinned == server_id) {
         log::warn!("owner session not signed: that server id is another machine's");
         return Err(REFUSED.to_string());
+    }
+    /*
+    CDXC:Security 2026-11-17 FIX:
+    Found while proving `/api/approveWithOwnerKey`: a connection that forwards everything to another computer this app also reaches (an agent replaced that machine's gxserver with a relay) looks like that computer, so the old key's one signed approval would let this app's key for the relaying machine in there, and its door sessions, opened through the relay, would pass through it. The pins stop that only once this app signed for the real computer first. So a server id that another connected machine reported at its own registration (`connected_computers`) is refused too: the real computer's own connection names it, which a relay elsewhere can't change. Its limit: that machine must have registered in this run (connected, at its one-minute renewal); the old owner key waits for a full registration pass for that reason. Second review, finding 4 (server ids have only 360 values, so two computers can share one): it applies only to a machine not pinned yet, so a computer pinned before keeps working when another machine reports its id, and a newly reported duplicate (refused here and by the pins) can't block it.
+    */
+    if crate::app::remote_conn::connected_computers::gpui_other_remote_machine_has_server_id(
+        &target.machine_id,
+        server_id,
+    ) {
+        log::warn!("owner session not signed: another connected machine has that server id");
+        return Err(REFUSED.to_string());
+    }
+
+    if !pin {
+        return Ok(());
     }
     pins.insert(target.machine_id.clone(), server_id.to_string());
     if let Some(parent) = path.parent() {
@@ -1107,14 +1562,25 @@ pub(crate) fn answerer_for(transport: &Transport, request: &ApprovalRequest) -> 
     if open || plain::server_approvals(transport).is_none_or(|answer| answer.may_approve_devices) {
         return Answerer::ThisApp;
     }
-    let (asked, words, flooded) = with_session(&transport.key(), |session| {
+    let (asked, words, flooded, offered) = with_session(&transport.key(), |session| {
         (
             session.waiting_approval.is_some(),
             session.key_words.clone(),
             session.flooded.clone(),
+            session.old_key_offer.is_some(),
         )
     });
     let there = expected_computer(transport);
+    if offered {
+        let (computer, _) = machine_and_host(transport);
+        return Answerer::Elsewhere {
+            devices: Vec::new(),
+            asked,
+            note: Some(format!(
+                "Or approve \"Let this Mac in on {computer}?\" on this Mac first, then approve this here."
+            )),
+        };
+    }
     Answerer::Elsewhere {
         devices: Vec::new(),
         asked,

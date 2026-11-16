@@ -304,6 +304,56 @@ impl GhostexGpuiApp {
         );
     }
 
+    /// The card that lets this app in on a locked connected computer with its old shared owner
+    /// key, once per request; only its Approve signs with that key (CDXC:Security 2026-11-17 at
+    /// `owner_security::approve_with_shared_owner_key`).
+    pub(crate) fn owner_security_show_unlock_card(
+        &mut self,
+        machine_id: String,
+        request: ApprovalRequest,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        static SHOWN: std::sync::Mutex<Option<std::collections::HashSet<String>>> =
+            std::sync::Mutex::new(None);
+        let id = card_id(Some(&machine_id), &request.id);
+        let first = SHOWN
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get_or_insert_with(Default::default)
+            .insert(id.clone());
+        let Some(target) = self.gpui_remote_gxserver_request_target(&machine_id) else {
+            return;
+        };
+        if !first {
+            return;
+        }
+        let (title, description) = super::old_key_unlock_card(&target, &request);
+        let computer = crate::app::helpers::gpui_remote_machine_name_from_settings(&machine_id)
+            .unwrap_or_else(|| machine_id.clone());
+        self.upsert_gpui_app_toast(
+            GpuiAppToast {
+                id,
+                level: GpuiAppToastLevel::Warning,
+                title,
+                description: Some(description),
+                copy_text: None,
+                action: Some(GpuiAppToastAction::SecurityApproval {
+                    request: Box::new(request),
+                    deny: false,
+                    machine_id: Some(machine_id),
+                    computer: Some(computer),
+                    // This Mac's own key: this Mac's own switch (second review, finding 6).
+                    require_presence: super::plain::this_computer_requires_presence(),
+                }),
+                loading: false,
+                persistent: true,
+                duration_ms: 0,
+                epoch: 0,
+            },
+            cx,
+        );
+    }
+
     fn owner_security_show_approvable_card(
         &mut self,
         machine_id: Option<String>,
@@ -391,6 +441,12 @@ impl GhostexGpuiApp {
                 | ghostex_gx_protocol::approval::SensitiveAction::ComputerRegister
         );
         let decided = cx.background_executor().spawn(async move {
+            // The unlock card ("Let this Mac in on …?"): a click after a lost answer finds its
+            // request approved, and the key already in there; it still finishes (third review,
+            // finding 1), so it skips the "no longer waiting" check.
+            if !deny && super::asks_for_this_app(&request) {
+                return super::unlock_with_old_key(&transport, &request).map_err(Decided::Failed);
+            }
             match super::card_request(&transport, &request.id) {
                 super::CardRequest::Waiting => {}
                 super::CardRequest::Moved(newer) => return Err(Decided::Moved(newer)),
