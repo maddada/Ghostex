@@ -105,11 +105,15 @@ open nothing else). Such a session is kept apart from the owner sessions (`doorS
 `security.json`), lapses after 12 hours (`DOOR_SESSION_TTL_MS`, the app opens another), and is
 known only on `DOOR_SESSION_ENDPOINTS` (pairing codes, approvals, paired devices, the connect-back
 signature, `securityStatus`); every other route, socket and relay answers 401. The "act as you"
-card ends with three words from SHA-256 of the request's own nonce (made by gxserver for that
+card ends with four words from SHA-256 of the request's own nonce (made by gxserver for that
 request) and the key id (`approval::owner_key_words_input`); the asking app gets the request back
 and shows the same words. The card says what the key may do (door only, or everything for an
-older app's key without a scope). Requests don't replace each other; at most three for other keys
-wait at once (`OWNER_KEY_REQUESTS_WAITING`), and a fourth key is refused until they are answered. Each connected computer gets its own owner key in the
+older app's key without a scope). It names the computer and its server id, and the asking app names the
+computer and id it means. A request carrying this start's one-time value (this computer's app) is
+never capped or pushed out; past three waiting (`OWNER_KEY_REQUESTS_WAITING`) a new request pushes
+out the oldest one that isn't the app's (as replaced, so its asker may ask again), and the token
+file makes at most 12 new ones an hour (`OWNER_KEY_REQUESTS_PER_HOUR`); past that it is refused
+with plain words the asking app shows, and the security log notes `ownerKey.flood` once an hour. Each connected computer gets its own owner key in the
 app (`load_or_create_scoped_owner_key`), so its signature opens nothing on another computer (review
 B1). The key, the cached session and the server-id pin are named after the app's own id for
 that machine (its settings) mixed with a salt kept in the key store, never after anything the

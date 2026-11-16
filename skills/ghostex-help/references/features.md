@@ -5362,9 +5362,12 @@ sessions, so any client can control agents on any machine.
   Only the Ghostex app on a computer, or a phone paired with it, makes its
   pairing codes, approves new phones and computers and removes a paired phone.
   Another of your computers' apps can do it too once you approved "Let <that
-  computer> (Ghostex app) show this computer's pairing code and approve new
-  phones and computers here" there; that card and the app that asks show the
-  same three key words, so approve it only when they match. If the app here no
+  computer> (Ghostex app) show the pairing code of <this computer> (Ghostex
+  server …)" there; that card and the app that asks show the same four key
+  words and name the same computer and server id, so approve it only when they
+  match. Too many such asks from that computer's terminal in an hour are
+  refused for the rest of the hour (the asking app says so), and the security
+  log notes it. If the app here no
   longer counts as you (its key is gone: a new Keychain, a reinstall) and no
   paired phone is left to approve it, reset who owns that computer in your own
   terminal there: stop Ghostex's server with `gxserver stop` (quitting the app
