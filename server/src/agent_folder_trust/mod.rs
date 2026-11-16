@@ -5,4 +5,7 @@ mod files;
 mod launch;
 mod stores;
 
-pub(crate) use launch::{added_project_folder_trusted, trust_session_folder_before_launch};
+pub(crate) use launch::{
+    added_project_folder_trusted, carry_claude_folder_trust_for_switch,
+    trust_session_folder_before_launch,
+};

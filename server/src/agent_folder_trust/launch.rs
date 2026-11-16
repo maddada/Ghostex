@@ -67,6 +67,33 @@ pub(crate) fn trust_session_folder_before_launch(
     }
 }
 
+/// CDXC:AgentProviders 2026-11-17 WHY:
+/// Every Claude account is its own profile with its own trusted folders, so an account switch restarted a session the user had already let into its folder on Claude's "Trust this folder?" question again, and the switch sat on "Resume conversation" until it failed with "its input box is not ready" (S90:P1953:G3cfn on 2026-11-16, moved from account 4, which trusted ~/dev/Kiwimake, to account 5, which never ran there). The user's yes in one profile is carried to the others when a switch restarts the session; a folder no profile trusts keeps Claude's own question, as the 2026-11-14 decision above wants with the setting off.
+/// SEE-ALSO: server/src/accounts/restart.rs (the in-place switch), server/src/accounts/restart_verification.rs (the readiness wait).
+pub(crate) fn carry_claude_folder_trust_for_switch(session: &Value, cwd: &str) {
+    if session.pointer("/runtimeSettings/agentbox").is_some()
+        || crate::session_chat_composer::session_chat_composer_agent_id(session)
+            .as_deref()
+            .and_then(TrustingAgent::from_agent_id)
+            != Some(TrustingAgent::Claude)
+    {
+        return;
+    }
+    let home = crate::resume_lookup::home_dir();
+    let Some(folder) = trustable_folder(cwd, &home) else {
+        return;
+    };
+    if !super::stores::claude_folder_trusted_in_any_profile(&home, &folder) {
+        return;
+    }
+    for warning in trust_folder(TrustingAgent::Claude, &home, &folder) {
+        eprintln!(
+            "Could not mark {} as a trusted folder for {warning}",
+            folder.display()
+        );
+    }
+}
+
 /// CDXC:AgentProviders 2026-11-11 DECISION:
 /// User, on the first-run page (step 16, trust the folder): "from now on always trust folders added automatically i hate this trust thing". With "Trust project folders automatically" on (confirmed on this computer, see above), a session in a folder the user added to Ghostex (the project's own folder, a folder inside it, or a worktree Ghostex made for it) gets its agent's folder-trust question answered for it, like a coordinator's thread already did (CDXC:Coordinators 2026-09-30 in coordinators/state.rs). The record written before launch (`trust_session_folder_before_launch`) usually stops the question, but an agent that had never run on the computer has no record to write to yet, and some agents ask anyway; those sessions now go on without the user. Never the home folder or anything above it, which a project at `~` would be (Main Hub has its own rule). The agent's first approval of a command or an edit stays the agent's own question.
 /// SEE-ALSO: server/src/session_chat_trust_memory.rs (`session_folders_remembered`, the funnel that answers), server/src/coordinators/state.rs (`coordinator_thread_folder_trusted`).

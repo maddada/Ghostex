@@ -228,6 +228,7 @@ pub(crate) fn start(
             session,
             &cwd,
         );
+        crate::agent_folder_trust::carry_claude_folder_trust_for_switch(session, &cwd);
     }
     // Pending sends belong to the CLI that is about to exit; the new generation also makes this sequence the only writer until it finishes.
     crate::session_chat_send::cancel_session_chat_sends(&project_id, &session_id);

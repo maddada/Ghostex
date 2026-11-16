@@ -448,11 +448,12 @@ pub fn switch_card_presentation(
     } else {
         "Codex"
     };
-    // A switch that only changes the model stays on the same account (model_fallback.rs).
+    // A switch that only changes the model stays on the same account (model_fallback.rs). A retry
+    // of a failed switch to the account the session already reached is still an account switch.
     let same_account =
         progress.from_account_id.is_some() && progress.from_account_id == progress.to_account_id;
     let mut labels = vec![
-        if same_account {
+        if same_account && progress.model.is_some() {
             "Switch model"
         } else {
             "Switch account"

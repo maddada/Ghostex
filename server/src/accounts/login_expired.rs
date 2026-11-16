@@ -2,11 +2,22 @@
 //! User: an account must show as needing sign-in once one of its sessions reports "Login expired · Please run /login", in Settings > Accounts, `ghostex accounts` and wherever new sessions pick an account, so nothing new starts on it until it is signed in again. Its state used to come only from claude-swap's reading of the saved login (`usageStatus`), which never sees a running session's own login fail: on 2026-10-26 four sessions on account 4 stopped on "Login expired" while the account still read "ready". The recovery pass now marks the account (`login_expired_at`), discovery reports a marked account as `loginRequired`, and no automatic rule, pinned rule or account switch picks it. A sign-in through Ghostex (Settings > Accounts' Reconnect, the chat card's Reconnect) clears it, and so do a real reply from a session on the account and a claude-swap usage reading of its saved login taken afterwards, which prove the login works again (on 2026-10-26 account 4 was signed in again outside Ghostex two minutes after its sessions failed).
 //! WHY: As with a disabled organization (disabled.rs), the screen alone cannot say which login failed, because a resumed CLI repaints the previous login's error; only a transcript error recorded after the session moved to its current account, under that account's own login, with no reply after it, marks the account. An error from before the account last signed in never marks it again. Claude only for now: Ghostex reads Codex's sign-in errors only from its screen, which a resumed Codex can repaint.
 //! SEE-ALSO: helpers.rs (`discover_row`), store.rs (`login_expired`), default_account.rs, model.rs (`auto_switchable`), setup.rs (clears on sign-in), session_chat_account_sign_in.rs (the card's Reconnect).
+//! CDXC:AgentProviders 2026-11-17 DECISION:
+//! User: when a Claude session Ghostex starts or resumes hits "Login expired · Please run /login", Ghostex moves it to another ready account by itself and carries on, the way a session at its usage limit moves; the expired account is marked Needs sign-in so no new session (a coordinator's new thread included) starts on it, and the user is told once that it needs /login. On 2026-11-16 every new thread started on account 4 (MS, the default for new sessions) died on its first turn, and the mark never came: each session was switched away by hand within seconds, before a recovery pass saw its error card, and the switch time then hid the error from every later check. So a switch that leaves an account with an unanswered login error on it marks the account too (`mark_left_account`).
+//! WHY: The automatic switch also accepts an account whose usage could not be read (its last reading still had room), because staying on an expired login fails every turn for certain, while `recovery::ranked` needs a fresh reading that a locked Keychain (cswap `keychain_unavailable`) denies every account.
+//! SEE-ALSO: recovery.rs (`plan_session` runs `recover`), endpoint.rs (`select` runs `mark_left_account`), disabled.rs (the same switch for a disabled organization).
 
-use super::{disabled, model::*, store};
+use super::{continuation::SwitchSource, disabled, endpoint, launch, model::*, store};
 use crate::{
-    domain::DomainStateError,
+    domain::{DomainRepository, DomainStateError},
     logging::{GxserverLogInput, LogLevel},
+    notification_feed::{
+        broadcast_notification_feed_changed,
+        store::{
+            insert_notification_feed_row, notification_agent_icon, NewNotificationFeedRow,
+            NOTIFICATION_FEED_KIND_CUSTOM,
+        },
+    },
     server::AppState,
 };
 use chrono::{DateTime, Utc};
@@ -160,7 +171,7 @@ fn transcript_tail(session: &Value) -> Option<String> {
 /// Recovery-pass step for one running session: marks its account when the session shows the
 /// sign-in error card for a login that failed on that account, and clears the mark once a session
 /// on the account answers again. Never owns the session; the other recovery steps still run.
-pub(crate) fn observe(
+fn observe(
     state: &AppState,
     db: &rusqlite::Connection,
     old: &Value,
@@ -210,35 +221,288 @@ pub(crate) fn observe(
         return Ok(());
     };
     let _gate = state.accounts.mutation_gate();
+    if let Change::Mark(at) = change {
+        mark(state, db, &id, at, old, "recovery")?;
+        return Ok(());
+    }
     let mut registry = store::read(db)?;
     let Some(account) = registry.accounts.iter_mut().find(|a| a.id == id) else {
         return Ok(());
     };
-    let event = match change {
-        Change::Mark(at) => {
-            if account.login_expired_at.is_some() {
-                return Ok(());
-            }
-            account.login_expired_at = DateTime::<Utc>::from_timestamp_millis(at)
-                .map(|at| at.to_rfc3339())
-                .or_else(|| Some(Utc::now().to_rfc3339()));
-            "accountLoginExpired"
-        }
-        Change::Clear => {
-            account.login_expired_at = None;
-            account.login_confirmed_at = Some(Utc::now().to_rfc3339());
-            "accountLoginWorksAgain"
-        }
-    };
+    account.login_expired_at = None;
+    account.login_confirmed_at = Some(Utc::now().to_rfc3339());
     let name = account.name.clone();
     store::write(db, &registry)?;
     state.accounts.invalidate();
     log(
         state,
-        event,
+        "accountLoginWorksAgain",
         json!({ "accountId": id, "name": name, "projectId": pid, "sessionId": sid }),
     );
     Ok(())
+}
+
+/// Marks account `id` Needs sign-in as of `at` (milliseconds) and tells the user once, on the
+/// session that hit the error; false when it already was. The caller holds `accounts.mutations`.
+fn mark(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    id: &str,
+    at: i64,
+    session: &Value,
+    source: &str,
+) -> Result<bool, DomainStateError> {
+    let mut registry = store::read(db)?;
+    let Some(account) = registry.accounts.iter_mut().find(|a| a.id == id) else {
+        return Ok(false);
+    };
+    if account.login_expired_at.is_some() {
+        return Ok(false);
+    }
+    account.login_expired_at = DateTime::<Utc>::from_timestamp_millis(at)
+        .map(|at| at.to_rfc3339())
+        .or_else(|| Some(Utc::now().to_rfc3339()));
+    let label = launch::account_label(&account.selector, &account.name);
+    let email = super::runtime::current_snapshot()
+        .accounts
+        .iter()
+        .find(|found| endpoint::account_id(found) == id)
+        .map(|found| found.email.clone())
+        .unwrap_or_default();
+    let name = account.name.clone();
+    store::write(db, &registry)?;
+    state.accounts.invalidate();
+    log(
+        state,
+        "accountLoginExpired",
+        json!({
+            "accountId": id, "name": name, "source": source,
+            "projectId": session["projectId"], "sessionId": session["sessionId"],
+        }),
+    );
+    announce(state, db, session, &label, &email);
+    Ok(true)
+}
+
+/// The one bell row that says the account needs signing in again, on the session that found out.
+fn announce(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    session: &Value,
+    label: &str,
+    email: &str,
+) {
+    let (Some(pid), Some(sid)) = (session["projectId"].as_str(), session["sessionId"].as_str())
+    else {
+        return;
+    };
+    let who = if email.is_empty() {
+        label.to_string()
+    } else {
+        format!("{label} ({email})")
+    };
+    let row = NewNotificationFeedRow {
+        project_id: pid.to_string(),
+        session_id: sid.to_string(),
+        kind: NOTIFICATION_FEED_KIND_CUSTOM,
+        title: format!("Claude account {label} needs to sign in again"),
+        subtitle: session["title"].as_str().unwrap_or_default().to_string(),
+        body: format!(
+            "The login of Claude account {who} expired. New sessions no longer start on it, and sessions that hit this move to another ready account. Reconnect it in Settings > Accounts, or run /login in a session on it."
+        ),
+        agent_name: notification_agent_icon(session),
+        attention_event_id: None,
+    };
+    if insert_notification_feed_row(db, row).is_ok() {
+        broadcast_notification_feed_changed(state);
+    }
+}
+
+/// When the session's transcript holds a login error for `account` that nothing answered since:
+/// recorded after the session moved to the account, under the account's own login, after its
+/// login last worked, with no real reply after it. Milliseconds.
+fn unanswered_error(
+    state: &AppState,
+    registry: &Registry,
+    session: &Value,
+    account: &SavedAccount,
+) -> Option<i64> {
+    if disabled::written_by_other_login(state, registry, session, &account.id) {
+        return None;
+    }
+    let found = read_transcript(&transcript_tail(session)?);
+    let since = millis(
+        session
+            .pointer("/runtimeSettings/accountSuppressedUsageNoticeAt")
+            .and_then(Value::as_str),
+    )
+    .unwrap_or(i64::MIN);
+    let confirmed_at = millis(account.login_confirmed_at.as_deref()).max(reading_at(&account.id));
+    let expired = found.expired_at?;
+    (expired > since
+        && confirmed_at.is_none_or(|confirmed| expired > confirmed)
+        && found.replied_at.is_none_or(|replied| replied < expired))
+    .then_some(expired)
+}
+
+/// A switch is about to move `session` off `from`: when the session's last turn there failed on an
+/// expired login, the account is marked Needs sign-in now, since after the switch its error is
+/// older than the switch and no later check counts it. The caller holds `accounts.mutations`.
+pub(crate) fn mark_left_account(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    registry: &Registry,
+    session: &Value,
+    from: &str,
+) {
+    let Some(account) = registry
+        .accounts
+        .iter()
+        .find(|a| a.id == from && a.provider == Provider::Claude)
+    else {
+        return;
+    };
+    if account.login_expired_at.is_some()
+        || launch::session_uses_own_login(Provider::Claude, session)
+    {
+        return;
+    }
+    if let Some(at) = unanswered_error(state, registry, session, account) {
+        let _ = mark(state, db, from, at, session, "switch");
+    }
+}
+
+/// The account a session whose login expired moves to: the one a usage-limit switch picks, else,
+/// while no account's usage can be read, the lowest-numbered ready account set to Automatic whose
+/// last reading still had room (see the module's 2026-11-17 WHY).
+fn replacement(
+    registry: &Registry,
+    snapshot: &Snapshot,
+    session: &Value,
+    current: &str,
+) -> Option<String> {
+    let policy = launch::effective_policy(registry, Provider::Claude, session);
+    if let Some(best) = super::recovery::ranked(
+        registry,
+        snapshot,
+        Provider::Claude,
+        Some(current),
+        "",
+        policy.priority,
+    )
+    .first()
+    {
+        return Some(best.id.clone());
+    }
+    registry
+        .accounts
+        .iter()
+        .filter(|a| a.provider == Provider::Claude && a.auto_switchable() && a.id != current)
+        .filter(|a| {
+            snapshot.accounts.iter().any(|found| {
+                endpoint::account_id(found) == a.id
+                    && found.status == "ready"
+                    && found.usage.iter().all(|w| w.used_percent < 100.)
+            })
+        })
+        .min_by_key(|a| (a.selector.parse::<u32>().unwrap_or(u32::MAX), a.id.clone()))
+        .map(|a| a.id.clone())
+}
+
+/// Recovery-pass step for one running Claude session: when it shows the sign-in error card for an
+/// expired login on its account, the account is marked and the session moves to another ready
+/// account, which continues the task the way a usage-limit switch does. True when it owned the
+/// session this pass.
+pub(crate) fn recover(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    repo: &DomainRepository<'_>,
+    snapshot: &Snapshot,
+    project: &Value,
+    old: &Value,
+    provider: Provider,
+) -> Result<bool, DomainStateError> {
+    let _ = observe(state, db, old, provider);
+    let (Some(pid), Some(sid)) = (old["projectId"].as_str(), old["sessionId"].as_str()) else {
+        return Ok(false);
+    };
+    if provider != Provider::Claude
+        || launch::session_uses_own_login(provider, old)
+        || old["lifecycleState"].as_str() != Some("running")
+        || disabled::switch_in_progress(old)
+        || !crate::session_chat_options::cached_session_chat_terminal_notice(state, pid, sid)
+            .is_some_and(|notice| notice.sign_in_error())
+    {
+        return Ok(false);
+    }
+    let _gate = state.accounts.mutation_gate();
+    let Some(session) = repo.get_session(pid, sid)? else {
+        return Ok(true);
+    };
+    if session["lifecycleState"].as_str() != Some("running")
+        || disabled::switch_in_progress(&session)
+    {
+        return Ok(true);
+    }
+    let registry = store::read(db)?;
+    let Some(current) = disabled::current_account(state, &registry, &session) else {
+        return Ok(false);
+    };
+    let Some(account) = registry.accounts.iter().find(|a| a.id == current) else {
+        return Ok(false);
+    };
+    let Some(expired_at) = unanswered_error(state, &registry, &session, account) else {
+        return Ok(false);
+    };
+    mark(state, db, &current, expired_at, &session, "recovery")?;
+    let registry = store::read(db)?;
+    let policy = launch::effective_policy(&registry, provider, &session);
+    if !policy.enabled
+        || session
+            .pointer("/runtimeSettings/accountRecoverySuppressed")
+            .and_then(Value::as_bool)
+            == Some(true)
+        || session
+            .pointer("/runtimeSettings/accountRecovery/status")
+            .and_then(Value::as_str)
+            == Some("needsAttention")
+    {
+        return Ok(true);
+    }
+    let attention = |reason: &str| {
+        json!({
+            "status": "needsAttention", "trigger": "loginExpired", "attempt": 0,
+            "reason": reason, "updatedAt": Utc::now().to_rfc3339()
+        })
+    };
+    let Some(target) = replacement(&registry, snapshot, &session, &current) else {
+        super::recovery::save(state, repo, &session, attention("This account's login expired, and no other Claude account set to Automatic is ready. Run /login, reconnect the account in Settings > Accounts, or switch this session to another account."))?;
+        return Ok(true);
+    };
+    match endpoint::select(
+        state,
+        repo,
+        &registry,
+        snapshot,
+        project,
+        &session,
+        Some(&target),
+        SwitchSource::Automatic,
+    ) {
+        Ok(()) => {
+            log(
+                state,
+                "accountLoginExpiredSwitch",
+                json!({ "projectId": pid, "sessionId": sid, "from": current, "to": target }),
+            );
+            endpoint::publish(state, repo, &session)?;
+        }
+        Err(error) => {
+            let session = repo.get_session(pid, sid)?.unwrap_or(session);
+            super::recovery::save(state, repo, &session, attention(&error.message))?;
+        }
+    }
+    Ok(true)
 }
 
 /// Clears the mark of every account whose saved login claude-swap has read successfully since,

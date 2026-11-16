@@ -629,6 +629,8 @@ pub(crate) fn dispatch(
                         SwitchSource::Manual
                     },
                 )?;
+                // The switch may have marked the account it left as needing sign-in (login_expired.rs), so the writes below start from the stored list.
+                registry = store::read(&db)?;
                 // Choosing a disabled account by hand is the user saying it works again (disabled.rs); otherwise the next send would move the session straight off it.
                 let chosen = required(params, "accountId")?;
                 if let Some(account) = registry
@@ -856,6 +858,9 @@ pub(crate) fn select(
     if current == id && !retrying_failed_switch {
         return Ok(());
     }
+    if let Some(from) = current.filter(|from| Some(*from) != id) {
+        super::login_expired::mark_left_account(state, repository.db, registry, session, from);
+    }
     let mut runtime = session["runtimeSettings"]
         .as_object()
         .cloned()
@@ -961,12 +966,30 @@ pub(crate) fn select(
     if restarting_in_place {
         super::restart::retain_current_account(&mut runtime, session);
     }
+    // A retry of a failed switch is the same move: the failed attempt already recorded the target as
+    // the session's account once its agent started there, so the card keeps the account the
+    // conversation came from.
+    let from_account = retrying_failed_switch
+        .then(|| {
+            session
+                .pointer("/runtimeSettings/accountSwitch/fromAccountId")
+                .and_then(Value::as_str)
+        })
+        .flatten()
+        .or_else(|| {
+            super::session_identity::display_account_id(
+                registry,
+                provider,
+                session,
+                &state.paths.home_dir,
+            )
+        });
     runtime.insert("accountSwitch".into(), json!({
         "id": uuid::Uuid::new_v4().to_string(),
         "provider": provider,
         "source": if source == SwitchSource::Automatic { "automatic" } else { "manual" },
         "phase": "switching",
-        "fromAccountId": super::session_identity::display_account_id(registry, provider, session, &state.paths.home_dir),
+        "fromAccountId": from_account,
         "toAccountId": id,
         // When the session left `fromAccountId`; `updatedAt` follows every later phase (recovery::left_account).
         "leftAt": chrono::Utc::now().to_rfc3339(),

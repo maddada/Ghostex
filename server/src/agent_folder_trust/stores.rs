@@ -232,6 +232,27 @@ fn claude_config_files(home: &Path) -> Vec<PathBuf> {
     dedupe_files(files.into_iter().filter(|file| file.is_file()).collect())
 }
 
+/// Whether any Claude Code profile on this computer (see `claude_config_files`) records `folder`
+/// as trusted: the user answered Claude's folder-trust question with yes there.
+pub(super) fn claude_folder_trusted_in_any_profile(home: &Path, folder: &Path) -> bool {
+    let key = folder_key(folder);
+    let key = if cfg!(windows) {
+        key.replace('\\', "/")
+    } else {
+        key
+    };
+    claude_config_files(home).iter().any(|file| {
+        read_json_object(file).ok().flatten().is_some_and(|config| {
+            config
+                .object
+                .get("projects")
+                .and_then(|projects| projects.get(&key))
+                .and_then(|project| project.get("hasTrustDialogAccepted"))
+                == Some(&Value::Bool(true))
+        })
+    })
+}
+
 /// Claude Code keys its projects by the folder path, with forward slashes on Windows.
 fn trust_in_claude_config(file: &Path, key: &str) -> io::Result<()> {
     let key = if cfg!(windows) {

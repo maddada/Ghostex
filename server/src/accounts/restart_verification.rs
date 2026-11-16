@@ -147,15 +147,25 @@ pub(crate) async fn wait_for_account_ready(
                         if composer.state == SessionChatComposerState::Ready && !cancelled() {
                             return Ok(());
                         }
+                        let trust_prompt = notice
+                            .as_ref()
+                            .is_some_and(|notice| notice.kind == SESSION_CHAT_NOTICE_TRUST_PROMPT);
                         if target.accept_remembered_trust
-                            && notice.as_ref().is_some_and(|notice| {
-                                notice.kind == SESSION_CHAT_NOTICE_TRUST_PROMPT
-                            })
+                            && trust_prompt
                             && trust_answered_at.is_none_or(|at| at.elapsed() >= TRUST_ANSWER_RETRY)
                             && !cancelled()
                         {
                             trust_answered_at = Some(Instant::now());
                             accept_remembered_trust(&target, agent).await;
+                        }
+                        // The folder question is the user's to answer, and the chat shows it as a card.
+                        if trust_prompt {
+                            reason = "The selected account started, but it asks whether to trust this folder. Answer the folder question in the chat to continue.".to_string();
+                            tokio::time::sleep(Duration::from_millis(250)).await;
+                            if Instant::now() >= deadline {
+                                return Err(reason);
+                            }
+                            continue;
                         }
                     }
                     reason = "The selected account started, but its input box is not ready. Check the terminal for a login or setup prompt.".to_string();

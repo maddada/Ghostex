@@ -662,8 +662,10 @@ pub(crate) fn plan_session(
     let Some(provider) = launch::provider(&project, old) else {
         return Ok(None);
     };
-    // Ahead of the Continue automatically check too: a login a session reported expired marks its account Needs sign-in whatever this session's policy says.
-    let _ = super::login_expired::observe(state, db, old, provider);
+    // Ahead of the Continue automatically check too: a login a session reported expired marks its account Needs sign-in whatever this session's policy says, and with Continue automatically on moves the session to another ready account.
+    if super::login_expired::recover(state, db, repo, snapshot, &project, old, provider)? {
+        return Ok(None);
+    }
     // Ahead of the Continue automatically check: a disabled login is marked out of automatic switching whatever this session's policy says.
     if super::disabled::recover(state, db, repo, snapshot, &project, old, provider)? {
         return Ok(None);
