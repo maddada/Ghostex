@@ -6090,6 +6090,14 @@ closed Workers included, each with the Worker's name. They open read-only there.
 Each group (Unanswered, Earlier, Worker pages) shows its newest 30 rows at first
 (Unanswered always in full) with its own "Show all N" under them, which loads the
 rest; a folded group shows none.
+Star a page to find it again: on the computer, click the star at the right end of
+its card's window bar, the star on its row in Chat Resources (shown while the
+pointer is on the row), or Star page in its window's ⋯ menu; on the phone, Star in
+the ⋯ menu of its card or of the open page. A starred page's row shows a yellow
+star and the dropdown gets Starred, which lists only starred pages. Stars belong to
+the chat they were set in, are kept by Ghostex across restarts and devices, and are
+never shown to the agent. When the agent shows a newer version of the same file,
+the star moves to the newest one; unstarring takes it off every version.
 Every copy shows a small "Copied!" bubble at the pointer for a moment, whether
 it came from a terminal, a chat message, a copy button, or a menu. Copy sound is
 off by default. Enable it under Settings > Notifications > Sounds to also hear a
