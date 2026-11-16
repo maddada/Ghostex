@@ -1030,7 +1030,10 @@ pub(crate) fn read_question_tags(
         .flat_map(|item| item.asks.iter().map(|ask| ask.tag.to_ascii_uppercase()))
         .filter(|tag| !tag.is_empty())
         .collect();
-    let highest = highest_q_tag(states.keys()).max(highest_q_tag(item_tags.iter()));
+    // A Needs you to-do's tag is never given again either (session_needs_you/).
+    let highest = highest_q_tag(states.keys())
+        .max(highest_q_tag(item_tags.iter()))
+        .max(crate::session_needs_you::highest_tag(db, &key));
     let mut tags: Vec<Value> = states
         .iter()
         .map(|(tag, settled)| json!({ "tag": tag, "settled": settled, "where": "chat" }))
@@ -1288,6 +1291,9 @@ pub(crate) fn observe_activity(state: &AppState, params: &Map<String, Value>, re
     std::thread::spawn(move || {
         std::thread::sleep(SETTLE_DELAY);
         refresh(&state, &project_id, &session_id, turn_end);
+        if let Some(ended_idle) = turn_end {
+            crate::session_needs_you::turn_ended(&state, &project_id, &session_id, ended_idle);
+        }
     });
 }
 
@@ -1392,8 +1398,31 @@ fn notify(
     newly: &[OpenAsker],
     raise_attention: bool,
 ) {
-    let body =
-        crate::notification_feed::store::bounded_notification_body(&notification_body(newly));
+    notify_waiting(
+        state,
+        db,
+        repository,
+        project_id,
+        session_id,
+        &notification_body(newly),
+        raise_attention,
+    );
+}
+
+/// A turn left something new waiting on the user (`body` says what): its Finished feed row turns
+/// into Needs input with `body`, and with `raise_attention` (the turn ended idle) the session is
+/// raised to attention once. Open questions and Needs you to-dos (session_needs_you/) both alert
+/// this way.
+pub(crate) fn notify_waiting(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+    body: &str,
+    raise_attention: bool,
+) {
+    let body = crate::notification_feed::store::bounded_notification_body(body);
     if raise_attention {
         // The turn ended without attention, so nothing sounded yet: raise it once, the way any
         // other wait for input is raised.

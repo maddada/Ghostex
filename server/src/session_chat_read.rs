@@ -246,6 +246,8 @@ pub(crate) fn resolve_session_chat_read_state(
     .hash(&mut hasher);
     // Same discipline: a secret request card opening or closing wakes the long-poller.
     crate::secret_requests::secret_requests_identity(project_id, session_id).hash(&mut hasher);
+    // A Needs you to-do opening or closing too (session_needs_you/).
+    crate::session_needs_you::needs_you_identity(project_id, session_id).hash(&mut hasher);
     /*
     CDXC:AgentScreenDetection 2026-08-22:
     The progress row DOES hash its numbers, unlike the notice above. A notice
@@ -751,6 +753,7 @@ pub(crate) async fn handle_read_session_chat_http(
     crate::coordinators::insert_coordinator_threads(&mut result, &project_id, &session_id);
     crate::side_chats::insert_side_chats(&mut result, &project_id, &session_id);
     crate::secret_requests::insert_secret_requests(&mut result, &project_id, &session_id);
+    crate::session_needs_you::insert_needs_you(&mut result, &project_id, &session_id);
     crate::coordinators::insert_relayed_answers(&mut result, &project_id, &session_id);
     crate::autopilot::insert_chat_autopilot(&mut result, &project_id, &session_id);
     crate::collab_shim::insert_chat_collab(&mut result, &project_id, &session_id);

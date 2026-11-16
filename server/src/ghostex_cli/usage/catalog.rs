@@ -249,6 +249,10 @@ pub fn usage() -> String {
             "Ask the user for a password, API key or token through a private card in this session's chat, and wait for the answer. The value never enters the chat or your context: when saved, the result names an owner-only file (deleted after 24 hours) to read inside the command that needs it. Use it instead of asking for a secret in chat, and for a sudo password",
         ),
         format_help_command(
+            "needs-you add \"what to do\" [--detail text] [--command text] [--answer label]... | list [--all] | done Q<n> | drop Q<n>",
+            "Put a step only the user can do (a sudo command, a tap on their phone, a sign-in, a check by eye) above this session's chat box as a to-do with a Done button; it stays until they press Done or you clear it, and their answer arrives as \"Q61: Done\". Add one without being asked whenever such a step blocks your work",
+        ),
+        format_help_command(
             "secret providers [list|add --name text --account text|remove <id>|check --provider id --reference op://…]",
             "List, add, remove or test the 1Password accounts Ghostex reads saved keys from (Settings > Secrets); check says only whether a reference can be read, never its value",
         ),

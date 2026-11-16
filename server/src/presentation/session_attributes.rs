@@ -279,6 +279,7 @@ pub(crate) fn attention_state(session: &Value, generated_at: &str) -> Value {
 pub(crate) fn turn_end_waits_on_user(session: &Value, generated_at: &str) -> bool {
     crate::session_chat_async_questions::pending_question_count(session)
         + crate::session_chat_open_questions::open_question_count(session)
+        + crate::session_needs_you::open_count(session)
         > 0
         || crate::session_approval::session_awaits_approval(session, generated_at)
         || crate::connectors::waiting_connector_card(session).is_some()

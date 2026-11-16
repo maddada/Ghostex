@@ -33,6 +33,9 @@ Other agents
 Secrets
 - A password, API key or token: `ghostex secret request --label <what> --reason <why>`. Never ask for it in chat.
 
+Steps only the user can do
+- A sudo command, a tap on their phone, a sign-in, a check by eye: without being asked, add it with `ghostex needs-you add \"<what to do>\" [--detail \"…\"] [--command \"…\"]` and also list it under Needs you in your reply. It stays above the chat box with a Done button until they press it; their answer arrives as \"Q<n>: Done\". Seen it done yourself: `ghostex needs-you done Q<n>`; no longer needed: `ghostex needs-you drop Q<n>`.
+
 Ghostex skills
 - Install one when the user wants what it does: `ghostex visual install-skill` (ghostex-visuals), `ghostex browser install-skill` (ghostex-embedded-browser-use), `ghostex browser-use install-skill` (other browsers through Cua Driver), `ghostex computer-use install-skill` (drive desktop apps), `ghostex agents-orchestration install-skill` (ghostex-agents), `ghostex guide install-skill` (ghostex-help).
 

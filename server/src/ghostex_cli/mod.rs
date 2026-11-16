@@ -46,6 +46,7 @@ mod help_ask;
 mod hookless_activity;
 pub mod launchers;
 mod mcp_stdio;
+mod needs_you;
 pub mod notify;
 pub mod output;
 pub mod paired_device;
@@ -170,6 +171,7 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "guide",
     "manage-beads",
     "notify",
+    "needs-you",
     "secret",
     "secrets",
     "visual",
@@ -474,6 +476,7 @@ fn is_known_command(name: &str) -> bool {
         "agent-sync",
         "feedback",
         "notify",
+        "needs-you",
         "secret",
         "secrets",
         "show",
@@ -1027,6 +1030,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "board" => board::board_command(args),
         "notify" => notify::notify_command(args),
         "secret" | "secrets" => secret::secret_command(args),
+        "needs-you" => needs_you::needs_you_command(args),
         "feedback" => feedback::feedback_command(args),
         "show" => show::show_command(args),
         "visual" => visual::visual_command(args),

@@ -223,9 +223,11 @@ pub(crate) fn project_presentation_session(
     // The open ```questions forms and question pages count too, while the agent works as well
     // (CDXC:SessionStatus 2026-10-20 in server/src/session_chat_open_questions.rs). Only a running
     // session publishes them; `attention.kind` reads them in every lifecycle state.
+    // Open Needs you to-dos count too (session_needs_you/, CDXC:Notifications 2026-11-16).
     let unanswered_question_count =
         crate::session_chat_async_questions::pending_question_count(session)
-            + crate::session_chat_open_questions::open_question_count(session);
+            + crate::session_chat_open_questions::open_question_count(session)
+            + crate::session_needs_you::open_count(session);
     output.insert(
         "pendingQuestionCount".to_string(),
         Value::from(if lifecycle_state == "running" {
