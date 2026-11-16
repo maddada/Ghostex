@@ -33,6 +33,8 @@ mod lost_folder_access;
 #[cfg(not(windows))]
 mod session_bin;
 pub mod session_glue;
+mod session_tree;
+pub(crate) use session_tree::{read_zmx_session_tree, SessionTree};
 pub(crate) use lost_folder_access::{
     restart as restart_after_lost_folder_access, start_lost_folder_access_watch,
     ACTION_RESTART as LOST_FOLDER_ACCESS_ACTION_RESTART,
