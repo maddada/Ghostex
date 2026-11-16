@@ -151,6 +151,25 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             }
             let approve =
                 ask_yes_no("Do they match the words on that computer? Approve it? [y/N] ");
+            if approve && requires_presence(&parsed.flags) {
+                match confirm_it_is_you(&device.name) {
+                    Ok(()) => {}
+                    Err(PresenceFailure::Cancelled(message)) => {
+                        // Closed or failed the prompt: ask again on the next poll, so n still denies.
+                        println!("{message} Not approved.");
+                        seen.remove(&device.approval_id);
+                        continue;
+                    }
+                    Err(PresenceFailure::Unavailable(message)) => {
+                        println!("{message}");
+                        println!(
+                            "Not approved: {} is still waiting. Approve it in the Ghostex app on this computer or on a paired phone.",
+                            device.name
+                        );
+                        continue;
+                    }
+                }
+            }
             let (endpoint, done) = if approve {
                 ("/api/approveApprovalRequest", "Approved")
             } else {
@@ -182,6 +201,59 @@ fn may_approve_here(flags: &super::args::Flags) -> bool {
         .ok()
         .and_then(|status| status.get("mayApproveDevices").and_then(Value::as_bool))
         .unwrap_or(true)
+}
+
+/// Whether Settings > Security > "Require Touch ID or your password to approve" is on for this
+/// computer (`requirePresence` in `/api/securityStatus`; a gxserver from before it never asks).
+fn requires_presence(flags: &super::args::Flags) -> bool {
+    call_gxserver_rpc(crate::security::SECURITY_STATUS_ENDPOINT, &json!({}), flags)
+        .ok()
+        .and_then(|status| status.get("requirePresence").and_then(Value::as_bool))
+        .unwrap_or(false)
+}
+
+enum PresenceFailure {
+    /// The prompt showed and was closed or failed: they may try again.
+    Cancelled(String),
+    /// No prompt can be shown here (a server with no screen, no polkit agent, an SSH session).
+    Unavailable(String),
+}
+
+/*
+CDXC:Security 2026-11-16 DECISION:
+User (W524, gap 2 of Connect a Computer, option A, all platforms): with "Require Touch ID or your
+password to approve" on, a y here does what the app's Approve does: the system's own presence
+prompt first (`ghostex_owner_keys::confirm_presence`: Touch ID or the Mac password, Windows Hello,
+polkit), then the plain approval. A computer where no prompt can be shown (a Linux server with no
+screen or polkit agent, a Windows SSH session) refuses and points to the app or a paired phone
+instead of approving unchecked. The prompt shows on the screen of the computer this runs on, so a
+terminal over SSH to a Mac or Linux desktop still asks the person at its screen.
+*/
+fn confirm_it_is_you(device_name: &str) -> Result<(), PresenceFailure> {
+    let ssh = std::env::var_os("SSH_CONNECTION").is_some() || std::env::var_os("SSH_TTY").is_some();
+    let screen =
+        std::env::var_os("DISPLAY").is_some() || std::env::var_os("WAYLAND_DISPLAY").is_some();
+    // polkit needs a desktop session's agent to show its password prompt; Windows Hello can't
+    // show in an SSH session. (macOS shows its sheet on the Mac's own screen.)
+    if (cfg!(target_os = "linux")
+        && !screen
+        && (ssh || std::env::var_os("XDG_SESSION_TYPE").is_none_or(|kind| kind == "tty")))
+        || (cfg!(target_os = "windows") && ssh)
+    {
+        return Err(PresenceFailure::Unavailable(
+            "This computer asks for Touch ID, Windows Hello or your password to approve, and it can't show that prompt in this terminal.".to_string(),
+        ));
+    }
+    println!("Confirm it's you on this computer to approve {device_name}...");
+    match ghostex_owner_keys::confirm_presence(&format!("Approve {device_name} connecting to this computer")) {
+        Ok(_) => Ok(()),
+        Err(ghostex_owner_keys::KeyError::PresenceUnavailable(detail)) => {
+            Err(PresenceFailure::Unavailable(format!(
+                "This computer asks for Touch ID, Windows Hello or your password to approve, and it can't show that prompt here ({detail})."
+            )))
+        }
+        Err(error) => Err(PresenceFailure::Cancelled(error.to_string())),
+    }
 }
 
 /// Follows the devices waiting for an Approve in the app or on a phone: says how each one that is

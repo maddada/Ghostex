@@ -59,6 +59,8 @@ portable-pty = "0.9"
 rand = "0.10"
 # Verifies approvers' signatures (P-256 from the Secure Enclave / Android Keystore, RSA from Windows Hello); already in the tree through rustls.
 ring = "0.17"
+# CDXC:Security 2026-11-16 WHY: `ghostex computer-code` asks Touch ID, Windows Hello or the system (polkit) password before it approves a device with y, when Settings > Security > "Require Touch ID or your password to approve" is on: the same presence prompt the app uses (packages/owner-keys). Only its `confirm_presence` is called here; the key store code comes with it.
+ghostex-owner-keys = { path = "../packages/owner-keys" }
 tungstenite = { version = "0.29", default-features = false, features = ["handshake"] }
 ureq = { version = "3.5", features = ["json"] }
 # `fallible_uint`: rusqlite 0.38 moved the u64 column reads and writes (session counts, the scan cache) behind it.

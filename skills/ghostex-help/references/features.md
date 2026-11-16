@@ -5373,7 +5373,10 @@ sessions, so any client can control agents on any machine.
   words" with three words; A's terminal then prints "<B> wants to connect. Its
   words: a b c". While A has neither the Ghostex app nor a paired phone, it asks
   "Do they match the words on that computer? Approve it? [y/N]"; if the words
-  are the same on both, type y (n turns it down). Once A has the Ghostex app or
+  are the same on both, type y (n turns it down); with Settings > Security >
+  "Require Touch ID or your password to approve" on, y first asks Touch ID,
+  Windows Hello or the system password on A (on a Linux server with no screen
+  or polkit agent it can't, says so, and leaves the request waiting). Once A has the Ghostex app or
   a paired phone, only they make codes and let devices in: the command first
   waits for you to approve "Show this computer's pairing code" in the app or on
   your phone (then it gets codes for ten minutes), and B waits there to be
