@@ -71,10 +71,27 @@ fn collect(node: &Node, spans: &mut Vec<(usize, usize)>) {
 /// whitespace or a raw `<`, so `https://example.com&lt;/a>` linked (and printed) the whole run.
 /// Addresses inside the tag lose their autolink start for the same reason, so `href="https://…"`
 /// cannot run on into the next escaped tag and a tag's attribute never becomes a live link.
+///
+/// CDXC:SessionChat 2026-11-16 WHY:
+/// A line that starts with a tag (`<ghostex-system>`) opens an HTML block that runs to the next
+/// blank line, so a code span in that paragraph was escaped too, and a code span shows character
+/// references as typed: "`item ask <W7> --done <Q12>`" read "item ask <&#87;7> --done <&#81;12>".
+/// Once the tag is text the paragraph parses as Markdown again, where nothing in a code span can
+/// open a tag, so code spans are copied as they are.
 fn as_literal_text(html: &str) -> String {
     let mut out = String::with_capacity(html.len() + 16);
     let mut chars = html.char_indices().peekable();
     while let Some((at, ch)) = chars.next() {
+        if ch == '`' {
+            let run = html[at..].chars().take_while(|c| *c == '`').count();
+            let span_end = code_span_end(html, at, run);
+            let end = span_end.unwrap_or(at + run);
+            out.push_str(&html[at..end]);
+            while chars.peek().is_some_and(|(next, _)| *next < end) {
+                chars.next();
+            }
+            continue;
+        }
         match ch {
             '<' => {
                 out.push('<');
@@ -92,6 +109,25 @@ fn as_literal_text(html: &str) -> String {
         }
     }
     out
+}
+
+/// Where the code span opened by the `run` backticks at `at` ends (after its closing run of as many
+/// backticks, on the same paragraph), `None` when nothing closes it.
+fn code_span_end(html: &str, at: usize, run: usize) -> Option<usize> {
+    let mut from = at + run;
+    loop {
+        let rest = &html[from..];
+        let found = rest.find('`')?;
+        if rest[..found].contains("\n\n") {
+            return None;
+        }
+        let start = from + found;
+        let length = html[start..].chars().take_while(|c| *c == '`').count();
+        if length == run {
+            return Some(start + length);
+        }
+        from = start + length;
+    }
 }
 
 /// `markdown` with every raw HTML node that is not plain formatting turned into literal text.

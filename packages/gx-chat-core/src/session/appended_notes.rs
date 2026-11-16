@@ -218,7 +218,9 @@ pub fn is_system_only(message: &ChatMessage) -> bool {
     message.role == ChatRole::User
         && !message.blocks.is_empty()
         && message.blocks.iter().all(|block| match block {
-            ChatBlock::Text { text } => text.contains(SYSTEM_OPEN) && without_notes(text).trim().is_empty(),
+            ChatBlock::Text { text } => {
+                text.contains(SYSTEM_OPEN) && without_notes(text).trim().is_empty()
+            }
             _ => false,
         })
 }
@@ -238,15 +240,41 @@ pub fn is_system_only(message: &ChatMessage) -> bool {
 /// (Q3561), with "make sure in case 1 (note joins the user's turn) the real reply is never
 /// hidden". The note asks the agent to answer with only "ok" when it has nothing to do there.
 pub fn without_note_turns(rows: Vec<crate::state::ChatRow>) -> Vec<crate::state::ChatRow> {
-    if !rows.iter().any(|row| is_system_only(row)) {
+    without_note_turns_after(rows, &mut NoteTurns::default())
+}
+
+/// Where [`without_note_turns`] stood after the rows it last read, so rows pushed after them can
+/// be read on their own (`session/composition.rs` `refresh_boundaried`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct NoteTurns {
+    /// The role of the last row read that was not a system row.
+    previous: Option<ChatRole>,
+    /// Whether that row is in a turn a note opened.
+    in_note_turn: bool,
+}
+
+/// [`without_note_turns`] for `rows` coming right after the ones `turns` read.
+///
+/// CDXC:Coordinators 2026-11-16 WHY:
+/// The user still saw the open questions note as his own bubble, `<ghostex-system>` tags and all,
+/// on a coordinator that was mid-turn. The note was a system-only row, but the live chat builds its
+/// transcript in `refresh_boundaried`, whose whole rebuild and whose rows-pushed-at-the-end path
+/// never dropped notes; only the rarely used rebuild in `boundaried_transcript` did. Both now
+/// read every row through here, the pushed rows from where the last read stopped.
+pub fn without_note_turns_after(
+    rows: Vec<crate::state::ChatRow>,
+    turns: &mut NoteTurns,
+) -> Vec<crate::state::ChatRow> {
+    if !turns.in_note_turn && !rows.iter().any(|row| is_system_only(row)) {
+        if let Some(last) = rows.iter().rev().find(|row| row.role != ChatRole::System) {
+            turns.previous = Some(last.role.clone());
+        }
         return rows;
     }
     let mut kept = Vec::with_capacity(rows.len());
-    let mut previous: Option<ChatRole> = None;
-    let mut in_note_turn = false;
     for row in rows {
         if row.role == ChatRole::System {
-            if !in_note_turn {
+            if !turns.in_note_turn {
                 kept.push(row);
             }
             continue;
@@ -258,18 +286,20 @@ pub fn without_note_turns(rows: Vec<crate::state::ChatRow>) -> Vec<crate::state:
             // right after the message), or with nothing loaded before it, the note joined a
             // running turn, and nothing is hidden.
             if !row.queued {
-                in_note_turn =
-                    matches!(previous, Some(ChatRole::Assistant | ChatRole::Reasoning));
+                turns.in_note_turn = matches!(
+                    turns.previous,
+                    Some(ChatRole::Assistant | ChatRole::Reasoning)
+                );
             }
-            previous = Some(row.role.clone());
+            turns.previous = Some(row.role.clone());
             continue;
         }
-        if in_note_turn && row.role == ChatRole::User {
+        if turns.in_note_turn && row.role == ChatRole::User {
             // The user's own words end the note's turn, wherever they land.
-            in_note_turn = false;
+            turns.in_note_turn = false;
         }
-        previous = Some(row.role.clone());
-        if !in_note_turn {
+        turns.previous = Some(row.role.clone());
+        if !turns.in_note_turn {
             kept.push(row);
         }
     }
