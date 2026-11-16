@@ -443,7 +443,9 @@ impl Render for GpuiTitlebarPopupWindow {
             )
             .child(match &self.content {
                 GpuiTitlebarPopupContent::AccountUsage(panel) => panel.clone().into_any_element(),
-                GpuiTitlebarPopupContent::Menu(menu) => menu.clone().into_any_element(),
+                GpuiTitlebarPopupContent::Menu(menu) => {
+                    fit_popup_window_to_menu(menu.clone().into_any_element())
+                }
                 GpuiTitlebarPopupContent::Reading(panel) => panel.clone().into_any_element(),
                 GpuiTitlebarPopupContent::RemoteSites(panel) => panel.clone().into_any_element(),
                 GpuiTitlebarPopupContent::CollabShare(panel) => panel.clone().into_any_element(),
@@ -451,6 +453,32 @@ impl Render for GpuiTitlebarPopupWindow {
                 GpuiTitlebarPopupContent::SessionLinks(panel) => panel.clone().into_any_element(),
             })
     }
+}
+
+/// A dropdown's menu, its window shrunk to the panel the menu drew.
+///
+/// CDXC:PlatformSupport 2026-11-16 WHY:
+/// A dropdown's window is sized before it draws, from the menu's rows in logical pixels, but GPUI snaps each row, gap, padding and border to whole device pixels, rounding a half toward zero. At 2x (macOS) every length is exact; at a fractional Windows scale each 34px row loses about a pixel (42.5 to 42 at 125%), so the drawn panel ended short of its window and the window's blur, which DWM draws over the whole window, showed as a grey band under the panel, taller the more rows the menu had. The window now takes the height the panel was laid out at.
+fn fit_popup_window_to_menu(menu: AnyElement) -> AnyElement {
+    #[cfg(target_os = "windows")]
+    {
+        div()
+            .size_full()
+            .child(menu)
+            .on_children_prepainted(|bounds, window, _cx| {
+                let Some(panel) = bounds.first() else {
+                    return;
+                };
+                let drawn = panel.bottom();
+                let size = window.bounds().size;
+                if drawn > px(0.0) && size.height - drawn > px(0.5) {
+                    window.resize(gpui::size(size.width, drawn));
+                }
+            })
+            .into_any_element()
+    }
+    #[cfg(not(target_os = "windows"))]
+    menu
 }
 
 pub(crate) enum GpuiTitlebarReadingPanelState {
