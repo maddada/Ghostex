@@ -237,7 +237,17 @@ async fn answer_session_chat_prompt(
     if kind == "compactFirst" {
         let checked = params.get("checked").and_then(Value::as_bool) == Some(true);
         let coordinator = (target.project_id.clone(), target.session_id.clone());
-        let result = if crate::coordinators::set_stopped_threads_compact(&coordinator, checked) {
+        // One thread's tick on the stopped-threads card (Q68); absent from older clients' single box.
+        let thread = params
+            .get("threadProjectId")
+            .and_then(Value::as_str)
+            .zip(params.get("threadSessionId").and_then(Value::as_str))
+            .map(|(project, session)| (project.to_string(), session.to_string()));
+        let result = if crate::coordinators::set_stopped_threads_compact(
+            &coordinator,
+            thread.as_ref(),
+            checked,
+        ) {
             Ok(())
         } else {
             let mut request = params.clone();

@@ -24,6 +24,7 @@ pub mod inline_answers;
 pub mod interactive;
 pub mod later;
 pub mod model;
+pub mod notice_checkboxes;
 pub mod notice_choices;
 pub mod notice_state;
 pub mod notice_tail;

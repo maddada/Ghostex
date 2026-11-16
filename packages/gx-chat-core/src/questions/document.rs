@@ -47,6 +47,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
                     context.now_ms,
                     context.utc_offset_minutes,
                 );
+                crate::questions::notice_checkboxes::decorate(object);
             }
             Tri::Value(decorated)
         }

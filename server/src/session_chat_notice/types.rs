@@ -306,6 +306,12 @@ pub struct SessionChatTerminalNotice {
     /// (i) tooltip, and the `answer` a click sends), for a card Ghostex makes itself; never
     /// classified from the screen (CDXC:AgentProviders 2026-11-14 in server/src/carry_on_compaction.rs).
     pub checkbox: Option<Value>,
+    /// Several such checkboxes (`checkboxes`), for clients whose chat core draws them, with the
+    /// card's words for them (`checkboxesDetail`, the detail without what the rows already show);
+    /// `checkbox` and `detail` stay for older clients (CDXC:Coordinators 2026-11-16 in
+    /// server/src/coordinators/stopped_by_restart.rs, Q68).
+    pub checkboxes: Option<Value>,
+    pub checkboxes_detail: Option<String>,
     /// The failed queue row this card stands for (session_chat_send_failure.rs).
     pub send_failure_prompt_id: Option<String>,
     /// Server-side delivery policy for this particular detected state.
@@ -340,6 +346,8 @@ impl SessionChatTerminalNotice {
             auto_trust: false,
             account_wait: None,
             checkbox: None,
+            checkboxes: None,
+            checkboxes_detail: None,
             send_failure_prompt_id: None,
             blocks_input: session_chat_notice_kind_blocks_input(kind),
         }
@@ -458,7 +466,10 @@ impl SessionChatTerminalNotice {
     pub fn same_frame(&self, other: Option<&SessionChatTerminalNotice>) -> bool {
         self.same_notice(other)
             && other.is_some_and(|other| {
-                self.account_wait == other.account_wait && self.checkbox == other.checkbox
+                self.account_wait == other.account_wait
+                    && self.checkbox == other.checkbox
+                    && self.checkboxes == other.checkboxes
+                    && self.checkboxes_detail == other.checkboxes_detail
             })
             && (!self.passes_keys_through()
                 || other.is_some_and(|other| self.screen_tail == other.screen_tail))
@@ -609,6 +620,12 @@ impl SessionChatTerminalNotice {
         }
         if let Some(checkbox) = self.checkbox.as_ref() {
             map.insert("checkbox".to_string(), checkbox.clone());
+        }
+        if let Some(checkboxes) = self.checkboxes.as_ref() {
+            map.insert("checkboxes".to_string(), checkboxes.clone());
+        }
+        if let Some(detail) = self.checkboxes_detail.as_ref() {
+            map.insert("checkboxesDetail".to_string(), json!(detail));
         }
         if let Some(prompt_id) = self.send_failure_prompt_id.as_deref() {
             map.insert("sendFailure".to_string(), json!({ "promptId": prompt_id }));
