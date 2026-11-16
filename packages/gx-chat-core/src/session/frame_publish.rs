@@ -122,6 +122,7 @@ pub fn side_state_moves(
             .is_some_and(|modes| &session.unavailable_modes != modes)
         || side.removed_question_ids.is_some()
         || side.retired_page_ids.is_some()
+        || side.starred_page_ids.is_some()
         || side
             .resource_index
             .as_ref()

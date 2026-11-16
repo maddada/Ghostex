@@ -133,6 +133,10 @@ pub struct QuestionListRow {
     /// The thread that posted this page, on a row of a coordinator's Worker pages group.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub thread: String,
+    /// A page the reader starred (`questions::later::starred_page_ids`): the row shows a star
+    /// and the list's Starred filter shows it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub starred: bool,
 }
 
 /// One jump to a question: scroll to `item` once per `revision`, then highlight `target` (the
@@ -163,6 +167,10 @@ pub struct OpenQuestionsState {
     pub pages: u32,
 }
 
+/// The Starred filter (`questions::later::starred_page_ids`), listed after All while a page is
+/// starred (or while it is the picked filter), so the dropdown is as it was in a chat with none.
+const STARRED_FILTER: (&str, &str) = ("starred", "Starred");
+
 const FILTERS: [(&str, &str); 4] = [
     ("all", "All"),
     ("html", "Pages"),
@@ -170,9 +178,11 @@ const FILTERS: [(&str, &str); 4] = [
     ("charts", "Visuals"),
 ];
 
-/// Whether the filter `filter` shows a row of kind `kind` (`form`, `page`, `chart`).
-fn filter_shows(filter: &str, kind: &str) -> bool {
+/// Whether the filter `filter` shows a row of kind `kind` (`form`, `page`, `chart`); `starred`
+/// says the row is a starred page.
+fn filter_shows(filter: &str, kind: &str, starred: bool) -> bool {
     match filter {
+        "starred" => starred,
         "html" => kind == "page",
         "qa" => kind == "form",
         "charts" => kind == "chart",
@@ -240,7 +250,8 @@ pub fn reset_pages(state: &mut ChatState) {
 
 /// `questionListFilter {filter}`: the list shows what the filter picks, from its first page.
 pub fn pick_filter(state: &mut ChatState, filter: &str) {
-    let filter = if FILTERS.iter().any(|(id, _)| *id == filter) && filter != "all" {
+    let known = FILTERS.iter().any(|(id, _)| *id == filter) || filter == STARRED_FILTER.0;
+    let filter = if known && filter != "all" {
         filter.to_string()
     } else {
         String::new()
@@ -462,6 +473,7 @@ fn indexed_row(
             .as_ref()
             .map(|thread| thread.title.clone())
             .unwrap_or_default(),
+        starred: false,
     }
 }
 
@@ -619,6 +631,7 @@ fn list_row(asker: &Asker, context: &ChatContext, labels: bool) -> QuestionListR
         at_ms: asker.at,
         time_title,
         thread: String::new(),
+        starred: false,
     }
 }
 
@@ -648,6 +661,7 @@ fn content_row(
         at_ms: item.at,
         time_title,
         thread: String::new(),
+        starred: false,
     }
 }
 
@@ -818,16 +832,35 @@ pub fn project_with(
     .flatten()
     .collect::<Vec<_>>()
     .join(" \u{b7} ");
-    let filters = FILTERS
+    // The starred pages: marked on their rows and listed by the Starred filter, on top of the
+    // kept rows, so a star never lists the rows again.
+    let stars = crate::questions::later::starred_page_ids(state);
+    let starred = |row: &QuestionListRow| row.kind == "page" && stars.contains(&row.id);
+    let starred_count = if stars.is_empty() {
+        0
+    } else {
+        all.iter()
+            .flat_map(|section| &section.rows)
+            .filter(|row| starred(row))
+            .count()
+    };
+    let mut kinds: Vec<(&str, &str)> = FILTERS.to_vec();
+    if starred_count > 0 || filter == STARRED_FILTER.0 {
+        kinds.insert(1, STARRED_FILTER);
+    }
+    let filters = kinds
         .iter()
         .map(|(id, label)| QuestionListFilter {
             id: id.to_string(),
             label: label.to_string(),
-            count: all
-                .iter()
-                .flat_map(|section| &section.rows)
-                .filter(|row| filter_shows(id, &row.kind))
-                .count() as u32,
+            count: if *id == STARRED_FILTER.0 {
+                starred_count as u32
+            } else {
+                all.iter()
+                    .flat_map(|section| &section.rows)
+                    .filter(|row| filter_shows(id, &row.kind, false))
+                    .count() as u32
+            },
         })
         .collect();
     // `page_sections` over the filtered sections, copying only the rows the page keeps.
@@ -840,7 +873,7 @@ pub fn project_with(
                 section
                     .rows
                     .iter()
-                    .filter(|row| filter_shows(filter, &row.kind))
+                    .filter(|row| filter_shows(filter, &row.kind, starred(row)))
             };
             let count = shown().count();
             if count == 0 {
@@ -856,7 +889,13 @@ pub fn project_with(
                 id: section.id.clone(),
                 title: section.title.clone(),
                 count: count as u32,
-                rows: shown().take(keep).cloned().collect(),
+                rows: shown()
+                    .take(keep)
+                    .map(|row| QuestionListRow {
+                        starred: starred(row),
+                        ..row.clone()
+                    })
+                    .collect(),
                 remaining: (count - keep) as u32,
             })
         })
@@ -1694,6 +1733,7 @@ mod tests {
                 message_id: format!("m-{id}"),
                 title: String::new(),
                 at: Some(at),
+                source: None,
             });
         }
         let pill = project(&state, &ChatContext::default());
@@ -2079,7 +2119,9 @@ mod paged_labels_tests {
         let filter = state.questions.open_questions.filter.as_str();
         let mut sections = Vec::new();
         for mut section in list(state, context) {
-            section.rows.retain(|row| filter_shows(filter, &row.kind));
+            section
+                .rows
+                .retain(|row| filter_shows(filter, &row.kind, row.starred));
             if !section.rows.is_empty() {
                 section.count = section.rows.len() as u32;
                 sections.push(section);

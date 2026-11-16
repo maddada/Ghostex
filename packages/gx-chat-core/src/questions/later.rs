@@ -23,6 +23,9 @@ pub struct LaterState {
     pub pending: BTreeMap<String, (bool, u64)>,
     /// The removals set here that the wire has not confirmed yet, by id, and the call that set them.
     pub removing: BTreeMap<String, u64>,
+    /// The stars set or taken off here that the wire has not confirmed yet, by page id: whether it
+    /// is starred, and the call that set it (`star`).
+    pub starring: BTreeMap<String, (bool, u64)>,
 }
 
 /// The forms and pages put off For later: gxserver's list with this client's changes on top.
@@ -52,6 +55,142 @@ pub fn removed_ids(state: &ChatState) -> BTreeSet<String> {
         .chain(state.questions.later.removing.keys())
         .cloned()
         .collect()
+}
+
+/// Every page the chat knows of (its loaded rows and its stored index): id, the file it was
+/// published from, and when.
+fn known_pages(state: &ChatState) -> Vec<(String, Option<String>, Option<i64>)> {
+    use crate::transcript::open_questions::AskerKind;
+    let mut pages: Vec<(String, Option<String>, Option<i64>)> = Vec::new();
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut add = |id: &str, source: Option<&String>, at: Option<i64>| {
+        if seen.insert(id.to_string()) {
+            pages.push((id.to_string(), source.cloned(), at));
+        }
+    };
+    for asker in state.transcript_view.askers.iter() {
+        if asker.kind == AskerKind::Page {
+            add(&asker.id, asker.source.as_ref(), asker.at);
+        }
+    }
+    for item in state.questions.content.items.iter() {
+        if item.kind == crate::transcript::question_forms::ContentKind::Page {
+            add(&item.id, item.source.as_ref(), item.at);
+        }
+    }
+    let view = state.session.resource_index.view();
+    for entry in view.records().iter() {
+        if entry.kind == "page" {
+            add(&entry.id, entry.source.as_ref(), entry.at_ms);
+        }
+    }
+    pages
+}
+
+/// The pages shown starred: gxserver's list with this client's changes on top, each star moved
+/// to the newest version of its page's file (a newer `ghostex show` of the same file, whose old
+/// card reads Replaced). Taking a star off takes it off every version of that file.
+///
+/// CDXC:SessionChat 2026-11-16 DECISION:
+/// BANOZZ asked on Discord ("star resources", 2026-11-13) to star pages in a chat and find them in
+/// Resources; the user promised it and picked on the star-resources page (Q3540 to Q3549): pages
+/// only; a Starred entry in the Resources filter (no group of its own; starred rows stay in
+/// their groups), newest first; on the desktop a star in the page card's window bar, a row's hover
+/// button and Star page in the page window's ⋯ menu; on the phone Star in the ⋯ menus of the
+/// page card and the page sheet, and a star on starred rows; stars per session, which agents
+/// cannot read; and when a newer version of the same file replaces a starred page, the star
+/// follows it.
+/// SEE-ALSO: server/src/session_chat_open_questions.rs (`set_starred`, the stored list),
+/// questions/open_questions.rs (the Starred filter), apps/desktop/src/app/native_chat/page_card.rs,
+/// apps/desktop/src/app/window/visual_page_modal/more_menu.rs,
+/// apps/mobile/app/src/chat/native/cards/CardMoreMenu.tsx.
+pub fn starred_page_ids(state: &ChatState) -> BTreeSet<String> {
+    let starring = &state.questions.later.starring;
+    if state.session.starred_page_ids.is_empty() && starring.values().all(|(on, _)| !on) {
+        return BTreeSet::new();
+    }
+    let pages = known_pages(state);
+    let source_of = |id: &str| -> Option<&String> {
+        pages
+            .iter()
+            .find(|(page, _, _)| page == id)
+            .and_then(|(_, source, _)| source.as_ref())
+    };
+    // The files a star was taken off here: every version of them is off.
+    let cleared: BTreeSet<&String> = starring
+        .iter()
+        .filter(|(_, (on, _))| !on)
+        .filter_map(|(id, _)| source_of(id))
+        .collect();
+    let mut ids: BTreeSet<String> = state.session.starred_page_ids.iter().cloned().collect();
+    for (id, (on, _)) in starring {
+        if *on {
+            ids.insert(id.clone());
+        } else {
+            ids.remove(id);
+        }
+    }
+    let mut shown = BTreeSet::new();
+    let mut files: BTreeSet<&String> = BTreeSet::new();
+    for id in &ids {
+        match source_of(id) {
+            Some(source) if cleared.contains(source) => {}
+            Some(source) => {
+                files.insert(source);
+            }
+            None => {
+                shown.insert(id.clone());
+            }
+        }
+    }
+    // Each starred file's newest version (the last one listed wins a tie, as the transcript's
+    // order puts the newer one later).
+    for file in files {
+        let newest = pages
+            .iter()
+            .filter(|(_, source, _)| source.as_ref() == Some(file))
+            .fold(
+                None::<&(String, Option<String>, Option<i64>)>,
+                |best, page| match best {
+                    Some(best) if best.2 > page.2 => Some(best),
+                    _ => Some(page),
+                },
+            );
+        if let Some((id, _, _)) = newest {
+            shown.insert(id.clone());
+        }
+    }
+    shown
+}
+
+/// `pageStar {id, starred}`: stars a page in this chat, or takes its star off (every version of
+/// its file). Only a page: a form or chart is not starred (Q3540).
+pub fn star(state: &mut ChatState, id: &str, starred: bool) -> Vec<Effect> {
+    let id = id.trim();
+    if id.is_empty() || starred_page_ids(state).contains(id) == starred {
+        return Vec::new();
+    }
+    if !known_pages(state).iter().any(|(page, _, _)| page == id) {
+        return Vec::new();
+    }
+    let request_id = state.core.allocate_request_id();
+    state
+        .questions
+        .later
+        .starring
+        .insert(id.to_string(), (starred, request_id));
+    state.core.request_publish();
+    vec![Effect::SendRpc {
+        request_id,
+        method: ChatRpcMethod::AnswerSessionChatPrompt,
+        params: Box::new(json!({
+            "kind": "pageStar",
+            "questionId": id,
+            "starred": starred,
+            "projectId": state.identity.project_id,
+            "sessionId": state.identity.session_id,
+        })),
+    }]
 }
 
 /// `questionRemove {id}`: removes a form or page without answering it.
@@ -281,13 +420,23 @@ pub fn rpc_settled(
         .iter()
         .find(|(_, request)| **request == request_id)
         .map(|(id, _)| id.clone());
-    if marked.is_none() && removed.is_none() {
+    let star = state
+        .questions
+        .later
+        .starring
+        .iter()
+        .find(|(_, (_, request))| *request == request_id)
+        .map(|(id, _)| id.clone());
+    if marked.is_none() && removed.is_none() && star.is_none() {
         return None;
     }
     let RpcOutcome::Err { message, .. } = outcome else {
         return Some(Vec::new());
     };
-    let what = if let Some(id) = marked {
+    let what = if let Some(id) = star {
+        state.questions.later.starring.remove(&id);
+        "change the page's star"
+    } else if let Some(id) = marked {
         state.questions.later.pending.remove(&id);
         "change For later"
     } else {
@@ -303,8 +452,50 @@ pub fn rpc_settled(
     }])
 }
 
+/// Forgets the stars the wire now carries: a star once its page is on gxserver's list, a star
+/// taken off once neither the page nor another version of its file is.
+fn settle_stars(state: &mut ChatState) {
+    let starred = &state.session.starred_page_ids;
+    let pages = if state.questions.later.starring.values().any(|(on, _)| !on) {
+        known_pages(state)
+    } else {
+        Vec::new()
+    };
+    let source_of = |id: &str| -> Option<&String> {
+        pages
+            .iter()
+            .find(|(page, _, _)| page == id)
+            .and_then(|(_, source, _)| source.as_ref())
+    };
+    let settled: Vec<String> = state
+        .questions
+        .later
+        .starring
+        .iter()
+        .filter(|(id, (on, _))| {
+            if *on {
+                return starred.contains(id);
+            }
+            let file = source_of(id);
+            !starred
+                .iter()
+                .any(|known| known == *id || (file.is_some() && source_of(known) == file))
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+    if settled.is_empty() {
+        return;
+    }
+    for id in settled {
+        state.questions.later.starring.remove(&id);
+    }
+}
+
 /// Forgets the changes the wire now carries.
 pub fn settle(state: &mut ChatState) {
+    if !state.questions.later.starring.is_empty() {
+        settle_stars(state);
+    }
     let wire = &state.session.later_question_ids;
     let removed = &state.session.removed_question_ids;
     // Runs on every event: the state is only borrowed mutably when a mark actually settles, so its

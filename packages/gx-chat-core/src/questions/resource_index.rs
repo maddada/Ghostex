@@ -51,6 +51,11 @@ pub struct ResourceEntry {
     /// A page's address, which opens it where the reader's Open Ghostex pages in setting says.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    /// A page's `"source"`, the file it was published from (server/src/ghostex_cli/show.rs
+    /// `source_key`), so a star follows a newer version of it (`questions::later::starred_page_ids`).
+    /// Absent on a page block printed before 2026-11-16 and on a record stored before then.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
     /// Set on a page a thread posted, in its coordinator's index.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thread: Option<ThreadRef>,
@@ -353,6 +358,7 @@ pub fn scan_message(message: &ChatMessage) -> Vec<ResourceEntry> {
                     title: page.title.trim().to_string(),
                     tags: page.questions.clone().unwrap_or_default(),
                     url: Some(page.url.clone()),
+                    source: page.source.clone(),
                     ..ResourceEntry::default()
                 }
             } else {

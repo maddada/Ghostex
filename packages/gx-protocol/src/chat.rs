@@ -305,6 +305,7 @@ pub struct TurnLifecycle {
 /// | `accountSwitch`, `apiRetry`, `pendingModelSelection`, `asyncQuestionsSince`, `forkedAt` | a daemon without queue support; otherwise always written, `null` meaning none |
 /// | `retiredAsyncQuestionIds`, `laterQuestionIds`, `removedQuestionIds` | a daemon without queue support; otherwise always written |
 /// | `retiredPageIds` | UNCHANGED (a daemon before 2026-11-16 never writes it) |
+/// | `starredPageIds` | UNCHANGED (a daemon before 2026-11-16 never writes it) |
 /// | `resourceIndex` | UNCHANGED (a daemon before 2026-10-30 never writes it) |
 ///
 /// Payload shapes are kept loose (`Value`) until the native chat needs each one typed; every one
@@ -432,6 +433,11 @@ pub struct ChatSideState {
     /// counting them; this list lets a card say Replaced. Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retired_page_ids: Option<Vec<String>>,
+    /// The pages the reader starred in this chat (page ids,
+    /// server/src/session_chat_open_questions.rs `set_starred`): Resources' Starred filter and the
+    /// star on their cards. Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub starred_page_ids: Option<Vec<String>>,
     /// The session's resource index (`ResourceEntry` records, gx-chat-core
     /// `questions/resource_index.rs`; server/src/session_chat_resources.rs): every question form,
     /// page and chart the whole conversation held, so the Resources list and count cover more than

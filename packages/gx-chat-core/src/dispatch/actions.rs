@@ -84,6 +84,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::ImportPageAnswers
         | ActionKind::ExportPage
         | ActionKind::QuestionRemove
+        | ActionKind::PageStar
         | ActionKind::SnoozeQuestion
         | ActionKind::CancelQuestion
         | ActionKind::MarkQuestionAnswered

@@ -110,6 +110,10 @@ pub struct Document {
     /// cards say so and offer "Back to unanswered" (`questions::later`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub later_questions: Vec<String>,
+    /// The pages the reader starred, by page id, each star on the newest version of its file
+    /// (`questions::later::starred_page_ids`), so their cards show the star.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub starred_pages: Vec<String>,
     /// Per completed-work row: the read is in flight, or it failed and offers a retry.
     pub deferred_work: Shared<BTreeMap<String, DeferredWorkRow>>,
     /// Claude Code workflow runs drawn as cards, by Workflow call id

@@ -202,6 +202,7 @@ action_kinds! {
     ImportPageAnswers => "importPageAnswers",
     ExportPage => "exportPage",
     QuestionRemove => "questionRemove",
+    PageStar => "pageStar",
     SnoozeQuestion => "snoozeQuestion",
     CancelQuestion => "cancelQuestion",
     MarkQuestionAnswered => "markQuestionAnswered",

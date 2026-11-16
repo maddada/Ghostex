@@ -214,6 +214,17 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 .collect();
             effects.extend(crate::questions::later::mark_seen(state, &ids));
         }
+        ActionKind::PageStar => {
+            let id = action
+                .param("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let starred = action
+                .param("starred")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            effects.extend(crate::questions::later::star(state, id, starred));
+        }
         ActionKind::QuestionRemove => {
             let id = action
                 .param("id")

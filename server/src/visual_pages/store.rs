@@ -169,6 +169,18 @@ pub(super) fn read_record(gxserver_state_dir: &Path, id: &str) -> Option<serde_j
     serde_json::from_slice(&bytes).ok()
 }
 
+/// The file the page was published from, as `ghostex show` named it (`sourcePath` on its
+/// record), or `None` for a page published from no file or before files were kept. Two pages with
+/// the same one are versions of the same file (the starred pages,
+/// server/src/session_chat_open_questions.rs `set_starred`).
+pub(crate) fn page_source_path(gxserver_state_dir: &Path, id: &str) -> Option<String> {
+    read_record(gxserver_state_dir, id)?
+        .get("sourcePath")
+        .and_then(serde_json::Value::as_str)
+        .filter(|path| !path.is_empty())
+        .map(str::to_string)
+}
+
 pub(super) enum StoreAnswersError {
     NotFound,
     /// The page already holds answers, sent at this time.
