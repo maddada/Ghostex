@@ -135,6 +135,7 @@ pub(crate) mod session_handoff_modal_lifecycle;
 pub(crate) mod session_note_modal_lifecycle;
 pub(crate) mod session_notes;
 pub(crate) mod session_pane_placement;
+pub(crate) mod session_popup;
 pub(crate) mod settings_modal_lifecycle;
 pub(crate) mod side_chat_panel;
 pub(crate) mod sidebar_agent_launch_placeholder;

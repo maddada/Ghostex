@@ -301,6 +301,10 @@ impl GhostexGpuiApp {
     // Native focus and window plumbing the browser has no counterpart for.
     pub(crate) fn reveal_floating_sessions(&mut self, _cx: &mut Context<Self>) {}
 
+    /// Option-click opens a session in a window of its own on the desktop (app/session_popup/);
+    /// a page has no windows, so the click only focuses the session.
+    pub(crate) fn open_session_popup_for_row(&mut self, _row_id: &str, _cx: &mut Context<Self>) {}
+
     /// The desktop connects to a computer a coordinator's nested thread runs on before opening it
     /// (session_chat_fork_branches.rs); this build streams no other computer, so it never nests one.
     pub(crate) fn open_borrowed_thread_row_when_connected(

@@ -315,6 +315,10 @@ impl GhostexGpuiApp {
                 );
                 let _ = app.react_to_native_sidebar_session_click(&session_id, cx);
                 app.reveal_floating_sessions(cx);
+                // Option-click (Alt) opens it in its own window too (app/session_popup/).
+                if modifiers.alt {
+                    app.open_session_popup_for_row(&session_id, cx);
+                }
             }),
         )
         .on_mouse_down(

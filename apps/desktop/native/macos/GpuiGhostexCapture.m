@@ -156,6 +156,18 @@ bool GhostexGpuiCaptureWindowFrame(void *native_view, double *x, double *y,
   return true;
 }
 
+/// A session's own window (app/session_popup/) floats over other apps while its Pin is on, and
+/// takes the normal level again when it is turned off. Unlike Ghostex Capture's windows it keeps
+/// its titlebar, buttons and shadow, and stays on its own Space.
+void GhostexGpuiSetWindowStaysOnTop(void *native_view, bool on_top) {
+  NSWindow *window = GhostexGpuiCaptureWindowOfView(native_view);
+  if (!window) {
+    return;
+  }
+  window.level = on_top ? NSFloatingWindowLevel : NSNormalWindowLevel;
+  window.hidesOnDeactivate = NO;
+}
+
 /// Gives a keyable Ghostex Capture window the keyboard again (after a capture hid and re-showed it).
 void GhostexGpuiCaptureFocusWindow(void *native_view) {
   NSWindow *window = GhostexGpuiCaptureWindowOfView(native_view);

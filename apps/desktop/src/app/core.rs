@@ -1005,6 +1005,8 @@ pub struct GhostexGpuiApp {
     /// The native Docs view's state; see app/native_docs/.
     pub(crate) native_docs: crate::app::native_docs::state::NativeDocsState,
     pub(crate) native_kanban: crate::app::native_kanban::state::NativeKanbanState,
+    /// The sessions in windows of their own; see app/session_popup/.
+    pub(crate) session_popups: crate::app::session_popup::SessionPopups,
     /// The Beads view (the side panel's view that was the Kanban); see app/native_beads/.
     pub(crate) native_beads: Option<gpui::Entity<crate::app::native_beads::BeadsView>>,
     pub(crate) floating_reveal: crate::app::floating_reveal::model::FloatingRevealState,

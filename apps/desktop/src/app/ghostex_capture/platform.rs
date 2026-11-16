@@ -51,6 +51,7 @@ unsafe extern "C" {
         height: f64,
     );
     fn GhostexGpuiCaptureFocusWindow(native_view: *mut std::ffi::c_void);
+    fn GhostexGpuiSetWindowStaysOnTop(native_view: *mut std::ffi::c_void, on_top: bool);
     fn GhostexGpuiCaptureHideWindow(native_view: *mut std::ffi::c_void) -> bool;
     fn GhostexGpuiCaptureShowWindow(native_view: *mut std::ffi::c_void, focus: bool);
     fn GhostexGpuiCaptureMakeResizable(
@@ -206,6 +207,21 @@ pub(crate) fn detach_from_parent(native: NativeWindow) {
     let _ = native;
 }
 
+/// Keeps an ordinary window above other apps' windows while `on_top`, or puts it back among them.
+/// Unlike `prepare_floating_window` the window keeps its titlebar, its buttons and its place in
+/// the taskbar and on its own desktop: a session's own window's Pin (app/session_popup/). Not
+/// offered on Wayland (`supported`), which has no such state.
+pub(crate) fn set_window_stays_on_top(native: NativeWindow, on_top: bool) {
+    #[cfg(target_os = "macos")]
+    unsafe {
+        GhostexGpuiSetWindowStaysOnTop(native as *mut std::ffi::c_void, on_top)
+    };
+    #[cfg(target_os = "windows")]
+    windows::set_stays_on_top(native, on_top);
+    #[cfg(target_os = "linux")]
+    x11::set_stays_on_top(native, on_top);
+}
+
 /// Gives a keyable window the keyboard again.
 pub(crate) fn focus_window(native: NativeWindow) {
     #[cfg(target_os = "macos")]
@@ -293,9 +309,10 @@ mod windows {
     use windows_sys::Win32::Foundation::{HWND, POINT};
     use windows_sys::Win32::System::Threading::GetCurrentProcessId;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GWLP_HWNDPARENT, GetCursorPos, GetForegroundWindow, GetWindowThreadProcessId, HWND_TOPMOST,
-        SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
-        SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, ShowWindow,
+        GWLP_HWNDPARENT, GetCursorPos, GetForegroundWindow, GetWindowThreadProcessId,
+        HWND_NOTOPMOST, HWND_TOPMOST, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE,
+        SWP_NOSIZE, SWP_SHOWWINDOW, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos,
+        ShowWindow,
     };
 
     use super::FrontmostApp;
@@ -338,6 +355,20 @@ mod windows {
 
     pub(super) fn focus(native: usize) {
         unsafe { SetForegroundWindow(native as HWND) };
+    }
+
+    pub(super) fn set_stays_on_top(native: usize, on_top: bool) {
+        unsafe {
+            SetWindowPos(
+                native as HWND,
+                if on_top { HWND_TOPMOST } else { HWND_NOTOPMOST },
+                0,
+                0,
+                0,
+                0,
+                SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
+            );
+        }
     }
 
     pub(super) fn hide(native: usize) -> bool {
@@ -450,6 +481,32 @@ mod x11 {
                 event,
             );
         }
+        let _ = connection.flush();
+    }
+
+    pub(super) fn set_stays_on_top(native: usize, on_top: bool) {
+        let Some((connection, root)) = connection() else {
+            return;
+        };
+        let (Some(state), Some(above)) = (
+            atom(connection, b"_NET_WM_STATE"),
+            atom(connection, b"_NET_WM_STATE_ABOVE"),
+        ) else {
+            return;
+        };
+        // `_NET_WM_STATE_ADD` is 1 and `_NET_WM_STATE_REMOVE` 0; the last 1 says a normal app asks.
+        let event = ClientMessageEvent::new(
+            32,
+            native as u32,
+            state,
+            [u32::from(on_top), above, 0, 1, 0],
+        );
+        let _ = connection.send_event(
+            false,
+            *root,
+            EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY,
+            event,
+        );
         let _ = connection.flush();
     }
 

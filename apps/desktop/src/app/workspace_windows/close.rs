@@ -186,6 +186,10 @@ impl GhostexGpuiApp {
         if let Some(board) = self.native_kanban_take_detached_window() {
             close_owned_window(board, cx);
         }
+        // Its sessions' own windows close with it and do not come back (app/session_popup/).
+        for popup in self.take_session_popup_windows() {
+            close_owned_window(popup, cx);
+        }
     }
 
     /// Starts closing this window's remote Action sessions on their machines. Returns the closes

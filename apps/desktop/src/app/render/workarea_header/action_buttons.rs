@@ -619,6 +619,8 @@ impl GhostexGpuiApp {
                 this.children(self.render_workarea_header_session_details_button(cx))
             })
             .children(self.render_workarea_header_share_button(cx))
+            // The focused session in a window of its own (app/session_popup/).
+            .children(self.render_workarea_header_session_popup_button(cx))
             // No trailing ⋯ button: what it held opens from the sidebar's menu
             // (CDXC:Titlebar 2026-11-11 DECISION in titlebar/menu_panels.rs).
             // With a view open the toggles end the view tab strip instead (render_workarea_panel_toggles).

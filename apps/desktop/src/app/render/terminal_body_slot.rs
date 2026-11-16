@@ -57,6 +57,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         if let Some(session_id) = leaf.tab_group.active_session_id() {
+            // The session is drawn in its own window; its pane says so (app/session_popup/).
+            if self.session_popup_shows(session_id) {
+                return self.render_session_popup_placeholder(leaf.pane_id, session_id, cx);
+            }
             /*
             CDXC:SessionChat 2026-07-31:
             Chat mode swaps this tab's body for its chat CEF page in the same slot.

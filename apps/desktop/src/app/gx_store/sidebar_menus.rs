@@ -235,6 +235,12 @@ impl GhostexGpuiApp {
         // A row the list no longer draws answers with nothing, which closes the panel, exactly as
         // the TypeScript's empty reply did.
         let items = items.unwrap_or_default();
+        // The desktop's own row, which the phone's menu never has (app/session_popup/).
+        let items = if action.is_none() {
+            crate::app::session_popup::with_open_in_new_window_row(items, &session_id)
+        } else {
+            items
+        };
         let owns_panel = self
             .native_sidebar
             .menu

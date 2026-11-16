@@ -993,6 +993,17 @@ impl Render for GhostexGpuiApp {
             .on_action(cx.listener(|this, action: &CloseAgentsPane, _window, cx| {
                 this.close_agents_pane(WorkspacePaneId(action.pane_id), cx);
             }))
+            .on_action(cx.listener(
+                |this, action: &crate::app::actions::OpenAgentsPaneInNewWindow, _window, cx| {
+                    if let Some(session_id) = this
+                        .agents_workspace
+                        .find_leaf(WorkspacePaneId(action.pane_id))
+                        .and_then(|leaf| leaf.tab_group.active_session_id())
+                    {
+                        this.open_session_popup_for_shell(session_id, cx);
+                    }
+                },
+            ))
             .on_action(
                 cx.listener(|this, action: &ToggleFocusModeForPane, _window, cx| {
                     this.toggle_agents_focus_mode_for_pane(WorkspacePaneId(action.pane_id), cx);
