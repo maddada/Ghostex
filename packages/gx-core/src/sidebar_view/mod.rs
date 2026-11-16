@@ -52,6 +52,7 @@ mod space_switch;
 pub(crate) mod spaces;
 pub(crate) mod tags;
 pub(crate) mod text;
+mod thread_fold;
 mod threads;
 #[cfg(test)]
 pub(crate) use threads::MAX_DEPTH as MAX_THREAD_DEPTH;
