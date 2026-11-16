@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 11.8.2 - 2026-11-16
+
+**Ghostex 11.8.2 is out.** It fixes the Mac app quitting when a chat shows a one-click answer, including on every launch for some people.
+
+### 🩹 Fixes and polish
+
+- **macOS: Ghostex no longer quits when you open a chat that ends with one-click answer buttons,** which for some people happened on every launch, thanks to @nadzifal, @NexiaMoe and @WangAxerold.
+- **Ghostex's notes reach a coordinator as their own message,** and the chat hides them, so a coordinator's reply is no longer lost behind one, thanks to @sebastianarena.
+- **A coordinator's right-click menu groups its settings under one Coordinator row,** as the phone's long-press menu does.
+
 ## 11.8.1 - 2026-11-16
 
 **Ghostex 11.8.1 is out.** It fixes a freeze that could follow an update or restart.
