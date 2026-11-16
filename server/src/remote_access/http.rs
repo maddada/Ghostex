@@ -699,6 +699,28 @@ pub(crate) async fn handle_remote_access_http(
             }
         }
         crate::remote_access::connect_back::SIGN_CONNECT_BACK_ENDPOINT => {
+            // Only the door's keepers, and only for the code this computer shows now
+            // (CDXC:Security 2026-11-16 in remote_access/connect_back.rs).
+            if !security.keeps_door(&caller) {
+                return RemoteAccessHttpError {
+                    status: StatusCode::FORBIDDEN,
+                    code: "forbidden",
+                    message: "Only the Ghostex app on this computer or your phone can ask another computer to connect back.".to_string(),
+                }
+                .into_response(endpoint_path, request_id);
+            }
+            let live = params
+                .get("secret")
+                .and_then(Value::as_str)
+                .is_some_and(|secret| pairing_runtime.is_live_secret(secret.trim()));
+            if !live {
+                return RemoteAccessHttpError {
+                    status: StatusCode::BAD_REQUEST,
+                    code: "badRequest",
+                    message: "That isn't the code this computer shows now. Open Connect a Computer again and try again.".to_string(),
+                }
+                .into_response(endpoint_path, request_id);
+            }
             tokio::task::spawn_blocking(move || {
                 super::connect_back::sign_connect_back(&paths, &params)
                     .map_err(|error| RemoteAccessHttpError::bad_request(format!("{error:#}")))

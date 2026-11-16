@@ -289,18 +289,13 @@ impl GhostexGpuiApp {
                 let mut params = connect_back_code_params(&code).ok_or_else(|| {
                     "This computer's code isn't ready. Close this window and open Connect a Computer again.".to_string()
                 })?;
-                let secret = params
-                    .get("secret")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string();
+                // The whole code: this computer signs where to connect back too (`signatureV2`,
+                // CDXC:Security 2026-11-16 in server/src/remote_access/connect_back.rs); the call
+                // goes with the app's owner session (`owner_security::is_door_call`).
+                let to_sign = params.clone();
                 let signed = background
                     .spawn(async move {
-                        local_rpc(
-                            "/api/signComputerConnectBack",
-                            json!({ "secret": secret }),
-                            SHORT_TIMEOUT,
-                        )
+                        local_rpc("/api/signComputerConnectBack", to_sign, SHORT_TIMEOUT)
                     })
                     .await?;
                 if let (Some(params), Some(signed)) = (params.as_object_mut(), signed.as_object()) {

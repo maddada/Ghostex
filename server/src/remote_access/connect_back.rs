@@ -62,8 +62,28 @@ fn connect_back_payload(secret: &str, timestamp_ms: u64) -> Vec<u8> {
     format!("ghostex-connect-back-v1\n{secret_hash}\n{timestamp_ms}").into_bytes()
 }
 
+/*
+CDXC:Security 2026-11-16 FIX:
+Review of the owner-only door: any caller here, an agent's session token included, got this computer's device key to sign any secret, and the signature covered only the secret and the time, while the computer asked takes the address, port, user and name from the call. An agent could have the other computer pair with an address it controls. Now only the door's keepers ask (the app's owner session, a paired phone; route `/api/signComputerConnectBack` in remote_access/http.rs), only for the code this computer shows now (`RemotePairingRuntime::is_live_secret`), and `signatureV2` also covers the address, port, user, name and SSH port. A computer with this code checks `signatureV2` when it comes; one from before checks `signature`, which is still sent, and a computer asked by an older one (without `signatureV2`) still takes its `signature`, as before.
+*/
+/// What `signatureV2` covers: the code's secret (hashed) and the time, plus where to connect back.
+fn connect_back_payload_v2(
+    code: &ComputerPairingCode,
+    user: &str,
+    ssh_port: u16,
+    timestamp_ms: u64,
+) -> Vec<u8> {
+    let secret_hash = hex::encode(Sha256::digest(code.secret.as_bytes()));
+    format!(
+        "ghostex-connect-back-v2\n{secret_hash}\n{timestamp_ms}\n{}\n{}\n{user}\n{}\n{ssh_port}",
+        code.address, code.port, code.name
+    )
+    .into_bytes()
+}
+
 /// `/api/signComputerConnectBack` on the computer that wants the other to connect back: signs its
-/// own code's `secret` with this computer's pairing device key.
+/// own code (`secret`, and with `address`, `port`, `user`, `name` and `sshPort` also
+/// `signatureV2`) with this computer's pairing device key.
 pub fn sign_connect_back(paths: &GxserverPaths, params: &Value) -> Result<Value> {
     let secret = params
         .get("secret")
@@ -73,11 +93,26 @@ pub fn sign_connect_back(paths: &GxserverPaths, params: &Value) -> Result<Value>
         .ok_or_else(|| anyhow!("secret is required."))?;
     let key = load_or_create_device_key(paths)?;
     let timestamp_ms = crate::security::now_ms();
-    Ok(json!({
+    let mut answer = json!({
         "deviceKey": { "algorithm": DEVICE_KEY_ALGORITHM, "publicKey": device_public_key(&key)? },
         "timestampMs": timestamp_ms,
         "signature": device_sign(&key, &connect_back_payload(secret, timestamp_ms))?,
-    }))
+    });
+    let code = ComputerPairingCode {
+        address: text(params, "address"),
+        port: port(params, "port").unwrap_or(0),
+        secret: secret.to_string(),
+        name: text(params, "name"),
+    };
+    let user = text(params, "user");
+    if !code.address.is_empty() && code.port != 0 && !user.is_empty() && !code.name.is_empty() {
+        let ssh_port = port(params, "sshPort").unwrap_or(22);
+        answer["signatureV2"] = json!(device_sign(
+            &key,
+            &connect_back_payload_v2(&code, &user, ssh_port, timestamp_ms)
+        )?);
+    }
+    Ok(answer)
 }
 
 fn last_timestamps() -> &'static Mutex<HashMap<String, u64>> {
@@ -171,14 +206,23 @@ pub fn connect_back(
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let seen = last.get(&public_key).copied().unwrap_or(0);
-        if !fresh
-            || timestamp_ms <= seen
-            || !verify_device_signature(
+        // `signatureV2` covers where to connect back too; an older computer sends only
+        // `signature` (CDXC:Security 2026-11-16 at `connect_back_payload_v2`).
+        let signature_v2 = text(params, "signatureV2");
+        let signed = if signature_v2.is_empty() {
+            verify_device_signature(
                 &public_key,
                 &connect_back_payload(&code.secret, timestamp_ms),
                 &signature,
             )
-        {
+        } else {
+            verify_device_signature(
+                &public_key,
+                &connect_back_payload_v2(&code, &user, ssh_port, timestamp_ms),
+                &signature_v2,
+            )
+        };
+        if !fresh || timestamp_ms <= seen || !signed {
             bail!(
                 "This ask isn't signed by {}, or its clock is more than five minutes off.",
                 asker.name
