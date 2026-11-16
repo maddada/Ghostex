@@ -3,8 +3,8 @@ use super::{
     hover_actions::{SESSION_HOVER_BUTTON, SESSION_HOVER_ICON},
     menu_state::{
         QUICK_BUTTON_MIN_WIDTH, SIDEBAR_MENU_ARM_TIMEOUT, SIDEBAR_MENU_QUICK_ROW_HEIGHT,
-        SIDEBAR_MENU_SEARCH_HEIGHT, SIDEBAR_MENU_SEPARATOR_HEIGHT,
-        SidebarMenuPanel, SidebarMenuPlacement, SidebarMenuState,
+        SIDEBAR_MENU_SEARCH_HEIGHT, SIDEBAR_MENU_SEPARATOR_HEIGHT, SidebarMenuPanel,
+        SidebarMenuPlacement, SidebarMenuState,
     },
 };
 use crate::app::window::native_modal_kit::modal_typed_filter_field;
@@ -1153,7 +1153,8 @@ impl GhostexGpuiApp {
                         .pb(px(6.0 * scale));
                     for (button_index, button) in buttons.iter().enumerate() {
                         let label = button["label"].as_str().unwrap_or_default().to_owned();
-                        let icon_path = gpui_sidebar_command_icon_asset_path(button["icon"].as_str());
+                        let icon_path =
+                            gpui_sidebar_command_icon_asset_path(button["icon"].as_str());
                         let disabled = button["disabled"] == true;
                         strip = strip.child(
                             v_flex()

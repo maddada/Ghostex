@@ -541,7 +541,9 @@ impl VoiceAgentTab {
             (false, _) if unreadable => {
                 "This saved key can't be read anymore. Paste it again.".into()
             }
-            (false, Some(true)) if chatgpt_signin => "Using your ChatGPT sign-in from Codex.".into(),
+            (false, Some(true)) if chatgpt_signin => {
+                "Using your ChatGPT sign-in from Codex.".into()
+            }
             (false, Some(true)) => match &reference {
                 Some(reference) => format!("Read from 1Password: {reference}").into(),
                 None => "A key is saved on this computer.".into(),

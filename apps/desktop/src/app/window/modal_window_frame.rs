@@ -200,13 +200,7 @@ impl Render for ModalWindowFrame {
             .size_full()
             .child(self.content.clone())
             .when_some(linux_edge, |this, edge| {
-                this.child(
-                    div()
-                        .absolute()
-                        .inset_0()
-                        .border_1()
-                        .border_color(edge),
-                )
+                this.child(div().absolute().inset_0().border_1().border_color(edge))
             })
             .when(show_close, |this| {
                 this.child(Self::top_band_tracker(reveal))

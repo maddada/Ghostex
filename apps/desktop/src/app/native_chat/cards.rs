@@ -393,14 +393,25 @@ impl SingleLineCard {
     /// and ends in "…"; when the row is too tight the time steps aside first (the opened message
     /// still has it), then the logo, dot and computer icon; the title clips, so nothing paints
     /// over the time. The phone matches (`singleLineTitleFit`, singleLineCard.tsx).
-    pub(super) fn title_fit(&self, room: Option<f32>, lead: f32, time: f32, marks: f32) -> TitleFit {
+    pub(super) fn title_fit(
+        &self,
+        room: Option<f32>,
+        lead: f32,
+        time: f32,
+        marks: f32,
+    ) -> TitleFit {
         let Some(room) = room else {
             return TitleFit {
                 show_time: true,
                 show_marks: true,
             };
         };
-        let with_time = room - if time > 0.0 { time + TITLE_ROW_GAP } else { 0.0 } - lead;
+        let with_time =
+            room - if time > 0.0 {
+                time + TITLE_ROW_GAP
+            } else {
+                0.0
+            } - lead;
         let show_time = time <= 0.0 || with_time - marks >= self.name_min;
         let name_room = if show_time { with_time } else { room - lead };
         TitleFit {

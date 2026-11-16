@@ -315,7 +315,11 @@ pub(crate) struct DictationControl {
 pub(crate) type Dictation = Option<DictationControl>;
 
 impl NativeChatView {
-    pub(super) fn dictate(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<Dictate> {
+    pub(super) fn dictate(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<Dictate> {
         if let Some(control) = &self.dictation {
             return control.dictate.clone();
         }
@@ -1102,14 +1106,15 @@ impl NativeChatView {
         }
         // Aimed at the Reply card's field: typed there while the card is open, else into the chat
         // box, so a dictation is never lost.
-        let (target, anchor) = if target.as_deref() == Some(super::reply_attachments::REPLY_DICTATION) {
-            if self.insert_reply_dictation(text, &anchor, dictate_insert_spacing(), cx) {
-                return;
-            }
-            (None, None)
-        } else {
-            (target, anchor)
-        };
+        let (target, anchor) =
+            if target.as_deref() == Some(super::reply_attachments::REPLY_DICTATION) {
+                if self.insert_reply_dictation(text, &anchor, dictate_insert_spacing(), cx) {
+                    return;
+                }
+                (None, None)
+            } else {
+                (target, anchor)
+            };
         let chat_anchor = if target.is_none() {
             anchor.clone()
         } else {

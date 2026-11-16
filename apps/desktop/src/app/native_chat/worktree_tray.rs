@@ -18,16 +18,16 @@
 //! 4-way switch are gone; the bar reads as one path whose parts open their own menus, with no border
 //! of their own (a hover wash shows what can be clicked). A part cut short shows its full words in
 //! its tooltip, with its hotkey (Q1228).
-use super::tray_layout::{tray_layout, PartSize, TrayLayout, NARROW_WIDTH};
+use super::tray_layout::{NARROW_WIDTH, PartSize, TrayLayout, tray_layout};
 use super::{appearance::ChatAppearance, composer::hotkey_chord, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, rgb, svg, AnyElement, Bounds, Context, InteractiveElement as _, IntoElement,
-    ParentElement as _, Pixels, StatefulInteractiveElement as _, Styled as _, Window,
+    AnyElement, Bounds, Context, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
+    StatefulInteractiveElement as _, Styled as _, Window, div, px, rgb, svg,
 };
 use gpui_component::ElementExt as _;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::cell::Cell;
 use std::rc::Rc;
 

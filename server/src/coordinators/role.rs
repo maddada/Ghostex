@@ -223,11 +223,12 @@ pub fn rename_queued_coordinator_skill_lines(db: &rusqlite::Connection) -> rusql
                 .collect::<Result<Vec<_>, _>>()?;
             for (project_id, session_id) in sessions {
                 let update_session = |conn: &rusqlite::Connection| -> rusqlite::Result<usize> {
-                    let next_version =
-                        crate::session_chat_queue::bump_queue_version(conn, &project_id, &session_id)
-                            .map_err(|error| {
-                                rusqlite::Error::ToSqlConversionFailure(Box::new(error))
-                            })?;
+                    let next_version = crate::session_chat_queue::bump_queue_version(
+                        conn,
+                        &project_id,
+                        &session_id,
+                    )
+                    .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
                     conn.execute(
                         "UPDATE session_chat_queued_prompts SET text = ?2 || substr(text, length(?1) + 1), updatedAt = ?3, version = ?6
                          WHERE projectId = ?4 AND sessionId = ?5 AND substr(text, 1, length(?1)) = ?1

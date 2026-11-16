@@ -378,12 +378,21 @@ impl NativeChatView {
                 view.toggle_marker_disclosure(toggle_key.clone(), open, cx)
             }))
             .child(tile)
-            .child(div().flex_1().min_w_0().flex().items_center().child(title_element))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .items_center()
+                    .child(title_element),
+            )
             .when(!failed.is_empty(), |this| {
                 this.child(shape.pill(None, Some(failed.clone()), p.error(), p))
             })
             .when(!time.is_empty(), |this| this.child(small(time.clone())))
-            .when(!live_more.is_empty(), |this| this.child(small(live_more.clone())))
+            .when(!live_more.is_empty(), |this| {
+                this.child(small(live_more.clone()))
+            })
             .children(spinner)
             .into_any_element()
     }

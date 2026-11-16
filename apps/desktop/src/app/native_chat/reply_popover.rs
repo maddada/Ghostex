@@ -571,7 +571,9 @@ impl NativeChatView {
                 }
             }
             if adopted {
-                chat.reply_popover.unsaved.insert(SESSION_REPLY_ROW.to_owned());
+                chat.reply_popover
+                    .unsaved
+                    .insert(SESSION_REPLY_ROW.to_owned());
                 chat.save_kept_replies(cx);
             }
             if !legacy.is_empty() {
@@ -1106,9 +1108,11 @@ impl ReplyPopover {
         .unwrap_or(serde_json::Value::Null);
         self.references = super::composer_references::parse(&text, &parsed);
         self.reference_draft = Some(text);
-        let replacements = super::composer_references::replacements(&self.references, &self.appearance);
-        self.input
-            .update(cx, |input, cx| input.set_inline_replacements(replacements, cx));
+        let replacements =
+            super::composer_references::replacements(&self.references, &self.appearance);
+        self.input.update(cx, |input, cx| {
+            input.set_inline_replacements(replacements, cx)
+        });
     }
 
     /// The microphone: Dictate records into this field (reply_attachments.rs), through the chat's
@@ -1136,7 +1140,12 @@ impl ReplyPopover {
         });
         let input = self.input.clone();
         cx.spawn(async move |popover, cx| {
-            let picked = paths.await.ok().and_then(Result::ok).flatten().unwrap_or_default();
+            let picked = paths
+                .await
+                .ok()
+                .and_then(Result::ok)
+                .flatten()
+                .unwrap_or_default();
             let _ = popover.update(cx, |popover, cx| {
                 popover.picking = false;
                 let chat = popover.chat.clone();
@@ -1188,11 +1197,7 @@ impl ReplyPopover {
                 gpui::svg()
                     .path(icon)
                     .size(px(15.0 * s))
-                    .text_color(if live {
-                        p.ring
-                    } else {
-                        p.muted
-                    }),
+                    .text_color(if live { p.ring } else { p.muted }),
             )
             .on_click(cx.listener(move |popover, _, _, cx| press(popover, cx)))
             .into_any_element()
@@ -1256,7 +1261,9 @@ impl Render for ReplyPopover {
             (super::reply_attachments::ReplyDictation::Recording, _, _) => {
                 Some(("Listening\u{2026}".to_string(), false))
             }
-            (_, pending, _) if pending > 0 => Some(("Saving the picture\u{2026}".to_string(), false)),
+            (_, pending, _) if pending > 0 => {
+                Some(("Saving the picture\u{2026}".to_string(), false))
+            }
             (_, _, Some(error)) => Some((error, true)),
             _ => None,
         };

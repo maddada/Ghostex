@@ -477,7 +477,10 @@ async fn start_conversation(
                 json!({"provider": provider.id()}),
             );
             let message = if keys::uses_chatgpt_signin(&state.paths, provider) && client_remote {
-                format!("On the computer this session runs on: {}", super::chatgpt_signin::EXPIRED)
+                format!(
+                    "On the computer this session runs on: {}",
+                    super::chatgpt_signin::EXPIRED
+                )
             } else if keys::uses_chatgpt_signin(&state.paths, provider) {
                 super::chatgpt_signin::EXPIRED.to_string()
             } else {

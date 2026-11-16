@@ -1108,7 +1108,9 @@ impl NativeChatView {
                 let items = Arc::make_mut(&mut self.items);
                 let items_len_before = items.len();
                 let start = splice.start.min(items_len_before);
-                let end = start.saturating_add(splice.delete_count).min(items_len_before);
+                let end = start
+                    .saturating_add(splice.delete_count)
+                    .min(items_len_before);
                 let inserted_len = splice.items.len();
                 let replaced: Vec<_> = items.splice(start..end, splice.items).collect();
                 (start, end, items_len_before, inserted_len, replaced)
@@ -1558,9 +1560,11 @@ impl NativeChatView {
             }
         }
         if !self.has_pending_answer_disclosure() {
-            if self.retired_answer_cards.iter().all(|card| {
-                card.expanded_suffixes.is_empty() && card.collapsed_suffixes.is_empty()
-            }) {
+            if self
+                .retired_answer_cards
+                .iter()
+                .all(|card| card.expanded_suffixes.is_empty() && card.collapsed_suffixes.is_empty())
+            {
                 self.retired_answer_cards.clear();
             }
             if self.retired_answer_cards.is_empty() {
@@ -1586,7 +1590,8 @@ impl NativeChatView {
         let Some(retired) = self.retired_answer_cards.remove(pos) else {
             return;
         };
-        self.claimed_answer_card_prefixes.insert(target_prefix.clone());
+        self.claimed_answer_card_prefixes
+            .insert(target_prefix.clone());
         for suffix in retired.expanded_suffixes {
             self.expanded.insert(format!("{target_prefix}{suffix}"));
         }

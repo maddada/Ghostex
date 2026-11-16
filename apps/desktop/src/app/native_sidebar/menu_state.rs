@@ -392,9 +392,9 @@ impl SidebarMenuPanel {
         if let Some(selected) = selected {
             let enabled = |item: &Value| {
                 item["separator"] != true
-                && item["heading"] != true
-                && item["disabled"] != true
-                && item.get("quick").is_none()
+                    && item["heading"] != true
+                    && item["disabled"] != true
+                    && item.get("quick").is_none()
             };
             self.selected = self
                 .items
@@ -632,9 +632,9 @@ impl SidebarMenuPanel {
             .enumerate()
             .filter(|(_, item)| {
                 item["separator"] != true
-                && item["heading"] != true
-                && item["disabled"] != true
-                && item.get("quick").is_none()
+                    && item["heading"] != true
+                    && item["disabled"] != true
+                    && item.get("quick").is_none()
             })
             .map(|(index, _)| index)
             .collect();

@@ -369,13 +369,8 @@ impl NativeChatView {
         let shape = &*SINGLE_LINE_CARD;
         // The name is cut, never collapsed: on a tight row the time steps aside, then the name's
         // marks (cards.rs `title_fit`, the user's Q3300 A).
-        let time_width = super::fonts::label_width(
-            &time,
-            &p.font,
-            gpui::FontWeight::NORMAL,
-            12.0 * s,
-            cx,
-        ) / s;
+        let time_width =
+            super::fonts::label_width(&time, &p.font, gpui::FontWeight::NORMAL, 12.0 * s, cx) / s;
         let fit = if card["pill"].is_object() {
             let pill = &card["pill"];
             let lead = super::fonts::label_width(
@@ -603,7 +598,11 @@ impl NativeChatView {
     /// (cards.rs `title_fit`).
     pub(super) fn session_pill_marks_width(pill: &Value, p: &ChatAppearance) -> f32 {
         let gap = 4.0;
-        let logo = if pill["logo"] != false { 12.0 + gap } else { 0.0 };
+        let logo = if pill["logo"] != false {
+            12.0 + gap
+        } else {
+            0.0
+        };
         let session = &pill["session"];
         let card = (pill["missing"] != true && session.is_object())
             .then(|| {

@@ -301,7 +301,9 @@ impl NativeChatView {
         let header = div()
             .id(SharedString::from(format!("side-question-row:{id}")))
             .role(gpui::Role::Button)
-            .aria_label(format!("Side question: {question}. Not added to the conversation"))
+            .aria_label(format!(
+                "Side question: {question}. Not added to the conversation"
+            ))
             .aria_expanded(expanded)
             .h(px(shape.header_height(s)))
             .px(px(shape.padding_x * s))

@@ -403,7 +403,9 @@ impl GhostexGpuiApp {
                 this.remote_browser.pending.remove(&machine_id);
                 match result {
                     Ok(tunnel) => {
-                        this.remote_browser.tunnels.insert(machine_id.clone(), tunnel);
+                        this.remote_browser
+                            .tunnels
+                            .insert(machine_id.clone(), tunnel);
                         if this.active_mode == TitlebarMode::Browser
                             && this
                                 .project_editor_shell
@@ -411,11 +413,17 @@ impl GhostexGpuiApp {
                         {
                             this.sync_active_browser_tab_to_surface(window, cx);
                         }
-                        this.reload_pending_startup_browser_tabs_for_remote_machine(&machine_id, cx);
+                        this.reload_pending_startup_browser_tabs_for_remote_machine(
+                            &machine_id,
+                            cx,
+                        );
                     }
                     Err(message) => {
-                        this.remote_browser.errors.insert(machine_id.clone(), message);
-                        this.pending_startup_browser_remote_machines.remove(&machine_id);
+                        this.remote_browser
+                            .errors
+                            .insert(machine_id.clone(), message);
+                        this.pending_startup_browser_remote_machines
+                            .remove(&machine_id);
                     }
                 }
                 cx.notify();

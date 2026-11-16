@@ -11,17 +11,17 @@
 use super::{appearance::ChatAppearance, option_menu, reply_popover, state::NativeChatView};
 use crate::app::gx_store::unified_new_session::PendingDraftMove;
 use crate::app::native_chat::cursor::ChatCursor as _;
-use ghostex_gx_core::unified_sidebar::{filter_project_choices, UnifiedProjectChoice};
-use gpui::prelude::FluentBuilder as _;
+use ghostex_gx_core::unified_sidebar::{UnifiedProjectChoice, filter_project_choices};
 use gpui::Focusable as _;
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    div, px, size, svg, AnyElement, AppContext as _, Bounds, Context, Entity, FocusHandle,
-    InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Point, Render, ScrollHandle,
+    AnyElement, AppContext as _, Bounds, Context, Entity, FocusHandle, InteractiveElement as _,
+    IntoElement, ParentElement as _, Pixels, Point, Render, ScrollHandle,
     StatefulInteractiveElement as _, Styled as _, Subscription, WeakEntity, Window, WindowBounds,
-    WindowOptions,
+    WindowOptions, div, px, size, svg,
 };
-use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::Root;
+use gpui_component::input::{Input, InputEvent, InputState};
 use serde_json::Value;
 use std::time::Duration;
 // `web_time`, because the web build has no `std::time::Instant` (it panics in wasm).
