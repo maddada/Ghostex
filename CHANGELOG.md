@@ -9,7 +9,7 @@
 ### 🩹 Fixes and polish
 
 - **macOS: Ghostex no longer quits when you open a chat that ends with one-click answer buttons,** which for some people happened on every launch, thanks to @nadzifal, @NexiaMoe and @WangAxerold.
-- **Ghostex's notes reach a coordinator as their own message,** and the chat hides them, so a coordinator's reply is no longer lost behind one, thanks to @sebastianarena.
+- **Ghostex's notes reach a coordinator as their own message,** and the chat hides them however they arrive, so a coordinator's reply is no longer lost behind one, thanks to @sebastianarena.
 - **A coordinator's right-click menu groups its settings under one Coordinator row,** as the phone's long-press menu does.
 - **A new chat in an existing worktree on another computer opens in Chat,** not as a terminal or an empty pane.
 
