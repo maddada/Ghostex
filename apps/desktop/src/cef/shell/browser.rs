@@ -527,6 +527,13 @@ impl CefBrowser {
             .map(|host| platform::native_view_ptr(host.window_handle()))
     }
 
+    /// The top-left corner of the page's view in the window, where GPUI last placed it.
+    pub fn view_origin(&self) -> Option<gpui::Point<Pixels>> {
+        self.last_bounds
+            .borrow()
+            .map(|(x, y, ..)| gpui::point(gpui::px(x), gpui::px(y)))
+    }
+
     /// Whether `bounds` differs from the frame the native view last took.
     pub fn bounds_differ(&self, bounds: Bounds<Pixels>, scale_factor: f32) -> bool {
         let raw_bounds = (

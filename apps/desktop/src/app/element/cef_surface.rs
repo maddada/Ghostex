@@ -265,6 +265,11 @@ impl CefSurface {
         }
     }
 
+    /// The top-left corner of the page's view in the window, once a paint has placed it.
+    pub(crate) fn view_origin(&self) -> Option<Point<Pixels>> {
+        self.browser.view_origin()
+    }
+
     pub(crate) fn can_go_back(&self) -> bool {
         self.browser.can_go_back()
     }

@@ -207,6 +207,9 @@ impl GhostexGpuiApp {
             cef::BrowserPageMetadataEvent::CopyToClipboard(item) => {
                 gpui_copy_to_clipboard(item, cx);
             }
+            cef::BrowserPageMetadataEvent::ContextMenuRequested(menu) => {
+                self.show_browser_page_context_menu(tab_id, menu, window, cx);
+            }
             cef::BrowserPageMetadataEvent::TitleChanged(title) => {
                 /*
                 CDXC:Browser 2026-06-22-07:23:
