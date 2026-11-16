@@ -23,23 +23,65 @@ impl GhostexGpuiApp {
         CDXC:Clipboard 2026-06-27-10:28:
         Direct GPUI terminal paste uses the same runtime-only previewable-image setting as macOS before targeting the focused mounted Ghostty surface. Disabled keeps explicit-string-only behavior; enabled converts only validated image file references or raw image bytes into Markdown before any terminal insertion.
         */
+        if self.focused_terminal_is_still_mounting() {
+            self.report_terminal_paste_failure(TerminalPasteFailure::TerminalStarting, cx);
+            return true;
+        }
         let Some(target) = self.terminal_paste_target() else {
             return false;
         };
         let read = gpui_read_clipboard(cx, "terminalPaste");
         cx.spawn(async move |this, cx| {
-            let Some(item) = read.await else {
-                return;
-            };
+            let item = read.await;
             this.update(cx, |this, cx| {
-                if this.terminal_paste_target() == Some(target) {
-                    this.paste_clipboard_item_into_focused_terminal(&item, cx);
+                if this.terminal_paste_target() != Some(target) {
+                    this.report_terminal_paste_failure(TerminalPasteFailure::FocusMoved, cx);
+                    return;
                 }
+                let Some(item) = item else {
+                    this.report_terminal_paste_failure(
+                        TerminalPasteFailure::ClipboardUnreadable,
+                        cx,
+                    );
+                    return;
+                };
+                this.paste_clipboard_item_into_focused_terminal(&item, cx);
             })
             .ok();
         })
         .detach();
         true
+    }
+
+    /// The focused pane holds a terminal that is still being created, so there is nothing to paste
+    /// into yet. Cmd+V used to fall through to no handler there and do nothing.
+    fn focused_terminal_is_still_mounting(&self) -> bool {
+        matches!(
+            self.shell_keyboard_owner(),
+            ShellKeyboardOwner::TerminalMounting
+        )
+    }
+
+    /*
+    CDXC:Clipboard 2026-11-17 WHY:
+    User (Discord feedback, and the owner had seen it too): pasting into a terminal sometimes pasted nothing. Every step of a terminal paste had a way to stop without a word: the terminal still starting, focus moving before the clipboard read finished, an empty or unreadable clipboard (Universal Clipboard and apps that hand over their text late can fail to deliver it), an image or file with no text while images-as-links is off, an image that could not be saved, a terminal whose connection had dropped refusing the bytes, and a paste confirmation that could not open. Each now shows a short card saying what happened and what to do, and writes the reason (never the clipboard contents) to the terminal focus log, so the next report names its cause.
+    */
+    pub(crate) fn report_terminal_paste_failure(
+        &mut self,
+        failure: TerminalPasteFailure,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        support_logs::append(
+            support_logs::GpuiSupportLog::TerminalFocus,
+            "gpui.terminalPaste.notDelivered",
+            serde_json::json!({
+                "reason": format!("{failure:?}"),
+                "shellFocus": format!("{:?}", self.shell_focus),
+                "firstResponderTarget": format!("{:?}", self.first_responder_target),
+            }),
+        );
+        let (title, description) = failure.card_text();
+        self.dispatch_gpui_workspace_action_toast("warning", title, description, cx);
     }
 
     /// The terminal a paste is meant for, taken when the key is pressed. The clipboard read
@@ -76,6 +118,10 @@ impl GhostexGpuiApp {
             paste_previewable_images_enabled,
             self.focused_terminal_is_factory_droid(),
         ) else {
+            self.report_terminal_paste_failure(
+                terminal_clipboard_without_text_failure(item, paste_previewable_images_enabled),
+                cx,
+            );
             return false;
         };
 
@@ -88,6 +134,10 @@ impl GhostexGpuiApp {
         if !enabled {
             return self.send_text_to_focused_terminal_surface("\u{16}", cx);
         }
+        if self.focused_terminal_is_still_mounting() {
+            self.report_terminal_paste_failure(TerminalPasteFailure::TerminalStarting, cx);
+            return true;
+        }
         let Some(target) = self.terminal_paste_target() else {
             return false;
         };
@@ -96,6 +146,7 @@ impl GhostexGpuiApp {
             let item = read.await;
             this.update(cx, |this, cx| {
                 if this.terminal_paste_target() != Some(target) {
+                    this.report_terminal_paste_failure(TerminalPasteFailure::FocusMoved, cx);
                     return;
                 }
                 if let Some(item) = item
@@ -228,6 +279,7 @@ impl GhostexGpuiApp {
                     None => this.focused_terminal_shell_session_id() == Some(session_id),
                 };
                 if !destination_is_live {
+                    this.report_terminal_paste_failure(TerminalPasteFailure::FocusMoved, cx);
                     return;
                 }
                 match result {
@@ -240,12 +292,17 @@ impl GhostexGpuiApp {
                         };
                         match runtime_session_id {
                             Some(runtime_session_id) => {
-                                this.paste_text_into_gpui_engine_terminal_target(
+                                if !this.paste_text_into_gpui_engine_terminal_target(
                                     target,
                                     runtime_session_id,
                                     text.as_str(),
                                     cx,
-                                );
+                                ) {
+                                    this.report_terminal_paste_failure(
+                                        TerminalPasteFailure::TerminalRefusedInput,
+                                        cx,
+                                    );
+                                }
                             }
                             None => {
                                 this.paste_text_into_focused_terminal_surface(text.as_str(), cx);
@@ -297,7 +354,12 @@ impl GhostexGpuiApp {
             if paste_protection
                 && view.update(cx, |view, _cx| view.paste_requires_confirmation(text))
             {
-                if self.pending_terminal_paste_confirmation.is_none() {
+                // Only a dialog that is really on screen keeps an earlier paste waiting. A pending
+                // paste whose dialog is gone would otherwise swallow every later paste that needs
+                // confirming, without a word.
+                let dialog_on_screen = self.terminal_paste_confirmation_dialog_open
+                    && self.native_app_modal_kind() == Some(GpuiAppModalKind::TerminalPasteConfirm);
+                if !dialog_on_screen {
                     self.pending_terminal_paste_confirmation =
                         Some(PendingGpuiTerminalPasteConfirmation {
                             text: text.to_string(),
@@ -308,10 +370,16 @@ impl GhostexGpuiApp {
                 }
                 return true;
             }
-            view.update(cx, |view, cx| view.paste_text(text, cx));
+            if !view.update(cx, |view, cx| view.paste_text(text, cx)) {
+                self.report_terminal_paste_failure(TerminalPasteFailure::TerminalRefusedInput, cx);
+            }
             return true;
         }
-        self.send_text_to_focused_terminal_surface(text, cx)
+        if self.send_text_to_focused_terminal_surface(text, cx) {
+            return true;
+        }
+        self.report_terminal_paste_failure(TerminalPasteFailure::FocusMoved, cx);
+        false
     }
 
     /// Asks before a paste that could run commands, in a native app-modal window
@@ -334,6 +402,8 @@ impl GhostexGpuiApp {
             self.terminal_paste_confirmation_dialog_open = true;
         } else {
             self.pending_terminal_paste_confirmation = None;
+            self.terminal_paste_confirmation_dialog_open = false;
+            self.report_terminal_paste_failure(TerminalPasteFailure::ConfirmationUnavailable, cx);
         }
     }
 
@@ -345,10 +415,12 @@ impl GhostexGpuiApp {
         let pending = self.pending_terminal_paste_confirmation.take();
         self.terminal_paste_confirmation_dialog_open = false;
         self.release_native_app_modal_window(GpuiAppModalKind::TerminalPasteConfirm, cx);
-        if let (TerminalPasteConfirmModalCommand::Paste, Some(pending)) = (command, pending) {
-            pending
+        if let (TerminalPasteConfirmModalCommand::Paste, Some(pending)) = (command, pending)
+            && !pending
                 .view
-                .update(cx, |view, cx| view.paste_text(&pending.text, cx));
+                .update(cx, |view, cx| view.paste_text(&pending.text, cx))
+        {
+            self.report_terminal_paste_failure(TerminalPasteFailure::TerminalRefusedInput, cx);
         }
         cx.notify();
     }
@@ -485,6 +557,87 @@ impl GhostexGpuiApp {
             _ => {}
         }
         true
+    }
+}
+
+/// Why a terminal paste did not reach the terminal (CDXC:Clipboard 2026-11-17 above).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TerminalPasteFailure {
+    /// The focused pane's terminal is still being created.
+    TerminalStarting,
+    /// The terminal that had the keyboard when Paste was pressed lost it before the paste landed.
+    FocusMoved,
+    /// The clipboard read gave nothing back: empty, or the app that copied never handed it over.
+    ClipboardUnreadable,
+    /// The clipboard holds something, but no text a terminal can take.
+    NoText,
+    /// An image or image file with no text while Paste images as preview links is off.
+    ImageNeedsSetting,
+    /// Paste images as preview links is on, but the image could not be read or saved.
+    ImageNotSaved,
+    /// The terminal refused the bytes: its connection to the session has ended or is being replaced.
+    TerminalRefusedInput,
+    /// The paste needed confirming and the confirmation window could not open.
+    ConfirmationUnavailable,
+}
+
+impl TerminalPasteFailure {
+    fn card_text(self) -> (&'static str, &'static str) {
+        match self {
+            Self::TerminalStarting => (
+                "Nothing pasted",
+                "The terminal is still starting. Paste again in a moment.",
+            ),
+            Self::FocusMoved => (
+                "Nothing pasted",
+                "The terminal lost focus before the paste finished. Click the terminal and paste again.",
+            ),
+            Self::ClipboardUnreadable => (
+                "Nothing pasted",
+                "The clipboard is empty or could not be read. Copy the text again, then paste.",
+            ),
+            Self::NoText => (
+                "Nothing pasted",
+                "The clipboard has no text a terminal can take. Copy the text again, then paste.",
+            ),
+            Self::ImageNeedsSetting => (
+                "Image not pasted",
+                "Terminals take images only with Paste images as preview links on. Turn it on in Settings, Terminal.",
+            ),
+            Self::ImageNotSaved => (
+                "Image not pasted",
+                "Ghostex could not save the image from the clipboard. Copy it again, then paste.",
+            ),
+            Self::TerminalRefusedInput => (
+                "Nothing pasted",
+                "The terminal is not connected right now. Wait for it to reconnect, then paste again.",
+            ),
+            Self::ConfirmationUnavailable => (
+                "Nothing pasted",
+                "The paste confirmation could not open. Paste again.",
+            ),
+        }
+    }
+}
+
+/// Why a clipboard that `terminal_clipboard_paste_text` turned down gave a terminal nothing.
+fn terminal_clipboard_without_text_failure(
+    item: &ClipboardItem,
+    paste_previewable_images_enabled: bool,
+) -> TerminalPasteFailure {
+    let holds_image = item.entries().iter().any(|entry| match entry {
+        gpui::ClipboardEntry::Image(_) => true,
+        gpui::ClipboardEntry::ExternalPaths(paths) => paths
+            .paths()
+            .iter()
+            .any(|path| is_project_board_image_file_path(path)),
+        gpui::ClipboardEntry::String(_) => false,
+    });
+    match (holds_image, paste_previewable_images_enabled) {
+        (true, false) => TerminalPasteFailure::ImageNeedsSetting,
+        (true, true) => TerminalPasteFailure::ImageNotSaved,
+        (false, _) if item.entries().is_empty() => TerminalPasteFailure::ClipboardUnreadable,
+        (false, _) => TerminalPasteFailure::NoText,
     }
 }
 

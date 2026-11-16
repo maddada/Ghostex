@@ -875,11 +875,24 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
+            // The terminal asked for a paste (its Paste menu item, the Edit menu, Super+V or
+            // Ctrl+V); one that finds no terminal holding the keyboard says so instead of
+            // vanishing (CDXC:Clipboard 2026-11-17 in terminal_input/paste_and_shortcuts.rs).
             TerminalViewEvent::PasteRequested => {
-                let _ = self.paste_into_focused_terminal_from_clipboard(cx);
+                if !self.paste_into_focused_terminal_from_clipboard(cx) {
+                    self.report_terminal_paste_failure(
+                        crate::app::terminal_input::TerminalPasteFailure::FocusMoved,
+                        cx,
+                    );
+                }
             }
             TerminalViewEvent::ControlVRequested => {
-                let _ = self.paste_image_or_send_control_v(cx);
+                if !self.paste_image_or_send_control_v(cx) {
+                    self.report_terminal_paste_failure(
+                        crate::app::terminal_input::TerminalPasteFailure::FocusMoved,
+                        cx,
+                    );
+                }
             }
             TerminalViewEvent::PathsDropped(paths) => {
                 self.insert_paths_into_gpui_engine_terminal(target, runtime_session_id, paths, cx);

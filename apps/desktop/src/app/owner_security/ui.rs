@@ -34,6 +34,9 @@ enum Decided {
     Failed(String),
 }
 
+/// What a card's decision did: the unlock card let this app in with its old owner key.
+const UNLOCKED: bool = true;
+
 /// The notice's title: what the person is asked to approve.
 fn approval_title(request: &ApprovalRequest) -> &'static str {
     use ghostex_gx_protocol::approval::SensitiveAction;
@@ -445,7 +448,9 @@ impl GhostexGpuiApp {
             // request approved, and the key already in there; it still finishes (third review,
             // finding 1), so it skips the "no longer waiting" check.
             if !deny && super::asks_for_this_app(&request) {
-                return super::unlock_with_old_key(&transport, &request).map_err(Decided::Failed);
+                return super::unlock_with_old_key(&transport, &request)
+                    .map(|()| UNLOCKED)
+                    .map_err(Decided::Failed);
             }
             match super::card_request(&transport, &request.id) {
                 super::CardRequest::Waiting => {}
@@ -457,12 +462,17 @@ impl GhostexGpuiApp {
             } else {
                 super::approve_request(&transport, &request)
             }
+            .map(|()| !UNLOCKED)
             .map_err(Decided::Failed)
         });
         let machine_id = machine_id.map(str::to_string);
         cx.spawn(async move |this, cx| {
             let outcome = decided.await;
             let _ = this.update(cx, |this, cx| {
+                // The unlock card's request may have been asked again: this card goes now.
+                if matches!(outcome, Ok(UNLOCKED)) {
+                    this.remove_gpui_app_toast(&card, cx);
+                }
                 // A connected computer waits on this request: send its call now instead of on
                 // its next renewal, well inside the approval's two minutes.
                 if outcome.is_ok() && lets_computer_in && !deny {

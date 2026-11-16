@@ -371,8 +371,9 @@ impl GhostexGpuiApp {
         else {
             return false;
         };
-        view.update(cx, |view, cx| view.paste_text(text, cx));
-        true
+        // False when the terminal refused the bytes (its connection ended), not only when the
+        // view is gone, so a caller never reports a paste that did not land.
+        view.update(cx, |view, cx| view.paste_text(text, cx))
     }
 
     pub(crate) fn perform_manage_files_bridge_side_effect(

@@ -10,3 +10,5 @@ mod close_confirm;
 mod paste_and_shortcuts;
 mod preedit_and_text_send;
 mod text_input_handoff;
+
+pub(crate) use paste_and_shortcuts::TerminalPasteFailure;
