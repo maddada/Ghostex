@@ -578,6 +578,23 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         .into_iter()
         .map(|(at, row)| (now_ms - at > DAY_MS, at, row))
         .collect();
+    // The session's Needs you to-dos (`ghostex needs-you add`), in any agent chat. A chat with no
+    // work items has read no turns for its Show in chat, so it reads them here, only while a
+    // to-do is open.
+    if super::needs_you::has_items(state) {
+        let own_turns;
+        let todo_turns = if turns.is_empty() {
+            own_turns = self::turns(state);
+            &own_turns
+        } else {
+            turns
+        };
+        needs.extend(
+            super::needs_you::rows(state, context, todo_turns, now_ms, show_in_chat, reply_name)
+                .into_iter()
+                .map(|(at, row)| (now_ms - at > DAY_MS, at, row)),
+        );
+    }
     let work = state
         .session
         .coordinator_threads
@@ -644,6 +661,9 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 "itemPills": item_pills(&items, item, text(ask, "tag")),
                 "buttons": card["buttons"],
                 "busy": card["busy"],
+                // A command to run, from a thread's `ghostex needs-you add --command`: the row's
+                // chip that copies it (`extras::needs_you`).
+                "command": text(ask, "command"),
                 // The words sent from here as its Reply, which its Reply button shows until gxserver
                 // settles it (an answer picked from its buttons is marked on that button instead).
                 "replied": replied_words(ask, answers.get(&key).map(String::as_str)),

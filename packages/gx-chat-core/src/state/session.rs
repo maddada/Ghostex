@@ -100,6 +100,8 @@ pub struct SessionState {
     pub side_chat_of: Option<Value>,
     /// The session's secret requests (`extras::secret_requests`); unchanged on omission.
     pub secret_requests: Option<Value>,
+    /// The session's Needs you to-dos (`extras::needs_you`); unchanged on omission.
+    pub needs_you: Option<Value>,
     /// For a coordinator's thread: the approvals its coordinator's chat answered for it
     /// (`extras::relayed_approvals::audit_lines`); unchanged on omission.
     pub relayed_answers: Option<Value>,
@@ -200,6 +202,7 @@ impl Default for SessionState {
             side_chats: None,
             side_chat_of: None,
             secret_requests: None,
+            needs_you: None,
             relayed_answers: None,
             autopilot: None,
             collab: Default::default(),
