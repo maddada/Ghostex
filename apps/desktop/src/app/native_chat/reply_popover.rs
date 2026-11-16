@@ -22,8 +22,15 @@ use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
-/// The card's size before the chat's zoom.
+/// The card's size before the chat's zoom; wider when its button row needs it (`card_width`).
 const WIDTH: f32 = 400.0;
+/// The card's padding, the row's icon buttons (Dictate, Attach) and the gap between the row's parts.
+const PADDING: f32 = 8.0;
+const ICON_BUTTON: f32 = 26.0;
+const ROW_GAP: f32 = 2.0;
+/// An action button's padding either side and the gap between its label and its key.
+const ACTION_PADDING: f32 = 8.0;
+const ACTION_GAP: f32 = 8.0;
 const HEIGHT: f32 = 132.0;
 /// The line that says why the last send failed (`reopen_failed_reply`).
 const ERROR_LINE: f32 = 22.0;
@@ -342,7 +349,8 @@ impl NativeChatView {
         } else {
             content
         };
-        let bounds = popover_bounds(content.origin + at, within, scale, !error.is_empty());
+        let width = card_width(question.is_some(), &appearance, window);
+        let bounds = popover_bounds(content.origin + at, within, width, scale, !error.is_empty());
         let parent = super::child_window::window_native_view(window)
             .unwrap_or(self.config.parent_native_view);
         let display_id =
@@ -839,16 +847,53 @@ impl NativeChatView {
     }
 }
 
+/// The card's width before the chat's zoom: `WIDTH`, or what its button row takes when that is
+/// more. Off a Mac the keys are spelled out ("Ctrl+Enter"), and with a question's labels the row
+/// was wider than 400px on Linux and Windows.
+fn card_width(question: bool, appearance: &ChatAppearance, window: &Window) -> f32 {
+    let scale = appearance.scale;
+    let mut style = window.text_style();
+    style.font_family = appearance.font.clone().into();
+    style.font_weight = FontWeight::MEDIUM;
+    let text_width = |text: &str| {
+        window
+            .text_system()
+            .shape_line(
+                text.to_owned().into(),
+                px(13.0 * scale),
+                &[style.to_run(text.len())],
+                None,
+            )
+            .width
+            .as_f32()
+            / scale
+    };
+    let (add, send) = action_labels(question);
+    let actions: f32 = [(add, ReplyAction::AddToPrompt), (send, ReplyAction::Send)]
+        .into_iter()
+        .map(|(label, action)| {
+            text_width(label)
+                + text_width(shortcut_label(action))
+                + ACTION_PADDING * 2.0
+                + ACTION_GAP
+        })
+        .sum();
+    // Both icons, the status line's own padding, the four gaps and a little air.
+    let row = ICON_BUTTON * 2.0 + 8.0 + ROW_GAP * 4.0 + actions + 8.0;
+    WIDTH.max((row + PADDING * 2.0).ceil())
+}
+
 /// Where the card opens: its top-left corner at the press, kept inside the chat with a margin, and
 /// above the press when there is no room below it.
 fn popover_bounds(
     at: Point<Pixels>,
     within: Bounds<Pixels>,
+    width: f32,
     scale: f32,
     error: bool,
 ) -> Bounds<Pixels> {
     let margin = px(12.0 * scale);
-    let width = px(WIDTH * scale).min(within.size.width - margin * 2.0);
+    let width = px(width * scale).min(within.size.width - margin * 2.0);
     // A send that failed says why on a line of its own above the buttons.
     let height = px((HEIGHT + if error { ERROR_LINE } else { 0.0 }) * scale);
     let y = if at.y + px(4.0 * scale) + height < within.bottom() - margin {
@@ -1182,7 +1227,7 @@ impl ReplyPopover {
             .flex_shrink_0()
             .items_center()
             .justify_center()
-            .size(px(26.0 * s))
+            .size(px(ICON_BUTTON * s))
             .rounded(px(6.0 * s))
             .when(live, |button| button.bg(hover))
             .hover(move |button| button.bg(hover))
@@ -1216,14 +1261,23 @@ impl ReplyPopover {
             .aria_label(format!("{label} ({shortcut})"))
             .chat_cursor_pointer()
             .flex()
+            .min_w_0()
+            .overflow_hidden()
             .items_center()
-            .gap(px(8.0 * s))
+            .gap(px(ACTION_GAP * s))
             .h(px(26.0 * s))
-            .px(px(8.0 * s))
+            .px(px(ACTION_PADDING * s))
             .rounded(px(6.0 * s))
             .hover(move |row| row.bg(hover))
-            .child(div().text_color(p.foreground).child(label))
-            .child(div().text_color(p.muted).child(shortcut))
+            .child(div().flex_shrink_0().text_color(p.foreground).child(label))
+            // In a chat too narrow for the whole row the key gives way first.
+            .child(
+                div()
+                    .min_w_0()
+                    .truncate()
+                    .text_color(p.muted)
+                    .child(shortcut),
+            )
             .on_click(cx.listener(move |popover, _, _, cx| popover.close(Some(action), true, cx)))
             .into_any_element()
     }
@@ -1276,7 +1330,7 @@ impl Render for ReplyPopover {
             .border_1()
             .border_color(edge)
             .bg(p.menu_surface())
-            .p(px(8.0 * s))
+            .p(px(PADDING * s))
             .font_family(p.font)
             .text_size(px(13.0 * s))
             .text_color(p.foreground)
@@ -1311,11 +1365,15 @@ impl Render for ReplyPopover {
                 )
             })
             .child(
+                // The status line takes the slack, so the actions sit at the right. No
+                // `justify_end`: a row wider than the card then spilled out past its left border,
+                // taking the microphone and paperclip with it; now its right end is cut instead.
                 div()
                     .flex()
+                    .min_w_0()
+                    .overflow_hidden()
                     .items_center()
-                    .justify_end()
-                    .gap(px(2.0 * s))
+                    .gap(px(ROW_GAP * s))
                     .font_weight(FontWeight::MEDIUM)
                     .child(self.icon_button(
                         "chat-reply-dictate",
@@ -1351,25 +1409,26 @@ impl Render for ReplyPopover {
                     )
                     .child(self.action_button(
                         "chat-reply-add",
-                        if self.question.is_some() {
-                            "Reply in chat box"
-                        } else {
-                            "Add to prompt"
-                        },
+                        action_labels(self.question.is_some()).0,
                         ReplyAction::AddToPrompt,
                         cx,
                     ))
                     .child(self.action_button(
                         "chat-reply-send",
-                        if self.question.is_some() {
-                            "Send answer"
-                        } else {
-                            "Send reply"
-                        },
+                        action_labels(self.question.is_some()).1,
                         ReplyAction::Send,
                         cx,
                     )),
             )
+    }
+}
+
+/// The two actions' labels: a question's answer, or a quoted reply.
+fn action_labels(question: bool) -> (&'static str, &'static str) {
+    if question {
+        ("Reply in chat box", "Send answer")
+    } else {
+        ("Add to prompt", "Send reply")
     }
 }
 
