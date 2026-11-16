@@ -447,11 +447,19 @@ impl NativeChatView {
                             22.0
                         };
                 }
-                if !text(&card["reason"], "text").is_empty() {
-                    height += 34.0;
-                }
-                if !text(card, "error").is_empty() {
-                    height += 34.0;
+                // The warning and error lines wrap (about 62 characters a row in the menu's width)
+                // and the "blocks this at" line is one more row; each sits 12px below the last.
+                let wrapped = |line: String| {
+                    if line.is_empty() {
+                        0.0
+                    } else {
+                        12.0 + (line.chars().count() as f32 / 62.0).ceil().max(1.0) * 21.0
+                    }
+                };
+                height += wrapped(text(&card["reason"], "text"));
+                height += wrapped(text(card, "error"));
+                if card["autoBlockAt"].as_str().is_some_and(|at| !at.is_empty()) {
+                    height += 12.0 + 21.0;
                 }
                 height + 12.0
             })
@@ -494,10 +502,18 @@ impl NativeChatView {
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
-            .children(
-                open.iter()
-                    .map(|card| self.relayed_approval_card(card, "menu", p, cx)),
-            )
+            // CDXC:SessionChat 2026-11-16 WHY: Each card keeps its full height and the list scrolls.
+            // A card clips its corners (`overflow_hidden`), which gives a flex item no minimum
+            // height, so in a list shorter than its cards the card itself shrank, cut off its own
+            // Yes / No row and left the list nothing to scroll (the user's screenshot of a long
+            // expanded command, 2026-11-16).
+            .children(open.iter().map(|card| {
+                div()
+                    .flex_shrink_0()
+                    .w_full()
+                    .min_w_0()
+                    .child(self.relayed_approval_card(card, "menu", p, cx))
+            }))
             .into_any_element();
         Some(super::chat_pills::pill_menu_column(
             "chat-approvals-menu",
