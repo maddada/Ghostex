@@ -2592,6 +2592,7 @@ dependencies = [
  "mimalloc",
  "oo7",
  "percent-encoding",
+ "plist",
  "portable-pty",
  "qrcode",
  "ratex-gpui",

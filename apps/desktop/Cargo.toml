@@ -155,6 +155,9 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 # theirs, and only Rust's own allocations move.
 [target.'cfg(target_os = "macos")'.dependencies]
 mimalloc = { version = "0.1", default-features = false }
+# Reads Wallspace's preferences for the page window's glass when the desktop picture file is gone
+# (app/window/visual_page_modal/glass.rs, `wallspace_poster`); already in the graph through gpui.
+plist = "1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 x11rb = { version = "0.13", features = ["xinput", "shape"] }

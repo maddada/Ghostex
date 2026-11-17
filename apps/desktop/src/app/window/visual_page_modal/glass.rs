@@ -182,7 +182,10 @@ fn page_glass(window: &Window, cx: &mut App) -> Option<Glass> {
             .opacity(crate::app::helpers::work_area_glass_alpha()),
     );
     let Some(snapshot) = snapshot else {
-        return remembered_glass(bounds.size, tint);
+        if crate::app::helpers::window_glass_live::window_glass_live_mode() {
+            return None;
+        }
+        return stand_in_glass(window, cx, tint).or_else(|| remembered_glass(bounds.size, tint));
     };
     // Held against the screen (and always under the live blur, which is the screen behind the
     // window), the page window shows the part of the screen it sits over, like the main window
@@ -207,15 +210,154 @@ fn page_glass(window: &Window, cx: &mut App) -> Option<Glass> {
 /// CDXC:SessionChat 2026-11-16 DECISION:
 /// User: "why dont i see the bg show here in the ghostex page pls? we implemented this before but i dont see it now anymore". The page window's picture comes from the main window's snapshot of the desktop picture, and that snapshot is `None` whenever macOS names a desktop picture file that cannot be opened. That is what happened on 2026-11-16: a wallpaper changer left the desktop on `$TMPDIR/StaticWallpaper/<n>_static.jpg`, which was gone by the afternoon (the system log showed Ghostex's once-a-second check failing on it, "can't open ... fileExists == false"). The main window's live blur kept working, since the system blurs what is on screen, but the page window fell back to the painted dusk. So the last picture the page window was handed is kept (in memory, and in the cache folder for the next launch) and used while the desktop picture can't be read, placed covering the window; the real picture takes over again as soon as one can be read. A video or a live style is not this: there the glass shows no picture on purpose, so the page keeps the painted dusk or dawn.
 fn remembered_glass(window_size: Size<Pixels>, tint: Rgba) -> Option<Glass> {
-    if crate::app::helpers::window_glass_live::window_glass_live_mode() {
-        return None;
-    }
     let (jpeg, screen) = remembered_picture()?;
     Some(Glass {
         jpeg,
         rect: picture_rect(window_size, screen, None),
         tint,
     })
+}
+
+/// CDXC:SessionChat 2026-11-17 WHY:
+/// User: "why is this not showing the blurred bg like it used to??? it's inline html in the macos app". The desktop is a Wallspace video wallpaper. Wallspace plays the video itself and names a still of it, `$TMPDIR/StaticWallpaper/<key>_static.jpg`, as the macOS desktop picture, and that file was gone again (the system log showed the main window's once-a-second read failing on it, "fileExists == false"). The fallback of 2026-11-16 above only helps once a picture has been seen, and none had been since the app started, so the page window painted the flat dusk top (`PAGE_TOP_DARK`). While the desktop picture can't be read, the page now uses Wallspace's own poster of the wallpaper it is playing (`wallspace_poster`), which is the same scene, placed as the main window's picture would be. The kept picture still comes after it, for any other desktop picture that disappears.
+fn stand_in_glass(window: &Window, cx: &App, tint: Rgba) -> Option<Glass> {
+    let poster = wallspace_poster()?;
+    let bounds = window.bounds();
+    let display = window.display(cx)?.bounds();
+    let jpeg = stand_in_picture(&poster, display.size)?;
+    remember_picture(&jpeg);
+    let on_screen = (crate::app::helpers::window_glass_shows_live_blur()
+        || crate::app::helpers::window_glass_picture_follows_screen())
+    .then(|| bounds.origin - display.origin);
+    Some(Glass {
+        jpeg,
+        rect: picture_rect(bounds.size, display.size, on_screen),
+        tint,
+    })
+}
+
+/// The poster Wallspace keeps for the wallpaper it is playing, when there is one.
+#[cfg(target_os = "macos")]
+fn wallspace_poster() -> Option<std::path::PathBuf> {
+    let home = std::path::PathBuf::from(std::env::var_os("HOME")?);
+    let prefs = home.join("Library/Preferences/wallspace.app.plist");
+    // The preferences are read again only when the file changes.
+    static LAST: std::sync::Mutex<Option<(std::time::SystemTime, Option<String>)>> =
+        std::sync::Mutex::new(None);
+    let modified = std::fs::metadata(&prefs).and_then(|m| m.modified()).ok()?;
+    let mut last = LAST.lock().ok()?;
+    let key = match last.as_ref() {
+        Some((seen, key)) if *seen == modified => key.clone(),
+        _ => {
+            let key = plist::Value::from_file(&prefs)
+                .ok()
+                .and_then(|prefs| wallspace_key(prefs.as_dictionary()?));
+            *last = Some((modified, key.clone()));
+            key
+        }
+    }?;
+    drop(last);
+    let poster = home
+        .join("Library/Caches/Wallspace/images/posters")
+        .join(format!("{key}.webp"));
+    poster.is_file().then_some(poster)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn wallspace_poster() -> Option<std::path::PathBuf> {
+    None
+}
+
+/// The playing wallpaper's key in Wallspace's preferences: `savedWallpaperKey`, else the name of
+/// `savedWallpaperMasterUrl`'s video. Only digits, letters, `-` and `_`, since it names a file.
+#[cfg(target_os = "macos")]
+fn wallspace_key(prefs: &plist::Dictionary) -> Option<String> {
+    let key = match prefs.get("savedWallpaperKey") {
+        Some(plist::Value::Integer(key)) => Some(key.to_string()),
+        Some(plist::Value::String(key)) => Some(key.clone()),
+        _ => None,
+    }
+    .or_else(|| {
+        let url = prefs.get("savedWallpaperMasterUrl")?.as_string()?;
+        let name = url.rsplit('/').next()?;
+        Some(name.split('.').next()?.to_string())
+    })?;
+    (!key.is_empty()
+        && key
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_'))
+    .then_some(key)
+}
+
+/// The picture at `path`, cut to the shape of a screen `screen` points in size (the middle of it,
+/// as a desktop fills the screen) and softened like the main window's (`softened`). Made again only
+/// when the file or the screen changes.
+fn stand_in_picture(path: &std::path::Path, screen: Size<Pixels>) -> Option<Vec<u8>> {
+    type Key = (std::path::PathBuf, std::time::SystemTime, u32, u32);
+    static LAST: std::sync::Mutex<Option<(Key, Vec<u8>)>> = std::sync::Mutex::new(None);
+    let modified = std::fs::metadata(path).and_then(|m| m.modified()).ok()?;
+    let key: Key = (
+        path.to_path_buf(),
+        modified,
+        f32::from(screen.width).to_bits(),
+        f32::from(screen.height).to_bits(),
+    );
+    if let Ok(last) = LAST.lock()
+        && let Some((last_key, jpeg)) = last.as_ref()
+        && *last_key == key
+    {
+        return Some(jpeg.clone());
+    }
+    let jpeg = screen_shaped_jpeg(&std::fs::read(path).ok()?, screen)?;
+    let soft = softened(&jpeg, f32::from(screen.width));
+    if let Ok(mut last) = LAST.lock() {
+        *last = Some((key, soft.clone()));
+    }
+    Some(soft)
+}
+
+/// `bytes`, a picture in any format the app reads, cut to the shape of `screen` around its middle
+/// and made at most `PICTURE_MAX_WIDTH` pixels wide, as a JPEG.
+fn screen_shaped_jpeg(bytes: &[u8], screen: Size<Pixels>) -> Option<Vec<u8>> {
+    let picture = image::load_from_memory(bytes).ok()?.to_rgb8();
+    let (width, height) = (picture.width(), picture.height());
+    if width == 0 || height == 0 {
+        return None;
+    }
+    let shape = f32::from(screen.width) / f32::from(screen.height).max(1.0);
+    let (cut_width, cut_height) = if width as f32 / height as f32 > shape {
+        (
+            ((height as f32 * shape).round() as u32).clamp(1, width),
+            height,
+        )
+    } else {
+        (
+            width,
+            ((width as f32 / shape).round() as u32).clamp(1, height),
+        )
+    };
+    let cut = image::imageops::crop_imm(
+        &picture,
+        (width - cut_width) / 2,
+        (height - cut_height) / 2,
+        cut_width,
+        cut_height,
+    )
+    .to_image();
+    let out_width = cut_width.min(PICTURE_MAX_WIDTH);
+    let out_height =
+        ((cut_height as f32 * out_width as f32 / cut_width as f32).round() as u32).max(1);
+    let small = image::imageops::resize(
+        &cut,
+        out_width,
+        out_height,
+        image::imageops::FilterType::Triangle,
+    );
+    let mut out = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 90)
+        .encode_image(&small)
+        .ok()?;
+    Some(out)
 }
 
 /// The last picture the page window was handed, and its size (only its shape matters, to cover
@@ -544,6 +686,48 @@ mod tests {
         let light = spread(&soften(&jpeg, 1728.0, 10.0).unwrap());
         let heavy = spread(&soften(&jpeg, 1728.0, 90.0).unwrap());
         assert!(heavy < light, "{heavy} < {light}");
+    }
+
+    #[test]
+    fn a_stand_in_picture_is_cut_to_the_screen_shape_around_its_middle() {
+        // A 16:9 poster on a 16:10 screen loses its sides; on a 4:3 screen it loses more of them.
+        let poster = stripes(1280, 720);
+        let cut = screen_shaped_jpeg(&poster, size(px(1728.0), px(1080.0))).unwrap();
+        let cut = image::load_from_memory(&cut).unwrap();
+        assert_eq!((cut.width(), cut.height()), (PICTURE_MAX_WIDTH, 400));
+        let cut = screen_shaped_jpeg(&poster, size(px(1024.0), px(768.0))).unwrap();
+        let cut = image::load_from_memory(&cut).unwrap();
+        assert_eq!((cut.width(), cut.height()), (PICTURE_MAX_WIDTH, 480));
+        // A tall screen loses the top and bottom of a square picture instead.
+        let cut = screen_shaped_jpeg(&stripes(400, 400), size(px(800.0), px(1600.0))).unwrap();
+        let cut = image::load_from_memory(&cut).unwrap();
+        assert_eq!((cut.width(), cut.height()), (200, 400));
+        assert!(screen_shaped_jpeg(b"not a picture", size(px(800.0), px(600.0))).is_none());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn wallspace_names_its_wallpaper_by_key_or_by_its_video() {
+        let mut prefs = plist::Dictionary::new();
+        prefs.insert(
+            "savedWallpaperMasterUrl".into(),
+            plist::Value::String(
+                "file:///Users/me/Library/Caches/Wallspace/Wallpapers/107826141533452.mp4".into(),
+            ),
+        );
+        assert_eq!(wallspace_key(&prefs).as_deref(), Some("107826141533452"));
+        prefs.insert(
+            "savedWallpaperKey".into(),
+            plist::Value::Integer(816347559438864_i64.into()),
+        );
+        assert_eq!(wallspace_key(&prefs).as_deref(), Some("816347559438864"));
+        // A key that would leave the posters folder is refused.
+        prefs.insert(
+            "savedWallpaperKey".into(),
+            plist::Value::String("../../x".into()),
+        );
+        assert_eq!(wallspace_key(&prefs), None);
+        assert_eq!(wallspace_key(&plist::Dictionary::new()), None);
     }
 
     #[test]
