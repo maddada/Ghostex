@@ -1548,6 +1548,27 @@ fn turn_items(
                     .section
                     .as_ref()
                     .and_then(|deferred| serde_json::to_value(deferred).ok());
+                /* Only the folded rows' cards: an artifact row draws its own. */
+                let sent_messages: Vec<Value> = collapsed_work
+                    .iter()
+                    .flat_map(|row| {
+                        match builder
+                            .message_or_placeholder(row, eager, Draw::Read)
+                            .get("sentMessages")
+                            .cloned()
+                        {
+                            Some(Value::Array(cards)) => cards,
+                            _ => Vec::new(),
+                        }
+                    })
+                    .collect();
+                // The reply draws no send the turn already carries (`without_turn_sends`).
+                let final_message = turn.final_message.as_ref().map(|message| {
+                    crate::transcript::sent_message::without_turn_sends(
+                        builder.message_or_placeholder(message, eager, Draw::Row),
+                        &sent_messages,
+                    )
+                });
                 TranscriptItem::CompletedWork {
                     id: turn.user.id.clone(),
                     label: turn_worked_label(turn, loaded, &projection.items[index + 1..]),
@@ -1583,20 +1604,7 @@ fn turn_items(
                             }
                         })
                         .collect(),
-                    /* Only the folded rows' cards: an artifact row draws its own. */
-                    sent_messages: collapsed_work
-                        .iter()
-                        .flat_map(|row| {
-                            match builder
-                                .message_or_placeholder(row, eager, Draw::Read)
-                                .get("sentMessages")
-                                .cloned()
-                            {
-                                Some(Value::Array(cards)) => cards,
-                                _ => Vec::new(),
-                            }
-                        })
-                        .collect(),
+                    sent_messages,
                     /* The folded rows' "GBot added" cards, hoisted like the sent messages. */
                     gbot_cards: collapsed_work
                         .iter()
@@ -1629,10 +1637,7 @@ fn turn_items(
                         .iter()
                         .map(|message| builder.message_or_placeholder(message, eager, Draw::Row))
                         .collect(),
-                    final_message: turn
-                        .final_message
-                        .as_ref()
-                        .map(|message| builder.message_or_placeholder(message, eager, Draw::Row)),
+                    final_message,
                     read_images: Vec::new(),
                     cards_in_fold: false,
                     tally: Box::new(WorkTally {

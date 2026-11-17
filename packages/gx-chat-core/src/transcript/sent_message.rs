@@ -450,6 +450,38 @@ pub fn written_files(message: &ChatMessage) -> Vec<(&str, &str)> {
         .collect()
 }
 
+/// `reply` without the "Message to …" cards its finished turn already carries in `turn` (the
+/// turn's `sentMessages`, hoisted from its folded work).
+///
+/// CDXC:SessionChat 2026-11-18 WHY: User, of a coordinator chat in Quiet View: "why is this message shown outside and not under some folder like it's supposed to be in quiet mode? pls fix". The coordinator wrote "Now the triage thread for the replies and PR explanations." and then, as rows of their own, ran the Bash call that sent the thread its task. That line became the turn's reply, and the reply row takes in the calls after its words (they draw folded behind them), while the turn's work keeps those same rows; so the one send was projected twice, once on the turn and once on the reply. Quiet View folds the turn's cards into its line but keeps the reply in view with whatever it draws, so the reply's copy stood alone under the words, and the line counted the send twice. A card the turn already has is dropped from the reply: every view draws the send once, with the turn's other sends, and Quiet View folds it into the line (one that was not sent still stays in view, `quiet_view::QuietTurnTail::sends`). Two cards are the same send when everything but their place (`key`, `tool`) matches: the same call, projected the same way.
+pub(crate) fn without_turn_sends(reply: Arc<Value>, turn: &[Value]) -> Arc<Value> {
+    let place_free = |card: &Value| -> Value {
+        let mut card = card.clone();
+        if let Value::Object(fields) = &mut card {
+            fields.remove("key");
+            fields.remove("tool");
+        }
+        card
+    };
+    let repeats = |card: &Value| {
+        let card = place_free(card);
+        turn.iter().any(|kept| place_free(kept) == card)
+    };
+    let has_repeat = reply["sentMessages"]
+        .as_array()
+        .is_some_and(|cards| cards.iter().any(repeats));
+    if !has_repeat {
+        return reply;
+    }
+    let mut reply = reply;
+    if let Value::Object(fields) = Arc::make_mut(&mut reply) {
+        if let Some(Value::Array(cards)) = fields.get_mut("sentMessages") {
+            cards.retain(|card| !repeats(card));
+        }
+    }
+    reply
+}
+
 /// The `sentMessages` a projected message carries: one card per message its tool calls sent, keyed
 /// `<message id>:<n>`. Sends of the same message in one call (a loop over several sessions) share
 /// one card that lists each recipient. The names are completed across the transcript and the host's
