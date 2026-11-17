@@ -50,6 +50,7 @@ type PopupSignature = (
     bool,
     bool,
     bool,
+    u64,
 );
 
 fn popup_signature(app: &GhostexGpuiApp, row_id: &str) -> Option<PopupSignature> {
@@ -72,6 +73,7 @@ fn popup_signature(app: &GhostexGpuiApp, row_id: &str) -> Option<PopupSignature>
         popup.pinned,
         popup.expanded,
         app.gx_store_sidebar_list_ready(),
+        window_glass_redraw_key(),
     ))
 }
 
@@ -162,6 +164,7 @@ impl Render for SessionPopupRoot {
         let Some(app) = self.app.upgrade() else {
             return div().into_any_element();
         };
+        sync_own_window_glass(window);
         let row_id = self.row_id.clone();
         let body = app.update(cx, |app, cx| {
             app.render_session_popup_window(&row_id, window, cx)
@@ -231,7 +234,9 @@ impl GhostexGpuiApp {
             .min_h_0()
             .flex()
             .flex_col()
-            .bg(workspace_background_color())
+            // The work area's tint over the glass, as the session has in its pane (opaque without
+            // glass).
+            .bg(workspace_column_background())
             .child(
                 self.render_session_popup_header(row_id, &title, agent_icon, expanded, pinned, cx),
             )

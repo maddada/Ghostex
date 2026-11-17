@@ -29,8 +29,8 @@ use crate::app::consts::{WINDOW_CONTROLS_LEADING_RESERVE, WORKAREA_HEADER_HEIGHT
 use crate::app::helpers::titlebar_project_text_color;
 use crate::app::helpers::{
     CHROME_LIGHT_APPEARANCE, chrome_ink, glass_clear, live_glass_window_creation_background,
-    set_detached_board_glass_window, sync_detached_board_window_glass, titlebar_svg_icon,
-    workspace_background_color, workspace_column_background,
+    set_own_glass_window, sync_own_window_glass, titlebar_svg_icon, workspace_background_color,
+    workspace_column_background,
 };
 use crate::app::model::TitlebarMode;
 use crate::app::render::sleeping_card::{view_card_button, view_card_frame};
@@ -77,7 +77,7 @@ impl Render for KanbanWindowRoot {
         if !app.read(cx).native_kanban_in_own_window(window) {
             return div().into_any_element();
         }
-        sync_detached_board_window_glass(window);
+        sync_own_window_glass(window);
         app.update(cx, |app, cx| {
             app.render_native_kanban_window_body(window, cx)
         })
@@ -197,7 +197,7 @@ impl GhostexGpuiApp {
                 // The window's own close control puts the board back in the panel.
                 let window_id = window.window_handle().window_id();
                 window.on_window_should_close(cx, move |_, cx| {
-                    set_detached_board_glass_window(window_id, false);
+                    set_own_glass_window(window_id, false);
                     let on_close = on_close.clone();
                     // Deferred so the app is never updated from inside the platform's close.
                     cx.defer(move |cx| {
@@ -212,7 +212,7 @@ impl GhostexGpuiApp {
                 return;
             };
             let handle: AnyWindowHandle = handle.into();
-            set_detached_board_glass_window(handle.window_id(), true);
+            set_own_glass_window(handle.window_id(), true);
             app.update(cx, |app, cx| {
                 app.native_kanban.detached = Some(KanbanDetachedWindow { window: handle });
                 app.native_kanban_release_window_bound_inputs();
@@ -241,7 +241,7 @@ impl GhostexGpuiApp {
     /// closing takes the board's window with it, app/workspace_windows/close.rs).
     pub(crate) fn native_kanban_take_detached_window(&mut self) -> Option<AnyWindowHandle> {
         let detached = self.native_kanban.detached.take()?;
-        set_detached_board_glass_window(detached.window.window_id(), false);
+        set_own_glass_window(detached.window.window_id(), false);
         self.native_kanban_release_window_bound_inputs();
         Some(detached.window)
     }

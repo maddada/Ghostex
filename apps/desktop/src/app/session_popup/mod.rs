@@ -40,8 +40,8 @@ use std::collections::HashMap;
 
 use ghostex_gx_core::SessionKey;
 use gpui::{
-    AnyWindowHandle, AppContext as _, Bounds, Context, Pixels, TitlebarOptions, WindowBounds,
-    WindowOptions, px, size,
+    AnyWindowHandle, AppContext as _, Bounds, Context, Pixels, Styled as _, TitlebarOptions,
+    WindowBounds, WindowOptions, px, size,
 };
 use gpui_component::Root;
 
@@ -303,6 +303,8 @@ impl GhostexGpuiApp {
             }),
             #[cfg(target_os = "macos")]
             app_owns_titlebar_drag: true,
+            // The pop-up takes part in window glass as the main window does (window_glass.rs).
+            window_background: crate::app::helpers::live_glass_window_creation_background(),
             window_min_size: Some(size(px(MIN_WIDTH), px(MIN_HEIGHT))),
             app_id: crate::gpui_platform_window_app_id(),
             icon: crate::gpui_platform_window_icon(),
@@ -329,6 +331,7 @@ impl GhostexGpuiApp {
                 // The window's own close button and Cmd+W put the session back in its pane.
                 let window_id = window.window_handle().window_id();
                 window.on_window_should_close(cx, move |_, cx| {
+                    crate::app::helpers::set_own_glass_window(window_id, false);
                     let on_close = on_close.clone();
                     let row_id = close_row.clone();
                     // Deferred so the app is never updated from inside the platform's close.
@@ -339,12 +342,13 @@ impl GhostexGpuiApp {
                     });
                     true
                 });
-                cx.new(|cx| Root::new(root, window, cx))
+                cx.new(|cx| Root::new(root, window, cx).bg(gpui::transparent_black()))
             });
             let Ok(handle) = opened else {
                 return;
             };
             let handle: AnyWindowHandle = handle.into();
+            crate::app::helpers::set_own_glass_window(handle.window_id(), true);
             let native = handle
                 .update(cx, |_, window, _| {
                     crate::app::helpers::cef_parent_native_view(window)
@@ -412,6 +416,7 @@ impl GhostexGpuiApp {
             return;
         };
         let handle = popup.window;
+        crate::app::helpers::set_own_glass_window(handle.window_id(), false);
         cx.defer(move |cx| {
             let _ = handle.update(cx, |_, window, _| window.remove_window());
         });
@@ -561,7 +566,10 @@ impl GhostexGpuiApp {
             .session_popups
             .windows
             .drain()
-            .map(|(_, popup)| popup.window)
+            .map(|(_, popup)| {
+                crate::app::helpers::set_own_glass_window(popup.window.window_id(), false);
+                popup.window
+            })
             .collect();
         saved::set_open(self.workspace_window_slot, Vec::new());
         handles

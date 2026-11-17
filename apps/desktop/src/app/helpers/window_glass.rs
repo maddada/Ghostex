@@ -576,18 +576,18 @@ pub(crate) fn window_glass_active_for(window: Option<gpui::AnyWindowHandle>) -> 
                 || crate::app::workspace_windows::is_workspace_window(window.window_id())
                 || id == FLOATING_REVEAL_WINDOW_ID.load(Ordering::Relaxed)
                 || id == DOCS_DRAWER_WINDOW_ID.load(Ordering::Relaxed)
-                || detached_board_glass_window(id)
+                || own_glass_window(id)
         })
 }
 
-/// The Project board's own windows (app/native_kanban/window.rs), one per workspace window at
-/// most, which draw the board on glass as the panel does.
-static DETACHED_BOARD_WINDOW_IDS: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::new());
+/// The windows that draw part of a workspace window on its glass in a window of their own: the
+/// Project board's (app/native_kanban/window.rs) and the session pop-ups (app/session_popup/).
+static OWN_GLASS_WINDOW_IDS: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::new());
 
-/// Adds `window` to the board windows that take glass, or removes it once the window closes.
-pub(crate) fn set_detached_board_glass_window(window: gpui::WindowId, glass: bool) {
+/// Adds `window` to the windows of their own that take glass, or removes it once it closes.
+pub(crate) fn set_own_glass_window(window: gpui::WindowId, glass: bool) {
     let id = window.as_u64();
-    if let Ok(mut ids) = DETACHED_BOARD_WINDOW_IDS.lock() {
+    if let Ok(mut ids) = OWN_GLASS_WINDOW_IDS.lock() {
         ids.retain(|known| *known != id);
         if glass {
             ids.push(id);
@@ -603,9 +603,9 @@ pub(crate) fn set_detached_board_glass_window(window: gpui::WindowId, glass: boo
     }
 }
 
-/// Whether the window with `id` is one of the board's own windows.
-fn detached_board_glass_window(id: u64) -> bool {
-    DETACHED_BOARD_WINDOW_IDS
+/// Whether the window with `id` is a board window or a session pop-up.
+fn own_glass_window(id: u64) -> bool {
+    OWN_GLASS_WINDOW_IDS
         .lock()
         .is_ok_and(|ids| ids.contains(&id))
 }
@@ -784,11 +784,47 @@ fn apply_workspace_window_glass(window: &Window) -> Option<(u8, u8)> {
     Some((previous, code))
 }
 
-/// The Project board's own window (app/native_kanban/window.rs) takes the workspace windows'
-/// backdrop, so the board looks there as it does in the panel. Called from its every render;
-/// nothing is applied while the settings are unchanged.
-pub(crate) fn sync_detached_board_window_glass(window: &Window) {
+/// A window of its own (the Project board's, a session pop-up) takes the workspace windows'
+/// backdrop through the same path, so what it draws looks there as it does in the main window.
+/// Called from its every render; nothing is applied while the settings are unchanged.
+///
+/// CDXC:Theming 2026-11-17 DECISION:
+/// User, of a popped-out session window drawn solid black beside the transparent main window: when transparency is on, the pop-ups get the same transparent background and blur as the main window, on every platform where the main window has it, through the main window's own code path (not a copy); toggling the setting updates open pop-ups, and nothing paints a black fill over the glass.
+pub(crate) fn sync_own_window_glass(window: &Window) {
     let _ = apply_workspace_window_glass(window);
+}
+
+/// Changes whenever something a window of its own draws from the glass changes (on or off, the
+/// backdrop, the blur, the work area's tint, the appearance), so a window that redraws only on its
+/// own signature (a session pop-up) redraws when Settings changes the glass.
+pub(crate) fn window_glass_redraw_key() -> u64 {
+    use std::hash::{Hash as _, Hasher as _};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    window_glass_active().hash(&mut hasher);
+    WINDOW_GLASS_WALLPAPER
+        .load(Ordering::Relaxed)
+        .hash(&mut hasher);
+    WINDOW_GLASS_PICTURE_FOLLOWS_SCREEN
+        .load(Ordering::Relaxed)
+        .hash(&mut hasher);
+    WINDOW_GLASS_BLUR_RADIUS
+        .load(Ordering::Relaxed)
+        .hash(&mut hasher);
+    WINDOW_GLASS_WINDOWS_BLUR
+        .load(Ordering::Relaxed)
+        .hash(&mut hasher);
+    CHROME_LIGHT_APPEARANCE
+        .load(Ordering::Relaxed)
+        .hash(&mut hasher);
+    work_area_glass_alpha().to_bits().hash(&mut hasher);
+    let workspace = workspace_background_color();
+    [workspace.h, workspace.s, workspace.l, workspace.a]
+        .map(f32::to_bits)
+        .hash(&mut hasher);
+    window_glass_custom_image().hash(&mut hasher);
+    window_glass_video().hash(&mut hasher);
+    window_glass_live::window_glass_live_mode().hash(&mut hasher);
+    hasher.finish()
 }
 
 /// CDXC:Theming 2026-09-25 DECISION:
