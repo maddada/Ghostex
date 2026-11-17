@@ -297,6 +297,25 @@ git pull --rebase && git push origin main
 git rev-parse HEAD        # record: the release point
 ```
 
+### 3a. Smoke test on macOS before dispatch
+
+Before `release:actions` runs for real, the release commit gets a smoke test on
+the user's Mac (user decision 2026-11-17, Q3734 to Q3736). A thread rebuilds the
+app from the release point with `cargo xtask rebuild`, then runs all 16 steps
+itself with the `cua-driver` skill and the `ghostex` CLI: the last crash's
+fixes, threads and coordinators with the latest Claude and Codex, a terminal
+command, a browser search, typing in fields, an inline page and the chat box,
+and a model change on both. It may restart the app itself. A crash or a typing
+failure **stops** the release (fix, rebuild, run all 16 again); every other
+failed step is a **warning** in the report, and a warning does not stop the
+dispatch. Crash checks stay for three releases. It takes about 15 minutes.
+
+The runbook, with every command, pass check, stop or warn call, the report format
+and the three-release rule, is [smoke-test.md](smoke-test.md). Put its verdict
+line in step 9's report. Update its list in a separate commit after the release,
+never in the prepare commit. The `--dry-run` below needs no smoke test; the real
+dispatch does.
+
 ### 4. Dispatch
 
 ```bash
@@ -630,6 +649,7 @@ on it; check each one's commit is in the tag (`git merge-base --is-ancestor
 
 ## Don'ts
 
+- Don't dispatch for real before the smoke test (step 3a) has no Stop; warnings alone don't hold it.
 - Don't build, sign or notarize locally, and don't install into `/Applications`.
 - Don't cut a full release only to ship phone JavaScript; use `bun run release:ota`.
 - Don't hand-edit `appcast.xml` or the casks.
