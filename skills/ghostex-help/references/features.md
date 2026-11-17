@@ -5385,19 +5385,21 @@ sessions, so any client can control agents on any machine.
   are the same on both, type y (n turns it down); with Settings > Security >
   "Require Touch ID or your password to approve" on, y first asks Touch ID,
   Windows Hello or the system password on A (on a Linux server with no screen
-  or polkit agent it can't, says so, and leaves the request waiting). Once A has the Ghostex app or
-  a paired phone, only they make codes and let devices in: the command first
-  waits for you to approve "Show this computer's pairing code" in the app or on
-  your phone (then it gets codes for ten minutes), and B waits there to be
-  approved, with the same three words; A's terminal says so and follows that
-  answer. The command stops after the first computer you
+  or polkit agent it can't, says so, and leaves the request waiting). Once A has an owner (the
+  Ghostex app on A or on another of your computers, or a paired phone), only
+  they make codes and let devices in, and A's terminal names them: the command
+  first waits for you to approve "Show this computer's pairing code" in Ghostex
+  on one of them, as a card there, so A's own screen is never needed (then it
+  gets codes for ten minutes), and B waits to be approved the same way, as "Is
+  this your computer?" with the same three words; A's terminal can't approve it,
+  says where, and follows that answer. The command stops after the first computer you
   approve (run it again to connect another), after 10 minutes with nobody
   waiting, or when you press Ctrl+C, and B then finishes signing in as usual.
   `--copy` also puts each code on the clipboard (on a server reached over SSH,
   your terminal's clipboard, when your terminal allows that), so the long text
-  needn't be selected by hand. On B, the words screen tells you to click
-  Approve on A, or to type y in A's terminal when A has no screen (or to
-  approve on your phone, once one is paired with A).
+  needn't be selected by hand. On B, the words screen tells you to approve
+  "Is this your computer?" in Ghostex on a computer or phone that owns A (A's
+  terminal names them), or to type y in A's terminal while A has no owner yet.
   `--once` or `--json` only print the code and exit, so approve the new computer
   in the Ghostex app (or on a paired phone) within a minute instead. In a
   terminal that can't answer (no keyboard input), it says to approve in the app

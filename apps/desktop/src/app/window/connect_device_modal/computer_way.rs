@@ -966,7 +966,7 @@ impl GpuiConnectDeviceWindow {
             .child(paste)
             .child(self.numbered_step(
                 4,
-                "Compare the three words on both screens, then approve there: type y in its terminal, or approve on your phone if one is paired with it.",
+                "Compare the three words on both screens, then approve: type y in its terminal while it has no owner yet; once it has one, approve in Ghostex on a computer or phone that owns it (its terminal names them).",
             ))
             .into_any_element()
     }
@@ -1026,14 +1026,14 @@ impl GpuiConnectDeviceWindow {
         let name = flow.computer_name.clone();
         let this_computer = self.computer_name.clone();
         let step = flow.step.clone();
-        let approved = format!("Approved on {name}");
+        let approved = "Approved".to_string();
         let opens = format!("This computer can open {name}");
         match step {
             JoinStep::Asking => v_flex()
                 .w_full()
                 .gap(px(16.0))
                 .child(self.progress_list(vec![
-                    (format!("Asking {name} to let this computer in"), Some(false)),
+                    (format!("Asking to connect to {name}"), Some(false)),
                     (approved, None),
                     (opens, None),
                 ]))
@@ -1049,11 +1049,13 @@ impl GpuiConnectDeviceWindow {
                         .child(name.clone()),
                 )
                 .child(pairing_words(&p, &words, false))
+                // CDXC:Security 2026-11-17 at `approvers_here` in server/src/server/security_http.rs:
+                // the Approve is wherever {name}'s owners are, not necessarily on its screen.
                 .child(self.muted(format!(
-                    "{name} shows three words now. Click Approve there only if they are the same as these. A computer with no screen asks you to type y in its terminal instead, or to approve on your phone once one is paired with it."
+                    "Approve \"Is this your computer?\" only if it shows these same three words. It shows in Ghostex on the computers and phones that own {name}, and on {name} itself if Ghostex is open there; if you ran ghostex computer-code on {name}, its terminal names them. A computer with no owner yet asks you to type y in that terminal instead."
                 )))
                 .child(self.progress_list(vec![
-                    (format!("Waiting for Approve on {name}"), Some(false)),
+                    ("Waiting for your Approve".to_string(), Some(false)),
                     (opens, None),
                 ]))
                 .child(modal_footer(vec![modal_action_button(

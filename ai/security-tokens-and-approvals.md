@@ -79,7 +79,14 @@ owner key is enrolled, or a phone paired with its own token, remembered for good
 
 - gets the code from `/api/remotePairingCode` with `openTunnel` only after an Approve of a
   `pairingShowCode` request on the app or a phone (`ghostex computer-code` waits for it), then for
-  ten minutes (`TOKEN_FILE_CODE_WINDOW_MS`, in memory);
+  ten minutes (`TOKEN_FILE_CODE_WINDOW_MS`, in memory). The terminal never approves here, even on a
+  headless computer (the user, 17 Nov, Q-3A); instead `/api/securityStatus` names who can
+  (`approvesHere`: each owner app by its computer's name, `thisApp` for this computer's own, each
+  paired phone and computer), and `ghostex computer-code` and the CLI's approval wait say "Approve it
+  in Ghostex on <them>", this computer's own app last. Each owner app connected to this computer
+  shows both asks (the code, then "Is this your computer?") as cards: live from the event, through
+  the one entry that can approve when the same computer is added twice, and from the once-a-minute
+  renewal when the event was missed (`owner_security_show_missed_requests`);
 - can't approve `pairingApproveDevice`, `pairingShowCode` or `addApproverKey` requests
   (`opens_door`; `/api/approveApprovalRequest` answers `forbidden`); it still lists and denies;
 - adds a new owner key (`/api/enrollOwnerKey`) only with an approved `addApproverKey` (the desktop

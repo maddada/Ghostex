@@ -107,6 +107,31 @@ pub(crate) fn gpui_other_remote_machine_has_server_id(
     })
 }
 
+/// `remote_machine_id` and every other connected machine entry whose gxserver reported the same
+/// server id (the same computer added twice, say over SSH and through Easy Connect), sorted, so
+/// each entry picks the same one to show that computer's cards through (CDXC:Security 2026-11-17
+/// in owner_security/ui.rs at `owner_security_show_card`). Just `remote_machine_id` until it
+/// registered.
+pub(crate) fn gpui_remote_machines_sharing_server_id(remote_machine_id: &str) -> Vec<String> {
+    let registration = state();
+    let Some(server_id) = registration
+        .get(remote_machine_id)
+        .and_then(|machine| machine.server_id.clone())
+    else {
+        return vec![remote_machine_id.to_string()];
+    };
+    let mut machines: Vec<String> = registration
+        .iter()
+        .filter(|(machine_id, machine)| {
+            machine_id.as_str() == remote_machine_id
+                || machine.server_id.as_deref() == Some(server_id.as_str())
+        })
+        .map(|(machine_id, _)| machine_id.clone())
+        .collect();
+    machines.sort();
+    machines
+}
+
 /// The connected remote machine whose gxserver has `server_id`, the way gxserver names another
 /// computer's session (`serverId:projectId:sessionId`).
 pub(crate) fn gpui_remote_machine_for_server_id(server_id: &str) -> Option<String> {
@@ -213,7 +238,7 @@ impl GhostexGpuiApp {
         }
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let (outcomes, unlock_offers) = background
+            let (outcomes, unlock_offers, waiting_there) = background
                 .spawn(async move {
                     // Never the system prompt from here: a request waits as a card instead.
                     crate::app::owner_security::without_prompts(|| {
@@ -227,19 +252,34 @@ impl GhostexGpuiApp {
                         // (CDXC:Security 2026-11-17 at `owner_security::approve_with_shared_owner_key`).
                         crate::app::owner_security::note_registration_pass();
                         let offers = targets
-                            .into_iter()
+                            .iter()
                             .filter_map(|(machine_id, target)| {
-                                crate::app::owner_security::old_key_unlock_offer(&target)
-                                    .map(|request| (machine_id, request))
+                                crate::app::owner_security::old_key_unlock_offer(target)
+                                    .map(|request| (machine_id.clone(), request))
                             })
                             .collect::<Vec<_>>();
-                        (outcomes, offers)
+                        // Each computer's waiting requests, so a card whose event this app missed
+                        // still shows (CDXC:Security 2026-11-17 in owner_security/ui.rs at
+                        // `owner_security_show_missed_requests`).
+                        let waiting_there = targets
+                            .into_iter()
+                            .filter_map(|(machine_id, target)| {
+                                crate::app::owner_security::pending_requests(
+                                    &crate::app::owner_security::Transport::Remote(target),
+                                )
+                                .map(|requests| (machine_id, requests))
+                            })
+                            .collect::<Vec<_>>();
+                        (outcomes, offers, waiting_there)
                     })
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
                 for (machine, request) in unlock_offers {
                     this.owner_security_show_unlock_card(machine, request, cx);
+                }
+                for (machine, requests) in waiting_there {
+                    this.owner_security_show_missed_requests(machine, requests, cx);
                 }
                 for outcome in &outcomes {
                     for (machine, request) in &outcome.waiting {

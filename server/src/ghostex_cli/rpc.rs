@@ -322,6 +322,33 @@ fn request_gxserver_body(
     Ok(Value::Object(merged))
 }
 
+/// Where this computer's asks are approved, from its `/api/securityStatus` answer (`approvesHere`,
+/// CDXC:Security 2026-11-17 at `approvers_here` in server/src/server/security_http.rs): "in
+/// Ghostex on Mohamads-MacBook-Pro-2 or on your phone (Pixel 9)". `None` from a gxserver that
+/// doesn't say, or when nothing can approve there yet.
+pub(crate) fn where_to_approve(status: &Value) -> Option<String> {
+    let mut entries: Vec<&Value> = status.get("approvesHere")?.as_array()?.iter().collect();
+    // The user's other computers and phones first: this computer's own screen is the one a
+    // headless user doesn't look at.
+    entries.sort_by_key(|entry| entry.get("kind").and_then(Value::as_str) == Some("thisApp"));
+    let places: Vec<String> = entries
+        .into_iter()
+        .filter_map(|entry| {
+            let name = entry.get("name")?.as_str()?;
+            Some(match entry.get("kind").and_then(Value::as_str) {
+                Some("thisApp") => "in the Ghostex app on this computer".to_string(),
+                Some("phone") => format!("on your phone ({name})"),
+                _ => format!("in Ghostex on {name}"),
+            })
+        })
+        .collect();
+    match places.as_slice() {
+        [] => None,
+        [one] => Some(one.clone()),
+        [rest @ .., last] => Some(format!("{} or {last}", rest.join(", "))),
+    }
+}
+
 /*
 CDXC:Security 2026-11-08 WHY:
 An agent or the user's own terminal can only ask for a sensitive action (GitHub #495): gxserver answers `approvalRequired` and shows the request on the computer and phone. The CLI says so on stderr, waits for the answer (`--no-wait` returns at once), and repeats the same call with the approval id, which gxserver spends only on that exact change.
@@ -345,9 +372,22 @@ fn wait_for_approval(
         .pointer("/approval/summary")
         .and_then(Value::as_str)
         .unwrap_or("this change");
-    eprintln!(
-        "Waiting for your approval on your computer or phone: {summary}. (Ghostex shows it there; Ctrl+C to stop waiting.)"
-    );
+    let status = request_gxserver_envelope(
+        target,
+        crate::security::SECURITY_STATUS_ENDPOINT,
+        &json!({ "params": {}, "protocolVersion": GXSERVER_PROTOCOL_VERSION }),
+        flags,
+    )
+    .ok()
+    .and_then(|envelope| envelope.get("result").cloned());
+    match status.as_ref().and_then(where_to_approve) {
+        Some(place) => eprintln!(
+            "Waiting for your approval: {summary}. Approve it {place}, where it shows as a card while Ghostex is open. (Ctrl+C to stop waiting.)"
+        ),
+        None => eprintln!(
+            "Waiting for your approval on your computer or phone: {summary}. (Ghostex shows it there; Ctrl+C to stop waiting.)"
+        ),
+    }
     loop {
         std::thread::sleep(Duration::from_secs(2));
         let read = request_gxserver_envelope(

@@ -9,6 +9,11 @@ use super::Transport;
 use crate::GhostexGpuiApp;
 use crate::app::window::toast::{GpuiAppToast, GpuiAppToastAction, GpuiAppToastLevel};
 
+/// Every request this app was told of or listed as waiting (any computer): the renewal shows only
+/// the others (`owner_security_show_missed_requests`).
+static SEEN_REQUESTS: std::sync::Mutex<Option<std::collections::HashSet<String>>> =
+    std::sync::Mutex::new(None);
+
 fn card_id(machine_id: Option<&str>, request_id: &str) -> String {
     format!(
         "security-approval-{}-{request_id}",
@@ -66,6 +71,13 @@ impl GhostexGpuiApp {
             return;
         };
         let id = card_id(machine_id.as_deref(), &request.id);
+        if change == "requested" {
+            SEEN_REQUESTS
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .get_or_insert_with(Default::default)
+                .insert(request.id.clone());
+        }
         if change != "requested" {
             // That computer let this app act as the owner there: open the owner session now.
             if change == "approved" && super::asks_for_this_app(&request) {
@@ -83,6 +95,12 @@ impl GhostexGpuiApp {
                 }
             }
             self.remove_gpui_app_toast(&id, cx);
+            // Shown through another entry of the same computer (`owner_security_show_card`).
+            if let Some(machine) = machine_id.as_deref() {
+                for sibling in crate::app::remote_conn::connected_computers::gpui_remote_machines_sharing_server_id(machine) {
+                    self.remove_gpui_app_toast(&card_id(Some(&sibling), &request.id), cx);
+                }
+            }
             return;
         }
         // The app's own clicks are approved right where they happen (`approve_own_call`); its
@@ -113,6 +131,37 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         self.remove_gpui_app_toast(&card_id(None, request_id), cx);
+    }
+
+    /*
+    CDXC:Security 2026-11-17 FIX:
+    The user ran `ghostex computer-code` on their headless Windows PC and no card came on the Mac for about ten minutes, until the Mac app restarted and listed what waited there. A connected computer's request shows from its `approvalRequestsChanged` event, and its waiting requests are listed only when its stream goes live, so a missed event (or a card queued behind another) left nothing until the next restart. The renewal (once a minute) now also lists each connected computer's waiting requests and shows any this app never showed; one already shown isn't raised again, so a card the user closed stays closed.
+    */
+    /// Requests still waiting on `machine_id` that this app never showed (their event was missed):
+    /// shown now, once each.
+    pub(crate) fn owner_security_show_missed_requests(
+        &mut self,
+        machine_id: String,
+        requests: Vec<ApprovalRequest>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let missed: Vec<ApprovalRequest> = {
+            let seen = SEEN_REQUESTS
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            requests
+                .into_iter()
+                .filter(|request| seen.as_ref().is_none_or(|seen| !seen.contains(&request.id)))
+                .collect()
+        };
+        for request in missed {
+            self.owner_security_on_approval_change(
+                Some(machine_id.clone()),
+                "requested",
+                Some(request),
+                cx,
+            );
+        }
     }
 
     /// This computer's pairing requests still waiting show as notices: the Connect a phone window,
@@ -233,31 +282,64 @@ impl GhostexGpuiApp {
             self.owner_security_show_approvable_card(None, request, cx);
             return;
         };
-        let Some(target) = self.gpui_remote_gxserver_request_target(&machine) else {
+        /*
+        CDXC:Security 2026-11-17 FIX:
+        The user's Windows PC was in Settings > Remote twice (over SSH, where this app is one of its owners, and through Easy Connect, added later with a key it never approved). Each entry showed that computer's requests: one as a card with Approve, one as "Approve on M7-Desktop", which sent the user to the Windows screen they never use. A request now shows once, through the first entry (by id) of that computer that can approve it, or as one notice when none can; each entry works out the same one, and showing it takes down the others' card for that request.
+        */
+        let siblings =
+            crate::app::remote_conn::connected_computers::gpui_remote_machines_sharing_server_id(
+                &machine,
+            );
+        let targets: Vec<_> = siblings
+            .iter()
+            .filter_map(|sibling| {
+                self.gpui_remote_gxserver_request_target(sibling)
+                    .map(|target| (sibling.clone(), target))
+            })
+            .collect();
+        if targets.is_empty() {
             return;
-        };
+        }
         let checked = cx.background_executor().spawn({
             let request = request.clone();
-            async move { super::answerer_for(&Transport::Remote(target), &request) }
+            async move {
+                let mut first_elsewhere = None;
+                for (sibling, target) in targets {
+                    match super::answerer_for(&Transport::Remote(target), &request) {
+                        super::Answerer::ThisApp => return (sibling, super::Answerer::ThisApp),
+                        elsewhere => {
+                            first_elsewhere.get_or_insert((sibling, elsewhere));
+                        }
+                    }
+                }
+                first_elsewhere.expect("at least one entry was checked")
+            }
         });
         cx.spawn(async move |this, cx| {
-            let answerer = checked.await;
-            let _ = this.update(cx, |this, cx| match answerer {
-                super::Answerer::ThisApp => {
-                    this.owner_security_show_approvable_card(machine_id, request, cx)
+            let (chosen, answerer) = checked.await;
+            let _ = this.update(cx, |this, cx| {
+                for sibling in &siblings {
+                    if *sibling != chosen {
+                        this.remove_gpui_app_toast(&card_id(Some(sibling), &request.id), cx);
+                    }
                 }
-                super::Answerer::Elsewhere {
-                    devices,
-                    asked,
-                    note,
-                } => this.owner_security_show_approve_elsewhere(
-                    &machine,
-                    &request,
-                    &devices,
-                    asked,
-                    note.as_deref(),
-                    cx,
-                ),
+                match answerer {
+                    super::Answerer::ThisApp => {
+                        this.owner_security_show_approvable_card(Some(chosen), request, cx)
+                    }
+                    super::Answerer::Elsewhere {
+                        devices,
+                        asked,
+                        note,
+                    } => this.owner_security_show_approve_elsewhere(
+                        &chosen,
+                        &request,
+                        &devices,
+                        asked,
+                        note.as_deref(),
+                        cx,
+                    ),
+                }
             });
         })
         .detach();
@@ -279,7 +361,7 @@ impl GhostexGpuiApp {
         let summary = request.summary.trim().trim_end_matches('.');
         let where_to = match devices {
             [] => format!("in Ghostex on the computer or phone that owns {computer}"),
-            several => format!("on {}", several.join(" or ")),
+            several => format!("in Ghostex on {}", several.join(" or ")),
         };
         let then = if asked {
             format!(
@@ -296,7 +378,9 @@ impl GhostexGpuiApp {
             GpuiAppToast {
                 id: card_id(Some(machine_id), &request.id),
                 level: GpuiAppToastLevel::Info,
-                title: format!("Approve on {computer}"),
+                // Not "Approve on {computer}": its owners may all be elsewhere (a headless
+                // computer, CDXC:Security 2026-11-17 at `approvers_here` in gxserver).
+                title: format!("{computer} asks for your approval"),
                 description: Some(format!(
                     "{computer} asks: {summary}. Approve it {where_to}.{then}"
                 )),

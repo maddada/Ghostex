@@ -328,6 +328,12 @@ fn owner_place(transport: &Transport) -> String {
         .and_then(|key| key_id_of(&key.public_key_b64()));
     let status = in_security_flow(|| rpc(transport, "/api/securityStatus", json!({})))
         .unwrap_or_default();
+    // Named by that gxserver itself where it says (CDXC:Security 2026-11-17 at `approvers_here`
+    // in server/src/server/security_http.rs): owner apps on any computer, paired phones and
+    // computers.
+    if let Some(names) = approves_here_names(&status) {
+        return owner_place_text(&names, matches!(transport, Transport::Local));
+    }
     let mut names: Vec<String> = Vec::new();
     for key in status
         .get("ownerKeys")
@@ -354,7 +360,35 @@ fn owner_place(transport: &Transport) -> String {
     owner_place_text(&names, matches!(transport, Transport::Local))
 }
 
-/// [`owner_place`]'s words for the owners' `names` ("your phone" is a phone).
+/// The names in a gxserver's `approvesHere` (`None` from one that doesn't say, or says nobody): a
+/// phone as "your phone (<name>)", this computer's own app by the computer's name.
+fn approves_here_names(status: &Value) -> Option<Vec<String>> {
+    let mut entries: Vec<&Value> = status.get("approvesHere")?.as_array()?.iter().collect();
+    // That computer's own app last: a headless computer's screen is the one nobody looks at.
+    entries.sort_by_key(|entry| text(entry, "kind").as_deref() == Some("thisApp"));
+    let names: Vec<String> = entries
+        .into_iter()
+        .filter_map(|entry| {
+            let name = text(entry, "name")?;
+            Some(match text(entry, "kind").as_deref() {
+                Some("phone") => format!("your phone ({name})"),
+                _ => name,
+            })
+        })
+        .collect();
+    (!names.is_empty()).then_some(names)
+}
+
+/// The places `transport`'s asks are approved, for a notice's "Approve it on …": `approvesHere`
+/// where that gxserver says, else nothing (the notice then names no one).
+fn approver_places(transport: &Transport) -> Vec<String> {
+    in_security_flow(|| rpc(transport, "/api/securityStatus", json!({})))
+        .ok()
+        .and_then(|status| approves_here_names(&status))
+        .unwrap_or_default()
+}
+
+/// [`owner_place`]'s words for the owners' `names` ("your phone …" is a phone).
 fn owner_place_text(names: &[String], local: bool) -> String {
     if names.is_empty() {
         return if local {
@@ -368,6 +402,8 @@ fn owner_place_text(names: &[String], local: bool) -> String {
         .map(|name| {
             if name == "your phone" {
                 "on your phone".to_string()
+            } else if name.starts_with("your phone (") {
+                format!("on {name}")
             } else {
                 format!("in Ghostex on {name}")
             }
@@ -1808,7 +1844,7 @@ pub(crate) fn answerer_for(transport: &Transport, request: &ApprovalRequest) -> 
         };
     }
     Answerer::Elsewhere {
-        devices: Vec::new(),
+        devices: approver_places(transport),
         asked,
         note: flooded.or_else(|| {
             words.filter(|_| asked).map(|words| {

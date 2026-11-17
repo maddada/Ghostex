@@ -928,6 +928,9 @@ fn handle(
             // Retired keys (`retire_owner_key`) aren't listed: they sign nothing here.
             "ownerKeys": security.listed_owner_keys(),
             "approverKeys": security.approver_keys.list(),
+            // Who can approve here, in plain names, for the apps' "approve it in Ghostex on …"
+            // and `ghostex computer-code` (CDXC:Security 2026-11-17 at `approvers_here`).
+            "approvesHere": approvers_here(state),
             "pendingApprovals": if caller.has(security::Capability::DecideApprovals) {
                 security.approvals.list_pending(now).len()
             } else {
@@ -939,6 +942,61 @@ fn handle(
             format!("{endpoint_path} is not an approval endpoint."),
         )),
     }
+}
+
+/*
+CDXC:Security 2026-11-17 FIX:
+The user ran `ghostex computer-code --copy` in a terminal on their Windows PC, which they use headless, to connect their Linux computer: "i dont want to look for approval screen on the windows machine cuz that machine is supposed to be connected to headlessly", and then "it's asking M7-Desktop to let this computer in even tho i'm using headless command to get the code from there man. this doesn't make sense." Both asks (show the code, let the new computer in) can only be approved by this computer's door keepers (its owner apps, on any computer, and its paired phones and computers; never the terminal once there is one, the user's Q-3A), yet every message said "the Ghostex app on this computer or your phone", or "Approve on <this computer>". gxserver now names them: `approvesHere` in `/api/securityStatus` lists, in plain names, each app that owns this computer (on whichever computer it runs; this computer's own app says so) and each paired phone or computer, for `ghostex computer-code`, the CLI's approval wait and the apps' "approve it in Ghostex on …". Older gxservers don't send it; their readers keep the old words.
+*/
+/// Who can approve this computer's asks (its door keepers), in plain names: `{name, kind}` with
+/// kind `app` (an owner app on another computer), `thisApp` (this computer's own app), `phone` or
+/// `computer` (a paired device). Never keys or ids.
+fn approvers_here(state: &AppState) -> Vec<Value> {
+    let security = &state.security;
+    let this_name = crate::remote_access::cached_remote_access_identity()
+        .map(|identity| identity.computer_name)
+        .ok();
+    let mut out: Vec<Value> = Vec::new();
+    let mut push = |name: String, kind: &str| {
+        let name = name.trim().to_string();
+        if !name.is_empty() && !out.iter().any(|seen| seen["name"] == name.as_str()) {
+            out.push(json!({ "name": name, "kind": kind }));
+        }
+    };
+    for key in security.listed_owner_keys() {
+        let label = key
+            .label
+            .trim_end_matches("(Ghostex app)")
+            .trim()
+            .to_string();
+        let here = security.is_app_owner_key(&key.key_id)
+            || this_name
+                .as_deref()
+                .is_some_and(|name| name.eq_ignore_ascii_case(&label));
+        match key.platform.as_str() {
+            "ios" | "android" => push(label, "phone"),
+            _ if here => push(label, "thisApp"),
+            _ => push(label, "app"),
+        }
+    }
+    let devices = crate::storage::open_gxserver_database(&state.paths)
+        .ok()
+        .and_then(|db| crate::remote_access::paired_devices::list_paired_devices_json(&db).ok());
+    for device in devices
+        .as_ref()
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|device| device["status"] == "paired")
+    {
+        let name = device["name"].as_str().unwrap_or_default().to_string();
+        let kind = match device["platform"].as_str().unwrap_or_default() {
+            "ios" | "android" => "phone",
+            _ => "computer",
+        };
+        push(name, kind);
+    }
+    out
 }
 
 /// The Settings > Security switch, read from this computer's settings file.

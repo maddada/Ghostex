@@ -45,12 +45,14 @@ or Add a computer). Paste it into Connect a Computer on the other computer to co
 one. It works on a server without the Ghostex app too: gxserver must be running here and Easy
 Connect on (ghostex tailcat enable).
 
-Once this computer has the Ghostex app or a paired phone, only they let a new device in:
-  - First you approve \"Show this computer's pairing code\" in the Ghostex app or on your phone;
-    then the code prints. After 10 minutes it asks again.
-  - Each computer or phone that uses the code shows here with its three words. Approve it in the
-    app or on your phone, where it shows with the same words.
-On a computer with neither yet, nothing asks: check the words match the ones on the other
+Once this computer has an owner (the Ghostex app here or on one of your other computers, or a
+paired phone), only they let a new device in, and this terminal says which ones they are:
+  - First you approve \"Show this computer's pairing code\" in Ghostex on one of them (it shows
+    there as a card; you don't need this computer's screen); then the code prints. After 10
+    minutes it asks again.
+  - Each computer or phone that uses the code shows here with its three words. Approve it the
+    same way, where it shows as \"Is this your computer?\" with the same words.
+On a computer with no owner yet, nothing asks: check the words match the ones on the other
 computer, then answer y to approve it or n to deny it here.
 
 It keeps running so the other computer can reach this one. A code works once and lapses after
@@ -96,6 +98,15 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
     println!("Waiting for the other computer. Press Ctrl+C when you are done.");
     let interactive = std::io::stdin().is_terminal();
     let answers_here = may_approve_here(&parsed.flags);
+    // Where a waiting computer is approved when it can't be here (CDXC:Security 2026-11-17 at
+    // `approvers_here` in server/src/server/security_http.rs): the owners' apps and phones by name.
+    let place = call_gxserver_rpc(
+        crate::security::SECURITY_STATUS_ENDPOINT,
+        &json!({}),
+        &parsed.flags,
+    )
+    .ok()
+    .and_then(|status| super::rpc::where_to_approve(&status));
     let mut shown_code = code.text;
     let mut seen = HashSet::new();
     // Devices to approve in the app or on a phone: approval id → name, followed until answered.
@@ -143,9 +154,14 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                 device.words.join(" ")
             );
             if !answers_here || !interactive {
-                println!(
-                    "Approve it in the Ghostex app on this computer or on your phone, where it shows with the same words."
-                );
+                match &place {
+                    Some(place) => println!(
+                        "Approve it {place}, where it shows as \"Is this your computer?\" with the same words. This terminal can't approve it: this computer already has an owner."
+                    ),
+                    None => println!(
+                        "Approve it in the Ghostex app on this computer or on your phone, where it shows with the same words."
+                    ),
+                }
                 approved_elsewhere.push((device.approval_id.clone(), device.name.clone()));
                 continue;
             }
