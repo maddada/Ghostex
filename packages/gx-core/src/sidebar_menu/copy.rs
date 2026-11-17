@@ -1,4 +1,4 @@
-//! A session menu's Copy ID row and its Copy submenu: Copy Details, Copy Link, and every link or
+//! A session menu's Copy submenu: Copy ID first, then Copy Details, Copy Link, and every link or
 //! name of the session's work.
 
 use crate::sidebar_view::view::SessionRow;
@@ -8,12 +8,15 @@ use super::commands::{message, MenuCommand};
 use super::group::MenuGroup;
 use super::item::MenuItem;
 
-/// The session menu's own Copy ID row, or `None` while the machine's daemon id is not known yet,
+/// The Copy submenu's first row, Copy ID, or `None` while the machine's daemon id is not known yet,
 /// since a mention without the ref reaches nobody.
 ///
 /// CDXC:ContextMenus 2026-11-12 DECISION:
 /// User: "i want a new Copy ID that let's me just copy the id and name of an agent so i can mention it in other chats" (2026-10-28), then (2026-11-12) "move Copy ID to sit directly above Tag As": Copy ID leaves the Copy submenu and is a row of the session menu itself, right above Tag As. It copies `[<session title>](<Global Ref>)` (`session_mention` in gx-protocol), which the chats draw as the session's agent pill; dropping a session row on a chat's composer types the same text. The phone's long-press menu matches.
-/// Since 2026-11-15 it is a button in the menu's quick row beside Rename and Pin instead (CDXC:ContextMenus 2026-11-15 in session.rs `full_menu`).
+/// Since 2026-11-15 it was a button in the menu's quick row beside Rename and Pin instead (CDXC:ContextMenus 2026-11-15 in session.rs `full_menu`).
+///
+/// CDXC:ContextMenus 2026-11-18 DECISION:
+/// User: "please move copy id to the top of the copy menu item in the context menu for a session in the sidebar and move Popup to be the 3rd button after rename and pin". Copy ID is the first row of the Copy submenu again (`copy_submenu`), and the quick row's third button is the desktop's Open in a Popup (`gx_store/sidebar_menus.rs`) instead. Supersedes the 2026-11-15 quick-row placement.
 pub(crate) fn copy_id_row(row: &SessionRow, group: &MenuGroup<'_>) -> Option<MenuItem> {
     session_mention_text(row, &group.details())
         .filter(|text| !text.trim().is_empty())
@@ -26,7 +29,7 @@ pub(crate) fn copy_id_row(row: &SessionRow, group: &MenuGroup<'_>) -> Option<Men
         })
 }
 
-/// The Copy submenu of one row. Copy Details is always there; the other rows only when the session
+/// The Copy submenu of one row. Copy ID leads (when the daemon id is known) and Copy Details is always there; the other rows only when the session
 /// has something for them (a branch from the git probe or work mode, the work-mode links).
 ///
 /// CDXC:ContextMenus 2026-10-09 DECISION:
@@ -35,14 +38,15 @@ pub(crate) fn copy_id_row(row: &SessionRow, group: &MenuGroup<'_>) -> Option<Men
 /// CDXC:ContextMenus 2026-10-31 DECISION:
 /// User (GitHub issue #373): a "Copy link" item next to Copy Details and Copy ID, named Copy Link to match the other Copy rows, and it copies the https page that works where people paste it (`session_page_url` in gx-protocol). Left out when the machine's daemon id is not known yet, since a link without the ref reaches nobody. The phone's Copy submenu matches.
 pub(crate) fn copy_submenu(id: &str, row: &SessionRow, group: &MenuGroup<'_>) -> MenuItem {
-    let mut children = vec![MenuItem::row(
+    let mut children: Vec<MenuItem> = copy_id_row(row, group).into_iter().collect();
+    children.push(MenuItem::row(
         "Copy Details",
         "copy",
         MenuCommand::command(message::copy_session_details(
             id,
             &session_details_text(row, &group.details()),
         )),
-    )];
+    ));
     let mut copy_row = |label: &str, icon: &str, text: Option<String>| {
         if let Some(text) = text.filter(|text| !text.trim().is_empty()) {
             children.push(MenuItem::row(
@@ -205,9 +209,10 @@ mod tests {
     #[test]
     fn copy_link_copies_the_page_under_copy_details() {
         let rows = copied(&group(Some("S90")));
-        assert_eq!(rows[0].0, "Copy Details");
+        assert_eq!(rows[0].0, "Copy ID");
+        assert_eq!(rows[1].0, "Copy Details");
         assert_eq!(
-            rows[1],
+            rows[2],
             (
                 "Copy Link".to_string(),
                 "https://ghostex.dev/open/session#S90:P3lv0:G7hgi".to_string()
@@ -224,7 +229,7 @@ mod tests {
     #[test]
     fn copy_details_ends_by_pointing_at_ghostex_agents() {
         let rows = copied(&group(Some("S90")));
-        let details = &rows[0].1;
+        let details = &rows[1].1;
         assert_eq!(details.lines().last(), Some(MORE_DETAILS_LINE));
         assert!(details.contains("Global Ref: S90:P3lv0:G7hgi"));
         assert!(!details.contains('$'), "no skill reference: {details}");

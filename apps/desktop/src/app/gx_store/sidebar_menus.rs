@@ -237,7 +237,10 @@ impl GhostexGpuiApp {
         let items = items.unwrap_or_default();
         // The desktop's own row, which the phone's menu never has (app/session_popup/).
         let items = if action.is_none() {
-            crate::app::session_popup::with_open_in_new_window_row(items, &session_id)
+            popup_row_into_quick_row(crate::app::session_popup::with_open_in_new_window_row(
+                items,
+                &session_id,
+            ))
         } else {
             items
         };
@@ -356,4 +359,31 @@ fn text(value: &Value, key: &str) -> String {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string()
+}
+
+/// CDXC:ContextMenus 2026-11-18 DECISION:
+/// User: "move Popup to be the 3rd button after rename and pin". Open in a Popup (added by `session_popup::with_open_in_new_window_row`) moves into the menu's quick row right after Rename and Pin, and leaves the list; a menu with no quick row keeps it where it was added.
+fn popup_row_into_quick_row(mut items: Vec<Value>) -> Vec<Value> {
+    let Some(popup_at) = items
+        .iter()
+        .position(|item| item["label"] == "Open in a Popup")
+    else {
+        return items;
+    };
+    let Some(quick_at) = items.iter().position(|item| item["quick"].is_array()) else {
+        return items;
+    };
+    let popup = items.remove(popup_at);
+    // Removing an earlier row shifts the quick row down by one; the quick row leads the menu, so
+    // this only matters for odd shapes.
+    let quick_at = if popup_at < quick_at {
+        quick_at - 1
+    } else {
+        quick_at
+    };
+    if let Some(buttons) = items[quick_at]["quick"].as_array_mut() {
+        let at = buttons.len().min(2);
+        buttons.insert(at, popup);
+    }
+    items
 }
