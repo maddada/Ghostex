@@ -31,6 +31,15 @@ const CANCEL: &str = "Cancel";
 const RESTART_AND_UPDATE: &str = "Restart and update";
 const DOWNLOAD_UPDATE: &str = "Download update";
 const OPEN_DOWNLOAD_PAGE: &str = "Open download page";
+const UPDATE: &str = "Update";
+const RELEASE_PAGE: &str = "Release page";
+const COMMAND_HINT: &str =
+    "Update opens a terminal that runs this command. You type your password there.";
+/// The hint line plus the command box under the notes, without its lines of 12/16 mono.
+const COMMAND_BLOCK_HEIGHT: f32 = 12.0 + 19.5 + 8.0 + 14.0 + 2.0;
+/// An upper bound on one 12px mono character's width, to count the command's wrapped lines (a
+/// .deb or .rpm download and install takes two or three).
+const COMMAND_CHAR_WIDTH: f32 = 7.4;
 /// CDXC:Release 2026-11-17 DECISION:
 /// User: "we need to mention this in the update window of ghostex clearly so people clearly see
 /// that (keep text friendly and short, just say where they can rollback in case of any issue, or
@@ -79,8 +88,8 @@ const CIRCLE_TOP: f32 = 8.25;
 pub(crate) enum UpdateAvailableState {
     Available,
     Ready,
-    /// CDXC:Release 2026-09-22 DECISION:
-    /// User: Linux does not install updates itself; its dialog shows the same changelog and its button opens the download page. Native only: the React twin is never opened on Linux.
+    /// CDXC:Release 2026-11-18 DECISION:
+    /// User (Q81): a Linux package install's dialog shows the command that updates it (`linux_command`, from gxserver) and its Update button opens a terminal that runs it, beside a Release page button; with no command (a tarball, an install no package manager owns) its one button opens the download page, as since 2026-09-22. Native only: the React twin is never opened on Linux.
     Notify,
 }
 
@@ -90,6 +99,8 @@ pub(crate) enum UpdateAvailableModalCommand {
     Download,
     Restart,
     OpenDownloadPage,
+    /// Linux packages: open a terminal that runs the update command.
+    RunUpdateCommand,
 }
 
 pub(crate) type UpdateAvailableModalHost = Rc<dyn Fn(UpdateAvailableModalCommand, &mut App)>;
@@ -99,6 +110,8 @@ pub(crate) struct UpdateAvailableModalConfig {
     pub(crate) state: UpdateAvailableState,
     pub(crate) notes_markdown: String,
     pub(crate) portable: bool,
+    /// Linux packages: the command Update runs in a terminal (gxserver's `linuxUpdate.command`).
+    pub(crate) linux_command: Option<String>,
     pub(crate) palette: ModalPalette,
 }
 
@@ -329,6 +342,7 @@ pub(crate) struct GpuiUpdateAvailableModalWindow {
     version: String,
     state: UpdateAvailableState,
     portable: bool,
+    linux_command: Option<String>,
     blocks: Vec<Block>,
     fit: ModalFit,
     focus_handle: FocusHandle,
@@ -357,6 +371,9 @@ impl GpuiUpdateAvailableModalWindow {
             version: config.version,
             state: config.state,
             portable: config.portable,
+            linux_command: config
+                .linux_command
+                .filter(|_| config.state == UpdateAvailableState::Notify),
             blocks,
             fit: ModalFit::fixed(),
             focus_handle,
@@ -385,9 +402,16 @@ impl GpuiUpdateAvailableModalWindow {
         let command = match self.state {
             UpdateAvailableState::Ready => UpdateAvailableModalCommand::Restart,
             UpdateAvailableState::Available => UpdateAvailableModalCommand::Download,
+            UpdateAvailableState::Notify if self.linux_command.is_some() => {
+                UpdateAvailableModalCommand::RunUpdateCommand
+            }
             UpdateAvailableState::Notify => UpdateAvailableModalCommand::OpenDownloadPage,
         };
         self.close_window_and_send(command, window, cx);
+    }
+
+    fn open_release_page(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.close_window_and_send(UpdateAvailableModalCommand::OpenDownloadPage, window, cx);
     }
 
     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -742,12 +766,22 @@ impl GpuiUpdateAvailableModalWindow {
     fn render_body(&self, window: &Window) -> AnyElement {
         let p = self.palette;
         let portable_height = if self.portable { 12.0 + 19.5 } else { 0.0 };
+        let command_height = self.linux_command.as_deref().map_or(0.0, |command| {
+            // The body is the window less the shell's side padding, the box less its own.
+            let text_width = (f32::from(window.viewport_size().width) - 2.0 * 20.0 - 18.0).max(1.0);
+            let per_line = (text_width / COMMAND_CHAR_WIDTH).floor().max(1.0);
+            let lines = (command.chars().count() as f32 / per_line)
+                .ceil()
+                .clamp(1.0, 4.0);
+            COMMAND_BLOCK_HEIGHT + 16.0 * lines
+        });
         let notes_height = (f32::from(window.viewport_size().height)
             - MODAL_FIT_EXTRA_HEIGHT
             - HEADER_HEIGHT
             - CARD_PADDING * 2.0
             - 2.0
             - portable_height
+            - command_height
             - GO_BACK_LINE_HEIGHT)
             .max(0.0);
         v_flex()
@@ -763,7 +797,44 @@ impl GpuiUpdateAvailableModalWindow {
                         .child(PORTABLE_NOTE),
                 )
             })
+            .children(
+                self.linux_command
+                    .as_deref()
+                    .map(|command| self.render_command(command)),
+            )
             .child(self.render_go_back_line())
+            .into_any_element()
+    }
+
+    /// What Update runs, and that the password goes in the terminal.
+    fn render_command(&self, command: &str) -> AnyElement {
+        let p = self.palette;
+        let (fill, edge) = self.code_chip_colors();
+        v_flex()
+            .w_full()
+            .gap(px(8.0))
+            .child(
+                div()
+                    .text_size(px(13.0))
+                    .line_height(px(19.5))
+                    .text_color(hsla(p.muted))
+                    .child(COMMAND_HINT),
+            )
+            .child(
+                div()
+                    .w_full()
+                    .px(px(8.0))
+                    .py(px(7.0))
+                    .rounded(px(CODE_RADIUS))
+                    .border_1()
+                    .border_color(hsla(edge))
+                    .bg(hsla(fill))
+                    .font_family(MODAL_MONO_FONT)
+                    .text_size(px(12.0))
+                    .line_height(px(16.0))
+                    .text_color(hsla(p.foreground))
+                    .child(command.to_string()),
+            )
             .into_any_element()
     }
 
@@ -798,32 +869,45 @@ impl GpuiUpdateAvailableModalWindow {
     fn render_footer(&self, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
         let later = self.state != UpdateAvailableState::Available;
-        modal_footer(vec![
-            modal_action_button(
+        let runs_command = self.linux_command.is_some();
+        let mut buttons = vec![modal_action_button(
+            &p,
+            "update-available-cancel",
+            if later { LATER } else { CANCEL },
+            None,
+            ModalButtonTone::Neutral,
+            false,
+            |this, window, cx| this.cancel(window, cx),
+            cx,
+        )];
+        if runs_command {
+            buttons.push(modal_action_button(
                 &p,
-                "update-available-cancel",
-                if later { LATER } else { CANCEL },
+                "update-available-release-page",
+                RELEASE_PAGE,
                 None,
                 ModalButtonTone::Neutral,
                 false,
-                |this, window, cx| this.cancel(window, cx),
+                |this, window, cx| this.open_release_page(window, cx),
                 cx,
-            ),
-            modal_action_button(
-                &p,
-                "update-available-confirm",
-                match self.state {
-                    UpdateAvailableState::Ready => RESTART_AND_UPDATE,
-                    UpdateAvailableState::Available => DOWNLOAD_UPDATE,
-                    UpdateAvailableState::Notify => OPEN_DOWNLOAD_PAGE,
-                },
-                None,
-                ModalButtonTone::Neutral,
-                false,
-                |this, window, cx| this.confirm(window, cx),
-                cx,
-            ),
-        ])
+            ));
+        }
+        buttons.push(modal_action_button(
+            &p,
+            "update-available-confirm",
+            match self.state {
+                UpdateAvailableState::Ready => RESTART_AND_UPDATE,
+                UpdateAvailableState::Available => DOWNLOAD_UPDATE,
+                UpdateAvailableState::Notify if runs_command => UPDATE,
+                UpdateAvailableState::Notify => OPEN_DOWNLOAD_PAGE,
+            },
+            None,
+            ModalButtonTone::Neutral,
+            false,
+            |this, window, cx| this.confirm(window, cx),
+            cx,
+        ));
+        modal_footer(buttons)
     }
 }
 

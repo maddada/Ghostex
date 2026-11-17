@@ -129,14 +129,24 @@ pub(super) fn compose_status(state: &AppState, answer: &AppAnswer) -> Value {
         }
     }
     let available_version = text(report, "availableVersion");
+    let app_platform = text(report, "platform");
+    let linux_update =
+        super::linux_install::linux_update(app_platform.as_deref(), available_version.as_deref());
+    let unsupported_reason = if linux_update.is_null() {
+        None
+    } else {
+        super::linux_install::unsupported_reason(&linux_update, available_version.as_deref())
+    }
+    .or_else(|| text(report, "unsupportedReason"));
     json!({
         "version": GXSERVER_VERSION,
         "platform": platform(),
         "appConnected": app_connected,
-        "appPlatform": text(report, "platform"),
+        "appPlatform": app_platform,
         "appVersion": text(report, "appVersion"),
         "supported": report.get("supported").and_then(Value::as_bool).unwrap_or(false),
-        "unsupportedReason": text(report, "unsupportedReason"),
+        "unsupportedReason": unsupported_reason,
+        "linuxUpdate": linux_update,
         "phase": phase,
         "updateAvailable": available_version.is_some(),
         "availableVersion": available_version,

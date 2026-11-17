@@ -95,6 +95,10 @@ impl GhostexGpuiApp {
                     item.insert("progress".into(), json!(text(&view, "detail")));
                 } else if state == "failed" || state == "unknown" {
                     item.insert("error".into(), json!(text(&view, "detail")));
+                } else if available && status["linuxUpdate"].is_object() {
+                    // A Linux package: its command and release page (server/src/app_update/linux_install.rs).
+                    item.insert("note".into(), json!(text(status, "unsupportedReason")));
+                    item.insert("linuxUpdate".into(), status["linuxUpdate"].clone());
                 } else if available {
                     item.insert(
                         "note".into(),

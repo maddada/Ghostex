@@ -73,6 +73,8 @@ pub(crate) struct UpdatesTab {
     confirm_go_back: bool,
     /// Copy command was pressed on a deb or rpm install's Go back row.
     go_back_copied: bool,
+    /// The Linux Ghostex card whose update command was just copied (its id).
+    linux_command_copied: Option<String>,
 }
 
 impl SettingsPage for UpdatesTab {
@@ -169,6 +171,7 @@ impl UpdatesTab {
             all_run,
             confirm_go_back: false,
             go_back_copied: false,
+            linux_command_copied: None,
         }
     }
 

@@ -18,6 +18,8 @@ pub(crate) mod gxserver_stop_and_workspace_sleep;
 pub(crate) mod keep_awake_automation;
 pub(crate) mod keep_awake_core;
 pub(crate) mod keep_awake_lid_sleep;
+#[cfg(target_os = "linux")]
+pub(crate) mod linux_update_command;
 pub(crate) mod managed_tool_terminal;
 pub(crate) mod notifications_and_settings_sync;
 pub(crate) mod permission_guide;

@@ -12,12 +12,12 @@ use super::super::extensions::cards::CARD_MIN_HEIGHT;
 use super::UpdatesTab;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, Context, FontWeight, InteractiveElement as _,
-    IntoElement, ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _,
-    Transformation, div, img, px, radians,
+    Animation, AnimationExt as _, AnyElement, ClipboardItem, Context, FontWeight,
+    InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Transformation, div, img, px, radians,
 };
 use gpui_component::{h_flex, v_flex};
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::time::Duration;
 
 fn text<'a>(item: &'a Value, key: &str) -> Option<&'a str> {
@@ -246,6 +246,70 @@ pub(super) fn up_to_date_row(
         .into_any_element()
 }
 
+/// A Linux Ghostex card's update (server/src/app_update/linux_install.rs): the command that updates
+/// it, the release page, and whether it is this computer (Update runs the command in a terminal
+/// here) or another one (only Copy: nobody may be at that computer's screen).
+struct LinuxUpdate {
+    command: Option<String>,
+    release_url: String,
+    appimage: bool,
+    here: bool,
+    computer: String,
+}
+
+impl LinuxUpdate {
+    fn of(item: &Value) -> Option<Self> {
+        let plan = item["linuxUpdate"].as_object()?;
+        if !matches!(item["state"].as_str(), Some("available" | "failed")) {
+            return None;
+        }
+        Some(Self {
+            command: plan
+                .get("command")
+                .and_then(Value::as_str)
+                .filter(|command| !command.trim().is_empty())
+                .map(str::to_string),
+            release_url: plan
+                .get("releaseUrl")
+                .and_then(Value::as_str)
+                .unwrap_or(super::go_back::RELEASES_URL)
+                .to_string(),
+            appimage: plan.get("kind").and_then(Value::as_str) == Some("appimage"),
+            here: item["computer"]
+                .as_str()
+                .is_none_or(|computer| computer == "local"),
+            computer: text(item, "computerName")
+                .or(text(item, "name"))
+                .unwrap_or("that computer")
+                .to_string(),
+        })
+    }
+
+    /// The card's line: what Update does, or what to do instead.
+    fn line(&self) -> String {
+        match (&self.command, self.appimage, self.here) {
+            (Some(_), _, true) => {
+                "Update opens a terminal that runs this command. You type your password there."
+                    .to_string()
+            }
+            (Some(_), _, false) => format!("Run this command in a terminal on {}.", self.computer),
+            (None, true, true) => {
+                "Update downloads the new version and restarts Ghostex.".to_string()
+            }
+            (None, true, false) => format!(
+                "Open Ghostex on {} and use its update button.",
+                self.computer
+            ),
+            (None, false, _) => "Download the new version from the release page.".to_string(),
+        }
+    }
+
+    /// Update runs here: the command in a terminal, or the AppImage's own update.
+    fn runs_here(&self) -> bool {
+        self.here && (self.command.is_some() || self.appimage)
+    }
+}
+
 /// The status word beside the name; `None` for a plain update (its button says it).
 fn status_word(item: &Value) -> Option<&'static str> {
     match item["state"].as_str() {
@@ -379,13 +443,22 @@ impl UpdatesTab {
             _ => None,
         };
 
+        let linux = LinuxUpdate::of(item);
         let line = if updating {
-            text(item, "progress").or(Some("Updating…"))
+            text(item, "progress")
+                .map(str::to_string)
+                .or(Some("Updating…".to_string()))
+        } else if let Some(linux) = linux.as_ref() {
+            Some(linux.line())
         } else {
-            text(item, "error").or(text(item, "note"))
+            text(item, "error")
+                .or(text(item, "note"))
+                .map(str::to_string)
         };
 
-        let action: Option<AnyElement> = if updating {
+        let action: Option<AnyElement> = if let Some(linux) = linux.as_ref().filter(|_| !updating) {
+            self.linux_actions(p, &id, linux, cx)
+        } else if updating {
             Some(
                 h_flex()
                     .items_center()
@@ -526,8 +599,29 @@ impl UpdatesTab {
                     .text_size(px(12.0))
                     .line_height(px(16.5))
                     .text_color(hsla(p.foreground_alpha(0.7)))
-                    .child(line.to_string())
+                    .child(line)
             }))
+            .children(
+                linux
+                    .as_ref()
+                    .and_then(|linux| linux.command.clone())
+                    .map(|command| {
+                        div()
+                            .id(SharedString::from(format!("updates-linux-command-{id}")))
+                            .min_w_0()
+                            .px(px(8.0))
+                            .py(px(6.0))
+                            .rounded(px(6.0))
+                            .border_1()
+                            .border_color(hsla(p.hairline))
+                            .bg(hsla(p.surface))
+                            .font_family(MODAL_MONO_FONT)
+                            .text_size(px(12.0))
+                            .line_height(px(17.0))
+                            .text_color(hsla(p.foreground))
+                            .child(command)
+                    }),
+            )
             .child(
                 h_flex()
                     .mt_auto()
@@ -536,9 +630,94 @@ impl UpdatesTab {
                     .items_center()
                     .justify_between()
                     .gap(px(8.0))
-                    .child(div().min_w_0().children(auto))
+                    .child(match linux.as_ref() {
+                        Some(linux) => div().min_w_0().child(release_link(
+                            p,
+                            &id,
+                            linux.release_url.clone(),
+                            cx,
+                        )),
+                        None => div().min_w_0().children(auto),
+                    })
                     .children(action),
             )
             .into_any_element()
+    }
+}
+
+/// The release page, as a plain link at the card's footer.
+fn release_link(
+    p: &SettingsPalette,
+    id: &str,
+    url: String,
+    cx: &mut Context<UpdatesTab>,
+) -> AnyElement {
+    let hover = p.foreground;
+    div()
+        .id(SharedString::from(format!("updates-release-page-{id}")))
+        .cursor_pointer()
+        .underline()
+        .text_size(px(12.0))
+        .text_color(hsla(p.muted))
+        .hover(move |this| this.text_color(hsla(hover)))
+        .on_click(cx.listener(move |_, _, _, cx| cx.open_url(&url)))
+        .child("Release page")
+        .into_any_element()
+}
+
+impl UpdatesTab {
+    /// A Linux Ghostex card's buttons: Copy command when there is one, and Update when it runs on
+    /// this computer. Another computer's card has no Update: nobody may be at its screen.
+    fn linux_actions(
+        &self,
+        p: &SettingsPalette,
+        id: &str,
+        linux: &LinuxUpdate,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let mut buttons: Vec<AnyElement> = Vec::new();
+        if let Some(command) = linux.command.clone() {
+            let copied = self.linux_command_copied.as_deref() == Some(id);
+            let copied_id = id.to_string();
+            buttons.push(settings_button_sized(
+                p,
+                SharedString::from(format!("updates-linux-copy-{id}")),
+                if copied { "Copied" } else { "Copy command" },
+                None,
+                ButtonVariant::Default,
+                ButtonSize::Xs,
+                false,
+                None,
+                move |tab: &mut Self, _window, cx| {
+                    cx.write_to_clipboard(ClipboardItem::new_string(command.clone()));
+                    tab.linux_command_copied = Some(copied_id.clone());
+                    cx.notify();
+                },
+                cx,
+            ));
+        }
+        if linux.runs_here() {
+            buttons.push(settings_button_sized(
+                p,
+                SharedString::from(format!("updates-update-{id}")),
+                "Update",
+                None,
+                ButtonVariant::Default,
+                ButtonSize::Xs,
+                false,
+                None,
+                |tab: &mut Self, _window, cx| {
+                    tab.post(json!({ "type": "runLinuxAppUpdate" }), cx);
+                },
+                cx,
+            ));
+        }
+        (!buttons.is_empty()).then(|| {
+            h_flex()
+                .items_center()
+                .gap(px(6.0))
+                .children(buttons)
+                .into_any_element()
+        })
     }
 }

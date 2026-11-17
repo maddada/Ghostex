@@ -70,8 +70,16 @@ you hover the window's left edge shows the window buttons in its top-left corner
 In full screen they sit at the left edge too, with no gap for the window buttons.
 The sidebar's top row also moves the window when you drag it. When an update is available, a download button
 appears just before the project name. On Linux the button opens the release
-notes with an **Open download page** button instead of installing the update;
-install the new package the same way you installed Ghostex. Linux downloads come
+notes with the command that updates Ghostex the way it was installed (for
+example `yay -S ghostex-bin` for the AUR package, or a download plus
+`sudo apt install` for the .deb or `sudo dnf install` for the .rpm), a
+**Release page** button and **Update**, which opens a terminal tab in Ghostex
+that runs the command; type your password there, then restart Ghostex when it
+finishes. Settings > Updates shows the same command on Ghostex's card, with
+Copy command, Update and a Release page link; another Linux computer's card
+shows its command with Copy command, to run on that computer. The tarball, or a
+copy no package manager installed, gets only the release page (**Open download
+page**). Linux downloads come
 for x64 and for ARM64 (aarch64) computers, each as a .deb, an .rpm, a portable
 .tar.zst and an AppImage on the release page; pick the one that matches your computer's processor
 (`uname -m` prints x86_64 or aarch64). The AppImage needs no install: make it
