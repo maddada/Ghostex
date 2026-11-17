@@ -162,6 +162,15 @@ pub(super) async fn route_chat_http(
             )
             .await
         }
+        "/api/readSessionWhere" => {
+            crate::session_where::handle_read_session_where_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
         "/api/stopSessionBackgroundTask" => {
             crate::session_details::handle_stop_session_background_task_http(
                 &state,
