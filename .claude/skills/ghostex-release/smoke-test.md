@@ -17,6 +17,13 @@ after-release commit (see "Keeping the list").
 - **The agent may restart the app itself** ("u can restart fam"). Sessions live
   in zmx, so they survive an app restart. This overrides AGENTS.md's "never run
   `cargo xtask start`" for this run only; say so in the report.
+- **Background first, foreground only where needed** (user, 2026-11-17: "go
+  with bg tools first, use foreground for what needs foreground tools").
+  Drive every step with background tools. Only a part that background input
+  can't reach (a field it can't focus, like 5.3's text box) may use
+  foreground input: bring Ghostex to the front, act, then put the frontmost
+  app, the pointer and the open chat back as they were. Say in the report
+  which steps used foreground input.
 - **Stop or warn (Q3736).** Only a crash or a failure of typing stops the
   release. Every other failed step is a warning in the report (see the "On
   failure" column below). A step that is marked Stop stops the release only for
@@ -75,7 +82,12 @@ after-release commit (see "Keeping the list").
      content). Put focus where you type with `ghostex focus <ref>` (chat box or
      terminal) or by opening a surface that focuses its own box (Settings
      search, the Search palette, a page with autofocus). Foreground input
-     doesn't help on a SpaceO display: SpaceO hands activation straight back.
+     doesn't help on a SpaceO display: SpaceO hands activation straight back,
+     and it keeps doing so while any SpaceO session still holds Ghostex, so
+     end the SpaceO session (`spaceo_session_destroy`) before using foreground
+     input on the main display. cua-driver's per-action `delivery_mode:
+     "foreground"` gives focus back to the previous app after every action;
+     use `bring_to_front` first, then foreground actions.
    - A cua-driver pixel click can leave the real pointer on the SpaceO display;
      SpaceO then pauses ("cursor is currently on an agent screen"). Move it back
      with `move_cursor` (scope desktop) and `spaceo_session_resume`.
@@ -215,9 +227,10 @@ both.
    with one text question (`type="text"`) and one choice question. It is a test
    fixture, not a page for the user: publish it with
    `ghostex show $W/smoke-page.html --no-check --json` and retire it at the end with
-   `ghostex page retire <page>`, so nothing stays open (in 11.8.x and 11.9.0
-   that answers "No gxserver endpoint for POST /api/retireVisualPages";
-   closing the session that shows the card clears its open questions).
+   `ghostex page retire <page>`, so nothing stays open. (Builds of 11.8.0 to
+   11.8.2, and 11.9.0 builds older than the fix, answer "No gxserver endpoint
+   for POST /api/retireVisualPages"; there, closing the session that shows
+   the card clears its open questions.)
 2. Open the page window in the app: the card needs to be in a chat, so have
    the 2.1 session echo the ```visual block (`agents send $ref --body-file`
    with "Reply with exactly the following block and nothing else"), open that
@@ -226,8 +239,31 @@ both.
    window's web view (clicks, keys, Tab and the a/b shortcuts all do nothing),
    and neither does a DevTools click (`ghostex browser mcp`
    `ghostex_click`): it focuses the field in the page, not the native view.
-   This step needs a real click on a real display; until the tooling can do
-   that, mark it NOT RUN with that reason.
+   This step needs foreground input on the main display (see the rules):
+   end any SpaceO session, `bring_to_front` the page window, click into the
+   box, type, click a choice, then give focus back. On the 11.9.0 run even
+   that delivered nothing to Ghostex (cua-driver's foreground clicks and
+   keys didn't reach the chat box either, so the tool route, not the page,
+   was at fault). OS-level input from the agent's own shell is no way out
+   either: there `AXIsProcessTrusted()` and `CGPreflightPostEventAccess()`
+   are both false (check with a two-line Swift script; it doesn't prompt), so
+   CGEvent posting is dropped and System Events `keystroke` would need an
+   Accessibility prompt, which the agent must not answer.
+   **What works: the DevTools protocol on the page window's webview.** Ghostex's
+   CEF answers on a local DevTools port (find it with `lsof -nP -iTCP
+   -sTCP:LISTEN -p <Ghostex pid>`, the one whose `/json/version` says
+   Chrome; it was 9334). `/json/list` lists the open page by its title; connect
+   to its `webSocketDebuggerUrl` (Node's built-in `WebSocket`) and: focus the
+   text box (`Runtime.evaluate` `box.focus()`), `Input.insertText` most of the
+   text, a few `Input.dispatchKeyEvent` keys (a letter, then `x` and
+   Backspace), click the choice with `Input.dispatchMouseEvent`, read back
+   the box's value, the radio's `aria-checked` and the "N of 2 answered"
+   counter, and save `Page.captureScreenshot` to `$W`. With `Runtime.enable`
+   and `Log.enable` on, `Page.reload` the page and collect console errors
+   (the per-box Dictate buttons must load without errors; don't press one,
+   it asks for the microphone). Report 5.3 as PASS (DevTools input): native
+   key routing into the app is covered by 5.4. The Send button is always
+   enabled in this kit; the counter is what changes. Don't press Send.
 3. **Pass:** the typed text shows in the box letter by letter, the pick shows,
    and the Send button enables. Do **not** press Send (it would send an answer).
    Retire the page.
