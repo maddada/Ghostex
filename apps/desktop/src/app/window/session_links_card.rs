@@ -141,9 +141,29 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// The card window reports its own hover (`links_card_hovered`), so nothing else is needed.
-    pub(crate) fn session_links_card_holds_pointer(&self, _cx: &mut gpui::App) -> bool {
-        false
+    /// Whether the pointer is on the card, asked of the OS rather than the card's own hover.
+    ///
+    /// CDXC:SessionLinks 2026-11-17 WHY:
+    /// On Omarchy (Hyprland, the app on XWayland) the card window's own hover (`links_card_hovered`) never turned on, so moving the pointer from the row onto the card closed it and its links could not be clicked; macOS was fine. On Linux the watch also asks the X server where the pointer is (the capture button's `platform::pointer`) and keeps the card while it is inside the card's frame. macOS and Windows keep relying on the card's own hover.
+    pub(crate) fn session_links_card_holds_pointer(&self, cx: &mut gpui::App) -> bool {
+        #[cfg(target_os = "linux")]
+        {
+            let Some(handle) = self.native_sidebar.links_card_window else {
+                return false;
+            };
+            handle
+                .update(cx, |_, window, _| {
+                    let bounds = window.bounds();
+                    crate::app::ghostex_capture::platform::pointer(window.scale_factor())
+                        .is_some_and(|pointer| bounds.contains(&pointer))
+                })
+                .unwrap_or(false)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = cx;
+            false
+        }
     }
 
     /// Closes the card, from anywhere but the card's own window (the hover timers).
