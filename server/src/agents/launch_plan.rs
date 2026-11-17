@@ -173,6 +173,36 @@ pub(crate) fn create_agent_session_params_for_project(
     } else {
         configured_command
     };
+    // On the hub (CDXC:AgentProviders 2026-11-18 in accounts/hub/launch.rs): a launcher that picked
+    // a CLIProxyAPI hub as the account starts the session in that hub's profile folder, which makes
+    // it a session on its own login that `apply_new_session` leaves alone.
+    let configured_command = match crate::accounts::hub::launch::picked_hub(&runtime_settings) {
+        Some(_) if agentbox_provider.is_some() => {
+            return Err(DomainStateError::bad_request(
+                "A session that runs in a box can't start on the hub. Leave out the box.",
+            ));
+        }
+        Some(hub_id) => {
+            let provider =
+                crate::accounts::launch::agent_provider(&agent_id, agent_icon.as_deref())
+                    .ok_or_else(|| {
+                        DomainStateError::bad_request(
+                            "Only Claude and Codex sessions can start on the hub.",
+                        )
+                    })?;
+            let base = configured_command
+                .clone()
+                .or_else(|| default_agent_command(&agent_id).map(str::to_string));
+            Some(crate::accounts::hub::launch::apply(
+                &crate::paths::get_gxserver_paths(None),
+                provider,
+                &hub_id,
+                base.as_deref(),
+                &mut runtime_settings,
+            )?)
+        }
+        None => configured_command,
+    };
     // `coordinator start-thread --account`: the account is checked here, where the agent and its command are known, and stored as the picked account `apply_new_session` honours.
     if let Some(wanted) = read_text(params, "account") {
         if agentbox_provider.is_some() {

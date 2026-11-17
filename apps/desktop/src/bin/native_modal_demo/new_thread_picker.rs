@@ -63,6 +63,7 @@ fn account(
         usage: Some(usage.to_string()),
         ready,
         is_default,
+        hub: false,
     }
 }
 

@@ -3220,6 +3220,21 @@ Ghostex shows what is used, agy's `/usage` what is left (74% used is agy's
 the sidebar, on the account's page, and under Other usage in a chat's Accounts &
 limits panel on the computer and the phone; clicking one in the sidebar opens
 Settings > Accounts. Their ⋯ menu holds Sign in again, Turn off and Remove….
+**CLIProxyAPI hubs** (the CLIProxyAPI built-in extension, off by default; turn
+it on in Settings > Extensions > Built-in; nothing about it shows while it is
+off): Add account > CLIProxyAPI hub adds a CLIProxyAPI you run yourself, with its
+address, one of its client keys (`api-keys` in its config) and, optionally, its
+management key and a name. Ghostex never installs or runs CLIProxyAPI, never
+copies your Claude Swap or Codex Swap logins into it, and never changes its
+accounts. Both keys stay sealed on the computer and are never synced. With the
+management key, the hub's accounts show under it with read-only usage bars
+(sign accounts in or out on the hub itself). New Claude and Codex sessions can
+start On the hub from the New Thread picker's account list: they run in a
+profile folder of their own (`~/.claude-profiles/ghostex-<hub>` or
+`~/.codex-profiles/ghostex-<hub>`), so they use their own login and are never
+switched to another account. When every hub account is out of room, the
+session waits for the reset the hub names ("cooling down … reset after 1h10m")
+and continues by itself. Setting: `cliProxyApiEnabled`.
 Each Codex login is its own account with its own name and settings, also when
 two people sign in to the same ChatGPT Business workspace or one person has
 several workspaces; this needs Codex Swap 0.3.2 or later (its Update is in the ⋯

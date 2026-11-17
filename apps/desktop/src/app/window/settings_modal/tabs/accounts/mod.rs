@@ -17,6 +17,7 @@ pub(crate) mod data;
 mod editor;
 mod guide;
 mod helper_tools;
+mod hubs;
 mod list;
 mod manager;
 mod menus;
@@ -102,6 +103,9 @@ pub(crate) struct AccountsTab {
     pub(crate) open_menu: Option<String>,
     /// The Cursor, Gemini or Copilot sign-in under way (`usage_flow.rs`).
     pub(crate) usage_sign_in: Option<usage_flow::UsageSignIn>,
+    /// The Add a hub form and the saved hubs' fields being edited (`hubs.rs`), by hub id (`new`
+    /// for Add a hub).
+    pub(crate) hub_drafts: HashMap<String, hubs::HubDraft>,
     /// The machine whose accounts the page shows (the machine picker's pick); `None` is this
     /// computer. Changing it starts the page over on that machine.
     shown_machine: Option<String>,
@@ -128,13 +132,24 @@ pub(crate) enum Pane {
     AddPick,
     /// A Cursor, Gemini or Copilot sign-in.
     AddUsage(&'static str),
+    /// Add a CLIProxyAPI hub.
+    AddHub,
+    /// A saved CLIProxyAPI hub (its id).
+    Hub(String),
+    /// One account a hub pools (its row id), read only.
+    HubAccount(String),
 }
 
 impl super::HoldsUnsavedInput for AccountsTab {
     /// A Remove confirmation or an Uninstall confirmation is open (account edits save as they are
     /// made, and adding an account asks nothing to type).
     fn holds_unsaved_input(&self, _cx: &gpui::App) -> bool {
-        self.editors.values().any(|draft| draft.remove) || self.helpers.confirm_uninstall.is_some()
+        self.editors.values().any(|draft| draft.remove)
+            || self.helpers.confirm_uninstall.is_some()
+            || self.hub_drafts.values().any(|draft| draft.remove)
+            || self.hub_drafts.get("new").is_some_and(|draft| {
+                !draft.client_key.is_empty() || !draft.management_key.is_empty()
+            })
     }
 }
 
@@ -192,6 +207,7 @@ impl AccountsTab {
             was_active: false,
             preview_applied: false,
             masked_inputs: HashMap::new(),
+            hub_drafts: HashMap::new(),
             commit_inputs: HashSet::new(),
             claude_ai_polling: false,
             pending_reconnect: None,
@@ -558,6 +574,9 @@ impl AccountsTab {
                 .iter()
                 .any(|account| account.id() == *id && account.registered()),
             Pane::Rules(_) | Pane::Add(_) | Pane::AddPick | Pane::AddUsage(_) => true,
+            Pane::AddHub => data.hubs().is_some(),
+            Pane::Hub(id) => data.hub(id).is_some(),
+            Pane::HubAccount(id) => data.hub_account(id).is_some(),
         };
         if let Some(pane) = self.pane.clone().filter(exists) {
             return pane;

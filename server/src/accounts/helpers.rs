@@ -592,7 +592,7 @@ fn codex_usage(row: &Value) -> Result<(Vec<UsageWindow>, Option<u64>), String> {
         .and_then(Value::as_u64);
     Ok((windows, reset_credits))
 }
-fn codex_windows(out: &mut Vec<UsageWindow>, model: &str, value: &Value) {
+pub(crate) fn codex_windows(out: &mut Vec<UsageWindow>, model: &str, value: &Value) {
     for key in ["primary_window", "secondary_window"] {
         let v = &value[key];
         let Some(used) = v.get("used_percent").and_then(Value::as_f64) else {

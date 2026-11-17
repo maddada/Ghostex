@@ -501,6 +501,17 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         user_only: false,
     },
     Supplemental {
+        key: "cliProxyApiEnabled",
+        tab: EXTENSIONS,
+        group: None,
+        section: "official",
+        section_title: "Built-in",
+        title: "CLIProxyAPI",
+        subtitle: "Turn CLIProxyAPI on or off: hubs in Settings > Accounts, the usage of the accounts each hub pools, and On the hub when a Claude or Codex session starts. Ghostex only points at a hub you run yourself. Off by default; saved hubs are kept while it is off.",
+        options: &[],
+        user_only: true,
+    },
+    Supplemental {
         key: "connectorsHidden",
         tab: EXTENSIONS,
         group: None,

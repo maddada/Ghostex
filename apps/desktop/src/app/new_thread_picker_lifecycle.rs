@@ -215,8 +215,52 @@ pub(crate) fn new_thread_picker_accounts(state: &Value) -> Vec<NewThreadPickerAc
                 is_default,
                 id,
                 provider,
+                hub: false,
             })
         })
+        .chain(hub_picker_accounts(state))
+        .collect()
+}
+
+/// "On the hub" for Claude and Codex, one per CLIProxyAPI hub, while that extension is on
+/// (gxserver sends `cliproxyHubs` only then). The pick goes to gxserver as the account
+/// `cliproxy:<hub id>`, which starts the session in that hub's profile folder.
+///
+/// CDXC:AgentProviders 2026-11-18 SEE-ALSO: server/src/accounts/hub/launch.rs.
+fn hub_picker_accounts(state: &Value) -> Vec<NewThreadPickerAccount> {
+    let hubs = state["cliproxyHubs"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    hubs.iter()
+        .filter_map(|hub| {
+            let id = hub["id"].as_str()?;
+            let label = hub["label"].as_str().unwrap_or("hub");
+            Some(["claude", "codex"].map(|provider| {
+                let accounts = hub["accounts"]
+                    .as_array()
+                    .map(|accounts| {
+                        accounts
+                            .iter()
+                            .filter(|account| account["provider"].as_str() == Some(provider))
+                            .count()
+                    })
+                    .unwrap_or(0);
+                NewThreadPickerAccount {
+                    id: format!("cliproxy:{id}"),
+                    provider: provider.to_string(),
+                    name: format!("On the hub · {label}"),
+                    usage: (accounts > 0).then(|| match accounts {
+                        1 => "1 account".to_string(),
+                        n => format!("{n} accounts"),
+                    }),
+                    ready: hub["status"].as_str() != Some("unavailable"),
+                    is_default: false,
+                    hub: true,
+                }
+            }))
+        })
+        .flatten()
         .collect()
 }
 

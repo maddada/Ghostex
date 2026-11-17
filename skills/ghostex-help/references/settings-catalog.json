@@ -11998,6 +11998,18 @@
       "agentWritable": true
     },
     {
+      "key": "cliProxyApiEnabled",
+      "title": "CLIProxyAPI",
+      "subtitle": "Turn CLIProxyAPI on or off: hubs in Settings > Accounts, the usage of the accounts each hub pools, and On the hub when a Claude or Codex session starts. Ghostex only points at a hub you run yourself. Off by default; saved hubs are kept while it is off.",
+      "tab": "extensions",
+      "tabTitle": "Extensions",
+      "section": "official",
+      "sectionTitle": "Built-in",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": false
+    },
+    {
       "key": "connectorsHidden",
       "title": "Turn off Connectors",
       "subtitle": "Turn off Connectors everywhere: the Connectors page in Settings, the apps your agents get and the ghostex connectors commands. Experimental, off by default; your sign-ins and connected apps are kept.",

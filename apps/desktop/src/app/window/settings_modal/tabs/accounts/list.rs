@@ -49,7 +49,10 @@ impl AccountsTab {
                     "Add account",
                     Some(icon::PLUS),
                     None,
-                    if matches!(pane, Pane::AddPick | Pane::Add(_) | Pane::AddUsage(_)) {
+                    if matches!(
+                        pane,
+                        Pane::AddPick | Pane::Add(_) | Pane::AddUsage(_) | Pane::AddHub
+                    ) {
                         SizedButtonVariant::Primary
                     } else {
                         SizedButtonVariant::Outline
@@ -121,6 +124,11 @@ impl AccountsTab {
             for account in &accounts {
                 children.push(self.render_list_account(p, account, pane, hide, cx));
             }
+        }
+        let hubs = self.render_hub_list(p, data, pane, hide, cx);
+        if !hubs.is_empty() {
+            children.push(divider());
+            children.extend(hubs);
         }
         v_flex()
             .id("accounts-list")
@@ -287,7 +295,7 @@ impl AccountsTab {
 
 /// A list row with a plain-text title.
 #[allow(clippy::too_many_arguments)]
-fn list_item(
+pub(super) fn list_item(
     p: &SettingsPalette,
     id: SharedString,
     selected: bool,
@@ -309,7 +317,7 @@ fn list_item(
 
 /// A selectable list row: leading mark, title and an optional second line.
 #[allow(clippy::too_many_arguments)]
-fn list_item_with_title(
+pub(super) fn list_item_with_title(
     p: &SettingsPalette,
     id: SharedString,
     selected: bool,
