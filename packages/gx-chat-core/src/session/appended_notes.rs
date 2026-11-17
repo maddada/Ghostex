@@ -233,7 +233,8 @@ pub fn system_message(notes: &[&str]) -> Option<String> {
 /// User: "i dont like that we tell the agent to respond with ok in some cases", then picked "A +
 /// C" (Q3887): informational notes no longer wake an idle agent, the chat hides a bare "ok", and
 /// this line names "ok" only as the fallback.
-const NOTE_ONLY_REPLY: &str = "From Ghostex, not the user: act on what it asks; if nothing is left to do, reply \"ok\".";
+const NOTE_ONLY_REPLY: &str =
+    "From Ghostex, not the user: act on what it asks; if nothing is left to do, reply \"ok\".";
 
 /// Whether `message` is a user row that holds only Ghostex's notes: no words of the user's, no
 /// picture. No chat draws it.
@@ -272,6 +273,8 @@ pub fn without_note_turns(rows: Vec<crate::state::ChatRow>) -> Vec<crate::state:
 pub struct NoteTurns {
     /// The role of the last row read that was not a system row.
     previous: Option<ChatRole>,
+    /// That row's time, when it has one.
+    previous_at: Option<i64>,
     /// Whether that row is in a turn a note opened.
     in_note_turn: bool,
     /// Whether that row is in a turn a message from another agent (a thread's report) opened.
@@ -295,7 +298,11 @@ fn is_acknowledgement(message: &ChatMessage) -> bool {
             _ => return false,
         }
     }
-    let words = words.trim().trim_end_matches(['.', '!']).trim().to_lowercase();
+    let words = words
+        .trim()
+        .trim_end_matches(['.', '!'])
+        .trim()
+        .to_lowercase();
     ACKNOWLEDGEMENTS.contains(&words.as_str())
 }
 
@@ -303,6 +310,31 @@ fn is_acknowledgement(message: &ChatMessage) -> bool {
 /// as a report card (`transcript/turns.rs` `is_agent_conversation`).
 fn is_report(message: &ChatMessage) -> bool {
     message.role == ChatRole::User && crate::transcript::turns::is_agent_conversation(message)
+}
+
+/// Whether `row`, a note or a report that just landed, opened a turn of its own: it came right
+/// after the agent's reply, and was not typed before that reply was written.
+///
+/// CDXC:SessionChat 2026-11-18 WHY:
+/// GitHub #649: an OMP coordinator's reply to a one-click answer showed in the terminal but not
+/// in the chat, until the user's next message. The open questions note went right after the
+/// answer, while OMP was streaming; OMP takes a message typed mid-turn into the response it is
+/// streaming (live steering) and records it after that partial response, before the command and
+/// the reply that follow. Read as "a note right after the agent's reply", it hid the whole rest of
+/// the turn. OMP stamps such a row with the time it was typed and the response with the time it
+/// ended, so a note older than the row before it was typed while that row was still being written:
+/// the turn was running. Agents that stamp a row when they record it (Claude Code, Codex) always
+/// read as before.
+fn opens_own_turn(row: &ChatMessage, turns: &NoteTurns) -> bool {
+    !row.queued
+        && matches!(
+            turns.previous,
+            Some(ChatRole::Assistant | ChatRole::Reasoning)
+        )
+        && !matches!(
+            (row.timestamp, turns.previous_at),
+            (Some(typed), Some(reply)) if typed < reply
+        )
 }
 
 /// [`without_note_turns`] for `rows` coming right after the ones `turns` read.
@@ -333,6 +365,7 @@ pub fn without_note_turns_after(
     {
         if let Some(last) = rows.iter().rev().find(|row| row.role != ChatRole::System) {
             turns.previous = Some(last.role.clone());
+            turns.previous_at = last.timestamp;
         }
         return rows;
     }
@@ -349,14 +382,12 @@ pub fn without_note_turns_after(
             // Only right after the agent's own reply did its turn end before the note: after the
             // user's message or a tool's result (a read that leaves tool rows out shows the note
             // right after the message), or with nothing loaded before it, the note joined a
-            // running turn, and nothing is hidden.
+            // running turn, and nothing is hidden (`opens_own_turn`).
             if !row.queued {
-                turns.in_note_turn = matches!(
-                    turns.previous,
-                    Some(ChatRole::Assistant | ChatRole::Reasoning)
-                );
+                turns.in_note_turn = opens_own_turn(&row, turns);
             }
             turns.previous = Some(row.role.clone());
+            turns.previous_at = row.timestamp;
             continue;
         }
         if row.role == ChatRole::User {
@@ -365,12 +396,7 @@ pub fn without_note_turns_after(
             if is_report(&row) {
                 // Like a note: a report opens a turn of its own only after the agent's finished
                 // reply; landing in a running turn it changes nothing.
-                if !row.queued
-                    && matches!(
-                        turns.previous,
-                        Some(ChatRole::Assistant | ChatRole::Reasoning)
-                    )
-                {
+                if opens_own_turn(&row, turns) {
                     turns.in_report_turn = true;
                 }
             } else {
@@ -379,6 +405,7 @@ pub fn without_note_turns_after(
             }
         }
         turns.previous = Some(row.role.clone());
+        turns.previous_at = row.timestamp;
         if turns.in_note_turn || (turns.in_report_turn && is_acknowledgement(&row)) {
             continue;
         }
@@ -536,6 +563,55 @@ mod tests {
             without_appended_notes(&with_note(sent, PLAYBOOK_CHANGED_NOTE)),
             sent
         );
+    }
+
+    fn row(id: &str, role: &str, text: &str, at: i64) -> crate::state::ChatRow {
+        std::sync::Arc::new(
+            serde_json::from_value(serde_json::json!({
+                "id": id,
+                "role": role,
+                "blocks": [{ "type": "text", "text": text }],
+                "timestamp": at,
+                "source": "transcript",
+            }))
+            .unwrap(),
+        )
+    }
+
+    fn ids(rows: &[crate::state::ChatRow]) -> Vec<&str> {
+        rows.iter().map(|row| row.id.as_str()).collect()
+    }
+
+    /// GitHub #649: OMP took the note into the response it was streaming and wrote it after that
+    /// partial response, stamped with the time it was typed.
+    #[test]
+    fn keeps_the_turn_a_note_typed_mid_response_joined() {
+        let note =
+            system_message(&["Still open for the user: \u{201c}Send it?\u{201d} (Q36)."]).unwrap();
+        let rows = vec![
+            row("answer", "user", "{\"Q36\": \"Send\"}", 1_000),
+            row("partial", "assistant", "Sending the report.", 5_000),
+            row("note", "user", &note, 2_000),
+            row("reply", "assistant", "Sent.", 9_000),
+            row("next", "user", "thanks", 20_000),
+        ];
+        assert_eq!(
+            ids(&without_note_turns(rows)),
+            ["answer", "partial", "reply", "next"]
+        );
+    }
+
+    #[test]
+    fn hides_the_turn_a_note_opened_after_the_reply() {
+        let note = system_message(&["Your playbook changed."]).unwrap();
+        let rows = vec![
+            row("ask", "user", "hi", 1_000),
+            row("reply", "assistant", "Hello.", 2_000),
+            row("note", "user", &note, 3_000),
+            row("ok", "assistant", "ok", 4_000),
+            row("next", "user", "thanks", 20_000),
+        ];
+        assert_eq!(ids(&without_note_turns(rows)), ["ask", "reply", "next"]);
     }
 
     #[test]
