@@ -2891,7 +2891,8 @@ chats before the prompt cache expires (on by default), Only above (the smallest 
 100K to 500K, 200K by default; shown while the switch is on) and Use a 1-hour prompt cache (off by
 default). Idle compaction runs only on a 1-hour cache, which a Claude subscription gets; an API key,
 Bedrock, Vertex or Foundry gets 5 minutes unless Use a 1-hour prompt cache is on, and 1-hour cache
-writes cost more. They apply to Claude sessions started or resumed afterwards. On the phone they are
+writes cost more. Ghostex's switch wins over Claude Code's own `idleCompaction` in your Claude
+settings files. They apply to Claude sessions started or resumed afterwards. On the phone they are
 in Settings › Chat › Claude Code, for the computer picked there (a computer needs this Ghostex
 version or later). The Session details
 Cache card shows the cache length, when the chat will be compacted if it stays idle, or that a

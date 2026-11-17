@@ -1,8 +1,10 @@
 //! Claude Code's idle compaction and prompt cache length, set from Settings > Agents > Claude Code
 //! and handed to each Claude launch and resume through its one `--settings` JSON.
 //!
+//! CDXC:AgentProviders 2026-11-17 DECISION:
+//! User: "I want to enable idle compaction for sure!", after a `"idleCompaction": false` in their own ~/.claude/settings.json kept idle compaction off while Ghostex's switch read on. So the switch and its size always reach Claude, also when they equal Claude's defaults: flag settings outrank the user, project and local settings files, so a file can no longer turn it off behind the switch. Supersedes the 2026-11-14 rule that a value went only when it differed from Claude's default, which let the account's settings.json decide.
 //! CDXC:AgentProviders 2026-11-14 DECISION:
-//! User: "we need to work on automatically compacting after the cache expires. thing is claude actually offers this". Claude Code 2.1.299 and later compact a conversation of 200K tokens or more that sits idle for about 54 minutes, before its one-hour prompt cache expires (`idleCompaction`, on by default; `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` for the size, 100K at the least), and only on a one-hour cache, which a subscription gets and an API key, Bedrock, Vertex or Foundry account does not unless `promptCacheTtl` is "1h". So Ghostex sets Claude's own feature rather than sending `/compact` itself: Settings > Agents > Claude Code has "Compact idle chats before the prompt cache expires" (on), "Only above" 100K to 500K (200K, Claude's default; Q3103: "i want settings to not show if the setting that is enabling them is disabled", so it hides while the switch is off) and "Use a 1-hour prompt cache" (off; Q3102). A value is passed only when it differs from Claude's default, so with the defaults the account's own settings.json decides.
+//! User: "we need to work on automatically compacting after the cache expires. thing is claude actually offers this". Claude Code 2.1.299 and later compact a conversation of 200K tokens or more that sits idle for about 54 minutes, before its one-hour prompt cache expires (`idleCompaction`, on by default; `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` for the size, 100K at the least), and only on a one-hour cache, which a subscription gets and an API key, Bedrock, Vertex or Foundry account does not unless `promptCacheTtl` is "1h". So Ghostex sets Claude's own feature rather than sending `/compact` itself: Settings > Agents > Claude Code has "Compact idle chats before the prompt cache expires" (on), "Only above" 100K to 500K (200K, Claude's default; Q3103: "i want settings to not show if the setting that is enabling them is disabled", so it hides while the switch is off) and "Use a 1-hour prompt cache" (off; Q3102).
 //! WHY: the size goes as `env` in the `--settings` JSON, not into the session's environment: Claude copies that `env` into its process environment at start, reads `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` from it each time idle compaction arms, and lists it among the variables settings may set (checked on Claude Code 2.1.325 with `claude -p --settings '{"env":{…}}'`, which printed the value from a shell command). Claude keeps only the last `--settings`, so these keys join the one the Connectors, Bypass and home-folder steps write (`with_claude_settings`).
 //! SEE-ALSO: packages/settings-catalog/src/data/defaults.rs (the three keys), apps/desktop/src/app/window/settings_modal/tabs/agents/claude_context.rs (the rows), server/src/session_chat_options/selection_sources.rs (`idleCompactAt` for the context panel's Cache card), server/src/agents/launch_plan.rs and resume_plan.rs (where it is applied).
 
@@ -71,14 +73,11 @@ impl ClaudeCompaction {
         )
     }
 
-    /// Writes into Claude's settings JSON only what differs from Claude's own defaults. False when
-    /// there is nothing to write.
-    fn write_into(&self, settings: &mut Map<String, Value>) -> bool {
-        let mut wrote = false;
-        if !self.idle_compaction {
-            settings.insert("idleCompaction".to_string(), json!(false));
-            wrote = true;
-        } else if self.min_tokens != CLAUDE_DEFAULT_MIN_TOKENS {
+    /// Writes the switch, its size while it is on, and the one-hour cache when asked for into
+    /// Claude's settings JSON, whatever the account's own settings files say.
+    fn write_into(&self, settings: &mut Map<String, Value>) {
+        settings.insert("idleCompaction".to_string(), json!(self.idle_compaction));
+        if self.idle_compaction {
             if let Some(env) = settings
                 .entry("env")
                 .or_insert_with(|| json!({}))
@@ -88,19 +87,11 @@ impl ClaudeCompaction {
                     MIN_TOKENS_VARIABLE.to_string(),
                     json!(self.min_tokens.to_string()),
                 );
-                wrote = true;
             }
         }
         if self.one_hour_cache {
             settings.insert("promptCacheTtl".to_string(), json!("1h"));
-            wrote = true;
         }
-        wrote
-    }
-
-    /// Whether any value differs from Claude's defaults, so a launch needs the flag at all.
-    fn changes_anything(&self) -> bool {
-        self.write_into(&mut Map::new())
     }
 }
 
@@ -118,8 +109,7 @@ pub(crate) fn read_endpoint_value() -> Value {
 }
 
 /// `command` with this computer's idle compaction and cache length in its `--settings` JSON, for a
-/// Claude launch or resume; any other agent, or settings that match Claude's defaults, leave it as
-/// it is.
+/// Claude launch or resume; any other agent's command is left as it is.
 pub(crate) fn with_claude_compaction_settings(family: Option<&str>, command: &str) -> String {
     if cfg!(test) {
         return command.to_string();
@@ -128,11 +118,12 @@ pub(crate) fn with_claude_compaction_settings(family: Option<&str>, command: &st
 }
 
 fn with_compaction(family: Option<&str>, command: &str, compaction: ClaudeCompaction) -> String {
-    if family != Some("claude") || command.trim().is_empty() || !compaction.changes_anything() {
+    if family != Some("claude") || command.trim().is_empty() {
         return command.to_string();
     }
     super::home_secret_folders::with_claude_settings(command, |settings| {
-        compaction.write_into(settings).then_some(())
+        compaction.write_into(settings);
+        Some(())
     })
     .unwrap_or_else(|| {
         eprintln!(
