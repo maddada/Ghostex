@@ -39,6 +39,10 @@ pub const GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     CDXC:Secrets 2026-11-02 WHY:
     `$ghostex-secrets` is the one bundled skill agents may pick up on their own: an agent that needs a password or token must find `ghostex secret request` at that moment, whichever agent family it is, or it asks for the secret in chat. Agents that never get the skill's description in context (it is not installed, or the agent reads no skills) fall back to asking, so the CLI help names the verb too.
     */
+    /*
+    CDXC:AgentSkills 2026-11-17 DECISION (supersedes the WHY above for loading on its own):
+    User (Q1 "C"): no Ghostex skill is picked up by a model on its own, in Ghostex or not, so `$ghostex-secrets` and `$ghostex-agent-guide` ship `disable-model-invocation: true` and `allow_implicit_invocation: false` like the rest. Sessions Ghostex starts learn `ghostex secret request` from the launch note (agents/ghostex_note.rs `SECRETS_NOTE`) and threads from their brief; the guide is that same note. Agents Ghostex can't hand a note (OpenCode, Cursor, Amp…) find them only when named.
+    */
     "ghostex-secrets",
     /*
     CDXC:AgentGuide 2026-11-02 WHY:

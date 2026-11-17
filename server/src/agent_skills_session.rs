@@ -1,25 +1,30 @@
 //! Ghostex's skills in a Claude that Ghostex did not start answer only to their slash command.
 //!
-//! Every Claude on the computer reads `~/.claude/skills`, where Ghostex links its skills. Most of
-//! them are manual-only in their own frontmatter (`disable-model-invocation: true`). The rest (the
-//! coordinator and GBot playbooks, `ghostex-secrets`, `ghostex-agent-guide`, an extension's skill
-//! such as `thread-brief`) are meant to be picked up by the model inside Ghostex. For those, gxserver
+//! Every Claude on the computer reads `~/.claude/skills`, where Ghostex links its skills. The
+//! bundled ones are all manual-only in their own frontmatter (`disable-model-invocation: true`);
+//! a message that names one (`/ghostex-coordinator` in a coordinator's first message) still loads
+//! it. An extension's skill (`thread-brief`) may come without that flag. For such a skill gxserver
 //! writes `"skillOverrides": {"<name>": "user-invocable-only"}` into each Claude user settings file
 //! (hidden from the model, `/name` still works), and every Claude command Ghostex starts or resumes
-//! carries `"<name>": "on"` in its `--settings` JSON, which outranks user settings.
+//! carries `"<name>": "on"` in its `--settings` JSON, which outranks user settings. An entry Ghostex
+//! wrote for a skill that has since gained the flag itself is removed: the flag does the same.
 //!
 //! CDXC:AgentSkills 2026-11-17 DECISION:
 //! User: sessions launched outside Ghostex "must not get or use the Ghostex skills on their own";
 //! they are used only when the user asks with the slash command (`/ghostex-coordinator`,
 //! `/ghostex-help`), or when Ghostex launches the session. A plain `claude` on the user's Linux
 //! computer loaded the coordinator playbook by itself and ran `ghostex coordinator item ask`.
+//! Then (Q1 "C") the four bundled skills that still loaded on their own (coordinator, GBots,
+//! secrets, agent guide) got the flag too, so this file now serves extension skills.
 //! WHY not a separate folder per session (`--add-dir`): tested on Claude Code 2.1.326, a skill in
 //! an added folder whose name is also in `~/.claude/skills` is offered to the model as
 //! `<folder>:<name>`, "scoped to <folder>/", and `skillOverrides` "off" hides both copies, so a
 //! manual-only global copy and a normal per-session copy can't live side by side. A skill's own
-//! `disable-model-invocation` can't be turned back on by settings ("locked_by: author"), so the
-//! shipped files stay as they are and the switch lives in settings. A key the user already set is
-//! left alone, in their file and on the launch.
+//! `disable-model-invocation` can't be turned back on by settings ("locked_by: author"). A
+//! manual-only skill named in the user's message as `/name` is still loaded by the Skill tool
+//! (tested with haiku: "Read and adhere to this skill: /gx-probe" loaded it; the same request without
+//! `/gx-probe` was refused). A key the user set themselves is left alone, in their file and on the
+//! launch.
 //! SEE-ALSO: server/src/agents/launch_plan.rs and resume_plan.rs (the `--settings` merge, next to
 //! the idle compaction one), server/src/agents/home_secret_folders.rs (`with_claude_settings`).
 
@@ -68,19 +73,32 @@ fn frontmatter_disables_model_invocation(markdown: &str) -> bool {
         .any(|value| value.trim().trim_matches(['"', '\'']) == "true")
 }
 
+/// The Ghostex skills installed in `~/.agents/skills`, by name, split into the ones a model may
+/// pick up on its own and the ones whose frontmatter makes them manual-only.
+fn ghostex_skills_by_invocation(home: &Path) -> (Vec<String>, Vec<String>) {
+    let canonical_root = home.join(CANONICAL_AGENT_SKILLS_DIR);
+    let mut model_invocable = Vec::new();
+    let mut manual_only = Vec::new();
+    for name in ghostex_agent_sync::fsx::child_names(&canonical_root) {
+        if name.starts_with('.') || !is_ghostex_skill(&canonical_root, &name) {
+            continue;
+        }
+        match fs::read_to_string(canonical_root.join(&name).join("SKILL.md")) {
+            Ok(markdown) if frontmatter_disables_model_invocation(&markdown) => {
+                manual_only.push(name)
+            }
+            Ok(_) => model_invocable.push(name),
+            Err(_) => {}
+        }
+    }
+    model_invocable.sort();
+    manual_only.sort();
+    (model_invocable, manual_only)
+}
+
 /// The Ghostex skills installed in `~/.agents/skills` that a model may pick up on its own, by name.
 pub(crate) fn model_invocable_ghostex_skills(home: &Path) -> Vec<String> {
-    let canonical_root = home.join(CANONICAL_AGENT_SKILLS_DIR);
-    let mut names: Vec<String> = ghostex_agent_sync::fsx::child_names(&canonical_root)
-        .into_iter()
-        .filter(|name| !name.starts_with('.') && is_ghostex_skill(&canonical_root, name))
-        .filter(|name| {
-            fs::read_to_string(canonical_root.join(name).join("SKILL.md"))
-                .is_ok_and(|markdown| !frontmatter_disables_model_invocation(&markdown))
-        })
-        .collect();
-    names.sort();
-    names
+    ghostex_skills_by_invocation(home).0
 }
 
 /// Every Claude user settings file a plain `claude` may read: the default config folder's
@@ -108,11 +126,17 @@ pub(crate) fn claude_user_settings_files(home: &Path) -> Vec<PathBuf> {
 }
 
 /// Adds `"<name>": "user-invocable-only"` under `skillOverrides` for each of `names` the file
-/// doesn't name yet. Returns whether the file changed. A file that isn't a JSON object is an error
-/// and is never rewritten.
-fn hide_from_model_in(file: &Path, names: &[String]) -> std::io::Result<bool> {
+/// doesn't name yet, and removes that same value for each of `drop` (skills manual-only by their
+/// own flag now). Returns whether the file changed. A file that isn't a JSON object is an error
+/// and is never rewritten; a file that doesn't exist is created only to add an entry.
+fn hide_from_model_in(file: &Path, names: &[String], drop: &[String]) -> std::io::Result<bool> {
     use crate::agent_folder_trust::files::{read_json_object, write_json_object};
-    let mut document = read_json_object(file)?.unwrap_or_default();
+    let existing = read_json_object(file)?;
+    if existing.is_none() && names.is_empty() {
+        return Ok(false);
+    }
+    let mut document = existing.unwrap_or_default();
+    let had_overrides = document.object.contains_key(SKILL_OVERRIDES_KEY);
     let overrides = document
         .object
         .entry(SKILL_OVERRIDES_KEY.to_string())
@@ -127,23 +151,30 @@ fn hide_from_model_in(file: &Path, names: &[String]) -> std::io::Result<bool> {
             changed = true;
         }
     }
+    for name in drop {
+        if overrides.get(name).and_then(Value::as_str) == Some(OUTSIDE_GHOSTEX) {
+            overrides.remove(name);
+            changed = true;
+        }
+    }
+    if overrides.is_empty() && (changed || !had_overrides) {
+        document.object.remove(SKILL_OVERRIDES_KEY);
+    }
     if changed {
         write_json_object(file, &document)?;
     }
     Ok(changed)
 }
 
-/// Makes every Claude user settings file hide Ghostex's model-invocable skills from the model.
-/// Returns the files changed and the ones that could not be.
+/// Makes every Claude user settings file hide Ghostex's model-invocable skills from the model, and
+/// drops the entries it wrote for skills that are manual-only by their own flag now. Returns the
+/// files changed and the ones that could not be.
 pub(crate) fn keep_ghostex_skills_manual_outside_ghostex(home: &Path) -> (Vec<String>, Vec<Value>) {
-    let names = model_invocable_ghostex_skills(home);
+    let (names, manual_only) = ghostex_skills_by_invocation(home);
     let mut changed = Vec::new();
     let mut failed = Vec::new();
-    if names.is_empty() {
-        return (changed, failed);
-    }
     for file in claude_user_settings_files(home) {
-        match hide_from_model_in(&file, &names) {
+        match hide_from_model_in(&file, &names, &manual_only) {
             Ok(true) => changed.push(path_string(&file)),
             Ok(false) => {}
             Err(error) => failed.push(json!({
@@ -302,6 +333,33 @@ mod tests {
         assert!(keep_ghostex_skills_manual_outside_ghostex(home.path())
             .0
             .is_empty());
+    }
+
+    #[test]
+    fn an_entry_ghostex_wrote_goes_once_the_skill_carries_the_flag_itself() {
+        let home = home_with_skills();
+        let settings = home.path().join(".claude/settings.json");
+        fs::write(
+            &settings,
+            r#"{"skillOverrides":{"ghostex-help":"user-invocable-only","ghostex-cli":"off"}}"#,
+        )
+        .unwrap();
+        write_skill(
+            &home.path().join(".agents/skills/ghostex-cli"),
+            "ghostex-cli",
+            true,
+        );
+        keep_ghostex_skills_manual_outside_ghostex(home.path());
+        let written: Value = serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
+        // ghostex-help's flag does the same now; the user's own "off" stays.
+        assert_eq!(
+            written["skillOverrides"],
+            json!({
+                "ghostex-cli": "off",
+                "ghostex-coordinator": "user-invocable-only",
+                "thread-brief": "user-invocable-only"
+            })
+        );
     }
 
     #[test]

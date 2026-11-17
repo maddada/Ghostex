@@ -7,6 +7,11 @@ description: >-
   with `ghostex gbots brief`, where your files and memory live, who leads you,
   and how to report. Never load it in an ordinary agent session, a thread or
   Chief of Staff's chat.
+# CDXC:AgentSkills 2026-11-17 DECISION:
+# User (Q1 "C"): no Ghostex skill is picked up by a model on its own, in any session. A message that
+# names the skill (`/name` in Claude, `$name` in Codex) still loads it: Ghostex names it where a
+# session needs it, and its launch note and `ghostex agent-guide` carry the rest.
+disable-model-invocation: true
 ---
 
 # You are a GBot

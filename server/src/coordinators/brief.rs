@@ -168,6 +168,10 @@ pub fn thread_brief(coordinator: &BriefContext<'_>, task: &str) -> String {
 - The user talks only to the coordinator. Never ask the user directly or publish a page for them (`ghostex show`): put questions, mockups and the path of any page file in your final report, and the coordinator shows them to the user and sends you the answers. Link what each question is about (a PR, issue, file, page or commit: a Markdown link with the full URL, or a file path link) so the user can check it.\n\
 - Do not merge, push, or delete anything unless this brief asks for it.",
     );
+    // CDXC:AgentSkills 2026-11-17 WHY: `ghostex-secrets` no longer loads on its own (agents/ghostex_note.rs `SECRETS_NOTE`) and a thread takes no launch note, so the brief names the verb.
+    brief.push_str(
+        "\n- If a step needs a secret only the user has (a password, an API key or token), run `ghostex secret request --label <what> --reason <why>`: the user types it on a private card. Never ask for it in your report.",
+    );
     brief.push_str(
         "\n- Never end your turn mid-task to wait for something you can wait on in the background (a build, a test run, a job). If you do end your turn while a background job still runs, say so plainly in your last line, so the coordinator does not take it as finished.\n- Your final report is a handover: start each relevant section of it with one of the markers, only for sections that have something. Status sections first: ✅ Done, 🚀 Shipped, 📣 Comms, 🛫 Kicked off, 🔄 In progress, ⏸️ Parked, 📦 Held for release, 🧪 Untested. Actionable sections last: ⚠️ Read this, 🛑 Blocked, 💡 Suggestions, then ❓ Needs you at the very end. Start every bullet and sub-bullet with a capital letter, even when it continues a lead-in sentence.",
     );

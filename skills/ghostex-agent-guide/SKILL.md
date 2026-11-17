@@ -9,6 +9,11 @@ description: >-
   user asks for one of these, or about Ghostex, and when a step only the user
   can do (a sudo command, a sign-in, a tap on their phone) blocks your work;
   otherwise don't bring it up.
+# CDXC:AgentSkills 2026-11-17 DECISION:
+# User (Q1 "C"): no Ghostex skill is picked up by a model on its own, in any session. A message that
+# names the skill (`/name` in Claude, `$name` in Codex) still loads it: Ghostex names it where a
+# session needs it, and its launch note and `ghostex agent-guide` carry the rest.
+disable-model-invocation: true
 ---
 
 # ghostex-agent-guide

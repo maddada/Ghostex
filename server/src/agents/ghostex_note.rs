@@ -23,6 +23,15 @@ pub const GHOSTEX_NOTE: &str = "You are running inside Ghostex. Ghostex can show
 /// and the same in `ghostex agent-guide`; it is not behind a setting.
 pub const NEEDS_YOU_NOTE: &str = "When a step can only be done by the user (a sudo command, a tap on their phone, a sign-in, a check by eye), add it with `ghostex needs-you add \"<what to do>\" [--command \"…\"]` and also list it under Needs you in your reply. Their answer arrives as \"Q<n>: Done\". If you see it done yourself, run `ghostex needs-you done Q<n>`.";
 
+/// The paragraph after the Needs you one that has agents ask for a secret through Ghostex.
+///
+/// CDXC:AgentSkills 2026-11-17 DECISION:
+/// User (Q1 "C"): `ghostex-secrets` no longer loads on its own (`disable-model-invocation: true`,
+/// `allow_implicit_invocation: false`), so no session outside Ghostex reaches for it. A session
+/// Ghostex starts learns the verb here instead; threads, which take no note, from their brief
+/// (coordinators/brief.rs `thread_brief`).
+pub const SECRETS_NOTE: &str = "When a task needs a secret only the user has (a password, a sudo password, an API key or token), run `ghostex secret request --label <what> --reason <why>`: the user types it on a private card and you get a private file holding it. Never ask for it in chat.";
+
 const NOTE_SETTING_KEY: &str = "agentGhostexNote";
 pub(crate) const PREVIEW_BROWSER_SETTING_KEY: &str = "agentPreviewBrowser";
 
@@ -82,8 +91,10 @@ pub(crate) fn agent_preview_browser(paths: &GxserverPaths) -> PreviewBrowser {
 /// The note with the browser sentence the user's choice adds, then the Needs you paragraph.
 pub(crate) fn ghostex_note_text(browser: PreviewBrowser) -> String {
     match browser.note_sentence() {
-        Some(sentence) => format!("{GHOSTEX_NOTE} {sentence}\n\n{NEEDS_YOU_NOTE}"),
-        None => format!("{GHOSTEX_NOTE}\n\n{NEEDS_YOU_NOTE}"),
+        Some(sentence) => {
+            format!("{GHOSTEX_NOTE} {sentence}\n\n{NEEDS_YOU_NOTE}\n\n{SECRETS_NOTE}")
+        }
+        None => format!("{GHOSTEX_NOTE}\n\n{NEEDS_YOU_NOTE}\n\n{SECRETS_NOTE}"),
     }
 }
 
@@ -159,7 +170,7 @@ mod tests {
         );
         assert_eq!(
             ghostex_note_text(PreviewBrowser::Ask),
-            format!("{GHOSTEX_NOTE}\n\n{NEEDS_YOU_NOTE}")
+            format!("{GHOSTEX_NOTE}\n\n{NEEDS_YOU_NOTE}\n\n{SECRETS_NOTE}")
         );
         assert!(
             ghostex_note_text(PreviewBrowser::from_setting(Some("internal-browser")))
