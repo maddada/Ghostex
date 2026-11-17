@@ -904,8 +904,8 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     },
     HotkeyDefinition {
         id: "popOutPane",
-        title: "Pop Out Pane",
-        description: "Pop out or restore the focused pane.",
+        title: "Open in a Popup",
+        description: "Open the focused pane's session in a popup, or bring it back.",
         default_key: "ctrl+shift+o",
         windows_linux_default_key: Some("cmd+alt+o"),
         alternate_default_keys: &[],

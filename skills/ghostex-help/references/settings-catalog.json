@@ -14643,8 +14643,8 @@
     },
     {
       "id": "popOutPane",
-      "title": "Pop Out Pane",
-      "description": "Pop out or restore the focused pane.",
+      "title": "Open in a Popup",
+      "description": "Open the focused pane's session in a popup, or bring it back.",
       "defaultKey": "ctrl+shift+o",
       "windowsLinuxDefaultKey": "cmd+alt+o",
       "terminalDefaultKey": "ctrl+shift+o",

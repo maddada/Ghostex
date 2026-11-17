@@ -125,7 +125,7 @@ impl SessionPopupRoot {
         app.update(cx, |app, cx| app.close_session_popup(&row_id, cx));
     }
 
-    /// The Ghostex hotkeys pressed in this window. Pop Out Pane brings the session back; the rest
+    /// The Ghostex hotkeys pressed in this window. Open in a Popup (`popOutPane`) brings the session back; the rest
     /// run in the main window, as the floating sidebar's do (floating_reveal/window.rs).
     fn run_hotkey(
         &mut self,
@@ -551,9 +551,7 @@ impl GhostexGpuiApp {
                             .line_height(px(21.0))
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(ink.opacity(0.9))
-                            .child(SharedString::from(format!(
-                                "{title} is open in its own window"
-                            ))),
+                            .child(SharedString::from(format!("{title} is open in a popup"))),
                     )
                     .child(
                         div()
@@ -561,7 +559,7 @@ impl GhostexGpuiApp {
                             .text_size(px(12.5))
                             .line_height(px(18.0))
                             .text_color(ink.opacity(0.55))
-                            .child("Closing that window brings it back here."),
+                            .child("Closing it there brings it back here."),
                     )
                     .child(
                         div()
@@ -595,7 +593,7 @@ impl GhostexGpuiApp {
 }
 
 impl GhostexGpuiApp {
-    /// The work area header's Open in New Window button, for the focused pane's session.
+    /// The work area header's Open in a Popup button, for the focused pane's session.
     pub(crate) fn render_workarea_header_session_popup_button(
         &self,
         cx: &mut Context<Self>,
@@ -605,13 +603,13 @@ impl GhostexGpuiApp {
         if session.agent_icon == Some("browser") {
             return None;
         }
-        let tooltip = titlebar_tooltip_label("Open in New Window", "popOutPane");
+        let tooltip = titlebar_tooltip_label("Open in a Popup", "popOutPane");
         let color = titlebar_icon_color();
         Some(
             div()
                 .id("ghostex-gpui-workarea-header-session-popup")
                 .role(gpui::Role::Button)
-                .aria_label("Open in New Window")
+                .aria_label("Open in a Popup")
                 .flex()
                 .flex_shrink_0()
                 .items_center()

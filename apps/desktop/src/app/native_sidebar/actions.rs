@@ -147,7 +147,7 @@ impl GhostexGpuiApp {
             self.gx_store_drop_sidebar_command_before_ready(&command);
             return;
         }
-        // The session menu's Open in New Window, a desktop-only row (app/session_popup/).
+        // The session menu's Open in a Popup, a desktop-only row (app/session_popup/).
         if command["type"] == "sessionAction"
             && command["action"] == crate::app::session_popup::OPEN_IN_NEW_WINDOW_ACTION
         {

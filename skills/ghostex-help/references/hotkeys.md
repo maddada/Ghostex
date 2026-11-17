@@ -85,7 +85,7 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Sleep Focused Session | `cmd+shift+a` |  | `cmd+shift+a` | unassigned | Sleep the focused terminal session. | `sleepFocusedSession` |
 | Wake Focused Session | unassigned |  | unassigned |  | Wake the focused sleeping terminal session. | `wakeFocusedSession` |
 | Close Focused Session | `cmd+shift+backspace` |  | `cmd+shift+backspace` |  | Close the focused pane or session. | `closeFocusedSession` |
-| Pop Out Pane | `ctrl+shift+o` | `cmd+alt+o` | `ctrl+shift+o` | `cmd+alt+o` | Pop out or restore the focused pane. | `popOutPane` |
+| Open in a Popup | `ctrl+shift+o` | `cmd+alt+o` | `ctrl+shift+o` | `cmd+alt+o` | Open the focused pane's session in a popup, or bring it back. | `popOutPane` |
 | Previous Group | unassigned |  | unassigned |  | Focus the previous group. | `focusPreviousGroup` |
 | Next Group | unassigned |  | unassigned |  | Focus the next group. | `focusNextGroup` |
 | Back | `cmd+[` | `cmd+alt+shift+[` | `cmd+[` | `cmd+alt+shift+[` | Go back to the previously active session or project. | `navigateHistoryBack` |

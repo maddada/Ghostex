@@ -1,5 +1,5 @@
-//! A session in a window of its own. Open in New Window (the session's right-click menu, the work
-//! area header's button, the split-pane grip's menu, the Pop Out Pane hotkey, or Option-click on
+//! A session in a window of its own. Open in a Popup (the session's right-click menu, the work
+//! area header's button, the split-pane grip's menu, the Open in a Popup hotkey, or Option-click on
 //! the sidebar row) moves a chat or terminal session out of its pane into a plain top-level window
 //! drawn on the same app state; the pane shows a card with Show Window and Bring Back, and closing
 //! the window puts the session back.
@@ -16,6 +16,9 @@
 //! session keeps its own size, place, Pin and small or expanded state; with nothing saved it opens
 //! centred on the Ghostex window. The pop-ups that were open come back at the next launch. Chats
 //! and terminals only; browser tabs not yet.
+//!
+//! CDXC:SessionPopup 2026-11-17 DECISION:
+//! User: every place that offers a session's own window says "Open in a Popup" (title case where the menu uses title case, "Open in a popup" in sentence case): the session menu, the work area header button's tooltip and label, the split-pane grip's menu, and the hotkey's name in Settings > Keyboard and Quick Access. The hotkey id `popOutPane` and its setting keys stay. Supersedes the name Open in New Window above; the Project board's own Open in New Window is not a session's and keeps its name.
 //!
 //! CDXC:SessionPopup 2026-11-16 WHY:
 //! It follows the Kanban board's pop-out (native_kanban/window.rs): the session's chat view and
@@ -84,7 +87,7 @@ impl SessionPopups {
     }
 }
 
-/// The row's right-click menu with Open in New Window added under Move to Group (or above
+/// The row's right-click menu with Open in a Popup added under Move to Group (or above
 /// Advanced). Added here, where the desktop answers the menu, so the menu the phone builds never
 /// has it.
 pub(crate) fn with_open_in_new_window_row(
@@ -95,7 +98,7 @@ pub(crate) fn with_open_in_new_window_row(
         return items;
     }
     let row = serde_json::json!({
-        "label": "Open in New Window",
+        "label": "Open in a Popup",
         "icon": "external-link",
         "checked": false,
         "disabled": false,
@@ -186,7 +189,7 @@ impl GhostexGpuiApp {
             .and_then(|leaf| leaf.tab_group.active_session_id())
     }
 
-    /// The Pop Out Pane hotkey: the focused pane's session goes to its own window, or comes back
+    /// The Open in a Popup hotkey (`popOutPane`): the focused pane's session goes to its own window, or comes back
     /// when it is already in one.
     pub(crate) fn toggle_session_popup_for_focused_pane(&mut self, cx: &mut Context<Self>) {
         let Some(session_id) = self.session_popup_focused_target() else {
@@ -267,7 +270,7 @@ impl GhostexGpuiApp {
             self.dispatch_gpui_app_modal_toast(
                 "info",
                 "Browser tabs stay in the main window",
-                "Only chats and terminals can open in a window of their own for now.",
+                "Only chats and terminals can open in a popup for now.",
                 cx,
             );
             return;

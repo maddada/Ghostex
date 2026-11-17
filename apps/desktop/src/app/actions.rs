@@ -143,7 +143,7 @@ pub(crate) struct CloseAgentsPane {
     pub(crate) pane_id: u64,
 }
 
-/// The split-pane grip's Open in New Window: the pane's session in a window of its own
+/// The split-pane grip's Open in a Popup: the pane's session in a window of its own
 /// (app/session_popup/).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]

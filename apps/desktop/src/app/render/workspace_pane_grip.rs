@@ -163,7 +163,7 @@ impl GhostexGpuiApp {
             )
             // The pane's session in a window of its own (app/session_popup/).
             .menu(
-                "Open in New Window",
+                "Open in a Popup",
                 Box::new(OpenAgentsPaneInNewWindow { pane_id: pane_id.0 }),
             );
         match grip {
