@@ -230,6 +230,10 @@ impl GhostexGpuiApp {
             );
             return;
         };
+        if window.modifiers().alt {
+            self.native_docs_open_link_in_default_app(&path, cx);
+            return;
+        }
         let before = self.native_docs.documents.len();
         let shown = self.native_docs.active.as_deref().and_then(|active| {
             self.native_docs
@@ -247,6 +251,35 @@ impl GhostexGpuiApp {
             self.native_docs.documents.insert(shown + 1, opened);
             self.native_docs_persist_open_files(cx);
             self.native_docs_notify(cx);
+        }
+    }
+
+    /// Opens a linked file (or folder) in this computer's default app for it, as Option-click
+    /// (Alt-click off macOS) on a file link does.
+    ///
+    /// CDXC:Docs 2026-11-18 DECISION:
+    /// User picked "Add Option-click (Alt-click) on a file link to open it in the default app": in Files, Option-click (Alt-click on Windows and Linux) on a link to a file, inside or outside the project, opens it in the system's default app instead of a Files tab; a plain or Cmd-click still opens it in Files (Q3888, Q3889).
+    fn native_docs_open_link_in_default_app(&mut self, path: &Path, cx: &mut Context<Self>) {
+        let remote = self.native_docs.project.as_ref().is_some_and(|project| {
+            crate::app::helpers::gpui_remote_project_reference_from_project_id(&project.project_id)
+                .is_some()
+        });
+        let error = if remote {
+            Some("This file is on another computer, so it can't open in this computer's apps. A plain click opens it in Files.".to_string())
+        } else if !path.exists() {
+            Some(format!("Nothing exists at {}.", path.display()))
+        } else {
+            crate::app::helpers::gpui_spawn_os_open(path.as_os_str())
+                .err()
+                .map(|_| format!("Your computer couldn't open {}.", path.display()))
+        };
+        if let Some(error) = error {
+            self.dispatch_gpui_workspace_action_toast(
+                "error",
+                "Couldn't open in the default app",
+                &error,
+                cx,
+            );
         }
     }
 

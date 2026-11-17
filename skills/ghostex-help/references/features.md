@@ -550,7 +550,9 @@ view from the strip.
   in your mail app, and a link to a file (a path, a path relative to the open
   file, or a `file://` link, with or without a `#heading` or `:line`) opens that
   file in a new Files tab beside the current one, or shows its tab if it is
-  already open; a path that is not there says so. A link that opens another app
+  already open, also when the file is outside the project; a path that is not
+  there says so. Option-click (Alt-click on Windows and Linux) a link to a file
+  to open it in your computer's default app for that file instead. A link that opens another app
   (such as `vscode://` or `ghostex://`) shows where it goes and asks "Open a
   link in another app?" first, with Cancel as the default.
   Hover a table to open it in a window or copy it as Markdown or CSV; a table
