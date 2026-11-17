@@ -134,6 +134,8 @@ export const SHARED_BASE_VALUES = Object.freeze({
  */
 const DESKTOP_APP_PATHSPECS = Object.freeze([
   { pathspec: 'apps/desktop/**' },
+  // Compiled into the app by go_back/mod.rs (include_str!): the oldest version Go back offers.
+  { pathspec: 'release-go-back.json' },
   { pathspec: ':(exclude)apps/desktop/build' },
   { pathspec: ':(exclude)apps/desktop/target' },
   { pathspec: 'packages/paths/**' },
