@@ -50,14 +50,37 @@ after-release commit (see "Keeping the list").
 3. Record the baseline for crash detection:
    `ls ~/.local/state/ghostex/logs/crashes > $W/crashes-before.txt`,
    `wc -l ~/.local/state/ghostex/logs/gpui-crash-reports.log` and
-   `ls ~/Library/Logs/DiagnosticReports | grep -i ghostex`. `$W` is
+   `ls ~/Library/Logs/DiagnosticReports | grep -i ghostex`, and (from 11.9.0)
+   `ls -la ~/.local/state/ghostex/logs/crash-reports/`. `$W` is
    `~/.local/share/agent-work/Ghostex/smoke/<release-commit-short>-run<N>/`.
+   The dev build carries no commit stamp and still reports the previous version
+   (the version bump is the prepare commit), so match the release point by the
+   rebuild log's start time against the commit time.
 4. Resolve your project: `ghostex agents whoami --json` (project id `$P`).
 5. Name every session you create `smoke-<step>-run<N>`. Clean up at the end.
 6. Look at what the cua-driver skill says first (`list_windows({app:"Ghostex"})`
    gives the `pid` and `window_id`; read narrowly with `get_window_state` and a
    `query`; act with `run_steps`; check with `verify_state`). Work in the
    background. Save a screenshot per area into `$W`.
+   - GPUI stops painting a window that isn't on screen (another Space, Stage
+     Manager), and background clicks then do nothing. Put Ghostex on a SpaceO
+     display: make another app frontmost (SpaceO refuses while Ghostex owns the
+     menu bar), `spaceo_session_create` (preset `exclusive`), quit Ghostex with
+     `spaceo_menu ["Ghostex","Quit Ghostex"]`, start it with cua-driver
+     `launch_app({name:"/Applications/Ghostex.app"})` (`spaceo_open_app` fails
+     with "browser did not publish its private DevTools endpoint" and kills the
+     launch), then `spaceo_adopt_app(pid)`. Drive it with `spaceo_*` tools.
+   - Background clicks press buttons and rows but never move keyboard focus
+     into a text input (chat box, Settings fields, the browser address bar, web
+     content). Put focus where you type with `ghostex focus <ref>` (chat box or
+     terminal) or by opening a surface that focuses its own box (Settings
+     search, the Search palette, a page with autofocus). Foreground input
+     doesn't help on a SpaceO display: SpaceO hands activation straight back.
+   - A cua-driver pixel click can leave the real pointer on the SpaceO display;
+     SpaceO then pauses ("cursor is currently on an agent screen"). Move it back
+     with `move_cursor` (scope desktop) and `spaceo_session_resume`.
+   - `read-session-chat --json` is huge; read replies with
+     `ghostex read-session-chat $ref --all --last 3 --format text`.
 7. **A crash at any time** (the app disappears from `list_apps`, a new file in
    `crashes/`, a new panic line, a new DiagnosticReport, or `ghostex sessions`
    hangs more than 15 seconds) is a **Stop**, whichever step was running. Log it
@@ -83,12 +106,14 @@ from the create result.
 ### 1. The last crash (crash checks; see "Keeping the list")
 
 **1.1 Chat ending in one-click answers.** Fix `f95220d0d` (v11.8.2; #638, #640, #642).
-1. `ghostex create-agent claude --project-id $P --title smoke-1.1-runN`, then
-   `ghostex agents send $ref 'Reply with one line, then these two links on their own line: [Yes](ghostex-answer:Q9001) [No](ghostex-answer:Q9001)'`.
+1. `ghostex agents create claude --project-id $P --title smoke-1.1-runN --task 'Reply with one line, then these two links on their own line: [Yes](ghostex-answer:Q9001) [No](ghostex-answer:Q9001)'`
+   (`create-agent` has no `--title`). The agent's auto title replaces the
+   `--title` within a minute (a Claude one may copy the sender's session name),
+   so track every session by its `$ref`, not its title.
 2. Wait until `ghostex read-session-chat $ref --limit 3 --json` shows the reply.
-3. With cua-driver: open that chat so it is the front chat, quit Ghostex
-   (menu Ghostex > Quit via `invoke_menu`), start it again (`launch_app`), and
-   open the same chat.
+3. Open that chat so it is the front chat (`ghostex focus $ref`), quit Ghostex
+   (menu Ghostex > Quit), start it again (cua-driver `launch_app`, then
+   `spaceo_adopt_app` if you use SpaceO), and check the same chat is open.
 4. **Pass:** the app is running again with the chat open, the Yes and No buttons
    show (`get_window_state` with `query:"Yes"`), and the crash baseline from step
    3 is unchanged. **Stop** on a quit, a panic, or no buttons.
@@ -104,7 +129,7 @@ from the create result.
 4. **Pass:** all three answer. **Stop** if any hangs (the freeze).
 
 **1.3 A chat with no saved Reply draft.** Fixes `dbcb1b304`, `52100362b` (v11.8.0).
-1. `ghostex create-agent codex --project-id $P --title smoke-1.3-runN` (no task,
+1. `ghostex agents create codex --project-id $P --title smoke-1.3-runN` (no task,
    so it never had a Reply draft).
 2. Click its row in the sidebar to open its chat.
 3. **Pass:** the chat opens with its transcript or an empty chat, the app stays
@@ -121,8 +146,9 @@ from the create result.
 
 ### 2. Threads
 
-**2.1 Latest Claude.** `ghostex create-agent claude --project-id $P --title smoke-2.1-runN --model <latest Claude>`,
-then `ghostex agents send $ref 'Reply with exactly: smoke-ok-2.1'`.
+**2.1 Latest Claude.** `ghostex create-agent claude --project-id $P --model <latest Claude> --effort low`
+(no `--title` there: `ghostex rename-session <sessionId> smoke-2.1-runN`, which
+the auto title may replace again), then `ghostex agents send $ref 'Reply with exactly: smoke-ok-2.1'`.
 **Pass:** within 120 seconds `ghostex read-session-chat $ref --limit 4 --json`
 has that text from the assistant. **Warn** otherwise (say if it is the account:
 `ghostex accounts`).
@@ -142,24 +168,28 @@ otherwise.
 ### 4. Terminal and browser
 
 **4.1 Terminal command.**
-1. `ghostex terminal --title smoke-4.1-runN`, then find it with `ghostex sessions --json`.
+1. `ghostex create-session smoke-4.1-runN --start --project-id $P` (its
+   `session.globalRef` is the id). Not `ghostex terminal`: run from `$W` it adds
+   a new project named after that folder, and its terminal never starts.
 2. `ghostex send-text <id> 'echo smoke-ok-4.1'` and `ghostex send-enter <id>`.
-3. With cua-driver click into its pane and type a second command with
-   `type_text` (`echo smoke-keys-4.1`) and `press_key` Return, so real keys are
-   tested, not only the CLI. Also paste one line (`clipboard_write`, then
-   `hotkey` cmd+v).
+3. `ghostex focus <id>` (keyboard focus to the pane), then type a second
+   command with real keys (`spaceo_type` `echo smoke-keys-4.1` with submit, or
+   cua-driver `type_text` and `press_key` Return), so real keys are tested, not
+   only the CLI. Also paste one line: save the user's clipboard (`pbpaste >
+   $W/clipboard-saved.txt`), put the line on it, cua-driver `hotkey` cmd+v on
+   the window (it runs Edit > Paste), Return, then restore the clipboard.
 4. **Pass:** `ghostex read-text <id> --lines 20` shows `smoke-ok-4.1` and
    `smoke-keys-4.1`, and the paste lands with no "can't be delivered" message.
    **Stop** if typed keys or the paste don't arrive (`dd5fd7d46`, next release).
 
 **4.2 Browser: open it and search.**
-1. Open a browser pane (`ghostex open https://duckduckgo.com` or the sidebar's
-   New Browser; check `ghostex --help` for the current verb).
-2. With cua-driver click the address bar, `type_text` `ghostex terminal`, press
-   Return.
-3. **Pass:** every letter shows in the bar (`get_window_state` query on the bar's
-   value) and a results page loads with links (read its title or text). **Stop**
-   if keys don't land; **Warn** if the page doesn't load (network).
+1. Open a browser pane: `ghostex browser open https://duckduckgo.com --project-id $P --reuse none`.
+2. Type `ghostex terminal` and press Return. A background click can't focus the
+   address bar, but DuckDuckGo focuses its own search box, so the keys land
+   there; say which box you typed in.
+3. **Pass:** every letter shows in the box (screenshot) and a results page loads
+   with links (read its title or text). **Stop** if keys don't land; **Warn** if
+   the page doesn't load (network).
 
 ### 5. Typing in fields (all Stop)
 
@@ -167,10 +197,13 @@ Use `type_text` through cua-driver, then read the value back with
 `get_window_state` (`query`) or `verify_state`. If the field's value can't be
 read from the accessibility tree, compare a zoomed screenshot (`zoom`).
 
-**5.1 A Settings field.** Open Settings (cmd+,), click a text field (for example
-Settings > General's name box or any text input), `type_text smoke-field-5.1`.
-**Pass:** the same text reads back. Press Escape or Cancel so nothing is saved,
-and check the old value is back.
+**5.1 A Settings field.** Open Settings (`spaceo_menu ["Ghostex","Settings…"]`;
+Ghostex takes activation then and SpaceO pauses, so `spaceo_session_resume` and
+open it again). There is no General name box. The field that takes background
+focus is Settings' own search box (others, like Accounts > Name, need a real
+click). Type `smoke-field-5.1`.
+**Pass:** the same text reads back (`spaceo_find` TextField shows its value).
+Press Escape and check the old value is back.
 
 **5.2 A search box.** Type `term` into the sidebar search and `font` into
 Settings' search. **Pass:** each shows every letter and the list narrows. Clear
@@ -181,17 +214,29 @@ both.
    skeleton (`<meta name="ghostex-page" content="v2">`): a `gx-questions` page
    with one text question (`type="text"`) and one choice question. It is a test
    fixture, not a page for the user: publish it with
-   `ghostex show $W/smoke-page.html --no-check` and retire it at the end with
-   `ghostex page retire <page>`, so nothing stays open.
-2. Open the page window in the app. cua-driver: click into the text box,
-   `type_text smoke-page-5.3`, pick a choice.
+   `ghostex show $W/smoke-page.html --no-check --json` and retire it at the end with
+   `ghostex page retire <page>`, so nothing stays open (in 11.8.x and 11.9.0
+   that answers "No gxserver endpoint for POST /api/retireVisualPages";
+   closing the session that shows the card clears its open questions).
+2. Open the page window in the app: the card needs to be in a chat, so have
+   the 2.1 session echo the ```visual block (`agents send $ref --body-file`
+   with "Reply with exactly the following block and nothing else"), open that
+   chat and press the card's Open. Then click into the text box, type
+   `smoke-page-5.3`, pick a choice. Background input never reaches the page
+   window's web view (clicks, keys, Tab and the a/b shortcuts all do nothing),
+   and neither does a DevTools click (`ghostex browser mcp`
+   `ghostex_click`): it focuses the field in the page, not the native view.
+   This step needs a real click on a real display; until the tooling can do
+   that, mark it NOT RUN with that reason.
 3. **Pass:** the typed text shows in the box letter by letter, the pick shows,
    and the Send button enables. Do **not** press Send (it would send an answer).
    Retire the page.
 
 **5.4 The chat box: type and send.**
-1. Open `$ref` from 2.1. cua-driver: click the chat box, `type_text` a short
-   message `smoke-chat-5.4`, press Return.
+1. `ghostex focus $ref` (the 2.1 chat; this puts keyboard focus in its chat
+   box), type a short message `smoke-chat-5.4` with real keys, press Return.
+   `ghostex read-session-chat-queue $ref --json` `.draft.content` shows what
+   the box holds.
 2. Then a long one-line message (about 600 characters of `smoke ` repeated, no
    newline), press Return (`b89d89a10`, next release).
 3. **Pass:** each time the box empties and the message shows in the transcript
@@ -211,11 +256,22 @@ change or the next message gets no answer.
 
 **6.2 Codex.** The same on the 2.2 chat, `smoke-ok-6.2`.
 
+The picker is a button `Model: <name>` (`spaceo_find "Model:"`); its list is a
+separate window with the models as MenuItems. Picking a model also changes the
+agent's saved default: Claude's `/model` writes `model` in
+`~/.claude/settings.json` ("saved as your default for new sessions"), and
+Codex writes `model_reasoning_effort` in `~/.codex/config.toml`. Copy both
+files to `$W` before 6.1 and put the old values back after 6.2.
+
 ### Clean up
 
-Close every `smoke-*-runN` session (`ghostex agents close <ref>`, `ghostex kill`
-for terminals), retire the test page, close the browser pane you opened, put
-any setting you touched back. List what you removed in the report (AGENTS.md:
+Close every `smoke-*-runN` session (`ghostex agents close <ref>` for threads and
+coordinators, which then stay in `coordinator list` as `stopped`; `ghostex kill`
+for terminals), retire the test page, close the browser tabs you opened (the
+tab's x), remove any project a step added (`ghostex remove-project --project-id <id>`),
+put any setting you touched back (Claude and Codex defaults, the clipboard),
+and end the SpaceO session (`spaceo_session_destroy` with `keep_apps`; a
+hover tooltip left on its display blocks that until Ghostex next restarts). List what you removed in the report (AGENTS.md:
 "Clean up what you create to test").
 
 ## The report
