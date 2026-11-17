@@ -27,6 +27,21 @@ pub(crate) mod native_chat;
 pub(crate) mod native_kanban;
 pub(crate) mod native_sidebar;
 pub(crate) mod notice_modal_host;
+/// The page holds no owner key, so no approval request is ever this app's own ask
+/// (`notice_modal_host.rs`); the desktop's `owner_security` talks to the OS key store.
+pub(crate) mod owner_security {
+    pub(crate) fn asks_for_this_app(
+        _request: &ghostex_gx_protocol::approval::ApprovalRequest,
+    ) -> bool {
+        false
+    }
+
+    pub(crate) fn reported_computer_name(
+        _request: &ghostex_gx_protocol::approval::ApprovalRequest,
+    ) -> Option<String> {
+        None
+    }
+}
 /// The window panels' tween alone (the page has none of the desktop's panels), which the chat's
 /// docked Session details column slides on.
 #[allow(dead_code)]
