@@ -737,10 +737,13 @@ ordered by when they last came back to you (started, sent a message, or a
 finished turn), never by output while an agent works. For a list that stays
 put, pick Alphabetical (by title) or Created (newest first) in Session order
 (`unifiedSessionOrder`, in Settings under the Sidebar switch and in Sort &
-Filter, the phone follows it): then a session keeps its place when you send it
-a message or it finishes, and moves only when it is renamed; the Moving and
-Parked shelves and the cards inside each project group follow the same order,
-and turning off the Moving section keeps working sessions in place too. Pinned sessions come
+Filter, the phone follows it): then a session keeps its place in its shelf when
+you send it a message or it finishes (under Alphabetical, renaming it moves it
+once). The Moving and Parked shelves and the cards inside each project group
+follow the same order. A session still changes shelf: with the Moving section
+on, a working session goes to Moving until it stops, and with Unpark after
+sending a message on, sending to a parked session takes it out of Parked; turn
+off the Moving section for a list where working sessions stay put. Pinned sessions come
 first, in the order you give them (drag a pinned card above or below another
 pinned card of the same list or project group; the Project sidebar's Pinned
 keeps the same order; see Pinned order below), and above them a Drafts section holds every session nobody has sent a
