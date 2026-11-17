@@ -4,7 +4,7 @@ Standalone preview of the native GPUI app modals so their look can be checked
 against the React Storybook stories without launching Ghostex. Run with:
     cargo run --release --bin native-modal-demo
 Environment:
-    GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|updates-menu|start-menu|chief-row|notice-modal|gbot-team|new-gbot|new-bot|... (which modal; default export-transcript)
+    GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|go-back|crash-report|updates-menu|start-menu|chief-row|notice-modal|gbot-team|new-gbot|new-bot|... (which modal; default export-transcript)
     GHOSTEX_NATIVE_MODAL_DEMO_THEME=dark|light                (default dark)
     GHOSTEX_NATIVE_MODAL_DEMO_SIDEBAR_THEME=dark-green|...    (a dark theme's text colours)
     GHOSTEX_NATIVE_MODAL_DEMO_CHROME=<rrggbb>                 (tint the modal from a theme chrome)
@@ -188,6 +188,16 @@ mod space_editor_modal;
 mod start_menu_click_demo;
 #[path = "native_modal_demo/start_menu.rs"]
 mod start_menu_demo;
+#[path = "native_modal_demo/crash_report.rs"]
+mod crash_report_demo;
+#[path = "native_modal_demo/crash_report_core.rs"]
+mod crash_report_core;
+#[path = "../app/window/crash_report_modal.rs"]
+mod crash_report_modal;
+#[path = "native_modal_demo/go_back.rs"]
+mod go_back_demo;
+#[path = "../app/window/go_back_modal.rs"]
+mod go_back_modal;
 #[path = "native_modal_demo/update_available.rs"]
 mod update_available_demo;
 // The top bar's Updates button and list: `app` holds the stand-ins its rows file reads.
@@ -837,6 +847,8 @@ fn main() {
                 // DEMO-ARMS: one arm per converted modal.
                 "add-project" => add_project_demo::open(&demo, cx),
                 "new-thread-picker" => new_thread_picker_demo::open(&demo, cx),
+                "go-back" => go_back_demo::open(&demo, cx),
+                "crash-report" => crash_report_demo::open(&demo, cx),
                 "update-available" => update_available_demo::open(&demo, cx),
                 "notice-modal" => notice_modal_demo::open(&demo, cx),
                 "updates-menu" => updates_menu_demo::open(&demo, cx),

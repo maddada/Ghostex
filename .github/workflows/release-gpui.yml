@@ -337,6 +337,12 @@ jobs:
           toolchain="$(sed -n 's/^channel = "\(.*\)"$/\1/p' apps/desktop/rust-toolchain.toml)"
           tooling/release-gpui/retry.sh 3 5 -- rustup toolchain install "$toolchain" --profile minimal --component rustfmt
           tooling/release-gpui/retry.sh 3 5 -- rustup component add rustfmt
+      # CDXC:Release 2026-11-17 DECISION: database changes since the last release must be safe to
+      # go back from, or the release marks itself "can't go back" (tooling/release-gpui/go-back-gate.mjs).
+      - name: Check database changes are safe to go back from
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: node tooling/release-gpui/go-back-gate.mjs --version "$RELEASE_VERSION"
       - name: Install and typecheck
         run: |
           bun install --frozen-lockfile

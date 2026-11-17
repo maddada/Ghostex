@@ -23,13 +23,13 @@ pub(crate) mod new_coordinator_modal;
 pub(crate) mod new_gbot_modal;
 pub(crate) mod new_thread_picker;
 pub(crate) mod notice_modal;
+pub(crate) mod page_band_geometry;
+pub(crate) mod page_controls;
 pub(crate) mod popup_dismissal;
 pub(crate) mod popup_frame;
 pub(crate) mod quick_access;
 pub(crate) mod rename_session_modal;
 pub(crate) mod rename_worktree_modal;
-pub(crate) mod page_band_geometry;
-pub(crate) mod page_controls;
 pub(crate) mod round_close_button;
 pub(crate) mod session_handoff_modal;
 pub(crate) mod session_note_modal;
@@ -80,6 +80,11 @@ pub(crate) mod space_editor_modal {
 /// which `app_modal_kind.rs` reads; the page never opens that notice.
 pub(crate) const SECURITY_UPGRADE_MODAL_WIDTH: f32 = 640.0;
 pub(crate) const SECURITY_UPGRADE_MODAL_INITIAL_HEIGHT: f32 = 520.0;
+
+/// The crash window's size (`window/crash_report_modal.rs` on the desktop), which
+/// `app_modal_kind.rs` reads; the page never opens it.
+pub(crate) const CRASH_REPORT_MODAL_WIDTH: f32 = 520.0;
+pub(crate) const CRASH_REPORT_MODAL_INITIAL_HEIGHT: f32 = 300.0;
 
 /// The Connect a device window's size (`window/connect_device_modal.rs` on the desktop), which
 /// `app_modal_kind.rs` reads; the page never opens that window.

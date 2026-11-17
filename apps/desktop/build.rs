@@ -856,6 +856,22 @@ fn main() {
         "cargo:rustc-env=GHOSTEX_BUILD_VERSION_STAMPED={}",
         u8::from(stamped)
     );
+    // CDXC:CrashReports 2026-11-17 WHY: a crash report names the commit it was built from. Only
+    // the release job knows it (`GHOSTEX_BUILD_COMMIT`, else GitHub Actions' `GITHUB_SHA`); a
+    // local build reads no git state here, since a commit that changed on every `git commit`
+    // would recompile the whole crate on the next `cargo xtask start`.
+    println!("cargo:rerun-if-env-changed=GHOSTEX_BUILD_COMMIT");
+    println!("cargo:rerun-if-env-changed=GITHUB_SHA");
+    let commit: String = env::var("GHOSTEX_BUILD_COMMIT")
+        .ok()
+        .or_else(|| env::var("GITHUB_SHA").ok())
+        .unwrap_or_default()
+        .trim()
+        .chars()
+        .filter(char::is_ascii_hexdigit)
+        .take(10)
+        .collect();
+    println!("cargo:rustc-env=GHOSTEX_BUILD_COMMIT={commit}");
     // CDXC:Build 2026-10-02 WHY:
     // Cargo treats a rerun-if-changed path that does not exist as always changed, and GhosttyKit.xcframework only exists on macOS. Emitting these hints on Linux and Windows reran this build script on every build and recompiled the whole ghostex-gpui crate even when nothing had changed.
     if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {

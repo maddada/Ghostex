@@ -235,7 +235,7 @@ static USER_AT_PLACEHOLDER: LazyLock<Regex> =
 static LONG_KEY: LazyLock<Regex> = LazyLock::new(|| regex(r"\b[A-Za-z0-9+/_-]{32,}={0,2}"));
 
 /// `text` with the obvious personal data replaced by placeholders such as `<email>` and `~`.
-pub(super) fn scrub_personal_data(text: &str, context: &FeedbackScrubContext) -> String {
+pub(crate) fn scrub_personal_data(text: &str, context: &FeedbackScrubContext) -> String {
     let mut result = text.to_string();
     // This computer's own home folders first, in whatever form they were written.
     let mut homes: Vec<&str> = context

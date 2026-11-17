@@ -40,6 +40,8 @@ pub(super) struct FeedbackSubmission {
     collected_by_agent: bool,
     /// The sender's GitHub username, sent as the relay's `reporter`.
     reporter: Option<String>,
+    /// A crash report's `{ fingerprint, version, location }` (the desktop's crash window).
+    crash: Option<Value>,
 }
 
 pub(super) struct FeedbackImage {
@@ -98,6 +100,7 @@ impl FeedbackSubmission {
             ));
         }
         let images = FeedbackImage::from_params(params)?;
+        let crash = crash_from_params(params)?;
         Ok(Self {
             title,
             body,
@@ -108,6 +111,7 @@ impl FeedbackSubmission {
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
             reporter,
+            crash,
         })
     }
 
@@ -126,6 +130,9 @@ impl FeedbackSubmission {
         });
         if let Some(reporter) = &self.reporter {
             payload["reporter"] = json!(reporter);
+        }
+        if let Some(crash) = &self.crash {
+            payload["crash"] = crash.clone();
         }
         payload
     }
@@ -188,6 +195,50 @@ impl FeedbackSubmission {
             )),
         }
     }
+}
+
+/// CDXC:CrashReports 2026-11-17 WHY:
+/// The desktop's crash window sends `crash: { fingerprint, version, location }` with its report, so
+/// the relay can file the same crash (same version and place, so the same `gxc-` id) from many
+/// people on one issue instead of one issue each. A relay without that support ignores the field
+/// and files a new issue, as for any feedback.
+/// SEE-ALSO: apps/desktop/src/crash_report/ (the record and its fingerprint), the relay checkout's
+/// src/index.ts and src/issue.ts.
+fn crash_from_params(params: &serde_json::Map<String, Value>) -> Result<Option<Value>, String> {
+    let crash = match params.get("crash") {
+        None | Some(Value::Null) => return Ok(None),
+        Some(Value::Object(crash)) => crash,
+        Some(_) => return Err(String::from("crash must be an object.")),
+    };
+    let text = |key: &str| {
+        crash
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim()
+    };
+    let fingerprint = text("fingerprint");
+    let valid_fingerprint = fingerprint
+        .strip_prefix("gxc-")
+        .is_some_and(|hex| hex.len() == 12 && hex.chars().all(|c| c.is_ascii_hexdigit()));
+    if !valid_fingerprint {
+        return Err(String::from("The crash id is not in the expected shape."));
+    }
+    let version: String = text("version")
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || ".+_-".contains(*c))
+        .take(64)
+        .collect();
+    let location: String = text("location")
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(120)
+        .collect();
+    Ok(Some(json!({
+        "fingerprint": fingerprint.to_ascii_lowercase(),
+        "version": version,
+        "location": location,
+    })))
 }
 
 fn relay_feedback_url() -> String {

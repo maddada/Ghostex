@@ -367,17 +367,16 @@ pub fn install_panic_hook() {
             .or_else(|| panic_info.payload().downcast_ref::<String>().cloned())
             .unwrap_or_else(|| "non-string panic payload".to_string());
         let backtrace = std::backtrace::Backtrace::force_capture().to_string();
-        write_entry(
-            GpuiSupportLog::CrashReports,
-            "gpui.panic",
-            panic_crash_details(
-                panic_info
-                    .location()
-                    .map(|location| (location.file(), location.line())),
-                &message,
-                &backtrace,
-            ),
+        let details = panic_crash_details(
+            panic_info
+                .location()
+                .map(|location| (location.file(), location.line())),
+            &message,
+            &backtrace,
         );
+        // The crash window offers it at the next open (crash_report/capture.rs).
+        crate::crash_report::record_panic(&details);
+        write_entry(GpuiSupportLog::CrashReports, "gpui.panic", details);
         previous_hook(panic_info);
     }));
 }
@@ -515,12 +514,19 @@ pub extern "C" fn GhostexGpuiRecordUncaughtException(
         .take(MAX_CRASH_STACK_FRAMES)
         .map(|frame| redact_crash_text(frame, MAX_CRASH_FRAME_CHARS).into())
         .collect();
+    let name = redact_crash_text(&text(name), MAX_SANITIZED_STRING_CHARS);
+    let reason = redact_crash_text(&text(reason), MAX_CRASH_MESSAGE_CHARS);
+    let frames: Vec<String> = call_stack
+        .iter()
+        .filter_map(|frame| frame.as_str().map(str::to_string))
+        .collect();
+    crate::crash_report::record_uncaught_exception(&name, &reason, &frames);
     write_entry(
         GpuiSupportLog::CrashReports,
         "gpui.uncaughtException",
         serde_json::json!({
-            "name": redact_crash_text(&text(name), MAX_SANITIZED_STRING_CHARS),
-            "reason": redact_crash_text(&text(reason), MAX_CRASH_MESSAGE_CHARS),
+            "name": name,
+            "reason": reason,
             "callStack": call_stack,
             "executableLoadAddress": format!("{executable_load_address:#x}"),
             "pid": std::process::id(),

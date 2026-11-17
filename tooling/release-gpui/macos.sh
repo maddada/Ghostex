@@ -581,7 +581,9 @@ const start = changelog.indexOf(`## ${version} -`);
 if (start < 0) throw new Error(`CHANGELOG.md has no ${version} section`);
 const next = changelog.indexOf("\n## ", start + 4);
 const section = changelog.slice(start, next < 0 ? undefined : next).trim();
-writeFileSync(process.env.NOTES_PATH, `# Ghostex ${version}\n\n${section}\n`);
+// CDXC:Release 2026-11-17 DECISION: the update window says where to go back (apps/desktop/src/app/window/update_available_modal.rs GO_BACK_LINE); on macOS that window is Sparkle's, so its notes end with the line.
+const goBack = "If anything goes wrong after updating, you can go back to the version you have now in Settings › Updates, or download any older version from [GitHub](https://github.com/maddada/Ghostex/releases).";
+writeFileSync(process.env.NOTES_PATH, `# Ghostex ${version}\n\n${section}\n\n${goBack}\n`);
 JS
 
 		GENERATE_ARGS=(

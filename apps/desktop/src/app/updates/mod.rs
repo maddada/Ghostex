@@ -12,6 +12,7 @@
 //! Every connected computer's own items come from its gxserver through its tunnel (remote.rs), and
 //! the list is grouped by computer, this one first.
 //! SEE-ALSO: app/window/settings_modal/tabs/updates/ (the page), app/titlebar/updates_menu.rs.
+mod go_back;
 mod items;
 mod notification;
 mod remote;
@@ -327,6 +328,8 @@ impl GhostexGpuiApp {
             "checkedAt": checked_at,
             // This computer, then each remote computer, with the line an offline one shows.
             "computers": self.update_computers_payload(),
+            // Settings > Updates > Go back (go_back.rs).
+            "goBack": go_back::offer_payload(),
         });
         self.dispatch_open_gpui_app_modal_message(message.clone(), cx);
         self.defer_in_main_window(cx, |app, window, cx| {
@@ -446,6 +449,7 @@ impl GhostexGpuiApp {
                 };
                 self.install_updates(ids, cx);
             }
+            Some("goBack") => self.go_back_from_settings(cx),
             Some("dismiss") => {
                 if let Some(id) = command.get("id").and_then(Value::as_str) {
                     let error = command

@@ -367,13 +367,31 @@ pub(crate) fn apply_appimage_update_after_exit(appimage: &Path) -> Result<(), St
         .arg(source.as_deref().unwrap_or(Path::new("")))
         .arg(install.data_dir.join(UPDATE_LOG_FILE))
         .arg(install.data_dir.join(UPDATE_LOCK_FILE))
+        .arg(crate::go_back::keep::kept_appimage_location())
+        .arg(crate::go_back::THIS_VERSION)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
-    // The new Ghostex starts in this desktop session, with the Wayland socket this process hid, and
-    // without what this version's launcher set for this version: its Chromium folder and loader
-    // path, and the X11 scale it pinned (which the next start would read as the user's own).
-    crate::restore_wayland_display_for_process_command(&mut command);
+    prepare_relaunch_environment(&mut command);
+    // SAFETY: setsid only detaches the child from this process's session; it allocates nothing.
+    unsafe {
+        command.pre_exec(|| {
+            libc::setsid();
+            Ok(())
+        });
+    }
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("Could not start the update: {error}"))
+}
+
+/// The Ghostex a script starts after this one quits (an update, going back) starts in this desktop
+/// session, with the Wayland socket this process hid, and without what this version's launcher set
+/// for this version: its Chromium folder and loader path, and the X11 scale it pinned (which the
+/// next start would read as the user's own).
+pub(crate) fn prepare_relaunch_environment(command: &mut std::process::Command) {
+    crate::restore_wayland_display_for_process_command(command);
     if let Some(cef_dir) = std::env::var_os(crate::cef_component_window::CEF_RUNTIME_DIR_ENV) {
         command.env_remove(crate::cef_component_window::CEF_RUNTIME_DIR_ENV);
         if let Some(paths) = std::env::var_os("LD_LIBRARY_PATH") {
@@ -390,22 +408,11 @@ pub(crate) fn apply_appimage_update_after_exit(appimage: &Path) -> Result<(), St
     if crate::linux_x11_scale::pinned_scale_factor().is_some() {
         command.env_remove("GPUI_X11_SCALE_FACTOR");
     }
-    // SAFETY: setsid only detaches the child from this process's session; it allocates nothing.
-    unsafe {
-        command.pre_exec(|| {
-            libc::setsid();
-            Ok(())
-        });
-    }
-    command
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| format!("Could not start the update: {error}"))
 }
 
 /// Runs detached after Ghostex quits: `$1` Ghostex's pid, `$2` the verified AppImage, `$3` the
 /// install copy, `$4` the AppImage file the user started (empty when unknown), `$5` a log, `$6` the
-/// update lock. The new AppImage's launcher copies its payload over the install copy with
+/// update lock, `$7` where the old version is kept for going back, `$8` the version it is. The new AppImage's launcher copies its payload over the install copy with
 /// `cp --remove-destination` and writes the payload stamp last, then starts Ghostex from it. The
 /// copy is snapshotted with hard links first (`cp -al`): unlinking a file leaves its old content in
 /// the snapshot, so it costs no space. If the launcher exits before a new stamp appears (a full
@@ -414,7 +421,7 @@ pub(crate) fn apply_appimage_update_after_exit(appimage: &Path) -> Result<(), St
 /// version's name when it had a release name.
 const SWAP_SCRIPT: &str = r#"
 set -u
-pid=$1 new=$2 install=$3 source=$4 log=$5 lock=$6
+pid=$1 new=$2 install=$3 source=$4 log=$5 lock=$6 kept=$7 old_version=$8
 exec >>"$log" 2>&1
 echo "$(date '+%F %T') update to $(basename "$new")"
 if command -v flock >/dev/null 2>&1; then
@@ -446,7 +453,11 @@ while ! installed; do
 	sleep 0.3
 done
 echo "installed $(cat "$stamp")"
-rm -rf "$snapshot"
+# Kept for going back (go_back/keep.rs): the snapshot still holds the old files.
+keep_dir=$(dirname "$kept")
+mkdir -p "$keep_dir" && rm -rf "$kept" "$keep_dir/kept.json" && mv "$snapshot" "$kept" &&
+	printf '{"version":"%s","keptAtMs":%s000}\n' "$old_version" "$(date +%s)" >"$keep_dir/kept.json" ||
+	rm -rf "$snapshot"
 if [ -n "$source" ] && [ -f "$source" ]; then
 	dir=$(dirname "$source")
 	case "$(basename "$source")" in

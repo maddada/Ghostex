@@ -394,6 +394,16 @@ impl GhostexGpuiApp {
                     updater
                         .check_for_updates()
                         .map_err(|error| error.to_string())
+                        .map(|check| match check {
+                            // A version this computer went back from waits for a newer one,
+                            // unless the user asks (go_back/mod.rs).
+                            windows_updater::WindowsUpdateCheck::UpdateAvailable(update)
+                                if !interactive && crate::go_back::skipped(update.version()) =>
+                            {
+                                windows_updater::WindowsUpdateCheck::NoUpdateAvailable
+                            }
+                            check => check,
+                        })
                 })
                 .await;
             let _ = this.update_in(cx, |this, window, cx| {
@@ -528,6 +538,17 @@ impl GhostexGpuiApp {
                 let result = updater
                     .download(&update, progress_sender)
                     .map_err(|error| error.to_string());
+                // The version running now is kept before Restart and update can replace it, so
+                // going back works (go_back/keep.rs).
+                if result.is_ok()
+                    && let Err(reason) = crate::go_back::keep::keep_running_app()
+                {
+                    support_logs::append(
+                        support_logs::GpuiSupportLog::HostLifecycle,
+                        "goBack.keepFailed",
+                        serde_json::json!({ "reason": reason }),
+                    );
+                }
                 let _ = result_sender.send(result);
             })
             .detach();
@@ -643,7 +664,15 @@ impl GhostexGpuiApp {
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
             let result = background
-                .spawn(async move { linux_updater::check_for_updates() })
+                .spawn(async move {
+                    // A version this computer went back from waits for a newer one, unless the
+                    // user asks (go_back/mod.rs).
+                    linux_updater::check_for_updates().map(|update| {
+                        update.filter(|update| {
+                            interactive || !crate::go_back::skipped(update.version())
+                        })
+                    })
+                })
                 .await;
             let _ = this.update_in(cx, |this, window, cx| {
                 this.update_checking = false;

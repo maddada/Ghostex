@@ -29,6 +29,8 @@ extern void GhostexGpuiSparkleUpdateDownloadProgressChanged(int32_t hasProgress,
 extern void GhostexGpuiSparkleUpdateVersionFound(const char *version);
 extern void GhostexGpuiSparkleUnattendedUpdateEvent(int32_t kind,
                                                     const char *text);
+/* go_back/keep.rs: keeps the running app so the user can go back to it. */
+extern void GhostexGpuiKeepAppBeforeUpdate(void);
 
 /*
  CDXC:RemoteMachines 2026-10-16 WHY:
@@ -439,6 +441,18 @@ static Class GhostexGpuiSparkleUserDriverClass(Class standardUserDriverClass) {
     GhostexGpuiSparkleUpdateVersionFound(version.UTF8String);
   }
   GhostexGpuiSparkleUpdateAvailableChanged(1);
+}
+
+/*
+ CDXC:Release 2026-11-17 WHY:
+ Sparkle replaces this bundle once Ghostex quits; this is the last moment the running version is
+ still on disk, so it is kept here for Go back (Q3729, apps/desktop/src/go_back/keep.rs). Called
+ for an Install and Relaunch and for an update installed on quit alike.
+*/
+- (void)updater:(id)updater willInstallUpdate:(id)item {
+  (void)updater;
+  (void)item;
+  GhostexGpuiKeepAppBeforeUpdate();
 }
 
 - (void)updaterDidNotFindUpdate:(id)updater {

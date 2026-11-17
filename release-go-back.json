@@ -1,0 +1,5 @@
+{
+  "about": "Set noGoBackBelow to a release's own version when that release changes stored data in a way the version before it can't read. Ghostex then offers no Go back to any version below it. Rules and the release check: ai/database-rules.md.",
+  "noGoBackBelow": null,
+  "reason": null
+}

@@ -310,6 +310,8 @@ pub(crate) fn open_workspace_window(
             if lead {
                 app.start_gpui_updater(cx);
                 app.start_gpui_spaceo_health_watch(cx);
+                // The last run's crash, if it crashed (crash_report_modal_lifecycle.rs).
+                app.offer_pending_crash_report(cx);
                 #[cfg(target_os = "linux")]
                 app.offer_interface_scale_reset_for_display_scale(cx);
             }

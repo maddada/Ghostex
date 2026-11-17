@@ -31,6 +31,16 @@ const CANCEL: &str = "Cancel";
 const RESTART_AND_UPDATE: &str = "Restart and update";
 const DOWNLOAD_UPDATE: &str = "Download update";
 const OPEN_DOWNLOAD_PAGE: &str = "Open download page";
+/// CDXC:Release 2026-11-17 DECISION:
+/// User: "we need to mention this in the update window of ghostex clearly so people clearly see
+/// that (keep text friendly and short, just say where they can rollback in case of any issue, or
+/// from github)". One line under the notes; GitHub opens the releases page. macOS shows Sparkle's
+/// window instead, whose notes end with the same line (tooling/release-gpui/macos-finalize.sh).
+const GO_BACK_LINE: &str = "If anything goes wrong after updating, you can go back to the version you have now in Settings\u{a0}›\u{a0}Updates, or download any older version from GitHub.";
+const GO_BACK_LINK: &str = "GitHub";
+const RELEASES_URL: &str = "https://github.com/maddada/Ghostex/releases";
+/// The line's height in the body: one or two lines at 13/19.5 in the notes' width.
+const GO_BACK_LINE_HEIGHT: f32 = 12.0 + 19.5 * 2.0;
 
 /// `.update-available-modal-notes`: 13px prose at line-height 1.55.
 const NOTES_FONT_SIZE: f32 = 13.0;
@@ -737,7 +747,8 @@ impl GpuiUpdateAvailableModalWindow {
             - HEADER_HEIGHT
             - CARD_PADDING * 2.0
             - 2.0
-            - portable_height)
+            - portable_height
+            - GO_BACK_LINE_HEIGHT)
             .max(0.0);
         v_flex()
             .w_full()
@@ -752,6 +763,35 @@ impl GpuiUpdateAvailableModalWindow {
                         .child(PORTABLE_NOTE),
                 )
             })
+            .child(self.render_go_back_line())
+            .into_any_element()
+    }
+
+    /// "If anything goes wrong…": where to go back, with GitHub as a link.
+    fn render_go_back_line(&self) -> AnyElement {
+        let p = self.palette;
+        let start = GO_BACK_LINE.find(GO_BACK_LINK).unwrap_or(0);
+        let link = start..start + GO_BACK_LINK.len();
+        let styled = StyledText::new(GO_BACK_LINE).with_highlights([(
+            link.clone(),
+            HighlightStyle {
+                color: Some(hsla(p.foreground)),
+                underline: Some(gpui::UnderlineStyle {
+                    thickness: px(1.0),
+                    color: Some(hsla(p.muted)),
+                    wavy: false,
+                }),
+                ..Default::default()
+            },
+        )]);
+        div()
+            .text_size(px(13.0))
+            .line_height(px(19.5))
+            .text_color(hsla(p.muted))
+            .child(
+                gpui::InteractiveText::new("update-available-go-back-line", styled)
+                    .on_click(vec![link], |_, _, cx| cx.open_url(RELEASES_URL)),
+            )
             .into_any_element()
     }
 

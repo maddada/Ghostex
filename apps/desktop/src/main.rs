@@ -17,10 +17,12 @@ mod cef_component_window;
 #[cfg(any(target_os = "linux", test))]
 mod cef_library_version;
 mod component_store;
+mod crash_report;
 mod data_url_image;
 mod fold_motion;
 mod ghostty_kit;
 mod ghostty_vt;
+mod go_back;
 mod heap_counter;
 mod host_name;
 mod hotkey_label;
@@ -263,6 +265,9 @@ fn main() {
     if session_link_handoff::hand_off_to_running_app(&launch_links) {
         return;
     }
+    // This launch, for going back after an update that keeps crashing (go_back/mod.rs): the
+    // message shows before any window when it is due.
+    let go_back_offer = go_back::note_launch();
     #[cfg(target_os = "windows")]
     thread::spawn(windows_url_scheme::register_at_launch);
     // Install missing `ghostex`/`gx` PATH wrappers and refresh stale
@@ -481,7 +486,20 @@ fn main() {
         // Window frame persistence (macOS persistMainWindowChrome parity): every
         // window open at the last quit reopens at its saved frame with the
         // multi-monitor rules, else the historical centered default.
-        crate::app::workspace_windows::open_saved_workspace_windows(cx);
+        // A clean quit tells the next launch this one didn't crash (go_back/mod.rs).
+        cx.on_app_quit(|_| {
+            go_back::note_clean_quit();
+            async {}
+        })
+        .detach();
+        match go_back_offer {
+            Some(offer) => go_back::window::open(
+                offer,
+                Box::new(crate::app::workspace_windows::open_saved_workspace_windows),
+                cx,
+            ),
+            None => crate::app::workspace_windows::open_saved_workspace_windows(cx),
+        }
         /*
         CDXC:PlatformSupport 2026-10-01 WHY:
         The workspace windows own application lifetime. App-modal, toast,

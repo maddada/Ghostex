@@ -28,6 +28,7 @@
 //! its machine and why). Alone, the page has no picker and its Update all is this computer's.
 //! SEE-ALSO: server/src/updates/mod.rs (all of the user's picks), app/updates/mod.rs.
 mod card;
+mod go_back;
 
 use super::super::super::native_modal_kit::*;
 use super::super::catalog::SettingOption;
@@ -68,6 +69,10 @@ pub(crate) struct UpdatesTab {
     /// The last "Update all machines": each computer's id and name with the ids it was sent, so
     /// the lines under the picker can say how each went. Kept until the page closes.
     all_run: Vec<(String, String, Vec<String>)>,
+    /// Go back was pressed and its confirm shows (go_back.rs).
+    confirm_go_back: bool,
+    /// Copy command was pressed on a deb or rpm install's Go back row.
+    go_back_copied: bool,
 }
 
 impl SettingsPage for UpdatesTab {
@@ -162,6 +167,8 @@ impl UpdatesTab {
             filter: "all".to_string(),
             pending_auto: HashMap::new(),
             all_run,
+            confirm_go_back: false,
+            go_back_copied: false,
         }
     }
 
@@ -830,6 +837,11 @@ impl Render for UpdatesTab {
         }
         if let Some(section) = self.not_installed(&p, &shown, cx) {
             blocks.push(PageBlock::section("notInstalled", section));
+        }
+        if shown_id == THIS_COMPUTER
+            && let Some(section) = self.go_back_section(&p, payload.as_ref(), cx)
+        {
+            blocks.push(PageBlock::section("goBack", section));
         }
         blocks.push(PageBlock::plain(
             div()

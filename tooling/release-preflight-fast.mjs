@@ -13,6 +13,7 @@ import {
 } from './release-shared.mjs';
 import { RELEASE_BUILD_SCRIPTS, runReleaseBuildScripts } from './release-preflight-build-scripts.mjs';
 import { checkPatches } from './release-gpui/check-patches-apply.mjs';
+import { evaluateGoBackGate } from './release-gpui/go-back-gate.mjs';
 import { formatToolingImportViolation, scanToolingImports } from './release-preflight-tooling-imports.mjs';
 import {
   SPARKLE_KEY_SOURCE,
@@ -483,6 +484,12 @@ async function checkAssertionFreshness() {
   );
 }
 
+/* Database changes must be safe to go back from (tooling/release-gpui/go-back-gate.mjs). */
+async function checkGoBack(options) {
+  const result = evaluateGoBackGate({ version: options.version });
+  return result.status === 'fail' ? fail(result.detail) : pass(result.detail);
+}
+
 async function checkGhAuth() {
   const result = await runCommand('env -u GH_TOKEN -u GITHUB_TOKEN gh auth status -h github.com', {
     timeoutMs: 30_000,
@@ -764,6 +771,7 @@ async function main() {
     { fn: () => checkPatchesApply(), name: 'patches-apply' },
     { fn: () => checkAssertionFreshness(), name: 'assertion-freshness' },
     { fn: () => checkSparkleKey(), name: 'sparkle-key' },
+    { fn: () => checkGoBack(options), name: 'go-back' },
   ];
   if (!options.skipCredentials) {
     fastChecks.push(

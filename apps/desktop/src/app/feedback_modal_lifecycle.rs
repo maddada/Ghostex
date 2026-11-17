@@ -138,7 +138,7 @@ fn feedback_offline_diagnostics() -> String {
 /// What this computer knows is private: its home folder, user and computer names, and the names,
 /// hosts and users of the saved remote machines (CDXC:Feedback 2026-10-22 DECISION in
 /// window/feedback_modal/offline_issue.rs).
-fn feedback_scrub_context() -> FeedbackScrubContext {
+pub(crate) fn feedback_scrub_context() -> FeedbackScrubContext {
     let variable = |name: &str| {
         std::env::var(name)
             .ok()

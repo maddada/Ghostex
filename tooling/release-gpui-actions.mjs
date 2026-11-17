@@ -628,6 +628,14 @@ if ((command === 'start' || command === 'amend') && requiresGpuiReferenceContrac
  * remote-only on purpose: those are the expensive gates, and prepare still runs
  * each of them exactly once.
  */
+/*
+ * CDXC:Release 2026-11-17 DECISION: database changes since the last release must be safe to go
+ * back from, or the release marks itself "can't go back" in release-go-back.json (Q3730,
+ * tooling/release-gpui/go-back-gate.mjs). Milliseconds here; the gates job runs it again.
+ */
+if (command === 'start') {
+  run('node', ['tooling/release-gpui/go-back-gate.mjs', '--version', version], { capture: false });
+}
 if ((command === 'start' || command === 'amend') && !options.skipLocalTests) {
   run('bun', ['run', 'release:test'], { capture: false });
 }

@@ -63,6 +63,9 @@ pub(crate) enum GpuiAppModalKind {
     CoordinatorDetails,
     /// Send Bug / Feedback, from the More options menu (feedback_modal_lifecycle.rs).
     Feedback,
+    /// "Ghostex closed unexpectedly", opened by the app at the open after a crash
+    /// (crash_report_modal_lifecycle.rs), never by a bridge message.
+    CrashReport,
     /// Create a Linear ticket and start work on it, from a work-mode project's menu
     /// (create_linear_ticket_modal_lifecycle.rs).
     CreateLinearTicket,
@@ -130,6 +133,7 @@ impl GpuiAppModalKind {
             "makeCoordinator" => Some(Self::MakeCoordinator),
             "coordinatorDetails" => Some(Self::CoordinatorDetails),
             "feedback" => Some(Self::Feedback),
+            "crashReport" => Some(Self::CrashReport),
             "createLinearTicket" => Some(Self::CreateLinearTicket),
             "workLinkPicker" => Some(Self::WorkLinkPicker),
             "addSessionLink" => Some(Self::AddSessionLink),
@@ -184,6 +188,7 @@ impl GpuiAppModalKind {
             Self::MakeCoordinator => "makeCoordinator",
             Self::CoordinatorDetails => "coordinatorDetails",
             Self::Feedback => "feedback",
+            Self::CrashReport => "crashReport",
             Self::CreateLinearTicket => "createLinearTicket",
             Self::WorkLinkPicker => "workLinkPicker",
             Self::AddSessionLink => "addSessionLink",
@@ -235,6 +240,7 @@ impl GpuiAppModalKind {
             Self::MakeCoordinator => "Ghostex Make Coordinator",
             Self::CoordinatorDetails => "Ghostex Coordinator",
             Self::Feedback => "Ghostex Send Bug / Feedback",
+            Self::CrashReport => "Ghostex Crash Report",
             Self::CreateLinearTicket => "Ghostex Create Linear Ticket",
             Self::WorkLinkPicker => "Ghostex Link Session",
             Self::AddSessionLink => "Ghostex Add a Link",
@@ -430,6 +436,10 @@ impl GpuiAppModalKind {
                 px(crate::app::window::FEEDBACK_MODAL_WIDTH),
                 px(crate::app::window::FEEDBACK_MODAL_INITIAL_HEIGHT),
             ),
+            Self::CrashReport => size(
+                px(crate::app::window::CRASH_REPORT_MODAL_WIDTH),
+                px(crate::app::window::CRASH_REPORT_MODAL_INITIAL_HEIGHT),
+            ),
             Self::CreateLinearTicket => size(
                 px(crate::app::window::CREATE_LINEAR_TICKET_MODAL_WIDTH),
                 px(crate::app::window::CREATE_LINEAR_TICKET_MODAL_INITIAL_HEIGHT),
@@ -618,6 +628,7 @@ impl GpuiAppModalKind {
             Self::Worktree
             | Self::AgentHooksRequired
             | Self::SecurityUpgrade
+            | Self::CrashReport
             | Self::DeleteWorktree
             | Self::RenameWorktree
             | Self::SidebarSpaceEditor

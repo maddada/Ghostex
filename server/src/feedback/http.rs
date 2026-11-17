@@ -15,7 +15,7 @@ use super::relay::FeedbackSubmission;
 /// `draftFeedback { app, message, githubUsername? }` answers `{ title, body, footer }`: the issue
 /// the message becomes (the reporter line on top when a username is given), which the client shows
 /// for review and the user may edit, plus the line the relay adds under it.
-/// `sendFeedback { app, title, body, images, githubUsername?, collectedByAgent?, dryRun? }` posts
+/// `sendFeedback { app, title, body, images, githubUsername?, collectedByAgent?, crash?, dryRun? }` posts
 /// the reviewed issue and answers `{ issueNumber, issueUrl }`; with `dryRun` it answers the request
 /// it would post instead (`ghostex feedback send --dry-run`).
 pub(crate) async fn handle_feedback_http(

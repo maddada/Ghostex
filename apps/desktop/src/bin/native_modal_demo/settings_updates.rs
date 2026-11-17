@@ -595,5 +595,14 @@ pub(super) fn answers(state: &str, message: &Value) -> Vec<Value> {
         "error": null,
         "checkedAt": chrono::Utc::now().timestamp_millis() - 4 * 60_000,
         "computers": computers,
+        // Settings > Updates > Go back (`updates-go-back-command`: a deb install's command).
+        "goBack": if state == "updates-go-back-command" {
+            json!({
+                "current": "11.8.2", "previous": "11.7.1", "how": "command",
+                "command": "curl -fLo /tmp/ghostex_11.7.1_amd64.deb https://github.com/maddada/Ghostex/releases/download/v11.7.1/ghostex_11.7.1_amd64.deb && sudo apt install --allow-downgrades -y /tmp/ghostex_11.7.1_amd64.deb",
+            })
+        } else {
+            json!({ "current": "11.8.2", "previous": "11.7.1", "how": "swap" })
+        },
     })]
 }

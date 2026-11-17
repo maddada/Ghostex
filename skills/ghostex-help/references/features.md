@@ -7522,6 +7522,22 @@ Updates does the same; a dismissed failure stays hidden in every window until
 that item's next update. An item only the page can finish (Needs you) opens
 Settings > Updates.
 
+### Go back to the version you had
+
+When Ghostex updates itself it keeps the version you had, so you can go back if
+something isn't working right. Settings > Updates > **Go back** shows "Go back to
+11.7.1" (the version before this one): press Go back… and then Go back, and
+Ghostex closes and opens again on that version. Your chats, projects and
+settings stay as they are, and Ghostex doesn't offer the version you left again
+until a newer one is out. If a new version closes unexpectedly twice in its
+first day, the next time you open Ghostex it says so before any window opens and
+offers Try again or Go back. On Linux, a deb or rpm install shows the one command
+that installs the older version (Copy command); with no kept copy, Download opens
+that version on GitHub. Every older version is also on
+https://github.com/maddada/Ghostex/releases (Older versions, Open GitHub). A
+release that changes your data in a way the version before can't read doesn't
+offer Go back.
+
 ## Experience (Settings > Experience: Chill, Regular, Advanced)
 
 Experience sets how many buttons and details Ghostex shows, on the computer and
@@ -7918,6 +7934,17 @@ name, home folder, computer name, saved remote machines, addresses, emails and
 tokens are removed first. Nothing is posted until you press Create on GitHub. A
 long report has its diagnostics shortened to fit in the link, and the issue says
 so; a message too long even on its own is put on your clipboard for you to paste.
+
+If the desktop app closes unexpectedly, the next time you open it a window says
+"Ghostex closed unexpectedly" with one line on what happened. "What's sent"
+shows the whole report: where it crashed and the error, the Ghostex version,
+how it was installed, your system and computer model, when it happened, and the
+last lines of Ghostex's own log. Your home folder, file paths, emails, tokens
+and keys are removed first, and your chats, files and terminal text are never in
+it. You can add what you were doing. Send report files it as a public issue on
+the Ghostex GitHub through feedback.ghostex.dev (no GitHub account needed) and
+then shows the issue number; the same crash from many people goes to one issue.
+Don't send drops it, and either way that crash isn't offered again.
 
 On the phone, Send Bug / Feedback is in the menu at the top of the Sessions
 screen, under Settings. It has the same form: your GitHub username (required,
