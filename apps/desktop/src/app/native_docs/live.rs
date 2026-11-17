@@ -222,6 +222,12 @@ impl GhostexGpuiApp {
             return;
         }
         let Some(path) = self.native_docs_link_file_path(doc_path, target) else {
+            self.dispatch_gpui_workspace_action_toast(
+                "error",
+                "Couldn't open that link",
+                &format!("Files can't tell which file {target} points to."),
+                cx,
+            );
             return;
         };
         let before = self.native_docs.documents.len();
@@ -257,7 +263,20 @@ impl GhostexGpuiApp {
             if let Some(path) = super::open_file::typed_absolute_path(link) {
                 return Some(path);
             }
-            let resolved = super::blocks::resolve_image_path(doc_path, link)?;
+            let Some(resolved) = super::blocks::resolve_image_path(doc_path, link) else {
+                // A relative link that climbs above the project folder (#645): resolved from the
+                // document's real folder, so it opens like a file outside the project does.
+                if link.contains("://") || link.starts_with('/') {
+                    return None;
+                }
+                let document = Path::new(doc_path);
+                let document = if document.is_absolute() {
+                    document.to_path_buf()
+                } else {
+                    project.project_path.join(document)
+                };
+                return Some(join_relative_link(document.parent()?, link));
+            };
             let resolved = Path::new(&resolved);
             Some(if resolved.is_absolute() {
                 resolved.to_path_buf()
@@ -394,6 +413,22 @@ impl GhostexGpuiApp {
             this.native_docs_notify(cx);
         });
     }
+}
+
+/// `link` (relative, `/`-separated) joined to `folder`, with its `.` and `..` folded in by name, as
+/// the link reads: a `..` above the top of the computer stays at the top.
+fn join_relative_link(folder: &Path, link: &str) -> PathBuf {
+    let mut path = folder.to_path_buf();
+    for segment in link.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                path.pop();
+            }
+            other => path.push(other),
+        }
+    }
+    path
 }
 
 /// `link` without a trailing `:line` or `:line:column`.
