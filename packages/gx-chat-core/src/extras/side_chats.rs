@@ -95,6 +95,7 @@ pub fn pill(panel: &Value) -> Option<ChatPill> {
     }
     let meta = text(panel, "meta").to_string();
     Some(ChatPill {
+        supervisor_row: None,
         switch: None,
         menu: Vec::new(),
         id: SIDE_CHATS_PILL.to_string(),

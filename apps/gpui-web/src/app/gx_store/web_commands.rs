@@ -43,7 +43,7 @@ impl GhostexGpuiApp {
         self.gx_store.sidebar_ui.restore(state);
     }
 
-    fn gx_store_persist_sidebar_ui(&mut self) {
+    pub(crate) fn gx_store_persist_sidebar_ui(&mut self) {
         let owed = self.gx_store.sidebar_ui.take_pending();
         if owed.is_empty() {
             return;

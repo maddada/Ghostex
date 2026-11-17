@@ -122,6 +122,35 @@ impl SidebarUiStore {
         before != notices.len()
     }
 
+    /// Hides each of `group_ids` the first time it is seen, as the user's own Hide would, and
+    /// remembers it so a project the user shows again stays shown. Returns whether anything moved;
+    /// the hidden items are then owed a write.
+    ///
+    /// CDXC:Autopilot 2026-11-18 DECISION:
+    /// Q87, "A. Hidden, opened from Autopilot": Autopilot's project starts hidden like a project the user hid, and Show hidden still lists it. A project's hidden state is each sidebar's own (`ghostex.sidebar.hidden-items.v1`), so gxserver marks the project (`autopilotSupervisorProject`) and each sidebar hides it here once; `autoHiddenGroupIds` tells "never hidden yet" apart from "the user unhid it", so an unhide is respected and nothing re-hides it on the next start.
+    pub fn hide_once(&mut self, group_ids: &[String]) -> bool {
+        let items = &mut self.state.hidden_items;
+        let mut moved = false;
+        for group_id in group_ids {
+            if items
+                .auto_hidden_group_ids
+                .iter()
+                .any(|seen| seen == group_id)
+            {
+                continue;
+            }
+            items.auto_hidden_group_ids.push(group_id.clone());
+            if !items.group_ids.iter().any(|hidden| hidden == group_id) {
+                items.group_ids.push(group_id.clone());
+            }
+            moved = true;
+        }
+        if moved {
+            self.pending.merge(SidebarPersistSet::hidden_items());
+        }
+        moved
+    }
+
     /// The machine tab the sidebar draws.
     pub fn selected_machine_id(&self) -> &str {
         &self.state.selected_machine_id

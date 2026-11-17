@@ -27,6 +27,8 @@ pub(crate) mod native_chat;
 pub(crate) mod native_kanban;
 pub(crate) mod native_sidebar;
 pub(crate) mod notice_modal_host;
+/// A stand-in: the page has no owner key (`owner_security.rs`).
+pub(crate) mod owner_security;
 /// The window panels' tween alone (the page has none of the desktop's panels), which the chat's
 /// docked Session details column slides on.
 #[allow(dead_code)]

@@ -252,6 +252,9 @@ pub struct SidebarHiddenItems {
     pub group_ids: Vec<String>,
     /// `<section key>:<collection id>`.
     pub collection_keys: Vec<String>,
+    /// Projects Ghostex hid once on its own (Autopilot's project, `SidebarUiStore::hide_once`), so
+    /// one the user shows again is never hidden again.
+    pub auto_hidden_group_ids: Vec<String>,
 }
 
 /// The sidebar's own state: what is collapsed, hidden, filtered, and selected.

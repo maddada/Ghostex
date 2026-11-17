@@ -1379,6 +1379,7 @@ pub fn pill(board: &Value) -> Option<ChatPill> {
     }
     let label = words.join(" \u{b7} ");
     Some(ChatPill {
+        supervisor_row: None,
         switch: None,
         menu: Vec::new(),
         id: BOARD_PILL.to_string(),
@@ -1440,6 +1441,7 @@ pub fn blocked_pill(board: &Value) -> Option<ChatPill> {
         .and_then(|pair| pair[1].as_u64())
         .filter(|count| *count > 0)?;
     Some(ChatPill {
+        supervisor_row: None,
         switch: None,
         menu: Vec::new(),
         id: BLOCKED_PILL.to_string(),

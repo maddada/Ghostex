@@ -119,6 +119,10 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
             output.insert("workSource".to_string(), work_source);
         }
     }
+    // The supervisor's "Autopilot" project: every sidebar hides it once (CDXC:Autopilot 2026-11-18 in server/src/autopilot/supervisor.rs).
+    if crate::autopilot::is_supervisor_project(project) {
+        output.insert("autopilotSupervisorProject".to_string(), Value::Bool(true));
+    }
     // Settings > Autopilot covers this project and its worktrees (the sidebar's Advanced row).
     if let Some(inside) = crate::autopilot::project_presentation(project) {
         output.insert("autopilot".to_string(), Value::Bool(inside));

@@ -18,7 +18,7 @@ use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
 use super::super::palette::SettingsPalette;
 use super::super::rail::{rail_pages, render_no_matches};
-use super::super::store::{SettingsStore, store_gxserver_rpc};
+use super::super::store::{SettingsStore, post_store_message, store_gxserver_rpc};
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Context, Div, Entity, IntoElement,
     ParentElement as _, Render, Styled as _, Task, Window, div, px,
@@ -509,7 +509,7 @@ impl AutopilotTab {
             // User, on the old "It hasn't been needed yet" line: "why has this never been
             // needed??" It wakes only for what the rules can't settle, so the line says which.
             None => format!(
-                "Not started yet. It wakes only for what Autopilot's rules can't settle: a session still frozen after an interrupt and a reload, or (with Answer questions on) a question with no recommended choice (when it answers questions). Until then the rules handle everything. It starts in an Autopilot project in your sidebar.{}",
+                "Not started yet. It wakes only for what Autopilot's rules can't settle: a session still frozen after an interrupt and a reload, or (with Answer questions on) a question with no recommended choice (when it answers questions). Until then the rules handle everything. It starts in an Autopilot project, hidden in your sidebar (Show hidden lists it).{}",
                 if question_choice(&config) == "wait" {
                     " Questions wait for you, so they stay with you."
                 } else {
@@ -536,7 +536,46 @@ impl AutopilotTab {
                 )
             }
         };
-        rows.push(padded_text(p, &[(status.as_str(), false)]));
+        let status = padded_text(p, &[(status.as_str(), false)]);
+        // "Open supervisor" once it has a session: its project starts hidden (CDXC:Autopilot
+        // 2026-11-18 in server/src/autopilot/supervisor.rs). Before that the line above says it
+        // hasn't been needed yet.
+        let session = supervisor["projectId"]
+            .as_str()
+            .zip(supervisor["sessionId"].as_str())
+            .map(|(project_id, session_id)| {
+                ghostex_gx_core::SessionKey::local(project_id, session_id).to_sidebar_session_id()
+            });
+        rows.push(match session {
+            Some(session) => {
+                let open = settings_button(
+                    p,
+                    "autopilot-open-supervisor",
+                    "Open supervisor",
+                    Some("modals/settings/arrow-up-right.svg"),
+                    ButtonVariant::Outline,
+                    false,
+                    None,
+                    move |page: &mut Self, _window, cx| {
+                        post_store_message(
+                            &page.store,
+                            json!({ "type": "focusSession", "sessionId": session }),
+                            cx,
+                        );
+                    },
+                    cx,
+                );
+                h_flex()
+                    .w_full()
+                    .gap(px(12.0))
+                    .items_center()
+                    .pr(px(ROW_PADDING_X))
+                    .child(div().flex_1().min_w_0().child(status))
+                    .child(open)
+                    .into_any_element()
+            }
+            None => status,
+        });
         let notes = supervisor["notesDir"]
             .as_str()
             .map(home_relative)

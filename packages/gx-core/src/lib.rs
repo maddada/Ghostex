@@ -237,12 +237,12 @@ pub use crate::sidebar_menu::{
     AGENT_CHOICE_SCOPE_SETTING_KEY,
 };
 pub use crate::sidebar_ui::{
-    collapse_into_storage, collapse_state_from_storage, hidden_items_from_storage,
-    hidden_items_into_storage, machine_tab_from_storage, sidebar_window_storage_key,
-    SidebarCollapseDiff, SidebarPersistSet, SidebarUiIntent, SidebarUiOutcome, SidebarUiStore,
-    ToggleAllProjectsInput, COLLAPSE_STORAGE_KEY, COLLAPSE_STORAGE_VERSION,
-    HIDDEN_ITEMS_STORAGE_KEY, MACHINE_TAB_STORAGE_KEY, PROJECT_COLLECTIONS_STORAGE_KEY,
-    SIDEBAR_WINDOW_SCOPE_ID,
+    autopilot_project_group_ids, collapse_into_storage, collapse_state_from_storage,
+    hidden_items_from_storage, hidden_items_into_storage, machine_tab_from_storage,
+    sidebar_window_storage_key, SidebarCollapseDiff, SidebarPersistSet, SidebarUiIntent,
+    SidebarUiOutcome, SidebarUiStore, ToggleAllProjectsInput, COLLAPSE_STORAGE_KEY,
+    COLLAPSE_STORAGE_VERSION, HIDDEN_ITEMS_STORAGE_KEY, MACHINE_TAB_STORAGE_KEY,
+    PROJECT_COLLECTIONS_STORAGE_KEY, SIDEBAR_WINDOW_SCOPE_ID,
 };
 pub use crate::sidebar_view::extension_panel;
 pub use crate::sidebar_view::project_sidebar_icon_data_url;

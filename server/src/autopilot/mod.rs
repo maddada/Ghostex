@@ -5,6 +5,7 @@
 mod config;
 mod log;
 mod notes;
+mod supervisor;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, OnceLock, PoisonError};
@@ -17,6 +18,11 @@ pub use config::{
 };
 pub use log::{append as append_log, read_recent as read_log, summary, LogEntry, Outcome};
 pub use notes::{ensure_notes, next_wake_number, notes_dir, write_wake};
+pub use supervisor::{
+    is_supervisor_project, keeps_ghostex_title, read_record as read_supervisor_record,
+    supervisor_session, write_record as write_supervisor_record, SupervisorRecord,
+    SUPERVISOR_TITLE,
+};
 
 /// The choices as last read or written; the paths of this gxserver once the runtime started.
 #[cfg(not(test))]
@@ -100,6 +106,17 @@ pub fn insert_chat_autopilot(frame: &mut Map<String, Value>, project_id: &str, s
             "offline": crate::network_status::is_offline(),
         }),
     );
+    // The pill's "Open supervisor" row, once there is a supervisor and this chat is not it.
+    if let Some((supervisor_project, supervisor_session)) = supervisor_session() {
+        if (supervisor_project.as_str(), supervisor_session.as_str()) != (project_id, session_id) {
+            if let Some(Value::Object(autopilot)) = frame.get_mut("autopilot") {
+                autopilot.insert(
+                    "supervisor".to_string(),
+                    json!({ "projectId": supervisor_project, "sessionId": supervisor_session }),
+                );
+            }
+        }
+    }
 }
 
 /// How long a session the user stopped by hand is left alone.

@@ -20,8 +20,7 @@ use crate::autopilot::{self, AutopilotConfig, SupervisorModel};
 use crate::coordinators::SessionKey;
 use crate::presentation::presentation_activity;
 
-const SUPERVISOR_FILE: &str = "autopilot-supervisor.json";
-const SUPERVISOR_TITLE: &str = "Autopilot supervisor";
+use crate::autopilot::{SupervisorRecord, SUPERVISOR_TITLE};
 /// Least time between two wakes.
 const WAKE_GAP_MS: i64 = 60_000;
 /// A wake that the supervisor has not finished after this long lets the next one through.
@@ -90,25 +89,12 @@ pub(super) fn forget_session(key: &SessionKey) {
     }
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SupervisorRecord {
-    project_id: String,
-    session_id: String,
-    agent: String,
-}
-
 fn read_record(paths: &crate::paths::GxserverPaths) -> Option<SupervisorRecord> {
-    std::fs::read_to_string(paths.app_state_dir.join(SUPERVISOR_FILE))
-        .ok()
-        .and_then(|text| serde_json::from_str(&text).ok())
+    autopilot::read_supervisor_record(paths)
 }
 
 fn write_record(paths: &crate::paths::GxserverPaths, record: &SupervisorRecord) {
-    let _ = std::fs::write(
-        paths.app_state_dir.join(SUPERVISOR_FILE),
-        serde_json::to_string_pretty(record).unwrap_or_default(),
-    );
+    autopilot::write_supervisor_record(paths, record);
 }
 
 /// The supervisor's session: Autopilot leaves it out of everything else.
@@ -293,6 +279,7 @@ async fn wake(
 ) -> std::result::Result<u64, String> {
     let record = match live_supervisor(state) {
         Some((record, session)) => {
+            restore_title(state, &record, &session);
             let busy =
                 presentation_activity(&session, &crate::presentation::now_iso()) == "working";
             let last = judge().lock().map(|judge| judge.last_wake_ms).unwrap_or(0);
@@ -324,6 +311,55 @@ async fn wake(
     .await
     .map_err(|error| format!("Couldn't wake the supervisor: {error}"))?;
     Ok(n)
+}
+
+/// Puts "Autopilot supervisor" back on a supervisor the agent renamed (Claude named the first ones
+/// after their first message), unless the user renamed it. Runs when gxserver starts and on each
+/// wake.
+fn restore_title(state: &AppState, record: &SupervisorRecord, session: &Value) {
+    if session["title"].as_str() == Some(SUPERVISOR_TITLE)
+        || session
+            .pointer("/runtimeSettings/pendingAgentTitleRequestTitleSource")
+            .and_then(Value::as_str)
+            == Some("user")
+    {
+        return;
+    }
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let mut runtime = session["runtimeSettings"]
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    runtime.insert("titleSource".into(), json!("ghostex"));
+    let updated = repository.update_session(
+        json!({
+            "projectId": record.project_id,
+            "sessionId": record.session_id,
+            "title": SUPERVISOR_TITLE,
+            "runtimeSettings": runtime,
+        })
+        .as_object()
+        .expect("object literal"),
+    );
+    if updated.is_ok() {
+        let _ = schedule_presentation_session_delta(
+            state,
+            &db,
+            &repository,
+            &record.project_id,
+            &record.session_id,
+        );
+    }
+}
+
+/// When gxserver starts: the supervisor gets its own title back (`restore_title`).
+pub(super) fn restore_title_at_start(state: &AppState) {
+    if let Some((record, session)) = live_supervisor(state) {
+        restore_title(state, &record, &session);
+    }
 }
 
 /// What a failed start or wake depends on: the Autopilot settings and whether each agent has an

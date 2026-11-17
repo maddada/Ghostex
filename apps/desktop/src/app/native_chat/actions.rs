@@ -481,6 +481,17 @@ impl NativeChatView {
             cx.emit(super::state::NativeChatEvent::Host(
                 json!({"type":"open","modal":"settings","initialTab":"autopilot"}),
             ));
+        } else if action.command["type"]
+            == ghostex_gx_chat_core::extras::autopilot::OPEN_SUPERVISOR_COMMAND
+        {
+            // The Autopilot pill's "Open supervisor": the supervisor's session on this chat's
+            // computer, opened as a session name's pill opens its session.
+            cx.emit(super::state::NativeChatEvent::Host(json!({
+                "type": "sessionChatHostAction",
+                "action": "openAgentSession",
+                "projectId": action.command["projectId"],
+                "sessionId": action.command["sessionId"],
+            })));
         } else if action.command["type"] == "openSkillsSettings" {
             cx.emit(super::state::NativeChatEvent::Host(json!({
                 "type":"open","modal":"settings","initialTab":"integrations","initialSection":"agentSkills",

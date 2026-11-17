@@ -459,6 +459,14 @@ impl GhostexGpuiApp {
         // Before the generation is read: pruning is a change to the sidebar's own state and the
         // inputs have to carry it.
         self.gx_store_prune_sidebar_tag_filters(&settings);
+        // Autopilot's project starts hidden, once (gx-core `SidebarUiStore::hide_once`).
+        let projects_moved = {
+            let changes = &self.gx_store.sidebar_list.changes;
+            !changes.projects_changed.is_empty() || !changes.machines_reloaded.is_empty()
+        };
+        self.gx_store
+            .sidebar_ui
+            .hide_autopilot_projects(projects_moved, &self.gx_store.core);
         let ui_generation = self.gx_store.sidebar_ui.generation();
         let changes = std::mem::take(&mut self.gx_store.sidebar_list.changes);
         let dirty = std::mem::take(&mut self.gx_store.sidebar_list.dirty);

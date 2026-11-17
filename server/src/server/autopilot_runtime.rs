@@ -268,6 +268,7 @@ fn now_ms() -> i64 {
 
 pub(crate) fn start_autopilot_runtime(state: Arc<AppState>) {
     let _ = autopilot::read_config(&state.paths);
+    super::autopilot_judge::restore_title_at_start(&state);
     let memory = Arc::new(Mutex::new(Memory::default()));
     let mut shutdown = state.shutdown_tx.subscribe();
     tokio::spawn(async move {

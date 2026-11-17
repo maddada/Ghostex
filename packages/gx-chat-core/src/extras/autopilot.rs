@@ -31,6 +31,9 @@ const OFFLINE_ARIA: &str = "Autopilot is waiting for the network";
 /// The menu row that opens Settings > Autopilot: a renderer handles this command itself (the core
 /// has nothing to do for it).
 pub const OPEN_SETTINGS_COMMAND: &str = "openAutopilotSettings";
+/// The menu row that opens the supervisor's session (`projectId`, `sessionId` on the command): a
+/// renderer handles it itself.
+pub const OPEN_SUPERVISOR_COMMAND: &str = "openAutopilotSupervisor";
 
 fn flag(state: &ChatState, key: &str) -> Option<bool> {
     state
@@ -107,8 +110,29 @@ pub fn pill(state: &ChatState) -> Option<ChatPill> {
                 "command": { "type": OPEN_SETTINGS_COMMAND },
             }),
         ],
+        supervisor_row: supervisor_row(state),
         ..ChatPill::default()
     })
+}
+
+/// "Open supervisor", once Autopilot has a supervisor session and this chat is not it (gxserver
+/// sends `autopilot.supervisor` only then).
+///
+/// CDXC:Autopilot 2026-11-18 DECISION:
+/// Q87, "A. Hidden, opened from Autopilot": the Autopilot project starts hidden, so Settings › Autopilot and the Autopilot pill's menu get "Open supervisor", shown only once a supervisor session exists. The row travels apart from `menu` so the phone, whose sheet can't open it yet, never draws a row that does nothing.
+fn supervisor_row(state: &ChatState) -> Option<Value> {
+    let supervisor = state.session.autopilot.as_ref()?.get("supervisor")?;
+    let project_id = supervisor.get("projectId").and_then(Value::as_str)?;
+    let session_id = supervisor.get("sessionId").and_then(Value::as_str)?;
+    Some(json!({
+        "label": "Open supervisor",
+        "iconPath": "titlebar/plane.svg",
+        "command": {
+            "type": OPEN_SUPERVISOR_COMMAND,
+            "projectId": project_id,
+            "sessionId": session_id,
+        },
+    }))
 }
 
 /// `toggleAutopilot`: flips the pill at once and asks gxserver to save it: Autopilot itself on a

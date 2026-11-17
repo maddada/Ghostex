@@ -84,6 +84,7 @@ pub fn chat_pills(
     let mut pills = Vec::new();
     if resources.total > 0 {
         pills.push(ChatPill {
+            supervisor_row: None,
             switch: None,
             menu: Vec::new(),
             id: "resources".to_string(),
@@ -106,6 +107,7 @@ pub fn chat_pills(
         let in_flight = count(threads, "inFlight");
         let meta = text(threads, "meta");
         pills.push(ChatPill {
+            supervisor_row: None,
             switch: None,
             menu: Vec::new(),
             id: "threads".to_string(),
@@ -146,6 +148,7 @@ pub fn chat_pills(
     if tasks.is_object() && !tasks_in_session_details {
         let meta = text(tasks, "meta");
         pills.push(ChatPill {
+            supervisor_row: None,
             switch: None,
             menu: Vec::new(),
             id: "tasks".to_string(),
@@ -169,6 +172,7 @@ pub fn chat_pills(
             .count();
         let meta = text(fleet, "countLabel");
         pills.push(ChatPill {
+            supervisor_row: None,
             switch: None,
             menu: Vec::new(),
             id: "subagents".to_string(),
@@ -185,6 +189,7 @@ pub fn chat_pills(
     if background.is_object() {
         let meta = text(background, "meta");
         pills.push(ChatPill {
+            supervisor_row: None,
             switch: None,
             menu: Vec::new(),
             id: "background".to_string(),
@@ -207,6 +212,7 @@ pub fn chat_pills(
 /// User: "i have a stashed prompt but we aren't showing it at all. let's please show stashed pill here in the pills bar above the composer. should just say stashed and the number of stashed prompts for that session and look like the resources one basically". The count used to live only as the badge on the More actions menu's "Stash prompt" row (composerChrome.stashBadge, capped at 9, in a menu nobody opens) since the toolbar's stash button went on 2026-10-22, so a stash sat unseen. The pill reads "Stashed" and the real count, drawn like Resources, and opens the Saved Prompts list the Stash prompt row opens from an empty chat box. It is the last of the core's pills, so it appearing after a stash moves none of the others; the Links pill still follows it.
 pub fn stashed_pill(stashed: usize) -> Option<ChatPill> {
     (stashed > 0).then(|| ChatPill {
+        supervisor_row: None,
         switch: None,
         menu: Vec::new(),
         id: STASHED_PILL.to_string(),

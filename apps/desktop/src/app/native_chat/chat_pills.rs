@@ -661,13 +661,22 @@ impl NativeChatView {
         if self.chat_menu_toggled_shut(trigger, cx) {
             return;
         }
-        let rows = self.snapshot["chatPills"]
+        let pill = self.snapshot["chatPills"]
             .as_array()
             .into_iter()
             .flatten()
-            .find(|pill| pill["id"] == id)
+            .find(|pill| pill["id"] == id);
+        let mut rows = pill
             .and_then(|pill| pill["menu"].as_array().cloned())
             .unwrap_or_default();
+        // "Open supervisor" after the toggle, once Autopilot has one (gx-chat-core
+        // `extras/autopilot.rs`, CDXC:Autopilot 2026-11-18).
+        if let Some(row) = pill
+            .map(|pill| &pill["supervisorRow"])
+            .filter(|row| row.is_object())
+        {
+            rows.insert(rows.len().min(1), row.clone());
+        }
         match at {
             Some(at) => self.show_chat_menu_at(rows, at, AUTOPILOT_MENU_WIDTH, window, cx),
             None => {

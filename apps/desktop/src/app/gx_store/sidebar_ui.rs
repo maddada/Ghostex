@@ -122,6 +122,8 @@ pub(crate) struct SidebarUiHost {
     pub(super) stored_project_collections: Option<Value>,
     pub(super) counters: SidebarUiCounters,
     pub(super) last_error: Option<&'static str>,
+    /// Autopilot's projects were looked for since the stored state landed (`hide_autopilot_projects`).
+    autopilot_checked: bool,
 }
 
 impl Default for SidebarUiHost {
@@ -142,6 +144,7 @@ impl Default for SidebarUiHost {
             stored_project_collections: None,
             counters: SidebarUiCounters::default(),
             last_error: None,
+            autopilot_checked: false,
         }
     }
 }
@@ -221,6 +224,27 @@ impl SidebarUiHost {
             return false;
         }
         let moved = self.store.retain_machine_notice_collapses(machines);
+        if moved {
+            self.generation += 1;
+        }
+        moved
+    }
+
+    /// Hides Autopilot's project the first time this sidebar sees it (gx-core
+    /// `SidebarUiStore::hide_once`). Looks only when projects arrived or moved, and only once the
+    /// stored state is in: a hide made before it landed would be replaced by it. The write is owed
+    /// and goes out with the update's own (`gx_store_write_owed_sidebar_ui_state`).
+    pub(super) fn hide_autopilot_projects(
+        &mut self,
+        projects_moved: bool,
+        core: &ghostex_gx_core::Core,
+    ) -> bool {
+        if !self.restored || (!projects_moved && self.autopilot_checked) {
+            return false;
+        }
+        self.autopilot_checked = true;
+        let group_ids = ghostex_gx_core::autopilot_project_group_ids(core.presentation());
+        let moved = !group_ids.is_empty() && self.store.hide_once(&group_ids);
         if moved {
             self.generation += 1;
         }

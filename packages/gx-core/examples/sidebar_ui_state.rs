@@ -269,6 +269,7 @@ fn main() -> ExitCode {
             == SidebarHiddenItems {
                 group_ids: vec!["a".to_string(), "b".to_string()],
                 collection_keys: vec!["local:c1".to_string()],
+                auto_hidden_group_ids: Vec::new(),
             },
         format!("{hidden:?}"),
     );
