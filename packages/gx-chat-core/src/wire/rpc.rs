@@ -98,6 +98,8 @@ pub enum ChatRpcMethod {
     ReadSessionFilesLinks,
     /// What the Session details panel shows (`extras/session_details/`).
     ReadSessionDetails,
+    /// Where the session runs, for the where pill (`extras/where_pill.rs`).
+    ReadSessionWhere,
     /// Ends one of the session's background commands (the Session details panel's stop button).
     StopSessionBackgroundTask,
     /// The Mode menu's "Restart in Bypass when idle" switch (server/src/session_chat_mode_restart.rs).
@@ -167,6 +169,7 @@ impl ChatRpcMethod {
             Self::CatchUpSession => "catchUpSession",
             Self::ReadSessionFilesLinks => "readSessionFilesLinks",
             Self::ReadSessionDetails => "readSessionDetails",
+            Self::ReadSessionWhere => "readSessionWhere",
             Self::StopSessionBackgroundTask => "stopSessionBackgroundTask",
             Self::RestartSessionInMode => "restartSessionInMode",
             Self::HoldSessionChatSend => "holdSessionChatSend",
@@ -230,6 +233,7 @@ impl ChatRpcMethod {
             "catchUpSession" => Self::CatchUpSession,
             "readSessionFilesLinks" => Self::ReadSessionFilesLinks,
             "readSessionDetails" => Self::ReadSessionDetails,
+            "readSessionWhere" => Self::ReadSessionWhere,
             "stopSessionBackgroundTask" => Self::StopSessionBackgroundTask,
             "restartSessionInMode" => Self::RestartSessionInMode,
             "holdSessionChatSend" => Self::HoldSessionChatSend,

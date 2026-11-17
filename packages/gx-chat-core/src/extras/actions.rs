@@ -33,6 +33,7 @@ pub fn handle_with_ids(
         | ActionKind::SessionDetailsOpen => {
             crate::extras::session_details::actions::handle(state, action, next_request_id)
         }
+        ActionKind::WherePill => crate::extras::where_pill::handle(state, action),
         ActionKind::ToggleAgentFleet => {
             state.extras.panels.fleet_open = Some(flag(action, "open"));
             Vec::new()
