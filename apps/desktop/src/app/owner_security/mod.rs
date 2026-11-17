@@ -259,6 +259,8 @@ fn owner_refusal(transport: &Transport) -> Option<String> {
     let me = this_computer_name();
     let local = matches!(transport, Transport::Local);
     let there = expected_computer(transport);
+    // Only the cases that name where to approve look the owners up (one `securityStatus` call).
+    let place = || owner_place(transport);
     match (open, waiting, gave_up) {
         (true, ..) => None,
         // The old owner key may let this app in there: only on the user's Approve of its card.
@@ -270,18 +272,89 @@ fn owner_refusal(transport: &Transport) -> Option<String> {
         }
         (false, false, _) if flooded.is_some() => flooded,
         (false, true, _) if local => Some(format!(
-            "This computer already has an owner. On your phone, approve \"Let {me} (Ghostex app) show the pairing code of …\" once, only if it shows the key words {words}; then Ghostex here can show the code and approve devices."
+            "This computer already has an owner. {}, approve \"Let {me} (Ghostex app) show the pairing code of …\" once, only if it shows the key words {words}; then Ghostex here can show the code and approve devices.",
+            capitalized(&place())
         )),
         (false, true, _) => Some(format!(
-            "{there} has its own owner. In Ghostex there or on a phone paired with it, approve \"Let {me} (Ghostex app) show the pairing code of …\" once, only if it shows the key words {words} and names {there}; then you can approve its devices from here."
+            "{there} has its own owner. {}, approve \"Let {me} (Ghostex app) show the pairing code of …\" once, only if it shows the key words {words} and names {there}; then you can approve its devices from here.",
+            capitalized(&place())
         )),
         (false, false, true) if local => Some(format!(
-            "\"Let {me} (Ghostex app) show this computer's pairing code\" wasn't approved on your phone, so Ghostex here can't show the code or approve devices. Restart Ghostex to ask again, or do it from your phone."
+            "\"Let {me} (Ghostex app) show this computer's pairing code\" wasn't approved, so Ghostex here can't show the code or approve devices. Restart Ghostex to ask again, or approve it {}.",
+            place()
         )),
         (false, false, true) => Some(format!(
-            "That computer didn't let {me} act as you there, so approve its devices in Ghostex there or on a phone paired with it. Restart Ghostex here to ask again."
+            "That computer didn't let {me} act as you there, so approve its devices {}. Restart Ghostex here to ask again.",
+            place()
         )),
         _ => None,
+    }
+}
+
+/// Where to approve this app's ask on `transport`'s gxserver: the apps and phones that own that
+/// computer, named when its `securityStatus` lists them (a computer's own app by that computer's
+/// name, a phone as "your phone"), otherwise "in Ghostex on the computer or phone that owns ...".
+/// Never says "your phone" unless a phone is an owner there. Blocks (never on the main thread).
+fn owner_place(transport: &Transport) -> String {
+    let own_owner = owner_key_for(transport)
+        .ok()
+        .and_then(|key| key_id_of(&key.public_key_b64()));
+    let status = in_security_flow(|| rpc(transport, "/api/securityStatus", json!({})))
+        .unwrap_or_default();
+    let mut names: Vec<String> = Vec::new();
+    for key in status
+        .get("ownerKeys")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|key| own_owner.is_none() || text(key, "keyId") != own_owner)
+    {
+        let name = if matches!(text(key, "platform").as_deref(), Some("ios" | "android")) {
+            "your phone".to_string()
+        } else if let Some(label) = text(key, "label") {
+            let label = label.trim_end_matches("(Ghostex app)").trim().to_string();
+            if label.is_empty() {
+                continue;
+            }
+            label
+        } else {
+            continue;
+        };
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    owner_place_text(&names, matches!(transport, Transport::Local))
+}
+
+/// [`owner_place`]'s words for the owners' `names` ("your phone" is a phone).
+fn owner_place_text(names: &[String], local: bool) -> String {
+    if names.is_empty() {
+        return if local {
+            "in Ghostex on the computer or phone that owns this computer".to_string()
+        } else {
+            "in Ghostex on the computer or phone that owns that computer".to_string()
+        };
+    }
+    names
+        .iter()
+        .map(|name| {
+            if name == "your phone" {
+                "on your phone".to_string()
+            } else {
+                format!("in Ghostex on {name}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" or ")
+}
+
+/// `text` with its first letter in capitals, for a place that starts a sentence.
+fn capitalized(text: &str) -> String {
+    let mut chars = text.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => String::new(),
     }
 }
 
@@ -1121,7 +1194,7 @@ pub(crate) fn unlock_with_old_key(
         if error == OWNER_WAITING_ERROR {
             let (computer, _) = machine_and_host(transport);
             format!(
-                "This Mac couldn't manage {computer} again just now. Try again in a minute. If it keeps failing, approve this Mac in Ghostex on {computer} or on a phone paired with it."
+                "This Mac couldn't manage {computer} again just now. Try again in a minute. If it keeps failing, approve this Mac in Ghostex on the computer or phone that owns {computer}."
             )
         } else {
             error
@@ -1453,7 +1526,7 @@ pub(crate) fn steer_needs_owner(
     });
     waiting.then(|| {
         format!(
-            "Ghostex on {} isn't approved as you on the computer this session runs on yet, so it can't stop, answer or type there for you. Approve \"Let {} (Ghostex app) act as the owner\" once on that computer (Ghostex shows it as a card) or on your phone in that computer's Approvals; after that it works without asking.",
+            "Ghostex on {} isn't approved as you on the computer this session runs on yet, so it can't stop, answer or type there for you. Approve \"Let {} (Ghostex app) act as the owner\" once in Ghostex on the computer or phone that owns that computer (it shows there as a card); after that it works without asking.",
             this_computer_name(),
             this_computer_name(),
         )
@@ -1462,13 +1535,13 @@ pub(crate) fn steer_needs_owner(
 
 /// [`enroll_owner_key`]'s answer while that computer's own owner hasn't let this app act as the
 /// owner there; the approval card replaces it with words naming both computers.
-pub(crate) const OWNER_WAITING_ERROR: &str = "Another owner key is enrolled on that computer's Ghostex. Approve this app there or on your phone.";
+pub(crate) const OWNER_WAITING_ERROR: &str = "Another owner key is enrolled on that computer's Ghostex. Approve this app in Ghostex on the computer or phone that owns that computer.";
 
 /// What Approve on `computer`'s card says while that computer's owner hasn't let this app in.
 pub(crate) fn owner_waiting_message(computer: &str) -> String {
     let me = this_computer_name();
     format!(
-        "{computer} has its own owner, so Ghostex here can't answer its requests yet. In Ghostex on {computer}, or on a phone paired with {computer}, approve \"Let {me} (Ghostex app) act as the owner\" (it shows there as a card once Ghostex on {computer} is open), or answer this request there instead."
+        "{computer} has its own owner, so Ghostex here can't answer its requests yet. In Ghostex on the computer or phone that owns {computer}, approve \"Let {me} (Ghostex app) act as the owner\" (it shows there as a card once Ghostex is open on it), or answer this request there instead."
     )
 }
 
@@ -1833,7 +1906,7 @@ pub(crate) fn approve_request(
         )
         .map_err(|(code, message)| match code.as_deref() {
             Some(APPROVAL_REQUIRED_ERROR) => {
-                "Approve adding this computer as an approver on your phone first, then try again."
+                "Approve adding this computer as an approver in Ghostex on the computer or phone that owns that computer first, then try again."
                     .to_string()
             }
             _ => message,

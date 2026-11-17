@@ -274,7 +274,7 @@ impl GhostexGpuiApp {
             .unwrap_or_else(|| machine_id.to_string());
         let summary = request.summary.trim().trim_end_matches('.');
         let where_to = match devices {
-            [] => format!("in Ghostex on {computer} or on a phone paired with it"),
+            [] => format!("in Ghostex on the computer or phone that owns {computer}"),
             several => format!("on {}", several.join(" or ")),
         };
         let then = if asked {
