@@ -507,8 +507,8 @@ pub(crate) fn command_names_model(command: &str, agent: &str) -> bool {
     false
 }
 
-/// True when `command` already passes an effort option (any agent's spelling, Codex's
-/// `-c model_reasoning_effort=…` too), read shell-aware like [`command_names_model`] so prompt text
+/// True when `command` already passes an effort option (any agent's spelling, and on Codex
+/// `-c model_reasoning_effort=…`), read shell-aware like [`command_names_model`] so prompt text
 /// that mentions `--effort` does not count.
 pub(crate) fn command_names_effort(command: &str, agent: &str) -> bool {
     let mut offset = 0;
@@ -528,14 +528,14 @@ pub(crate) fn command_names_effort(command: &str, agent: &str) -> bool {
         if matches!(
             flag,
             "--effort" | "--reasoning-effort" | "--reasoning" | "--thinking"
-        ) || word.starts_with("--config=model_reasoning_effort=")
+        ) || (agent == "codex" && word.starts_with("--config=model_reasoning_effort="))
         {
             return true;
         }
         if !is_option_word(&command[start..end], &word) {
             continue;
         }
-        if matches!(word.as_str(), "-c" | "--config") {
+        if agent == "codex" && matches!(word.as_str(), "-c" | "--config") {
             config_value = true;
             continue;
         }
