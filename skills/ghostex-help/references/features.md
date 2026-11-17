@@ -737,9 +737,11 @@ ordered by when they last came back to you (started, sent a message, or a
 finished turn), never by output while an agent works. For a list that stays
 put, pick Alphabetical (by title) or Created (newest first) in Session order
 (`unifiedSessionOrder`, in Settings under the Sidebar switch and in Sort &
-Filter, the phone follows it): then a session keeps its place in its shelf when
-you send it a message or it finishes (under Alphabetical, renaming it moves it
-once). The Moving and Parked shelves and the cards inside each project group
+Filter; the phone follows it once its app is updated, and an older phone app
+keeps Recent activity): then a session keeps its place in its shelf when you
+send it a message or it finishes. Under Alphabetical a title change still moves
+it: your rename, or the title Ghostex gives a session after its first message
+or takes from its terminal. The Moving and Parked shelves and the cards inside each project group
 follow the same order. A session still changes shelf: with the Moving section
 on, a working session goes to Moving until it stops, and with Unpark after
 sending a message on, sending to a parked session takes it out of Parked; turn
