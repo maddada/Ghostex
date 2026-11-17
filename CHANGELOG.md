@@ -2,6 +2,57 @@
 
 ## Unreleased
 
+## 11.9.0 - 2026-11-17
+
+**Ghostex 11.9.0 is out.** Go back to the version you had in one click, report a crash in one click, sessions in their own window, plain approval cards, a setup row for Claude Swap and Codex Swap, and every release now passes a smoke test on macOS before it ships.
+
+### 🛟 Safer updates
+
+- **Go back to the version you had:** every update keeps the previous version, and Settings > Updates offers "Go back to <version>" any time something feels off. On deb and rpm installs it gives the one command that installs the older package.
+- **If a new version keeps crashing,** Ghostex says so the next time it opens and offers Try again or Go back, and the update window says where to go back.
+- **Report a crash in one click:** after a crash, the next open shows what happened, exactly what would be sent (version, system, where it crashed, recent log lines, with private details removed) and one Send report button. The same crash from many people lands on one issue so it gets fixed faster.
+- **Every release is now smoke tested on macOS before it ships:** chats and coordinators with Claude and Codex, the terminal, the browser, typing everywhere, model changes and the fixes for recent crashes.
+
+### 🪟 Work area
+
+- **Open a chat or terminal session in its own window** from its right-click menu, the work area header, the split-pane grip, the Pop Out Pane hotkey or Option-click. Pin keeps it on top and closing it brings the session back ([#641](https://github.com/maddada/Ghostex/issues/641)).
+- **Page windows keep their frosted glass on macOS** when the desktop picture file is gone, as with some live wallpaper apps.
+- **Hidden projects and hidden collections no longer add dots** to their Space or computer tab, unless Show hidden is on.
+
+### 👤 Accounts
+
+- **A setup row at the top of Settings > Accounts** offers to install Claude Swap or Codex Swap when your saved accounts need it, shows the install, and on a failure says why with Try again and Copy details. Accounts that wait for it say "Needs Claude Swap".
+- **Disabled accounts sit at the bottom** of the Claude and Codex lists, with the ones you use and the ones that need a sign-in on top.
+- **A Claude session whose login expired moves to another ready account by itself,** and that account is marked for sign-in.
+- **Codex rate-limit resets work again.**
+
+### 🌐 Remote computers
+
+- **Approval cards ask one plain question,** like "Let Office PC connect to MacBook?", with the words to check in big boxes and just Deny and Approve. Touch ID asks the same question.
+- **A computer without a screen pairs from its terminal:** `ghostex computer-code` shows the code right away and says where to approve, and the approval shows as a card in your other Ghostex apps instead of on that computer's screen.
+- **Connected computers never ask you for approvals on their own;** only something you do asks, once, and approvals you gave carry over restarts.
+- **Connect a computer has Code, Headless server and SSH details tabs,** and says why it can't show a code instead of spinning.
+- **A coordinator can start on another computer,** with its project and account picked on the agent step.
+- **Windows: Ghostex moves to a free port when Windows reserves its usual one,** and your other computers follow it ([#639](https://github.com/maddada/Ghostex/issues/639)).
+- **A plain folder never merges with another computer's project just by its name.**
+
+### 🩹 Fixes and polish
+
+- **A long one-line message reaches Claude Code on a short terminal,** and a message never stays stuck as sending ([#643](https://github.com/maddada/Ghostex/issues/643)).
+- **Changing the model or effort no longer leaves stray /model or /effort text in Claude's or Codex's input box.**
+- **Update all never installs Hex by itself;** it shows under Not installed with its own Install button ([#644](https://github.com/maddada/Ghostex/issues/644)), thanks to @franklinselva.
+- **Links, code and bold text show inside Markdown table cells** in the Files viewer ([#645](https://github.com/maddada/Ghostex/issues/645)).
+- **A paste into the terminal that can't be delivered says why** instead of doing nothing.
+- **Snoozed questions fold into one Snoozed row** above the chat box.
+- **No error dialogs while Ghostex's server starts or restarts,** and a restart sends far fewer updates.
+- **The sidebar shows its settled look from the first frame** at launch.
+- **Ghostex skills work as slash commands in Claude sessions you start yourself,** and only Ghostex's own sessions use them on their own.
+- **Linux (Omarchy): the usage pop-up, header dropdowns and the links card stay open** while you use them.
+- **Windows: header dropdowns fit their window** at fractional scales.
+- **A home folder project shows a house and a drive shows a drive,** never an app's icon from inside it.
+- **Themes recolour the notifications menu and the Settings chat preview.**
+- **`ghostex page retire` works again.**
+
 ## 11.8.2 - 2026-11-16
 
 **Ghostex 11.8.2 is out.** It fixes the Mac app quitting when a chat shows a one-click answer, including on every launch for some people.
