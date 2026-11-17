@@ -853,6 +853,12 @@ impl SidebarViewModel {
             effective,
             previous
                 .as_ref()
+                // Hiding or unhiding a project, or Show hidden, changes what every tab counts.
+                .filter(|previous| {
+                    previous.inputs.ui.show_hidden == effective.ui.show_hidden
+                        && previous.inputs.ui.hidden_items.group_ids
+                            == effective.ui.hidden_items.group_ids
+                })
                 .map(|previous| &previous.machine_summaries),
             changes,
         );
@@ -1503,7 +1509,12 @@ fn machine_summaries(
             Some(summary) => *summary,
             None => {
                 built += 1;
-                machine_tab_summary(store, &machine, inputs.host.parked_project_ids(&machine))
+                machine_tab_summary(
+                    store,
+                    &machine,
+                    inputs.host.parked_project_ids(&machine),
+                    &inputs.ui,
+                )
             }
         };
         summaries.insert(machine, summary);

@@ -13,10 +13,10 @@
 
 use std::collections::BTreeSet;
 
-use crate::keys::MachineId;
+use crate::keys::{MachineId, ProjectKey};
 use crate::presentation_store::{MachinePresentation, PresentationStore};
 
-use super::inputs::SidebarHostInputs;
+use super::inputs::{SidebarHostInputs, SidebarUiState};
 use super::membership::project_members;
 use super::rows::side_chat_needs;
 use super::view::MachineSummary;
@@ -61,6 +61,7 @@ pub(crate) fn machine_tab_summary(
     store: &PresentationStore,
     machine_id: &MachineId,
     parked: &BTreeSet<String>,
+    ui: &SidebarUiState,
 ) -> MachineSummary {
     let mut summary = MachineSummary::default();
     let Some(machine) = store.machine(machine_id) else {
@@ -68,6 +69,15 @@ pub(crate) fn machine_tab_summary(
     };
     let side_chat_needs = side_chat_needs(store, machine_id);
     for project_id in drawn_project_ids(machine, parked) {
+        // A project the user hid adds nothing to the tab's dots (`assemble::counts_toward_dots`).
+        let group_id = ProjectKey {
+            machine: machine_id.clone(),
+            project_id: project_id.to_string(),
+        }
+        .to_sidebar_group_id();
+        if !super::assemble::counts_toward_dots(ui, &group_id) {
+            continue;
+        }
         let members = project_members(store, machine, machine_id, project_id);
         let session_ids = members.session_ids.iter().chain(
             members

@@ -310,6 +310,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
             for group_id in group_ids
                 .iter()
                 .filter(|group_id| shows_group(&view, group_id))
+                .filter(|group_id| counts_toward_dots(input.ui, group_id))
             {
                 let Some(build) = input.builds.get(group_id) else {
                     continue;
@@ -624,6 +625,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
     let mut machine_summary = MachineSummary::default();
     for build in group_ids
         .iter()
+        .filter(|group_id| counts_toward_dots(input.ui, group_id))
         .filter_map(|group_id| input.builds.get(group_id))
     {
         // A coordinator's thread on another computer counts on that computer's tab.
@@ -869,6 +871,20 @@ pub(crate) fn empty_state_deadline_ms(
 /// renderers draw a session group inside its project's block, so it folds with the project.
 pub fn owner_project_group_id(group_id: &str) -> Option<String> {
     parse_workspace_subgroup_id(group_id).map(|(project, _)| project.to_sidebar_group_id())
+}
+
+/// Whether a group's sessions count toward the Space and machine tab dots: not while its project
+/// is hidden (its session groups with it), unless Show hidden draws hidden projects again.
+///
+/// CDXC:Sidebar 2026-11-17 DECISION:
+/// User: "pls make hidden projects not show dots on the space or machine that they're a part of", then "unless show hidden is enabled then they do show". A hidden project's sessions add nothing to any Space dot or computer tab dot; unhiding it, or turning Show hidden on, counts them again.
+pub(crate) fn counts_toward_dots(ui: &SidebarUiState, group_id: &str) -> bool {
+    if ui.show_hidden {
+        return true;
+    }
+    let hidden = &ui.hidden_items.group_ids;
+    !hidden.iter().any(|hidden| hidden == group_id)
+        && owner_project_group_id(group_id).is_none_or(|owner| !hidden.contains(&owner))
 }
 
 /// The groups Collapse All and Expand Previous act on, out of `group_ids`: the projects without
