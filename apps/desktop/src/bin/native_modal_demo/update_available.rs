@@ -1,6 +1,6 @@
 //! Preview of the native Ghostex Update dialog. States: `ready`, `portable`,
 //! `nonotes`, `notify` (a Linux tarball: the download page only), `notify-command` (a Linux
-//! package: the command Update runs in a terminal, and Release page); the default shows an available update with real release notes
+//! package: its update command with Copy command, and Release page); the default shows an available update with real release notes
 //! read from the repository CHANGELOG.
 use super::update_available_modal::*;
 use gpui::{App, AppContext as _};
@@ -31,7 +31,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             UpdateAvailableModalCommand::Download => eprintln!("download update"),
             UpdateAvailableModalCommand::Restart => eprintln!("restart and update"),
             UpdateAvailableModalCommand::OpenDownloadPage => eprintln!("open download page"),
-            UpdateAvailableModalCommand::RunUpdateCommand => eprintln!("run update command"),
         }
         cx.quit();
     });

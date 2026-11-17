@@ -1,20 +1,10 @@
-//! Linux package installs: Update opens a terminal that runs the command gxserver worked out for
-//! this computer (`linuxUpdate` in `/api/appUpdateStatus`, server/src/app_update/linux_install.rs),
-//! from Settings > Updates and from the update dialog.
-//!
-//! CDXC:Updates 2026-11-18 WHY:
-//! The terminal is a Ghostex command-pane tab (the one Settings > Integrations > Tools already
-//! uses for installs that ask for a password), not the desktop's own terminal app: it works on
-//! every distribution and desktop without `xdg-terminal-exec`, and it runs in a zmx session, so
-//! closing or restarting Ghostex while pacman, apt or dnf replaces it leaves the install running.
-//! The command is read from gxserver here, never taken from a page, so nothing else can make the
-//! app run text of its choosing.
-//! SEE-ALSO: server/src/app_update/linux_install.rs, apps/desktop/src/app/os_integration/managed_tool_terminal.rs.
+//! Linux package installs: the update dialog shows the command gxserver worked out for this
+//! computer (`linuxUpdate` in `/api/appUpdateStatus`, server/src/app_update/linux_install.rs), with
+//! Copy command and the release page.
+//! SEE-ALSO: server/src/app_update/linux_install.rs, apps/desktop/src/app/window/update_available_modal.rs.
 #![cfg(target_os = "linux")]
 
 use std::time::Duration;
-
-use gpui::Window;
 
 use crate::app::helpers::*;
 use crate::*;
@@ -65,74 +55,6 @@ impl GhostexGpuiApp {
                     open_message,
                     serde_json::Value::Null,
                     None,
-                    cx,
-                );
-            });
-        })
-        .detach();
-    }
-
-    /// The update dialog's Update: the dialog has no workspace window, so the terminal opens in
-    /// the main one.
-    pub(crate) fn run_linux_update_command_in_main_window(&mut self, cx: &mut gpui::Context<Self>) {
-        self.defer_in_main_window(cx, |app, window, cx| {
-            app.run_linux_update_command(window, cx)
-        });
-    }
-
-    /// Settings > Updates' and the dialog's Update on Linux: a command-pane tab that runs the
-    /// update command, where the user types their password (the AppImage: its own dialog).
-    pub(crate) fn run_linux_update_command(
-        &mut self,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        // The AppImage downloads and swaps in the update itself, from its own dialog.
-        if self.linux_appimage_install.is_some() {
-            self.open_linux_update_modal(Some(window), cx);
-            return;
-        }
-        let background = cx.background_executor().clone();
-        cx.spawn_in(window, async move |this, cx| {
-            let plan = background
-                .spawn(async move { read_linux_update_plan() })
-                .await;
-            let _ = this.update_in(cx, |this, window, cx| {
-                let command = match plan {
-                    Ok(plan) => plan_command(&plan),
-                    Err(error) => {
-                        this.dispatch_gpui_app_modal_toast(
-                            "error",
-                            "Couldn't start the update",
-                            &error,
-                            cx,
-                        );
-                        return;
-                    }
-                };
-                let Some(command) = command else {
-                    this.dispatch_gpui_app_modal_toast(
-                        "info",
-                        "No update command here",
-                        "Download the new version from the release page.",
-                        cx,
-                    );
-                    this.open_linux_update_download_page(cx);
-                    return;
-                };
-                this.open_gpui_command_action_terminal(
-                    "ghostex.gpui.updateGhostex".to_string(),
-                    "Update Ghostex".to_string(),
-                    command,
-                    false,
-                    false,
-                    window,
-                    cx,
-                );
-                this.dispatch_gpui_app_modal_toast(
-                    "info",
-                    "Updating Ghostex",
-                    "Type your password in the terminal tab. Restart Ghostex when it finishes.",
                     cx,
                 );
             });

@@ -191,10 +191,10 @@ impl GhostexGpuiApp {
             "restartCuaDriver" => {
                 self.restart_gpui_cua_driver(cx);
             }
-            // Settings > Updates' Update on a Linux package install (linux_update_command.rs).
-            "runLinuxAppUpdate" => {
+            // Settings > Updates' Update on the Linux AppImage: its own download-and-swap dialog.
+            "openLinuxAppImageUpdate" => {
                 #[cfg(target_os = "linux")]
-                self.run_linux_update_command(window, cx);
+                self.open_linux_update_modal(Some(window), cx);
             }
             "runManagedToolTerminalCommand" => {
                 if let Some(tool_id) = command.get("toolId").and_then(serde_json::Value::as_str) {

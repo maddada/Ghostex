@@ -247,8 +247,8 @@ pub(super) fn up_to_date_row(
 }
 
 /// A Linux Ghostex card's update (server/src/app_update/linux_install.rs): the command that updates
-/// it, the release page, and whether it is this computer (Update runs the command in a terminal
-/// here) or another one (only Copy: nobody may be at that computer's screen).
+/// it (shown with Copy command; Ghostex runs nothing itself), the release page, and whether it is
+/// this computer or another one.
 struct LinuxUpdate {
     command: Option<String>,
     release_url: String,
@@ -288,10 +288,7 @@ impl LinuxUpdate {
     /// The card's line: what Update does, or what to do instead.
     fn line(&self) -> String {
         match (&self.command, self.appimage, self.here) {
-            (Some(_), _, true) => {
-                "Update opens a terminal that runs this command. You type your password there."
-                    .to_string()
-            }
+            (Some(_), _, true) => "To update, run this in a terminal:".to_string(),
             (Some(_), _, false) => format!("Run this command in a terminal on {}.", self.computer),
             (None, true, true) => {
                 "Update downloads the new version and restarts Ghostex.".to_string()
@@ -304,9 +301,9 @@ impl LinuxUpdate {
         }
     }
 
-    /// Update runs here: the command in a terminal, or the AppImage's own update.
-    fn runs_here(&self) -> bool {
-        self.here && (self.command.is_some() || self.appimage)
+    /// Update runs here only for the AppImage, which downloads and swaps itself.
+    fn appimage_here(&self) -> bool {
+        self.here && self.appimage
     }
 }
 
@@ -666,8 +663,8 @@ fn release_link(
 }
 
 impl UpdatesTab {
-    /// A Linux Ghostex card's buttons: Copy command when there is one, and Update when it runs on
-    /// this computer. Another computer's card has no Update: nobody may be at its screen.
+    /// A Linux Ghostex card's buttons: Copy command when there is one; Update only for this
+    /// computer's AppImage, which opens its own download-and-swap dialog.
     fn linux_actions(
         &self,
         p: &SettingsPalette,
@@ -696,7 +693,7 @@ impl UpdatesTab {
                 cx,
             ));
         }
-        if linux.runs_here() {
+        if linux.appimage_here() {
             buttons.push(settings_button_sized(
                 p,
                 SharedString::from(format!("updates-update-{id}")),
@@ -707,7 +704,7 @@ impl UpdatesTab {
                 false,
                 None,
                 |tab: &mut Self, _window, cx| {
-                    tab.post(json!({ "type": "runLinuxAppUpdate" }), cx);
+                    tab.post(json!({ "type": "openLinuxAppImageUpdate" }), cx);
                 },
                 cx,
             ));

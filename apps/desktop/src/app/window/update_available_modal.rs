@@ -31,10 +31,10 @@ const CANCEL: &str = "Cancel";
 const RESTART_AND_UPDATE: &str = "Restart and update";
 const DOWNLOAD_UPDATE: &str = "Download update";
 const OPEN_DOWNLOAD_PAGE: &str = "Open download page";
-const UPDATE: &str = "Update";
+const COPY_COMMAND: &str = "Copy command";
+const COPIED: &str = "Copied";
 const RELEASE_PAGE: &str = "Release page";
-const COMMAND_HINT: &str =
-    "Update opens a terminal that runs this command. You type your password there.";
+const COMMAND_HINT: &str = "To update, run this in a terminal:";
 /// The hint line plus the command box under the notes, without its lines of 12/16 mono.
 const COMMAND_BLOCK_HEIGHT: f32 = 12.0 + 19.5 + 8.0 + 14.0 + 2.0;
 /// An upper bound on one 12px mono character's width, to count the command's wrapped lines (a
@@ -89,7 +89,7 @@ pub(crate) enum UpdateAvailableState {
     Available,
     Ready,
     /// CDXC:Release 2026-11-18 DECISION:
-    /// User (Q81): a Linux package install's dialog shows the command that updates it (`linux_command`, from gxserver) and its Update button opens a terminal that runs it, beside a Release page button; with no command (a tarball, an install no package manager owns) its one button opens the download page, as since 2026-09-22. Native only: the React twin is never opened on Linux.
+    /// User (Q83, "Show the command and a link", which replaced Autopilot's earlier Q81 pick "Update runs the right command"): a Linux package install's dialog shows the command that updates it (`linux_command`, from gxserver) under "To update, run this in a terminal:", with Later, Release page and Copy command; Ghostex runs nothing itself. With no command (a tarball, an install no package manager owns) its one button opens the download page, as since 2026-09-22. Native only: the React twin is never opened on Linux.
     Notify,
 }
 
@@ -99,8 +99,6 @@ pub(crate) enum UpdateAvailableModalCommand {
     Download,
     Restart,
     OpenDownloadPage,
-    /// Linux packages: open a terminal that runs the update command.
-    RunUpdateCommand,
 }
 
 pub(crate) type UpdateAvailableModalHost = Rc<dyn Fn(UpdateAvailableModalCommand, &mut App)>;
@@ -110,7 +108,7 @@ pub(crate) struct UpdateAvailableModalConfig {
     pub(crate) state: UpdateAvailableState,
     pub(crate) notes_markdown: String,
     pub(crate) portable: bool,
-    /// Linux packages: the command Update runs in a terminal (gxserver's `linuxUpdate.command`).
+    /// Linux packages: the command that updates this install, shown with Copy command (gxserver's `linuxUpdate.command`).
     pub(crate) linux_command: Option<String>,
     pub(crate) palette: ModalPalette,
 }
@@ -343,6 +341,8 @@ pub(crate) struct GpuiUpdateAvailableModalWindow {
     state: UpdateAvailableState,
     portable: bool,
     linux_command: Option<String>,
+    /// Copy command was pressed: its label says Copied.
+    copied: bool,
     blocks: Vec<Block>,
     fit: ModalFit,
     focus_handle: FocusHandle,
@@ -374,6 +374,7 @@ impl GpuiUpdateAvailableModalWindow {
             linux_command: config
                 .linux_command
                 .filter(|_| config.state == UpdateAvailableState::Notify),
+            copied: false,
             blocks,
             fit: ModalFit::fixed(),
             focus_handle,
@@ -402,12 +403,18 @@ impl GpuiUpdateAvailableModalWindow {
         let command = match self.state {
             UpdateAvailableState::Ready => UpdateAvailableModalCommand::Restart,
             UpdateAvailableState::Available => UpdateAvailableModalCommand::Download,
-            UpdateAvailableState::Notify if self.linux_command.is_some() => {
-                UpdateAvailableModalCommand::RunUpdateCommand
-            }
             UpdateAvailableState::Notify => UpdateAvailableModalCommand::OpenDownloadPage,
         };
         self.close_window_and_send(command, window, cx);
+    }
+
+    /// Copy command: the dialog stays open, so the command is still there to read.
+    fn copy_command(&mut self, cx: &mut Context<Self>) {
+        if let Some(command) = self.linux_command.clone() {
+            cx.write_to_clipboard(gpui::ClipboardItem::new_string(command));
+            self.copied = true;
+            cx.notify();
+        }
     }
 
     fn open_release_page(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -806,7 +813,7 @@ impl GpuiUpdateAvailableModalWindow {
             .into_any_element()
     }
 
-    /// What Update runs, and that the password goes in the terminal.
+    /// The command that updates this install, and where to run it.
     fn render_command(&self, command: &str) -> AnyElement {
         let p = self.palette;
         let (fill, edge) = self.code_chip_colors();
@@ -869,7 +876,7 @@ impl GpuiUpdateAvailableModalWindow {
     fn render_footer(&self, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
         let later = self.state != UpdateAvailableState::Available;
-        let runs_command = self.linux_command.is_some();
+        let has_command = self.linux_command.is_some();
         let mut buttons = vec![modal_action_button(
             &p,
             "update-available-cancel",
@@ -880,7 +887,7 @@ impl GpuiUpdateAvailableModalWindow {
             |this, window, cx| this.cancel(window, cx),
             cx,
         )];
-        if runs_command {
+        if has_command {
             buttons.push(modal_action_button(
                 &p,
                 "update-available-release-page",
@@ -891,6 +898,17 @@ impl GpuiUpdateAvailableModalWindow {
                 |this, window, cx| this.open_release_page(window, cx),
                 cx,
             ));
+            buttons.push(modal_action_button(
+                &p,
+                "update-available-copy-command",
+                if self.copied { COPIED } else { COPY_COMMAND },
+                None,
+                ModalButtonTone::Neutral,
+                false,
+                |this, _window, cx| this.copy_command(cx),
+                cx,
+            ));
+            return modal_footer(buttons);
         }
         buttons.push(modal_action_button(
             &p,
@@ -898,7 +916,6 @@ impl GpuiUpdateAvailableModalWindow {
             match self.state {
                 UpdateAvailableState::Ready => RESTART_AND_UPDATE,
                 UpdateAvailableState::Available => DOWNLOAD_UPDATE,
-                UpdateAvailableState::Notify if runs_command => UPDATE,
                 UpdateAvailableState::Notify => OPEN_DOWNLOAD_PAGE,
             },
             None,

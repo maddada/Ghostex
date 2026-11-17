@@ -71,7 +71,7 @@ impl GhostexGpuiApp {
     /// The dialog has already removed its window. `Download` and `Restart`
     /// are the `downloadGhostexUpdate` / `restartAndUpdateGhostex` bridge
     /// commands the React page posted, on Windows and the Linux AppImage;
-    /// `OpenDownloadPage` and `RunUpdateCommand` are the Linux packages' (linux_update_command.rs).
+    /// `OpenDownloadPage` is the Linux packages' Release page (their Copy command stays in the dialog).
     fn handle_gpui_update_available_modal_command(
         &mut self,
         command: UpdateAvailableModalCommand,
@@ -96,10 +96,6 @@ impl GhostexGpuiApp {
             UpdateAvailableModalCommand::OpenDownloadPage => {
                 #[cfg(target_os = "linux")]
                 self.open_linux_update_download_page(cx);
-            }
-            UpdateAvailableModalCommand::RunUpdateCommand => {
-                #[cfg(target_os = "linux")]
-                self.run_linux_update_command_in_main_window(cx);
             }
         }
         #[cfg(not(any(target_os = "windows", target_os = "linux")))]

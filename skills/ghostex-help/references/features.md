@@ -72,14 +72,13 @@ The sidebar's top row also moves the window when you drag it. When an update is 
 appears just before the project name. On Linux the button opens the release
 notes with the command that updates Ghostex the way it was installed (for
 example `yay -S ghostex-bin` for the AUR package, or a download plus
-`sudo apt install` for the .deb or `sudo dnf install` for the .rpm), a
-**Release page** button and **Update**, which opens a terminal tab in Ghostex
-that runs the command; type your password there, then restart Ghostex when it
-finishes. Settings > Updates shows the same command on Ghostex's card, with
-Copy command, Update and a Release page link; another Linux computer's card
-shows its command with Copy command, to run on that computer. The tarball, or a
-copy no package manager installed, gets only the release page (**Open download
-page**). Linux downloads come
+`sudo apt install` for the .deb or `sudo dnf install` for the .rpm), with
+**Release page** and **Copy command**: run the command in a terminal, type your
+password when it asks, then restart Ghostex. Settings > Updates shows the same
+command on Ghostex's card, with Copy command and a Release page link; another
+Linux computer's card shows its command the same way, to run on that computer.
+The tarball, or a copy no package manager installed, gets only the release page
+(**Open download page**). Linux downloads come
 for x64 and for ARM64 (aarch64) computers, each as a .deb, an .rpm, a portable
 .tar.zst and an AppImage on the release page; pick the one that matches your computer's processor
 (`uname -m` prints x86_64 or aarch64). The AppImage needs no install: make it
@@ -4520,10 +4519,13 @@ log notes it for you.
 
 **The supervisor** is an agent that wakes only for judgment calls: a question
 with no recommended choice, or a session the rules could not keep moving. It
-starts the first time it is needed, in an **Autopilot** project in your
-sidebar, on the **Supervisor model** you pick under **Advanced** (Claude Opus 5.5 at medium or
+starts the first time it is needed, as **Autopilot supervisor** in an
+**Autopilot** project that starts hidden in your sidebar (**Show hidden** lists
+it, and you can unhide it like any project), on the **Supervisor model** you pick under **Advanced** (Claude Opus 5.5 at medium or
 Codex GPT 6.1 Sol at high; the other one when that agent has no account with
-room), and you can read its chat to see why it did each thing. It keeps notes
+room). To read its chat and see why it did each thing, use **Open supervisor**
+in Settings > Autopilot or in the Autopilot pill's menu (both show once it has
+started). It keeps notes
 (one running file, and one per session) that every wake reads first, so it
 never starts from scratch, and it acts only through Ghostex: it answers a
 question, tells a session how to carry on, or leaves it for you with a note. It
