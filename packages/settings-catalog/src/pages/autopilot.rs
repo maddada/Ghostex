@@ -47,6 +47,7 @@ fn supervisor() -> Section {
         "Advanced",
         vec![
             advanced(row("autopilotSupervisor", "Supervisor model", "The agent that wakes for judgment calls: Claude Opus 5.5 at medium, or Codex GPT 6.1 Sol at high. It starts on an account with room.")),
+            advanced(row("autopilotCheckup", "Supervisor check-up", "Off, or every 10 (the default), 20 or 30 minutes, or every hour: Ghostex looks for sessions that seem stuck in ways its rules don't settle (silent after a reload, told to carry on but doing nothing, failing again and again, saying the same thing in a loop, waiting on nothing) and wakes the supervisor only when it finds one, so a quiet check-up costs nothing. Also ghostex autopilot checkup.")),
             advanced(row("autopilotSweep", "Look at every session every", "How often Autopilot sweeps every session it covers, from 1 to 10 minutes (2 by default). A session whose turn ends is looked at right away.")),
         ],
     )

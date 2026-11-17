@@ -9910,6 +9910,18 @@
       "agentWritable": false
     },
     {
+      "key": "autopilotCheckup",
+      "title": "Supervisor check-up",
+      "subtitle": "Off, or every 10 (the default), 20 or 30 minutes, or every hour: Ghostex looks for sessions that seem stuck in ways its rules don't settle (silent after a reload, told to carry on but doing nothing, failing again and again, saying the same thing in a loop, waiting on nothing) and wakes the supervisor only when it finds one, so a quiet check-up costs nothing. Also ghostex autopilot checkup.",
+      "tab": "autopilot",
+      "tabTitle": "Autopilot",
+      "section": "supervisor",
+      "sectionTitle": "Advanced",
+      "type": "ui",
+      "advanced": true,
+      "agentWritable": false
+    },
+    {
       "key": "autopilotSweep",
       "title": "Look at every session every",
       "subtitle": "How often Autopilot sweeps every session it covers, from 1 to 10 minutes (2 by default). A session whose turn ends is looked at right away.",

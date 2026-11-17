@@ -471,6 +471,32 @@ impl AutopilotTab {
             window,
             cx,
         )];
+        // CDXC:Autopilot 2026-11-18 SEE-ALSO: server/src/autopilot/config.rs (`checkup_minutes`, the user's words).
+        let checkup = config["checkupMinutes"].as_u64().unwrap_or(10).to_string();
+        rows.push(select_field(
+            self,
+            p,
+            "autopilotCheckup",
+            RowSpec::new("Supervisor check-up").description(
+                "Ghostex looks for sessions that seem stuck in ways its rules don't settle, and wakes the supervisor only when it finds one.",
+            ),
+            None,
+            &[
+                option("Off", "0"),
+                option("Every 10 minutes", "10"),
+                option("Every 20 minutes", "20"),
+                option("Every 30 minutes", "30"),
+                option("Every hour", "60"),
+            ],
+            checkup.as_str(),
+            Some(240.0),
+            |page: &mut Self, value, _, cx| {
+                let minutes = value.parse::<u64>().unwrap_or(10);
+                page.set(json!({ "checkupMinutes": minutes }), cx)
+            },
+            window,
+            cx,
+        ));
         let minutes = (config["sweepSeconds"].as_f64().unwrap_or(120.0) / 60.0).round();
         let page = cx.weak_entity();
         let saver: SliderSaver = std::rc::Rc::new(move |_store, value, commit, cx| {

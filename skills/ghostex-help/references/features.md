@@ -4528,8 +4528,19 @@ in Settings > Autopilot or in the Autopilot pill's menu (both show once it has
 started). It keeps notes
 (one running file, and one per session) that every wake reads first, so it
 never starts from scratch, and it acts only through Ghostex: it answers a
-question, tells a session how to carry on, or leaves it for you with a note. It
-never approves a prompt itself.
+question, tells a session how to carry on, reloads it, or leaves it for you
+with a note. It never approves a prompt itself.
+
+How often it wakes: only when something needs it. Besides the judgment calls
+above, **Supervisor check-up** under **Advanced** (every 10 minutes by default;
+20 or 30 minutes, every hour, or Off) has Ghostex look for sessions that seem
+stuck in ways its rules don't settle: still silent after an interrupt and a
+reload, told to carry on but doing nothing, failing again and again, saying the
+same thing in a loop, or waiting on something that isn't running. Only when it
+finds one does it wake the supervisor to nudge or heal them (each session at
+most twice an hour); a check-up that finds nothing wakes nothing and costs
+nothing. Between wakes, once the supervisor's conversation reaches 120K tokens,
+Ghostex compacts it (its notes keep what it knows), so it stays cheap to wake.
 
 Which sessions: **Every session** (coordinators and threads included; the
 projects and sessions you took out are listed under it, each with a switch to
@@ -4560,8 +4571,9 @@ CLI: `ghostex autopilot` (status and summary), `ghostex autopilot on|off`,
 `ghostex autopilot log [--last <n>]`, `ghostex autopilot project <project-id>
 on|off`, `ghostex autopilot session <project-id> <session-id> on|off`,
 `ghostex autopilot read-only-plan on|off` (Let read-only threads leave plan
-mode), and `ghostex autopilot decide <project-id> <session-id> --answer <pick> | --message
-<text> | --leave <note>` (what the supervisor runs).
+mode), `ghostex autopilot checkup off|10|20|30|60` (Supervisor check-up), and
+`ghostex autopilot decide <project-id> <session-id> --answer <pick> | --message
+<text> | --reload | --leave <note>` (what the supervisor runs).
 
 ## Beads view (was Kanban)
 

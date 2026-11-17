@@ -23,6 +23,9 @@ pub const SWEEP_MIN_SECS: u64 = 60;
 pub const SWEEP_MAX_SECS: u64 = 600;
 /// The waits a question may get before Autopilot picks its recommended choice, in minutes.
 pub const ANSWER_WAITS: [u64; 3] = [5, 10, 15];
+/// The supervisor check-up's periods in minutes; 0 is Off.
+pub const CHECKUP_MINUTES: [u64; 5] = [0, 10, 20, 30, 60];
+pub const CHECKUP_DEFAULT_MINUTES: u64 = 10;
 
 /// Which sessions the switch covers.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -129,6 +132,13 @@ pub struct AutopilotConfig {
     pub read_only_leave_plan: bool,
     pub supervisor: SupervisorModel,
     pub sweep_seconds: u64,
+    /// "Supervisor check-up": every this many minutes Ghostex looks for covered sessions that seem
+    /// stuck in ways the rules don't settle, and wakes the supervisor only when it finds one. 0 is
+    /// Off.
+    ///
+    /// CDXC:Autopilot 2026-11-18 DECISION:
+    /// User: "I wanna wake it up programmatically only when it needs to actually review something, not just all the time. also maybe we can actually run it every 10 mins or something based on a setting so it can nudge threads that need nudging that code doesn't catch or heal them but not every 2 mins for that for sure because that's way too much." Settings > Autopilot "Supervisor check-up": Off, every 10 (the default), 20 or 30 minutes, or every hour. A check-up never wakes the agent blindly: Ghostex's own code first collects the sessions that look stuck or off track (server/src/server/autopilot_checkup.rs), and with none the supervisor isn't woken and no tokens are spent.
+    pub checkup_minutes: u64,
     /// By project id; a worktree follows its main project.
     pub projects: BTreeMap<String, Membership>,
     /// By `<projectId>:<sessionId>`.
@@ -150,6 +160,7 @@ impl Default for AutopilotConfig {
             read_only_leave_plan: false,
             supervisor: SupervisorModel::OpusMedium,
             sweep_seconds: SWEEP_DEFAULT_SECS,
+            checkup_minutes: CHECKUP_DEFAULT_MINUTES,
             projects: BTreeMap::new(),
             sessions: BTreeMap::new(),
         }
@@ -165,6 +176,9 @@ impl AutopilotConfig {
         self.sweep_seconds = self.sweep_seconds.clamp(SWEEP_MIN_SECS, SWEEP_MAX_SECS);
         if !ANSWER_WAITS.contains(&self.answer_after_minutes) {
             self.answer_after_minutes = 10;
+        }
+        if !CHECKUP_MINUTES.contains(&self.checkup_minutes) {
+            self.checkup_minutes = CHECKUP_DEFAULT_MINUTES;
         }
         if !self.answer_approvals_set {
             self.answer_approvals = true;

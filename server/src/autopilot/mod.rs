@@ -14,7 +14,7 @@ use serde_json::{json, Map, Value};
 
 pub use config::{
     apply_patch, read_config, update_config, AutopilotConfig, HardLimits, Membership, Scope,
-    SupervisorModel, Tier,
+    SupervisorModel, Tier, CHECKUP_MINUTES,
 };
 pub use log::{append as append_log, read_recent as read_log, summary, LogEntry, Outcome};
 pub use notes::{ensure_notes, next_wake_number, notes_dir, write_wake};

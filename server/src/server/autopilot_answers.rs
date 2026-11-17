@@ -918,44 +918,15 @@ pub(super) fn decide_prompt(
         } else {
             classify(&tool, &text, project_path)
         };
-        let labels: Vec<(usize, String)> = match &notice.dialog {
-            Some(dialog) => dialog
-                .rows
-                .iter()
-                .enumerate()
-                .map(|(index, row)| (index, row.label.to_ascii_lowercase()))
-                .collect(),
-            None => notice
-                .choices
-                .iter()
-                .map(|choice| (choice.index, choice.label.to_ascii_lowercase()))
-                .collect(),
-        };
-        let yes = labels
-            .iter()
-            .find(|(_, label)| {
-                (label.starts_with("yes")
-                    || label.starts_with("trust")
-                    || label.starts_with("allow")
-                    || label.starts_with("approve"))
-                    && !contains_any(label, &["don't ask", "dont ask", "always", "remember"])
-            })
-            .or_else(|| labels.iter().find(|(_, label)| label.starts_with("yes")))
-            .map(|(index, _)| *index);
+        let labels = notice_rows(&notice);
+        let yes = approving_row(&labels);
         let no = labels
             .iter()
             .find(|(_, label)| {
                 label.starts_with("no") || label.starts_with("deny") || label.starts_with("reject")
             })
             .map(|(index, _)| *index);
-        let body = |index: usize| match &notice.dialog {
-            Some(dialog) => {
-                json!({ "kind": "terminalDialog", "choiceIndex": index, "dialogId": dialog.id })
-            }
-            None => {
-                json!({ "kind": "terminalChoice", "choiceIndex": index, "noticeDetectedAt": notice.detected_at })
-            }
-        };
+        let body = |index: usize| answer_body(&notice, index);
         // Trusting the project folder lets the agent start; it is not a step out of read-only.
         let reads = !trust && reads_only(&tool, &text);
         return match after_users_minute(verdict(config, class, read_only && !trust, reads), waited)
@@ -1034,4 +1005,65 @@ pub(super) fn current_fingerprint(memory: &PromptMemory) -> Option<String> {
         .seen
         .as_ref()
         .map(|(fingerprint, _)| fingerprint.clone())
+}
+
+/// A prompt's rows on screen, lowercased, with the index an answer names.
+fn notice_rows(
+    notice: &crate::session_chat_notice::SessionChatTerminalNotice,
+) -> Vec<(usize, String)> {
+    match &notice.dialog {
+        Some(dialog) => dialog
+            .rows
+            .iter()
+            .enumerate()
+            .map(|(index, row)| (index, row.label.to_ascii_lowercase()))
+            .collect(),
+        None => notice
+            .choices
+            .iter()
+            .map(|choice| (choice.index, choice.label.to_ascii_lowercase()))
+            .collect(),
+    }
+}
+
+/// The row that approves it once (Yes, Trust, Allow, Approve), never one that remembers it.
+fn approving_row(labels: &[(usize, String)]) -> Option<usize> {
+    labels
+        .iter()
+        .find(|(_, label)| {
+            (label.starts_with("yes")
+                || label.starts_with("trust")
+                || label.starts_with("allow")
+                || label.starts_with("approve"))
+                && !contains_any(label, &["don't ask", "dont ask", "always", "remember"])
+        })
+        .or_else(|| labels.iter().find(|(_, label)| label.starts_with("yes")))
+        .map(|(index, _)| *index)
+}
+
+/// `/api/answerSessionChatPrompt` params picking row `index` of the prompt the card showed.
+fn answer_body(
+    notice: &crate::session_chat_notice::SessionChatTerminalNotice,
+    index: usize,
+) -> Value {
+    match &notice.dialog {
+        Some(dialog) => {
+            json!({ "kind": "terminalDialog", "choiceIndex": index, "dialogId": dialog.id })
+        }
+        None => {
+            json!({ "kind": "terminalChoice", "choiceIndex": index, "noticeDetectedAt": notice.detected_at })
+        }
+    }
+}
+
+/// The answer that trusts the folder when the session shows its agent's "Trust this folder?"
+/// (Claude's and Codex's alike), for the supervisor's own notes folder (autopilot_judge.rs).
+pub(super) fn trust_folder_answer(
+    state: &super::AppState,
+    key: &crate::coordinators::SessionKey,
+) -> Option<Value> {
+    let notice =
+        crate::session_chat_options::cached_session_chat_terminal_notice(state, &key.0, &key.1)
+            .filter(|notice| notice.kind == "trustPrompt")?;
+    approving_row(&notice_rows(&notice)).map(|index| answer_body(&notice, index))
 }

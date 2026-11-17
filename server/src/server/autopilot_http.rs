@@ -5,12 +5,13 @@
 //!   summary since the switch went on, and the newest log lines (`limit`, 200 by default).
 //! - `op: "set"`: `patch` holds the choices to change (`enabled`, `scope`, `tier`, `limits`,
 //!   `answerQuestions`, `answerAfterMinutes`, `answerApprovals`, `readOnlyLeavePlan`, `supervisor`,
-//!   `sweepSeconds`).
+//!   `sweepSeconds`, `checkupMinutes`).
 //! - `op: "setProject"`: `projectId` and `on`; a worktree's main project is changed instead.
 //! - `op: "setSession"`: `projectId`, `sessionId` and `on` (`toggle: true` flips it).
 //! - `op: "decide"`: the supervisor's decision for one session (`ghostex autopilot decide`):
 //!   `projectId`, `sessionId`, and `answers` (one pick per open question, in order), `message`
-//!   (sent to it as the user's) or `leave` (a note: left for the user). Ghostex applies it and logs
+//!   (sent to it as the user's), `reload: true` (reload it on its own conversation) or `leave` (a
+//!   note: left for the user). Ghostex applies it and logs
 //!   it; the supervisor never answers a prompt or types into a session itself.
 //!
 //! Every change republishes the projects (the sidebar's Advanced > Autopilot row) and the open
@@ -342,6 +343,7 @@ async fn decide(
         .unwrap_or_default();
     let message = text(params, "message");
     let leave = text(params, "leave");
+    let reload = params.get("reload").and_then(Value::as_bool) == Some(true);
     let (title, project, bot) = {
         let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
             code: "internalError",
@@ -366,7 +368,7 @@ async fn decide(
     };
     // A bot's conversation is a chat, not a task: Autopilot types nothing into it (CDXC:Bots
     // 2026-11-08, bot_projects.rs).
-    if bot && (message.is_some() || !answers.is_empty()) {
+    if bot && (message.is_some() || !answers.is_empty() || reload) {
         return Err(DomainStateError {
             code: "invalidState",
             message: "That is a bot's conversation: Autopilot never sends it anything.".to_string(),
@@ -389,11 +391,15 @@ async fn decide(
         .await
         .map_err(failed)?;
         format!("Told it: \"{message}\"")
+    } else if reload {
+        super::autopilot_runtime::reload(state, &key)
+            .await
+            .map_err(failed)?
     } else if let Some(note) = leave.clone() {
         format!("Left it for you: {note}")
     } else {
         return Err(DomainStateError::bad_request(
-            "Give --answer (once per question), --message or --leave.",
+            "Give --answer (once per question), --message, --reload or --leave.",
         ));
     };
     autopilot::append_log(
