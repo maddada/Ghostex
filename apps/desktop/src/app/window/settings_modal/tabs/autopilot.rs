@@ -881,14 +881,10 @@ impl Render for AutopilotTab {
         {
             blocks.push(PageBlock::section("limits", section));
         }
-        if shown("activity")
-            && let Some(section) = self.log_section(&p, cx)
-        {
-            blocks.push(PageBlock::section("activity", section));
-        }
-        // The supervisor and the sweep sit in the collapsed Advanced fold at the bottom, or in
+        // The supervisor and the sweep sit in the collapsed Advanced fold above the log, or in
         // place while a search matches them (CDXC:Autopilot 2026-11-14 in
-        // packages/settings-catalog/src/pages/autopilot.rs).
+        // packages/settings-catalog/src/pages/autopilot.rs). CDXC:Autopilot 2026-11-17
+        // DECISION: user, "put advanced above logs": Advanced sits above the Log.
         if enabled {
             let tab = SettingsTabId::Autopilot;
             if search.tab.is_searching {
@@ -923,6 +919,11 @@ impl Render for AutopilotTab {
                     blocks.push(PageBlock::section("supervisor", section));
                 }
             }
+        }
+        if shown("activity")
+            && let Some(section) = self.log_section(&p, cx)
+        {
+            blocks.push(PageBlock::section("activity", section));
         }
         settings_page(&self.store, SettingsTabId::Autopilot, &p, blocks, cx)
     }
