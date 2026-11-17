@@ -19,7 +19,6 @@ pub fn hex_rgb(value: Option<&Value>) -> Option<u32> {
         .flatten()
 }
 
-
 /// Rust port of `getSidebarTitlebarGradientColors` /
 /// `normalizedSidebarTitlebarTintDirection` in packages/shared/ghostex-settings.ts (deleted 2026-10-01): the
 /// tint direction is the background's per-channel deviation from its average,
@@ -34,10 +33,7 @@ pub fn sidebar_titlebar_gradient_stops(background: u32) -> (u32, u32) {
 /// The gradient stops, flattening as Colourfulness goes past Vivid toward Full (`fade` 0 to 1), so
 /// at Full the sidebar is the picked colour from top to bottom (CDXC:Theming 2026-10-31 in
 /// packages/settings-catalog/src/dark_chrome.rs).
-pub fn sidebar_titlebar_gradient_stops_toward_full(
-    background: u32,
-    fade: f64,
-) -> (u32, u32) {
+pub fn sidebar_titlebar_gradient_stops_toward_full(background: u32, fade: f64) -> (u32, u32) {
     let base = sidebar_titlebar_rgb_channels(background);
     let direction = sidebar_titlebar_tint_direction(base);
     let strength = (1.0 - fade.clamp(0.0, 1.0)) as f32;
@@ -245,10 +241,7 @@ pub fn clamp_sidebar_titlebar_light_background_lightness_percent(value: f64) -> 
     )
 }
 
-pub fn sidebar_titlebar_light_background_for_lightness(
-    lightness_percent: f64,
-    tint: u32,
-) -> u32 {
+pub fn sidebar_titlebar_light_background_for_lightness(lightness_percent: f64, tint: u32) -> u32 {
     let lightness = clamp_sidebar_titlebar_light_background_lightness_percent(lightness_percent);
     if lightness == MAX_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_LIGHTNESS_PERCENT {
         return 0xffffff;
@@ -338,11 +331,8 @@ pub const LIGHT_THEME_PRESET_CONTROLS: [(&str, f64, u32); 16] = [
 /// The saved custom dark controls: the darkness slider (seeded from a valid legacy saved
 /// background color when the slider key is missing) plus the tint choice. The stored
 /// `customSidebarTitlebarBackgroundColor` hex itself is never the applied color.
-pub fn custom_dark_chrome_controls(
-    object: &Map<String, Value>,
-) -> (f64, u32) {
-    let legacy_background =
-        hex_rgb(object.get("customSidebarTitlebarBackgroundColor"));
+pub fn custom_dark_chrome_controls(object: &Map<String, Value>) -> (f64, u32) {
+    let legacy_background = hex_rgb(object.get("customSidebarTitlebarBackgroundColor"));
     let darkness_fallback = legacy_background
         .map(sidebar_titlebar_background_darkness_for_color)
         .unwrap_or(DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT);
@@ -392,10 +382,7 @@ pub fn theme_contrast_offset(object: &Map<String, Value>) -> f64 {
 /// How far one area's Colourfulness sits past Vivid toward Full (0 to 1). Depth reads the same
 /// key clamped at Vivid (`theme_contrast_points`); the retired `themeContrast` never went past it.
 /// SEE-ALSO: CDXC:Theming 2026-10-31 in packages/settings-catalog/src/dark_chrome.rs.
-pub fn theme_full_colour_fade(
-    object: &Map<String, Value>,
-    key: &str,
-) -> f64 {
+pub fn theme_full_colour_fade(object: &Map<String, Value>, key: &str) -> f64 {
     object
         .get(key)
         .and_then(Value::as_f64)
@@ -403,23 +390,15 @@ pub fn theme_full_colour_fade(
 }
 
 /// The dark chrome at `darkness` for `tint`, faded `fade` of the way toward the tint itself.
-pub fn sidebar_titlebar_background_toward_full(
-    darkness_percent: f64,
-    tint: u32,
-    fade: f64,
-) -> u32 {
+pub fn sidebar_titlebar_background_toward_full(darkness_percent: f64, tint: u32, fade: f64) -> u32 {
     let vivid = sidebar_titlebar_background_for_darkness(darkness_percent, tint);
     if fade <= 0.0 {
         return vivid;
     }
     let channels = |color: u32| sidebar_titlebar_rgb_channels(color).map(f64::from);
     sidebar_titlebar_pack_rgb(
-        crate::dark_chrome::dark_chrome_toward_full(
-            channels(vivid),
-            channels(tint),
-            fade,
-        )
-        .map(|channel| channel as f32),
+        crate::dark_chrome::dark_chrome_toward_full(channels(vivid), channels(tint), fade)
+            .map(|channel| channel as f32),
     )
 }
 
@@ -436,12 +415,8 @@ pub fn sidebar_titlebar_light_background_toward_full(
     }
     let channels = |color: u32| sidebar_titlebar_rgb_channels(color).map(f64::from);
     sidebar_titlebar_pack_rgb(
-        crate::dark_chrome::light_chrome_toward_full(
-            channels(vivid),
-            channels(tint),
-            fade,
-        )
-        .map(|channel| channel as f32),
+        crate::dark_chrome::light_chrome_toward_full(channels(vivid), channels(tint), fade)
+            .map(|channel| channel as f32),
     )
 }
 
@@ -454,9 +429,7 @@ pub fn work_area_contrast_delta(object: &Map<String, Value>) -> f64 {
 /// Mirror of `resolveDarkChromeControls` plus the preset migration in
 /// packages/shared/ghostex-settings/normalize.ts (deleted 2026-10-01): a missing or unknown preset with non-default
 /// custom values means the user tuned them before the dropdown existed, so they stay in force.
-pub fn dark_chrome_controls(
-    object: &Map<String, Value>,
-) -> (f64, u32) {
+pub fn dark_chrome_controls(object: &Map<String, Value>) -> (f64, u32) {
     let (darkness, tint) = dark_chrome_raw_controls(object);
     (
         clamp_sidebar_titlebar_background_darkness_percent(darkness),
@@ -475,9 +448,7 @@ pub fn dark_chrome_controls(
 /// sidebar were not there.
 pub fn dark_chrome_raw_controls(object: &Map<String, Value>) -> (f64, u32) {
     let custom = custom_dark_chrome_controls(object);
-    let preset = object
-        .get("darkThemePreset")
-        .and_then(Value::as_str);
+    let preset = object.get("darkThemePreset").and_then(Value::as_str);
     if preset == Some("custom") {
         return custom;
     }
@@ -507,9 +478,7 @@ pub fn dark_chrome_raw_controls(object: &Map<String, Value>) -> (f64, u32) {
 pub const CUSTOM_LIGHT_THEME_DEPTH_SHIFT: f64 = -1.0;
 
 /// Mirror of `resolveLightChromeControls` in packages/shared/ghostex-settings/titlebar-color.ts (deleted 2026-10-01).
-pub fn light_chrome_controls(
-    object: &Map<String, Value>,
-) -> (f64, u32) {
+pub fn light_chrome_controls(object: &Map<String, Value>) -> (f64, u32) {
     let (lightness, tint) = light_chrome_raw_controls(object);
     (
         clamp_sidebar_titlebar_light_background_lightness_percent(lightness),
@@ -520,9 +489,7 @@ pub fn light_chrome_controls(
 /// `light_chrome_controls` before its final clamp: a preset's depth plus the sidebar contrast, or
 /// the Custom colour's saved depth one point deeper (SEE-ALSO: `dark_chrome_raw_controls`).
 pub fn light_chrome_raw_controls(object: &Map<String, Value>) -> (f64, u32) {
-    let preset = object
-        .get("lightThemePreset")
-        .and_then(Value::as_str);
+    let preset = object.get("lightThemePreset").and_then(Value::as_str);
     if preset == Some("custom") {
         let lightness = clamp_sidebar_titlebar_light_background_lightness_percent(
             object
@@ -530,9 +497,8 @@ pub fn light_chrome_raw_controls(object: &Map<String, Value>) -> (f64, u32) {
                 .and_then(Value::as_f64)
                 .unwrap_or(DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_LIGHTNESS_PERCENT),
         ) + CUSTOM_LIGHT_THEME_DEPTH_SHIFT;
-        let tint =
-            hex_rgb(object.get("customSidebarTitlebarLightBackgroundTintColor"))
-                .unwrap_or(DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_TINT_RGB);
+        let tint = hex_rgb(object.get("customSidebarTitlebarLightBackgroundTintColor"))
+            .unwrap_or(DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_TINT_RGB);
         return (lightness, tint);
     }
     let (_, lightness, tint) = preset
@@ -571,10 +537,7 @@ pub fn resolved_custom_sidebar_titlebar_background_for_variant(
 
 /// The chrome the work area's colour is derived from: the sidebar's chrome with the work area
 /// contrast in place of the sidebar contrast, clamped once (`dark_chrome_raw_controls`).
-pub fn resolved_work_area_chrome_for_variant(
-    object: &Map<String, Value>,
-    light: bool,
-) -> u32 {
+pub fn resolved_work_area_chrome_for_variant(object: &Map<String, Value>, light: bool) -> u32 {
     let delta = work_area_contrast_delta(object);
     if light {
         let (lightness, tint) = light_chrome_raw_controls(object);
@@ -596,10 +559,7 @@ pub fn resolved_work_area_chrome_for_variant(
 /// CDXC:Theming 2026-09-23 DECISION:
 /// User: "make the contrast show as a slider in the advanced and make sidebar and main contrast different please". The work area's own colour (chat, terminals, the workspace and its glass tint, web pages' content colour) comes from the theme at the work area contrast, while the sidebar keeps the sidebar contrast.
 /// SEE-ALSO: `getWorkAreaBackgroundForSettings` in packages/shared/ghostex-settings/titlebar-color.ts (deleted 2026-10-01).
-pub fn work_area_background_for_variant(
-    object: &Map<String, Value>,
-    light: bool,
-) -> u32 {
+pub fn work_area_background_for_variant(object: &Map<String, Value>, light: bool) -> u32 {
     session_chat_background_for_chrome(resolved_work_area_chrome_for_variant(object, light))
 }
 
@@ -654,7 +614,7 @@ pub fn accent_color_for_tint(tint: u32, light: bool) -> u32 {
     let [red, green, blue] = sidebar_titlebar_rgb_channels(tint).map(|channel| channel / 255.0);
     let max = red.max(green).max(blue);
     let min = red.min(green).min(blue);
-    if (max - min) * 255.0 < 1.0 {
+    if tint_is_neutral(tint) {
         return if light { 0x262626 } else { 0x86d3f8 };
     }
     let chroma = max - min;
@@ -692,11 +652,26 @@ pub fn accent_color_for_tint(tint: u32, light: bool) -> u32 {
     ])
 }
 
+/// Whether `tint` is a grey with no hue, whose accent is a fixed colour (`accent_color_for_tint`)
+/// rather than one taken from the tint.
+pub fn tint_is_neutral(tint: u32) -> bool {
+    let [red, green, blue] = sidebar_titlebar_rgb_channels(tint);
+    red.max(green).max(blue) - red.min(green).min(blue) < 1.0
+}
+
+/// Whether one appearance's chrome paints a tint with a hue (a tinted preset or custom tint), so
+/// its accent is the theme's own (`theme_accent_for_variant`).
+pub fn theme_tint_has_hue(object: &Map<String, Value>, light: bool) -> bool {
+    let tint = if light {
+        light_chrome_controls(object).1
+    } else {
+        dark_chrome_controls(object).1
+    };
+    !tint_is_neutral(tint)
+}
+
 /// The accent for one appearance, from the tint that appearance's chrome actually paints.
-pub fn theme_accent_for_variant(
-    object: &Map<String, Value>,
-    light: bool,
-) -> u32 {
+pub fn theme_accent_for_variant(object: &Map<String, Value>, light: bool) -> u32 {
     let tint = if light {
         light_chrome_controls(object).1
     } else {

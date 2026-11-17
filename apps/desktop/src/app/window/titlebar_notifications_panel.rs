@@ -568,7 +568,7 @@ impl GpuiTitlebarReadingPanel {
     }
 
     /// CDXC:Notifications 2026-09-11 DECISION:
-    /// User: notification cards look like the Tips dropdown cards (square icon tile, bold title, muted body, check mark bottom right, UNREAD and READ groups), keeping the blue accents for ordinary unread cards. The 2026-11-02 approval decision in server/src/notification_feed/store.rs supersedes blue for an approval card, which uses the sidebar's approval red. A theme's Accent and Danger roles replace the blue and red (CDXC:Theming 2026-11-17 in notification_feed/mod.rs).
+    /// User: notification cards look like the Tips dropdown cards (square icon tile, bold title, muted body, check mark bottom right, UNREAD and READ groups), keeping the blue accents for ordinary unread cards. The 2026-11-02 approval decision in server/src/notification_feed/store.rs supersedes blue for an approval card, which uses the sidebar's approval red. Superseded for the blue on 2026-11-17 (Q183): the user chose that a theme's own accent (its Accent role, else a tinted preset's accent) replaces it, and the Danger role replaces the red (CDXC:Theming 2026-11-17 in notification_feed/mod.rs).
     /// User: no dismiss gutter; the X floats where the time is and, while the card is hovered, replaces the time in that same right-aligned slot.
     fn render_notification_row(
         &self,

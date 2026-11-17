@@ -249,6 +249,18 @@ pub(crate) fn theme_accent_for_variant(
     })
 }
 
+/// The theme's own accent in one appearance (`theme_accent_for_variant`) when the theme sets one:
+/// the Accent theme role, or a tint with a hue. `None` for a neutral grey tint without the role,
+/// whose accent is a fixed colour that says nothing about the theme.
+pub(crate) fn theme_own_accent_for_variant(
+    object: &serde_json::Map<String, serde_json::Value>,
+    light: bool,
+) -> Option<u32> {
+    (crate::app::helpers::theme_role_rgba("accent", light).is_some()
+        || ghostex_settings_catalog::theme_colours::theme_tint_has_hue(object, light))
+    .then(|| theme_accent_for_variant(object, light))
+}
+
 /// Colour theme role `id` when it is set in this appearance (helpers/theme_roles.rs), laid over the
 /// work area so a see-through value still gives one solid colour; `None` while it is not set.
 pub(crate) fn theme_role_over_work_area(

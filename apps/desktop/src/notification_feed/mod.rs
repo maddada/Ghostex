@@ -50,7 +50,7 @@ const NOTIFICATION_BELL_ICON_SIZE: f32 = 15.0;
 pub(crate) const NOTIFICATION_ATTENTION_BLUE: u32 = 0x95d7f6;
 /// CDXC:Notifications 2026-09-16 DECISION:
 /// User: make the "Project · Finished" meta line more visible in light mode.
-/// The fill/border accent stays #95d7f6; this darker same-hue ink is only for unread meta text on pale unread cards.
+/// The fill/border accent stays #95d7f6 (unless the theme sets its own accent, CDXC:Theming 2026-11-17 below); this darker same-hue ink is only for unread meta text on pale unread cards.
 pub(crate) const NOTIFICATION_ATTENTION_BLUE_TEXT_LIGHT: u32 = 0x0d7eab;
 /// CDXC:Notifications 2026-10-05 DECISION:
 /// User: banked reset expiry warnings are notified "using red color". Urgent rows swap the attention blue for this red on the card, and the bell's badge turns red while one is unread.
@@ -60,9 +60,14 @@ pub(crate) const NOTIFICATION_URGENT_RED_TEXT_LIGHT: u32 = 0xc42b2b;
 
 /// The attention blue of unread cards and the bell's badge, in one appearance.
 ///
-/// CDXC:Theming 2026-11-17 DECISION: User, through the coordinator: "The notification dropdown stays blue after a theme is applied ... make it follow the applied theme (accent, surfaces, text, borders) like the rest of the app." The attention blue (kept for ordinary unread cards by CDXC:Notifications 2026-09-11) is what a theme leaves alone: the Accent theme role replaces it and the Danger role replaces the urgent red, each laid over the work area as the app's own accent is (`theme_role_over_work_area`). Without those roles the blue and red stay; the sidebar's approval red is the sidebar's status colour and stays too.
+/// CDXC:Theming 2026-11-17 DECISION: User, through the coordinator: "The notification dropdown stays blue after a theme is applied ... make it follow the applied theme (accent, surfaces, text, borders) like the rest of the app", and on 2026-11-17 (Q183) chose that a tinted preset with no Accent role moves the notifications off blue too, "using the preset's own accent". The attention blue (CDXC:Notifications 2026-09-11) takes the theme's own accent whenever the theme sets one: the Accent theme role, else the accent of a tint with a hue (`theme_own_accent_for_variant`). Only a neutral grey tint with no Accent role keeps the blue. The Danger role replaces the urgent red, laid over the work area as the accent is (`theme_role_over_work_area`); the sidebar's approval red is the sidebar's status colour and stays.
 pub(crate) fn notification_attention_color(light: bool) -> u32 {
-    themed_notification_color("accent", light).unwrap_or(NOTIFICATION_ATTENTION_BLUE)
+    theme_own_accent(light).unwrap_or(NOTIFICATION_ATTENTION_BLUE)
+}
+
+fn theme_own_accent(light: bool) -> Option<u32> {
+    let snapshot = shared_settings::shared_sidebar_settings_snapshot();
+    crate::app::helpers::theme_own_accent_for_variant(snapshot.object(), light)
 }
 
 /// The urgent red of unread cards and the bell's badge, in one appearance (the Danger theme role
@@ -142,15 +147,15 @@ impl GpuiNotificationFeedKind {
         }
     }
 
-    /// The accent as unread meta text on a pale light-mode card: the Danger or Accent role's own
-    /// light colour when it is set, else a darker ink of the red or blue.
+    /// The accent as unread meta text on a pale light-mode card: the Danger role or the theme's own
+    /// light accent when the theme sets one (already dark enough to read as text), else a darker
+    /// ink of the red or blue.
     pub(crate) fn accent_text_light(self) -> u32 {
-        let (role, own) = if self.urgent() {
-            ("danger", NOTIFICATION_URGENT_RED_TEXT_LIGHT)
+        if self.urgent() {
+            themed_notification_color("danger", true).unwrap_or(NOTIFICATION_URGENT_RED_TEXT_LIGHT)
         } else {
-            ("accent", NOTIFICATION_ATTENTION_BLUE_TEXT_LIGHT)
-        };
-        themed_notification_color(role, true).unwrap_or(own)
+            theme_own_accent(true).unwrap_or(NOTIFICATION_ATTENTION_BLUE_TEXT_LIGHT)
+        }
     }
 
     /// Card tile icon when the session has no agent logo to show.
