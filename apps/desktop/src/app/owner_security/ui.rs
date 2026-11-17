@@ -69,6 +69,10 @@ impl GhostexGpuiApp {
         if change != "requested" {
             // That computer let this app act as the owner there: open the owner session now.
             if change == "approved" && super::asks_for_this_app(&request) {
+                // This computer's own owner let this app in here (m7-arch's app on m7-arch).
+                if machine_id.is_none() {
+                    super::note_owner_key_approved(&Transport::Local);
+                }
                 if let Some(target) = machine_id
                     .as_deref()
                     .and_then(|machine| self.gpui_remote_gxserver_request_target(machine))

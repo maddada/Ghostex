@@ -74,8 +74,12 @@ struct OwnerSession {
     /// The `addApproverKey` request enrolling the owner key there waits on (another owner key is
     /// enrolled on that computer): later attempts read it instead of asking again.
     waiting_approval: Option<String>,
-    /// That request was denied or lapsed: no more asking there until the app restarts.
+    /// That request was denied or lapsed: no more asking there on this app's own (at connect, in
+    /// the background) until the app restarts.
     gave_up: bool,
+    /// `gave_up` because the request lapsed unanswered, not a Deny: the user's own click that
+    /// needs it (show a pairing code, Approve) asks once more ([`ask_again_after_lapse`]).
+    lapsed: bool,
     /// That gxserver takes plain approvals: no owner session is opened there (`plain.rs`).
     plain: bool,
     /// `token` was opened for door calls only ([`door_call`]): every other call keeps the token
@@ -220,6 +224,10 @@ fn door_token_for(
     if let Some(token) = SharedKeyDoorToken::for_transport(transport) {
         return Some(Ok(token));
     }
+    // Showing a pairing code is the user's own window (Connect a device, Settings > Remote).
+    if path == "/api/remotePairingCode" {
+        ask_again_after_lapse(transport);
+    }
     ensure_owner_session(transport);
     match with_session(&transport.key(), |session| session.token.clone()) {
         Some(token) => Some(Ok(token)),
@@ -235,11 +243,28 @@ pub(crate) fn door_call<R>(
     transport: &Transport,
     work: impl FnOnce() -> Result<R, String>,
 ) -> Result<R, String> {
+    ask_again_after_lapse(transport);
     ensure_owner_session(transport);
     if let Some(refusal) = owner_refusal(transport) {
         return Err(refusal);
     }
     work()
+}
+
+/*
+CDXC:Security 2026-11-17 FIX:
+Live, 17 Nov: m7-arch's app asked m7-arch to let it show m7-arch's own pairing code ("candle cobalt river pony"); the request lapsed unanswered after ten minutes, and the app then refused the code until it restarted, saying "Restart Ghostex to ask again". The coordinator: "If a request lapsed, the user needs an obvious way to ask again." A lapse (not a Deny) no longer ends the asking for good: the app still doesn't ask again on its own (no new card on every reconnect), but the user's own click that needs it (opening the pairing code, an Approve) asks once more, one new request that then waits a day (`OWNER_KEY_REQUEST_TTL_MS` in server/src/server/security_http.rs).
+*/
+/// The user's own click on `transport` after this app's ask there lapsed unanswered: ask once
+/// more there (one new request; while it waits, later clicks read it instead).
+fn ask_again_after_lapse(transport: &Transport) {
+    with_session(&transport.key(), |session| {
+        if session.gave_up && session.lapsed {
+            session.gave_up = false;
+            session.lapsed = false;
+            session.last_attempt = None;
+        }
+    });
 }
 
 /// Why this app can't make a code or approve on `transport`'s gxserver yet: its owner key waits
@@ -1588,7 +1613,10 @@ fn enroll_owner_key(transport: &Transport, params: Value) -> Result<Value, Strin
                     && matches!(transport, Transport::Remote(_))
                     && lists_old_shared_key(transport);
                 if !ask_again {
-                    with_session(&key, |session| session.gave_up = true);
+                    with_session(&key, |session| {
+                        session.gave_up = true;
+                        session.lapsed = matches!(state, RequestState::Lapsed);
+                    });
                     return Err(STOPPED.to_string());
                 }
             }
@@ -1698,14 +1726,22 @@ fn quiet_owner_session(transport: &Transport) -> Option<String> {
     Some(token)
 }
 
+/*
+CDXC:Security 2026-11-17 FIX:
+Live, 17 Nov: the user approved m7-arch's app's "show the pairing code of <the Mac>" at 03:39 and it lapsed two minutes later unused. Told of the approval, this app dropped the request's id and only noted that the next call should open the session; no call came within the approval's two minutes (the ask at connect had run, and nothing else asks while no window needs a code), and a later one would have asked anew without the id. Now the approval itself brings this app back at once, with the request's id kept: a gxserver from before 17 Nov lets the key in only on that call within two minutes, a newer one has let it in already (`enroll_owner_key_on_approval` in server/src/server/security_http.rs) and the call just opens the session. This computer's own requests count too (m7-arch's app's ask on m7-arch).
+*/
 /// That computer let this app act as the owner there (the request asking it was approved): the
-/// next call opens the owner session instead of waiting for the owner to act there first.
+/// owner session opens now, coming back with the approval's id, on a background thread.
 pub(crate) fn note_owner_key_approved(transport: &Transport) {
     with_session(&transport.key(), |session| {
         session.gave_up = false;
-        session.waiting_approval = None;
+        session.lapsed = false;
         session.last_attempt = None;
     });
+    let transport = transport.clone();
+    let _ = std::thread::Builder::new()
+        .name("ghostex-owner-key-approved".into())
+        .spawn(move || ensure_owner_session(&transport));
 }
 
 /// Who may answer a computer's requests.

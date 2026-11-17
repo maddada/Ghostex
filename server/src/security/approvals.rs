@@ -395,6 +395,39 @@ impl ApprovalStore {
         }
     }
 
+    /// The data of `kind` kept with request `id` ([`ApprovalStore::attach`]) while it waits or is
+    /// approved and not yet spent.
+    pub fn resume_of(&self, id: &str, kind: &str) -> Option<Value> {
+        let requests = self.lock();
+        let stored = requests.get(id)?;
+        if !matches!(
+            stored.request.status,
+            ApprovalStatus::Pending | ApprovalStatus::Approved
+        ) {
+            return None;
+        }
+        stored
+            .resume
+            .as_ref()
+            .filter(|resume| resume.kind == kind)
+            .map(|resume| resume.data.clone())
+    }
+
+    /// Marks approved request `id` spent by gxserver itself, which made the change it allows the
+    /// moment it was approved: nobody spends it later, and it never reads as approved-but-lapsed.
+    pub fn spend_approved(&self, id: &str) -> Option<ApprovalRequest> {
+        let mut requests = self.lock();
+        let stored = requests.get_mut(id)?;
+        if stored.request.status != ApprovalStatus::Approved {
+            return None;
+        }
+        stored.request.status = ApprovalStatus::Consumed;
+        stored.resume = None;
+        let spent = stored.request.clone();
+        self.save(&requests);
+        Some(spent)
+    }
+
     /// The requests still waiting or approved (not yet spent) that keep data of `kind`, with it.
     pub fn resumable(&self, kind: &str, now_ms: u64) -> Vec<(ApprovalRequest, Value)> {
         let mut requests = self.lock();

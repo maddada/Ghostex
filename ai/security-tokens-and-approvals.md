@@ -137,7 +137,13 @@ Connected computers: the desktop reaches another computer through its SSH tunnel
 computer's token file, so there it is the token file too. Where that computer says
 `mayApproveDevices: false`, the app enrolls its owner key there at connect: one `addApproverKey`
 card ("Let <computer> (Ghostex app) act as you on this computer") on that computer's app or a phone
-paired with it, reused while it waits; denied or lapsed, it asks again only after the app restarts.
+paired with it, reused while it waits (it waits a day, `OWNER_KEY_REQUEST_TTL_MS`, so the app's
+restarts and reconnects get the same card back); denied, it asks again only after the app restarts;
+lapsed, the user's own click that needs it (opening a pairing code, an Approve) asks once more
+(`owner_security::ask_again_after_lapse`). The key goes in the moment the owner approves, whatever
+the asking app does next (`enroll_owner_key_on_approval`: the key kept with the request, checked
+against its target and params digest, and the request marked spent); the app, told of the approval,
+comes back at once with the id anyway, which a gxserver from before 17 Nov needs within 2 minutes.
 Once approved, its owner session there (which survives that gxserver's restarts) goes only with that
 computer's codes and Approve (`owner_security::remote_door_token`), and that computer's pairing cards
 are approvable here (`answerer_for`); until then they show as "Approve on <computer>". Where that

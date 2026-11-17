@@ -250,6 +250,66 @@ const FIRST_KEY_SECRET_PARAM: &str = "firstKeySecret";
 const OWNER_KEY_REQUESTS_WAITING: usize = 3;
 /// The answer when the token file made too many "act as you" requests this hour (R3-2).
 pub(crate) const OWNER_KEY_FLOODED: &str = "ownerKeyRequestsFlooded";
+/// How long an app's "show the pairing code of …" request waits for the owner: a day, so its card
+/// is still there when the user comes to the computer that answers it, and the asking app's
+/// restarts and reconnects get the same request back instead of asking anew each time.
+const OWNER_KEY_REQUEST_TTL_MS: u64 = 24 * 60 * 60 * 1000;
+/// The data an owner-key request keeps ([`security::ApprovalStore::attach`]): the key and its
+/// scope, so gxserver lets the key in the moment the owner approves.
+const OWNER_KEY_RESUME: &str = "ownerKey";
+
+/*
+CDXC:Security 2026-11-17 FIX:
+Live, 17 Nov: the user approved "Let m7-arch (Ghostex app) show the pairing code of <the Mac> … (angle easel magnet monkey)" on the Mac at 03:39, and it lapsed at 03:41, "Approved, but the change wasn't made within 2 minutes": the key went in only when the asking app came back with the approval, and m7-arch's app, told of the approval, dropped the approval's id and came back for nothing (apps/desktop/src/app/owner_security/mod.rs, `note_owner_key_approved`). Its own ask on m7-arch ("candle cobalt river pony") meanwhile lapsed unseen after ten minutes. The coordinator: the user's approval must take, and the card must still be there when the user is at the Mac, without the asking app asking again on every reconnect. The key an owner-key request names (bound by the request's own params digest) now goes in the moment the owner approves it, whatever the asking app does, and the request is marked spent; and such a request waits a day, so restarts and reconnects of the asking app get it back.
+*/
+/// The owner approved `request`: when it asks for an owner key and kept that key with it, the key
+/// goes in now (door-only when asked so), checked against the request's own target and params
+/// digest, and the request is marked spent. Returns whether the key is in.
+fn enroll_owner_key_on_approval(
+    state: &AppState,
+    request: &security::ApprovalRequest,
+    by: &Principal,
+    now: u64,
+) -> bool {
+    let security = &state.security;
+    if request.action != ghostex_gx_protocol::approval::SensitiveAction::AddApproverKey {
+        return false;
+    }
+    let Some(saved) = security.approvals.resume_of(&request.id, OWNER_KEY_RESUME) else {
+        return false;
+    };
+    let Ok(key) =
+        serde_json::from_value::<ghostex_gx_protocol::approval::ApproverKey>(saved["key"].clone())
+    else {
+        return false;
+    };
+    let door_only = saved["doorOnly"].as_bool() == Some(true);
+    let Ok(key_id) = security::key_id_of(&key) else {
+        return false;
+    };
+    let digest = security::params_digest(&json!({
+        "key": serde_json::to_value(&key).unwrap_or(Value::Null),
+        "doorOnly": door_only,
+    }));
+    if request.target.as_deref() != Some(key_id.as_str()) || digest != request.params_digest {
+        return false;
+    }
+    if door_only {
+        security.mark_door_only_key(&key_id);
+    }
+    enroll_approved_key(state, by, true, key, now);
+    if security.owner_keys.get(&key_id).is_none() {
+        return false;
+    }
+    if security.approvals.spend_approved(&request.id).is_some() {
+        log_approval_line(
+            state,
+            "approvalSpent",
+            json!({ "approvalId": request.id, "action": request.action.as_str(), "caller": "gxserver" }),
+        );
+    }
+    true
+}
 
 /// This computer's name and server id as the "act as you" card names them (review round 3, R3-4).
 fn this_computer_label(state: &AppState) -> String {
@@ -503,11 +563,22 @@ fn enroll_key(
         .params(json!({
             "key": serde_json::to_value(&key).unwrap_or(Value::Null),
             "doorOnly": door_only,
-        }));
+        }))
+        .pending_ttl(OWNER_KEY_REQUEST_TTL_MS);
         let outcome = presence_outcome(state, caller, action, body);
         if let security::PresenceOutcome::Pending(request) = &outcome {
             // New, not one that already waited (`pending` was read before asking).
             if !pending.iter().any(|waiting| waiting.id == request.id) {
+                // The key goes in the moment the owner approves (CDXC:Security 2026-11-17 at
+                // `enroll_owner_key_on_approval`); kept once, by the call that made the request.
+                security.approvals.attach(
+                    &request.id,
+                    OWNER_KEY_RESUME,
+                    json!({
+                        "key": serde_json::to_value(&key).unwrap_or(Value::Null),
+                        "doorOnly": door_only,
+                    }),
+                );
                 if app_request {
                     security.note_app_owner_key_request(&request.id);
                 } else {
@@ -660,6 +731,8 @@ fn handle(
             };
             // Asked once, kept for good (CDXC:Security 2026-11-10 in security/policy.rs).
             security.remember_approved(&request, now);
+            // An app's owner key goes in now, whether or not that app comes back for it.
+            enroll_owner_key_on_approval(state, &request, caller, now);
             // The request's outcome against its id, by the device that approved it.
             let mut logged =
                 crate::audit::Action::new("approval.approved", request.summary.clone());
@@ -803,6 +876,15 @@ fn handle(
                         .to_string(),
                 ));
             };
+            // The change is made: the request is spent, not left to read "approved, but the
+            // change wasn't made within 2 minutes" (m7-arch, 17 Nov).
+            if security.approvals.spend_approved(&id).is_some() {
+                log_approval_line(
+                    state,
+                    "approvalSpent",
+                    json!({ "approvalId": id, "action": request.action.as_str(), "caller": "gxserver" }),
+                );
+            }
             // It signs nothing here again, unless this computer's own app enrolled it
             // (CDXC:Security 2026-11-17 at `retire_owner_key`).
             let retired = security.retire_owner_key(&signer);
