@@ -1,12 +1,19 @@
 //! The where pill at the left end of the chat box's pill strip (pills_strip.rs): one pill split by
-//! a hairline, the computer's icon with the project and the computer on the left, the branch on
-//! the right. Hovering it shows the card of where the session runs; a click opens the same details
+//! a hairline, the computer's own icon with the project on the left, the branch on the right.
+//! Hovering it shows the card of where the session runs; a click opens the same details
 //! above the box with Copy branch and Open folder. gx-chat-core words all of it (`wherePill`,
 //! packages/gx-chat-core/src/extras/where_pill.rs, where the user's decision lives).
 //!
 //! The pill counts in the strip's fit (`pills_strip.rs`, `plan_strip_with_where`): the panel pills
-//! drop their labels first, then the pill drops the computer's name (`WhereTier::Short`), then the
+//! drop their labels first, then the pill shortens its texts (`WhereTier::Short`), then drops the
 //! project (`WhereTier::Icon`), and only then do panel pills go into the "+N" pill.
+//!
+//! CDXC:SessionChat 2026-11-18 DECISION:
+//! User, of the pill reading "Ghostex · This computer | main": "no need to mention the name of the
+//! machine here. instead just show the icon of the machine that i set instead of the pc icon shown
+//! there on the left". The pill no longer names the computer (the hover card and the details still
+//! do); its icon is the computer's own, the one the sidebar draws for it (picked in Settings >
+//! Remote, else its system's), and today's plain icons only while that is not known yet.
 
 use super::{appearance::ChatAppearance, cursor::ChatCursor as _, state::NativeChatView};
 use crate::app::native_sidebar::tooltips::CardInk;
@@ -30,22 +37,21 @@ const ROW_HEIGHT: f32 = 24.0;
 const ROWS_PAD_Y: f32 = 4.0;
 const ACTIONS_HEIGHT: f32 = 30.0;
 
-/// The pill's inner measures (unscaled): each half's side padding, an icon, the gap after it, the
-/// gap around the "·" before the computer's name, and the hairline between the halves.
+/// The pill's inner measures (unscaled): each half's side padding, an icon, the gap after it, and
+/// the hairline between the halves.
 const PAD: f32 = 8.0;
 const ICON: f32 = 14.0;
 const GAP: f32 = 5.0;
-const DOT_GAP: f32 = 4.0;
 const HAIRLINE: f32 = 1.0;
 const BORDER: f32 = 1.0;
 
 /// How much of the pill shows, widest first (`plan_strip_with_where`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) enum WhereTier {
-    /// Project · computer | branch.
+    /// Project | branch.
     #[default]
     Full,
-    /// Project | branch.
+    /// Project | branch, shorter.
     Short,
     /// The computer's icon | branch, shorter.
     Icon,
@@ -62,27 +68,25 @@ impl WhereTier {
         }
     }
 
-    /// The widest the project, the computer's name and the branch may be (unscaled); 0 hides one.
-    fn caps(self) -> (f32, f32, f32) {
+    /// The widest the project and the branch may be (unscaled); 0 hides one.
+    fn caps(self) -> (f32, f32) {
         match self {
-            WhereTier::Full => (170.0, 150.0, 220.0),
-            WhereTier::Short => (130.0, 0.0, 150.0),
-            WhereTier::Icon => (0.0, 0.0, 110.0),
+            WhereTier::Full => (170.0, 220.0),
+            WhereTier::Short => (130.0, 150.0),
+            WhereTier::Icon => (0.0, 110.0),
         }
     }
 }
 
-/// The pill's three texts, measured (unscaled).
+/// The pill's texts, measured (unscaled).
 struct Measured {
     project: f32,
-    machine: f32,
     branch: Option<f32>,
-    dot: f32,
 }
 
 /// The texts' widths at `tier`: each measured width (a pixel over, so it never cuts) under its cap.
-fn text_widths(measured: &Measured, tier: WhereTier) -> (f32, f32, Option<f32>) {
-    let (project, machine, branch) = tier.caps();
+fn text_widths(measured: &Measured, tier: WhereTier) -> (f32, Option<f32>) {
+    let (project, branch) = tier.caps();
     let fit = |width: f32, cap: f32| {
         if cap <= 0.0 {
             0.0
@@ -92,20 +96,16 @@ fn text_widths(measured: &Measured, tier: WhereTier) -> (f32, f32, Option<f32>) 
     };
     (
         fit(measured.project, project),
-        fit(measured.machine, machine),
         measured.branch.map(|width| fit(width, branch)),
     )
 }
 
 /// The pill's border box width at `tier` (unscaled), the sum of what `where_pill_element` draws.
 fn pill_width(measured: &Measured, tier: WhereTier) -> f32 {
-    let (project, machine, branch) = text_widths(measured, tier);
+    let (project, branch) = text_widths(measured, tier);
     let mut width = 2.0 * BORDER + PAD + ICON + PAD;
     if project > 0.0 {
         width += GAP + project;
-    }
-    if machine > 0.0 {
-        width += GAP + measured.dot + DOT_GAP + machine;
     }
     if let Some(branch) = branch {
         width += HAIRLINE + PAD + ICON + PAD;
@@ -120,8 +120,8 @@ fn icon_path(name: &str) -> String {
     format!("titlebar/{name}.svg")
 }
 
-/// The computer's icon: this computer's, the remote computer's own mark (its OS), a Cloud Box's
-/// cloud or a box's.
+/// The computer's icon: this computer's own and the remote computer's own mark (picked for it, else
+/// its system's), a Cloud Box's cloud or a box's.
 fn machine_icon(pill: &Value) -> String {
     let machine = &pill["machine"];
     match machine["kind"].as_str() {
@@ -139,7 +139,8 @@ fn machine_icon(pill: &Value) -> String {
                 mark.to_string()
             }
         }
-        _ => icon_path("device-desktop"),
+        _ => crate::app::gx_chat::session_directory::this_computer_icon()
+            .map_or_else(|| icon_path("device-desktop"), str::to_string),
     }
 }
 
@@ -269,9 +270,7 @@ impl NativeChatView {
         };
         let measured = Measured {
             project: width(&text(pill, "project")),
-            machine: width(&text(&pill["machine"], "name")),
             branch: pill["branch"].as_str().map(width),
-            dot: width("\u{b7}"),
         };
         Some(WhereTier::ALL.map(|tier| pill_width(&measured, tier)))
     }
@@ -289,15 +288,12 @@ impl NativeChatView {
             super::fonts::label_width(label, &p.font, FontWeight::NORMAL, 13.0 * s, cx) / s
         };
         let project = text(&pill, "project");
-        let machine = text(&pill["machine"], "name");
         let branch = pill["branch"].as_str().map(str::to_string);
         let measured = Measured {
             project: width(&project),
-            machine: width(&machine),
             branch: branch.as_deref().map(width),
-            dot: width("\u{b7}"),
         };
-        let (project_w, machine_w, branch_w) = text_widths(&measured, tier);
+        let (project_w, branch_w) = text_widths(&measured, tier);
         let open = self.chat_menu_is_open(WHERE_TRIGGER);
         let bounds = self.pill_bounds.cell(WHERE_MENU);
         let measured_bounds = bounds.clone();
@@ -329,18 +325,6 @@ impl NativeChatView {
             .child(icon(machine_icon(&pill)))
             .when(project_w > 0.0, |half| {
                 half.child(label(project.clone(), project_w, p.foreground))
-            })
-            .when(machine_w > 0.0, |half| {
-                half.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .flex_shrink_0()
-                        .gap(px(DOT_GAP * s))
-                        .text_color(p.card_muted)
-                        .child("\u{b7}")
-                        .child(label(machine.clone(), machine_w, p.card_muted)),
-                )
             });
         let right = branch.clone().zip(branch_w).map(|(branch, branch_w)| {
             half()

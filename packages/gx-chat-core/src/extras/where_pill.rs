@@ -1,5 +1,6 @@
-//! The where pill at the left end of the chat box's pill strip: the project, the computer and the
-//! branch of a running session, a hover card with everything else about where it runs, and a click
+//! The where pill at the left end of the chat box's pill strip: the computer's icon, the project and
+//! the branch of a running session (the computer's name only in its card since 2026-11-18, the
+//! decision in apps/desktop/src/app/native_chat/where_pill.rs), a hover card with everything else about where it runs, and a click
 //! that opens the same details with Copy branch and Open folder.
 //!
 //! gxserver on the session's machine reads the facts (`/api/readSessionWhere`,
