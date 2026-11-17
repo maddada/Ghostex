@@ -230,6 +230,7 @@ pub(crate) fn start(
         );
         crate::agent_folder_trust::carry_claude_folder_trust_for_switch(session, &cwd);
     }
+    crate::agent_folder_trust::allow_ghostex_in_codex_before_launch(session);
     // Pending sends belong to the CLI that is about to exit; the new generation also makes this sequence the only writer until it finishes.
     crate::session_chat_send::cancel_session_chat_sends(&project_id, &session_id);
     let mut steps = if let Some(background) = plan.background {
