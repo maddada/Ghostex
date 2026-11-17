@@ -909,7 +909,9 @@ pub fn build_unified_sidebar_folded(
 }
 
 /// How two cards of the list, the Moving shelf or the Parked shelf compare: by the shelf's own
-/// clock (`recent`) under Recent, else by the picked order.
+/// clock (`recent`) under Recent, else by the picked order. Ties fall to [`stable_identity_cmp`],
+/// and text compares by Unicode code point (Rust's `str` order), so the phone's port
+/// (`unifiedSessionCompare` in apps/mobile/app/src/contract/unified/build.ts) gives the same order.
 ///
 /// CDXC:Sidebar 2026-11-17 DECISION:
 /// Sebastian: the Unified sidebar keeps moving sessions around because it sorts by last updated, and he hates it. Settings › Sidebar gets Session order (`unifiedSessionOrder`): Recent activity, the default and Q790's order (`came_back_ms`), Alphabetical (the title A to Z, then the project, then the id) and Created (newest first). It orders the list, the Moving and Parked shelves and the cards inside each project group; Pinned keeps Pinned order, Drafts stay newest first and Snoozed soonest to wake. Under Alphabetical and Created a card never moves on a send, a turn that ends, asks or fails, or a thread that needs you (the coordinator lift only raises `came_back_ms`, which they ignore); a rename may move it once. The Moving section stays its own switch and still moves working cards to its shelf and back.
@@ -932,15 +934,33 @@ pub fn unified_session_cmp(
                         .to_lowercase()
                         .cmp(&right.repo.label.to_lowercase())
                 })
-                .then_with(|| tie_break(left, right))
+                .then_with(|| stable_identity_cmp(left, right))
         }
         UnifiedSessionOrder::Created => {
             let created = |row: &UnifiedRow| row.session.row.timing.created_ms.unwrap_or(0);
             created(right)
                 .cmp(&created(left))
-                .then_with(|| tie_break(left, right))
+                .then_with(|| stable_identity_cmp(left, right))
         }
     }
+}
+
+/// The tie-break of the stable orders: the project id, then the session id, which every client
+/// reads the same (the routed `sidebar_session_id` is `combined-session:…` here but the bare id or
+/// `machine:project:session` on the phone, and this computer is `local` here but its own id there).
+/// Only two computers holding the same project and session id fall through to the routed id.
+fn stable_identity_cmp(left: &UnifiedRow, right: &UnifiedRow) -> std::cmp::Ordering {
+    let identity = |row: &UnifiedRow| {
+        row.session
+            .row
+            .key
+            .as_ref()
+            .map(|key| (key.project_id.clone(), key.session_id.clone()))
+            .unwrap_or_default()
+    };
+    identity(left)
+        .cmp(&identity(right))
+        .then_with(|| tie_break(left, right))
 }
 
 /// `owner/repo` for a repository with a remote, `no remote` for a folder.

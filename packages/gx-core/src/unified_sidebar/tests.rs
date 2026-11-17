@@ -1365,3 +1365,62 @@ fn session_order_reads_its_setting() {
         UnifiedSessionOrder::Recent
     );
 }
+
+#[test]
+fn stable_orders_break_ties_by_project_then_session_and_compare_code_points() {
+    use crate::sidebar_view::UnifiedSessionOrder;
+    let local = MachineId::Local;
+    let titled = |project: &str, id: &str, title: &str| {
+        let mut row = timed(row(&local, project, id), 1_000, 1_000);
+        row.display_title = title.to_string();
+        row
+    };
+    // Two copies of one repository: the same title, label and creation time.
+    let view = sidebar(vec![
+        group(
+            "z",
+            "/z",
+            Some("git@github.com:o/repo.git"),
+            vec![titled("z", "a", "Same")],
+        ),
+        group(
+            "a",
+            "/a",
+            Some("git@github.com:o/repo.git"),
+            vec![titled("a", "z", "Same")],
+        ),
+        group(
+            "u",
+            "/u",
+            None,
+            vec![
+                titled("u", "emoji", "😀 task"),
+                titled("u", "wide", "Ｚ task"),
+            ],
+        ),
+    ]);
+    let machines = [UnifiedMachineInput {
+        machine: local,
+        label: "Local".to_string(),
+        view: &view,
+        spaces: None,
+    }];
+    let with = |session_order| UnifiedSettings {
+        working_section: false,
+        session_order,
+        ..settings()
+    };
+    let built = |order| {
+        ids(&build_unified_sidebar(&machines, with(order), &UnifiedFilter::default(), NOW).active)
+    };
+    // Project a's card before project z's; the fullwidth Z (U+FF3A) before the emoji (U+1F600).
+    assert_eq!(
+        built(UnifiedSessionOrder::Alphabetical),
+        ["z", "a", "wide", "emoji"]
+    );
+    // All created together: project a, then u (emoji, wide), then z.
+    assert_eq!(
+        built(UnifiedSessionOrder::Created),
+        ["z", "emoji", "wide", "a"]
+    );
+}
