@@ -112,7 +112,42 @@ pub(crate) fn remove_page_focus_handler(native_view: *mut c_void) {
     PAGE_FOCUS_HANDLERS.with(|handlers| handlers.borrow_mut().remove(&(native_view as usize)));
 }
 
+thread_local! {
+    /// What a page does on a press in it, by native view. Only macOS calls these
+    /// (`receive_native_page_pointer_down`), and only pages that ask for it register one.
+    static PAGE_POINTER_DOWN_HANDLERS: RefCell<HashMap<usize, StdRc<dyn Fn()>>> =
+        RefCell::new(HashMap::new());
+}
+
+/// AppKit's mouse-down reached the page in `native_view` (GpuiCefAppKitHooks.m). Runs inside the
+/// AppKit event, so a handler must not touch GPUI state there and then.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) fn receive_native_page_pointer_down(native_view: *mut c_void) {
+    if native_view.is_null() {
+        return;
+    }
+    let handler = PAGE_POINTER_DOWN_HANDLERS
+        .with(|handlers| handlers.borrow().get(&(native_view as usize)).cloned());
+    if let Some(handler) = handler {
+        handler();
+    }
+}
+
+pub(crate) fn remove_page_pointer_down_handler(native_view: *mut c_void) {
+    PAGE_POINTER_DOWN_HANDLERS
+        .with(|handlers| handlers.borrow_mut().remove(&(native_view as usize)));
+}
+
 impl CefBrowser {
+    /// Runs `handler` on every real press in this page (macOS only; Linux reports presses through
+    /// `on_native_pointer_focus` and popup_dismissal::PagePointerPress).
+    pub(crate) fn on_native_page_pointer_down(&self, handler: StdRc<dyn Fn()>) {
+        if let Some(native_view) = self.native_view() {
+            PAGE_POINTER_DOWN_HANDLERS
+                .with(|handlers| handlers.borrow_mut().insert(native_view as usize, handler));
+        }
+    }
+
     pub(crate) fn on_native_page_focus(&self, handler: StdRc<dyn Fn()>) {
         if let Some(native_view) = self.native_view() {
             PAGE_FOCUS_HANDLERS

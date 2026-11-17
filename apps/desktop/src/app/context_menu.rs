@@ -291,6 +291,11 @@ impl GpuiContextMenu {
         self
     }
 
+    /// The window the menu opened over, once it is shown.
+    pub(crate) fn source_window(&self) -> Option<AnyWindowHandle> {
+        self.source_window
+    }
+
     pub(crate) fn show(self, position: Point<Pixels>, window: &mut Window, cx: &mut App) {
         self.show_anchored(
             Bounds {

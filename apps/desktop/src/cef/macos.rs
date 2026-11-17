@@ -543,6 +543,12 @@ pub extern "C" fn GhostexGpuiCEFMarkNativeViewFocused(native_view: *mut c_void) 
     super::shell::mark_native_view_focused(native_view)
 }
 
+/// A real mouse-down on the CEF page whose browser root is `native_view` (any window).
+#[unsafe(no_mangle)]
+pub extern "C" fn GhostexGpuiCEFNativePagePointerDown(native_view: *mut c_void) {
+    super::shell::receive_native_page_pointer_down(native_view);
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiCEFLogNativeMouseDown(
     native_view: *mut c_void,

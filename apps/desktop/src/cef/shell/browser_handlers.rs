@@ -275,8 +275,9 @@ impl BrowserContextMenuTarget {
 }
 
 // CEF's built-in command ids (cef_menu_id_t) that Ghostex's page menu keeps.
-const MENU_ID_BACK: c_int = 100;
-const MENU_ID_FORWARD: c_int = 101;
+const MENU_ID_BACK: c_int = crate::app::helpers::web_bridge_types::PAGE_MENU_BACK_COMMAND_ID;
+const MENU_ID_FORWARD: c_int =
+    crate::app::helpers::web_bridge_types::PAGE_MENU_FORWARD_COMMAND_ID;
 const MENU_ID_RELOAD: c_int = 102;
 const MENU_ID_UNDO: c_int = 110;
 const MENU_ID_REDO: c_int = 111;

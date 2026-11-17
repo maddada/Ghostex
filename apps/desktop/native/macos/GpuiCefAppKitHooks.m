@@ -53,6 +53,7 @@ int GhostexGpuiCEFRefreshSystemPageAppearanceForNativeView(void *nativeView);
 void GhostexGpuiCEFRefreshSystemPageAppearances(void);
 void GhostexGpuiSidebarRevealFocusEditable(void *sidebar);
 void GhostexGpuiFirstResponderDidChange(void *gpuiRootView, void *responder);
+void GhostexGpuiCEFNativePagePointerDown(void *nativeView);
 int GhostexGpuiKeyboardRouteNativeEvent(void *gpuiRootView, int action,
                                         uint32_t keyCode, uint64_t modifiers,
                                         const char *shortcutCharacters,
@@ -1564,6 +1565,17 @@ static void GhostexGpuiCEFBrowserViewMouseDown(id self, SEL _cmd,
   */
   if (window) {
     GhostexGpuiFirstResponderReportWindow(window);
+  }
+  /*
+   CDXC:ContextMenus 2026-11-18 WHY:
+   The report above reaches only windows with a first-responder observer (the
+   main window), so a press in the floating page window's page closed nothing
+   and its right-click menu stayed open. Report the press for the browser root
+   itself too; only a page that asked for it acts on it
+   (`CefBrowser::on_native_page_pointer_down`). The event is not changed.
+  */
+  if (browserRoot) {
+    GhostexGpuiCEFNativePagePointerDown((__bridge void *)browserRoot);
   }
 
   struct objc_super superInfo = {
