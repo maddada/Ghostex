@@ -862,17 +862,6 @@ fn launch_effort_levels(family: &str) -> Option<(&'static str, &'static [&'stati
     }
 }
 
-/// True when `command` already passes an effort flag (any agent's spelling).
-fn command_names_effort(command: &str) -> bool {
-    command.split_whitespace().any(|word| {
-        let flag = word.split('=').next().unwrap_or(word);
-        matches!(
-            flag,
-            "--effort" | "--reasoning-effort" | "--reasoning" | "--thinking"
-        ) || word.contains("model_reasoning_effort=")
-    })
-}
-
 /// A new Claude, Codex or Cursor session starts on the model the user last chose as the agent's
 /// default (CDXC:AgentProviders 2026-10-07 in agent_model_pins.rs). A model the create names, or
 /// one the configured command already pins, is this session's own choice and is never taught to
@@ -914,7 +903,10 @@ fn pin_remembered_agent_model(
                 (None, Some(_)) if !command_names_model(&base, family) => {
                     Some((Some(pin.model.clone()), None))
                 }
-                (Some(_), None) if family != "cursor" && !command_names_effort(&base) => {
+                (Some(_), None)
+                    if family != "cursor"
+                        && !super::session_command::command_names_effort(&base, family) =>
+                {
                     pin.effort.clone().map(|effort| (None, Some(effort)))
                 }
                 _ => None,

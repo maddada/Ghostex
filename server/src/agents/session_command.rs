@@ -507,6 +507,38 @@ pub(crate) fn command_names_model(command: &str, agent: &str) -> bool {
     false
 }
 
+/// True when `command` already passes an effort option (any agent's spelling, Codex's
+/// `-c model_reasoning_effort=…` too), read shell-aware like [`command_names_model`] so prompt text
+/// that mentions `--effort` does not count.
+pub(crate) fn command_names_effort(command: &str, agent: &str) -> bool {
+    let mut offset = 0;
+    let mut skip_value = false;
+    let mut config_value = false;
+    while let Some((start, end, word)) = command_word(command, offset) {
+        offset = end;
+        if std::mem::take(&mut config_value) && word.starts_with("model_reasoning_effort=") {
+            return true;
+        }
+        if std::mem::take(&mut skip_value) || !is_option_word(&command[start..end], &word) {
+            continue;
+        }
+        let flag = word.split('=').next().unwrap_or(&word);
+        if matches!(
+            flag,
+            "--effort" | "--reasoning-effort" | "--reasoning" | "--thinking"
+        ) || word.starts_with("--config=model_reasoning_effort=")
+        {
+            return true;
+        }
+        if matches!(word.as_str(), "-c" | "--config") {
+            config_value = true;
+            continue;
+        }
+        skip_value = !word.contains('=') && option_takes_value(agent, &word);
+    }
+    false
+}
+
 /// Model ids such as `opus[1m]` carry shell glob characters, so only plain words stay unquoted.
 fn shell_word(value: &str) -> String {
     if value
