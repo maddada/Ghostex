@@ -38,6 +38,8 @@
 
 ![The built-in editor](media/readme/gx-hero-6.jpeg)
 
+<sub>Want an animated wallpaper behind Ghostex like these? Try [Wallspace](https://wallspace.app/) on macOS (free, recommended), [Lively Wallpaper](https://github.com/rocksdanister/lively) on Windows (free, open source) or [Hidamari](https://github.com/jeffshee/hidamari) on Linux (free, open source; it has no gallery, so add your own videos, for example looping clips from [Pexels Videos](https://www.pexels.com/search/videos/abstract%20loop/), or paste a YouTube link: search for "4K live wallpaper loop"). Move Ghostex to its own desktop or workspace so only the wallpaper sits behind it.</sub>
+
 </details>
 
 ## What it does
@@ -120,7 +122,7 @@ Fuzzy search every prompt you ever sent, across all your agents. Press Enter to 
 
 </details>
 
-**Also in the box:** an on-demand VS Code editor · remote computers over Easy Connect or SSH · Claude and Codex usage with account switching · worktrees, splits and spaces · scheduled prompts and notifications · optional plugins.
+**Also in the box:** an on-demand VS Code editor · remote computers over Easy Connect or SSH · Claude and Codex usage with account switching · worktrees, splits and spaces · automations (scheduled prompts) with menu bar and sound notifications · optional plugins such as the Kanban board.
 
 ## Works with your agent
 
@@ -130,7 +132,7 @@ Fuzzy search every prompt you ever sent, across all your agents. Press Enter to 
 
 ### On your computer
 
-**macOS** — [Apple Silicon DMG](https://maddada.com/download/macos-arm64)
+**macOS:** [Apple Silicon DMG](https://maddada.com/download/macos-arm64)
 
 <details>
 <summary>Or install with Homebrew</summary>
@@ -141,7 +143,7 @@ brew install ghostex
 
 </details>
 
-**Windows** — [x64 installer](https://maddada.com/download/windows-x64) · [ARM64 installer](https://maddada.com/download/windows-arm64)
+**Windows:** [x64 installer](https://maddada.com/download/windows-x64) · [ARM64 installer](https://maddada.com/download/windows-arm64)
 
 <details>
 <summary>PowerShell install and Windows details</summary>
@@ -156,7 +158,7 @@ Agents run in native PowerShell by default. Prefer Linux? Switch to WSL in Setti
 
 </details>
 
-**Linux** — [.deb](https://maddada.com/download/linux-deb-x64) · [.rpm](https://maddada.com/download/linux-rpm-x64) · [AppImage](https://maddada.com/download/linux-appimage-x64) · [tar.zst](https://maddada.com/download/linux-tar-x64)
+**Linux:** [.deb](https://maddada.com/download/linux-deb-x64) · [.rpm](https://maddada.com/download/linux-rpm-x64) · [AppImage](https://maddada.com/download/linux-appimage-x64) · [AUR](https://aur.archlinux.org/packages/ghostex-bin) · [tar.zst](https://maddada.com/download/linux-tar-x64)
 
 <details>
 <summary>Arch Linux, ARM64 and other Linux details</summary>
@@ -168,12 +170,12 @@ yay -S ghostex-bin
 # Other x64 distributions: extract into /opt/ghostex
 sudo tar -xpf ghostex-*-linux-x64.tar.zst -C /
 
-# AppImage
+# No package manager: the AppImage copies itself into ~/.local/share/ghostex/appimage on first start
 chmod +x ghostex-*-linux-x64.AppImage
 ./ghostex-*-linux-x64.AppImage
 ```
 
-ARM64 packages are on the [release page](https://github.com/maddada/Ghostex/releases/latest). To update an AppImage, download the new one and open it. Without FUSE, install your distribution's `fuse3` package or start with `--appimage-extract-and-run`.
+ARM64 packages are on the [release page](https://github.com/maddada/Ghostex/releases/latest). To update an AppImage, download the new one and open it. Without FUSE the AppImage says "Cannot mount AppImage": install your distribution's `fuse3` package, or start it with `--appimage-extract-and-run`.
 
 Ghostex offers to install Chromium the first time you open the browser or code editor.
 
@@ -181,9 +183,9 @@ Ghostex offers to install Chromium the first time you open the browser or code e
 
 ### On your phone
 
-**iPhone** — [Get it on the App Store](https://apps.apple.com/app/id6771707394)
+**iPhone:** [Get it on the App Store](https://apps.apple.com/app/id6771707394)
 
-**Android** — [Download the APK](https://github.com/maddada/Ghostex/releases/latest/download/ghostex-android.apk)
+**Android:** [Download the APK](https://github.com/maddada/Ghostex/releases/latest/download/ghostex-android.apk)
 
 Pair the phone app with Ghostex on your computer using Easy Connect, or use your existing Tailscale tailnet.
 
