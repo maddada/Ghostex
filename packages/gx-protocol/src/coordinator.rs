@@ -100,6 +100,86 @@ pub fn coordinator_start_effort(family: &str, setting: Option<&str>) -> Option<&
     })
 }
 
+/// The key in a create's `coordinator` object listing which of `agentModel`/`agentEffort`
+/// (`"model"`, `"effort"`) came from the sender's Coordinator settings rather than from the user.
+pub const COORDINATOR_START_FROM_SETTINGS_KEY: &str = "startFromSettings";
+
+/// Sets a coordinator create's `agentModel` and `agentEffort` that the user did not choose
+/// (`chosen_model`/`chosen_effort` false) from the Coordinator settings in `settings`, for an agent
+/// of `family`, and lists them under the `coordinator` object's
+/// [`COORDINATOR_START_FROM_SETTINGS_KEY`]. A value the settings leave to the agent (Agent default)
+/// is removed. The computer that runs the coordinator calls it again with its own settings, so a
+/// coordinator created from another computer starts on the settings of the one it runs on; a
+/// computer from before the key keeps the values the sender put in.
+pub fn apply_coordinator_start_settings(
+    params: &mut serde_json::Map<String, serde_json::Value>,
+    family: &str,
+    settings: &serde_json::Value,
+    chosen_model: bool,
+    chosen_effort: bool,
+) {
+    use serde_json::Value;
+    let setting = |key: &str| settings.get(key).and_then(Value::as_str);
+    let mut from_settings = Vec::new();
+    let fields = [
+        (
+            "model",
+            "agentModel",
+            chosen_model,
+            coordinator_start_model(family, setting(COORDINATOR_MODEL_SETTING)),
+        ),
+        (
+            "effort",
+            "agentEffort",
+            chosen_effort,
+            coordinator_start_effort(family, setting(COORDINATOR_EFFORT_SETTING)),
+        ),
+    ];
+    for (name, key, chosen, start) in fields {
+        if chosen {
+            continue;
+        }
+        match start {
+            Some(value) => {
+                params.insert(key.to_string(), Value::String(value.to_string()));
+            }
+            None => {
+                params.remove(key);
+            }
+        }
+        from_settings.push(Value::String(name.to_string()));
+    }
+    if let Some(coordinator) = params
+        .entry("coordinator")
+        .or_insert_with(|| Value::Object(Default::default()))
+        .as_object_mut()
+    {
+        if from_settings.is_empty() {
+            coordinator.remove(COORDINATOR_START_FROM_SETTINGS_KEY);
+        } else {
+            coordinator.insert(
+                COORDINATOR_START_FROM_SETTINGS_KEY.to_string(),
+                Value::Array(from_settings),
+            );
+        }
+    }
+}
+
+/// Which of a create's model and effort came from the sender's Coordinator settings
+/// ([`COORDINATOR_START_FROM_SETTINGS_KEY`]): `(model, effort)`.
+pub fn coordinator_start_from_settings(
+    params: &serde_json::Map<String, serde_json::Value>,
+) -> (bool, bool) {
+    let listed = |name: &str| {
+        params
+            .get("coordinator")
+            .and_then(|coordinator| coordinator.get(COORDINATOR_START_FROM_SETTINGS_KEY))
+            .and_then(serde_json::Value::as_array)
+            .is_some_and(|names| names.iter().any(|entry| entry.as_str() == Some(name)))
+    };
+    (listed("model"), listed("effort"))
+}
+
 /// A Model row's label in a New Coordinator form: OpenCode's lineup lists the same model under
 /// several providers ("GPT-6.1 Terra" from OpenAI and from OpenRouter), so its rows name the provider.
 pub fn coordinator_model_label(family: &str, value: &str, label: &str) -> String {

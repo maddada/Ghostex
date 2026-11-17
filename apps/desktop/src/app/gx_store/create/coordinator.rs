@@ -21,8 +21,8 @@ use crate::app::remote_conn::sidebar_rpc::{
 };
 use crate::app::window::{NewCoordinatorAgent, NewCoordinatorRefusal};
 use ghostex_gx_chat_core::protocol::{
-    COORDINATOR_EFFORT_SETTING, COORDINATOR_MODEL_SETTING, coordinator_quality_concern,
-    coordinator_start_effort, coordinator_start_model,
+    COORDINATOR_EFFORT_SETTING, COORDINATOR_MODEL_SETTING, apply_coordinator_start_settings,
+    coordinator_quality_concern, coordinator_start_effort, coordinator_start_model,
 };
 
 /// The agent family a launcher row runs as: the coordinator family it is one of
@@ -86,23 +86,19 @@ fn coordinator_title(name: &str) -> (&str, &'static str) {
     }
 }
 
-/// The create parameters every coordinator shares, on top of an agent launch's.
+/// The create parameters every coordinator shares, on top of an agent launch's: the model and
+/// effort from this computer's Coordinator settings (`settings`), marked as such so the computer
+/// that runs it applies its own (`apply_coordinator_start_settings` in gx-protocol).
 fn coordinator_params(
     mut params: Value,
     title_source: &str,
-    model: Option<&str>,
-    effort: Option<&str>,
+    family: &str,
+    settings: &Value,
 ) -> Value {
     if let Some(object) = params.as_object_mut() {
-        if let Some(model) = model.filter(|model| !model.is_empty()) {
-            object.insert("agentModel".to_string(), json!(model));
-        }
-        if let Some(effort) = effort.filter(|effort| !effort.is_empty()) {
-            object.insert("agentEffort".to_string(), json!(effort));
-        }
-
         object.remove("draft");
         object.insert("coordinator".to_string(), json!({}));
+        apply_coordinator_start_settings(object, family, settings, false, false);
         let runtime = object
             .entry("runtimeSettings")
             .or_insert_with(|| Value::Object(Map::new()));
@@ -149,6 +145,43 @@ pub(crate) fn coordinator_agents(
         .collect()
 }
 
+/// Each other computer's Coordinator model and Coordinator effort, as settings (`coordinatorModel`,
+/// `coordinatorEffort`), read with its model catalog (remote_conn/coordinator_catalog.rs), so the
+/// agent picker warns by the settings the coordinator will start on there. A computer not read yet,
+/// or one from before `/api/readCoordinatorStart`, has none: its create gets this computer's.
+static REMOTE_COORDINATOR_START: std::sync::Mutex<std::collections::BTreeMap<String, Value>> =
+    std::sync::Mutex::new(std::collections::BTreeMap::new());
+
+/// Keeps (or, with `None`, forgets) what `machine_id` answered `/api/readCoordinatorStart` with.
+/// The browser build reaches no other computer, so it never calls it.
+#[cfg_attr(ghostex_web, allow(dead_code))]
+pub(crate) fn remember_remote_coordinator_start(machine_id: &str, answer: Option<&Value>) {
+    let Ok(mut starts) = REMOTE_COORDINATOR_START.lock() else {
+        return;
+    };
+    match answer {
+        Some(answer) => {
+            starts.insert(
+                machine_id.to_string(),
+                json!({
+                    COORDINATOR_MODEL_SETTING: answer.get("model").cloned().unwrap_or(Value::Null),
+                    COORDINATOR_EFFORT_SETTING: answer.get("effort").cloned().unwrap_or(Value::Null),
+                }),
+            );
+        }
+        None => {
+            starts.remove(machine_id);
+        }
+    }
+}
+
+fn remote_coordinator_start(machine_id: &str) -> Option<Value> {
+    REMOTE_COORDINATOR_START
+        .lock()
+        .ok()
+        .and_then(|starts| starts.get(machine_id).cloned())
+}
+
 impl GhostexGpuiApp {
     /// This computer's launchers an orchestrator can run on, with this computer's lineups.
     pub(crate) fn gx_store_coordinator_agents(&self) -> Vec<NewCoordinatorAgent> {
@@ -169,11 +202,9 @@ impl GhostexGpuiApp {
         catalog: Option<&AgentModelCatalog>,
     ) -> Option<Vec<NewCoordinatorAgent>> {
         let hud = self.gx_store.hud.remote_sidebar_hud(machine_id)?;
-        Some(coordinator_agents(
-            Some(hud),
-            catalog,
-            &self.gx_store_hud_settings_value(),
-        ))
+        let settings = remote_coordinator_start(machine_id)
+            .unwrap_or_else(|| self.gx_store_hud_settings_value());
+        Some(coordinator_agents(Some(hud), catalog, &settings))
     }
 
     /// The launcher rows of the sidebar HUD of the copy's computer, which the agent picker lists,
@@ -257,8 +288,6 @@ impl GhostexGpuiApp {
             let family =
                 coordinator_family_in(self.gx_store.hud.remote_sidebar_hud(&machine_id), agent_id)
                     .unwrap_or_default();
-            let (model, effort) =
-                coordinator_start_options(&family, &self.gx_store_hud_settings_value());
             let params = coordinator_params(
                 remote_agent_launch_params(
                     agent_id,
@@ -268,8 +297,8 @@ impl GhostexGpuiApp {
                     name,
                 ),
                 title_source,
-                model,
-                effort,
+                &family,
+                &self.gx_store_hud_settings_value(),
             );
             let task = self.start_gpui_remote_sidebar_rpc(
                 &machine_id,
@@ -338,13 +367,11 @@ impl GhostexGpuiApp {
             return;
         };
         let family = coordinator_family_in(hud.as_deref(), agent_id).unwrap_or_default();
-        let (model, effort) =
-            coordinator_start_options(&family, &self.gx_store_hud_settings_value());
         let params = coordinator_params(
             local_agent_launch_params(&agent, &project_id, Map::new(), account_id, name),
             title_source,
-            model,
-            effort,
+            &family,
+            &self.gx_store_hud_settings_value(),
         );
         cx.spawn(async move |this, cx| {
             let created = gx_rpc(None, "/api/createAgentSession", params).await;

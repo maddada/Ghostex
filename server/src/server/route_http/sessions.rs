@@ -105,7 +105,12 @@ pub(super) async fn route_sessions_http(
                 if params.contains_key("account") {
                     state.accounts.refresh(&state.paths.home_dir, false);
                 }
-                let params = &coordinator_runtime::prepare_coordinator_create_params(params)?;
+                let mut prepared = coordinator_runtime::prepare_coordinator_create_params(params)?;
+                crate::coordinators::apply_destination_coordinator_start(
+                    &mut prepared,
+                    &crate::session_chat_catch_up::read_settings(&state.paths),
+                );
+                let params = &prepared;
                 let create_params = create_agent_session_params_for_project(db, &project, params)?;
                 let created_session = repository.create_session(&create_params, false)?;
                 crate::agents::turn_create_cap::record_turn_create(turn_create);

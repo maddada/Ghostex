@@ -24,3 +24,4 @@ mod projects;
 mod terminal;
 
 pub(crate) use claim::CreateHost;
+pub(crate) use coordinator::remember_remote_coordinator_start;

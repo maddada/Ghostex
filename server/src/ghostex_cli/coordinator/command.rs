@@ -384,7 +384,7 @@ fn make_main(parsed: &ParsedArgs) -> CliResult<()> {
 /// the efforts each model accepts.
 ///
 /// CDXC:Coordinators 2026-10-03 WHY:
-/// The phone's New Coordinator form reads its choices here instead of parsing the model catalog itself, so its lineup is the one gxserver serves and its defaults are the ones `create` applies (the Coordinator model and Coordinator effort settings, the orchestrator levels only, and the locked skill line each agent's first message starts with). Phones from before 2026-11-13 still show Model and Effort pickers and send what these defaults preselect, so the settings reach them through `defaultModel` and `defaultEffort`; with a setting on Agent default they preselect the lineup's own default model and its default effort.
+/// The phone's New Coordinator form reads its choices here instead of parsing the model catalog itself, so its lineup is the one gxserver serves and its defaults are the ones `create` applies (the Coordinator model and Coordinator effort settings, the orchestrator levels only, and the locked skill line each agent's first message starts with). Phones from before 2026-11-13 still show Model and Effort pickers and send what these defaults preselect, so the settings reach them through `defaultModel` and `defaultEffort`; with a setting on Agent default they preselect the model and effort Ghostex remembers for the agent (where the lineup lists it and the form offers it), else the lineup's own default.
 /// SEE-ALSO: apps/desktop/src/app/gx_store/create/coordinator.rs (the desktop dialog's lineup), apps/mobile/app/src/screens/sessions-screen/NewCoordinatorSheet.tsx (the phone's form).
 fn options(parsed: &ParsedArgs) -> CliResult<()> {
     let flags = server_flags(&parsed.flags);
@@ -428,6 +428,9 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
                 .then(|| catalog.pointer(&format!("/agents/{family}")))
                 .flatten();
             let takes_effort = coordinator_launch_takes_effort(family);
+            // Agent default preselects what a launch of this agent would start on: the model and
+            // effort Ghostex remembers for it, read without loading the store.
+            let pin = crate::agent_model_pins::read_launch_default(&paths, family);
             let agent_efforts = lineup
                 .and_then(|agent| agent.get("efforts"))
                 .cloned()
@@ -457,13 +460,17 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
                         .collect();
                     let offered = orchestrator_efforts(&levels, all_efforts, None);
                     let is_offered = |effort: &&str| offered.iter().any(|level| level == effort);
-                    // Agent default: the model's own default effort. Agents Ghostex picks no
-                    // effort for keep the orchestrator default.
+                    // Agent default: the remembered effort where the agent has one, else the
+                    // model's own default effort. Agents Ghostex picks no effort for keep the
+                    // orchestrator default.
                     let chosen: Option<&str> =
                         if matches!(family, "claude" | "codex" | "antigravity") {
                             let start: Option<&str> =
                                 coordinator_start_effort(family, effort_setting);
-                            start.or_else(|| model.get("defaultEffort").and_then(Value::as_str))
+                            start
+                                .or_else(|| pin.as_ref().and_then(|pin| pin.effort.as_deref()))
+                                .filter(is_offered)
+                                .or_else(|| model.get("defaultEffort").and_then(Value::as_str))
                         } else {
                             None
                         };
@@ -488,7 +495,8 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
                     })
                 }))
                 .collect();
-            let start_model = coordinator_start_model(family, model_setting);
+            let start_model: Option<&str> = coordinator_start_model(family, model_setting)
+                .or_else(|| pin.as_ref().map(|pin| pin.model.as_str()));
             let default_model = models
                 .iter()
                 .find(|model| start_model.is_some_and(|start| model["value"] == start))

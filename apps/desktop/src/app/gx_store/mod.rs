@@ -67,6 +67,8 @@ mod collection_menu;
 mod computer_icons;
 mod coordinator_actions;
 mod create;
+#[cfg_attr(ghostex_web, allow(unused_imports))]
+pub(crate) use create::remember_remote_coordinator_start;
 mod custom_tags_sync;
 mod delayed_send_seed;
 mod diagnostics;

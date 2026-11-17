@@ -1,8 +1,9 @@
 //! Creating a coordinator: `/api/createAgentSession` with a `coordinator` object.
 
 use ghostex_gx_chat_core::protocol::{
-    coordinator_start_effort, coordinator_start_model, COORDINATOR_AGENT_DEFAULT,
-    COORDINATOR_EFFORT_SETTING, COORDINATOR_MODEL_SETTING,
+    apply_coordinator_start_settings, coordinator_start_effort, coordinator_start_from_settings,
+    coordinator_start_model, COORDINATOR_AGENT_DEFAULT, COORDINATOR_EFFORT_SETTING,
+    COORDINATOR_MODEL_SETTING,
 };
 use rusqlite::Connection;
 use serde_json::{Map, Value};
@@ -181,26 +182,47 @@ pub fn coordinator_create_params(launch: CoordinatorLaunch<'_>) -> Value {
         "coordinator": { "goal": launch.goal, "firstRequest": launch.task },
     });
     // CDXC:Coordinators 2026-11-17 SEE-ALSO: `coordinator_start_model` in packages/gx-protocol/src/coordinator.rs (the user's decision: Opus 5.5 at Medium, or the agent's own default). ZCode takes no effort choice; its model rides agentModel and gxserver queues it as a `/model` line ahead of the first message.
-    let setting = |key: &str| launch.settings.get(key).and_then(Value::as_str);
-    let effort = launch.effort.or_else(|| {
-        family
-            .and_then(|family| {
-                coordinator_start_effort(family, setting(COORDINATOR_EFFORT_SETTING))
-            })
-            .map(str::to_string)
-    });
-    if let Some(effort) = effort {
-        params["agentEffort"] = Value::String(effort);
-    }
-    let model = launch.model.or_else(|| {
-        family
-            .and_then(|family| coordinator_start_model(family, setting(COORDINATOR_MODEL_SETTING)))
-            .map(str::to_string)
-    });
-    if let Some(model) = model {
+    let chosen_model = launch.model.is_some();
+    let chosen_effort = launch.effort.is_some();
+    if let Some(model) = launch.model {
         params["agentModel"] = Value::String(model);
     }
+    if let Some(effort) = launch.effort {
+        params["agentEffort"] = Value::String(effort);
+    }
+    if let (Some(family), Some(object)) = (family, params.as_object_mut()) {
+        apply_coordinator_start_settings(
+            object,
+            family,
+            launch.settings,
+            chosen_model,
+            chosen_effort,
+        );
+    }
     params
+}
+
+/// `/api/createAgentSession` for a coordinator: the model and effort the sender took from its own
+/// Coordinator settings are taken again from this computer's (`settings`), so a coordinator started
+/// here from another computer or the CLI starts on the settings of the computer it runs on. Values
+/// the user chose are kept. A create whose agent family is unknown here keeps what it was sent.
+pub(crate) fn apply_destination_coordinator_start(
+    params: &mut Map<String, Value>,
+    settings: &Value,
+) {
+    let (from_model, from_effort) = coordinator_start_from_settings(params);
+    if !from_model && !from_effort {
+        return;
+    }
+    let launch = params.get("launchSettings");
+    let row = serde_json::json!({
+        "agentId": params.get("agentId").cloned().unwrap_or(Value::Null),
+        "icon": launch.and_then(|launch| launch.get("icon")).cloned().unwrap_or(Value::Null),
+        "command": launch.and_then(|launch| launch.get("agentCommand")).cloned().unwrap_or(Value::Null),
+    });
+    if let Some(family) = coordinator_launcher_family(&row) {
+        apply_coordinator_start_settings(params, family, settings, !from_model, !from_effort);
+    }
 }
 
 /// `/api/readCoordinatorStart`: the Coordinator model and Coordinator effort settings as Settings

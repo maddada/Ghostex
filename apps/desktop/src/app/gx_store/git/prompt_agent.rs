@@ -254,6 +254,15 @@ impl GhostexGpuiApp {
             if let Some(first_request) = &coordinator.first_request {
                 fields["firstRequest"] = json!(first_request);
             }
+            let (model, effort) = coordinator.start_from_settings;
+            let from_settings: Vec<&str> = [("model", model), ("effort", effort)]
+                .into_iter()
+                .filter_map(|(name, listed)| listed.then_some(name))
+                .collect();
+            if !from_settings.is_empty() {
+                fields[ghostex_gx_chat_core::protocol::COORDINATOR_START_FROM_SETTINGS_KEY] =
+                    json!(from_settings);
+            }
             params.insert("coordinator".into(), fields);
             if launch.title.is_none() {
                 params.insert("title".into(), json!("Coordinator"));

@@ -70,6 +70,10 @@ pub(crate) struct HandoffCoordinator {
     /// a draft: the handoff's lead-in, for a destination gxserver that would type a staged draft
     /// into the terminal while the skill starts (`coordinatorHandoffDraft`).
     pub(crate) first_request: Option<String>,
+    /// The new orchestrator's model and effort came from this computer's Coordinator settings
+    /// (`(model, effort)`), so the computer that runs it applies its own
+    /// (`COORDINATOR_START_FROM_SETTINGS_KEY` in gx-protocol).
+    pub(crate) start_from_settings: (bool, bool),
 }
 
 impl HandoffCoordinator {
@@ -847,6 +851,14 @@ impl GhostexGpuiApp {
         // A new orchestrator starts on the Coordinator model and effort settings
         // (`coordinator_start_model` in gx-protocol).
         let setting = |key: &str| object.get(key).and_then(Value::as_str);
+        if let Some((_, coordinator)) = coordinator_launch.as_mut() {
+            coordinator.start_from_settings = (
+                launch_model.is_none(),
+                launch_model
+                    .and_then(|target| target.effort.as_ref())
+                    .is_none(),
+            );
+        }
         let agent_model = launch_model.map(|target| target.model.clone()).or_else(|| {
             coordinator_launch.as_ref().and_then(|(family, _)| {
                 ghostex_gx_chat_core::protocol::coordinator_start_model(

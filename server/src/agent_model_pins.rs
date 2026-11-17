@@ -212,6 +212,23 @@ pub(crate) fn launch_default(family: &str) -> Option<ModelPin> {
     .then_some(remembered.pin)
 }
 
+/// [`launch_default`] read straight from the file, for a process that never loaded the store (the
+/// `ghostex` CLI's `coordinator options`); it writes nothing.
+pub(crate) fn read_launch_default(
+    paths: &crate::paths::GxserverPaths,
+    family: &str,
+) -> Option<ModelPin> {
+    let family = pin_family(family)?;
+    let text = fs::read_to_string(paths.app_state_dir.join(STORE_FILE)).ok()?;
+    let remembered = serde_json::from_str::<PinFile>(&text)
+        .ok()?
+        .defaults
+        .remove(family)?;
+    (remembered.settings == settings_snapshot(family)
+        && launchable_model(family, &remembered.pin.model))
+    .then_some(remembered.pin)
+}
+
 /// The model and effort this conversation runs next: what it last ran, or what the user last
 /// picked for it. Its resume and wake are launched on it and its pill shows it, so both agree
 /// before the agent reports anything.

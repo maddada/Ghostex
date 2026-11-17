@@ -34,7 +34,20 @@ impl GhostexGpuiApp {
         let Some(target) = self.gpui_remote_gxserver_request_target(machine_id) else {
             return gpui::Task::ready(RemoteModelCatalog::Unreachable);
         };
+        let machine_id = machine_id.to_string();
         cx.background_executor().spawn(async move {
+            // The Coordinator settings the coordinator would start on there, for the picker's
+            // warning (`remember_remote_coordinator_start`).
+            let start = gpui_remote_gxserver_post_typed_operation(
+                &target,
+                "/api/readCoordinatorStart",
+                &serde_json::json!({}),
+                CATALOG_READ_TIMEOUT,
+            )
+            .ok()
+            .filter(|(status, _)| (200..300).contains(status))
+            .and_then(|(_, body)| parse_gpui_gxserver_rpc_result(&body).ok());
+            crate::app::gx_store::remember_remote_coordinator_start(&machine_id, start.as_ref());
             match read_remote_model_catalog(&target) {
                 Some(Some(catalog)) => {
                     ghostex_gx_chat_core::menus::catalog::parse_agent_model_catalog(&catalog)

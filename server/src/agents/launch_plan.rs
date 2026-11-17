@@ -862,6 +862,17 @@ fn launch_effort_levels(family: &str) -> Option<(&'static str, &'static [&'stati
     }
 }
 
+/// True when `command` already passes an effort flag (any agent's spelling).
+fn command_names_effort(command: &str) -> bool {
+    command.split_whitespace().any(|word| {
+        let flag = word.split('=').next().unwrap_or(word);
+        matches!(
+            flag,
+            "--effort" | "--reasoning-effort" | "--reasoning" | "--thinking"
+        ) || word.contains("model_reasoning_effort=")
+    })
+}
+
 /// A new Claude, Codex or Cursor session starts on the model the user last chose as the agent's
 /// default (CDXC:AgentProviders 2026-10-07 in agent_model_pins.rs). A model the create names, or
 /// one the configured command already pins, is this session's own choice and is never taught to
@@ -892,31 +903,38 @@ fn pin_remembered_agent_model(
         .clone()
         .or_else(|| default_agent_command(family).map(str::to_string))
         .unwrap_or_else(|| family.to_string());
-    // A coordinator on the Coordinator model setting's Agent default with a chosen effort starts on
-    // the remembered model at that effort (CDXC:Coordinators 2026-11-17 at `coordinator_start_model`
-    // in gx-protocol); without this the chosen effort would drop the remembered model too.
-    let coordinator_effort_only = requested_model.is_none()
-        && requested_effort.is_some()
-        && command.is_some()
-        && params.get("coordinator").is_some_and(Value::is_object)
-        && !command_names_model(&base, family);
-    if coordinator_effort_only {
-        let pinned = launch_default(family).and_then(|pin| {
-            with_agent_model_options(&base, family, Some(&pin.model), None)
-                .ok()
-                .map(|command| (command, pin.model))
-        });
-        if let Some((pinned_command, model)) = pinned {
-            let chosen = ModelPin {
-                model,
-                effort: requested_effort,
-                ..ModelPin::default()
+    // A coordinator whose Coordinator model or Coordinator effort setting is Agent default (or that
+    // names only one of the two) takes the other from the agent's remembered default (CDXC:Coordinators
+    // 2026-11-17 at `coordinator_start_model` in gx-protocol); without this naming one would drop the
+    // remembered value of the other. A model or effort the command already names stays.
+    let coordinator = command.is_some() && params.get("coordinator").is_some_and(Value::is_object);
+    if coordinator && requested_model.is_some() != requested_effort.is_some() {
+        if let Some(pin) = launch_default(family) {
+            let fill = match (&requested_model, &requested_effort) {
+                (None, Some(_)) if !command_names_model(&base, family) => {
+                    Some((Some(pin.model.clone()), None))
+                }
+                (Some(_), None) if family != "cursor" && !command_names_effort(&base) => {
+                    pin.effort.clone().map(|effort| (None, Some(effort)))
+                }
+                _ => None,
             };
-            runtime_settings.insert(
-                SESSION_PIN_KEY.to_string(),
-                session_marker(ORIGIN_SESSION, Some(&chosen)),
-            );
-            return Ok(Some(pinned_command));
+            if let Some((model, effort)) = fill {
+                if let Ok(filled) =
+                    with_agent_model_options(&base, family, model.as_deref(), effort.as_deref())
+                {
+                    let chosen = ModelPin {
+                        model: requested_model.or(model).unwrap_or_default(),
+                        effort: requested_effort.or(effort),
+                        ..ModelPin::default()
+                    };
+                    runtime_settings.insert(
+                        SESSION_PIN_KEY.to_string(),
+                        session_marker(ORIGIN_SESSION, Some(&chosen)),
+                    );
+                    return Ok(Some(filled));
+                }
+            }
         }
     }
     if requested_model.is_some() || requested_effort.is_some() || command_names_model(&base, family)
