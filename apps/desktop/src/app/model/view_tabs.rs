@@ -327,9 +327,8 @@ impl Render for ViewTabDragPreview {
             .px(px(WORKAREA_VIEW_TAB_HORIZONTAL_PADDING))
             .text_size(px(12.5))
             .text_color(titlebar_active_text_color())
-            .child(titlebar_svg_icon(
+            .child(crate::app::render::view_tab_strip::view_tab_icon(
                 self.icon,
-                WORKAREA_VIEW_TAB_ICON_SIZE,
                 titlebar_icon_color(),
             ))
             .child(

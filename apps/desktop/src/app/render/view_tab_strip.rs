@@ -27,6 +27,27 @@ use crate::*;
 
 const VIEW_TAB_GROUP: &str = "ghostex-gpui-view-tab";
 
+/// CDXC:Workarea 2026-11-18 DECISION:
+/// User: "pls make the claude logo here 10% smaller so it matches size of other icons there on that bar". The Claude logo's artwork fills its whole 16px box while the Tabler and Grok glyphs beside it keep padding inside theirs, so at the shared 13px it read bigger than its neighbours. Only that logo is drawn at 90% (11.7px), centred in the same 13px box so the tab's layout does not move.
+const VIEW_TAB_CLAUDE_LOGO_PATH: &str = "agent-icons/claude.svg";
+const VIEW_TAB_CLAUDE_LOGO_SCALE: f32 = 0.9;
+
+/// A view tab's icon: the shared tab icon size, centred in a box of that size.
+pub(crate) fn view_tab_icon(path: &'static str, color: gpui::Hsla) -> impl IntoElement {
+    let size = if path == VIEW_TAB_CLAUDE_LOGO_PATH {
+        WORKAREA_VIEW_TAB_ICON_SIZE * VIEW_TAB_CLAUDE_LOGO_SCALE
+    } else {
+        WORKAREA_VIEW_TAB_ICON_SIZE
+    };
+    div()
+        .size(px(WORKAREA_VIEW_TAB_ICON_SIZE))
+        .flex()
+        .flex_shrink_0()
+        .items_center()
+        .justify_center()
+        .child(titlebar_svg_icon(path, size, color))
+}
+
 /// Where a tab sits in the drawn row, and how that changes the way it is drawn.
 #[derive(Clone, Copy)]
 pub(crate) struct ViewStripTabSlot {
@@ -280,9 +301,8 @@ impl GhostexGpuiApp {
                     },
                 )
             })
-            .child(titlebar_svg_icon(
+            .child(view_tab_icon(
                 mode.tab_icon(),
-                WORKAREA_VIEW_TAB_ICON_SIZE,
                 if is_active {
                     titlebar_active_text_color()
                 } else {
