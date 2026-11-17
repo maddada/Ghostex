@@ -250,17 +250,13 @@ const FIRST_KEY_SECRET_PARAM: &str = "firstKeySecret";
 const OWNER_KEY_REQUESTS_WAITING: usize = 3;
 /// The answer when the token file made too many "act as you" requests this hour (R3-2).
 pub(crate) const OWNER_KEY_FLOODED: &str = "ownerKeyRequestsFlooded";
-/// How long an app's "show the pairing code of …" request waits for the owner: a day, so its card
-/// is still there when the user comes to the computer that answers it, and the asking app's
-/// restarts and reconnects get the same request back instead of asking anew each time.
-const OWNER_KEY_REQUEST_TTL_MS: u64 = 24 * 60 * 60 * 1000;
 /// The data an owner-key request keeps ([`security::ApprovalStore::attach`]): the key and its
 /// scope, so gxserver lets the key in the moment the owner approves.
 const OWNER_KEY_RESUME: &str = "ownerKey";
 
 /*
 CDXC:Security 2026-11-17 FIX:
-Live, 17 Nov: the user approved "Let m7-arch (Ghostex app) show the pairing code of <the Mac> … (angle easel magnet monkey)" on the Mac at 03:39, and it lapsed at 03:41, "Approved, but the change wasn't made within 2 minutes": the key went in only when the asking app came back with the approval, and m7-arch's app, told of the approval, dropped the approval's id and came back for nothing (apps/desktop/src/app/owner_security/mod.rs, `note_owner_key_approved`). Its own ask on m7-arch ("candle cobalt river pony") meanwhile lapsed unseen after ten minutes. The coordinator: the user's approval must take, and the card must still be there when the user is at the Mac, without the asking app asking again on every reconnect. The key an owner-key request names (bound by the request's own params digest) now goes in the moment the owner approves it, whatever the asking app does, and the request is marked spent; and such a request waits a day, so restarts and reconnects of the asking app get it back.
+Live, 17 Nov: the user approved "Let m7-arch (Ghostex app) show the pairing code of <the Mac> … (angle easel magnet monkey)" on the Mac at 03:39, and it lapsed at 03:41, "Approved, but the change wasn't made within 2 minutes": the key went in only when the asking app came back with the approval, and m7-arch's app, told of the approval, dropped the approval's id and came back for nothing (apps/desktop/src/app/owner_security/mod.rs, `note_owner_key_approved`). Its own ask on m7-arch ("candle cobalt river pony") meanwhile lapsed unseen after ten minutes. The coordinator: the user's approval must take, and the card must still be there when the user is at the Mac, without the asking app asking again on every reconnect. The key an owner-key request names (bound by the request's own params digest) now goes in the moment the owner approves it, whatever the asking app does, and the request is marked spent. (Such requests waited a day for a few hours on 17 Nov; that was taken back the same day, `OWNER_KEY_ASK_TTL_MS` in security/approvals.rs.)
 */
 /// The owner approved `request`: when it asks for an owner key and kept that key with it, the key
 /// goes in now (door-only when asked so), checked against the request's own target and params
@@ -563,8 +559,7 @@ fn enroll_key(
         .params(json!({
             "key": serde_json::to_value(&key).unwrap_or(Value::Null),
             "doorOnly": door_only,
-        }))
-        .pending_ttl(OWNER_KEY_REQUEST_TTL_MS);
+        }));
         let outcome = presence_outcome(state, caller, action, body);
         if let security::PresenceOutcome::Pending(request) = &outcome {
             // New, not one that already waited (`pending` was read before asking).

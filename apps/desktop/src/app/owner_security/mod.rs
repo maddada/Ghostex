@@ -228,7 +228,9 @@ fn door_token_for(
     if path == "/api/remotePairingCode" {
         ask_again_after_lapse(transport);
     }
-    ensure_owner_session(transport);
+    // A pairing code, an Approve, removing a device or connecting a computer: the user's own
+    // window or click, so it may ask there (once; later calls read that request).
+    ensure_owner_session(transport, true);
     match with_session(&transport.key(), |session| session.token.clone()) {
         Some(token) => Some(Ok(token)),
         None if path == "/api/remotePairingCode" => owner_refusal(transport).map(Err),
@@ -244,7 +246,7 @@ pub(crate) fn door_call<R>(
     work: impl FnOnce() -> Result<R, String>,
 ) -> Result<R, String> {
     ask_again_after_lapse(transport);
-    ensure_owner_session(transport);
+    ensure_owner_session(transport, true);
     if let Some(refusal) = owner_refusal(transport) {
         return Err(refusal);
     }
@@ -462,10 +464,15 @@ fn open_local_owner_session_quietly() {
     }
 }
 
+/*
+CDXC:Security 2026-11-17 FIX:
+User, after restarting Ghostex on the Mac once the other computers were rebuilt: "i just restarted ghostex after rebuild and saw 2 approval modals from ghostex and had to do touch id... whyyyyyyyy please fix this the right way we shouldn't spam the user with approvals like this". Each connected computer's app asked the Mac at connect, on its own, to let it show the Mac's pairing code and approve its devices (Q2099, "ask at connect"), so every restart of an app whose ask hadn't taken made a card, and the Mac showed each as a modal with Touch ID on Approve. The coordinator: no computer's app asks another computer on its own; an ask happens only as the direct result of the user's own action that needs it, and then once. Background work now only opens the owner session where this app's key is already in (`may_ask: false`: at connect, the renewal and its unlock offer, card checks, answering who may approve, after an approval); only the user's own window or click asks there (a pairing code, an Approve, removing a device, connecting a computer, Stop on a session there). Keys approved once stay in on both sides, so restarts open the session quietly and ask nothing. This supersedes Q2099's ask at connect.
+*/
 /// Opens the owner session on `transport`'s gxserver for door calls unless it is open or was
 /// tried in the last few seconds; on a connected computer only where its token file no longer
-/// keeps the door (asking there once, `enroll_owner_key`).
-fn ensure_owner_session(transport: &Transport) {
+/// keeps the door. Asks there (one request, `enroll_owner_key`) only when `may_ask`: the user's
+/// own window or click needs it.
+fn ensure_owner_session(transport: &Transport, may_ask: bool) {
     let key = transport.key();
     let start = with_session(&key, |session| {
         if session.door_only
@@ -496,7 +503,7 @@ fn ensure_owner_session(transport: &Transport) {
         Transport::Remote(_) => plain::server_approvals(transport)
             .is_some_and(|answer| answer.plain && !answer.may_approve_devices),
     };
-    let opened = needed.then(|| in_security_flow(|| open_owner_session(transport, true)));
+    let opened = needed.then(|| in_security_flow(|| open_owner_session(transport, may_ask)));
     with_session(&key, |session| {
         session.opening = false;
         match opened {
@@ -650,11 +657,13 @@ fn cached_token(transport: &Transport) -> Option<String> {
                         Transport::Local => open_local_owner_session_quietly(),
                         // A connected computer with its own owner: ask there once, at connect
                         // (CDXC:Security 2026-11-16 at `is_door_call`).
-                        Transport::Remote(_) => ensure_owner_session(&transport),
+                        // Quietly: it opens where this app's key is already in, and asks nobody
+                        // (CDXC:Security 2026-11-17 at `ensure_owner_session`).
+                        Transport::Remote(_) => ensure_owner_session(&transport, false),
                     }
                     return;
                 }
-                let opened = in_security_flow(|| open_owner_session(&transport, true));
+                let opened = in_security_flow(|| open_owner_session(&transport, false));
                 with_session(&transport.key(), |session| {
                     session.opening = false;
                     match opened {
@@ -704,11 +713,11 @@ pub(crate) fn forget_owner_token(token: &str) {
 }
 
 /// The owner session for `transport`, opened now on this thread if it isn't yet.
-fn require_owner_session(transport: &Transport) -> Result<String, String> {
+fn require_owner_session(transport: &Transport, may_ask: bool) -> Result<String, String> {
     if let Some(token) = with_session(&transport.key(), |session| session.token.clone()) {
         return Ok(token);
     }
-    let token = open_owner_session(transport, true)?;
+    let token = open_owner_session(transport, may_ask)?;
     with_session(&transport.key(), |session| {
         session.token = Some(token.clone())
     });
@@ -1118,22 +1127,17 @@ pub(crate) fn old_key_unlock_offer(
         )
     });
     if !still_waiting {
-        // Ask again: one new request (or the key is in already, and its session opens).
-        match in_security_flow(|| open_owner_session(&transport, true)) {
-            Ok(token) => {
-                with_session(&key, |session| {
-                    session.token = Some(token);
-                    session.door_only = true;
-                    session.opened_at = Some(Instant::now());
-                });
-                return None;
-            }
-            Err(error) if error == OWNER_WAITING_ERROR => {}
-            Err(error) => {
-                log::info!("old owner key not offered: {error}");
-                return None;
-            }
+        // Nothing of this app's waits there: the key may be in already (its session opens
+        // quietly), else no card until the user's own click there asks (opening that computer's
+        // pairing code or approving its device; CDXC:Security 2026-11-17 at `ensure_owner_session`).
+        if let Ok(token) = in_security_flow(|| open_owner_session(&transport, false)) {
+            with_session(&key, |session| {
+                session.token = Some(token);
+                session.door_only = true;
+                session.opened_at = Some(Instant::now());
+            });
         }
+        return None;
     }
     let new_public_key = owner_key_for(&transport).ok()?.public_key_b64();
     let checked = in_security_flow(|| check_old_key_unlock(&transport, &new_public_key));
@@ -1475,7 +1479,7 @@ pub(crate) fn pending_requests(transport: &Transport) -> Option<Vec<ApprovalRequ
             // A gxserver that approves plainly lists them for this app's token file.
             _ if plain::is_plain(transport) => {}
             Transport::Local => {
-                require_owner_session(transport)?;
+                require_owner_session(transport, false)?;
             }
             // Opened here when that needs no approval: the stream usually goes live before the
             // background opener ran, which listed nothing and left requests made meanwhile with
@@ -1541,7 +1545,7 @@ pub(crate) fn steer_needs_owner(
     }
     // Never block the window: the background opener (`cached_token`) tries meanwhile.
     if std::thread::current().name() != Some("main") {
-        if let Ok(token) = require_owner_session(&transport) {
+        if let Ok(token) = require_owner_session(&transport, true) {
             with_session(&key, |session| session.token = Some(token));
             return None;
         }
@@ -1592,6 +1596,11 @@ fn enroll_owner_key(transport: &Transport, params: Value) -> Result<Value, Strin
             RequestState::Unknown => return Err(WAITING.to_string()),
             RequestState::Approved => {
                 params = with_approval_id(&params, &id).unwrap_or(params);
+                // Spending the owner's approval asks nobody: a gxserver from before 17 Nov
+                // refuses `askOwner: false` before it reads the id.
+                if let Some(fields) = params.as_object_mut() {
+                    fields.remove("askOwner");
+                }
             }
             // Approved and then lapsed unspent reads the same as denied, yet the key went in when
             // it was approved (CDXC:Security 2026-11-10 in server/src/security/approvals.rs): ask
@@ -1741,7 +1750,7 @@ pub(crate) fn note_owner_key_approved(transport: &Transport) {
     let transport = transport.clone();
     let _ = std::thread::Builder::new()
         .name("ghostex-owner-key-approved".into())
-        .spawn(move || ensure_owner_session(&transport));
+        .spawn(move || ensure_owner_session(&transport, false));
 }
 
 /// Who may answer a computer's requests.
@@ -1774,7 +1783,7 @@ pub(crate) fn answerer_for(transport: &Transport, request: &ApprovalRequest) -> 
     if !plain_door {
         return answerer(transport);
     }
-    ensure_owner_session(transport);
+    ensure_owner_session(transport, false);
     let open = with_session(&transport.key(), |session| session.token.is_some());
     if open || plain::server_approvals(transport).is_none_or(|answer| answer.may_approve_devices) {
         return Answerer::ThisApp;
@@ -1823,8 +1832,9 @@ pub(crate) fn answerer(transport: &Transport) -> Answerer {
             .and_then(|public_key| key_id_of(&public_key));
         let mut session = quiet_owner_session(transport);
         if session.is_none() && !with_session(&transport.key(), |session| session.gave_up) {
-            // One request there, reused until answered (`enroll_owner_key`).
-            if let Ok(token) = open_owner_session(transport, true) {
+            // Quietly: asking there is the user's own click (CDXC:Security 2026-11-17 at
+            // `ensure_owner_session`).
+            if let Ok(token) = open_owner_session(transport, false) {
                 with_session(&transport.key(), |state| state.token = Some(token.clone()));
                 session = Some(token);
             }
@@ -1924,7 +1934,7 @@ pub(crate) fn approve_request(
         return plain::approve_plain(transport, request, answer.require_presence);
     }
     in_security_flow(|| {
-        require_owner_session(transport)?;
+        require_owner_session(transport, true)?;
         let owner_key = owner_key_for(transport)?;
         let (key, presence) =
             ghostex_owner_keys::unlock_approver_key(&plain::presence_reason(&request.summary))
@@ -1991,7 +2001,7 @@ pub(crate) fn card_request(transport: &Transport, id: &str) -> CardRequest {
     let plain = plain::is_plain(transport);
     in_security_flow(|| {
         if !plain {
-            require_owner_session(transport)?;
+            require_owner_session(transport, true)?;
         }
         let answer = match rpc(transport, "/api/readApprovalRequest", json!({ "id": id })) {
             Ok(answer) => answer,
@@ -2035,7 +2045,7 @@ pub(crate) fn approve_local_request_id(id: &str) -> Result<(), String> {
     let plain = plain::is_plain(&transport);
     let request = in_security_flow(|| {
         if !plain {
-            require_owner_session(&transport)?;
+            require_owner_session(&transport, true)?;
         }
         let answer = rpc(&transport, "/api/readApprovalRequest", json!({ "id": id }))
             .map_err(|(_, message)| message)?;
@@ -2052,7 +2062,7 @@ pub(crate) fn deny_request(transport: &Transport, id: &str) -> Result<(), String
     let plain = plain::is_plain(transport);
     in_security_flow(|| {
         if !plain {
-            require_owner_session(transport)?;
+            require_owner_session(transport, true)?;
         }
         rpc(transport, "/api/denyApprovalRequest", json!({ "id": id }))
             .map(|_| ())

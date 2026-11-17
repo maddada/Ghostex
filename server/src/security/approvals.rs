@@ -24,6 +24,13 @@ use super::{approver_keys::ApproverKeyError, Principal};
 pub const PENDING_TTL_MS: u64 = 10 * 60 * 1000;
 /// How long an approval stays spendable once signed.
 pub const APPROVED_TTL_MS: u64 = 2 * 60 * 1000;
+/*
+CDXC:Security 2026-11-17 FIX:
+The user, after restarting the Mac's Ghostex once the other computers were rebuilt, met two approval modals and Touch ID for asks nobody made: "we shouldn't spam the user with approvals like this". Other computers' apps had asked at connect on their own, and for a few hours that day such an ask ("Let <computer> (Ghostex app) show the pairing code of …") waited a day, so it came back as a modal at every restart of the Mac's app. The apps now ask only on the user's own click there (apps/desktop/src/app/owner_security/mod.rs, `ensure_owner_session`), with the user right there, so these asks wait the usual ten minutes again; one stored with a longer wait lapses ten minutes after it was made (`sweep`), so the day-long asks made in the background go at once.
+*/
+/// The longest an "act as you" request (`addApproverKey`) waits for the owner, whatever it was
+/// stored with.
+pub const OWNER_KEY_ASK_TTL_MS: u64 = PENDING_TTL_MS;
 /// Decided requests stay readable this long (so the asking agent learns the answer), then go.
 pub const DECIDED_RETENTION_MS: u64 = 30 * 60 * 1000;
 
@@ -688,6 +695,14 @@ fn sweep(
             request.status,
             ApprovalStatus::Pending | ApprovalStatus::Approved
         );
+        // An owner-key ask stored with a day's wait (17 Nov builds) lapses after the usual wait.
+        if request.status == ApprovalStatus::Pending
+            && request.action == SensitiveAction::AddApproverKey
+        {
+            request.expires_at_ms = request
+                .expires_at_ms
+                .min(request.created_at_ms.saturating_add(OWNER_KEY_ASK_TTL_MS));
+        }
         if live && now_ms >= request.expires_at_ms {
             request.status = ApprovalStatus::Expired;
             request.decided_at_ms = Some(now_ms);
