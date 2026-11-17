@@ -224,6 +224,7 @@ pub mod session_chat_omp_blocking;
 pub(crate) mod session_chat_omp_fleet;
 pub mod session_chat_open_questions;
 pub(crate) mod session_chat_opencode;
+pub(crate) mod session_chat_dismissed;
 pub mod session_chat_options;
 pub mod session_chat_paths;
 pub mod session_chat_pi_blocking;

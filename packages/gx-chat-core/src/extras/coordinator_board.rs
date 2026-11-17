@@ -1674,7 +1674,7 @@ pub fn show_item(state: &mut ChatState, item: u64) -> Vec<crate::effect::Effect>
 /// or a work item ask card's, which names its `ask` tag; "Done" on a task). It is recorded with
 /// gxserver first (op `answer`, which refuses a second answer from any client), and only then sent
 /// to the coordinator as a message ("B4: Yes"), without touching the chat box. A card already
-/// answered here takes no second click.
+/// answered here takes no second click. A Dismiss (op `cancel`, no `text`) is only recorded.
 ///
 /// CDXC:Coordinators 2026-11-05 WHY:
 /// The coordinator received "B7: Yes" three times for one decision: three clicks a second and six
@@ -1689,7 +1689,13 @@ pub fn answer(
 ) -> Option<crate::effect::Effect> {
     let field = |name: &str| params.get(name).and_then(Value::as_str).unwrap_or_default();
     let (key, item, label, text) = (field("key"), field("item"), field("label"), field("text"));
-    if text.is_empty() || item.is_empty() || state.extras.panels.board_answers.contains_key(key) {
+    // A Dismiss (`cancel`) is recorded and sends the agent nothing: gxserver tells it with the next
+    // message it gets anyway (server/src/session_chat_dismissed.rs, where the decision lives).
+    let cancel = field("op") == "cancel";
+    if (text.is_empty() && !cancel)
+        || item.is_empty()
+        || state.extras.panels.board_answers.contains_key(key)
+    {
         return None;
     }
     let reply = field("op") == "reply";
@@ -1891,6 +1897,8 @@ pub fn settle_answer(
         .board_answer_requests
         .remove(&request_id)?;
     Some(match answer {
+        // A Dismiss has no message.
+        Ok(_) if text.is_empty() => Vec::new(),
         Ok(_) => vec![answer_message(
             state,
             next_request_id,

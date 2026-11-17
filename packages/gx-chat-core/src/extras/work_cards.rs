@@ -545,6 +545,9 @@ fn ask_card(
     let snooze = snooze_choices(
         |hours| json!({ "type": "snoozeWorkAsk", "key": key, "item": reference, "ask": tag, "hours": hours }),
     );
+    // Dismiss, one word for taking it off for good (the user's "Dismiss is the same thing as
+    // Cancel"). It sends the coordinator nothing: gxserver tells it with its next message
+    // (server/src/session_chat_dismissed.rs, where the decision lives).
     let cancel = json!({
         "type": "coordinatorBoardAnswer",
         "op": "cancel",
@@ -552,9 +555,6 @@ fn ask_card(
         "item": reference,
         "ask": tag,
         "label": "Dismissed",
-        // Dismiss, one word for taking it off for good (the user's "Dismiss is the same thing as
-        // Cancel").
-        "text": format!("{reference} {tag}: I dismissed this; no need to ask it again."),
     });
     // Mark answered in its ⋯ menu: answered in the chat box already, so it closes as a Reply
     // does, with words that say where (the CDXC:Coordinators 2026-11-16 DECISION on
@@ -1035,6 +1035,7 @@ pub fn question_actions(state: &ChatState, context: &ChatContext, id: &str) -> V
                 "reply": row["reply"],
                 "open": row["open"],
                 "dismiss": row["dismiss"],
+                "dismissLabel": row["dismissLabel"],
                 "markAnswered": row["markAnswered"],
                 "snooze": row["snooze"],
                 "showInChat": row["showInChat"],
@@ -1176,6 +1177,9 @@ fn question_rows_of(
                 "title": if asker.title.is_empty() { "Questions" } else { asker.title.as_str() },
                 "age": crate::transcript::message_time::age_label(now_ms, at),
                 "dismiss": { "type": "cancelQuestion", "id": asker.id },
+                // A page that only waits to be seen asks no question: Mark as read, not Dismiss
+                // (server/src/session_chat_dismissed.rs, where the decision lives).
+                "dismissLabel": if asker.seen_only { "Mark as read" } else { "Dismiss" },
                 // A page that only waits to be seen asks nothing to answer.
                 "markAnswered": if asker.seen_only { Value::Null } else { json!({ "type": "markQuestionAnswered", "id": asker.id }) },
                 "snooze": snooze,

@@ -146,6 +146,23 @@ pub fn open_questions_note(open: &[(String, String)]) -> Option<String> {
     ))
 }
 
+/// The opening of the note that tells an agent which of its questions the user dismissed (or, for
+/// one with nothing to answer, marked read) since its last note, sent with the next message it
+/// gets anyway instead of a message of its own (server/src/session_chat_dismissed.rs, where the
+/// user's decision lives).
+const DISMISSED_OPENING: &str = "Dismissed by the user since your last message, don't ask again: ";
+
+/// The note naming `dismissed` (each as the agent knows it: "\"Release plan\" (Q12 to Q14)",
+/// "W7 Q12 \"Which branch?\""), `None` for none.
+pub fn dismissed_note(dismissed: &[String]) -> Option<String> {
+    let named: Vec<&str> = dismissed
+        .iter()
+        .map(|name| name.trim())
+        .filter(|name| !name.is_empty())
+        .collect();
+    (!named.is_empty()).then(|| format!("{DISMISSED_OPENING}{}.", named.join("; ")))
+}
+
 /// Whether `paragraph` is an open questions note gxserver wrote ([`open_questions_note`]).
 fn is_open_questions_note(paragraph: &str) -> bool {
     !paragraph.contains('\n')

@@ -164,12 +164,16 @@ struct CoordinatorNotes {
     drift: Option<crate::coordinators::DriftDelivery>,
     /// The questions still waiting on the user, by title (`open_questions_note`).
     open_questions: Option<String>,
+    /// The questions the user dismissed since the agent's last note, as the note names them, and
+    /// the note (`crate::session_chat_dismissed`). Any session, not only a coordinator.
+    dismissed: Option<(Vec<String>, String)>,
 }
 
 /// The notes that go under this message to an orchestrator (CDXC:Coordinators 2026-11-05 in
-/// coordinators/playbook.rs, CDXC:Coordinators 2026-11-13 in coordinators/drift.rs). Only
-/// messages someone sent (the chat box, thread reports, `ghostex agents send`, queued rows) carry
-/// them, never a slash or shell command, whose text the agent runs instead of reading.
+/// coordinators/playbook.rs, CDXC:Coordinators 2026-11-13 in coordinators/drift.rs), and to any
+/// session the questions the user dismissed since its last note (session_chat_dismissed.rs).
+/// Only messages someone sent (the chat box, thread reports, `ghostex agents send`, queued rows)
+/// carry them, never a slash or shell command, whose text the agent runs instead of reading.
 fn coordinator_playbook_note(
     state: &AppState,
     project_id: &str,
@@ -192,6 +196,11 @@ fn coordinator_playbook_note(
     let db = open_gxserver_database(&state.paths).ok()?;
     let repository = crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str());
     let key = (project_id.to_string(), session_id.to_string());
+    let dismissed = {
+        let names = crate::session_chat_dismissed::untold(&db, project_id, session_id);
+        ghostex_gx_chat_core::session::appended_notes::dismissed_note(&names)
+            .map(|note| (names, note))
+    };
     let playbook = crate::coordinators::playbook_update_note(&db, &repository, &key)
         .ok()
         .flatten();
@@ -205,13 +214,13 @@ fn coordinator_playbook_note(
     let open_questions = session
         .as_ref()
         .and_then(|session| open_questions_note(state, &db, &key, session, text));
-    (playbook.is_some() || drift.is_some() || open_questions.is_some()).then_some(
-        CoordinatorNotes {
+    (playbook.is_some() || drift.is_some() || open_questions.is_some() || dismissed.is_some())
+        .then_some(CoordinatorNotes {
             playbook,
             drift,
             open_questions,
-        },
-    )
+            dismissed,
+        })
 }
 
 /// The note under a user's message to a coordinator that names the questions still waiting on the
@@ -368,6 +377,9 @@ fn record_coordinator_playbook_note(
         if let Some(note) = &notes.open_questions {
             write_open_questions_sent(&db, &key, Some(note));
         }
+        if let Some((names, _)) = &notes.dismissed {
+            crate::session_chat_dismissed::forget(&db, project_id, session_id, names);
+        }
     }
 }
 
@@ -439,7 +451,8 @@ pub(crate) async fn send_session_chat_message_with_draft(
 }
 
 /// Ghostex's notes for a coordinator (the playbook note, the drift reminder, the compaction note,
-/// the open questions) as a message of their own, one `<ghostex-system>` block, typed right after
+/// the open questions), and for any session the questions the user dismissed since its last note,
+/// as a message of their own, one `<ghostex-system>` block, typed right after
 /// the user's message under the same send lock, so nothing else gets between them. The user's
 /// message starts the turn at once and the note reaches the agent while it works: Claude Code and
 /// Codex take a message submitted mid-turn into the running turn. Recorded as sent only once
@@ -467,6 +480,7 @@ async fn send_ghostex_notes(
                 .flat_map(|drift| drift.notes.iter().map(String::as_str)),
         )
         .chain(notes.open_questions.as_deref())
+        .chain(notes.dismissed.as_ref().map(|(_, note)| note.as_str()))
         .collect();
     let Some(message) = ghostex_gx_chat_core::session::appended_notes::system_message(&all) else {
         return;

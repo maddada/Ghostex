@@ -99,7 +99,7 @@ pub(super) fn answers_divider(p: &ChatAppearance) -> AnyElement {
         .into_any_element()
 }
 
-/// A page row's ⋯ menu (`dock_row`): Show in chat, Mark answered, Dismiss and Snooze with its lengths, as the
+/// A page row's ⋯ menu (`dock_row`): Show in chat, Mark answered, Dismiss (or Mark as read) and Snooze with its lengths, as the
 /// app's dropdown rows (`{label, command}`, a submenu's under `children`).
 fn page_row_menu(row: &Value) -> Vec<Value> {
     let mut rows = Vec::new();
@@ -115,8 +115,11 @@ fn page_row_menu(row: &Value) -> Vec<Value> {
     if row["markAnswered"].is_object() {
         rows.push(json!({ "label": "Mark answered", "command": row["markAnswered"] }));
     }
+    // Dismiss, or Mark as read on a row that asks no question (a Needs you to-do, a page that only
+    // waits to be seen): gx-chat-core's `dismissLabel`. Both send the agent nothing.
     if row["dismiss"].is_object() {
-        rows.push(json!({ "label": "Dismiss", "command": row["dismiss"] }));
+        let label = row["dismissLabel"].as_str().unwrap_or("Dismiss");
+        rows.push(json!({ "label": label, "command": row["dismiss"] }));
     }
     let snooze: Vec<Value> = row["snooze"]
         .as_array()

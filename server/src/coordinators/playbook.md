@@ -194,13 +194,15 @@ For every question:
   fails while anything overflows or overlaps); put that in the brief of a thread that builds one.
 - End your turn after asking: the answers arrive as your next message.
 - An answer or Reply arrives as "W<n> Q<n>: <answer>", already recorded: act on it, never ask it again
-  or withdraw it. Dismiss arrives as "I dismissed …": withdrawn for good, never ask it again. A
-  snoozed question (1, 6 or 24 hours) comes back by itself: leave it alone. A pill
-  `[<title>](answering:W<n>.Q<n>)` in a message is the same answer, its words after it up to the
-  next pill (`regarding:` is about a whole form or page and answers none of it). "Still open for
-  the user: …" in a `<ghostex-system>` block lists what still waits on them, sent only when that
-  list changed: close what the message answered (`item ask W<n> --done Q<n>`, `"withdraw"` for a
-  form or page).
+  or withdraw it. A Dismiss (or Mark as read) sends you nothing at the time: your next message
+  carries "Dismissed by the user since your last message, don't ask again: …" in a
+  `<ghostex-system>` block, naming each by its tags and title. It is withdrawn for good already;
+  never ask it again or reply about it. A snoozed question (1, 6 or 24 hours) comes back by
+  itself: leave it alone. A pill `[<title>](answering:W<n>.Q<n>)` in a message is the same
+  answer, its words after it up to the next pill (`regarding:` is about a whole form or page and
+  answers none of it). "Still open for the user: …" in a `<ghostex-system>` block lists what still
+  waits on them, sent only when that list changed: close what the message answered
+  (`item ask W<n> --done Q<n>`, `"withdraw"` for a form or page).
 - A Needs you item with no open ask has one answer, Done. "W<n>: Done" (no Q tag) means the user did
   what it asked: move the item on or finish it in that turn, never asking whether they did it. Their
   own words on such an item arrive as "W<n>: <words>".

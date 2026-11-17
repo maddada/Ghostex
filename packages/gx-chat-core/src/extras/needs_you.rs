@@ -123,14 +123,17 @@ pub fn rows(
                 "replied": replied,
                 "reply": { "item": tag, "key": key, "tag": "", "name": reply_name(title) },
                 "mention": "",
+                // Mark as read: a to-do asks no question, so it is not Dismiss. It sends the
+                // agent nothing; gxserver tells it with its next message
+                // (server/src/session_chat_dismissed.rs, where the decision lives).
                 "dismiss": {
                     "type": "coordinatorBoardAnswer",
                     "op": "cancel",
                     "key": key,
                     "item": tag,
                     "label": "Dismissed",
-                    "text": format!("{tag}: I dismissed this; no need to do it."),
                 },
+                "dismissLabel": "Mark as read",
                 "snooze": Value::Null,
                 "chips": [],
                 "needs": true,
