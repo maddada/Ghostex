@@ -6,7 +6,7 @@ use super::super::super::fields::{
     SizedButtonSize, SizedButtonVariant, icon, settings_icon, settings_sized_button, tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
-use super::data::{Account, AccountsState, provider_label};
+use super::data::{Account, AccountsState, helper_label, provider_label};
 use super::widgets::{
     TagTone, account_badge, account_logo, account_mark, account_text, status_tag, usage_bar,
 };
@@ -207,12 +207,21 @@ impl AccountsTab {
                 // (and the yellow pill and amber box in the panel beside it) said the same thing
                 // three times (the remote tile audit, finding 12). The row says it quietly; the
                 // panel it opens has the one Reconnect button.
+                // A missing Claude Swap or Codex Swap is named here, so the row says why it can't
+                // sign in yet (CDXC:AgentProviders 2026-11-17 in helper_tools.rs).
+                let provider = account.provider();
+                let name = helper_label(&provider);
                 div()
                     .text_color(hsla(p.muted))
-                    .child(if account.synced_from().is_some() {
-                        "Sign in on this computer"
-                    } else {
-                        "Sign in needed"
+                    .child(match self.helper_setup_needed(&provider, cx) {
+                        Some((tool, _)) if tool.running_action().is_some() => {
+                            format!("Installing {name}…")
+                        }
+                        Some(_) => format!("Needs {name}"),
+                        None if account.synced_from().is_some() => {
+                            "Sign in on this computer".to_string()
+                        }
+                        None => "Sign in needed".to_string(),
                     })
                     .into_any_element()
             }

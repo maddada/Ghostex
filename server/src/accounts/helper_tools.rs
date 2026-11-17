@@ -433,7 +433,13 @@ fn tool_view(home: &Path, provider: Provider, fresh: bool) -> Value {
         } else {
             Vec::new()
         };
-        return json!({"provider":provider,"installed":false,"actions":actions,"installPlan":plan,"unavailableReason":blocker,"job":job});
+        // Settings > Accounts offers to add curl and the certificates in place of the detour the
+        // reason names (tabs/accounts/helper_tools.rs `render_helper_setup_rows`).
+        let needs_system_tools = blocker.is_some()
+            && provider == Provider::Codex
+            && !cfg!(windows)
+            && !managed_tools::system_tools::missing(home, &["curl", "ca-certificates"]).is_empty();
+        return json!({"provider":provider,"installed":false,"actions":actions,"installPlan":plan,"unavailableReason":blocker,"needsSystemTools":needs_system_tools,"job":job});
     };
     let method = install_method(home, provider, &executable);
     let pending = (provider == Provider::Claude)

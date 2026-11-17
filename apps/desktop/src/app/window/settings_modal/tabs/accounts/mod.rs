@@ -606,6 +606,10 @@ impl AccountsTab {
             },
             cx,
         )];
+        if connected && data {
+            let setup = self.render_helper_setup_rows(&p, cx);
+            rows.splice(0..0, setup);
+        }
         if !connected {
             rows.push(settings_list_item(
                 &p,

@@ -707,6 +707,18 @@ pub(crate) fn settings_list_item_wrapped(
     list_item(p, None, None, title, Some(detail), controls, true)
 }
 
+/// [`settings_list_item_wrapped`] with a leading icon (Settings > Accounts' Claude Swap and
+/// Codex Swap setup rows).
+pub(crate) fn settings_list_item_wrapped_with_icon(
+    p: &SettingsPalette,
+    icon: AnyElement,
+    title: impl IntoElement,
+    detail: AnyElement,
+    controls: Option<AnyElement>,
+) -> AnyElement {
+    list_item(p, None, Some(icon), title, Some(detail), controls, true)
+}
+
 fn list_item(
     p: &SettingsPalette,
     status: Option<ListItemStatus>,

@@ -113,7 +113,10 @@ impl AccountsTab {
             )
         };
         body.push(muted(p, intro));
-        if !installed && helper.is_some() && self.helper_offers_install(provider) {
+        if let (false, Some(missing)) = (installed, self.helper_missing_sentence(provider, cx)) {
+            // The setup row at the top owns Install (CDXC:AgentProviders 2026-11-17 in helper_tools.rs).
+            body.push(muted(p, missing));
+        } else if !installed && helper.is_some() && self.helper_offers_install(provider) {
             body.push(muted(
                 p,
                 format!(

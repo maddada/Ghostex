@@ -20,7 +20,7 @@ use super::super::super::fields::{
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::post_store_message;
 use super::client::ACCOUNT_SETUP_OWNER;
-use super::data::{Account, provider_label};
+use super::data::{Account, helper_label, provider_label};
 use super::widgets::account_text;
 use super::{AccountsTab, Pane};
 use gpui::prelude::FluentBuilder as _;
@@ -949,6 +949,28 @@ impl AccountsTab {
                 },
                 cx,
             )]));
+        } else if let Some(missing) = self.helper_missing_sentence(provider, cx) {
+            // The setup row at the top owns Install while saved accounts wait for the helper; a
+            // sign-in refused for it never names a Settings page (CDXC:AgentProviders 2026-11-17
+            // in helper_tools.rs).
+            children.push(warning_text(p, missing));
+        } else if let Some(install) = self
+            .helpers
+            .tools
+            .iter()
+            .any(|tool| tool.provider() == provider && !tool.installed())
+            .then(|| self.render_helper_install_button(p, provider, "flow", cx))
+            .flatten()
+        {
+            children.push(warning_text(
+                p,
+                format!(
+                    "Signing in needs {}, which isn't on {} yet.",
+                    helper_label(provider),
+                    self.helper_place(cx)
+                ),
+            ));
+            children.push(button_row(vec![install]));
         } else {
             let message = if !error.is_empty() {
                 error.to_string()
@@ -958,6 +980,20 @@ impl AccountsTab {
                     .filter(|error| !error.is_empty())
                     .unwrap_or("The sign-in did not finish.")
                     .to_string()
+            };
+            // Refused while the helper was missing, which it no longer is.
+            let installed = self
+                .helpers
+                .tools
+                .iter()
+                .any(|tool| tool.provider() == provider && tool.installed());
+            let message = if installed && message.contains("in Settings > Accounts first") {
+                format!(
+                    "{} is installed now. Try again to sign in.",
+                    helper_label(provider)
+                )
+            } else {
+                message
             };
             children.push(warning_text(p, account_text(&message, hide)));
             children.push(button_row(vec![try_again]));

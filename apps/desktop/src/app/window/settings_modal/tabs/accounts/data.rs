@@ -635,6 +635,22 @@ impl HelperTool {
             .map(str::to_string)
     }
 
+    /// `needsSystemTools`: Codex Swap's installer waits only for curl and the certificates, which
+    /// Ghostex installs in a terminal (server/src/accounts/helper_tools.rs `tool_view`).
+    pub(crate) fn needs_system_tools(&self) -> bool {
+        self.raw["needsSystemTools"].as_bool() == Some(true)
+    }
+
+    /// The last install's failure while the helper is still missing: its error, then its output.
+    pub(crate) fn failed_install(&self) -> Option<(String, String)> {
+        let job = self.job()?;
+        (!self.installed()
+            && self.running_action().is_none()
+            && job["status"] == "failed"
+            && job["action"] == "install")
+            .then(|| (text(job, "error"), text(job, "output")))
+    }
+
     /// `offersInstall`: gxserver can install the missing helper itself (a remote computer on an
     /// older gxserver cannot).
     pub(crate) fn offers_install(&self) -> bool {

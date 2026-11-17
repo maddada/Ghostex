@@ -3234,6 +3234,13 @@ shared conversations. Ghostex runs the update with the tool that installed it
 (uv or pipx for cswap; Homebrew, Cargo or the installer script for xswap); for
 one installed some other way those items are off, so update it the way you
 installed it.
+When saved accounts need Claude Swap or Codex Swap and it isn't on the computer
+(for example accounts that arrived from another computer through Settings sync),
+a row at the top of Settings > Accounts says so, with how many accounts wait for
+it and an Install button; those accounts read "Needs Claude Swap" (or Codex
+Swap) until it's installed. A failed install says why, with Try again and Copy
+details; when Codex Swap's installer needs curl and security certificates on
+Linux, the row offers to install them in a terminal.
 For now Ghostex installs its own build of Claude Swap on every computer: the
 released Claude Swap 1.0.0 plus two fixes that are waiting to be released (sessions
 on an account whose sign-in on the computer was lost start on that account's own

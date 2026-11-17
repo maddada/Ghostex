@@ -227,6 +227,24 @@ impl AccountsTab {
             blocks.push(div().px(px(DETAIL_INSET)).child(flow).into_any_element());
         } else if account.needs_sign_in() {
             let reconnect_account = account.clone();
+            // While its helper is missing the setup row at the top owns Install, so this box says
+            // so instead of offering a sign-in that can't work (CDXC:AgentProviders 2026-11-17 in
+            // helper_tools.rs).
+            let helper_missing = self.helper_missing_sentence(provider, cx);
+            let reason = match account.synced_from() {
+                // CDXC:SettingsSync 2026-11-07 WHY in gx-core settings_sync/lists.rs: logins stay on each computer.
+                Some(from) => format!(
+                    "Added from {from}. Logins stay on each computer, so sign in on this one once to use it here."
+                ),
+                None => format!(
+                    "Its saved login stopped working, so Ghostex can't read its usage or switch to it.{}",
+                    sessions_sentence(account.session_count())
+                ),
+            };
+            let reason = match &helper_missing {
+                Some(missing) => format!("{reason} {missing}"),
+                None => reason,
+            };
             blocks.push(
                 v_flex()
                     .mx(px(DETAIL_INSET))
@@ -245,19 +263,10 @@ impl AccountsTab {
                             } else {
                                 gpui::rgb(0xfcd34d)
                             }))
-                            .child(match account.synced_from() {
-                                // CDXC:SettingsSync 2026-11-07 WHY in gx-core settings_sync/lists.rs: logins stay on each computer.
-                                Some(from) => format!(
-                                    "Added from {from}. Logins stay on each computer, so sign in on this one once to use it here."
-                                ),
-                                None => format!(
-                                    "Its saved login stopped working, so Ghostex can't read its usage or switch to it.{}",
-                                    sessions_sentence(account.session_count())
-                                ),
-                            }),
+                            .child(reason),
                     )
-                    .child(
-                        h_flex().child(settings_sized_button(
+                    .when(helper_missing.is_none(), |this| {
+                        this.child(h_flex().child(settings_sized_button(
                             p,
                             SharedString::from(format!("account-{id}-reconnect")),
                             if account.synced_from().is_some() {
@@ -275,8 +284,8 @@ impl AccountsTab {
                                 page.start_reconnect(&reconnect_account, cx)
                             },
                             cx,
-                        )),
-                    )
+                        )))
+                    })
                     .into_any_element(),
             );
         } else if connected {
