@@ -397,6 +397,27 @@ impl<'a> FileChange<'a> {
     }
 }
 
+/// The call id behind each of `message`'s file changes, in the order [`split_file_changes`] lists
+/// them (the order a row's `files` are numbered in, their `index`).
+pub(crate) fn file_change_call_ids(message: &ghostex_gx_protocol::ChatMessage) -> Vec<Option<String>> {
+    let (_, tools) = crate::transcript::tool_fold::split_blocks(&message.blocks);
+    pair_tool_blocks(tools)
+        .iter()
+        .flat_map(|pair| {
+            let (count, id) = match pair.call {
+                Some(ChatBlock::ToolCall {
+                    name,
+                    input,
+                    call_id,
+                    ..
+                }) => (file_changes(name, input).len(), call_id.clone()),
+                _ => (0, None),
+            };
+            std::iter::repeat_n(id, count)
+        })
+        .collect()
+}
+
 /// The file changes and the remaining tool blocks of one message.
 ///
 /// CDXC:SessionChat 2026-09-09 DECISION:

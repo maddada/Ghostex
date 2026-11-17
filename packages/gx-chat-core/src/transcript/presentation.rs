@@ -1246,24 +1246,41 @@ pub fn build_scope(
 /// `sent_message::without_turn_sends`), so counting the work and the reply counted those calls
 /// twice: a turn of four calls, two of them sends, said "6 tool calls" on its "Worked for" row and
 /// "3 tool calls" on its Quiet View line instead of 2. A call is the same call when its id is.
+///
+/// The same rows drew each edit made after the reply's words twice in the turn's "N files changed"
+/// fold, and summed its lines twice on the fold's card; the turn's files skip them the same way.
 fn calls_not_in(reply: &ChatMessage, work: &[ChatRow]) -> ChatMessage {
-    let id = |block: &ChatBlock| match block {
-        ChatBlock::ToolCall { call_id, .. } | ChatBlock::ToolResult { call_id, .. } => {
-            call_id.clone()
-        }
-        _ => None,
-    };
-    let held: std::collections::HashSet<String> = work
-        .iter()
-        .flat_map(|row| row.blocks.iter().filter_map(id))
-        .collect();
+    let held = held_call_ids(work);
     let mut reply = reply.clone();
     if !held.is_empty() {
         reply
             .blocks
-            .retain(|block| id(block).is_none_or(|call| !held.contains(&call)));
+            .retain(|block| block_call_id(block).is_none_or(|call| !held.contains(&call)));
     }
     reply
+}
+
+/// The id of the call a tool call or result block belongs to.
+fn block_call_id(block: &ChatBlock) -> Option<String> {
+    match block {
+        ChatBlock::ToolCall { call_id, .. } | ChatBlock::ToolResult { call_id, .. } => {
+            call_id.clone()
+        }
+        _ => None,
+    }
+}
+
+/// The ids of the calls a turn's work holds: their call blocks, not only a result (the reply's own
+/// call can have its result in a tool row of the work).
+fn held_call_ids(work: &[ChatRow]) -> std::collections::HashSet<String> {
+    work.iter()
+        .flat_map(|row| {
+            row.blocks.iter().filter_map(|block| match block {
+                ChatBlock::ToolCall { call_id, .. } => call_id.clone(),
+                _ => None,
+            })
+        })
+        .collect()
 }
 
 /// `itemIndex` for `items`, which start at row `first` of the list: the first row that draws each
@@ -1518,14 +1535,30 @@ fn turn_items(
                 keeps the same cards and ships nothing.
                 */
                 let mut files: Vec<Value> = Vec::new();
+                let held = held_call_ids(&work);
                 let sources: Vec<&ChatRow> = work.iter().chain(turn.final_message.iter()).collect();
                 for message in sources {
-                    if let Value::Array(rows) = builder
+                    if let Value::Array(mut rows) = builder
                         .message_or_placeholder(message, eager, Draw::Read)
                         .get("files")
                         .cloned()
                         .unwrap_or(Value::Null)
                     {
+                        // The reply's edits the work already holds are listed once, from the work
+                        // (`calls_not_in`).
+                        if Some(&message.id) == turn.final_message.as_ref().map(|reply| &reply.id)
+                            && !held.is_empty()
+                        {
+                            let calls =
+                                crate::transcript::file_changes::file_change_call_ids(message);
+                            rows.retain(|row| {
+                                let call = row["index"]
+                                    .as_u64()
+                                    .and_then(|at| calls.get(at as usize))
+                                    .and_then(Option::as_ref);
+                                call.is_none_or(|call| !held.contains(call))
+                            });
+                        }
                         files.extend(rows);
                     }
                 }
