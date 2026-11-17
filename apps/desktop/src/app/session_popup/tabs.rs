@@ -40,11 +40,13 @@ pub(crate) enum SessionPopupTarget {
 }
 
 impl GhostexGpuiApp {
-    /// The tab bar of popup `id`'s pane `pane`.
+    /// The tab bar of popup `id`'s pane `pane`, led by the name of the project its session belongs
+    /// to when `project` is given (a split popup's panes).
     pub(crate) fn render_session_popup_tab_strip(
         &self,
         id: SessionPopupId,
         pane: WorkspacePaneId,
+        project: Option<String>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let Some(popup) = self.session_popups.get(id) else {
@@ -112,6 +114,19 @@ impl GhostexGpuiApp {
                     app.session_popup_strip_drop(id, pane, end, dragged, cx);
                 }),
             )
+            .when_some(project, |strip, project| {
+                strip.child(
+                    div()
+                        .flex_shrink_0()
+                        .max_w(px(140.0))
+                        .px(px(6.0))
+                        .truncate()
+                        .text_size(px(11.5))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(titlebar_inactive_text_color())
+                        .child(project),
+                )
+            })
             .child(
                 h_flex()
                     .id(gpui::SharedString::from(format!(

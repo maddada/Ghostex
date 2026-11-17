@@ -219,17 +219,36 @@ impl Render for SessionPopupRoot {
             // (tabs.rs); one released inside was handled by what it was dropped on.
             .on_mouse_up_out(MouseButton::Left, move |event, window, cx| {
                 let position = event.position;
-                let outside = !gpui::Bounds::new(gpui::Point::default(), window.viewport_size())
-                    .contains(&position);
+                // A release inside the window is the drop target's (and `on_mouse_up` below), even
+                // where a child kept the root from counting as hovered.
+                if !cx.has_active_drag()
+                    || gpui::Bounds::new(gpui::Point::default(), window.viewport_size())
+                        .contains(&position)
+                {
+                    return;
+                }
                 let origin = super::window_global_bounds(window, cx).origin;
                 let _ = drop_app.update(cx, |app, cx| {
-                    app.session_popup_tab_released(id, outside.then(|| origin + position), cx)
+                    app.session_popup_tab_released(id, Some(origin + position), cx);
+                    app.session_popup_split_drag_end(id, cx);
                 });
             })
             .on_mouse_up(MouseButton::Left, {
                 let app = self.app.clone();
                 move |_, _, cx| {
-                    let _ = app.update(cx, |app, cx| app.session_popup_tab_released(id, None, cx));
+                    let _ = app.update(cx, |app, cx| {
+                        app.session_popup_tab_released(id, None, cx);
+                        app.session_popup_split_drag_end(id, cx);
+                    });
+                }
+            })
+            // A held divider follows the pointer anywhere in the window (panes.rs).
+            .on_mouse_move({
+                let app = self.app.clone();
+                move |event: &gpui::MouseMoveEvent, _, cx| {
+                    let _ = app.update(cx, |app, cx| {
+                        app.session_popup_split_drag_move(id, event, cx)
+                    });
                 }
             })
             .child(body)
@@ -250,7 +269,7 @@ impl GhostexGpuiApp {
         };
         let (expanded, pinned) = (popup.expanded, popup.pinned);
         let active = popup.active_key();
-        let pane = popup.layout.focused_pane;
+        let root = popup.layout.root.clone();
         let title = active
             .as_ref()
             .map(|key| self.session_popup_title(key))
@@ -261,7 +280,7 @@ impl GhostexGpuiApp {
             .and_then(|id| self.agents_workspace.session(id))
             .and_then(|session| session.agent_icon);
         window.set_window_title(&title);
-        let body = self.render_session_popup_pane(id, pane, window, cx);
+        let body = self.render_session_popup_node(id, &root, window, cx);
         div()
             .id("session-popup-window")
             .size_full()
@@ -285,8 +304,8 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    /// One pane of the window: its tab bar when it has more than one tab, then the selected tab's
-    /// session.
+    /// One pane of the window: its tab bar when it has more than one tab or the window is split
+    /// (a split pane's bar names its project), then the selected tab's session.
     pub(crate) fn render_session_popup_pane(
         &mut self,
         id: SessionPopupId,
@@ -300,15 +319,24 @@ impl GhostexGpuiApp {
         let Some(leaf) = popup.layout.find_leaf(pane) else {
             return div().into_any_element();
         };
-        let shows_strip = leaf.tab_group.tabs.len() > 1;
+        let split = matches!(popup.layout.root, WorkspaceNode::Split(_));
+        let shows_strip = split || leaf.tab_group.tabs.len() > 1;
         let key = leaf
             .tab_group
             .active_session_id()
             .and_then(|tab| popup.keys.get(&tab).cloned());
-        let strip = shows_strip.then(|| self.render_session_popup_tab_strip(id, pane, cx));
+        let project = split
+            .then(|| {
+                key.as_ref()
+                    .map(|key| self.session_popup_project_title(key))
+            })
+            .flatten();
+        let strip = shows_strip.then(|| self.render_session_popup_tab_strip(id, pane, project, cx));
         let body = key
             .map(|key| self.render_session_popup_session(&key, cx))
             .unwrap_or_else(|| div().into_any_element());
+        let body = self.session_popup_pane_drop_target(id, pane, body, cx);
+        let view = cx.entity().downgrade();
         div()
             .id(format!("session-popup-pane-{}", pane.0))
             .flex_1()
@@ -316,6 +344,11 @@ impl GhostexGpuiApp {
             .min_w_0()
             .flex()
             .flex_col()
+            // A click anywhere in the pane makes it the one the header acts on, without taking
+            // the click from the chat or terminal under it.
+            .capture_any_mouse_down(move |_: &MouseDownEvent, _, cx| {
+                let _ = view.update(cx, |app, cx| app.session_popup_focus_pane(id, pane, cx));
+            })
             .children(strip)
             .child(body)
             .into_any_element()

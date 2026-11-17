@@ -37,6 +37,7 @@
 //! placeholder), terminal_sync/gpui_engine_terminal_viewers.rs and session_chat_surfaces.rs (the
 //! on-screen checks), ghostex_capture/platform.rs (`set_window_stays_on_top`).
 
+mod panes;
 mod render;
 mod saved;
 mod tabs;
@@ -108,6 +109,10 @@ pub(crate) struct SessionPopupWindow {
     pub(crate) drop: Option<WorkspaceDropFeedback>,
     /// The tab bar and the place in it a dragged tab would land.
     pub(crate) strip_drop: Option<(WorkspacePaneId, usize)>,
+    /// Each split's span as last laid out, for its divider (panes.rs).
+    pub(crate) split_metrics: HashMap<WorkspaceSplitId, SplitResizeMetrics>,
+    /// The divider being dragged.
+    pub(crate) split_drag: Option<WorkspaceSplitResizeDragState>,
 }
 
 impl SessionPopupWindow {
@@ -624,6 +629,8 @@ impl GhostexGpuiApp {
                     revision: 0,
                     drop: None,
                     strip_drop: None,
+                    split_metrics: HashMap::new(),
+                    split_drag: None,
                 };
                 for key in &keys {
                     popup.add(key.clone());

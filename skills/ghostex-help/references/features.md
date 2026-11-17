@@ -7439,10 +7439,16 @@ the popup once it has two or more sessions: click a tab to show it, drag it
 along the bar to reorder, and click its **×** (or press Cmd+W, Ctrl+W on
 Windows and Linux) to send that session back to its pane. Drag a tab out of the
 window to give it a popup of its own, or onto another popup to move it there;
-the tab's right-click menu has the same as **Move to New Popup** and **Move to
-Popup ›**, plus **Bring Back**. The popup's header has **Keep on Top** (pin,
+the tab's right-click menu does the same with **Move to New Popup** and **Move
+to Popup ›**, and has **Bring Back**. Drag a tab onto the left, right, top or bottom
+edge of the popup's content to split it, side by side or above and below, as in
+the main window (the middle shows it there instead); each split pane gets its
+own tab bar, led by the name of the project its session belongs to, and
+dragging a pane's tab onto another pane's tab bar joins them again. Drag the
+line between two panes to resize them, or double-click it to make them equal.
+The popup's header has **Keep on Top** (pin,
 for the whole popup; not on Wayland), **Bring Back** for the session on show
-and **Expand** / **Shrink**. Closing the popup sends all its sessions back.
+(in a split, the pane you clicked last) and **Expand** / **Shrink**. Closing the popup sends all its sessions back.
 With transparency on, popups show the same glass as the main window. Popups
 open again with their tabs at the next launch. Browser tabs stay in the main
 window. A popup shows sessions of the project the main window is on; a session
