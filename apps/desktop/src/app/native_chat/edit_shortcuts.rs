@@ -329,6 +329,7 @@ impl NativeChatView {
                 self.search_input
                     .iter()
                     .chain(self.files_links_input.iter())
+                    .chain(self.secret_fields())
                     .chain(
                         self.terminal_picker_input
                             .iter()
@@ -502,6 +503,32 @@ impl NativeChatView {
         true
     }
 
+    /// While a secret request card is open, a keystroke bound for the chat box (it has focus, or
+    /// no other field of this chat does) is typed into the oldest open card's masked field
+    /// instead, so a secret can never land in the chat box and be sent (#648). Escape keeps its
+    /// meaning (interrupt) and chords the field does not edit with pass through.
+    pub(super) fn secret_card_key(
+        &mut self,
+        keystroke: &gpui::Keystroke,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if REPLAYING.with(Cell::get) || keystroke.key == "escape" {
+            return false;
+        }
+        let Some(secret) = self.open_secret_field() else {
+            return false;
+        };
+        let composer_focused = self
+            .input
+            .as_ref()
+            .is_some_and(|input| input.read(cx).focus_handle(cx).is_focused(window));
+        if !composer_focused && self.chat_text_field_focused(window, cx) {
+            return false;
+        }
+        self.background_key_into(&secret, keystroke, window, cx)
+    }
+
     /// Background typing into a single-line chat field (the find bar): typed text lands at its
     /// caret, and Enter, Escape, the arrows, deletion and editing chords are replayed into it so
     /// the field's own key handling (next/previous match, close) answers them.
@@ -572,6 +599,7 @@ impl NativeChatView {
                     .map(|dialog| dialog.field.focus_handle(cx)),
             )
             .chain(self.terminal_picker_focus_handle(cx))
+            .chain(self.secret_fields().map(|input| input.focus_handle(cx)))
             .any(|focus| focus.is_focused(window))
             || self.terminal_dialog_key_focus.is_focused(window)
     }

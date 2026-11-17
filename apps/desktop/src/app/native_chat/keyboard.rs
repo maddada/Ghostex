@@ -203,6 +203,12 @@ impl NativeChatView {
             window.prevent_default();
             return;
         }
+        // An open secret request card owns every keystroke bound for the chat box (#648).
+        if self.secret_card_key(&event.keystroke, window, cx) {
+            cx.stop_propagation();
+            window.prevent_default();
+            return;
+        }
         let this = self;
 
         let key = &event.keystroke;

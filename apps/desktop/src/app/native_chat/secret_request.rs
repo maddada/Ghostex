@@ -4,6 +4,9 @@
 //!
 //! CDXC:Secrets 2026-11-02 WHY:
 //! The typed value stays in the view's own masked `InputState` until Save, then crosses once in the `answerSecretRequest` action; it is never echoed through the core's document or the composer draft the way the question cards' text boxes are, and the field is dropped as soon as its card closes.
+//!
+//! CDXC:Secrets 2026-11-18 WHY:
+//! #648: a secret typed into the card went to the chat box and was sent as a chat message. The card's field was missing from the chat's list of its own text fields (`chat_text_field_focused`), so every keystroke typed in it was taken by the chat's background typing (`composer_background_key`), which moves the keyboard to the chat box and types the key there, and every queued chat box focus (the pane frame queues one on each press inside the chat) took the keyboard back from it. The field is now in that list, and while a card is open the chat box takes no keystrokes at all: a key bound for it is typed into the oldest open card instead (`secret_card_key`), a queued or gained chat box focus moves to the card, and a card opening while the chat box holds the keyboard takes it.
 //! SEE-ALSO: apps/mobile/app/src/chat/native/cards/SecretRequestCard.tsx (the phone's card), packages/gx-chat-core/src/extras/secret_requests.rs.
 
 use std::collections::HashMap;
@@ -12,9 +15,9 @@ use super::tone_card::{ToneButton, ToneCardParts, ToneLook, tone_look};
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,
-    ParentElement as _, StatefulInteractiveElement as _, Styled as _, Subscription, Window, div,
-    px,
+    AnyElement, AppContext as _, Context, Entity, Focusable as _, InteractiveElement as _,
+    IntoElement, ParentElement as _, StatefulInteractiveElement as _, Styled as _, Subscription,
+    Window, div, px,
 };
 use gpui_component::input::{Input, InputEvent, InputState};
 use serde_json::{Value, json};
@@ -41,6 +44,15 @@ impl NativeChatView {
                 .masked(true)
                 .placeholder(placeholder)
         });
+        // A card that opens while the chat box holds the keyboard takes it, so the next keystroke
+        // lands in the card. A field already being typed in (another card's) keeps it.
+        if self
+            .input
+            .as_ref()
+            .is_some_and(|composer| composer.read(cx).focus_handle(cx).is_focused(window))
+        {
+            input.update(cx, |input, cx| input.focus(window, cx));
+        }
         let request_id = id.to_string();
         let subscription = cx.subscribe_in(
             &input,
@@ -55,6 +67,32 @@ impl NativeChatView {
             .fields
             .insert(id.to_string(), (input.clone(), subscription));
         input
+    }
+
+    /// Whether a secret request card of this chat is open (unanswered).
+    pub(super) fn secret_request_open(&self) -> bool {
+        self.snapshot["secretRequests"]
+            .as_array()
+            .is_some_and(|cards| cards.iter().any(|card| card["open"] == true))
+    }
+
+    /// The masked field of the oldest open card, once it has been drawn: where the chat box's
+    /// keyboard goes while a card is open.
+    pub(super) fn open_secret_field(&self) -> Option<Entity<InputState>> {
+        self.snapshot["secretRequests"]
+            .as_array()?
+            .iter()
+            .filter(|card| card["open"] == true)
+            .find_map(|card| self.secret_request_inputs.fields.get(card["id"].as_str()?))
+            .map(|(input, _)| input.clone())
+    }
+
+    /// The masked field of every open card.
+    pub(super) fn secret_fields(&self) -> impl Iterator<Item = &Entity<InputState>> {
+        self.secret_request_inputs
+            .fields
+            .values()
+            .map(|(input, _)| input)
     }
 
     fn save_secret_request(&mut self, id: &str, cx: &mut Context<Self>) {
