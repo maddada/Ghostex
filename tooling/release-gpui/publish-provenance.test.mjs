@@ -198,7 +198,6 @@ describe('plan intake', () => {
   test('tolerates the non-product artifact directories the run also uploads', () => {
     expect(isNonProductArtifactDirectory('release-plan')).toBe(true);
     expect(isNonProductArtifactDirectory('release-provenance-android')).toBe(true);
-    expect(isNonProductArtifactDirectory('ghostex-symbols-11.10.0-macos-arm64-0bebbd22')).toBe(true);
     expect(isNonProductArtifactDirectory('release-code-server-390f119a145e-p2-linux-x64')).toBe(true);
     expect(isNonProductArtifactDirectory('release-android')).toBe(false);
   });

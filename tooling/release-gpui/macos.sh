@@ -185,8 +185,8 @@ phase_prepare_runtime() {
 # safety checks). Every other Ghostty and zmx build path passes ReleaseSafe (build.rs,
 # build-libghostty-vt.sh, prepare-macos-runtime.sh, TERMINAL-SHADERS.md). The same flags are
 # duplicated in macos-prerequisite.sh and warm-rust-build-cache.yml, and the GhosttyKit cache key
-# names the mode (`-releasesafe-`) so a cached Debug kit is never restored;
-# tooling/release-ghosttykit-optimize.test.mjs keeps all of them in step.
+# names the mode (`-releasesafe-`) so a cached Debug kit is never restored. Change all of them
+# together.
 prepare_ghosttykit() {
 	if [[ "$USE_PREBUILT_RUST" != "1" && ! -d "$GHOSTTY_KIT" ]]; then
 		GHOSTTY_ZIG="${GHOSTEX_ZIG:-${ZIG:-}}"
