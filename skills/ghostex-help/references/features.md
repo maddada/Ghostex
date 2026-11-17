@@ -3127,7 +3127,8 @@ Settings > Accounts saves Claude and Codex logins, and shows the usage of
 Cursor, Gemini and Copilot accounts. The left side has one **Add account**
 button over each provider's accounts, each with a usage bar (or "Sign in
 needed" when a login stopped working: its Reconnect is on the right), and the
-Claude and Codex rules; click one
+Claude and Codex rules. Within each provider, turned-off accounts (Disabled)
+sit at the bottom, below the ones in use and the ones that need a sign-in. Click one
 to see it on the right: its usage bars with reset times (labelled 5 hours, 7
 days and Fable), Name, **Use this account** (Automatically: Ghostex may start sessions on
 it and move sessions to it at a limit; Only when I pick it: automatic switching

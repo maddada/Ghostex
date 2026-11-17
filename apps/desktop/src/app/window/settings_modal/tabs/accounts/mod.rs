@@ -549,7 +549,7 @@ impl AccountsTab {
         cx.notify();
     }
 
-    /// The pane shown: the chosen one while it still exists, else the first saved account, else
+    /// The pane shown: the chosen one while it still exists, else the top account of the list, else
     /// the first provider's Add account setup.
     pub(crate) fn effective_pane(&self, data: &data::AccountsState) -> Pane {
         let exists = |pane: &Pane| match pane {
@@ -564,11 +564,7 @@ impl AccountsTab {
         }
         data::PROVIDERS
             .iter()
-            .find_map(|provider| {
-                data.registered(provider)
-                    .first()
-                    .map(|account| account.id())
-            })
+            .find_map(|provider| data.listed(provider).first().map(|account| account.id()))
             .map(Pane::Account)
             .unwrap_or(Pane::AddPick)
     }

@@ -67,7 +67,7 @@ impl AccountsTab {
                 children.push(divider());
             }
             children.push(self.render_list_header(p, provider));
-            let accounts = data.registered(provider);
+            let accounts = data.listed(provider);
             if accounts.is_empty() {
                 children.push(list_item(
                     p,
@@ -112,7 +112,7 @@ impl AccountsTab {
             ));
         }
         for provider in super::data::USAGE_PROVIDERS {
-            let accounts = data.registered(provider);
+            let accounts = data.listed(provider);
             if accounts.is_empty() {
                 continue;
             }

@@ -20,7 +20,8 @@
 //! `accounts-editor` (an account's pane), `accounts-advanced` (its Advanced open),
 //! `accounts-editor-actions` (scrolled to its buttons), `accounts-remove` (the Remove
 //! confirmation), `accounts-needs-sign-in` (an account whose login stopped working),
-//! `accounts-disabled` (an account the user turned off),
+//! `accounts-disabled` (an account the user turned off), `accounts-order` (turned-off
+//! accounts between working ones, which the list shows last),
 //! `accounts-reconnect` (its sign-in waiting), `accounts-code` (waiting with the code box and
 //! Details open), `accounts-connected`, `accounts-wrong` (signed in to another account),
 //! `accounts-blockers` (Codex sessions to pause), `accounts-defaults` / `accounts-rules` (Claude
@@ -281,6 +282,18 @@ fn accounts_rpc(state: &str, params: &Value) -> Answer {
             for helper in helpers {
                 helper["installed"] = json!(false);
             }
+        }
+    }
+    // Turned-off accounts in the middle of the slots: the list shows them last.
+    if state == "accounts-order"
+        && let Some(accounts) = data["accounts"].as_array_mut()
+    {
+        for account in accounts
+            .iter_mut()
+            .filter(|account| account["id"] == "claude-2" || account["id"] == "codex-2")
+        {
+            account["userDisabled"] = json!(true);
+            account["status"] = json!("disabled");
         }
     }
     // A Gemini account with Antigravity's Claude/GPT windows beside its own 5h and 7d.

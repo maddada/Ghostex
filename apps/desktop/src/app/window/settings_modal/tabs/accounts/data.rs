@@ -425,6 +425,25 @@ impl AccountsState {
         accounts
     }
 
+    /// The saved accounts of `provider` in the account list's order: the ones in use and the ones
+    /// that need something (sign in, Reconnect, a missing Claude Swap or Codex Swap) first,
+    /// turned-off ones last, each part by slot.
+    ///
+    /// CDXC:Accounts 2026-11-17 DECISION: User, of the Claude and Codex lists with Disabled rows
+    /// between the working ones: "pls group disabled accounts here at the bottom of the list and
+    /// keep active ones at the top, and keep ones that need to be relogged in and stuff like that
+    /// top also (per claude and per codex separately)". Only the list's order changes; slots,
+    /// switching and rotation still follow `registered`. The phone's Accounts screen already
+    /// puts turned-off accounts last (apps/mobile/app/src/accounts/client.ts).
+    pub(crate) fn listed(&self, provider: &str) -> Vec<Account> {
+        let (mut accounts, off): (Vec<Account>, Vec<Account>) = self
+            .registered(provider)
+            .into_iter()
+            .partition(|account| !account.user_disabled());
+        accounts.extend(off);
+        accounts
+    }
+
     /// `data.helpers.find(h => h.provider === provider)`.
     pub(crate) fn helper(&self, provider: &str) -> Option<Value> {
         self.raw["helpers"]
