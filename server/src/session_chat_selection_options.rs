@@ -123,9 +123,9 @@ impl PickerDriver<'_> {
                 .await?;
             return self.write(CODEX_SUBMIT).await;
         }
-        self.write(&build_session_chat_paste_bytes(command)).await?;
-        self.wait_for("type option command", |screen| {
-            // Slash completion can replace the ordinary ready verdict while the exact command is staged.
+        let payload = build_session_chat_paste_bytes(command);
+        // Slash completion can replace the ordinary ready verdict while the exact command is staged.
+        let typed = |screen: &str| {
             screen_lines(screen)
                 .iter()
                 .rev()
@@ -136,8 +136,14 @@ impl PickerDriver<'_> {
                 })
                 .is_some_and(|text| text.trim() == command)
                 .then_some(())
-        })
-        .await?;
+        };
+        if agent == SessionChatOptionAgent::Codex {
+            self.type_command_or_erase(agent, "type option command", command, &payload, typed)
+                .await?;
+        } else {
+            self.write(&payload).await?;
+            self.wait_for("type option command", typed).await?;
+        }
         self.write(CODEX_SUBMIT).await
     }
 

@@ -570,15 +570,15 @@ fn claude_option_applied(screen: &str, field: &str, value: &str) -> bool {
 #[derive(Debug, PartialEq, Eq)]
 enum UntakenCommandErase {
     Erase,
-    /// The input box shows other text, which is erased only when it is Claude's faint placeholder.
+    /// The input box shows other text, which is erased only when it is the agent's faint placeholder.
     UnlessDraft,
     Keep,
 }
 
-/// What to do about a typed `command` Claude's input box never showed, given the input box's text
-/// (`None` when no input box is drawn). An empty input box means the keys went to the terminal
-/// and wait there for Claude; copies of the command are this pick's own earlier tries.
-fn claude_untaken_command_erase(draft: Option<&str>, command: &str) -> UntakenCommandErase {
+/// What to do about a typed `command` the agent's input box never showed, given the input box's
+/// text (`None` when no input box is drawn). An empty input box means the keys went to the
+/// terminal and wait there for the agent; copies of the command are this pick's own earlier tries.
+fn untaken_command_erase(draft: Option<&str>, command: &str) -> UntakenCommandErase {
     let Some(draft) = draft.map(str::trim) else {
         return UntakenCommandErase::Keep;
     };
@@ -622,36 +622,74 @@ impl PickerDriver<'_> {
     /// command, and each retry typed another copy, so the next model or effort pick and the next
     /// message met `/effort high/effort high/effort high` in the input box. A typed slash command
     /// that does not show up in the input box is now erased with Ctrl+U at once (the terminal's
-    /// own line erase while Claude is not reading, Claude's line erase once it is; the input box
-    /// was checked empty before typing) and the pick waits for Claude to take keys again
-    /// (`INPUT_BOX_MISSING_CODE`) instead of using up the three tries that fail it for good.
+    /// own line erase while the agent is not reading, the agent's line erase once it is; the
+    /// input box was checked empty before typing) and the pick waits for the agent to take keys
+    /// again (`INPUT_BOX_MISSING_CODE`) instead of using up the three tries that fail it for good.
+    /// Codex's `/model`, `/plan`, `/fast` and permissions commands take the same path
+    /// (coordinator, 2026-11-17).
     async fn type_claude_command(&self, step: &str, command: &str) -> Result<(), DomainStateError> {
-        self.write(&crate::session_chat_send::build_session_chat_paste_bytes(
+        self.type_command_or_erase(
+            SessionChatOptionAgent::Claude,
+            step,
             command,
-        ))
-        .await?;
-        let typed = self
-            .wait_for(step, |screen| {
+            &crate::session_chat_send::build_session_chat_paste_bytes(command),
+            |screen| {
                 crate::session_chat_composer::claude_composer_input_text(screen)
                     .is_some_and(|text| text.trim() == command)
                     .then_some(())
-            })
-            .await;
-        let Err(error) = typed else {
+            },
+        )
+        .await
+    }
+
+    /// Writes `payload`, waits for `typed` to see `command` in the input box, and erases it when
+    /// it never shows up (see [`Self::type_claude_command`]). Only Claude and Codex are read here.
+    async fn type_command_or_erase(
+        &self,
+        agent: SessionChatOptionAgent,
+        step: &str,
+        command: &str,
+        payload: &str,
+        typed: impl FnMut(&str) -> Option<()>,
+    ) -> Result<(), DomainStateError> {
+        self.write(payload).await?;
+        let Err(error) = self.wait_for(step, typed).await else {
             return Ok(());
         };
         if error.code != "timeout" {
             return Err(error);
         }
-        let erase = match self.capture().await.as_deref().map(|screen| {
-            claude_untaken_command_erase(
-                crate::session_chat_composer::claude_composer_draft(screen).as_deref(),
-                command,
+        let (agent_name, erase) = if agent == SessionChatOptionAgent::Claude {
+            let rule = self.capture().await.as_deref().map(|screen| {
+                untaken_command_erase(
+                    crate::session_chat_composer::claude_composer_draft(screen).as_deref(),
+                    command,
+                )
+            });
+            let erase = match rule {
+                Some(UntakenCommandErase::Erase) => true,
+                Some(UntakenCommandErase::UnlessDraft) => !self.claude_input_holds_draft().await,
+                Some(UntakenCommandErase::Keep) | None => false,
+            };
+            ("Claude Code", erase)
+        } else {
+            // Codex's reader tells its dim placeholder from typed text only on a VT capture.
+            let input = crate::session_chat_send::capture_session_terminal_text_vt(self.zmx_name)
+                .await
+                .and_then(|screen| {
+                    crate::session_chat_composer::session_chat_composer_input("codex", &screen)
+                });
+            let draft = input.as_ref().map(|input| {
+                if input.is_empty() {
+                    ""
+                } else {
+                    input.text.as_str()
+                }
+            });
+            (
+                "Codex",
+                untaken_command_erase(draft, command) == UntakenCommandErase::Erase,
             )
-        }) {
-            Some(UntakenCommandErase::Erase) => true,
-            Some(UntakenCommandErase::UnlessDraft) => !self.claude_input_holds_draft().await,
-            Some(UntakenCommandErase::Keep) | None => false,
         };
         if erase {
             let _ = self
@@ -660,10 +698,11 @@ impl PickerDriver<'_> {
         }
         log_picker(
             LogLevel::Warn,
-            "sessionChatClaudeCommandNotTaken",
+            "sessionChatAgentCommandNotTaken",
             json!({
                 "projectId": self.project_id,
                 "sessionId": self.session_id,
+                "agent": agent_name,
                 "command": command,
                 "erased": erase,
             }),
@@ -672,7 +711,7 @@ impl PickerDriver<'_> {
         Err(DomainStateError {
             code: INPUT_BOX_MISSING_CODE,
             message: format!(
-                "Claude Code did not take the typed {command}: it is not reading keys right now (its external editor or another program may have the terminal). Ghostex erased it and tries again when Claude takes keys."
+                "{agent_name} did not take the typed {command}: it is not reading keys right now (its external editor or another program may have the terminal). Ghostex erased it and tries again when {agent_name} takes keys."
             ),
         })
     }
@@ -1082,17 +1121,22 @@ impl PickerDriver<'_> {
             }
         }
 
-        self.write(CODEX_MODEL_COMMAND).await?;
-        self.wait_for("type command", |screen| {
-            screen_lines(screen)
-                .iter()
-                .any(|line| {
-                    line.strip_prefix(CODEX_CURSOR)
-                        .or_else(|| line.strip_prefix(CODEX_ULTRA_CURSOR))
-                        .is_some_and(|text| text.trim() == CODEX_MODEL_COMMAND)
-                })
-                .then_some(())
-        })
+        self.type_command_or_erase(
+            SessionChatOptionAgent::Codex,
+            "type command",
+            CODEX_MODEL_COMMAND,
+            CODEX_MODEL_COMMAND,
+            |screen| {
+                screen_lines(screen)
+                    .iter()
+                    .any(|line| {
+                        line.strip_prefix(CODEX_CURSOR)
+                            .or_else(|| line.strip_prefix(CODEX_ULTRA_CURSOR))
+                            .is_some_and(|text| text.trim() == CODEX_MODEL_COMMAND)
+                    })
+                    .then_some(())
+            },
+        )
         .await?;
         self.write(CODEX_SUBMIT).await?;
 
