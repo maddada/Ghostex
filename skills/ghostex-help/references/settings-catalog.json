@@ -811,6 +811,32 @@
       "agentWritable": true
     },
     {
+      "key": "unifiedSessionOrder",
+      "title": "Session order",
+      "subtitle": "Order the Unified sidebar's sessions by recent activity (a session moves to the top when you send it a message and when it finishes or needs you), alphabetically by title, or by when each was created, newest first. Alphabetical and Created never move a session when it works or finishes; turn off the Moving section too for a list that never moves. Pinned sessions follow Pinned order. Applies to the phone too. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected.",
+      "tab": "sidebar",
+      "tabTitle": "Sidebar & Sessions",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "enum",
+      "default": "recent",
+      "options": [
+        {
+          "label": "Recent activity",
+          "value": "recent"
+        },
+        {
+          "label": "Alphabetical",
+          "value": "alphabetical"
+        },
+        {
+          "label": "Created (newest first)",
+          "value": "created"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
       "key": "sidebarVisibilityMemory",
       "title": "Remember sidebar per view",
       "subtitle": "Off: hiding the sidebar hides it everywhere. On: Agents and the wide views (Browser, Code, Files, Beads, Automate) each keep their own open or hidden sidebar; the Commands pane follows the same split.",

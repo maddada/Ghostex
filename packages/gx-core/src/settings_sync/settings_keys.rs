@@ -76,6 +76,7 @@ pub const SIDEBAR_ORGANIZATION_KEYS: &[&str] = &[
     "pinnedSessionOrder",
     "unifiedWorkingSection",
     "unifiedGroupByProject",
+    "unifiedSessionOrder",
     "unifiedProjectOrder",
     "sidebarSessionTagListItems",
 ];

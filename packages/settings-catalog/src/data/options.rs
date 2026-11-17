@@ -674,6 +674,13 @@ pub const SIDEBAR_SPACE_SWITCH_BEHAVIOR_OPTIONS: &[Opt] = &[
 
 /// CDXC:Sidebar 2026-11-07 DECISION in gx-core sidebar_view/inputs.rs: Manual (the default, first)
 /// keeps the dragged order; Most recently updated orders pinned sessions by when they came back.
+/// CDXC:Sidebar 2026-11-17 SEE-ALSO: gx-core unified_sidebar/build.rs `unified_session_cmp`; Recent activity by default.
+pub const UNIFIED_SESSION_ORDER_OPTIONS: &[Opt] = &[
+    opt("Recent activity", "recent"),
+    opt("Alphabetical", "alphabetical"),
+    opt("Created (newest first)", "created"),
+];
+
 pub const PINNED_SESSION_ORDER_OPTIONS: &[Opt] = &[
     opt("Manual (drag to rearrange)", "manual"),
     opt("Most recently updated", "recent"),

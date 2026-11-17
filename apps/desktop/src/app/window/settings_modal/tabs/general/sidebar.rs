@@ -159,6 +159,20 @@ fn sidebar_section(
             true,
             cx,
         ));
+        // CDXC:Sidebar 2026-11-17 DECISION in gx-core unified_sidebar/build.rs
+        // `unified_session_cmp` (Recent activity by default; the phone follows it).
+        rows.extend(page.select(
+            g,
+            s,
+            "unifiedSessionOrder",
+            "Session order",
+            "Order sessions by recent activity (a session moves to the top when you send it a message and when it finishes or needs you), alphabetically by title, or by when each was created, newest first. Alphabetical and Created never move a session when it works or finishes; turn off the Moving section too for a list that never moves. Pinned sessions follow Pinned order. Also in the sidebar's Sort & Filter menu.",
+            g.options("UNIFIED_SESSION_ORDER_OPTIONS"),
+            Some(256.0),
+            false,
+            window,
+            cx,
+        ));
     }
     // CDXC:Settings 2026-10-29 DECISION (wording Q23): Sidebar visibility memory, a select of Same in
     // every view / Remembered per view, is the switch Remember sidebar per view; the key keeps its

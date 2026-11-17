@@ -596,6 +596,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("sidebarView", J::Str("project")),
     ("unifiedWorkingSection", J::Bool(true)),
     ("unifiedGroupByProject", J::Bool(false)),
+    ("unifiedSessionOrder", J::Str("recent")),
     // CDXC:Sidebar 2026-10-31 SEE-ALSO: gx-core unified_sidebar/grouping.rs; repository keys in the order the user dragged the project groups into. No Settings row: the drag is how it is set.
     ("unifiedProjectOrder", J::Arr(&[])),
     (

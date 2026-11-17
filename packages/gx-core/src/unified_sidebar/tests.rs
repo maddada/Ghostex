@@ -94,6 +94,7 @@ fn settings() -> UnifiedSettings {
         working_section: true,
         enable_session_parking: true,
         pinned_session_order: crate::sidebar_view::PinnedSessionOrder::Manual,
+        session_order: crate::sidebar_view::UnifiedSessionOrder::Recent,
     }
 }
 
@@ -942,7 +943,12 @@ fn a_coordinators_workers_here_and_on_another_computer_nest_under_its_card() {
     assert_eq!(
         threads,
         [
-            (local.clone(), local.clone(), "here".to_string(), "p".to_string()),
+            (
+                local.clone(),
+                local.clone(),
+                "here".to_string(),
+                "p".to_string()
+            ),
             (
                 windows.clone(),
                 local.clone(),
@@ -1293,4 +1299,128 @@ fn revealing_a_card_the_filter_leaves_out_lifts_only_the_picks_it_misses() {
     assert_eq!(lifted.repos, search.repos);
     assert!(lifted.query.is_empty());
     assert!(UnifiedFilter::default().admitting(web).is_none());
+}
+
+#[test]
+fn session_order_alphabetical_and_created_ignore_sends_and_turn_ends() {
+    use crate::sidebar_view::UnifiedSessionOrder;
+    let local = MachineId::Local;
+    let titled = |id: &str, title: &str, created: i64, last: i64| {
+        let mut row = timed(row(&local, "p", id), created, last);
+        row.display_title = title.to_string();
+        row
+    };
+    // "zeta" was just sent to (working since 9_000); "beta" just finished a turn.
+    let mut zeta = titled("zeta", "Zeta", 3_000, 100);
+    zeta.activity = "working".to_string();
+    zeta.timing.working_started_ms = Some(9_000);
+    let beta = titled("beta", "beta", 1_000, 8_000);
+    let alpha = titled("alpha", "Alpha", 2_000, 200);
+    let view = sidebar(vec![group("p", "/p", None, vec![zeta, beta, alpha])]);
+    let machines = [UnifiedMachineInput {
+        machine: local.clone(),
+        label: "Local".to_string(),
+        view: &view,
+        spaces: None,
+    }];
+    let with = |session_order| UnifiedSettings {
+        working_section: false,
+        session_order,
+        ..settings()
+    };
+    let built = |order| {
+        ids(&build_unified_sidebar(&machines, with(order), &UnifiedFilter::default(), NOW).active)
+    };
+    assert_eq!(
+        built(UnifiedSessionOrder::Recent),
+        ["zeta", "beta", "alpha"]
+    );
+    assert_eq!(
+        built(UnifiedSessionOrder::Alphabetical),
+        ["alpha", "beta", "zeta"]
+    );
+    assert_eq!(
+        built(UnifiedSessionOrder::Created),
+        ["zeta", "alpha", "beta"]
+    );
+}
+
+#[test]
+fn session_order_reads_its_setting() {
+    use crate::sidebar_view::UnifiedSessionOrder;
+    assert_eq!(
+        UnifiedSessionOrder::from_setting(None),
+        UnifiedSessionOrder::Recent
+    );
+    assert_eq!(
+        UnifiedSessionOrder::from_setting(Some("alphabetical")),
+        UnifiedSessionOrder::Alphabetical
+    );
+    assert_eq!(
+        UnifiedSessionOrder::from_setting(Some("created")),
+        UnifiedSessionOrder::Created
+    );
+    assert_eq!(
+        UnifiedSessionOrder::from_setting(Some("bogus")),
+        UnifiedSessionOrder::Recent
+    );
+}
+
+#[test]
+fn stable_orders_break_ties_by_project_then_session_and_compare_code_points() {
+    use crate::sidebar_view::UnifiedSessionOrder;
+    let local = MachineId::Local;
+    let titled = |project: &str, id: &str, title: &str| {
+        let mut row = timed(row(&local, project, id), 1_000, 1_000);
+        row.display_title = title.to_string();
+        row
+    };
+    // Two copies of one repository: the same title, label and creation time.
+    let view = sidebar(vec![
+        group(
+            "z",
+            "/z",
+            Some("git@github.com:o/repo.git"),
+            vec![titled("z", "a", "Same")],
+        ),
+        group(
+            "a",
+            "/a",
+            Some("git@github.com:o/repo.git"),
+            vec![titled("a", "z", "Same")],
+        ),
+        group(
+            "u",
+            "/u",
+            None,
+            vec![
+                titled("u", "emoji", "😀 task"),
+                titled("u", "wide", "Ｚ task"),
+            ],
+        ),
+    ]);
+    let machines = [UnifiedMachineInput {
+        machine: local,
+        label: "Local".to_string(),
+        view: &view,
+        spaces: None,
+    }];
+    let with = |session_order| UnifiedSettings {
+        working_section: false,
+        session_order,
+        ..settings()
+    };
+    let built = |order| {
+        ids(&build_unified_sidebar(&machines, with(order), &UnifiedFilter::default(), NOW).active)
+    };
+    // Project a's card before project z's; the fullwidth Z (U+FF3A) before the emoji (U+1F600).
+    assert_eq!(
+        built(UnifiedSessionOrder::Alphabetical),
+        ["z", "a", "wide", "emoji"]
+    );
+    // All created together: project a, then u (emoji, wide), then z.
+    assert_eq!(
+        built(UnifiedSessionOrder::Created),
+        ["z", "emoji", "wide", "a"]
+    );
 }

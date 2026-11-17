@@ -236,6 +236,14 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
     if settings.get("pinnedSessionOrder").and_then(Value::as_str) == Some("recent") {
         map.insert("pinnedSessionOrder".to_string(), json!("recent"));
     }
+    // CDXC:Sidebar 2026-11-17 SEE-ALSO: packages/gx-core/src/unified_sidebar/build.rs (`unified_session_cmp`); the phone's Unified list orders its cards as the computer does (apps/mobile/app/src/contract/unified/build.ts). Sent only when it is Alphabetical or Created (the default is Recent activity); an older phone ignores it and keeps Recent.
+    if let Some(order) = settings
+        .get("unifiedSessionOrder")
+        .and_then(Value::as_str)
+        .filter(|order| matches!(*order, "alphabetical" | "created"))
+    {
+        map.insert("unifiedSessionOrder".to_string(), json!(order));
+    }
     // CDXC:Worktrees 2026-11-06 SEE-ALSO: packages/gx-core/src/sidebar_view/worktree_fold.rs; the phone's Project list follows the computer's Worktree sessions show in their project (apps/mobile/app/src/contract/grouping.ts). Sent only when off (the default is on).
     if settings
         .get("worktreeSessionsInProject")
