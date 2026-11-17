@@ -6,7 +6,7 @@
 //! CDXC:Updates 2026-11-05 DECISION:
 //! The user's picks are on server/src/updates/mod.rs. Here: the top bar's ↑ button shows while
 //! anything counts (Q1362) with the count beside it, and opens a small list with Update all and
-//! Open Updates… (Q1361, a quiet badge); Update all hands this app's own items to the paths their
+//! Open Updates… (Q1361, a quiet badge); Update all (only the items that list shows) hands this app's own items to the paths their
 //! Settings rows use (a remote machine's Update, Reinstall of the VS Code view or the Chromium
 //! runtime) and the rest to gxserver, which updates the Ghostex app last (Q1364).
 //! Every connected computer's own items come from its gxserver through its tunnel (remote.rs), and
@@ -154,6 +154,24 @@ impl GhostexGpuiApp {
     /// What the top bar's badge counts (each item's `counts`, Q1362), as last published.
     pub(crate) fn updates_badge_items(&self) -> Vec<Value> {
         with_snapshot(|snapshot| snapshot.badge.clone())
+    }
+
+    /// What the top bar list's Update all runs: the updatable items of that list (the badge's),
+    /// never an item the list leaves out.
+    ///
+    /// CDXC:Updates 2026-11-17 FIX: User: Update all "also updates fast computer use even though
+    /// that tool is NOT shown in the update list"; Update all updates exactly the rows the list
+    /// shows. WHY: it ran every updatable item of `updates_items()`, so Fast Computer & Browser
+    /// Use's patch updates and dismissed items that notification.rs keeps out of the list ran too.
+    pub(crate) fn titlebar_update_all_ids(&self) -> Vec<String> {
+        self.updates_badge_items()
+            .into_iter()
+            .filter(|item| {
+                matches!(item["state"].as_str(), Some("available" | "failed"))
+                    && item["canUpdate"] == true
+            })
+            .filter_map(|item| item["id"].as_str().map(str::to_string))
+            .collect()
     }
 
     /// Whether an update runs (the top bar's button then shows a spinner).
@@ -429,14 +447,7 @@ impl GhostexGpuiApp {
             Some("install") => {
                 let ids: Vec<String> = if command.get("all").and_then(Value::as_bool) == Some(true)
                 {
-                    self.updates_items()
-                        .into_iter()
-                        .filter(|item| {
-                            matches!(item["state"].as_str(), Some("available" | "failed"))
-                                && item["canUpdate"] == true
-                        })
-                        .filter_map(|item| item["id"].as_str().map(str::to_string))
-                        .collect()
+                    self.titlebar_update_all_ids()
                 } else {
                     command
                         .get("ids")

@@ -107,8 +107,9 @@ impl GhostexGpuiApp {
         );
     }
 
-    /// A row of the Updates list: Update all runs every update (Settings > Updates' button);
-    /// every other row opens that page.
+    /// A row of the Updates list: Update all runs the updates this list shows (never one it
+    /// leaves out, such as Fast Computer Use's patch updates); every other row opens Settings >
+    /// Updates.
     pub(crate) fn run_gpui_titlebar_updates(
         &mut self,
         update_all: bool,
@@ -116,10 +117,8 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         if update_all {
-            let mut command = serde_json::Map::new();
-            command.insert("op".into(), json!("install"));
-            command.insert("all".into(), json!(true));
-            self.handle_updates_command(&command, cx);
+            let ids = self.titlebar_update_all_ids();
+            self.install_updates(ids, cx);
             return;
         }
         let modal = GpuiAppModalKind::Settings;

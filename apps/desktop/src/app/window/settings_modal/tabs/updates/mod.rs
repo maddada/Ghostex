@@ -232,6 +232,7 @@ impl UpdatesTab {
         p: &SettingsPalette,
         payload: Option<&Value>,
         items: &[&Value],
+        shown: &[&Value],
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let running = payload.is_some_and(|payload| payload["running"] == true)
@@ -245,8 +246,12 @@ impl UpdatesTab {
             Some(_) if running => "Updating…".to_string(),
             Some(payload) => checked_ago(payload["checkedAt"].as_i64()),
         };
-        // The shown machine's updates (Update all machines, by the picker, runs every machine's).
-        let update_ids: Vec<String> = items
+        // The cards shown: the shown machine's updates in the picked group (Update all machines,
+        // by the picker, runs every machine's).
+        //
+        // CDXC:Updates 2026-11-17 FIX: User: Update all updates exactly the rows shown. WHY: with
+        // a group picked (Agents, say), Update all also ran the hidden groups' updates.
+        let update_ids: Vec<String> = shown
             .iter()
             .filter(|item| updatable(item))
             .filter_map(|item| item["id"].as_str().map(str::to_string))
@@ -807,7 +812,7 @@ impl Render for UpdatesTab {
             blocks.push(PageBlock::section("machinePicker", picker));
         }
 
-        let header = self.header(&p, payload.as_ref(), &here, cx);
+        let header = self.header(&p, payload.as_ref(), &here, &shown, cx);
         let cards: Vec<GridCell> = shown
             .iter()
             .filter(|item| on_card(item))
