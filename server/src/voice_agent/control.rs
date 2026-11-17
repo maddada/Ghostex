@@ -331,6 +331,7 @@ pub(super) async fn start_coordinator(state: &Arc<AppState>, args: &Value) -> To
             task: message.clone(),
             model: None,
             effort: None,
+            settings: &settings,
         });
     let created = match computers::call(
         state,

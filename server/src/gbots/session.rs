@@ -265,6 +265,7 @@ pub(crate) fn create_bot_chat_with(
     } else {
         bot.title.clone()
     };
+    let settings = crate::session_chat_catch_up::read_settings(&state.paths);
     let mut params = coordinator_create_params(CoordinatorLaunch {
         agent_rows: &agent_rows,
         project_id: &project_id,
@@ -279,6 +280,7 @@ pub(crate) fn create_bot_chat_with(
         task: task.unwrap_or_default().to_string(),
         model: bot.model.clone(),
         effort: bot.effort.clone(),
+        settings: &settings,
     })
     .as_object()
     .cloned()

@@ -19,11 +19,10 @@ use crate::GhostexGpuiApp;
 use crate::app::remote_conn::sidebar_rpc::{
     GpuiRemoteSidebarRpcMode, gpui_remote_sidebar_rpc_failure_reason,
 };
-use crate::app::window::{
-    DEFAULT_CLAUDE_COORDINATOR_MODEL, NewCoordinatorAgent, NewCoordinatorRefusal,
-};
+use crate::app::window::{NewCoordinatorAgent, NewCoordinatorRefusal};
 use ghostex_gx_chat_core::protocol::{
-    coordinator_launch_takes_effort, coordinator_quality_concern,
+    COORDINATOR_EFFORT_SETTING, COORDINATOR_MODEL_SETTING, coordinator_quality_concern,
+    coordinator_start_effort, coordinator_start_model,
 };
 
 /// The agent family a launcher row runs as: the coordinator family it is one of
@@ -38,21 +37,29 @@ fn coordinator_family(agent: &Value) -> Option<String> {
     Some(family.to_string())
 }
 
-/// The model and effort a new coordinator on `family` starts on, as the create sends them:
-/// Opus 5.5 at High on Claude, High where the launch takes an effort; `None` keeps the agent's own.
-fn coordinator_start_options(family: &str) -> (Option<&'static str>, Option<&'static str>) {
-    let model = (family == "claude").then_some(DEFAULT_CLAUDE_COORDINATOR_MODEL);
-    let effort = (coordinator_launch_takes_effort(family)
-        && matches!(family, "claude" | "codex" | "antigravity"))
-    .then_some("high");
-    (model, effort)
+/// The model and effort a new coordinator on `family` starts on, as the create sends them: the
+/// Coordinator model and Coordinator effort settings in `settings` (Opus 5.5 at Medium unless
+/// changed); `None` keeps the agent's own.
+fn coordinator_start_options(
+    family: &str,
+    settings: &Value,
+) -> (Option<&'static str>, Option<&'static str>) {
+    let setting = |key: &str| settings.get(key).and_then(Value::as_str);
+    (
+        coordinator_start_model(family, setting(COORDINATOR_MODEL_SETTING)),
+        coordinator_start_effort(family, setting(COORDINATOR_EFFORT_SETTING)),
+    )
 }
 
 /// The agent picker's warning for a coordinator on `family`: by the model it starts on (Claude's
 /// coordinator model, else the agent's default in `catalog`) and its effort. A model Ghostex does
 /// not know warns too.
-fn coordinator_start_warning(family: &str, catalog: Option<&AgentModelCatalog>) -> Option<String> {
-    let (start_model, effort) = coordinator_start_options(family);
+fn coordinator_start_warning(
+    family: &str,
+    catalog: Option<&AgentModelCatalog>,
+    settings: &Value,
+) -> Option<String> {
+    let (start_model, effort) = coordinator_start_options(family, settings);
     let lineup = catalog.and_then(|catalog| catalog.agents.get(family));
     let model = lineup.and_then(|agent| match start_model {
         Some(value) => agent.models.iter().find(|model| model.value == value),
@@ -121,6 +128,7 @@ fn coordinator_family_in(hud: Option<&Value>, agent_id: &str) -> Option<String> 
 pub(crate) fn coordinator_agents(
     hud: Option<&Value>,
     catalog: Option<&AgentModelCatalog>,
+    settings: &Value,
 ) -> Vec<NewCoordinatorAgent> {
     hud.and_then(|hud| hud.get("agents"))
         .and_then(Value::as_array)
@@ -135,7 +143,7 @@ pub(crate) fn coordinator_agents(
             let family = coordinator_family(row)?;
             Some(NewCoordinatorAgent {
                 agent_id,
-                warning: coordinator_start_warning(&family, catalog),
+                warning: coordinator_start_warning(&family, catalog, settings),
             })
         })
         .collect()
@@ -145,7 +153,11 @@ impl GhostexGpuiApp {
     /// This computer's launchers an orchestrator can run on, with this computer's lineups.
     pub(crate) fn gx_store_coordinator_agents(&self) -> Vec<NewCoordinatorAgent> {
         let catalog = crate::app::gx_chat::current_model_catalog();
-        coordinator_agents(self.gx_store_launch_hud().as_deref(), catalog.as_ref())
+        coordinator_agents(
+            self.gx_store_launch_hud().as_deref(),
+            catalog.as_ref(),
+            &self.gx_store_hud_settings_value(),
+        )
     }
 
     /// Another computer's launchers an orchestrator can run on, from the sidebar HUD read from it
@@ -157,7 +169,11 @@ impl GhostexGpuiApp {
         catalog: Option<&AgentModelCatalog>,
     ) -> Option<Vec<NewCoordinatorAgent>> {
         let hud = self.gx_store.hud.remote_sidebar_hud(machine_id)?;
-        Some(coordinator_agents(Some(hud), catalog))
+        Some(coordinator_agents(
+            Some(hud),
+            catalog,
+            &self.gx_store_hud_settings_value(),
+        ))
     }
 
     /// The launcher rows of the sidebar HUD of the copy's computer, which the agent picker lists,
@@ -241,7 +257,8 @@ impl GhostexGpuiApp {
             let family =
                 coordinator_family_in(self.gx_store.hud.remote_sidebar_hud(&machine_id), agent_id)
                     .unwrap_or_default();
-            let (model, effort) = coordinator_start_options(&family);
+            let (model, effort) =
+                coordinator_start_options(&family, &self.gx_store_hud_settings_value());
             let params = coordinator_params(
                 remote_agent_launch_params(
                     agent_id,
@@ -321,7 +338,8 @@ impl GhostexGpuiApp {
             return;
         };
         let family = coordinator_family_in(hud.as_deref(), agent_id).unwrap_or_default();
-        let (model, effort) = coordinator_start_options(&family);
+        let (model, effort) =
+            coordinator_start_options(&family, &self.gx_store_hud_settings_value());
         let params = coordinator_params(
             local_agent_launch_params(&agent, &project_id, Map::new(), account_id, name),
             title_source,

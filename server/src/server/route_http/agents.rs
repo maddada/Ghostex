@@ -31,6 +31,14 @@ pub(super) async fn route_agents_http(
                 crate::memory_guard::read_endpoint_value(&state.paths),
             ),
         ),
+        "/api/readCoordinatorStart" => routed_json(
+            Some(endpoint.path),
+            StatusCode::OK,
+            rpc_success(
+                request_id,
+                crate::coordinators::read_start_endpoint_value(&state.paths),
+            ),
+        ),
         "/api/readClaudeCompaction" => routed_json(
             Some(endpoint.path),
             StatusCode::OK,

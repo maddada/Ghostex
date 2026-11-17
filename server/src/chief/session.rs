@@ -246,6 +246,7 @@ fn create_chief_session(
     }
     let project = super::home::home_project(state, db, repository)?;
     let project_id = text_of(&project, "projectId")?;
+    let settings = crate::session_chat_catch_up::read_settings(&state.paths);
     let mut params = coordinator_create_params(CoordinatorLaunch {
         agent_rows: &agent_rows,
         project_id: &project_id,
@@ -255,6 +256,7 @@ fn create_chief_session(
         task: CHIEF_FIRST_REQUEST.to_string(),
         model: None,
         effort: None,
+        settings: &settings,
     })
     .as_object()
     .cloned()

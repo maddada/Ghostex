@@ -844,18 +844,27 @@ impl GhostexGpuiApp {
             matches!(target.provider.as_str(), "claude" | "codex" | "antigravity")
                 && model_picker_provider(agent.icon.as_deref()) == Some(target.provider.as_str())
         });
+        // A new orchestrator starts on the Coordinator model and effort settings
+        // (`coordinator_start_model` in gx-protocol).
+        let setting = |key: &str| object.get(key).and_then(Value::as_str);
         let agent_model = launch_model.map(|target| target.model.clone()).or_else(|| {
-            coordinator_launch
-                .as_ref()
-                .filter(|(family, _)| *family == "claude")
-                .map(|_| crate::app::window::DEFAULT_CLAUDE_COORDINATOR_MODEL.to_string())
+            coordinator_launch.as_ref().and_then(|(family, _)| {
+                ghostex_gx_chat_core::protocol::coordinator_start_model(
+                    family,
+                    setting(ghostex_gx_chat_core::protocol::COORDINATOR_MODEL_SETTING),
+                )
+                .map(str::to_string)
+            })
         });
         let agent_effort = launch_model
             .and_then(|target| target.effort.clone())
             .or_else(|| {
                 coordinator_launch.as_ref().and_then(|(family, _)| {
-                    matches!(*family, "claude" | "codex" | "antigravity")
-                        .then(|| "high".to_string())
+                    ghostex_gx_chat_core::protocol::coordinator_start_effort(
+                        family,
+                        setting(ghostex_gx_chat_core::protocol::COORDINATOR_EFFORT_SETTING),
+                    )
+                    .map(str::to_string)
                 })
             });
         self.git_start_prompt_agent(

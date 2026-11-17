@@ -744,6 +744,21 @@ pub const WORKER_NOTIFICATIONS_OPTIONS: &[Opt] = &[
 pub const COORDINATOR_BOARD_VIEW_OPTIONS: &[Opt] =
     &[opt("Side list", "list"), opt("Columns", "columns")];
 
+/// What a new coordinator starts on (`coordinatorModel`), in the Settings control's order
+/// (`coordinator_start_model` in gx-protocol).
+pub const COORDINATOR_MODEL_OPTIONS: &[Opt] =
+    &[opt("Opus 5.5", "opus"), opt("Agent default", "agent")];
+
+/// The effort a new coordinator starts on (`coordinatorEffort`), in the Settings control's order
+/// (`coordinator_start_effort` in gx-protocol).
+pub const COORDINATOR_EFFORT_OPTIONS: &[Opt] = &[
+    opt("Agent default", "agent"),
+    opt("Low", "low"),
+    opt("Medium", "medium"),
+    opt("High", "high"),
+    opt("XHigh", "xhigh"),
+];
+
 /// Message layout (`chatMessageLayout`), in the Settings control's order.
 pub const CHAT_MESSAGE_LAYOUT_OPTIONS: &[Opt] =
     &[opt("Default", "default"), opt("Left aligned", "left")];

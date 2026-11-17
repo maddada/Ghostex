@@ -958,6 +958,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         // The memory guard's switches, which the phone's Settings › Connection shows per computer
         // (memory_guard/mod.rs); it changes them with `updateSettingsPatch`.
         "/api/readMemoryGuard" => remote_allowed(path),
+        // The Coordinator model and effort settings, which the phone's Settings › Chat shows per
+        // computer (coordinators/create.rs); it changes them with `updateSettingsPatch`.
+        "/api/readCoordinatorStart" => remote_allowed(path),
         // A recorded or typed turn for a call the client opened (`voice_agent/clip.rs`): any client that may call.
         "/api/voiceAgentClip" | "/api/voiceAgentText" => remote_allowed(path),
         "/api/setVoiceAgentKey" => full_local(path),

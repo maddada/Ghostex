@@ -892,6 +892,33 @@ fn pin_remembered_agent_model(
         .clone()
         .or_else(|| default_agent_command(family).map(str::to_string))
         .unwrap_or_else(|| family.to_string());
+    // A coordinator on the Coordinator model setting's Agent default with a chosen effort starts on
+    // the remembered model at that effort (CDXC:Coordinators 2026-11-17 at `coordinator_start_model`
+    // in gx-protocol); without this the chosen effort would drop the remembered model too.
+    let coordinator_effort_only = requested_model.is_none()
+        && requested_effort.is_some()
+        && command.is_some()
+        && params.get("coordinator").is_some_and(Value::is_object)
+        && !command_names_model(&base, family);
+    if coordinator_effort_only {
+        let pinned = launch_default(family).and_then(|pin| {
+            with_agent_model_options(&base, family, Some(&pin.model), None)
+                .ok()
+                .map(|command| (command, pin.model))
+        });
+        if let Some((pinned_command, model)) = pinned {
+            let chosen = ModelPin {
+                model,
+                effort: requested_effort,
+                ..ModelPin::default()
+            };
+            runtime_settings.insert(
+                SESSION_PIN_KEY.to_string(),
+                session_marker(ORIGIN_SESSION, Some(&chosen)),
+            );
+            return Ok(Some(pinned_command));
+        }
+    }
     if requested_model.is_some() || requested_effort.is_some() || command_names_model(&base, family)
     {
         let requested = requested_model.map(|model| ModelPin {

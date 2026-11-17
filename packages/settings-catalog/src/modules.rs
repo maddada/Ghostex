@@ -522,6 +522,14 @@ pub fn exports(module: &str, platform: Platform) -> Vec<(&'static str, Json)> {
                 COORDINATOR_BOARD_VIEW_OPTIONS.to_json(),
             ),
             (
+                "COORDINATOR_MODEL_OPTIONS",
+                COORDINATOR_MODEL_OPTIONS.to_json(),
+            ),
+            (
+                "COORDINATOR_EFFORT_OPTIONS",
+                COORDINATOR_EFFORT_OPTIONS.to_json(),
+            ),
+            (
                 "CHAT_MESSAGE_LAYOUT_OPTIONS",
                 CHAT_MESSAGE_LAYOUT_OPTIONS.to_json(),
             ),

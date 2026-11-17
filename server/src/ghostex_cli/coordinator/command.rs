@@ -3,14 +3,16 @@ use ghostex_gx_chat_core::menus::orchestrator_effort::{
 };
 use ghostex_gx_chat_core::protocol::{
     coordinator_default_model_label, coordinator_launch_takes_effort,
-    coordinator_launch_takes_model, coordinator_model_label,
+    coordinator_launch_takes_model, coordinator_model_label, coordinator_start_effort,
+    coordinator_start_model, COORDINATOR_EFFORT_SETTING, COORDINATOR_MODEL_SETTING,
+    DEFAULT_COORDINATOR_EFFORT,
 };
 use serde_json::{json, Value};
 
 use super::{acknowledge_threads, board, item, playbook, sleep_threads, threads};
 use crate::coordinators::{
     coordinator_launcher_family as agent_family,
-    default_coordinator_launcher as default_coordinator_agent, DEFAULT_CLAUDE_COORDINATOR_MODEL,
+    default_coordinator_launcher as default_coordinator_agent,
 };
 use crate::ghostex_cli::{
     agents,
@@ -229,6 +231,9 @@ pub(crate) fn create_coordinator(parsed: &ParsedArgs) -> CliResult<Value> {
             task: task.clone(),
             model: flag_text(&parsed.flags, "model"),
             effort: flag_text(&parsed.flags, "effort"),
+            settings: &crate::session_chat_catch_up::read_settings(
+                &crate::paths::get_gxserver_paths(None),
+            ),
         });
     if let Some(folder) = &folder {
         create["projectPath"] = json!(folder);
@@ -379,7 +384,7 @@ fn make_main(parsed: &ParsedArgs) -> CliResult<()> {
 /// the efforts each model accepts.
 ///
 /// CDXC:Coordinators 2026-10-03 WHY:
-/// The phone's New Coordinator form reads its choices here instead of parsing the model catalog itself, so its lineup is the one gxserver serves and its defaults are the ones `create` applies (Opus 5.5 for Claude, High effort, the orchestrator levels only, and the locked skill line each agent's first message starts with).
+/// The phone's New Coordinator form reads its choices here instead of parsing the model catalog itself, so its lineup is the one gxserver serves and its defaults are the ones `create` applies (the Coordinator model and Coordinator effort settings, the orchestrator levels only, and the locked skill line each agent's first message starts with). Phones from before 2026-11-13 still show Model and Effort pickers and send what these defaults preselect, so the settings reach them through `defaultModel` and `defaultEffort`; with a setting on Agent default they preselect the lineup's own default model and its default effort.
 /// SEE-ALSO: apps/desktop/src/app/gx_store/create/coordinator.rs (the desktop dialog's lineup), apps/mobile/app/src/screens/sessions-screen/NewCoordinatorSheet.tsx (the phone's form).
 fn options(parsed: &ParsedArgs) -> CliResult<()> {
     let flags = server_flags(&parsed.flags);
@@ -387,8 +392,14 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
     let paths = crate::paths::get_gxserver_paths(None);
     crate::agent_model_catalog::adopt_cached_copy(&paths);
     let catalog = crate::agent_model_catalog::current();
-    let all_efforts =
-        crate::session_chat_catch_up::chat_setting_enabled(&paths, "orchestratorAllEfforts");
+    let settings = crate::session_chat_catch_up::read_settings(&paths);
+    let all_efforts = settings
+        .get("orchestratorAllEfforts")
+        .and_then(Value::as_bool)
+        == Some(true);
+    let setting = |key: &str| settings.get(key).and_then(Value::as_str);
+    let model_setting = setting(COORDINATOR_MODEL_SETTING);
+    let effort_setting = setting(COORDINATOR_EFFORT_SETTING);
     let effort_label = |effort: &str| {
         catalog
             .pointer(&format!("/effortLabels/{effort}"))
@@ -445,6 +456,21 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
                         .filter(|_| takes_effort)
                         .collect();
                     let offered = orchestrator_efforts(&levels, all_efforts, None);
+                    let is_offered = |effort: &&str| offered.iter().any(|level| level == effort);
+                    // Agent default: the model's own default effort. Agents Ghostex picks no
+                    // effort for keep the orchestrator default.
+                    let chosen: Option<&str> =
+                        if matches!(family, "claude" | "codex" | "antigravity") {
+                            let start: Option<&str> =
+                                coordinator_start_effort(family, effort_setting);
+                            start.or_else(|| model.get("defaultEffort").and_then(Value::as_str))
+                        } else {
+                            None
+                        };
+                    let default_effort = chosen
+                        .filter(is_offered)
+                        .map(str::to_string)
+                        .or_else(|| default_orchestrator_effort(&levels));
                     let efforts: Vec<Value> = offered
                         .iter()
                         .map(|effort| json!({ "value": effort, "label": effort_label(effort) }))
@@ -458,15 +484,14 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
                         ),
                         "default": model.get("default").and_then(Value::as_bool) == Some(true),
                         "efforts": efforts,
-                        "defaultEffort": default_orchestrator_effort(&levels),
+                        "defaultEffort": default_effort,
                     })
                 }))
                 .collect();
+            let start_model = coordinator_start_model(family, model_setting);
             let default_model = models
                 .iter()
-                .find(|model| {
-                    family == "claude" && model["value"] == DEFAULT_CLAUDE_COORDINATOR_MODEL
-                })
+                .find(|model| start_model.is_some_and(|start| model["value"] == start))
                 .or_else(|| models.iter().find(|model| model["default"] == true))
                 .or_else(|| models.first())
                 .map(|model| model["value"].clone())
@@ -488,8 +513,8 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
     let agents: Vec<Value> = agents.into_iter().map(|(_, agent)| agent).collect();
     let result = json!({
         "agents": agents,
-        // CDXC:Coordinators 2026-10-17 SEE-ALSO: packages/gx-chat-core/src/menus/orchestrator_effort.rs (the user's Low/Medium/High/XHigh decision, 2026-10-31); each model's own `defaultEffort` is High (or its highest level at or below High), and this is the level where the model has it.
-        "defaultEffort": "high",
+        // CDXC:Coordinators 2026-11-17 SEE-ALSO: `coordinator_start_effort` in packages/gx-protocol/src/coordinator.rs (the user's decision: Medium unless the Coordinator effort setting says otherwise); each model's own `defaultEffort` is that level where the model offers it.
+        "defaultEffort": coordinator_start_effort("claude", effort_setting).unwrap_or(DEFAULT_COORDINATOR_EFFORT),
     });
     if parsed.flags.truthy("json") {
         print_json(&result);

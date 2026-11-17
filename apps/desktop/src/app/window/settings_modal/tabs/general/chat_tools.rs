@@ -275,7 +275,31 @@ fn chat_section(
             cx,
         ));
     }
-    rows.extend(page.toggle(g, s, "orchestratorAllEfforts", "Every effort level in coordinator pickers", "Also lists the levels above XHigh (Max, Ultra and the like) in the coordinator effort pickers, where the agent has them. Coordinators work best on High or XHigh.", false, cx));
+    rows.extend(page.select(
+        g,
+        s,
+        "coordinatorModel",
+        "Coordinator model",
+        "The model a new coordinator starts on. Opus 5.5 works best on Claude; Agent default uses the agent's usual model. Change a running coordinator's model in its chat.",
+        g.options("COORDINATOR_MODEL_OPTIONS"),
+        None,
+        false,
+        window,
+        cx,
+    ));
+    rows.extend(page.select(
+        g,
+        s,
+        "coordinatorEffort",
+        "Coordinator effort",
+        "The effort a new coordinator starts on. Medium is plenty for most coordinators; Agent default uses the agent's usual effort. Change a running coordinator's effort in its chat.",
+        g.options("COORDINATOR_EFFORT_OPTIONS"),
+        None,
+        false,
+        window,
+        cx,
+    ));
+    rows.extend(page.toggle(g, s, "orchestratorAllEfforts", "Every effort level in coordinator pickers", "Also lists the levels above XHigh (Max, Ultra and the like) in the coordinator effort pickers, where the agent has them. Coordinators work best on Medium or higher.", false, cx));
     rows.extend(orchestrator_playbook_row(page, g, s, cx));
     rows.extend(read_aloud_rows(page, g, s, window, cx));
     // No heading, here or in the Advanced fold: it would repeat the page title (CDXC:Settings

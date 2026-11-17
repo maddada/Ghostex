@@ -1,5 +1,9 @@
 //! Creating a coordinator: `/api/createAgentSession` with a `coordinator` object.
 
+use ghostex_gx_chat_core::protocol::{
+    coordinator_start_effort, coordinator_start_model, COORDINATOR_AGENT_DEFAULT,
+    COORDINATOR_EFFORT_SETTING, COORDINATOR_MODEL_SETTING,
+};
 use rusqlite::Connection;
 use serde_json::{Map, Value};
 
@@ -84,9 +88,6 @@ pub fn register_created_coordinator(
     Ok(true)
 }
 
-/// CDXC:Coordinators 2026-10-01 SEE-ALSO: DEFAULT_CLAUDE_COORDINATOR_MODEL in apps/desktop/src/app/window/new_coordinator_modal.rs (the user's Opus 5.5 decision); a Claude coordinator created without a model uses the same, a Codex agent keeps its configured model.
-pub const DEFAULT_CLAUDE_COORDINATOR_MODEL: &str = "opus[1m]";
-
 fn row_text<'a>(row: &'a Value, key: &str) -> &'a str {
     row.get(key)
         .and_then(Value::as_str)
@@ -152,10 +153,13 @@ pub struct CoordinatorLaunch<'a> {
     pub task: String,
     pub model: Option<String>,
     pub effort: Option<String>,
+    /// The shared settings, for the Coordinator model and Coordinator effort a create without
+    /// `model`/`effort` starts on (`Value::Null` reads as their defaults).
+    pub settings: &'a Value,
 }
 
 /// The `/api/createAgentSession` params of a new coordinator, with the defaults `create` applies:
-/// Opus 5.5 for a Claude coordinator, and the orchestrator effort where its launch takes one.
+/// the Coordinator model and Coordinator effort settings (Opus 5.5 at Medium unless changed).
 pub fn coordinator_create_params(launch: CoordinatorLaunch<'_>) -> Value {
     let family = launch
         .agent_rows
@@ -176,20 +180,41 @@ pub fn coordinator_create_params(launch: CoordinatorLaunch<'_>) -> Value {
         "runtimeSettings": { "titleSource": title_source },
         "coordinator": { "goal": launch.goal, "firstRequest": launch.task },
     });
-    // CDXC:Coordinators 2026-10-17 SEE-ALSO: packages/gx-chat-core/src/menus/orchestrator_effort.rs (the user's Low/Medium/High/XHigh decision, 2026-10-31); without an effort an orchestrator starts on High where its launch takes an effort. ZCode takes no effort choice; its model rides agentModel and gxserver queues it as a `/model` line ahead of the first message.
+    // CDXC:Coordinators 2026-11-17 SEE-ALSO: `coordinator_start_model` in packages/gx-protocol/src/coordinator.rs (the user's decision: Opus 5.5 at Medium, or the agent's own default). ZCode takes no effort choice; its model rides agentModel and gxserver queues it as a `/model` line ahead of the first message.
+    let setting = |key: &str| launch.settings.get(key).and_then(Value::as_str);
     let effort = launch.effort.or_else(|| {
         family
-            .and_then(super::default_orchestrator_effort)
+            .and_then(|family| {
+                coordinator_start_effort(family, setting(COORDINATOR_EFFORT_SETTING))
+            })
             .map(str::to_string)
     });
     if let Some(effort) = effort {
         params["agentEffort"] = Value::String(effort);
     }
     let model = launch.model.or_else(|| {
-        (family == Some("claude")).then(|| DEFAULT_CLAUDE_COORDINATOR_MODEL.to_string())
+        family
+            .and_then(|family| coordinator_start_model(family, setting(COORDINATOR_MODEL_SETTING)))
+            .map(str::to_string)
     });
     if let Some(model) = model {
         params["agentModel"] = Value::String(model);
     }
     params
+}
+
+/// `/api/readCoordinatorStart`: the Coordinator model and Coordinator effort settings as Settings
+/// shows them (`opus`/`agent`; `agent`/`low`/`medium`/`high`/`xhigh`), for the phone's Settings ›
+/// Chat, which changes them through `updateSettingsPatch` like any settings write
+/// (apps/mobile/app/src/screens/settings/CoordinatorStartRows.tsx).
+pub(crate) fn read_start_endpoint_value(paths: &crate::paths::GxserverPaths) -> Value {
+    let settings = crate::shared_settings_file::read_shared_settings(paths).unwrap_or(Value::Null);
+    let setting = |key: &str| settings.get(key).and_then(Value::as_str);
+    let model = match coordinator_start_model("claude", setting(COORDINATOR_MODEL_SETTING)) {
+        Some(_) => "opus",
+        None => COORDINATOR_AGENT_DEFAULT,
+    };
+    let effort = coordinator_start_effort("claude", setting(COORDINATOR_EFFORT_SETTING))
+        .unwrap_or(COORDINATOR_AGENT_DEFAULT);
+    serde_json::json!({ "model": model, "effort": effort })
 }

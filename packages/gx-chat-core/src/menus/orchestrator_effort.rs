@@ -4,11 +4,9 @@
 //! CDXC:Coordinators 2026-10-17 DECISION:
 //! User: "raise the effort level to xhigh for the orchestrator by default please, and allow just high or xhigh (no low/max/ultracode here in this pop up or in the effort level selection inside the orchestrator chat composer please)." An orchestrator is offered High and XHigh and starts on XHigh; an agent without XHigh is offered its two highest levels below Max (Antigravity: Medium and High) and starts on the higher one. Supersedes the 2026-09-30 decision that started a coordinator at medium effort.
 //!
-//! CDXC:Coordinators 2026-10-29 DECISION:
-//! User: "allow picking medium here but default to high". An orchestrator is offered Medium, High and XHigh and starts on High; an agent without XHigh is offered its levels from Medium up to its highest below Max (Antigravity: Medium and High) and starts on High. Supersedes the 2026-10-17 rule above (High and XHigh, starting on XHigh), which stays as the record of that decision.
 //! CDXC:Coordinators 2026-10-31 DECISION:
-//! User: "please allow setting low as the orchestrator effort level". An orchestrator is offered Low as well: Low, Medium, High and XHigh, starting on High as before; an agent without XHigh is offered its levels from Low up to its highest below Max (Antigravity: Low, Medium and High). An agent or model without a Low level is offered from Medium up, as before. Supersedes the 2026-10-29 list above (it started at Medium).
-//! SEE-ALSO: apps/desktop/src/app/window/new_coordinator_modal.rs (the dialog), server/src/ghostex_cli/coordinator/command.rs (`ghostex orchestrator options` and `create`, which the phone's sheet uses), server/src/coordinators/role.rs (`default_orchestrator_effort`).
+//! User: "please allow setting low as the orchestrator effort level". An orchestrator is offered Low, Medium, High and XHigh; an agent without XHigh is offered its levels from Low up to its highest below Max (Antigravity: Low, Medium and High). An agent or model without a Low level is offered from Medium up. Supersedes the 2026-10-29 list (Medium, High and XHigh). The level a new coordinator starts on is the Coordinator effort setting since 2026-11-17 (`coordinator_start_effort` in gx-protocol).
+//! SEE-ALSO: apps/desktop/src/app/window/new_coordinator_modal.rs (the dialog), server/src/ghostex_cli/coordinator/command.rs (`ghostex orchestrator options` and `create`, which the phone's sheet uses), packages/gx-protocol/src/coordinator.rs (`coordinator_start_effort`, the level a new coordinator starts on).
 
 /// Levels above XHigh that an orchestrator is never offered.
 const BEYOND_ORCHESTRATOR: [&str; 3] = ["max", "ultra", "ultracode"];
@@ -61,8 +59,9 @@ pub fn orchestrator_efforts<T: AsRef<str>>(
         .collect()
 }
 
-/// The level an orchestrator starts on: High, or the agent's highest recommended level at or below
-/// High when it has no High (Medium, else its highest recommended level).
+/// The level a coordinator form preselects for a model that lacks the Coordinator effort setting's
+/// level: High, or the agent's highest recommended level at or below High when it has no High
+/// (Medium, else its highest recommended level).
 pub fn default_orchestrator_effort<T: AsRef<str>>(efforts: &[T]) -> Option<String> {
     let recommended = recommended_orchestrator_efforts(efforts);
     ["high", "medium"]

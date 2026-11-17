@@ -713,6 +713,9 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("markedHandovers", J::Str("coordinators")),
     // CDXC:Coordinators 2026-10-20 DECISION: User: "By default, we just show high and X high, but if he enables this, he can see all of the effort levels ... make the settings advanced." Off by default, so orchestrator effort pickers list only Low, Medium, High and XHigh since 2026-10-31 ("please allow setting low as the orchestrator effort level"; Medium joined on 2026-10-29 with "allow picking medium here but default to high"; `orchestrator_efforts` in packages/gx-chat-core/src/menus/orchestrator_effort.rs).
     ("orchestratorAllEfforts", J::Bool(false)),
+    // CDXC:Coordinators 2026-11-17 SEE-ALSO: the user's decision (Opus 5.5 at Medium, or the agent's own default) is at `coordinator_start_model` in packages/gx-protocol/src/coordinator.rs.
+    ("coordinatorModel", J::Str("opus")),
+    ("coordinatorEffort", J::Str("medium")),
     // CDXC:MarkedHandovers 2026-10-11 DECISION: User: coloured labels (style D) by default, their first pick of the three.
     ("markedHandoversStyle", J::Str("labels")),
     // CDXC:MarkedHandovers 2026-10-11 DECISION: User: "add a toggle for emojis in the colorful handover please. and set it to off by default."

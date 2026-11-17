@@ -628,6 +628,7 @@ fn a_coordinator_offered_low_gets_it_in_every_agents_launch_command() {
         task: String::new(),
         model: None,
         effort: Some("low".to_string()),
+        settings: &Value::Null,
     });
     assert_eq!(params["agentEffort"], "low");
     assert_eq!(
