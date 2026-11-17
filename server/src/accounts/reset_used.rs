@@ -56,8 +56,10 @@ impl Source {
 
 type SessionKey = (String, String);
 
-fn recent() -> &'static Mutex<BTreeMap<(Provider, Login), Instant>> {
-    static RECENT: OnceLock<Mutex<BTreeMap<(Provider, Login), Instant>>> = OnceLock::new();
+type Recent = BTreeMap<(Provider, Login), (Instant, Source)>;
+
+fn recent() -> &'static Mutex<Recent> {
+    static RECENT: OnceLock<Mutex<Recent>> = OnceLock::new();
     RECENT.get_or_init(Default::default)
 }
 
@@ -155,11 +157,10 @@ pub(crate) async fn answer(
     Ok(())
 }
 
-/// One session to continue, read under the accounts gate.
+/// One session to continue.
 struct Target {
     key: SessionKey,
     coordinator: bool,
-    working: bool,
 }
 
 /// BLOCKING. The running sessions of `provider` on `login` that wait on its limit (`clicked`
@@ -174,7 +175,6 @@ fn targets(
     let db = open_gxserver_database(&state.paths).map_err(store::error)?;
     let repo = DomainRepository::new(&db, &state.metadata.server_id);
     let registry = store::read(&db)?;
-    let now = chrono::Utc::now().to_rfc3339();
     let mut targets = Vec::new();
     for session in repo.list_sessions_excluding_stopped(None)? {
         let (Some(pid), Some(sid)) = (session["projectId"].as_str(), session["sessionId"].as_str())
@@ -209,17 +209,43 @@ fn targets(
         targets.push(Target {
             key,
             coordinator: crate::agents::session_is_coordinator(&runtime),
-            working: crate::presentation::presentation_activity(&session, &now) == "working",
         });
     }
     targets.sort_by_key(|target| !target.coordinator);
     Ok(targets)
 }
 
+/// BLOCKING. Whether the session, read now, still takes this Continue, and whether its turn is
+/// running: `None` when it is gone, already being continued (`retrying`), or, for a reading, the
+/// user stopped it or turned Continue automatically off since it was picked.
+fn still_due(state: &AppState, key: &SessionKey, source: Source) -> Option<bool> {
+    let db = open_gxserver_database(&state.paths).ok()?;
+    let repo = DomainRepository::new(&db, &state.metadata.server_id);
+    let session = repo.get_session(&key.0, &key.1).ok()??;
+    if session.pointer("/runtimeSettings/accountRecovery/status") == Some(&json!("retrying")) {
+        return None;
+    }
+    if source == Source::Reading && !super::recovery::recovery_retries(&repo, &session, true) {
+        return None;
+    }
+    let now = chrono::Utc::now().to_rfc3339();
+    Some(crate::presentation::presentation_activity(&session, &now) == "working")
+}
+
 /// Interrupts the session's turn when it is still running (a Codex asleep on the limit's
 /// Retry-After), then claims and sends its usage-limit Continue. False when nothing was claimed.
-async fn continue_one(state: Arc<AppState>, target: &Target) -> bool {
-    if target.working {
+async fn continue_one(state: Arc<AppState>, target: &Target, source: Source) -> bool {
+    // Checked before the interrupt: interrupting a session already being continued would cancel
+    // that Continue, and the claim below would then find it `retrying` and send none.
+    let working = {
+        let state = state.clone();
+        let key = target.key.clone();
+        tokio::task::spawn_blocking(move || still_due(&state, &key, source)).await
+    };
+    let Ok(Some(working)) = working else {
+        return false;
+    };
+    if working {
         let body = json!({ "params": {
             "projectId": target.key.0,
             "sessionId": target.key.1,
@@ -280,10 +306,16 @@ async fn continue_after_reset(
     if clicked.is_none() {
         let mut recent = recent().lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
-        recent.retain(|_, at| now.duration_since(*at) < SAME_RESET_WITHIN);
-        if recent.insert((provider, login.clone()), now).is_some() {
-            return 0;
+        recent.retain(|_, (at, _)| now.duration_since(*at) < SAME_RESET_WITHIN);
+        // A reading after any signal is the same reset; a Redeem yields only to an earlier Redeem,
+        // since a reading skips the sessions whose Continue automatically is off.
+        let key = (provider, login.clone());
+        if let Some((_, earlier)) = recent.get(&key) {
+            if source == Source::Reading || *earlier == Source::Redeem {
+                return 0;
+            }
         }
+        recent.insert(key, (now, source));
     }
     let found = {
         let state = state.clone();
@@ -323,7 +355,7 @@ async fn continue_after_reset(
     let mut rest = Vec::new();
     for target in targets {
         if target.coordinator {
-            if continue_one(state.clone(), &target).await {
+            if continue_one(state.clone(), &target, source).await {
                 continued += 1;
             }
         } else {
@@ -334,7 +366,7 @@ async fn continue_after_reset(
     for target in rest {
         let state = state.clone();
         tokio::spawn(async move {
-            continue_one(state, &target).await;
+            continue_one(state, &target, source).await;
         });
     }
     continued

@@ -28,9 +28,11 @@ pub(super) fn codex_base_url(home: &Path) -> Option<String> {
             return url.clone();
         }
     }
-    let url = modified
-        .and_then(|_| std::fs::read_to_string(&path).ok())
-        .and_then(|text| base_url_of(&text));
+    let url = match modified {
+        // A failed read is not cached, so the next probe reads the file again.
+        Some(_) => base_url_of(&std::fs::read_to_string(&path).ok()?),
+        None => None,
+    };
     cache.insert(path, (modified, url.clone()));
     url
 }

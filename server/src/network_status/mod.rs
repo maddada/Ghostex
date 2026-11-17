@@ -112,7 +112,9 @@ fn interest() -> &'static Mutex<HashMap<String, i64>> {
 
 /// Whether Ghostex should hold what it would type into `agent`'s session on its own: the computer
 /// is offline, or that agent's API host stopped answering. Never blocks; an agent asked about for
-/// the first time is probed from the next tick on, and reads as reachable until then.
+/// the first time is probed from the next tick on, and reads as reachable until then. Callers go
+/// through [`session_offline`]; this stays for the tests of the agent targets.
+#[cfg(test)]
 pub fn agent_offline(agent: Option<&str>) -> bool {
     target_offline(agent.and_then(agent_target))
 }
@@ -129,8 +131,9 @@ fn target_offline(target: Option<String>) -> bool {
     snapshot.offline_since.is_some() || target.is_some_and(|target| snapshot.down.contains(&target))
 }
 
-/// [`agent_offline`] for a session row's agent, probing the endpoint that session uses
-/// ([`session_target`]).
+/// Whether Ghostex should hold what it would type into this session on its own: the computer is
+/// offline, or the endpoint the session uses ([`session_target`]) stopped answering. Never blocks;
+/// a target asked about for the first time is probed from the next tick on.
 pub fn session_offline(session: &Value) -> bool {
     target_offline(session_target(session))
 }
@@ -147,14 +150,9 @@ pub fn wanted_targets(now: i64) -> BTreeSet<String> {
     targets
 }
 
-/// BLOCKING (a DNS lookup and a TCP connect, a few seconds at most). Whether `agent`'s API host
-/// answers right now, reusing an answer younger than `ttl` (the watch's included). For a caller
-/// that must know before it spends a try (account recovery's quick retries).
-pub fn agent_reachable_now(agent: &str, ttl: Duration) -> bool {
-    agent_target(agent).is_none_or(|target| reach_cached(&target, ttl))
-}
-
-/// BLOCKING. [`agent_reachable_now`] for a session row, at the endpoint it uses.
+/// BLOCKING (a DNS lookup and a TCP connect, a few seconds at most). Whether the endpoint this
+/// session uses answers right now, reusing an answer younger than `ttl` (the watch's included).
+/// For a caller that must know before it spends a try (account recovery's quick retries).
 pub fn session_reachable_now(session: &Value, ttl: Duration) -> bool {
     session_target(session).is_none_or(|target| reach_cached(&target, ttl))
 }

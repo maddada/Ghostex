@@ -110,12 +110,34 @@ fn command_home(session: &Value, provider: Provider) -> Option<PathBuf> {
         Provider::Codex => "CODEX_HOME=",
         Provider::Claude => "CLAUDE_CONFIG_DIR=",
     };
-    let value = session
+    let command = session
         .pointer("/runtimeSettings/agentCommand")
-        .and_then(Value::as_str)?
-        .split_whitespace()
-        .find_map(|word| word.strip_prefix(variable))?
-        .trim_matches(['\'', '"']);
+        .and_then(Value::as_str)?;
+    let start = command
+        .match_indices(variable)
+        .map(|(at, _)| at)
+        .find(|&at| {
+            command[..at]
+                .chars()
+                .next_back()
+                .is_none_or(char::is_whitespace)
+        })?;
+    let rest = &command[start + variable.len()..];
+    // A quoted value runs to its closing quote (`CODEX_HOME="/Users/a/Codex Work"`); anything
+    // that does not parse whole gives no folder rather than part of one.
+    let value = match rest.chars().next() {
+        Some(quote @ ('\'' | '"')) => {
+            let inner = &rest[1..];
+            &inner[..inner.find(quote)?]
+        }
+        _ => {
+            let word = rest.split(char::is_whitespace).next().unwrap_or_default();
+            if word.contains(['\'', '"', '\\']) {
+                return None;
+            }
+            word
+        }
+    };
     let path = match value.strip_prefix("~/") {
         Some(rest) => ghostex_paths::user_home_dir().join(rest),
         None => PathBuf::from(value),

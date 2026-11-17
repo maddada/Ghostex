@@ -1721,19 +1721,21 @@ pub(super) fn claim_after_reset(
     let claim = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     runtime.insert("accountRecoverySuppressed".into(), json!(false));
-    runtime.insert(
-        "accountRecovery".into(),
-        json!({
-            "status": "retrying",
-            "trigger": crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT,
-            "claim": claim,
-            "attempt": 0,
-            "reason": "The usage limit was reset.",
-            "previousAttemptAt": previous["lastAttemptAt"],
-            "lastAttemptAt": now,
-            "updatedAt": now,
-        }),
-    );
+    let mut recovery = json!({
+        "status": "retrying",
+        "trigger": crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT,
+        "claim": claim,
+        "attempt": 0,
+        "reason": "The usage limit was reset.",
+        "previousAttemptAt": previous["lastAttemptAt"],
+        "lastAttemptAt": now,
+        "updatedAt": now,
+    });
+    // The card's compaction choice carries over, so an unchecked box is not read as "unset".
+    if let Some(checked) = previous.get("compactFirst") {
+        recovery["compactFirst"] = checked.clone();
+    }
+    runtime.insert("accountRecovery".into(), recovery);
     let members = &["accountRecoverySuppressed", "accountRecovery"];
     endpoint::update_session_members(repo, session, &runtime, members)?;
     if let Some(row) = repo.get_session(pid, sid)? {
