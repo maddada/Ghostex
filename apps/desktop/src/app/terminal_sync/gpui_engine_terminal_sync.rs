@@ -458,10 +458,22 @@ impl GhostexGpuiApp {
         let settings =
             shared_settings::shared_sidebar_settings_snapshot().gpui_terminal_engine_settings();
         for slot_id in self.command_pane.rendered_terminal_body_mount_slots() {
-            if self
+            if let Some(view) = self
                 .command_gpui_engine_terminals
-                .contains_key(&slot_id.session_id)
+                .get(&slot_id.session_id)
+                .map(|record| record.view.clone())
             {
+                // CDXC:CommandPane 2026-11-18 WHY: an attach payload can land for a tab whose view
+                // already exists (it was hidden when the payload was made, or a viewer came back
+                // from its recipe first). Its typed input goes to that view now; left waiting, it
+                // was lost, or typed long after when the view was next recreated.
+                if let Some(input) = self
+                    .command_terminal_launch_payload_source
+                    .take_explicit_payload_for_mount_slot(slot_id)
+                    .and_then(|payload| payload.initial_input)
+                {
+                    view.update(cx, |view, cx| view.send_text_input(&input, cx));
+                }
                 continue;
             }
             let Some(payload) = self
