@@ -34,6 +34,13 @@ mod hotkey_label;
 mod shared_settings;
 #[path = "../support_logs.rs"]
 mod support_logs;
+// support_logs.rs's panic hook hands each panic to the crash window (crash_report/capture.rs);
+// this demo has no crash window, so the record goes nowhere.
+mod crash_report {
+    pub(crate) fn record_panic(_details: &serde_json::Value) {}
+    #[allow(dead_code)]
+    pub(crate) fn record_uncaught_exception(_name: &str, _reason: &str, _call_stack: &[String]) {}
+}
 #[path = "../terminal_element.rs"]
 mod terminal_element;
 #[path = "../terminal_environment.rs"]
