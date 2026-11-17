@@ -316,6 +316,9 @@ pub const HIDE_DISCONNECTED_MACHINES_SETTING_KEY: &str = "sidebarHideDisconnecte
 /// The setting behind Settings > Sidebar & Sessions > Advanced's Pinned order.
 pub const PINNED_SESSION_ORDER_SETTING_KEY: &str = "pinnedSessionOrder";
 
+/// The setting behind Settings > Sidebar's Session order, shown while the Unified sidebar is on.
+pub const UNIFIED_SESSION_ORDER_SETTING_KEY: &str = "unifiedSessionOrder";
+
 /// How pinned sessions are ordered, in the Project sidebar's Pinned and among the Unified
 /// sidebar's pinned cards.
 ///
@@ -326,6 +329,30 @@ pub enum PinnedSessionOrder {
     #[default]
     Manual,
     Recent,
+}
+
+/// How the Unified sidebar orders its cards (its list, Moving and Parked shelves, and the cards
+/// inside each project group); see `unified_sidebar::build` for the rule.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum UnifiedSessionOrder {
+    /// When each session last came back to you (`unified_sidebar::came_back_ms`).
+    #[default]
+    Recent,
+    /// By title, A to Z.
+    Alphabetical,
+    /// Newest session first, by when it was created.
+    Created,
+}
+
+impl UnifiedSessionOrder {
+    /// The saved value: `alphabetical` or `created`; anything else is Recent.
+    pub fn from_setting(value: Option<&str>) -> Self {
+        match value {
+            Some("alphabetical") => Self::Alphabetical,
+            Some("created") => Self::Created,
+            _ => Self::Recent,
+        }
+    }
 }
 
 impl PinnedSessionOrder {
@@ -386,6 +413,8 @@ pub struct SidebarSettings {
     /// The Unified sidebar folds working sessions into its Working shelf
     /// (`unifiedWorkingSection`, on by default).
     pub unified_working_section: bool,
+    /// The Unified sidebar's Session order (`unifiedSessionOrder`, Recent by default).
+    pub unified_session_order: UnifiedSessionOrder,
     /// The Unified sidebar's own hover strip (`unifiedSessionCardHoverButtons`); `session_card_hover_buttons`
     /// stays the Project sidebar's.
     pub unified_card_hover_buttons: Value,
@@ -446,6 +475,7 @@ impl Default for SidebarSettings {
             session_notes_enabled: false,
             unified_sidebar: false,
             unified_working_section: true,
+            unified_session_order: UnifiedSessionOrder::Recent,
             unified_card_hover_buttons: Value::Null,
             unified_group_by_project: false,
             unified_project_order: Vec::new(),
@@ -523,6 +553,11 @@ impl SidebarSettings {
             unified_working_section: boolean(
                 "unifiedWorkingSection",
                 defaults.unified_working_section,
+            ),
+            unified_session_order: UnifiedSessionOrder::from_setting(
+                settings
+                    .get(UNIFIED_SESSION_ORDER_SETTING_KEY)
+                    .and_then(Value::as_str),
             ),
             unified_card_hover_buttons: settings
                 .get("unifiedSessionCardHoverButtons")

@@ -734,7 +734,13 @@ pull request and agent. Under a project header the project line is left out, so
 every card there is two lines. A project is named after its repository there, so the same
 repository on this computer and a remote one is one project. Sessions are
 ordered by when they last came back to you (started, sent a message, or a
-finished turn), never by output while an agent works; pinned sessions come
+finished turn), never by output while an agent works. For a list that stays
+put, pick Alphabetical (by title) or Created (newest first) in Session order
+(`unifiedSessionOrder`, in Settings under the Sidebar switch and in Sort &
+Filter, the phone follows it): then a session keeps its place when you send it
+a message or it finishes, and moves only when it is renamed; the Moving and
+Parked shelves and the cards inside each project group follow the same order,
+and turning off the Moving section keeps working sessions in place too. Pinned sessions come
 first, in the order you give them (drag a pinned card above or below another
 pinned card of the same list or project group; the Project sidebar's Pinned
 keeps the same order; see Pinned order below), and above them a Drafts section holds every session nobody has sent a
@@ -5780,7 +5786,7 @@ sessions, so any client can control agents on any machine.
   Merge copies of the same repository, Worktree sessions show in their
   project, the Spaces switch, Show Main Hub on all Spaces, Hide projects
   without sessions, Group working sessions, session parking, Pinned order, the
-  Unified sidebar's Moving section, Group by project and project order, and
+  Unified sidebar's Moving section, Session order, Group by project and project order, and
   your Session Tags (the tags you made and the tag list's order). A change
   shows on your other computers within a minute, without a restart. A project
   one computer doesn't have keeps its place and shows there once you add it.

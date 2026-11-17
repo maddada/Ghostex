@@ -6,7 +6,8 @@
 use crate::app_lifecycle::APP_LIFECYCLE_ACTIONS;
 use crate::sidebar_actions::{
     GROUP_WORKING_SESSIONS_ACTION, HIDE_PROJECTS_WITHOUT_SESSIONS_ACTION,
-    PINNED_ORDER_MANUAL_ACTION, PINNED_ORDER_RECENT_ACTION, SWITCH_SIDEBAR_VIEW_ACTION,
+    PINNED_ORDER_MANUAL_ACTION, PINNED_ORDER_RECENT_ACTION, SESSION_ORDER_ALPHABETICAL_ACTION,
+    SESSION_ORDER_CREATED_ACTION, SESSION_ORDER_RECENT_ACTION, SWITCH_SIDEBAR_VIEW_ACTION,
     UNIFIED_GROUP_BY_PROJECT_ACTION, UNIFIED_WORKING_SECTION_ACTION,
 };
 use crate::sidebar_view::tags::{
@@ -126,6 +127,33 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
             intent("Moving Section", "stack", UNIFIED_WORKING_SECTION_ACTION)
                 .with_checked(input.settings.unified_working_section),
         );
+        // Session order, three ticked choices like Pinned order (CDXC:Sidebar 2026-11-17 in
+        // unified_sidebar/build.rs `unified_session_cmp`).
+        let order = input.settings.unified_session_order;
+        sort.push(MenuItem::separator());
+        sort.push(MenuItem::heading("Session order"));
+        for (label, icon, action, value) in [
+            (
+                "Recent activity",
+                "clock",
+                SESSION_ORDER_RECENT_ACTION,
+                crate::sidebar_view::UnifiedSessionOrder::Recent,
+            ),
+            (
+                "Alphabetical",
+                "letter-case",
+                SESSION_ORDER_ALPHABETICAL_ACTION,
+                crate::sidebar_view::UnifiedSessionOrder::Alphabetical,
+            ),
+            (
+                "Created",
+                "plus",
+                SESSION_ORDER_CREATED_ACTION,
+                crate::sidebar_view::UnifiedSessionOrder::Created,
+            ),
+        ] {
+            sort.push(intent(label, icon, action).with_checked(order == value));
+        }
         pinned_order(&mut sort);
     } else {
         // The Settings > Sidebar switch writes the same setting (CDXC:Sidebar 2026-10-05 in
@@ -446,6 +474,10 @@ mod tests {
                 "Show Hidden",
                 "Group by Project",
                 "Moving Section",
+                "Session order",
+                "Recent activity",
+                "Alphabetical",
+                "Created",
                 "Pinned order",
                 "Manual (drag to rearrange)",
                 "Most recently updated"

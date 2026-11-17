@@ -36,6 +36,9 @@ pub struct UnifiedSettings {
     /// `pinnedSessionOrder`: pinned cards in the dragged order, or by when they came back
     /// (CDXC:Sidebar 2026-11-07 DECISION in sidebar_view/inputs.rs).
     pub pinned_session_order: crate::sidebar_view::PinnedSessionOrder,
+    /// `unifiedSessionOrder`: how the list, Moving and Parked shelves order their cards
+    /// ([`unified_session_cmp`]).
+    pub session_order: crate::sidebar_view::UnifiedSessionOrder,
 }
 
 /// What the header's filter keeps. An empty set keeps everything of its kind; the kinds narrow
@@ -873,13 +876,17 @@ pub fn build_unified_sidebar_folded(
         }),
         crate::sidebar_view::PinnedSessionOrder::Recent => view.pinned.sort_by(by_came_back),
     }
-    view.active.sort_by(by_came_back);
+    let order = settings.session_order;
+    view.active
+        .sort_by(|left, right| unified_session_cmp(order, left, right, by_came_back));
     // The Working shelf lists the session you last sent work to first.
     view.working.sort_by(|left, right| {
-        let started = |row: &UnifiedRow| row.session.row.timing.working_started_ms.unwrap_or(0);
-        started(right)
-            .cmp(&started(left))
-            .then_with(|| tie_break(left, right))
+        unified_session_cmp(order, left, right, |left, right| {
+            let started = |row: &UnifiedRow| row.session.row.timing.working_started_ms.unwrap_or(0);
+            started(right)
+                .cmp(&started(left))
+                .then_with(|| tie_break(left, right))
+        })
     });
     // The soonest to wake first.
     view.snoozed.sort_by(|left, right| {
@@ -891,12 +898,49 @@ pub fn build_unified_sidebar_folded(
     // Parked rows read latest active first, as everywhere else (CDXC:Sessions 2026-09-12 in
     // sidebar_view/ordering.rs).
     view.parked.sort_by(|left, right| {
-        let active = |row: &UnifiedRow| row.session.row.timing.last_interaction_ms.unwrap_or(0);
-        active(right)
-            .cmp(&active(left))
-            .then_with(|| tie_break(left, right))
+        unified_session_cmp(order, left, right, |left, right| {
+            let active = |row: &UnifiedRow| row.session.row.timing.last_interaction_ms.unwrap_or(0);
+            active(right)
+                .cmp(&active(left))
+                .then_with(|| tie_break(left, right))
+        })
     });
     view
+}
+
+/// How two cards of the list, the Moving shelf or the Parked shelf compare: by the shelf's own
+/// clock (`recent`) under Recent, else by the picked order.
+///
+/// CDXC:Sidebar 2026-11-17 DECISION:
+/// Sebastian: the Unified sidebar keeps moving sessions around because it sorts by last updated, and he hates it. Settings › Sidebar gets Session order (`unifiedSessionOrder`): Recent activity, the default and Q790's order (`came_back_ms`), Alphabetical (the title A to Z, then the project, then the id) and Created (newest first). It orders the list, the Moving and Parked shelves and the cards inside each project group; Pinned keeps Pinned order, Drafts stay newest first and Snoozed soonest to wake. Under Alphabetical and Created a card never moves on a send, a turn that ends, asks or fails, or a thread that needs you (the coordinator lift only raises `came_back_ms`, which they ignore); a rename may move it once. The Moving section stays its own switch and still moves working cards to its shelf and back.
+pub fn unified_session_cmp(
+    order: crate::sidebar_view::UnifiedSessionOrder,
+    left: &UnifiedRow,
+    right: &UnifiedRow,
+    recent: impl Fn(&UnifiedRow, &UnifiedRow) -> std::cmp::Ordering,
+) -> std::cmp::Ordering {
+    use crate::sidebar_view::UnifiedSessionOrder;
+    match order {
+        UnifiedSessionOrder::Recent => recent(left, right),
+        UnifiedSessionOrder::Alphabetical => {
+            let title = |row: &UnifiedRow| row.session.row.display_title.to_lowercase();
+            title(left)
+                .cmp(&title(right))
+                .then_with(|| {
+                    left.repo
+                        .label
+                        .to_lowercase()
+                        .cmp(&right.repo.label.to_lowercase())
+                })
+                .then_with(|| tie_break(left, right))
+        }
+        UnifiedSessionOrder::Created => {
+            let created = |row: &UnifiedRow| row.session.row.timing.created_ms.unwrap_or(0);
+            created(right)
+                .cmp(&created(left))
+                .then_with(|| tie_break(left, right))
+        }
+    }
 }
 
 /// `owner/repo` for a repository with a remote, `no remote` for a folder.
