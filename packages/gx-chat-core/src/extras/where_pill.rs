@@ -6,8 +6,9 @@
 //! server/src/session_where.rs); the computer's name comes from the host
 //! ([`crate::Event::ComputerChanged`]), since that machine calls itself "This computer". This
 //! module reads once when the chat starts, again every [`POLL_MS`] while the chat is on screen,
-//! and words the pill, the card's rows and its actions into the `wherePill` document key. A draft
-//! has none: its worktree tray above the box says where it will run.
+//! and words the pill, the card (the project and computer as its header, then a row per other
+//! fact) and its actions into the `wherePill` document key. A draft has none: its worktree tray
+//! above the box says where it will run.
 //!
 //! CDXC:SessionChat 2026-11-17 DECISION:
 //! User, from the where pill mockups: Q3781 H, the two-part pill ("I love the popup you show on hover in A", so hovering it shows A's card); Q3782 the pill always shows the project, the machine and the branch; Q3783 the card and the details show the project, machine, Cloud Box, branch, worktree, pull request, counts, folder, agent and terminal; Q3784 a click opens the details with actions (Copy branch and Open folder, no Move to another computer); Q3785 it sits at the left end of the pill strip. The phone is not part of this yet.
@@ -230,24 +231,8 @@ pub fn document(state: &ChatState) -> Value {
     let branch = git.and_then(|git| text(git, "/branch"));
     let worktree = data.get("worktree").filter(|worktree| worktree.is_object());
 
-    let mut rows = vec![
-        row("project", "folder", "Project", project.clone(), None),
-        row(
-            "machine",
-            match machine["kind"].as_str() {
-                Some("cloudBox") => "cloud",
-                Some("remote") => "server",
-                Some("box") => "box",
-                _ => "device-desktop",
-            },
-            "Computer",
-            machine_name.clone(),
-            machine["offline"]
-                .as_bool()
-                .filter(|offline| *offline)
-                .map(|_| "Offline".to_string()),
-        ),
-    ];
+    // The card's header names the project and the computer, so no row repeats them.
+    let mut rows = Vec::new();
     if machine["kind"] == "cloudBox" {
         rows.push(row(
             "cloud",
@@ -382,7 +367,11 @@ pub fn document(state: &ChatState) -> Value {
         "ariaLabel": aria,
         "card": {
             "title": project,
-            "subtitle": machine_name,
+            "subtitle": if machine["offline"] == Value::Bool(true) {
+                format!("{machine_name} \u{b7} offline")
+            } else {
+                machine_name.clone()
+            },
             "rows": rows,
         },
         "actions": actions,

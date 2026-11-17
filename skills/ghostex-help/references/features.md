@@ -2037,6 +2037,17 @@ Side chats work with every agent Ghostex can fork (Claude Code, Codex, Pi,
 Empryo, Copilot and Grok Build). From the CLI: `ghostex side-chat start
 "<question>" --session <session>`, `ghostex side-chat list`, `ghostex side-chat
 bring-back --session <side chat>` and `ghostex side-chat delete --session <side chat>`.
+On the desktop, the left end of that strip shows where a running chat's session
+runs: one pill with the computer's icon, the project and the computer (This
+computer, the other computer's name, or Cloud Box) on its left and the branch on
+its right (a fork icon in a worktree). Hover it for the details: the Cloud Box,
+the worktree, the branch with its lines changed, uncommitted files, commits ahead
+and behind, the pull request, the folder, the agent and its account, and the
+terminal backend (zmx, tmux or zellij). Click it for the same details with
+**Copy branch** and **Open folder**. When the strip is crowded, the other pills
+drop their labels first, then this pill drops the computer's name and then the
+project. A new chat shows its worktree tray instead, and the phone does not show
+this pill yet.
 Claude panels such as `/status` and `/usage` show as clickable tabs, tables and
 usage meters instead of terminal text.
 Claude Code's permission mode (Bypass permissions, Auto, Manual, Accept edits or
