@@ -263,12 +263,12 @@ fn accounts_rpc(state: &str, params: &Value) -> Answer {
         data["helperTools"] = json!([
             {
                 "provider": "claude", "installed": false, "actions": ["install"],
-                "installPlan": "Downloads Ghostex's build of Claude Swap from GitHub, checks its checksum and installs it with uv. No password needed.",
+                "installPlan": "Downloads Claude Swap from GitHub, checks that it arrived intact and sets it up for you. No password needed.",
                 "job": null,
             },
             {
                 "provider": "codex", "installed": false, "actions": ["install"],
-                "installPlan": "Runs codex-swap's official installer. No password needed.",
+                "installPlan": "Downloads Codex Swap from GitHub, checks that it arrived intact and sets it up for you. No password needed.",
                 "job": {
                     "action": "install", "status": "failed",
                     "error": "curl: (28) Failed to connect to github.com port 443: Operation timed out",

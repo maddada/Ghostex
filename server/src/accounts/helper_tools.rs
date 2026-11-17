@@ -283,20 +283,23 @@ fn windows_installer(xswap: &Path) -> InstallMethod {
 }
 
 /// How Install sets up the helper on this computer: tooltip text, and why it cannot when so.
+///
+/// CDXC:AgentProviders 2026-11-17 DECISION:
+/// User, of Install's description showing "1.0.0.post1+ghostex", uv and `curl -fsSL … | sh`: plain words for non-technical users, "no version strings or shell commands in the main UI", then the shared Install button's tooltip "plain words too (no versions, uv or curl)". The plan says where it comes from, that it's checked and that no password is needed; the commands stay in the job's output (Copy details).
 fn install_plan(home: &Path, provider: Provider) -> (String, Option<String>) {
     match provider {
         Provider::Claude if claude_swap_build::pinned().is_some() => (
-            format!("Downloads Ghostex's build of Claude Swap ({}: claude-swap 1.0.0 plus two fixes waiting upstream) from GitHub, checks its checksum and installs it with uv, which Ghostex installs first when needed. No password needed.", claude_swap_build::pinned().unwrap_or_default()),
+            "Downloads Claude Swap from GitHub, checks that it arrived intact and sets it up for you. No password needed.".to_string(),
             managed_tools::platform::arch()
                 .is_none()
                 .then(managed_tools::platform::unsupported_cpu_reason),
         ),
         Provider::Claude => {
             if helpers::executable(home, "uv").is_some() {
-                ("Runs uv tool install claude-swap; uv downloads the Python it needs. No password needed.".into(), None)
+                ("Downloads Claude Swap and sets it up for you. No password needed.".into(), None)
             } else {
                 (
-                    "Ghostex first downloads uv from Astral into its tools folder, then runs uv tool install claude-swap; uv downloads the Python it needs. No password needed.".into(),
+                    "Downloads Claude Swap and what it needs to run, and sets it up for you. No password needed.".into(),
                     managed_tools::platform::arch()
                         .is_none()
                         .then(managed_tools::platform::unsupported_cpu_reason),
@@ -304,16 +307,16 @@ fn install_plan(home: &Path, provider: Provider) -> (String, Option<String>) {
             }
         }
         Provider::Codex if cfg!(windows) => (
-            format!("Runs codex-swap's official Windows installer (irm {CODEX_SWAP_INSTALL_PS1} | iex), which puts xswap in your user folder and on your PATH. No password needed."),
+            "Downloads Codex Swap from GitHub and sets it up in your user folder. No password needed.".to_string(),
             None,
         ),
         Provider::Codex => {
-            let plan = format!("Runs codex-swap's official installer (curl -fsSL {CODEX_SWAP_INSTALL_SH} | sh), which downloads the build for this computer, checks its checksum and puts xswap in ~/.local/bin. No password needed.");
+            let plan = "Downloads Codex Swap from GitHub, checks that it arrived intact and sets it up for you. No password needed.".to_string();
             let missing = managed_tools::system_tools::missing(home, &["curl", "ca-certificates"]);
             if missing.is_empty() || managed_tools::system_tools::can_install_in_background() {
                 (plan, None)
             } else {
-                (plan, Some("This installer needs curl and certificates. Use Install system tools in Settings > Integrations > Tools, then try again.".into()))
+                (plan, Some("Codex Swap's installer needs two system tools this computer doesn't have yet. Add them with Install system tools in Settings > Integrations > Tools, then try again.".into()))
             }
         }
     }
