@@ -785,7 +785,15 @@ pub(crate) async fn autopilot_answer_recommended(
         threads: None,
         computer: None,
     };
-    let asked = collect_async(state, &session).await;
+    // A page that asks nothing but waits to be marked seen (`awaitsSeen`, visual_pages/publish.rs)
+    // counts in the session's open questions, yet has no question to answer: Autopilot tried to
+    // answer two such pages every sweep for ten hours ("Say which questions to answer by ref. Open
+    // questions: ."). Only forms and pages with questions are Autopilot's to answer.
+    let asked: Vec<Asked> = collect_async(state, &session)
+        .await
+        .into_iter()
+        .filter(|asked| !asked.questions.is_empty())
+        .collect();
     if asked.is_empty() {
         return Ok(AutopilotForms::None);
     }

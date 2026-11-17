@@ -119,8 +119,14 @@ pub struct AutopilotConfig {
     /// The user set "Answer approval cards" themselves; until then it is on.
     ///
     /// CDXC:Autopilot 2026-11-13 DECISION:
-    /// User: "Make this enabled by default when Autopilot is enabled" for "Answer approval cards", which the 2026-11-07 decision had off by default; anyone who set the switch keeps their choice. A file written before this marker existed always held `answerApprovals: false`, whether or not the user touched it, so its `false` reads as never set (only `true` there was surely a choice). The hard limits keep their own switches, all off, and a read-only thread's cards are never approved (server/src/server/autopilot_answers.rs).
+    /// User: "Make this enabled by default when Autopilot is enabled" for "Answer approval cards", which the 2026-11-07 decision had off by default; anyone who set the switch keeps their choice. A file written before this marker existed always held `answerApprovals: false`, whether or not the user touched it, so its `false` reads as never set (only `true` there was surely a choice). The hard limits keep their own switches, all off, and a read-only thread's cards follow [`AutopilotConfig::read_only_leave_plan`].
     pub answer_approvals_set: bool,
+    /// "Let read-only threads leave plan mode": a read-only thread's plan exit, edits and commands
+    /// are judged like any other thread's instead of keeping it in plan mode. Off by default.
+    ///
+    /// CDXC:Autopilot 2026-11-18 DECISION:
+    /// User: read-only threads must not get stuck on an approval ("agent is getting stuck on this which i dont want to happen", "we need to fix this"), and "yes do this but add a toggle for it in settings that ppl can toggle on if they want". Off (the default), Autopilot never takes a read-only thread out of read-only and never leaves it waiting either: it approves what only reads, answers a plan exit with "No, keep planning" and a note, and declines edits and commands (server/src/server/autopilot_answers.rs). On, it approves the plan exit with the Yes that fits the tier, and the thread's later cards are judged like any thread's.
+    pub read_only_leave_plan: bool,
     pub supervisor: SupervisorModel,
     pub sweep_seconds: u64,
     /// By project id; a worktree follows its main project.
@@ -141,6 +147,7 @@ impl Default for AutopilotConfig {
             answer_after_minutes: 10,
             answer_approvals: true,
             answer_approvals_set: false,
+            read_only_leave_plan: false,
             supervisor: SupervisorModel::OpusMedium,
             sweep_seconds: SWEEP_DEFAULT_SECS,
             projects: BTreeMap::new(),

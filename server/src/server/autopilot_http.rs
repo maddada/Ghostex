@@ -4,7 +4,8 @@
 //! - `op: "read"` (default): the choices, the projects and the sessions set one by one, the
 //!   summary since the switch went on, and the newest log lines (`limit`, 200 by default).
 //! - `op: "set"`: `patch` holds the choices to change (`enabled`, `scope`, `tier`, `limits`,
-//!   `answerQuestions`, `answerAfterMinutes`, `answerApprovals`, `supervisor`, `sweepSeconds`).
+//!   `answerQuestions`, `answerAfterMinutes`, `answerApprovals`, `readOnlyLeavePlan`, `supervisor`,
+//!   `sweepSeconds`).
 //! - `op: "setProject"`: `projectId` and `on`; a worktree's main project is changed instead.
 //! - `op: "setSession"`: `projectId`, `sessionId` and `on` (`toggle: true` flips it).
 //! - `op: "decide"`: the supervisor's decision for one session (`ghostex autopilot decide`):
@@ -175,6 +176,9 @@ fn autopilot_widening(before: &AutopilotConfig, after: &AutopilotConfig) -> Opti
     }
     if after.tier != before.tier {
         changes.push(format!("Autopilot's level set to {:?}", after.tier));
+    }
+    if after.read_only_leave_plan && !before.read_only_leave_plan {
+        changes.push("Autopilot may take read-only threads out of plan mode".to_string());
     }
     let limits = |config: &AutopilotConfig| {
         serde_json::to_value(&config.limits)

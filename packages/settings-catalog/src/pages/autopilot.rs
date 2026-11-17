@@ -27,7 +27,8 @@ fn allowed() -> Section {
         "What it does",
         vec![
             row("autopilotAnswerQuestions", "When it asks a question", "Wait for me, or after 5, 10 or 15 minutes without your answer pick each question's recommended choice (a question with none goes to the supervisor)."),
-            row("autopilotApprovals", "When it asks permission", "Permission prompts, Connectors cards and folder trust: Wait for me, Safe steps (after a minute, approve reads, builds, tests, edits and local commits inside the project; anything else waits for you) or All but limits (after a minute, approve anything that is not a hard limit). A read-only thread's cards always wait for you."),
+            row("autopilotApprovals", "When it asks permission", "Permission prompts, Connectors cards and folder trust: Wait for me, Safe steps (after a minute, approve reads, builds, tests, edits and local commits inside the project; anything else waits for you) or All but limits (after a minute, approve anything that is not a hard limit). A read-only thread stays in plan mode: its reads are approved, a request to stop planning gets \"No, keep planning\", and its edits and commands are declined."),
+            row("autopilotReadOnlyLeavePlan", "Let read-only threads leave plan mode", "Off by default. When on, Autopilot approves a read-only helper's request to stop planning and start changing files, instead of keeping it in plan mode, and then judges its edits and commands like any other session's. Shows while Autopilot answers permission prompts."),
             row("autopilotHardLimits", "Hard limits it may cross", "With All but limits only. Each off until you turn it on: push a branch, finish a release you asked for, push main, merge pull requests, delete outside the project, post publicly. Sign-ins, 2FA, identity checks and payments are never done."),
         ],
     )

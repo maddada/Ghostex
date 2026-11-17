@@ -209,11 +209,13 @@ enum Act {
         params: Value,
         did: String,
     },
-    /// Decline its prompt, then tell the agent to carry on without it.
+    /// Decline its prompt, then tell the agent to carry on without it. `did` is logged instead of
+    /// "left for you" when nothing is left for the user (a read-only thread's step).
     Decline {
         params: Value,
         message: String,
         note: String,
+        did: Option<String>,
     },
     /// Leave its prompt for the user with a note.
     Leave {
@@ -347,7 +349,6 @@ fn tick(state: &AppState, memory: &Mutex<Memory>) -> Vec<Plan> {
             text_field(session, "projectId"),
             text_field(session, "sessionId"),
         );
-        autopilot::note_read_only_thread(&key.0, &key.1, session);
         let Some(project) = projects.get(&key.0) else {
             continue;
         };
@@ -614,10 +615,12 @@ fn decide(
                 params,
                 message,
                 note,
+                did,
             } => Act::Decline {
                 params,
                 message,
                 note,
+                did,
             },
             PromptAct::Leave { note } => Act::Leave { note },
             PromptAct::Forms => Act::Forms,
@@ -906,21 +909,23 @@ async fn execute(state: Arc<AppState>, memory: Arc<Mutex<Memory>>, plan: Plan) {
             params,
             message,
             note,
+            did,
         } => {
             let declined = match answer(&state, &key, params).await {
-                Ok(()) => send(&state, &key, message, false)
-                    .await
-                    .map_err(|error| error_text(&error)),
+                Ok(()) => send_after_prompt_closes(&state, &key, message).await,
                 Err(error) => Err(error),
             };
             match declined {
                 Ok(()) => {
-                    log(
-                        &state,
-                        &plan,
-                        &format!("Declined it and told the agent to carry on without it. Left for you: {note}"),
-                        Outcome::Parked,
-                    );
+                    match did {
+                        Some(did) => log(&state, &plan, did, Outcome::Done),
+                        None => log(
+                            &state,
+                            &plan,
+                            &format!("Declined it and told the agent to carry on without it. Left for you: {note}"),
+                            Outcome::Parked,
+                        ),
+                    }
                     mark_prompt_done(&memory, &key);
                 }
                 Err(error) => log(
@@ -985,7 +990,12 @@ async fn execute(state: Arc<AppState>, memory: Arc<Mutex<Memory>>, plan: Plan) {
                     finish(&memory, &key, None, now, |_| {});
                     return;
                 }
-                Err(error) => Err(error),
+                // Logged once: the same forms are not tried again until the session moves on
+                // (232 identical failures in a night, every sweep, before this).
+                Err(error) => {
+                    mark_prompt_done(&memory, &key);
+                    Err(error)
+                }
             }
         }
     };
@@ -1250,6 +1260,30 @@ async fn send(
         .await
         .unwrap_or_default();
     Err(String::from_utf8_lossy(&bytes).to_string())
+}
+
+/// Sends the note that follows a decline. The agent redraws a moment after the Escape or the row
+/// that declined, and a send that still sees the prompt on screen is refused ("Ready to code?.
+/// Answer it in chat before sending."), so it is tried again for a few seconds while the screen
+/// catches up.
+async fn send_after_prompt_closes(
+    state: &AppState,
+    key: &SessionKey,
+    text: &str,
+) -> std::result::Result<(), String> {
+    let mut tries = 0;
+    loop {
+        match send(state, key, text, false)
+            .await
+            .map_err(|error| error_text(&error))
+        {
+            Err(error) if tries < 8 && error.ends_with("Answer it in chat before sending.") => {
+                tries += 1;
+                tokio::time::sleep(std::time::Duration::from_millis(750)).await;
+            }
+            result => return result,
+        }
+    }
 }
 
 /// Types `text` into the session's terminal as it is (`/api/sendSessionText`).

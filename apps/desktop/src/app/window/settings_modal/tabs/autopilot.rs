@@ -375,8 +375,8 @@ impl AutopilotTab {
             p,
             "autopilotApprovals",
             RowSpec::new("When it asks permission").description(match permission {
-                "safe" => "Permission prompts, Connectors cards and folder trust. After a minute without your answer, it approves reads, builds, tests, edits and local commits inside the project; anything else waits for you, and hard limits are declined. A read-only thread's cards always wait for you.",
-                "all" => "Permission prompts, Connectors cards and folder trust. After a minute without your answer, it approves anything that is not a hard limit below and declines the rest. A read-only thread's cards always wait for you.",
+                "safe" => "Permission prompts, Connectors cards and folder trust. After a minute without your answer, it approves reads, builds, tests, edits and local commits inside the project; anything else waits for you, and hard limits are declined. A read-only thread stays in plan mode: its reads are approved, the rest declined.",
+                "all" => "Permission prompts, Connectors cards and folder trust. After a minute without your answer, it approves anything that is not a hard limit below and declines the rest. A read-only thread stays in plan mode: its reads are approved, the rest declined.",
                 _ => "Permission prompts, Connectors cards and folder trust wait for you.",
             }),
             None,
@@ -390,6 +390,23 @@ impl AutopilotTab {
             |page: &mut Self, value, _, cx| page.set(permission_patch(&value), cx),
             cx,
         ));
+        // Hidden while permission prompts wait for the user (CDXC:Autopilot 2026-11-18 in
+        // server/src/autopilot/config.rs, `read_only_leave_plan`).
+        if permission != "wait" {
+            rows.push(toggle_field_with(
+                p,
+                "autopilotReadOnlyLeavePlan",
+                RowSpec::new("Let read-only threads leave plan mode")
+                    .description("Autopilot approves a read-only helper's request to stop planning and start changing files, instead of keeping it in plan mode. Its edits and commands are then judged like any other session's.")
+                    .dependent(),
+                config["readOnlyLeavePlan"].as_bool() == Some(true),
+                None,
+                |page: &mut Self, checked, _, cx| {
+                    page.set(json!({ "readOnlyLeavePlan": checked }), cx)
+                },
+                cx,
+            ));
+        }
         settings_section(p, "What it does", None, None, rows)
     }
 

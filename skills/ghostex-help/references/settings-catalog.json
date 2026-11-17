@@ -9867,7 +9867,18 @@
     {
       "key": "autopilotApprovals",
       "title": "When it asks permission",
-      "subtitle": "Permission prompts, Connectors cards and folder trust: Wait for me, Safe steps (after a minute, approve reads, builds, tests, edits and local commits inside the project; anything else waits for you) or All but limits (after a minute, approve anything that is not a hard limit). A read-only thread's cards always wait for you.",
+      "subtitle": "Permission prompts, Connectors cards and folder trust: Wait for me, Safe steps (after a minute, approve reads, builds, tests, edits and local commits inside the project; anything else waits for you) or All but limits (after a minute, approve anything that is not a hard limit). A read-only thread stays in plan mode: its reads are approved, a request to stop planning gets \"No, keep planning\", and its edits and commands are declined.",
+      "tab": "autopilot",
+      "tabTitle": "Autopilot",
+      "section": "allowed",
+      "sectionTitle": "What it does",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "autopilotReadOnlyLeavePlan",
+      "title": "Let read-only threads leave plan mode",
+      "subtitle": "Off by default. When on, Autopilot approves a read-only helper's request to stop planning and start changing files, instead of keeping it in plan mode, and then judges its edits and commands like any other session's. Shows while Autopilot answers permission prompts.",
       "tab": "autopilot",
       "tabTitle": "Autopilot",
       "section": "allowed",

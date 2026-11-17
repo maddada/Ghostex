@@ -4499,8 +4499,17 @@ all of them every 2 minutes (1 to 10 minutes under **Advanced**). It then:
   commits inside the project; anything else waits for you and every hard limit
   is declined) or **All but limits** (the default; approves anything that
   crosses no hard limit). Each card waits a minute for you first, so at your
-  desk you answer it yourself. A read-only thread's cards (leaving Plan mode, or
-  a step out of Codex's read-only sandbox) always wait for you.
+  desk you answer it yourself. A read-only thread (a coordinator's helper
+  started with `--read-only`) never waits on Autopilot and stays read-only:
+  what only reads (opening a file, searching, fetching a page) is approved, a
+  request to stop planning ("Ready to code?") gets **No, keep planning** with a
+  note to finish with its plan as its report, and an edit, a command that
+  changes something or a step out of Codex's read-only sandbox is declined.
+  Turn on **Let read-only threads leave plan mode** (shown while Autopilot
+  answers permission prompts, off by default) and Autopilot instead approves
+  the plan with **Yes, manually approve edits** (or auto-accept edits on **All
+  but limits** when Claude offers it, never auto mode) and judges the thread's
+  edits and commands like any other session's.
 
 **Hard limits it may cross** show with **All but limits** only, each a switch
 off until you turn it on: push a branch, finish a release you asked for, push
@@ -4547,8 +4556,9 @@ did, and when (kept 30 days).
 
 CLI: `ghostex autopilot` (status and summary), `ghostex autopilot on|off`,
 `ghostex autopilot log [--last <n>]`, `ghostex autopilot project <project-id>
-on|off`, `ghostex autopilot session <project-id> <session-id> on|off`, and
-`ghostex autopilot decide <project-id> <session-id> --answer <pick> | --message
+on|off`, `ghostex autopilot session <project-id> <session-id> on|off`,
+`ghostex autopilot read-only-plan on|off` (Let read-only threads leave plan
+mode), and `ghostex autopilot decide <project-id> <session-id> --answer <pick> | --message
 <text> | --leave <note>` (what the supervisor runs).
 
 ## Beads view (was Kanban)

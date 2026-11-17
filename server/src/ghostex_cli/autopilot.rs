@@ -6,7 +6,8 @@ use serde_json::{json, Value};
 use super::args::Flags;
 use super::rpc::{call_gxserver_rpc, CliError, CliResult};
 
-const HELP: &str = "Usage: ghostex autopilot [status|on|off|log|project|session] [--json]
+const HELP: &str =
+    "Usage: ghostex autopilot [status|on|off|log|project|session|read-only-plan] [--json]
 
 Autopilot keeps sessions going while you are away: it carries on a session that stopped while its
 background job finished or mid-task, interrupts and carries on one stuck on a hung command, reloads
@@ -20,6 +21,9 @@ terminal ended. Every decision is logged. Settings > Autopilot has every choice.
                                            Put a project (and its worktrees) in or out
   ghostex autopilot session <project-id> <session-id> on|off
                                            Put one session in or out
+  ghostex autopilot read-only-plan on|off  Let read-only threads leave plan mode (off by
+                                           default): approve their plan and their edits like
+                                           any session's, instead of keeping them planning
   ghostex autopilot decide <project-id> <session-id> --answer <pick> [--answer ...]
                          | --message <text> | --leave <note>
                                            The supervisor's decision for one session: answer
@@ -69,6 +73,11 @@ pub(crate) fn autopilot_command(args: &[String]) -> CliResult<()> {
             "limit": 5,
         }))?,
         Some("log") => call(json!({ "op": "read", "limit": last }))?,
+        Some("read-only-plan") => call(json!({
+            "op": "set",
+            "patch": { "readOnlyLeavePlan": on_off(words.get(1).copied())? },
+            "limit": 5,
+        }))?,
         Some("project") => {
             let project_id = words
                 .get(1)
@@ -125,6 +134,9 @@ pub(crate) fn autopilot_command(args: &[String]) -> CliResult<()> {
                 String::new()
             }
         );
+        if config["readOnlyLeavePlan"].as_bool() == Some(true) {
+            println!("Read-only threads may leave plan mode.");
+        }
         let summary = &answer["summary"];
         println!(
             "Since it went on: {} actions, {} sessions kept moving, {} left for you, {} failed.",

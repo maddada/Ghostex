@@ -238,7 +238,7 @@ pub fn usage() -> String {
             "List the computers this one is connected to; any agent can then start, message and read sessions there with --computer <name> (sessions, agents create/send/list, coordinator start-thread, read-session-chat, read-text and the other session verbs), or with a session ref from that computer",
         ),
         format_help_command(
-            "autopilot [status|on|off|log [--last n]|project <id> on|off|session <project-id> <session-id> on|off] [--json]",
+            "autopilot [status|on|off|log [--last n]|project <id> on|off|session <project-id> <session-id> on|off|read-only-plan on|off] [--json]",
             "Autopilot keeps sessions going while you are away (carries on, interrupts a hung command, reloads, switches account at a limit) and logs every decision; Settings > Autopilot has every choice",
         ),
         format_help_command(
