@@ -331,8 +331,8 @@ fn owner_place(transport: &Transport) -> String {
     let own_owner = owner_key_for(transport)
         .ok()
         .and_then(|key| key_id_of(&key.public_key_b64()));
-    let status = in_security_flow(|| rpc(transport, "/api/securityStatus", json!({})))
-        .unwrap_or_default();
+    let status =
+        in_security_flow(|| rpc(transport, "/api/securityStatus", json!({}))).unwrap_or_default();
     // Named by that gxserver itself where it says (CDXC:Security 2026-11-17 at `approvers_here`
     // in server/src/server/security_http.rs): owner apps on any computer, paired phones and
     // computers.

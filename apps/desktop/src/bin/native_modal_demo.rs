@@ -176,6 +176,16 @@ mod share_popover_demo;
 #[path = "../app/window/share_popover_view.rs"]
 mod share_popover_view;
 // The work area header's jobs button and popover, drawn from the app's own view.
+#[path = "native_modal_demo/crash_report_core.rs"]
+mod crash_report_core;
+#[path = "native_modal_demo/crash_report.rs"]
+mod crash_report_demo;
+#[path = "../app/window/crash_report_modal.rs"]
+mod crash_report_modal;
+#[path = "native_modal_demo/go_back.rs"]
+mod go_back_demo;
+#[path = "../app/window/go_back_modal.rs"]
+mod go_back_modal;
 #[path = "native_modal_demo/jobs_popover.rs"]
 mod jobs_popover_demo;
 #[path = "../app/window/jobs_popover_view.rs"]
@@ -188,16 +198,6 @@ mod space_editor_modal;
 mod start_menu_click_demo;
 #[path = "native_modal_demo/start_menu.rs"]
 mod start_menu_demo;
-#[path = "native_modal_demo/crash_report.rs"]
-mod crash_report_demo;
-#[path = "native_modal_demo/crash_report_core.rs"]
-mod crash_report_core;
-#[path = "../app/window/crash_report_modal.rs"]
-mod crash_report_modal;
-#[path = "native_modal_demo/go_back.rs"]
-mod go_back_demo;
-#[path = "../app/window/go_back_modal.rs"]
-mod go_back_modal;
 #[path = "native_modal_demo/update_available.rs"]
 mod update_available_demo;
 // The top bar's Updates button and list: `app` holds the stand-ins its rows file reads.

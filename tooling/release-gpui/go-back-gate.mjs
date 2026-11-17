@@ -153,6 +153,7 @@ function readMarker() {
 
 /**
  * The check. Returns `{ status: 'pass' | 'fail', detail }`; `since` overrides the previous tag.
+ * @param {{ version?: string, since?: string }} [options]
  */
 export function evaluateGoBackGate({ version, since } = {}) {
   const releaseVersion = version ?? JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8')).version;

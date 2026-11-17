@@ -984,17 +984,20 @@ pub(crate) fn select(
                 &state.paths.home_dir,
             )
         });
-    runtime.insert("accountSwitch".into(), json!({
-        "id": uuid::Uuid::new_v4().to_string(),
-        "provider": provider,
-        "source": if source == SwitchSource::Automatic { "automatic" } else { "manual" },
-        "phase": "switching",
-        "fromAccountId": from_account,
-        "toAccountId": id,
-        // When the session left `fromAccountId`; `updatedAt` follows every later phase (recovery::left_account).
-        "leftAt": chrono::Utc::now().to_rfc3339(),
-        "updatedAt": chrono::Utc::now().to_rfc3339(),
-    }));
+    runtime.insert(
+        "accountSwitch".into(),
+        json!({
+            "id": uuid::Uuid::new_v4().to_string(),
+            "provider": provider,
+            "source": if source == SwitchSource::Automatic { "automatic" } else { "manual" },
+            "phase": "switching",
+            "fromAccountId": from_account,
+            "toAccountId": id,
+            // When the session left `fromAccountId`; `updatedAt` follows every later phase (recovery::left_account).
+            "leftAt": chrono::Utc::now().to_rfc3339(),
+            "updatedAt": chrono::Utc::now().to_rfc3339(),
+        }),
+    );
     // Only what the switch changed, onto the row as stored now (CDXC:Notifications 2026-10-31 in
     // api_errors.rs): a question card or published question stored meanwhile stays.
     let launch_settings = json!({ "launchSettings": launch_settings });
