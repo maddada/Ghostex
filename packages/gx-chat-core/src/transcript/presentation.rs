@@ -1238,6 +1238,34 @@ pub fn build_scope(
     }
 }
 
+/// `reply` without the tool calls (and their results) that `work` already holds, for counting a
+/// finished turn's calls.
+///
+/// CDXC:SessionChat 2026-11-18 WHY: a reply whose words came before its calls takes in the calls
+/// after them (they draw folded behind its words), while the turn's work keeps the same rows (see
+/// `sent_message::without_turn_sends`), so counting the work and the reply counted those calls
+/// twice: a turn of four calls, two of them sends, said "6 tool calls" on its "Worked for" row and
+/// "3 tool calls" on its Quiet View line instead of 2. A call is the same call when its id is.
+fn calls_not_in(reply: &ChatMessage, work: &[ChatRow]) -> ChatMessage {
+    let id = |block: &ChatBlock| match block {
+        ChatBlock::ToolCall { call_id, .. } | ChatBlock::ToolResult { call_id, .. } => {
+            call_id.clone()
+        }
+        _ => None,
+    };
+    let held: std::collections::HashSet<String> = work
+        .iter()
+        .flat_map(|row| row.blocks.iter().filter_map(id))
+        .collect();
+    let mut reply = reply.clone();
+    if !held.is_empty() {
+        reply
+            .blocks
+            .retain(|block| id(block).is_none_or(|call| !held.contains(&call)));
+    }
+    reply
+}
+
 /// `itemIndex` for `items`, which start at row `first` of the list: the first row that draws each
 /// id.
 pub(crate) fn item_index(items: &[TranscriptItem], first: usize) -> Vec<(String, usize)> {
@@ -1530,10 +1558,15 @@ fn turn_items(
                         // The rows are still on the server: only the files are known until it opens.
                         (0, 0)
                     } else {
+                        // The reply's calls the work already holds count once (`calls_not_in`).
+                        let reply = turn
+                            .final_message
+                            .as_ref()
+                            .map(|reply| calls_not_in(reply, &work));
                         let rows: Vec<&ChatMessage> = work
                             .iter()
-                            .chain(turn.final_message.iter())
                             .map(|row| &**row)
+                            .chain(reply.iter())
                             .collect();
                         (
                             tool_call_count(&rows),
