@@ -268,6 +268,35 @@ pub struct NoteTurns {
     previous: Option<ChatRole>,
     /// Whether that row is in a turn a note opened.
     in_note_turn: bool,
+    /// Whether that row is in a turn a message from another agent (a thread's report) opened.
+    in_report_turn: bool,
+}
+
+/// What an agent answers a message that needs nothing of it: a bare acknowledgement, matched
+/// trimmed, case-insensitive and without its closing full stop or exclamation mark.
+const ACKNOWLEDGEMENTS: [&str; 5] = ["", "ok", "okay", "noted", "got it"];
+
+/// Whether `message` is the agent's reply that only acknowledges (`ACKNOWLEDGEMENTS`): words only,
+/// no tool call.
+fn is_acknowledgement(message: &ChatMessage) -> bool {
+    if message.role != ChatRole::Assistant {
+        return false;
+    }
+    let mut words = String::new();
+    for block in &message.blocks {
+        match block {
+            ChatBlock::Text { text } => words.push_str(text),
+            _ => return false,
+        }
+    }
+    let words = words.trim().trim_end_matches(['.', '!']).trim().to_lowercase();
+    ACKNOWLEDGEMENTS.contains(&words.as_str())
+}
+
+/// Whether `message` is another agent's message delivered as a user row: a thread's report, drawn
+/// as a report card (`transcript/turns.rs` `is_agent_conversation`).
+fn is_report(message: &ChatMessage) -> bool {
+    message.role == ChatRole::User && crate::transcript::turns::is_agent_conversation(message)
 }
 
 /// [`without_note_turns`] for `rows` coming right after the ones `turns` read.
@@ -278,11 +307,24 @@ pub struct NoteTurns {
 /// transcript in `refresh_boundaried`, whose whole rebuild and whose rows-pushed-at-the-end path
 /// never dropped notes; only the rarely used rebuild in `boundaried_transcript` did. Both now
 /// read every row through here, the pushed rows from where the last read stopped.
+///
+/// CDXC:Coordinators 2026-11-18 DECISION:
+/// User, of a coordinator's "ok" under a "Reports" group: "can we skip showing the ok in the ui
+/// also", then "i still see ok here". A thread's report that reaches an idle coordinator opens a
+/// turn of its own, and when it needs nothing the coordinator can only answer "ok". The report
+/// card stays (it is the news); the agent's reply that only acknowledges (`ACKNOWLEDGEMENTS`, a
+/// short explicit list) is dropped from a turn a report opened, the same way a note's turn is read:
+/// only right after the agent's finished reply does the report open a turn, and the user's own
+/// words end it. A real reply is never hidden, nor anything in a turn the user's message opened.
+/// A turn a note opened already goes whole, its "ok" with it.
 pub fn without_note_turns_after(
     rows: Vec<crate::state::ChatRow>,
     turns: &mut NoteTurns,
 ) -> Vec<crate::state::ChatRow> {
-    if !turns.in_note_turn && !rows.iter().any(|row| is_system_only(row)) {
+    if !turns.in_note_turn
+        && !turns.in_report_turn
+        && !rows.iter().any(|row| is_system_only(row) || is_report(row))
+    {
         if let Some(last) = rows.iter().rev().find(|row| row.role != ChatRole::System) {
             turns.previous = Some(last.role.clone());
         }
@@ -311,14 +353,30 @@ pub fn without_note_turns_after(
             turns.previous = Some(row.role.clone());
             continue;
         }
-        if turns.in_note_turn && row.role == ChatRole::User {
-            // The user's own words end the note's turn, wherever they land.
+        if row.role == ChatRole::User {
+            // Any user row ends a note's turn, a report included: the report card always shows.
             turns.in_note_turn = false;
+            if is_report(&row) {
+                // Like a note: a report opens a turn of its own only after the agent's finished
+                // reply; landing in a running turn it changes nothing.
+                if !row.queued
+                    && matches!(
+                        turns.previous,
+                        Some(ChatRole::Assistant | ChatRole::Reasoning)
+                    )
+                {
+                    turns.in_report_turn = true;
+                }
+            } else {
+                // The user's own words end a report's turn, wherever they land.
+                turns.in_report_turn = false;
+            }
         }
         turns.previous = Some(row.role.clone());
-        if !turns.in_note_turn {
-            kept.push(row);
+        if turns.in_note_turn || (turns.in_report_turn && is_acknowledgement(&row)) {
+            continue;
         }
+        kept.push(row);
     }
     kept
 }
