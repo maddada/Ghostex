@@ -225,9 +225,15 @@ pub fn system_message(notes: &[&str]) -> Option<String> {
     (!block.is_empty()).then(|| block.to_string())
 }
 
-/// The last line of a notes message: a note that reaches an idle agent opens a turn of its own,
-/// which the chat does not draw, so its answer should cost as little as it can.
-const NOTE_ONLY_REPLY: &str = "This message is from Ghostex, not the user, and needs no answer of its own: act on it if it asks something of you, and if there is nothing to do, reply with only \"ok\".";
+/// The last line of a notes message. Notes that only inform wait for the agent's next message
+/// (gxserver `send_ghostex_notes`), so one that opens a turn of its own asks for something; "ok"
+/// stays as the fallback for when there is nothing left to do, and the chat hides it.
+///
+/// CDXC:Coordinators 2026-11-18 DECISION:
+/// User: "i dont like that we tell the agent to respond with ok in some cases", then picked "A +
+/// C" (Q3887): informational notes no longer wake an idle agent, the chat hides a bare "ok", and
+/// this line names "ok" only as the fallback.
+const NOTE_ONLY_REPLY: &str = "From Ghostex, not the user: act on what it asks; if nothing is left to do, reply \"ok\".";
 
 /// Whether `message` is a user row that holds only Ghostex's notes: no words of the user's, no
 /// picture. No chat draws it.

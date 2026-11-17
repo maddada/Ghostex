@@ -169,6 +169,22 @@ struct CoordinatorNotes {
     dismissed: Option<(Vec<String>, String)>,
 }
 
+impl CoordinatorNotes {
+    /// Whether a note asks the agent to do something: the playbook or compaction note ("run
+    /// `ghostex coordinator guide`") or a drift "Reminder:". The open questions list and the
+    /// dismissed questions only inform, so they never wake an idle agent (`send_ghostex_notes`).
+    ///
+    /// CDXC:Coordinators 2026-11-18 DECISION:
+    /// User picked "A + C" (Q3887) after "i dont like that we tell the agent to respond with ok in
+    /// some cases": a message that needs nothing from an agent should not wake it at all (A), and
+    /// the chat hides a bare "ok" (C, gx-chat-core `session::appended_notes`). Notes that only
+    /// inform are held while the agent is idle and go with its next message, the user's or a
+    /// thread's report, in the same separate system message; notes that ask for action go at once.
+    fn asks_action(&self) -> bool {
+        self.playbook.is_some() || self.drift.is_some()
+    }
+}
+
 /// The notes that go under this message to an orchestrator (CDXC:Coordinators 2026-11-05 in
 /// coordinators/playbook.rs, CDXC:Coordinators 2026-11-13 in coordinators/drift.rs), and to any
 /// session the questions the user dismissed since its last note (session_chat_dismissed.rs).
@@ -227,7 +243,8 @@ fn coordinator_playbook_note(
 /// user, by title with the tags the agent knows them by: its work items' open asks ("W7 Q12") and
 /// the forms and pages its replies asked ("Q12 to Q14"), leaving out the asks this message answers
 /// by tag ("W7 Q12: …", settled on delivery by `settle_work_replies`). `None` for a session that
-/// is not a coordinator, a message from another agent, or nothing open. Blocking.
+/// is not a coordinator, or nothing open. A thread's report carries it too, answering nothing.
+/// Blocking.
 ///
 /// CDXC:Coordinators 2026-11-16 DECISION:
 /// User, on issue #627, picked "Tell the coordinator what's still open": an answer typed in the
@@ -249,19 +266,22 @@ fn open_questions_note(
     session: &Value,
     text: &str,
 ) -> Option<String> {
-    if text
-        .lines()
-        .any(|line| line.trim() == crate::coordinators::AGENT_MESSAGE_OPENER)
-    {
-        return None;
-    }
     crate::coordinators::read_coordinator(db, &key.0, &key.1)
         .ok()
         .flatten()?;
-    let answered: Vec<(i64, String)> = crate::coordinators::chat_replies(text)
-        .into_iter()
-        .map(|(number, tag, _)| (number, tag))
-        .collect();
+    // A message from another agent (a thread's report) answers nothing, whatever it quotes; it
+    // still carries the list held back from an idle coordinator (`send_ghostex_notes`).
+    let from_agent = text
+        .lines()
+        .any(|line| line.trim() == crate::coordinators::AGENT_MESSAGE_OPENER);
+    let answered: Vec<(i64, String)> = if from_agent {
+        Vec::new()
+    } else {
+        crate::coordinators::chat_replies(text)
+            .into_iter()
+            .map(|(number, tag, _)| (number, tag))
+            .collect()
+    };
     let mut open: Vec<(String, String)> = Vec::new();
     for item in crate::coordinators::list_work_items(db, key).unwrap_or_default() {
         if item.finished_at.is_some() || item.dropped_at.is_some() {
@@ -485,6 +505,11 @@ async fn send_ghostex_notes(
     let Some(message) = ghostex_gx_chat_core::session::appended_notes::system_message(&all) else {
         return;
     };
+    if !notes.asks_action() && !agent_still_working(state, project_id, session_id).await {
+        // Not recorded as sent, so the next message the agent gets (the user's or a thread's
+        // report) carries it again, rebuilt as things then stand.
+        return;
+    }
     let sent = Box::pin(send_session_chat_message_locked(
         state,
         project_id,
@@ -510,6 +535,50 @@ async fn send_ghostex_notes(
                 details: Some(json!({ "projectId": project_id, "sessionId": session_id })),
             });
         }
+    }
+}
+
+/// How long `agent_still_working` waits for the message just sent to show as a running turn.
+const NOTE_WORKING_WAIT: Duration = Duration::from_secs(5);
+
+/// Whether the agent is working on the message just sent: its hooks or its transcript say a turn
+/// runs. Read for up to `NOTE_WORKING_WAIT`, as a hook or the transcript row can land a moment
+/// after the send; a turn that has already ended (a short reply with no tool call) reads as not.
+async fn agent_still_working(state: &AppState, project_id: &str, session_id: &str) -> bool {
+    let started = std::time::Instant::now();
+    let gate = Arc::new(Mutex::new(SessionChatTranscriptGate::default()));
+    loop {
+        let (check_state, project, session_key, readings) = (
+            state.clone(),
+            project_id.to_string(),
+            session_id.to_string(),
+            gate.clone(),
+        );
+        let working = tokio::task::spawn_blocking(move || {
+            let mut params = Map::new();
+            params.insert("projectId".to_string(), json!(project));
+            params.insert("sessionId".to_string(), json!(session_key));
+            let Ok(target) = crate::session_chat_send::resolve_session_chat_send_target(
+                &check_state,
+                &params,
+                "noteWorking",
+            ) else {
+                return false;
+            };
+            crate::session_chat_follower::session_chat_hook_working(&target.session)
+                || readings
+                    .lock()
+                    .is_ok_and(|mut gate| gate.is_working(&target.session))
+        })
+        .await
+        .unwrap_or(false);
+        if working {
+            return true;
+        }
+        if started.elapsed() >= NOTE_WORKING_WAIT {
+            return false;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
     }
 }
 
