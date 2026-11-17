@@ -325,6 +325,9 @@ pub struct SessionChatSuccessorHooks {
     /// The conversation (id, file) an agent that names its chat itself (Freebuff) started for this
     /// session, read only while no id is bound yet.
     pub unbound_agent_chat: Arc<dyn Fn() -> Option<(String, std::path::PathBuf)> + Send + Sync>,
+    /// Reads the session's running agent process for the conversation it holds open (the live
+    /// process identity repair, for this session only) and stores it; a no-op once an id is bound.
+    pub probe_live_identity: Arc<dyn Fn() + Send + Sync>,
     /// Persists the corrected identity; returns true when the registry changed.
     pub adopt_identity: Arc<dyn Fn(SessionChatIdentityAdoption) -> bool + Send + Sync>,
     pub log: Arc<dyn Fn(SessionChatSuccessorNotice) + Send + Sync>,

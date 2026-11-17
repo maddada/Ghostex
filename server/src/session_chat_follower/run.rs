@@ -1,5 +1,9 @@
 use super::*;
 
+/// How often a follower with no conversation bound asks the agent's process for one: the pace of
+/// the session list's own repair (server/session_repair_gate.rs).
+const IDENTITY_PROBE_EVERY: Duration = Duration::from_secs(5);
+
 /*
 Per-session follower task. Runs only while ≥1 client subscribes AND the
 session is running (the server.rs registry enforces both). `resnapshot` is
@@ -68,6 +72,8 @@ pub async fn run_session_chat_follower(
     // CDXC:AgentScreenDetection 2026-09-01: paces the slow steady
     // re-probe of the resolve-poll branch once the launch screen has settled.
     let mut unresolved_last_probe = std::time::Instant::now();
+    // When the running agent's process was last asked which conversation it holds open.
+    let mut last_identity_probe: Option<std::time::Instant> = None;
     let mut file_state = FollowerFileState::new();
     // Rolling AskUserQuestion state folded over everything decoded so far, plus
     // the last prompt/working pair actually published to clients.
@@ -204,6 +210,26 @@ pub async fn run_session_chat_follower(
                 if let Some((id, path)) = adopt_unbound_agent_chat(&config, lineage).await {
                     identity.agent_session_id = Some(id);
                     identity.agent_session_path = Some(path);
+                }
+            }
+            /*
+            CDXC:SessionIdentity 2026-11-18 WHY:
+            GitHub #650 (Linux, Codex, hooks off): the chat said "Not confirmed" while the terminal
+            showed the prompt and Codex's finished reply. A new Codex opens its conversation file
+            only at the first prompt, and without hooks only the live process scan finds it; that
+            scan runs when a client lists sessions or the terminal title names the agent, and
+            neither happened for two minutes, while this follower kept re-reading an identity no
+            one stored. So while no conversation is bound, the follower asks the agent's process
+            itself, at most every IDENTITY_PROBE_EVERY.
+            */
+            if identity.agent_session_id.is_none()
+                && last_identity_probe.is_none_or(|at| at.elapsed() >= IDENTITY_PROBE_EVERY)
+            {
+                if let Some(hooks) = config.successor_hooks.clone() {
+                    last_identity_probe = Some(std::time::Instant::now());
+                    let _ =
+                        tokio::task::spawn_blocking(move || (hooks.probe_live_identity)()).await;
+                    identity.adopt(read_live_state());
                 }
             }
             let agent_session_id = identity.agent_session_id.clone();
