@@ -574,7 +574,7 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                     ))
                 } else if missing_input_box_exhausted(&pending.id, &error, now_ms) {
                     crate::session_chat_codex_picker::unsupported_selection(format!(
-                        "The agent has not shown its input box for {} minutes, so Ghostex stopped trying to change the model. Open the terminal to see what it is showing, then pick the model again.",
+                        "The agent has not shown its input box or taken typed keys for {} minutes, so Ghostex stopped trying to change the model. Open the terminal to see what it is showing, then pick the model again.",
                         MISSING_INPUT_BOX_LIMIT_MS / 60_000
                     ))
                 } else {

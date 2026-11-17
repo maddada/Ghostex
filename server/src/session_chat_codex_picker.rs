@@ -567,6 +567,28 @@ fn claude_option_applied(screen: &str, field: &str, value: &str) -> bool {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum UntakenCommandErase {
+    Erase,
+    /// The input box shows other text, which is erased only when it is Claude's faint placeholder.
+    UnlessDraft,
+    Keep,
+}
+
+/// What to do about a typed `command` Claude's input box never showed, given the input box's text
+/// (`None` when no input box is drawn). An empty input box means the keys went to the terminal
+/// and wait there for Claude; copies of the command are this pick's own earlier tries.
+fn claude_untaken_command_erase(draft: Option<&str>, command: &str) -> UntakenCommandErase {
+    let Some(draft) = draft.map(str::trim) else {
+        return UntakenCommandErase::Keep;
+    };
+    if draft.replace(command, "").trim().is_empty() {
+        UntakenCommandErase::Erase
+    } else {
+        UntakenCommandErase::UnlessDraft
+    }
+}
+
 struct PickerDriver<'a> {
     project_id: &'a str,
     session_id: &'a str,
@@ -590,6 +612,69 @@ impl PickerDriver<'_> {
 
     async fn capture(&self) -> Option<String> {
         capture_session_terminal_text(self.zmx_name).await
+    }
+
+    /// CDXC:SessionChat 2026-11-17 WHY:
+    /// A model pick from the chat view of S1u:P4vwp:G0sy2 (Claude Code 2.1.326, idle, input box
+    /// empty) typed `/effort high`, and Claude never showed it in its input box: Claude was not
+    /// reading keys, so the terminal echoed them below its footer and kept them for Claude to
+    /// read later. The wait timed out, the cleanup only cleared an input box that showed the exact
+    /// command, and each retry typed another copy, so the next model or effort pick and the next
+    /// message met `/effort high/effort high/effort high` in the input box. A typed slash command
+    /// that does not show up in the input box is now erased with Ctrl+U at once (the terminal's
+    /// own line erase while Claude is not reading, Claude's line erase once it is; the input box
+    /// was checked empty before typing) and the pick waits for Claude to take keys again
+    /// (`INPUT_BOX_MISSING_CODE`) instead of using up the three tries that fail it for good.
+    async fn type_claude_command(&self, step: &str, command: &str) -> Result<(), DomainStateError> {
+        self.write(&crate::session_chat_send::build_session_chat_paste_bytes(
+            command,
+        ))
+        .await?;
+        let typed = self
+            .wait_for(step, |screen| {
+                crate::session_chat_composer::claude_composer_input_text(screen)
+                    .is_some_and(|text| text.trim() == command)
+                    .then_some(())
+            })
+            .await;
+        let Err(error) = typed else {
+            return Ok(());
+        };
+        if error.code != "timeout" {
+            return Err(error);
+        }
+        let erase = match self.capture().await.as_deref().map(|screen| {
+            claude_untaken_command_erase(
+                crate::session_chat_composer::claude_composer_draft(screen).as_deref(),
+                command,
+            )
+        }) {
+            Some(UntakenCommandErase::Erase) => true,
+            Some(UntakenCommandErase::UnlessDraft) => !self.claude_input_holds_draft().await,
+            Some(UntakenCommandErase::Keep) | None => false,
+        };
+        if erase {
+            let _ = self
+                .write(crate::session_chat_send::AGENT_TUI_CLEAR_INPUT_LINE)
+                .await;
+        }
+        log_picker(
+            LogLevel::Warn,
+            "sessionChatClaudeCommandNotTaken",
+            json!({
+                "projectId": self.project_id,
+                "sessionId": self.session_id,
+                "command": command,
+                "erased": erase,
+            }),
+            None,
+        );
+        Err(DomainStateError {
+            code: INPUT_BOX_MISSING_CODE,
+            message: format!(
+                "Claude Code did not take the typed {command}: it is not reading keys right now (its external editor or another program may have the terminal). Ghostex erased it and tries again when Claude takes keys."
+            ),
+        })
     }
 
     /// CDXC:SessionChat 2026-09-26 WHY:
@@ -877,16 +962,8 @@ impl PickerDriver<'_> {
         value: &str,
         command: &str,
     ) -> Result<(), DomainStateError> {
-        self.write(&crate::session_chat_send::build_session_chat_paste_bytes(
-            command,
-        ))
-        .await?;
-        self.wait_for("type Claude option command", |screen| {
-            crate::session_chat_composer::claude_composer_input_text(screen)
-                .is_some_and(|text| text.trim() == command)
-                .then_some(())
-        })
-        .await?;
+        self.type_claude_command("type Claude option command", command)
+            .await?;
         self.write(CODEX_SUBMIT).await?;
         let answer = self
             .wait_for("Claude option confirmation", |screen| {

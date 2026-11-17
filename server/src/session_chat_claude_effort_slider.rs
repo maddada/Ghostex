@@ -227,16 +227,8 @@ impl PickerDriver<'_> {
         effort: &str,
         confirm: &str,
     ) -> Result<(), DomainStateError> {
-        self.write(&crate::session_chat_send::build_session_chat_paste_bytes(
-            CLAUDE_EFFORT_COMMAND,
-        ))
-        .await?;
-        self.wait_for("type Claude effort command", |screen| {
-            crate::session_chat_composer::claude_composer_input_text(screen)
-                .is_some_and(|text| text.trim() == CLAUDE_EFFORT_COMMAND)
-                .then_some(())
-        })
-        .await?;
+        self.type_claude_command("type Claude effort command", CLAUDE_EFFORT_COMMAND)
+            .await?;
         self.write(CODEX_SUBMIT).await?;
         let mut slider = self
             .wait_for("open Claude effort slider", claude_effort_slider)

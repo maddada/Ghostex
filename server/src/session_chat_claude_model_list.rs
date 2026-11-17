@@ -569,16 +569,8 @@ impl PickerDriver<'_> {
         if over_draft {
             self.write(CLAUDE_MODEL_SHORTCUT).await?;
         } else {
-            self.write(&crate::session_chat_send::build_session_chat_paste_bytes(
-                CLAUDE_MODEL_COMMAND,
-            ))
-            .await?;
-            self.wait_for("type Claude model command", |screen| {
-                crate::session_chat_composer::claude_composer_input_text(screen)
-                    .is_some_and(|text| text.trim() == CLAUDE_MODEL_COMMAND)
-                    .then_some(())
-            })
-            .await?;
+            self.type_claude_command("type Claude model command", CLAUDE_MODEL_COMMAND)
+                .await?;
             self.write(CODEX_SUBMIT).await?;
         }
         let list = self.claude_model_list("open Claude model list").await?;

@@ -118,19 +118,22 @@ impl PickerDriver<'_> {
                 "Waiting for the text in the terminal input to be sent or cleared.",
             ));
         }
+        if agent == SessionChatOptionAgent::Claude {
+            self.type_claude_command("type option command", command)
+                .await?;
+            return self.write(CODEX_SUBMIT).await;
+        }
         self.write(&build_session_chat_paste_bytes(command)).await?;
         self.wait_for("type option command", |screen| {
             // Slash completion can replace the ordinary ready verdict while the exact command is staged.
-            let typed = if agent == SessionChatOptionAgent::Claude {
-                crate::session_chat_composer::claude_composer_input_text(screen)
-            } else {
-                screen_lines(screen).iter().rev().find_map(|line| {
+            screen_lines(screen)
+                .iter()
+                .rev()
+                .find_map(|line| {
                     line.strip_prefix(CODEX_CURSOR)
                         .or_else(|| line.strip_prefix(CODEX_ULTRA_CURSOR))
                         .map(|text| text.trim().to_string())
                 })
-            };
-            typed
                 .is_some_and(|text| text.trim() == command)
                 .then_some(())
         })
