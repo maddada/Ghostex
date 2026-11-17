@@ -762,6 +762,9 @@ impl GhostexGpuiApp {
 
     /// Expand and Shrink: the window takes its other size where it stands (the size each was last
     /// given, or a default one), keeping its centre on the same screen.
+    ///
+    /// CDXC:SessionPopup 2026-11-17 WHY:
+    /// User: after Expand or Shrink the window changed size but its content kept the old size until the border was dragged by hand. The frame was set from inside the button's own mouse handler, while GPUI held the popup's window; the platform reports the new size synchronously (`setFrame:display:animate:` on macOS, `SetWindowPos` on Windows), and GPUI's resize callback cannot update a window that is held, so the report was dropped. The frame is now set after the handler returns, and GPUI then re-reads the window's size (`Window::bounds_changed`) for platforms that report it late or not at all.
     pub(crate) fn toggle_session_popup_expanded(
         &mut self,
         id: SessionPopupId,
@@ -776,6 +779,7 @@ impl GhostexGpuiApp {
         popup.expanded = !popup.expanded;
         let expanded = popup.expanded;
         let native = popup.native;
+        let handle = popup.window;
         let lead = popup.lead.clone();
         let saved = saved::session(&lead).unwrap_or_default();
         let target_size = if expanded {
@@ -792,13 +796,19 @@ impl GhostexGpuiApp {
         if let Some(display) = window.display(cx) {
             target = clamp_into(target, display.visible_bounds());
         }
-        match native {
-            // Moves and sizes the window in one step where the OS lets a client place it.
-            Some(native) if platform::supported() => {
-                platform::set_window_frame(native, target, window.scale_factor())
+        let scale = window.scale_factor();
+        cx.defer(move |cx| {
+            match native {
+                // Moves and sizes the window in one step where the OS lets a client place it.
+                Some(native) if platform::supported() => {
+                    platform::set_window_frame(native, target, scale)
+                }
+                _ => {
+                    let _ = handle.update(cx, |_, window, _| window.resize(target.size));
+                }
             }
-            _ => window.resize(target.size),
-        }
+            let _ = handle.update(cx, |_, window, cx| window.bounds_changed(cx));
+        });
         saved::update_session(&lead, |saved| saved.expanded = expanded);
         cx.notify();
     }
