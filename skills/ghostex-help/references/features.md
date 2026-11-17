@@ -3324,6 +3324,16 @@ including sessions that are already open, forks, and restored sessions, so a
 change there applies everywhere at once. To make one session behave differently,
 open More actions > Agent > Switch Account and click Customize under Keep going at a
 limit; Use session defaults returns it to the Settings values.
+After you use a reset, the sessions waiting on that login's limit continue by
+themselves: Ghostex stops the turn each one is stuck in and sends it one Continue,
+the coordinator before its threads. That happens when a reset used from the
+account's usage panel (or by Auto-redeem) succeeds, and when a saved account's
+usage reading drops below 100% before its reset time. For a login Ghostex does
+not track (no saved account, or one served through your own proxy), press
+"I reset it, continue" on the session's usage-limit card. A Codex that reaches
+its API through a local proxy shows the proxy's "last status: 429" as this same
+usage-limit card; if your proxy keeps the old limit after the reset, restart the
+proxy first.
 When a Claude or Codex turn ends on a lost connection or a server error (such as
 "API Error: Can't reach the API server"), the chat shows it as a card and
 Ghostex resumes the turn by itself once the network is back, after 5s, 15s, 1m,

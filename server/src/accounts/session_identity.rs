@@ -98,6 +98,31 @@ pub(crate) fn transcript_login_identity(
     login_identity(provider, &transcript_home(session, provider)?, home)
 }
 
+/// The provider folder a session's agent runs in (`CODEX_HOME`, `CLAUDE_CONFIG_DIR`): the one its
+/// transcript lives under, else the one its command sets. `None` means the CLI's default folder.
+pub(crate) fn session_home(session: &Value, provider: Provider) -> Option<PathBuf> {
+    configured_home(session, provider).or_else(|| command_home(session, provider))
+}
+
+/// The folder an agent command assigns before its executable (`CODEX_HOME=~/.codex-hub codex`).
+fn command_home(session: &Value, provider: Provider) -> Option<PathBuf> {
+    let variable = match provider {
+        Provider::Codex => "CODEX_HOME=",
+        Provider::Claude => "CLAUDE_CONFIG_DIR=",
+    };
+    let value = session
+        .pointer("/runtimeSettings/agentCommand")
+        .and_then(Value::as_str)?
+        .split_whitespace()
+        .find_map(|word| word.strip_prefix(variable))?
+        .trim_matches(['\'', '"']);
+    let path = match value.strip_prefix("~/") {
+        Some(rest) => ghostex_paths::user_home_dir().join(rest),
+        None => PathBuf::from(value),
+    };
+    path.is_absolute().then_some(path)
+}
+
 fn configured_home(session: &Value, provider: Provider) -> Option<PathBuf> {
     if let Some(root) = session
         .pointer("/runtimeSettings/externalAgentHome")

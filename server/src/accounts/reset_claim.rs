@@ -174,5 +174,14 @@ pub(crate) fn claim_for_account(
             state.accounts.refresh_since(home, started);
         }
     }
+    // The sessions waiting on this account's limit continue now (reset_used.rs).
+    if outcome.kind() == "success" {
+        super::reset_used::spawn(
+            state,
+            account.provider,
+            super::reset_used::Login::Account(account.id.clone()),
+            super::reset_used::Source::Redeem,
+        );
+    }
     Ok(outcome)
 }

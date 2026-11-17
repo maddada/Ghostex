@@ -31,6 +31,7 @@ pub(crate) mod recovery;
 mod recovery_conversation;
 mod reset_claim;
 mod reset_credits;
+pub(crate) mod reset_used;
 pub(crate) mod reset_watch;
 pub(crate) mod restart;
 pub(crate) mod restart_verification;

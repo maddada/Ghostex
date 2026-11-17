@@ -8,6 +8,7 @@
 //! User, after the Mac lost its internet for about 1.5 hours and every agent sat on "API Error: Can't reach the API server (ENOTFOUND)" while Ghostex kept nudging one thread and reported it to its coordinator 9 times: "we need to please have a thing where auto pilot doesn't keep trying to continue threads when network is down". While offline, Autopilot sends no carry-ons and wakes no supervisor, the not-moving watches pause their clocks (no nudge, no report, no red dot) and start them again when the network is back, coordinator reports and the automatic restart for a held message wait, and messages a person or a coordinator sends on purpose still go out. The user hears it once: the Autopilot pill and `coordinator status` say "Offline: waiting for the network" while it lasts, and one line when it is back (the Autopilot log, and one report per coordinator whose threads were held). Not a ping of google.com: ICMP is often blocked and says nothing about the agent's API.
 //! SEE-ALSO: coordinators/stall.rs, coordinators/idle_wait.rs, coordinators/remote_stall.rs (the held clocks), server/autopilot_runtime.rs and autopilot_judge.rs, server/coordinator_runtime.rs (held reports and the line when back), session_chat_agent_restart.rs (held restart), accounts/api_errors.rs (recovery's own wait for the network uses the same probe), packages/gx-chat-core/src/extras/autopilot.rs (the pill).
 
+mod codex_config;
 mod probe;
 mod watch;
 
@@ -113,8 +114,11 @@ fn interest() -> &'static Mutex<HashMap<String, i64>> {
 /// is offline, or that agent's API host stopped answering. Never blocks; an agent asked about for
 /// the first time is probed from the next tick on, and reads as reachable until then.
 pub fn agent_offline(agent: Option<&str>) -> bool {
+    target_offline(agent.and_then(agent_target))
+}
+
+fn target_offline(target: Option<String>) -> bool {
     let snapshot = snapshot();
-    let target = agent.and_then(agent_target);
     if let Some(target) = &target {
         let now = chrono::Utc::now().timestamp_millis();
         interest()
@@ -125,9 +129,10 @@ pub fn agent_offline(agent: Option<&str>) -> bool {
     snapshot.offline_since.is_some() || target.is_some_and(|target| snapshot.down.contains(&target))
 }
 
-/// [`agent_offline`] for a session row's agent.
+/// [`agent_offline`] for a session row's agent, probing the endpoint that session uses
+/// ([`session_target`]).
 pub fn session_offline(session: &Value) -> bool {
-    agent_offline(crate::session_chat_follower::session_chat_agent_for_session(session).as_deref())
+    target_offline(session_target(session))
 }
 
 /// The targets the watch probes now: the API hosts of the agents asked about in the last ten
@@ -147,6 +152,29 @@ pub fn wanted_targets(now: i64) -> BTreeSet<String> {
 /// that must know before it spends a try (account recovery's quick retries).
 pub fn agent_reachable_now(agent: &str, ttl: Duration) -> bool {
     agent_target(agent).is_none_or(|target| reach_cached(&target, ttl))
+}
+
+/// BLOCKING. [`agent_reachable_now`] for a session row, at the endpoint it uses.
+pub fn session_reachable_now(session: &Value, ttl: Duration) -> bool {
+    session_target(session).is_none_or(|target| reach_cached(&target, ttl))
+}
+
+/// [`agent_target`] for a session row: a Codex whose own `config.toml` sends it to another
+/// endpoint (a local proxy) is probed there (codex_config.rs). A proxy in gxserver's environment
+/// still comes first, as for every agent.
+pub fn session_target(session: &Value) -> Option<String> {
+    let agent = crate::session_chat_follower::session_chat_agent_for_session(session)?;
+    if agent == "codex" && proxy_target().is_none() {
+        let home = crate::accounts::session_identity::session_home(
+            session,
+            crate::accounts::model::Provider::Codex,
+        )
+        .unwrap_or_else(|| ghostex_paths::user_home_dir().join(".codex"));
+        if let Some(target) = codex_config::codex_base_url(&home).and_then(|url| url_target(&url)) {
+            return Some(target);
+        }
+    }
+    agent_target(&agent)
 }
 
 /// The `host:port` that tells whether `agent` can reach its API: the proxy gxserver's environment

@@ -44,6 +44,9 @@ pub(crate) async fn restart(
         Some(crate::memory_guard::ACTION_RESUME) => {
             return crate::server::resume_after_memory_stop(state, params).await
         }
+        Some(crate::accounts::reset_used::ACTION_RESET_USED) => {
+            return crate::accounts::reset_used::answer(state, params).await
+        }
         Some(crate::coordinators::CARRY_ON_STOPPED_THREADS) => {
             return crate::coordinators::answer_stopped_threads(state, params, true).await
         }
