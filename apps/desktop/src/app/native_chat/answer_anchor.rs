@@ -100,12 +100,16 @@ impl NativeChatView {
         self.resume_tail_waiting();
     }
 
-    /// The composer is sending (`mode` "send", or "queue" and the like): an answer hold ends, and
-    /// follows the tail again only when the list was following at the click. Otherwise a message
-    /// sent now brings the chat back to its end, wherever the reader had scrolled.
+    /// The composer is sending (`mode` "send", or "queue" and the like). A message sent now ends an
+    /// answer hold, which follows the tail again only when the list was following at the click;
+    /// without one, it brings the chat back to its end wherever the reader had scrolled. Any other
+    /// mode leaves the list and the hold alone.
     ///
-    /// CDXC:SessionChat 2026-11-17 WHY: The user kept seeing the chat stop following while the agent worked. Reproduced in the web build: a long reply stops the chat at its top (reply_arrival.rs), the reader scrolls down through it but not quite to the end and sends the next message; nothing put the list back in Tail mode (rows are followed only by a reader within the pill's edge threshold, `follow_tail_if_near_end`), so the whole next turn streamed below the fold until the down pill. A message sent from the composer asks for the agent's answer, so it follows the end as the Scroll to bottom pill does. A queued message goes out later and does not move the list.
+    /// CDXC:SessionChat 2026-11-17 WHY: The user kept seeing the chat stop following while the agent worked. Reproduced in the web build: a long reply stops the chat at its top (reply_arrival.rs), the reader scrolls down through it but not quite to the end and sends the next message; nothing put the list back in Tail mode (rows are followed only by a reader within the pill's edge threshold, `follow_tail_if_near_end`), so the whole next turn streamed below the fold until the down pill. A message sent from the composer asks for the agent's answer, so it follows the end as the Scroll to bottom pill does. A queued message goes out later: it moves neither the list nor an answer hold.
     pub(super) fn follow_tail_for_send(&self, mode: &str) {
+        if mode != "send" {
+            return;
+        }
         let hold = std::mem::take(&mut *self.answer_hold.borrow_mut());
         if hold.active {
             if hold.resume && !self.held_by_focus_or_disclosure() {
@@ -115,7 +119,7 @@ impl NativeChatView {
             }
             return;
         }
-        if mode != "send" || self.transcript_focus_follow.get().is_some() {
+        if self.transcript_focus_follow.get().is_some() {
             return;
         }
         self.release_reply_hold();
