@@ -136,6 +136,18 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
             collection_id: collection_id_by_project.get(project_id).cloned(),
         })
     };
+    // Whether a group's sessions count toward the Space and computer tab dots (hidden projects
+    // and hidden collections don't, `counts_toward_dots`).
+    let counts_here = |group_id: &str| {
+        counts_toward_dots(
+            input.ui,
+            &section_key,
+            group_id,
+            space_project_of_group(group_id)
+                .and_then(|project| project.collection_id)
+                .as_deref(),
+        )
+    };
     let bots_mode = effective_sidebar_mode(input.settings, input.ui) == SidebarMode::Bots;
     let is_bot_group = |group_id: &str| bot_groups.contains(group_id);
     let is_gbot_group = |group_id: &str| gbot_groups.contains(&group_id);
@@ -310,7 +322,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
             for group_id in group_ids
                 .iter()
                 .filter(|group_id| shows_group(&view, group_id))
-                .filter(|group_id| counts_toward_dots(input.ui, group_id))
+                .filter(|group_id| counts_here(group_id))
             {
                 let Some(build) = input.builds.get(group_id) else {
                     continue;
@@ -625,7 +637,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
     let mut machine_summary = MachineSummary::default();
     for build in group_ids
         .iter()
-        .filter(|group_id| counts_toward_dots(input.ui, group_id))
+        .filter(|group_id| counts_here(group_id))
         .filter_map(|group_id| input.builds.get(group_id))
     {
         // A coordinator's thread on another computer counts on that computer's tab.
@@ -874,17 +886,30 @@ pub fn owner_project_group_id(group_id: &str) -> Option<String> {
 }
 
 /// Whether a group's sessions count toward the Space and machine tab dots: not while its project
-/// is hidden (its session groups with it), unless Show hidden draws hidden projects again.
+/// is hidden (its session groups with it) or the collection it is filed in is hidden in this
+/// section (`section_key`, the machine's), unless Show hidden draws hidden items again.
+/// `collection_id` is the collection the group's project is filed in, a worktree's by its parent.
 ///
 /// CDXC:Sidebar 2026-11-17 DECISION:
-/// User: "pls make hidden projects not show dots on the space or machine that they're a part of", then "unless show hidden is enabled then they do show". A hidden project's sessions add nothing to any Space dot or computer tab dot; unhiding it, or turning Show hidden on, counts them again.
-pub(crate) fn counts_toward_dots(ui: &SidebarUiState, group_id: &str) -> bool {
+/// User: "pls make hidden projects not show dots on the space or machine that they're a part of", then "unless show hidden is enabled then they do show". A hidden project's sessions add nothing to any Space dot or computer tab dot; unhiding it, or turning Show hidden on, counts them again. Then, asked about hidden collections: "Yes, do hidden collections too, the same way (including the other computer tabs)", so a hidden collection's projects count the same as hidden ones.
+pub(crate) fn counts_toward_dots(
+    ui: &SidebarUiState,
+    section_key: &str,
+    group_id: &str,
+    collection_id: Option<&str>,
+) -> bool {
     if ui.show_hidden {
         return true;
     }
     let hidden = &ui.hidden_items.group_ids;
-    !hidden.iter().any(|hidden| hidden == group_id)
-        && owner_project_group_id(group_id).is_none_or(|owner| !hidden.contains(&owner))
+    let project_hidden = hidden.iter().any(|hidden| hidden == group_id)
+        || owner_project_group_id(group_id).is_some_and(|owner| hidden.contains(&owner));
+    !project_hidden
+        && collection_id.is_none_or(|collection_id| {
+            !ui.hidden_items
+                .collection_keys
+                .contains(&format!("{section_key}:{collection_id}"))
+        })
 }
 
 /// The groups Collapse All and Expand Previous act on, out of `group_ids`: the projects without

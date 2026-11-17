@@ -16,7 +16,8 @@ use std::collections::BTreeSet;
 use crate::keys::{MachineId, ProjectKey};
 use crate::presentation_store::{MachinePresentation, PresentationStore};
 
-use super::inputs::{SidebarHostInputs, SidebarUiState};
+use super::collections::CollectionsState;
+use super::inputs::{SidebarHostInputs, SidebarUiState, LOCAL_MACHINE_ID};
 use super::membership::project_members;
 use super::rows::side_chat_needs;
 use super::view::MachineSummary;
@@ -62,20 +63,37 @@ pub(crate) fn machine_tab_summary(
     machine_id: &MachineId,
     parked: &BTreeSet<String>,
     ui: &SidebarUiState,
+    collections: &CollectionsState,
 ) -> MachineSummary {
     let mut summary = MachineSummary::default();
     let Some(machine) = store.machine(machine_id) else {
         return summary;
     };
     let side_chat_needs = side_chat_needs(store, machine_id);
-    for project_id in drawn_project_ids(machine, parked) {
-        // A project the user hid adds nothing to the tab's dots (`assemble::counts_toward_dots`).
+    let drawn = drawn_project_ids(machine, parked);
+    let section_key = match machine_id.remote_id() {
+        None => LOCAL_MACHINE_ID.to_string(),
+        Some(remote) => format!("remote:{remote}"),
+    };
+    let collection_id_by_project =
+        hidden_collection_lookup(machine, parked, ui, collections, &section_key, &drawn);
+    for project_id in drawn {
+        // A project the user hid, or one filed in a collection the user hid, adds nothing to the
+        // tab's dots (`assemble::counts_toward_dots`).
         let group_id = ProjectKey {
             machine: machine_id.clone(),
             project_id: project_id.to_string(),
         }
         .to_sidebar_group_id();
-        if !super::assemble::counts_toward_dots(ui, &group_id) {
+        if !super::assemble::counts_toward_dots(
+            ui,
+            &section_key,
+            &group_id,
+            collection_id_by_project
+                .as_ref()
+                .and_then(|lookup| lookup.get(project_id))
+                .map(String::as_str),
+        ) {
             continue;
         }
         let members = project_members(store, machine, machine_id, project_id);
@@ -118,6 +136,41 @@ pub(crate) fn machine_tab_summary(
         }
     }
     summary
+}
+
+/// The collection each of a machine's drawn projects is filed in (a worktree by its parent's), as
+/// the list files them (`CollectionsState::collection_id_by_project`). `None` while none of the
+/// machine's collections is hidden, or Show hidden is on: then no collection keeps a project out
+/// of the counts, and the worktree parents, which take the machine's project facts, are not
+/// worked out.
+fn hidden_collection_lookup(
+    machine: &MachinePresentation,
+    parked: &BTreeSet<String>,
+    ui: &SidebarUiState,
+    collections: &CollectionsState,
+    section_key: &str,
+    drawn: &[&str],
+) -> Option<std::collections::BTreeMap<String, String>> {
+    let any_hidden = !ui.show_hidden
+        && collections.collections.iter().any(|collection| {
+            ui.hidden_items
+                .collection_keys
+                .contains(&format!("{section_key}:{}", collection.collection_id))
+        });
+    if !any_hidden {
+        return None;
+    }
+    let meta = super::projects::build_project_meta(machine, &[], parked);
+    let project_ids: Vec<String> = drawn.iter().map(|id| id.to_string()).collect();
+    Some(collections.collection_id_by_project(
+        &project_ids,
+        &|project_id| Some(project_id.to_string()),
+        &|project_id| {
+            meta.overlay(project_id)
+                .and_then(|overlay| overlay.worktree.as_ref())
+                .map(|worktree| worktree.parent_project_id.clone())
+        },
+    ))
 }
 
 /// Whether ANY machine the store holds draws a project group, which is what the empty state's

@@ -853,11 +853,12 @@ impl SidebarViewModel {
             effective,
             previous
                 .as_ref()
-                // Hiding or unhiding a project, or Show hidden, changes what every tab counts.
+                // Hiding or unhiding a project or collection, or Show hidden, changes what every tab counts.
                 .filter(|previous| {
                     previous.inputs.ui.show_hidden == effective.ui.show_hidden
-                        && previous.inputs.ui.hidden_items.group_ids
-                            == effective.ui.hidden_items.group_ids
+                        && previous.inputs.ui.hidden_items == effective.ui.hidden_items
+                        && previous.inputs.host.stored_project_collections
+                            == effective.host.stored_project_collections
                 })
                 .map(|previous| &previous.machine_summaries),
             changes,
@@ -866,7 +867,6 @@ impl SidebarViewModel {
         state.work.machine_summaries_built = summaries_built;
 
         // 7. The list itself.
-        let side_state = store.machine(&machine).map(|entry| entry.side_state());
         let tag_filter_labels = effective
             .ui
             .selected_tag_filters
@@ -875,19 +875,7 @@ impl SidebarViewModel {
             .collect();
         let spaces = super::workspaces::window_spaces(store, effective, &machine)
             .map(|spaces| SpacesState::from_wire(&spaces));
-        let collections = match side_state.and_then(|side| side.project_collections.as_ref()) {
-            // A document has arrived for this machine, so the daemon is authoritative from
-            // here on, an empty one included: after the user deletes their last collection
-            // the stored copy still holds it for as long as it takes the sidebar to write,
-            // and falling back to it there would draw the collection the user just removed.
-            Some(state) => CollectionsState::from_wire(state),
-            None => effective
-                .host
-                .stored_project_collections
-                .as_ref()
-                .map(CollectionsState::from_local_json)
-                .unwrap_or_default(),
-        };
+        let collections = machine_collections(store, effective, &machine);
         // The one list files every machine's projects by every machine's documents (`merged.rs`).
         let merged_documents = match merging {
             true => super::merged::union_documents(store, effective, spaces, collections),
@@ -1501,7 +1489,9 @@ fn machine_summaries(
                 .iter()
                 .any(|project| project.machine == machine)
             // The user-made groups of every machine live in this computer's document.
-            || changes.side_state.workspace_groups;
+            || changes.side_state.workspace_groups
+            // A project filed into, or out of, a hidden collection moves the counts.
+            || changes.side_state.project_collections;
         let summary = match previous
             .filter(|_| !touched)
             .and_then(|held| held.get(&machine))
@@ -1514,12 +1504,35 @@ fn machine_summaries(
                     &machine,
                     inputs.host.parked_project_ids(&machine),
                     &inputs.ui,
+                    &machine_collections(store, inputs, &machine),
                 )
             }
         };
         summaries.insert(machine, summary);
     }
     (summaries, built)
+}
+
+/// The project collections a machine's list files its projects by.
+fn machine_collections(
+    store: &PresentationStore,
+    inputs: &SidebarInputs,
+    machine: &MachineId,
+) -> CollectionsState {
+    let side_state = store.machine(machine).map(|entry| entry.side_state());
+    match side_state.and_then(|side| side.project_collections.as_ref()) {
+        // A document has arrived for this machine, so the daemon is authoritative from
+        // here on, an empty one included: after the user deletes their last collection
+        // the stored copy still holds it for as long as it takes the sidebar to write,
+        // and falling back to it there would draw the collection the user just removed.
+        Some(state) => CollectionsState::from_wire(state),
+        None => inputs
+            .host
+            .stored_project_collections
+            .as_ref()
+            .map(CollectionsState::from_local_json)
+            .unwrap_or_default(),
+    }
 }
 
 fn machine_id(selected_machine_id: &str) -> MachineId {
