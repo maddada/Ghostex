@@ -977,7 +977,17 @@ pub fn pairing_status(
                     caller: Principal::Anonymous,
                 });
             match finish_pairing(context, &pending) {
-                Ok(answer) => {
+                Ok(mut answer) => {
+                    // Let in by this computer's terminal while only its own app owned it: the
+                    // computer that joined may now ask to manage it, and is told so
+                    // (CDXC:Security 2026-11-17 DECISION at `terminal_may_approve`).
+                    if context
+                        .security
+                        .terminal_join(now)
+                        .is_some_and(|(id, _)| id == pending.approval_id)
+                    {
+                        answer["looksAfter"] = serde_json::json!(true);
+                    }
                     runtime.finish_pending(&ask.id, answer.clone(), now);
                     Ok(PairingStatusAnswer {
                         status: PairingStatus::Approved,

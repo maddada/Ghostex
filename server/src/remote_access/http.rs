@@ -892,40 +892,40 @@ pub(crate) fn may_show_pairing_code(
     caller: &Principal,
     now_ms: u64,
 ) -> bool {
+    // The token file: the user's own terminal (CDXC:Security 2026-11-17 DECISION at
+    // `pairing_code_gate`). Session tokens (agents in Ghostex sessions) and other computers'
+    // agents never get one.
+    let _ = now_ms;
     match caller {
-        Principal::LocalAgent => security.token_file_gets_code(now_ms),
+        Principal::LocalAgent => true,
         other => security.keeps_door(other),
     }
 }
 
 /*
-CDXC:Security 2026-11-16 DECISION:
+CDXC:Security 2026-11-17 DECISION:
+User, on the approval cards page (Q3723, "A. One ask: only the joining computer"): `ghostex computer-code` on a computer that has an owner printed its code only after a "Show this computer's pairing code" card was approved on the owner's app or phone, then the computer that used the code needed a second Approve. Now the token file (the user's own terminal) gets the code at once, with no card: a code by itself lets nothing in, since every phone or computer that uses it still waits for "Let <it> connect to <this computer>?", which only the owner's apps and phones approve (the token file approves it only on a computer whose own app is its only owner, CDXC:Security 2026-11-17 DECISION at `terminal_may_approve` in security/policy.rs). Agents still get no code: inside a Ghostex session the CLI speaks with that session's token, which gets the Easy Connect details without a code (`may_show_pairing_code`), as does another computer's agent through the relay. Each code shown is in the security log ("A pairing code for Easy Connect was shown") and opens, for ten minutes, the window `terminal_may_approve` reads. What this gives up (for the reviewer): a program running as the user that reads the token file itself, rather than through a Ghostex session, now gets a code without a card; it still can't let anything in with it on a computer whose owners are elsewhere. Supersedes the 2026-11-16 card for the token file's code below.
+*/
+/*
+CDXC:Security 2026-11-16 DECISION (superseded for the token file's code on 2026-11-17, above):
 User (W524, "Owner only"): pairing codes come from the app or a phone, not from whatever holds the token file. Once this computer has an owner device, the token file asking for the code with the window open (`ghostex computer-code`, or a script) makes one `pairingShowCode` card for the app and your phones; the CLI waits for it and repeats the call with the approval, and from then on it gets the code for ten minutes (`TOKEN_FILE_CODE_WINDOW_MS`, its own idle limit) without asking again. Every phone or computer that then uses the code still waits for an Approve that only the app's owner session or a phone can give. An agent's session token still gets the details without a code and asks nothing.
 */
-/// Whether `caller` gets the code with the pairing window open, or the answer that waits for the
-/// owner's Approve (the token file once this computer has an owner device).
+/// Whether `caller` gets the code with the pairing window open: the token file and this
+/// computer's door keepers do; nobody else.
 fn pairing_code_gate(
     state: &AppState,
     caller: &Principal,
-    params: &Value,
-    body: &Value,
-    endpoint_path: &str,
-    request_id: &str,
+    _params: &Value,
+    _body: &Value,
+    _endpoint_path: &str,
+    _request_id: &str,
 ) -> Result<bool, RoutedResponse> {
-    use crate::security::{ActionRequest, SensitiveAction};
     let now = crate::security::now_ms();
-    if !matches!(caller, Principal::LocalAgent) || state.security.token_file_gets_code(now) {
-        return Ok(may_show_pairing_code(&state.security, caller, now));
+    let show = may_show_pairing_code(&state.security, caller, now);
+    if show && matches!(caller, Principal::LocalAgent) {
+        state.security.open_token_file_code_window(now);
     }
-    let action = ActionRequest::new(
-        SensitiveAction::PairingShowCode,
-        "Show this computer's pairing code in a terminal (ghostex computer-code)",
-    )
-    .detail("A phone or computer that uses the code still waits for your Approve. Approve only if you just ran ghostex computer-code yourself.")
-    .params(params.clone());
-    crate::server::require_owner_presence(state, caller, action, body, endpoint_path, request_id)?;
-    state.security.open_token_file_code_window(now);
-    Ok(true)
+    Ok(show)
 }
 
 fn read_device_id(body: &Value) -> Result<String, RemoteAccessHttpError> {

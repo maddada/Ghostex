@@ -438,6 +438,10 @@ pub fn computer_pairing_status(paths: &GxserverPaths, pending_id: &str) -> Resul
         "sshKeyInstalled": ssh_key_installed,
         "user": answer.get("user"),
         "addMachine": add_machine,
+        // That computer's terminal let this one in while only its own app owned it: this
+        // computer may now ask to manage it (CDXC:Security 2026-11-17 DECISION at
+        // `terminal_may_approve` in security/policy.rs). Older computers don't say.
+        "looksAfter": answer.get("looksAfter").and_then(Value::as_bool) == Some(true),
     }))
 }
 

@@ -140,6 +140,12 @@ pub(crate) struct JoinFlow {
     pub(crate) computer_name: String,
     pub(crate) target: Option<JoinTarget>,
     pub(crate) step: JoinStep,
+    /// That computer's terminal let this one in while only its own app owned it: once connected,
+    /// this computer asks once to manage it (CDXC:Security 2026-11-17 DECISION at
+    /// `terminal_may_approve` in server/src/security/policy.rs).
+    pub(crate) looks_after: bool,
+    /// The words of that ask, to match in that computer's terminal; `Some("")` once it is in.
+    pub(crate) manage_words: Option<String>,
 }
 
 /// The fields the Connect a computer pane types into.
@@ -222,6 +228,23 @@ impl GpuiConnectDeviceWindow {
         cx.notify();
     }
 
+    /// The ask to manage the computer this one just joined: its words to match in that computer's
+    /// terminal, `Ok(None)` when this computer manages it already, or why it couldn't ask.
+    pub(crate) fn join_manage_answer(
+        &mut self,
+        answer: Result<Option<String>, String>,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(flow) = self.join.as_mut() {
+            flow.manage_words = Some(match answer {
+                Ok(Some(words)) => words,
+                Ok(None) => "in".to_string(),
+                Err(_) => "failed".to_string(),
+            });
+        }
+        cx.notify();
+    }
+
     /// `/api/computerPairingStatus` answered (`status`, and whether that computer kept this one's
     /// key and which user it signs in as).
     pub(crate) fn join_status(&mut self, answer: Result<Value, String>, cx: &mut Context<Self>) {
@@ -240,6 +263,7 @@ impl GpuiConnectDeviceWindow {
         match (status.as_deref(), answer) {
             (Some("pending"), _) => {}
             (Some("approved"), Ok(answer)) => {
+                flow.looks_after = answer.get("looksAfter").and_then(Value::as_bool) == Some(true);
                 let key_installed =
                     answer.get("sshKeyInstalled").and_then(Value::as_bool) == Some(true);
                 let mut target = flow.target.clone();
@@ -264,7 +288,7 @@ impl GpuiConnectDeviceWindow {
                 flow.step = JoinStep::Failed(JoinFailure {
                     title: format!("{name} said no"),
                     message: format!(
-                        "Someone turned this computer down there (Not my computer, Deny on a phone, or n in its terminal). {}",
+                        "Someone turned this computer down (Deny in Ghostex or on a phone, or n in its terminal). {}",
                         new_code_hint(&name)
                     ),
                     fix: JoinFix::NewCode,
@@ -350,6 +374,16 @@ impl GpuiConnectDeviceWindow {
         }
         match state.as_deref() {
             Some("connected") => {
+                // The user's own connect: ask once to manage that computer where it offers it.
+                if flow.looks_after && flow.manage_words.is_none() {
+                    flow.manage_words = Some(String::new());
+                    (self.host)(
+                        ConnectDeviceCommand::AskToManage {
+                            remote_machine_id: remote_machine_id.clone(),
+                        },
+                        cx,
+                    );
+                }
                 flow.step = JoinStep::Connected { remote_machine_id };
             }
             // The key didn't work and no password is saved: the other computer didn't keep it.
@@ -454,6 +488,8 @@ impl GpuiConnectDeviceWindow {
             computer_name: target.name.clone(),
             target: Some(target),
             step: JoinStep::Asking,
+            looks_after: false,
+            manage_words: None,
         });
         cx.notify();
         (self.host)(ConnectDeviceCommand::JoinComputer { code }, cx);
@@ -1025,6 +1061,7 @@ impl GpuiConnectDeviceWindow {
         };
         let name = flow.computer_name.clone();
         let this_computer = self.computer_name.clone();
+        let manage_words = flow.manage_words.clone();
         let step = flow.step.clone();
         let approved = "Approved".to_string();
         let opens = format!("This computer can open {name}");
@@ -1052,10 +1089,10 @@ impl GpuiConnectDeviceWindow {
                 // CDXC:Security 2026-11-17 at `approvers_here` in server/src/server/security_http.rs:
                 // the Approve is wherever {name}'s owners are, not necessarily on its screen.
                 .child(self.muted(format!(
-                    "Approve \"Is this your computer?\" only if it shows these same three words. It shows in Ghostex on the computers and phones that own {name}, and on {name} itself if Ghostex is open there; if you ran ghostex computer-code on {name}, its terminal names them. A computer with no owner yet asks you to type y in that terminal instead."
+                    "Approve in Ghostex on a computer or phone that owns {name}. It asks \"Let {this_computer} connect to {name}?\" with these words. If you ran ghostex computer-code on {name}, its terminal says where, or asks you to type y there."
                 )))
                 .child(self.progress_list(vec![
-                    ("Waiting for your Approve".to_string(), Some(false)),
+                    ("Waiting for you to approve".to_string(), Some(false)),
                     (opens, None),
                 ]))
                 .child(modal_footer(vec![modal_action_button(
@@ -1129,6 +1166,33 @@ impl GpuiConnectDeviceWindow {
                         Some(true),
                     ),
                 ]))
+                // The one ask to manage that computer, where its terminal let this one in
+                // (CDXC:Security 2026-11-17 DECISION at `terminal_may_approve`).
+                .children(manage_words.as_deref().map(|words| match words {
+                    "" => self.muted(format!("Asking to manage {name}…")).into_any_element(),
+                    "in" => self
+                        .muted(format!(
+                            "This computer manages {name}: approve its new phones and computers from here."
+                        ))
+                        .into_any_element(),
+                    "failed" => self
+                        .muted(format!(
+                            "This computer couldn't ask to manage {name}. It can still open it."
+                        ))
+                        .into_any_element(),
+                    words => v_flex()
+                        .w_full()
+                        .gap(px(8.0))
+                        .child(self.muted(format!(
+                            "{name}'s terminal asks \"Let {this_computer} manage {name}?\". Type y there if it shows these words:"
+                        )))
+                        .child(pairing_words(
+                            &p,
+                            &words.split_whitespace().map(str::to_string).collect::<Vec<_>>(),
+                            false,
+                        ))
+                        .into_any_element(),
+                }))
                 .child(modal_footer(
                     // Connect both ways sends this computer's code: without one (this app may not
                     // show it yet) the button would do nothing.

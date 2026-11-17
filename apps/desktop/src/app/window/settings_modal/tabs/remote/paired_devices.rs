@@ -329,7 +329,11 @@ fn pending_device_row(
                     false,
                 ))
                 .child(div().flex_1())
-                .child(detail(t, pairing_question(phone), false)),
+                .child(detail(
+                    t,
+                    pairing_question_named(phone, &device.name),
+                    false,
+                )),
         )
         .child(pairing_words(&t.p.modal, &device.words, true))
         .child(

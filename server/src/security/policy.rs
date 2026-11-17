@@ -9,7 +9,7 @@ use super::{ActionRequest, Principal, SecurityState};
 /*
 CDXC:Security 2026-11-16 DECISION:
 User (W524, "Owner only"): only the Ghostex app on this computer or a paired phone makes pairing codes and approves new devices; agents running as the user must not. The token file is readable by every program of the user (its path is in every session's environment), so once this computer has an owner device (the app's owner key, kept in the OS key store, is enrolled, or a phone paired with its own token), the token file alone no longer:
-- gets a pairing code without an Approve on the app or a phone (`ghostex computer-code` asks once, then gets codes for ten minutes, `TOKEN_FILE_CODE_WINDOW_MS`);
+- gets a pairing code without an Approve on the app or a phone (`ghostex computer-code` asks once, then gets codes for ten minutes, `TOKEN_FILE_CODE_WINDOW_MS`; since 2026-11-17 Q3723 it gets the code at once, CDXC:Security 2026-11-17 DECISION at `pairing_code_gate` in remote_access/http.rs);
 - approves a device asking to pair, a terminal's pairing code or another owner key (`/api/approveApprovalRequest` refuses it; it may still deny, which only closes a door);
 - adds an owner key without such an Approve (`addApproverKey`).
 The app proves itself with its owner session (`/api/openOwnerSession`, signed by the owner key), which it opens for these calls only; every other call it makes, and everything else the token file does, is unchanged. Until this computer has any owner device (a new install, or a server without the app and no phone yet), the token file still keeps the door, or nobody could pair the first phone. A program running as the user that rewrites gxserver's own files can still change all this (the same-user limit). This narrows the 2026-11-10 decision below for the door only.
@@ -202,7 +202,7 @@ impl SecurityState {
             .contains(id)
     }
 
-    /// One Approve of a terminal's pairing code: the token file gets codes for a while.
+    /// The token file was just shown a pairing code (a terminal's `ghostex computer-code`).
     pub fn open_token_file_code_window(&self, now_ms: u64) {
         self.set_window(
             &self.token_file_code_until,
@@ -210,10 +210,91 @@ impl SecurityState {
         );
     }
 
-    /// Whether the token file gets a pairing code now: it keeps the door, or one was approved
-    /// within [`TOKEN_FILE_CODE_WINDOW_MS`].
-    pub fn token_file_gets_code(&self, now_ms: u64) -> bool {
-        self.keeps_door(&Principal::LocalAgent) || now_ms < self.window(&self.token_file_code_until)
+    /// Whether the token file was shown a pairing code within [`TOKEN_FILE_CODE_WINDOW_MS`].
+    pub fn token_file_code_shown_lately(&self, now_ms: u64) -> bool {
+        now_ms < self.window(&self.token_file_code_until)
+    }
+
+    /// Whether this computer's own app is its only owner: owner keys there are all ones its own
+    /// app enrolled with the one-time value it hands gxserver (`appOwnerKeys`), and no phone ever
+    /// paired with its own token.
+    pub fn only_own_app_owns(&self) -> bool {
+        let keys = self.listed_owner_keys();
+        !keys.is_empty()
+            && !self.is_remembered(OWNER_DEVICE)
+            && keys.iter().all(|key| self.is_app_owner_key(&key.key_id))
+    }
+
+    /*
+    CDXC:Security 2026-11-17 DECISION:
+    User (Q-4B, on a headless computer whose only owner is its own Ghostex app, which they never look at): "that app hands ownership to the first computer that joins it through ghostex computer-code (after the user's Approve of the join, with the matching words). Keep it as tight as possible: only the first join through computer-code, only while that computer has no other owner besides its own app, never through an agent, logged in the security log in plain words, and the new owner is told." The token file (the user's terminal; an agent in a Ghostex session holds a session token instead, which never gets a code or approves) may approve here only while (1) this computer's own app is its only owner (`only_own_app_owns`), and (2) a terminal was shown a pairing code in the last ten minutes, and only (a) a computer (never a phone) joining with that code, then (b) within ten minutes of that join, that same computer's app asking to manage this one (its door-only owner key), which gxserver lets in at the click (CDXC:Security 2026-11-17 at `enroll_owner_key_on_approval`). Once (b) is in, this computer has another owner and (1) no longer holds, so the terminal approves nothing again. A program that reads the token file itself (not through a Ghostex session) is the user's terminal here, as everywhere the token file decides (W524).
+    */
+    /// Whether the token file may approve `request` here: CDXC:Security 2026-11-17 DECISION above.
+    pub fn terminal_may_approve(
+        &self,
+        caller: &Principal,
+        request: &ApprovalRequest,
+        now_ms: u64,
+    ) -> bool {
+        if !matches!(caller, Principal::LocalAgent)
+            || !self.only_own_app_owns()
+            || !self.token_file_code_shown_lately(now_ms)
+        {
+            return false;
+        }
+        let summary = request.summary.trim();
+        match request.action {
+            // A computer joining (gxserver writes "Let a <system> computer that calls itself …").
+            SensitiveAction::PairingApproveDevice => summary.starts_with("Let a "),
+            // The computer that joined asking to manage this one: a door-only ask made after that
+            // join, within its ten minutes (an app names itself by its host name, which can differ
+            // from the name it joined with, so the words the user matches are the check).
+            SensitiveAction::AddApproverKey => {
+                summary.starts_with("Let ")
+                    && summary.contains(" show the pairing code of ")
+                    && self
+                        .terminal_join_at(now_ms)
+                        .is_some_and(|at| request.created_at_ms >= at)
+            }
+            _ => false,
+        }
+    }
+
+    /// The terminal let computer `name` in (request `id`).
+    pub fn note_terminal_join(&self, id: &str, name: &str, now_ms: u64) {
+        *self
+            .terminal_join
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+            Some((id.to_string(), name.to_string(), now_ms));
+    }
+
+    /// The computer the terminal let in within [`TOKEN_FILE_CODE_WINDOW_MS`]: (request id, name).
+    pub fn terminal_join(&self, now_ms: u64) -> Option<(String, String)> {
+        self.terminal_join
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+            .filter(|(_, _, at)| now_ms < at + TOKEN_FILE_CODE_WINDOW_MS)
+            .map(|(id, name, _)| (id, name))
+    }
+
+    /// When the terminal let a computer in, within [`TOKEN_FILE_CODE_WINDOW_MS`].
+    pub fn terminal_join_at(&self, now_ms: u64) -> Option<u64> {
+        self.terminal_join
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .as_ref()
+            .map(|(_, _, at)| *at)
+            .filter(|at| now_ms < at + TOKEN_FILE_CODE_WINDOW_MS)
+    }
+
+    /// The handover is done (or given up): the terminal approves nothing more.
+    pub fn clear_terminal_join(&self) {
+        *self
+            .terminal_join
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
     }
 
     fn window(&self, until: &std::sync::Mutex<u64>) -> u64 {

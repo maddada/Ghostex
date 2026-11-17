@@ -93,6 +93,28 @@ impl GhostexGpuiApp {
                     // Its requests that were notices ("Approve on …") can be approved here now.
                     self.owner_security_show_pending_requests(machine_id.clone(), cx);
                 }
+                // The new manager is told (Q-4B: "and the new owner is told").
+                let computer = machine_id
+                    .as_deref()
+                    .and_then(crate::app::helpers::gpui_remote_machine_name_from_settings)
+                    .unwrap_or_else(|| "this computer".to_string());
+                self.upsert_gpui_app_toast(
+                    GpuiAppToast {
+                        id: format!("security-manages-{}", machine_id.as_deref().unwrap_or("local")),
+                        level: GpuiAppToastLevel::Success,
+                        title: format!("{} now manages {computer}", super::this_computer_name()),
+                        description: Some(format!(
+                            "You can show {computer}'s pairing code and approve its new phones and computers from here."
+                        )),
+                        copy_text: None,
+                        action: None,
+                        loading: false,
+                        persistent: false,
+                        duration_ms: 8000,
+                        epoch: 0,
+                    },
+                    cx,
+                );
             }
             self.remove_gpui_app_toast(&id, cx);
             // Shown through another entry of the same computer (`owner_security_show_card`).
@@ -358,14 +380,18 @@ impl GhostexGpuiApp {
     ) {
         let computer = crate::app::helpers::gpui_remote_machine_name_from_settings(machine_id)
             .unwrap_or_else(|| machine_id.to_string());
-        let summary = request.summary.trim().trim_end_matches('.');
+        // The ask as its own card words it ("Let m7-arch connect to M7-Desktop?").
+        let summary = ghostex_gx_protocol::plain_ask::plain_ask(request, &computer)
+            .map(|ask| ask.question)
+            .unwrap_or_else(|| format!("{}.", request.summary.trim().trim_end_matches('.')));
         let where_to = match devices {
             [] => format!("in Ghostex on the computer or phone that owns {computer}"),
             several => format!("in Ghostex on {}", several.join(" or ")),
         };
         let then = if asked {
             format!(
-                " It also asks there, once, to let this computer answer {computer}'s requests from here."
+                " To answer {computer}'s asks from here next time, approve \"Let {} manage {computer}?\" there too.",
+                super::this_computer_name()
             )
         } else {
             String::new()
@@ -381,9 +407,7 @@ impl GhostexGpuiApp {
                 // Not "Approve on {computer}": its owners may all be elsewhere (a headless
                 // computer, CDXC:Security 2026-11-17 at `approvers_here` in gxserver).
                 title: format!("{computer} asks for your approval"),
-                description: Some(format!(
-                    "{computer} asks: {summary}. Approve it {where_to}.{then}"
-                )),
+                description: Some(format!("{summary} Approve it {where_to}.{then}")),
                 copy_text: None,
                 action: None,
                 loading: false,

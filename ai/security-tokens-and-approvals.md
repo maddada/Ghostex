@@ -77,9 +77,17 @@ phones always; the token file only while the computer has no owner device (`has_
 owner key is enrolled, or a phone paired with its own token, remembered for good as `ownerDevice` in
 `rememberedApprovals`). Once it has one, the token file:
 
-- gets the code from `/api/remotePairingCode` with `openTunnel` only after an Approve of a
-  `pairingShowCode` request on the app or a phone (`ghostex computer-code` waits for it), then for
-  ten minutes (`TOKEN_FILE_CODE_WINDOW_MS`, in memory). The terminal never approves here, even on a
+- gets the code from `/api/remotePairingCode` with `openTunnel` at once, with no card (Q3723,
+  17 Nov: a code lets nothing in by itself; every device that uses it waits for "Let <it> connect
+  to <this computer>?"). Session tokens (agents in Ghostex sessions) and other computers' agents
+  still get no code; a program that reads the token file itself does (the reviewer's note at
+  `pairing_code_gate`). Each code opens a ten-minute window (`TOKEN_FILE_CODE_WINDOW_MS`). While
+  this computer's only owner is its own app (`only_own_app_owns`: only `appOwnerKeys`, never a
+  phone), the token file may approve, inside that window, a computer (never a phone) joining with
+  the code, then within ten minutes that computer's door-only ask to manage it
+  (`terminal_may_approve`, Q-4B); gxserver logs both ("ownership.terminalJoin",
+  "ownership.handover"), tells the joining computer (`looksAfter` in `/api/pairingStatus`), and
+  once that key is in the terminal approves nothing more. Otherwise the terminal never approves here, even on a
   headless computer (the user, 17 Nov, Q-3A); instead `/api/securityStatus` names who can
   (`approvesHere`: each owner app by its computer's name, `thisApp` for this computer's own, each
   paired phone and computer), and `ghostex computer-code` and the CLI's approval wait say "Approve it

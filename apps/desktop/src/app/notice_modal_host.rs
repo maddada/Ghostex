@@ -18,7 +18,7 @@ use crate::app::helpers::{
     chrome_uses_light_appearance, titlebar_active_text_color, titlebar_popup_menu_hover_color,
     titlebar_svg_icon,
 };
-use crate::app::window::native_modal_kit::approve_presence_hint;
+use crate::app::window::native_modal_kit::{approve_presence_hint, this_computer_place};
 use crate::app::window::notice_modal::{
     GpuiNoticeModalWindow, NoticeModalCommand, NoticeModalHost, NoticeModalItem,
     NoticeModalPairing, NoticeModalTone,
@@ -26,7 +26,6 @@ use crate::app::window::notice_modal::{
 use crate::app::window::toast::{
     GpuiAppToast, GpuiAppToastAction, GpuiAppToastLevel, gpui_app_toast_without_repeats,
 };
-use ghostex_gx_protocol::approval::{ApprovalRequest, SensitiveAction};
 
 /// The notices waiting for an answer and the modal that shows them.
 #[derive(Default)]
@@ -52,6 +51,14 @@ impl GpuiAppToast {
     }
 }
 
+/// "This Mac" for a row value; another computer's name as it is.
+fn capitalized_place(place: &str) -> String {
+    match place.strip_prefix("this ") {
+        Some(rest) => format!("This {rest}"),
+        None => place.to_string(),
+    }
+}
+
 /// "Let the agents on studio and this computer reach each other" ends with a full stop.
 fn sentence(text: &str) -> String {
     let text = text.trim();
@@ -62,49 +69,10 @@ fn sentence(text: &str) -> String {
     }
 }
 
-/// The phone or computer a pairing request asks about, read from the summary and detail gxserver
-/// writes for it (server/src/remote_access/pair_device.rs: `… calls itself "<name>" …` and
-/// `… the same three words: a · b · c. …`); `None` for any other request, or one worded otherwise
-/// (it then shows as a plain approval).
-fn pairing_of(request: &ApprovalRequest) -> Option<NoticeModalPairing> {
-    if request.action != SensitiveAction::PairingApproveDevice {
-        return None;
-    }
-    let summary = request.summary.as_str();
-    let name = summary.split_once("calls itself \"")?.1.split_once('"')?.0;
-    let words: Vec<String> = request
-        .detail
-        .as_deref()?
-        .split_once("three words: ")?
-        .1
-        .split_once('.')?
-        .0
-        .split('·')
-        .map(|word| word.trim().to_string())
-        .filter(|word| !word.is_empty())
-        .collect();
-    if words.len() != 3 || name.trim().is_empty() {
-        return None;
-    }
-    let phone = summary.starts_with("Pair ");
-    let lower = summary.to_lowercase();
-    let kind_label = if !phone {
-        "computer"
-    } else if lower.contains("iphone") || lower.contains(" ios ") {
-        "iPhone"
-    } else if lower.contains("android") {
-        "Android"
-    } else {
-        "phone"
-    };
-    Some(NoticeModalPairing {
-        name: name.trim().to_string(),
-        kind_label: kind_label.to_string(),
-        phone,
-        words,
-    })
-}
-
+/*
+CDXC:Security 2026-11-17 DECISION:
+User, on the approval cards page (docs/2026-11-17/approval-ux/index.html): Q3720 "A card in the middle", Q3721 "Big boxes", Q3722 "Let … ?". An approval the app knows (a computer joining, a phone, a pairing code, another app asking to manage a computer) shows one plain question naming both sides, one line on what Approve lets it do, the words to check big with one line, then Deny and Approve (`ghostex_gx_protocol::plain_ask`). "Let this Mac manage <computer> again?" shows the plain words written for it (`owner_security::old_key_unlock_card`) and the name the computer gives itself, not the request's own sentence, which it used to. Anything else keeps gxserver's sentence with who asked, now named by its computer.
+*/
 /// How the modal draws `toast`.
 fn notice_item(toast: &GpuiAppToast) -> NoticeModalItem {
     if let Some(GpuiAppToastAction::SecurityApproval {
@@ -114,6 +82,45 @@ fn notice_item(toast: &GpuiAppToast) -> NoticeModalItem {
         ..
     }) = &toast.action
     {
+        let place = computer
+            .clone()
+            .unwrap_or_else(|| this_computer_place().to_string());
+        // This app's own ask, which its old key may let in: the card written for it.
+        if crate::app::owner_security::asks_for_this_app(request) {
+            return NoticeModalItem {
+                id: toast.id.clone(),
+                tone: NoticeModalTone::Approval,
+                title: toast.title.clone(),
+                message: toast.description.clone(),
+                source: crate::app::owner_security::reported_computer_name(request)
+                    .map(|name| vec![("It says it is".to_string(), name)])
+                    .unwrap_or_default(),
+                action_label: Some("Approve".to_string()),
+                copy_text: None,
+                hint: Some("Approve only if that is the computer you expect.".to_string()),
+                pairing: None,
+            };
+        }
+        if let Some(ask) = ghostex_gx_protocol::plain_ask::plain_ask(request, &place) {
+            let phone = request.summary.trim_start().starts_with("Pair ");
+            return NoticeModalItem {
+                id: toast.id.clone(),
+                tone: NoticeModalTone::Approval,
+                title: ask.question,
+                message: ask.body,
+                source: Vec::new(),
+                action_label: Some("Approve".to_string()),
+                copy_text: None,
+                hint: None,
+                pairing: (!ask.words.is_empty()).then(|| NoticeModalPairing {
+                    name: String::new(),
+                    kind_label: String::new(),
+                    phone,
+                    words: ask.words,
+                    check: ask.check.unwrap_or_default(),
+                }),
+            };
+        }
         let asker = match request.requested_by.kind.as_str() {
             "owner" => "Ghostex".to_string(),
             _ if request.requested_by.label.trim().is_empty() => "An agent".to_string(),
@@ -131,24 +138,6 @@ fn notice_item(toast: &GpuiAppToast) -> NoticeModalItem {
         }
         // Only when it will (Settings > Security, or an older gxserver): a plain Approve is one click.
         let hint = require_presence.then(|| approve_presence_hint().to_string());
-        // A pairing reads like the Connect a phone window: the device, its words, one sentence;
-        // the computer it asks on is named only when it isn't this one.
-        if let Some(pairing) = pairing_of(request) {
-            return NoticeModalItem {
-                id: toast.id.clone(),
-                tone: NoticeModalTone::Approval,
-                title: toast.title.clone(),
-                message: None,
-                source: computer
-                    .clone()
-                    .map(|computer| vec![("On".to_string(), computer)])
-                    .unwrap_or_default(),
-                action_label: Some("Approve".to_string()),
-                copy_text: None,
-                hint,
-                pairing: Some(pairing),
-            };
-        }
         return NoticeModalItem {
             id: toast.id.clone(),
             tone: NoticeModalTone::Approval,
@@ -156,12 +145,7 @@ fn notice_item(toast: &GpuiAppToast) -> NoticeModalItem {
             message: Some(message),
             source: vec![
                 ("Asked by".to_string(), asker),
-                (
-                    "Computer".to_string(),
-                    computer
-                        .clone()
-                        .unwrap_or_else(|| "This computer".to_string()),
-                ),
+                ("Computer".to_string(), capitalized_place(&place)),
             ],
             action_label: Some("Approve".to_string()),
             copy_text: None,

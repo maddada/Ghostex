@@ -186,6 +186,11 @@ pub(crate) enum ConnectDeviceCommand {
     Reconnect {
         remote_machine_id: String,
     },
+    /// Ask once to manage the computer just joined (its terminal let this one in while only its
+    /// own app owned it); the host answers `join_manage_answer`.
+    AskToManage {
+        remote_machine_id: String,
+    },
     /// Connect both ways with this computer's own `code`; the host answers
     /// `connect_back_progress`.
     ConnectBack {
@@ -573,7 +578,7 @@ impl GpuiConnectDeviceWindow {
         }
         match (&self.stage, &self.waiting) {
             (Stage::Connected(device), _) => format!("{} is connected", device.name),
-            (Stage::Ready, Some(device)) => pairing_question(device.phone).to_string(),
+            (Stage::Ready, Some(device)) => pairing_question_named(device.phone, &device.name),
             _ if self.computer_only => "Connect a computer".to_string(),
             _ => "Connect a device".to_string(),
         }

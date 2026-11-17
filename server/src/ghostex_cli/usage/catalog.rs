@@ -231,7 +231,7 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "computer-code [--once] [--json] [--copy]",
-            "Print this computer's pairing code (the one Connect a Computer shows) to paste into Connect a Computer on another computer; once this computer has an owner (the Ghostex app here or on another of your computers, or a paired phone), approve the code and then that computer in Ghostex on any of them, which this command names, otherwise approve it here when its three words match; --copy also puts the code on the clipboard; works on a server without the app; run it in your own terminal, not in a Ghostex session",
+            "Print this computer's pairing code (the one Connect a Computer shows) to paste into Connect a Computer on another computer; a computer that uses it waits for your Approve in Ghostex on a computer or phone that owns this one, which this command names; on a computer with no owner yet, or whose only owner is its own Ghostex app, approve it here when its three words match; --copy also puts the code on the clipboard; works on a server without the app; run it in your own terminal, not in a Ghostex session",
         ),
         format_help_command(
             "computers [--json]",

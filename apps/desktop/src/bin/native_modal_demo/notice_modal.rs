@@ -1,7 +1,7 @@
 //! Preview host for the notice modal: every toast that used to carry a button, in the words the
 //! app raises it with. States: `approval-remote` (default, a plain Approve), `approval-local`,
-//! `approval-presence` (Settings > Security's switch on), `approval-pairing` (a phone asking to
-//! pair, drawn like the Connect a phone window), `account`,
+//! `approval-presence` (Settings > Security's switch on), `approval-pairing` (a computer joining,
+//! "Let m7-arch connect to M7-Desktop?"), `approval-phone` ("Add iPhone 17 to this Mac?"), `account`,
 //! `views-off`, `files-off`, `sync-undo`, `chief-undo`, `homebrew`, `remote-copy-path`,
 //! `display-scale`, `linux-update`, `terminal-error`, `git-error`, `gxserver-failed`, `queue`
 //! (three waiting: "1 of 3"), `copied` (Copy details just pressed). Every click is printed and the
@@ -73,21 +73,45 @@ fn case(state: &str) -> NoticeModalItem {
             "This computer",
             "Approve asks for Touch ID or your password first.",
         ),
-        // A phone asking to pair while the Connect a phone window is closed (notice_modal_host.rs
-        // `pairing_of` reads this from gxserver's summary).
+        // A computer joining a computer this Mac owns (notice_modal_host.rs `notice_item` reads
+        // it from gxserver's sentence with `ghostex_gx_protocol::plain_ask`).
         "approval-pairing" => NoticeModalItem {
             source: Vec::new(),
-            message: None,
+            message: Some("It can then open your chats and terminals on M7-Desktop.".to_string()),
             pairing: Some(NoticeModalPairing {
-                name: "Mo's iPhone".to_string(),
-                kind_label: "iPhone".to_string(),
-                phone: true,
-                words: vec!["harbor".into(), "koala".into(), "angle".into()],
+                name: String::new(),
+                kind_label: String::new(),
+                phone: false,
+                words: vec!["candle".into(), "cobalt".into(), "river".into()],
+                check: "Approve only if m7-arch shows the same words.".to_string(),
             }),
             ..item(
                 "approval-pairing",
                 Approval,
-                "Is this your phone?",
+                "Let m7-arch connect to M7-Desktop?",
+                "",
+                Some("Approve"),
+                None,
+            )
+        },
+        // A phone asking to pair here.
+        "approval-phone" => NoticeModalItem {
+            source: Vec::new(),
+            message: Some(
+                "It can then use Ghostex on this Mac from anywhere, and approve asks like this one."
+                    .to_string(),
+            ),
+            pairing: Some(NoticeModalPairing {
+                name: String::new(),
+                kind_label: String::new(),
+                phone: true,
+                words: vec!["lantern".into(), "pepper".into(), "orbit".into()],
+                check: "Approve only if your phone shows the same words.".to_string(),
+            }),
+            ..item(
+                "approval-phone",
+                Approval,
+                "Add iPhone 17 to this Mac?",
                 "",
                 Some("Approve"),
                 None,

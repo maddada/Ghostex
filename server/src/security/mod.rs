@@ -126,8 +126,12 @@ pub struct SecurityState {
     retired_owner_keys: Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>,
     /// Owner keys this computer's own app enrolled: never retired (`owner.rs`).
     app_owner_keys: Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>,
-    /// Until when (ms) the token file gets pairing codes after an Approve (`policy.rs`).
+    /// Until when (ms) a pairing code shown to the token file (a terminal's `ghostex
+    /// computer-code`) counts as just shown (`policy.rs`).
     token_file_code_until: Arc<std::sync::Mutex<u64>>,
+    /// The first computer this computer's terminal let in while only its own app owned it, and
+    /// when (CDXC:Security 2026-11-17 at `terminal_may_approve` in `policy.rs`): request id, name, ms.
+    terminal_join: Arc<std::sync::Mutex<Option<(String, String, u64)>>>,
 }
 
 impl SecurityState {
@@ -146,6 +150,7 @@ impl SecurityState {
             save_lock: Arc::default(),
             events: broadcast::channel(256).0,
             token_file_code_until: Arc::default(),
+            terminal_join: Arc::default(),
             door_only_keys: Arc::default(),
             retired_owner_keys: Arc::default(),
             app_owner_keys: Arc::default(),

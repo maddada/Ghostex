@@ -285,7 +285,11 @@ fn owner_refusal(transport: &Transport) -> Option<String> {
         });
     let me = this_computer_name();
     let local = matches!(transport, Transport::Local);
-    let there = expected_computer(transport);
+    // The card's own question names the computer plainly (the approval cards page, 2026-11-17).
+    let there = match transport {
+        Transport::Local => "this computer".to_string(),
+        Transport::Remote(_) => machine_and_host(transport).0,
+    };
     // Only the cases that name where to approve look the owners up (one `securityStatus` call).
     let place = || owner_place(transport);
     match (open, waiting, gave_up) {
@@ -299,19 +303,19 @@ fn owner_refusal(transport: &Transport) -> Option<String> {
         }
         (false, false, _) if flooded.is_some() => flooded,
         (false, true, _) if local => Some(format!(
-            "This computer already has an owner. {}, approve \"Let {me} (Ghostex app) show the pairing code of …\" once, only if it shows the key words {words}; then Ghostex here can show the code and approve devices.",
+            "{} approve \"Let {me} manage {there}?\" first, only if it shows the words {words}. Then Ghostex here can show the code and approve devices.",
             capitalized(&place())
         )),
         (false, true, _) => Some(format!(
-            "{there} has its own owner. {}, approve \"Let {me} (Ghostex app) show the pairing code of …\" once, only if it shows the key words {words} and names {there}; then you can approve its devices from here.",
+            "{} approve \"Let {me} manage {there}?\" first, only if it shows the words {words}. Then you can show {there}'s pairing code and approve its devices from here.",
             capitalized(&place())
         )),
         (false, false, true) if local => Some(format!(
-            "\"Let {me} (Ghostex app) show this computer's pairing code\" wasn't approved, so Ghostex here can't show the code or approve devices. Restart Ghostex to ask again, or approve it {}.",
+            "\"Let {me} manage {there}?\" was turned down, so Ghostex here can't show the code or approve devices. Approve them {} instead, or restart Ghostex here to ask again.",
             place()
         )),
         (false, false, true) => Some(format!(
-            "That computer didn't let {me} act as you there, so approve its devices {}. Restart Ghostex here to ask again.",
+            "{there} said no to letting {me} manage it, so approve its devices {} instead. Restart Ghostex here to ask again.",
             place()
         )),
         _ => None,
@@ -1125,7 +1129,7 @@ fn machine_and_host(transport: &Transport) -> (String, Option<String>) {
 /// The name the computer behind `request` gives itself: the "<name> (Ghostex server …)" gxserver
 /// writes into its "act as you" summary (`this_computer_label` in
 /// server/src/server/security_http.rs).
-fn reported_computer_name(request: &ApprovalRequest) -> Option<String> {
+pub(crate) fn reported_computer_name(request: &ApprovalRequest) -> Option<String> {
     let after = request.summary.split_once("pairing code of ")?.1;
     let name = after.split_once(" (Ghostex server")?.0.trim();
     (!name.is_empty()).then(|| name.to_string())
@@ -1223,16 +1227,14 @@ pub(crate) fn old_key_unlock_card(
     let reached = host
         .map(|host| format!(" This Mac connects to it at {host}."))
         .unwrap_or_default();
-    let check = match reported_computer_name(request) {
-        Some(name) => format!(
-            " The computer that answered calls itself \"{name}\". Approve only if that is {computer}."
-        ),
-        None => format!(" Approve only if you expected this for {computer}."),
-    };
+    // The name the computer that answered gives itself shows as the card's own row, "It says it
+    // is" (notice_modal_host.rs `notice_item`), with "Approve only if that is the computer you
+    // expect." under it; this is the plain body (the approval cards page, 2026-11-17).
+    let _ = request;
     (
         format!("Let this Mac manage {computer} again?"),
         format!(
-            "Since the last Ghostex update, {computer} doesn't know this Mac any more, so no one can add a phone or computer to it. Approve to let this Mac manage {computer} again.{reached}{check}"
+            "After the last update, {computer} no longer knows this Mac, so nobody can add phones or computers to it.{reached}"
         ),
     )
 }
@@ -1590,23 +1592,25 @@ pub(crate) fn steer_needs_owner(
         session.waiting_approval.is_some() || session.gave_up
     });
     waiting.then(|| {
+        let me = this_computer_name();
+        let computer =
+            crate::app::helpers::gpui_remote_machine_name_from_settings(&target.machine_id)
+                .unwrap_or_else(|| "that computer".to_string());
         format!(
-            "Ghostex on {} isn't approved as you on the computer this session runs on yet, so it can't stop, answer or type there for you. Approve \"Let {} (Ghostex app) act as the owner\" once in Ghostex on the computer or phone that owns that computer (it shows there as a card); after that it works without asking.",
-            this_computer_name(),
-            this_computer_name(),
+            "{me} can't stop, answer or type in {computer}'s sessions yet. Approve \"Let {me} manage {computer}?\" once in Ghostex on a computer or phone that owns {computer}; after that it works without asking."
         )
     })
 }
 
 /// [`enroll_owner_key`]'s answer while that computer's own owner hasn't let this app act as the
 /// owner there; the approval card replaces it with words naming both computers.
-pub(crate) const OWNER_WAITING_ERROR: &str = "Another owner key is enrolled on that computer's Ghostex. Approve this app in Ghostex on the computer or phone that owns that computer.";
+pub(crate) const OWNER_WAITING_ERROR: &str = "This computer can't manage that computer yet. Approve the card asking to let it manage that computer in Ghostex on a computer or phone that owns it, then try again.";
 
 /// What Approve on `computer`'s card says while that computer's owner hasn't let this app in.
 pub(crate) fn owner_waiting_message(computer: &str) -> String {
     let me = this_computer_name();
     format!(
-        "{computer} has its own owner, so Ghostex here can't answer its requests yet. In Ghostex on the computer or phone that owns {computer}, approve \"Let {me} (Ghostex app) act as the owner\" (it shows there as a card once Ghostex is open on it), or answer this request there instead."
+        "Ghostex here can't answer {computer}'s asks yet. Approve \"Let {me} manage {computer}?\" in Ghostex on a computer or phone that owns {computer}, or answer this ask there instead."
     )
 }
 
@@ -1674,7 +1678,7 @@ fn enroll_owner_key(transport: &Transport, params: Value) -> Result<Value, Strin
     // Too many asked to act as you there this hour (review round 3, R3-2): say so, ask later.
     if text(&refused, "error").as_deref() == Some("ownerKeyRequestsFlooded") {
         let message = text(&refused, "message").unwrap_or_else(|| {
-            "Too many apps asked to act as you there this hour. Try again later.".to_string()
+            "Too many apps asked to manage that computer this hour. Try again later.".to_string()
         });
         with_session(&key, |session| session.flooded = Some(message.clone()));
         return Err(message);
@@ -1787,6 +1791,35 @@ pub(crate) fn note_owner_key_approved(transport: &Transport) {
     let _ = std::thread::Builder::new()
         .name("ghostex-owner-key-approved".into())
         .spawn(move || ensure_owner_session(&transport, false));
+}
+
+/// The user's own connect to a computer whose terminal let this one in while only its own app
+/// owned it: ask once to manage it (CDXC:Security 2026-11-17 DECISION at `terminal_may_approve` in
+/// server/src/security/policy.rs). The words to match in that terminal while it waits, `None`
+/// when this app manages it already.
+pub(crate) fn ask_to_manage(
+    target: &GpuiRemoteGxserverRequestTarget,
+) -> Result<Option<String>, String> {
+    let transport = Transport::Remote(target.clone());
+    let key = transport.key();
+    with_session(&key, |session| {
+        session.gave_up = false;
+        session.lapsed = false;
+    });
+    match in_security_flow(|| open_owner_session(&transport, true)) {
+        Ok(token) => {
+            with_session(&key, |session| {
+                session.token = Some(token);
+                session.door_only = true;
+                session.opened_at = Some(Instant::now());
+            });
+            Ok(None)
+        }
+        Err(error) if error == OWNER_WAITING_ERROR => {
+            Ok(with_session(&key, |session| session.key_words.clone()))
+        }
+        Err(error) => Err(error),
+    }
 }
 
 /// Who may answer a computer's requests.
@@ -1973,7 +2006,7 @@ pub(crate) fn approve_request(
         require_owner_session(transport, true)?;
         let owner_key = owner_key_for(transport)?;
         let (key, presence) =
-            ghostex_owner_keys::unlock_approver_key(&plain::presence_reason(&request.summary))
+            ghostex_owner_keys::unlock_approver_key(&plain::prompt_reason(transport, request))
                 .map_err(|error| error.to_string())?;
         let mut wire_key = key_json(
             &key.public_key_b64(),

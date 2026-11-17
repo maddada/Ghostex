@@ -110,16 +110,18 @@ impl ConnectedComputer {
         view
     }
 
-    /// Why agents can't reach it yet and what to approve where; `None` once they can.
+    /// Why agents can't reach it yet and what to approve where; `None` once they can. Only an
+    /// older gxserver still asks for this (plain approvals let agents in without a card); the
+    /// words name no card that no longer exists (the approval cards page, 2026-11-17).
     pub(crate) fn waiting_message(&self) -> Option<String> {
         let name = &self.name;
         let this = super::this_computer_name();
         Some(match self.waiting? {
             WaitingOn::Here => format!(
-                "{name} is connected, but agents here can't reach it until you approve letting the agents on {this} and {name} reach each other. Ghostex on this computer ({this}) shows that approval as a card; approve it there, then try again."
+                "{name} is connected, but agents here can't use it yet: Ghostex on {this} shows a card asking to let {name}'s agents in. Approve it there, then try again."
             ),
             WaitingOn::There => format!(
-                "{name} is connected, but agents here can't reach it until you approve letting the agents on {this} and {name} reach each other, on {name}. Ghostex on {name} shows that approval as a card (a phone paired with {name} can approve it too); approve it there, then try again."
+                "{name} is connected, but agents here can't use it yet: {name} runs an older Ghostex, which asks first. Approve its card about {this}'s agents in Ghostex on a computer or phone that owns {name}, or update Ghostex on {name} so it doesn't ask, then try again."
             ),
         })
     }

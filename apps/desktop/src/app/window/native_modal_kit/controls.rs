@@ -711,21 +711,41 @@ pub(crate) fn pairing_words(p: &ModalPalette, words: &[String], compact: bool) -
         .into_any_element()
 }
 
-/// "Your phone shows three words. Approve only if they are the same as these." (or computer): the
-/// one sentence under the words wherever they show.
+/// The one line under the words wherever they show (CDXC:Security 2026-11-17 DECISION in
+/// packages/gx-protocol/src/plain_ask.rs: "Approve only if m7-arch shows the same words.").
 pub(crate) fn pairing_words_sentence(phone: bool) -> String {
-    format!(
-        "Your {} shows three words. Approve only if they are the same as these.",
-        if phone { "phone" } else { "computer" }
-    )
+    if phone {
+        "Approve only if your phone shows the same words.".to_string()
+    } else {
+        "Approve only if that computer shows the same words.".to_string()
+    }
 }
 
-/// "Not my phone" / "Not my computer": the answer beside Approve wherever the words show.
-pub(crate) fn pairing_deny_label(phone: bool) -> &'static str {
-    if phone {
-        "Not my phone"
+/// The answer beside Approve wherever the words show: Deny, as on every other approval (the
+/// approval cards page: "Approve and Deny, nothing else").
+pub(crate) fn pairing_deny_label(_phone: bool) -> &'static str {
+    "Deny"
+}
+
+/// What this computer is called in a question asked on it: "this Mac", "this PC", "this computer".
+pub(crate) fn this_computer_place() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "this Mac"
+    } else if cfg!(target_os = "windows") {
+        "this PC"
     } else {
-        "Not my computer"
+        "this computer"
+    }
+}
+
+/// The question for a phone or computer that asks to pair here: "Add iPhone 17 to this Mac?",
+/// "Let m7-arch connect to this Mac?".
+pub(crate) fn pairing_question_named(phone: bool, name: &str) -> String {
+    let place = this_computer_place();
+    if phone {
+        format!("Add {name} to {place}?")
+    } else {
+        format!("Let {name} connect to {place}?")
     }
 }
 

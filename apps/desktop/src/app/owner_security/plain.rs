@@ -120,6 +120,22 @@ pub(crate) fn presence_reason(summary: &str) -> String {
     }
 }
 
+/// What the system prompt says for `request` on `transport`: the card's own question where the
+/// app words it ("let m7-arch connect to M7-Desktop", CDXC:Security 2026-11-17 DECISION in
+/// packages/gx-protocol/src/plain_ask.rs), else gxserver's sentence cleaned up ([`presence_reason`]).
+pub(crate) fn prompt_reason(transport: &Transport, request: &ApprovalRequest) -> String {
+    let place = match transport {
+        Transport::Local => crate::app::window::native_modal_kit::this_computer_place().to_string(),
+        Transport::Remote(target) => {
+            crate::app::helpers::gpui_remote_machine_name_from_settings(&target.machine_id)
+                .unwrap_or_else(|| "that computer".to_string())
+        }
+    };
+    ghostex_gx_protocol::plain_ask::plain_ask(request, &place)
+        .map(|ask| ask.prompt_reason())
+        .unwrap_or_else(|| presence_reason(&request.summary))
+}
+
 /// Approves `request` on `transport` with one click: the system prompt first when that computer
 /// asks for it (`require_presence`), then `{ id }`.
 pub(crate) fn approve_plain(
@@ -128,7 +144,7 @@ pub(crate) fn approve_plain(
     require_presence: bool,
 ) -> Result<(), String> {
     if require_presence {
-        ghostex_owner_keys::confirm_presence(&presence_reason(&request.summary))
+        ghostex_owner_keys::confirm_presence(&prompt_reason(transport, request))
             .map_err(|error| error.to_string())?;
     }
     let approve = || {

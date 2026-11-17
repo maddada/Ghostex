@@ -5386,19 +5386,20 @@ sessions, so any client can control agents on any machine.
   "Require Touch ID or your password to approve" on, y first asks Touch ID,
   Windows Hello or the system password on A (on a Linux server with no screen
   or polkit agent it can't, says so, and leaves the request waiting). Once A has an owner (the
-  Ghostex app on A or on another of your computers, or a paired phone), only
-  they make codes and let devices in, and A's terminal names them: the command
-  first waits for you to approve "Show this computer's pairing code" in Ghostex
-  on one of them, as a card there, so A's own screen is never needed (then it
-  gets codes for ten minutes), and B waits to be approved the same way, as "Is
-  this your computer?" with the same three words; A's terminal can't approve it,
-  says where, and follows that answer. The command stops after the first computer you
+  Ghostex app on another of your computers, or a paired phone), the code prints
+  at once, and B waits to be approved there: the card asks "Let B connect to
+  A?" with the same three words, and A's terminal names where to approve (A's
+  own screen is never needed; the terminal can't approve it). When A's only
+  owner is A's own Ghostex app (one you never look at), the first computer to
+  join can be let in from A's terminal with y, and its app then asks once to
+  manage A, which you approve with y in the same terminal after matching its
+  words; from then on that computer approves A's new phones and computers. The command stops after the first computer you
   approve (run it again to connect another), after 10 minutes with nobody
   waiting, or when you press Ctrl+C, and B then finishes signing in as usual.
   `--copy` also puts each code on the clipboard (on a server reached over SSH,
   your terminal's clipboard, when your terminal allows that), so the long text
   needn't be selected by hand. On B, the words screen tells you to approve
-  "Is this your computer?" in Ghostex on a computer or phone that owns A (A's
+  "Let B connect to A?" in Ghostex on a computer or phone that owns A (A's
   terminal names them), or to type y in A's terminal while A has no owner yet.
   `--once` or `--json` only print the code and exit, so approve the new computer
   in the Ghostex app (or on a paired phone) within a minute instead. In a

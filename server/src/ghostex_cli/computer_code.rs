@@ -45,13 +45,12 @@ or Add a computer). Paste it into Connect a Computer on the other computer to co
 one. It works on a server without the Ghostex app too: gxserver must be running here and Easy
 Connect on (ghostex tailcat enable).
 
-Once this computer has an owner (the Ghostex app here or on one of your other computers, or a
-paired phone), only they let a new device in, and this terminal says which ones they are:
-  - First you approve \"Show this computer's pairing code\" in Ghostex on one of them (it shows
-    there as a card; you don't need this computer's screen); then the code prints. After 10
-    minutes it asks again.
-  - Each computer or phone that uses the code shows here with its three words. Approve it the
-    same way, where it shows as \"Is this your computer?\" with the same words.
+Once this computer has an owner (the Ghostex app on one of your other computers, or a paired
+phone), the code prints at once, and each computer or phone that uses it shows here with its
+three words. Approve it in Ghostex on one of them, where it asks \"Let <it> connect to <this
+computer>?\" with the same words; this terminal names them. You don't need this computer's screen.
+When this computer's only owner is its own Ghostex app, the first computer to join can be let in
+here instead (y), and it can then ask to manage this computer (y again, with its words).
 On a computer with no owner yet, nothing asks: check the words match the ones on the other
 computer, then answer y to approve it or n to deny it here.
 
@@ -98,15 +97,23 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
     println!("Waiting for the other computer. Press Ctrl+C when you are done.");
     let interactive = std::io::stdin().is_terminal();
     let answers_here = may_approve_here(&parsed.flags);
-    // Where a waiting computer is approved when it can't be here (CDXC:Security 2026-11-17 at
-    // `approvers_here` in server/src/server/security_http.rs): the owners' apps and phones by name.
-    let place = call_gxserver_rpc(
+    let status = call_gxserver_rpc(
         crate::security::SECURITY_STATUS_ENDPOINT,
         &json!({}),
         &parsed.flags,
     )
-    .ok()
-    .and_then(|status| super::rpc::where_to_approve(&status));
+    .ok();
+    // Where a waiting computer is approved when it can't be here (CDXC:Security 2026-11-17 at
+    // `approvers_here` in server/src/server/security_http.rs): the owners' apps and phones by name.
+    let place = status.as_ref().and_then(super::rpc::where_to_approve);
+    // Only this computer's own app owns it: the first computer to join may be let in here, and
+    // may then manage it (CDXC:Security 2026-11-17 DECISION at `terminal_may_approve`).
+    let hands_over = status
+        .as_ref()
+        .and_then(|status| status.get("terminalMayApproveJoin"))
+        .and_then(Value::as_bool)
+        == Some(true);
+    let here = code.computer_name.clone();
     let mut shown_code = code.text;
     let mut seen = HashSet::new();
     // Devices to approve in the app or on a phone: approval id → name, followed until answered.
@@ -153,15 +160,51 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                 device.name,
                 device.words.join(" ")
             );
+            let phone = matches!(device.platform.as_str(), "ios" | "android");
+            if hands_over && !answers_here && interactive && !phone {
+                println!(
+                    "Only {here}'s own Ghostex app owns {here}, so you can let {} in here. It can then ask to manage {here}.",
+                    device.name
+                );
+                let approve =
+                    ask_yes_no("Do they match the words on that computer? Approve it? [y/N] ");
+                if !approve {
+                    let _ = call_gxserver_rpc(
+                        "/api/denyApprovalRequest",
+                        &json!({ "id": device.approval_id }),
+                        &parsed.flags,
+                    );
+                    println!("Denied: {}.", device.name);
+                    continue;
+                }
+                if requires_presence(&parsed.flags) && confirm_it_is_you(&device.name).is_err() {
+                    println!("Not approved: {} is still waiting.", device.name);
+                    seen.remove(&device.approval_id);
+                    continue;
+                }
+                match call_gxserver_rpc(
+                    "/api/approveApprovalRequest",
+                    &json!({ "id": device.approval_id }),
+                    &parsed.flags,
+                ) {
+                    Ok(_) => {
+                        hand_over(&device.name, &here, &parsed.flags);
+                        return Ok(());
+                    }
+                    Err(error) => {
+                        eprintln!("{error}");
+                        continue;
+                    }
+                }
+            }
             if !answers_here || !interactive {
                 match &place {
-                    Some(place) => println!(
-                        "Approve it {place}, where it shows as \"Is this your computer?\" with the same words. This terminal can't approve it: this computer already has an owner."
-                    ),
+                    Some(place) => println!("Approve it {place}."),
                     None => println!(
-                        "Approve it in the Ghostex app on this computer or on your phone, where it shows with the same words."
+                        "Approve it in Ghostex on a computer or phone that owns {here}, where it shows with the same words."
                     ),
                 }
+                println!("Waiting… (Ctrl+C to stop)");
                 approved_elsewhere.push((device.approval_id.clone(), device.name.clone()));
                 continue;
             }
@@ -178,10 +221,16 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                     }
                     Err(PresenceFailure::Unavailable(message)) => {
                         println!("{message}");
-                        println!(
-                            "Not approved: {} is still waiting. Approve it in the Ghostex app on this computer or on a paired phone.",
-                            device.name
-                        );
+                        match &place {
+                            Some(place) => println!(
+                                "Not approved: {} is still waiting. Approve it {place} instead.",
+                                device.name
+                            ),
+                            None => println!(
+                                "Not approved: {} is still waiting. Approve it in Ghostex on a computer or phone paired with {here} instead.",
+                                device.name
+                            ),
+                        }
                         continue;
                     }
                 }
@@ -410,8 +459,86 @@ fn copy_to_clipboard(text: &str) -> String {
 
 struct WaitingDevice {
     name: String,
+    /// "ios", "android", or the computer's system.
+    platform: String,
     words: Vec<String>,
     approval_id: String,
+}
+
+/// After this terminal let `name` in on a computer only its own app owned: waits (ten minutes at
+/// most) for `name`'s app to ask to manage `here`, and approves it on y with matching words
+/// (CDXC:Security 2026-11-17 DECISION at `terminal_may_approve` in server/src/security/policy.rs).
+fn hand_over(name: &str, here: &str, flags: &super::args::Flags) {
+    println!("Let in: {name}.");
+    println!(
+        "Waiting for {name} to ask to manage {here}: it shows the words to check there. (Ctrl+C to skip; {name} still connects.)"
+    );
+    let started = Instant::now();
+    let mut seen: HashSet<String> = HashSet::new();
+    while started.elapsed() < IDLE_LIMIT {
+        std::thread::sleep(POLL_EVERY);
+        let Ok(listed) = call_gxserver_rpc("/api/listApprovalRequests", &json!({}), flags) else {
+            continue;
+        };
+        let asks = listed
+            .get("requests")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|request| {
+                serde_json::from_value::<ghostex_gx_protocol::approval::ApprovalRequest>(
+                    request.clone(),
+                )
+                .ok()
+            })
+            .filter(|request| {
+                request.status == ghostex_gx_protocol::approval::ApprovalStatus::Pending
+                    && request.action
+                        == ghostex_gx_protocol::approval::SensitiveAction::AddApproverKey
+            });
+        for request in asks {
+            if !seen.insert(request.id.clone()) {
+                continue;
+            }
+            let Some(ask) = ghostex_gx_protocol::plain_ask::plain_ask(&request, here) else {
+                continue;
+            };
+            if !ask.question.contains(" manage ") {
+                continue;
+            }
+            println!("\n{}", ask.question);
+            println!("Its words: {}", ask.words.join(" "));
+            if !ask_yes_no(&format!(
+                "Do they match the words on {name}? Approve it? [y/N] "
+            )) {
+                let _ = call_gxserver_rpc(
+                    "/api/denyApprovalRequest",
+                    &json!({ "id": request.id }),
+                    flags,
+                );
+                println!(
+                    "Denied. {name} can still open {here}; it can't add phones or computers to it."
+                );
+                return;
+            }
+            match call_gxserver_rpc(
+                "/api/approveApprovalRequest",
+                &json!({ "id": request.id }),
+                flags,
+            ) {
+                Ok(_) => {
+                    println!(
+                        "{name} now manages {here}. Approve new phones and computers for {here} in Ghostex on {name}; this terminal approves nothing more."
+                    );
+                    return;
+                }
+                Err(error) => eprintln!("{error}"),
+            }
+        }
+    }
+    println!(
+        "{name} didn't ask to manage {here} within 10 minutes. It can still open {here}, but can't add phones or computers to it."
+    );
 }
 
 /// `/api/pairedDevices` `pending`: the computers and phones waiting for approval.
@@ -428,6 +555,7 @@ fn waiting_devices(answer: &Value) -> Vec<WaitingDevice> {
                     .filter(|name| !name.is_empty())
                     .unwrap_or("A new device")
                     .to_string(),
+                platform: text("platform").unwrap_or_default().to_lowercase(),
                 words: device
                     .get("words")?
                     .as_array()?

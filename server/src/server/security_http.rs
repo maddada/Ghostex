@@ -71,7 +71,13 @@ pub(crate) fn presence_outcome(
         Principal::Session { session_id, .. } => session_id.clone(),
         Principal::Owner { device_id } | Principal::Device { device_id } => device_id.clone(),
         Principal::Peer { name, .. } => name.clone(),
-        Principal::LocalAgent => "A terminal on this computer".to_string(),
+        // Named by its computer: the card may show on another computer (the approval cards page).
+        Principal::LocalAgent => format!(
+            "A terminal on {}",
+            crate::remote_access::cached_remote_access_identity()
+                .map(|identity| identity.computer_name)
+                .unwrap_or_else(|_| "this computer".to_string())
+        ),
         other => other.kind().to_string(),
     };
     let now = security::now_ms();
@@ -518,7 +524,7 @@ fn enroll_key(
             note_owner_key_flood(state, caller, now);
             return Err(EnrollRefusal::Reply(
                 OWNER_KEY_FLOODED,
-                "Too many apps asked to act as you on this computer in the last hour, so this one can't ask yet. Deny the requests you don't know there (in Ghostex or on your phone) and try again in an hour.".to_string(),
+                "Too many apps asked to manage this computer in the last hour, so this one can't ask yet. Deny the asks you don't know (in Ghostex or on your phone) and try again in an hour.".to_string(),
             ));
         }
         let nonce = security::random_b64(32);
@@ -704,8 +710,18 @@ fn handle(
             let ApproveApprovalParams { id, key_id, .. } = parse(params)?;
             // A new device, a terminal's pairing code or another owner: only the door's keepers
             // (CDXC:Security 2026-11-16 in security/policy.rs).
+            // The terminal, on a computer whose own app is its only owner, for the first computer
+            // that joins it and then that computer's ask to manage it (CDXC:Security 2026-11-17
+            // DECISION at `terminal_may_approve` in security/policy.rs).
+            let by_terminal = security
+                .approvals
+                .read(&id, caller, now)
+                .is_some_and(|asked| security.terminal_may_approve(caller, &asked, now));
             if let Some(asked) = security.approvals.read(&id, caller, now) {
-                if security::opens_door(&asked.action) && !security.keeps_door(caller) {
+                if security::opens_door(&asked.action)
+                    && !security.keeps_door(caller)
+                    && !by_terminal
+                {
                     crate::audit::record(
                         crate::audit::Action::from_approval(&asked),
                         crate::audit::Actor::from(caller),
@@ -727,7 +743,10 @@ fn handle(
             // Asked once, kept for good (CDXC:Security 2026-11-10 in security/policy.rs).
             security.remember_approved(&request, now);
             // An app's owner key goes in now, whether or not that app comes back for it.
-            enroll_owner_key_on_approval(state, &request, caller, now);
+            let enrolled = enroll_owner_key_on_approval(state, &request, caller, now);
+            if by_terminal {
+                note_terminal_handover(state, &request, enrolled, now);
+            }
             // The request's outcome against its id, by the device that approved it.
             let mut logged =
                 crate::audit::Action::new("approval.approved", request.summary.clone());
@@ -925,6 +944,11 @@ fn handle(
             // y/n only when it may (CDXC:Security 2026-11-16 in security/policy.rs). Older
             // clients don't read it.
             "mayApproveDevices": security.keeps_door(caller),
+            // The terminal may approve the first computer that joins with the code it was just
+            // shown, because this computer's own app is its only owner (CDXC:Security 2026-11-17
+            // DECISION at `terminal_may_approve`); `ghostex computer-code` then asks y/n.
+            "terminalMayApproveJoin": matches!(caller, Principal::LocalAgent)
+                && security.only_own_app_owns(),
             // Retired keys (`retire_owner_key`) aren't listed: they sign nothing here.
             "ownerKeys": security.listed_owner_keys(),
             "approverKeys": security.approver_keys.list(),
@@ -997,6 +1021,64 @@ fn approvers_here(state: &AppState) -> Vec<Value> {
         push(name, kind);
     }
     out
+}
+
+/// The terminal approved `request` under CDXC:Security 2026-11-17 DECISION at
+/// `terminal_may_approve` (security/policy.rs): the join is noted for the ask that may follow, the
+/// owner key ends the handover, and each says so in the security log in plain words.
+fn note_terminal_handover(
+    state: &AppState,
+    request: &security::ApprovalRequest,
+    enrolled: bool,
+    now: u64,
+) {
+    let security = &state.security;
+    let here = crate::remote_access::cached_remote_access_identity()
+        .map(|identity| identity.computer_name)
+        .unwrap_or_else(|_| "this computer".to_string());
+    match request.action {
+        ghostex_gx_protocol::approval::SensitiveAction::PairingApproveDevice => {
+            let name = request
+                .summary
+                .split_once("calls itself \"")
+                .and_then(|(_, rest)| rest.split_once('"'))
+                .map(|(name, _)| name.trim().to_string())
+                .unwrap_or_default();
+            security.note_terminal_join(&request.id, &name, now);
+            crate::audit::record(
+                crate::audit::Action::new(
+                    "ownership.terminalJoin",
+                    format!("Let {name} connect to {here} from {here}'s terminal"),
+                )
+                .target(name.clone()),
+                crate::audit::Actor::SharedToken { claimed_session: None },
+                crate::audit::Outcome::ApprovedBy(format!(
+                    "Approved in {here}'s terminal (ghostex computer-code): {here}'s own Ghostex app was its only owner, so {name} may now ask to manage {here}"
+                )),
+                Some(crate::audit::ApprovalRef::from(request)),
+            );
+        }
+        ghostex_gx_protocol::approval::SensitiveAction::AddApproverKey if enrolled => {
+            let name = security
+                .terminal_join(now)
+                .map(|(_, name)| name)
+                .unwrap_or_default();
+            security.clear_terminal_join();
+            crate::audit::record(
+                crate::audit::Action::new(
+                    "ownership.handover",
+                    format!("{name} now manages {here}"),
+                )
+                .target(name.clone()),
+                crate::audit::Actor::SharedToken { claimed_session: None },
+                crate::audit::Outcome::ApprovedBy(format!(
+                    "Approved in {here}'s terminal: {name} was the first computer to join {here} while only {here}'s own Ghostex app owned it. {name} now approves new phones and computers for {here}; the terminal approves nothing more"
+                )),
+                Some(crate::audit::ApprovalRef::from(request)),
+            );
+        }
+        _ => {}
+    }
 }
 
 /// The Settings > Security switch, read from this computer's settings file.

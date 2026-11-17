@@ -39,6 +39,7 @@ pub mod extension_panel;
 /// Pairing v2 (GitHub #495): device keys, Pending and the three match words; used module-qualified.
 pub mod pairing;
 pub mod peek;
+pub mod plain_ask;
 pub mod presentation;
 pub mod rpc;
 pub mod session_chat_agents;
