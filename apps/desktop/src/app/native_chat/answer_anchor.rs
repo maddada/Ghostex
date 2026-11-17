@@ -100,17 +100,31 @@ impl NativeChatView {
         self.resume_tail_waiting();
     }
 
-    /// The composer is sending: it follows the tail again when the list was following at the click.
-    pub(super) fn end_answer_hold_for_send(&self) {
+    /// The composer is sending (`mode` "send", or "queue" and the like): an answer hold ends, and
+    /// follows the tail again only when the list was following at the click. Otherwise a message
+    /// sent now brings the chat back to its end, wherever the reader had scrolled.
+    ///
+    /// CDXC:SessionChat 2026-11-17 WHY: The user kept seeing the chat stop following while the agent worked. Reproduced in the web build: a long reply stops the chat at its top (reply_arrival.rs), the reader scrolls down through it but not quite to the end and sends the next message; nothing put the list back in Tail mode (rows are followed only by a reader within the pill's edge threshold, `follow_tail_if_near_end`), so the whole next turn streamed below the fold until the down pill. A message sent from the composer asks for the agent's answer, so it follows the end as the Scroll to bottom pill does. A queued message goes out later and does not move the list.
+    pub(super) fn follow_tail_for_send(&self, mode: &str) {
         let hold = std::mem::take(&mut *self.answer_hold.borrow_mut());
-        if !hold.active {
+        if hold.active {
+            if hold.resume && !self.held_by_focus_or_disclosure() {
+                self.list.set_follow_mode(FollowMode::Tail);
+            } else {
+                self.resume_tail_waiting();
+            }
             return;
         }
-        if hold.resume && !self.held_by_focus_or_disclosure() {
-            self.list.set_follow_mode(FollowMode::Tail);
-        } else {
-            self.resume_tail_waiting();
+        if mode != "send" || self.transcript_focus_follow.get().is_some() {
+            return;
         }
+        self.release_reply_hold();
+        {
+            let mut motions = self.disclosure_motion.borrow_mut();
+            motions.follow_paused = false;
+            motions.reveal = None;
+        }
+        self.list.set_follow_mode(FollowMode::Tail);
     }
 
     /// When the focused field hold ends while an answer holds the list, the answer keeps it still and
