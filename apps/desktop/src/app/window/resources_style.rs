@@ -33,11 +33,16 @@ pub(crate) fn resource_header() -> gpui::Div {
         .flex_shrink_0()
         .items_stretch()
         .border_b_1()
-        .border_color(if window_glass_active() {
-            resource_glass_washes().hairline
-        } else {
-            chrome_ink().opacity(0.12)
-        })
+        // The Dividers theme role, when set (helpers/theme_roles.rs).
+        .border_color(crate::app::helpers::theme_role_or_rgba(
+            "divider",
+            chrome_uses_light_appearance(),
+            if window_glass_active() {
+                resource_glass_washes().hairline
+            } else {
+                chrome_ink().opacity(0.12)
+            },
+        ))
 }
 
 /// Under window glass these panels take the dialogs' washes on the darker panel frost
@@ -47,13 +52,18 @@ pub(crate) fn resource_glass_washes() -> super::native_modal_kit::FrostedDialogW
     super::native_modal_kit::frosted_dialog_washes(chrome_uses_light_appearance())
 }
 
-/// A card's edge on these pages: ink at 10%, the dialogs' hairline under glass.
+/// A card's edge on these pages: ink at 10%, the dialogs' hairline under glass, or the Borders
+/// theme role when it is set (helpers/theme_roles.rs).
 pub(super) fn resource_card_border() -> gpui::Rgba {
-    if window_glass_active() {
-        resource_glass_washes().hairline
-    } else {
-        chrome_ink().opacity(0.10)
-    }
+    crate::app::helpers::theme_role_or_rgba(
+        "border",
+        chrome_uses_light_appearance(),
+        if window_glass_active() {
+            resource_glass_washes().hairline
+        } else {
+            chrome_ink().opacity(0.10)
+        },
+    )
 }
 
 /// Hosted in the view panel these pages can be as narrow as `WORKAREA_VIEW_PANEL_MIN_WIDTH`, where

@@ -13,10 +13,11 @@ use super::super::super::store::SettingsValues;
 use super::colours::{Rgb, preview_colours};
 use crate::ui_fonts::{exact_family, monospace_default_face, monospace_replacement, picked_family};
 use chat_text_look::{
-    CHAT_BODY_FONT, CHAT_MONO_FONT, ChatTextColors, PROSE_LINE_HEIGHT, PROSE_SIZE, THINKING_GAP,
-    USER_BUBBLE_PADDING, USER_BUBBLE_RADIUS, inline_code_fill, inline_code_font_scale,
-    inline_code_padding_x, inline_code_radius, zoom_scale,
+    CHAT_BODY_FONT, CHAT_MONO_FONT, ChatTextColors, ChatTextRoles, PROSE_LINE_HEIGHT, PROSE_SIZE,
+    THINKING_GAP, USER_BUBBLE_PADDING, USER_BUBBLE_RADIUS, inline_code_fill,
+    inline_code_font_scale, inline_code_padding_x, inline_code_radius, zoom_scale,
 };
+use ghostex_settings_catalog::theme_roles::roles_for;
 use gpui::{
     AnyElement, App, FontWeight, Hsla, IntoElement as _, ParentElement as _, SharedString,
     Styled as _, div, px, relative,
@@ -82,6 +83,17 @@ fn bubble_fill(background: Rgb, light: bool) -> Hsla {
     hsla_of(Rgb(channels))
 }
 
+/// The colour theme role `id` sets in one appearance (helpers/theme_roles.rs reads the applied
+/// settings the same way), or `None` while it keeps the chat's own.
+fn preview_role(values: &SettingsValues, id: &str, light: bool) -> Option<Hsla> {
+    let [r, g, b, a] = roles_for(values.map(), light)
+        .into_iter()
+        .find(|(role, _)| *role == id)?
+        .1
+        .rgba(light);
+    Some(gpui::Rgba { r, g, b, a }.into())
+}
+
 /// Whether the chat draws in its light look: its own Chat theme, else the app's.
 fn chat_is_light(p: &SettingsPalette, values: &SettingsValues) -> bool {
     match values.string("sessionChatTheme").as_str() {
@@ -98,7 +110,9 @@ pub(super) fn chat_preview(
     mono_family: SharedString,
 ) -> AnyElement {
     let light = chat_is_light(p, values);
-    let colors = ChatTextColors::for_variant(light);
+    // The Theme colours roles the chat takes, from the values on this page so an edit shows at once.
+    let roles = ChatTextRoles::read(|id| preview_role(values, id, light));
+    let colors = ChatTextColors::for_variant(light).with_roles(roles);
     let strength = ghostex_gx_chat_core::transcript::text_strength::text_strength(
         values.f64("sessionChatTextStrengthPercent"),
     )
@@ -126,7 +140,9 @@ pub(super) fn chat_preview(
             .max_w(relative(0.8))
             .rounded(px(USER_BUBBLE_RADIUS * scale))
             .p(px(USER_BUBBLE_PADDING * scale))
-            .bg(bubble_fill(background, light))
+            .bg(roles
+                .user_message
+                .unwrap_or_else(|| bubble_fill(background, light)))
             .child(
                 line(colors.user_prose(strength))
                     .child("Can you give this function a clearer name?"),

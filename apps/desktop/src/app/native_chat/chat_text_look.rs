@@ -90,6 +90,28 @@ pub(crate) fn inline_code_fill(light: bool) -> Hsla {
     rgb(if light { 0xefeff0 } else { 0x272727 }).into()
 }
 
+/// The theme roles that recolour the chat's body text and your message (Text, Grey text and Your
+/// messages; packages/settings-catalog/src/theme_roles.rs), each `None` while the role keeps the
+/// chat's own colour. `ChatAppearance::with_theme_roles` and the Settings preview both read them
+/// here, so the preview shows what the chat draws.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct ChatTextRoles {
+    pub(crate) text: Option<Hsla>,
+    pub(crate) muted_text: Option<Hsla>,
+    pub(crate) user_message: Option<Hsla>,
+}
+
+impl ChatTextRoles {
+    /// The roles `role` answers: a role's colour in this appearance, or `None` when it is not set.
+    pub(crate) fn read(role: impl Fn(&str) -> Option<Hsla>) -> Self {
+        Self {
+            text: role("text"),
+            muted_text: role("mutedText"),
+            user_message: role("userMessage"),
+        }
+    }
+}
+
 /// The chat's text colours in one appearance.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ChatTextColors {
@@ -111,6 +133,19 @@ impl ChatTextColors {
             muted: color(0x9e9e9e, 0x71717b),
             light,
         }
+    }
+
+    /// These colours under the theme roles: Text sets every body text colour, Grey text the muted one.
+    pub(crate) fn with_roles(mut self, roles: ChatTextRoles) -> Self {
+        if let Some(text) = roles.text {
+            self.foreground = text;
+            self.primary = text;
+            self.prose = text;
+        }
+        if let Some(muted) = roles.muted_text {
+            self.muted = muted;
+        }
+        self
     }
 
     /// A body text colour at Text strength `percent` (CDXC:SessionChat 2026-10-31 in

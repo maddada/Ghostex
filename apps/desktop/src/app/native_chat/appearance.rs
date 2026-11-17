@@ -1,5 +1,6 @@
 use super::chat_text_look::{
-    CHAT_BODY_FONT, ChatTextColors, INPUT_STEP_DARK, INPUT_STEP_LIGHT, user_bubble_blue, zoom_scale,
+    CHAT_BODY_FONT, ChatTextColors, ChatTextRoles, INPUT_STEP_DARK, INPUT_STEP_LIGHT,
+    user_bubble_blue, zoom_scale,
 };
 use crate::app::helpers::{
     gpui_session_chat_uses_light_theme, sidebar_titlebar_pack_rgb, sidebar_titlebar_rgb_channels,
@@ -242,13 +243,16 @@ impl ChatAppearance {
             self.control_border = border;
             self.composer_border = border;
         }
-        if let Some(text) = role("text") {
-            self.foreground = text;
-            self.primary = text;
-            self.prose = text;
+        // Body text and your message take their roles where the Settings preview reads them too.
+        let text_roles = ChatTextRoles::read(&role);
+        let text = self.text_colors().with_roles(text_roles);
+        self.foreground = text.foreground;
+        self.primary = text.primary;
+        self.prose = text.prose;
+        self.muted = text.muted;
+        if let Some(text) = text_roles.text {
             self.code_text = text;
         }
-        self.muted = theme_role_or("mutedText", light, self.muted);
         // Accent comes through `theme_accent_for_variant`, which lays the role over the work area.
         self.card_panel = theme_role_or("surface", light, self.card_panel);
         if let Some(control) = role("control") {
@@ -259,7 +263,7 @@ impl ChatAppearance {
             self.menu = menu;
         }
         self.ring = theme_role_or("focusRing", light, self.ring);
-        if let Some(message) = role("userMessage") {
+        if let Some(message) = text_roles.user_message {
             self.user_message = message;
             self.user_band = message;
         }

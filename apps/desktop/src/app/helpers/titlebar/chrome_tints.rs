@@ -244,15 +244,24 @@ pub(crate) fn theme_accent_for_variant(
     object: &serde_json::Map<String, serde_json::Value>,
     light: bool,
 ) -> u32 {
-    let derived = ghostex_settings_catalog::theme_colours::theme_accent_for_variant(object, light);
-    let Some(role) = crate::app::helpers::theme_role_rgba("accent", light) else {
-        return derived;
-    };
+    theme_role_over_work_area(object, "accent", light).unwrap_or_else(|| {
+        ghostex_settings_catalog::theme_colours::theme_accent_for_variant(object, light)
+    })
+}
+
+/// Colour theme role `id` when it is set in this appearance (helpers/theme_roles.rs), laid over the
+/// work area so a see-through value still gives one solid colour; `None` while it is not set.
+pub(crate) fn theme_role_over_work_area(
+    object: &serde_json::Map<String, serde_json::Value>,
+    id: &str,
+    light: bool,
+) -> Option<u32> {
+    let role = crate::app::helpers::theme_role_rgba(id, light)?;
     let under = sidebar_titlebar_rgb_channels(work_area_background_for_variant(object, light));
     let over = [role.r, role.g, role.b].map(|channel| channel * 255.0);
-    sidebar_titlebar_pack_rgb(
-        [0, 1, 2].map(|index| under[index] + (over[index] - under[index]) * role.a),
-    )
+    Some(sidebar_titlebar_pack_rgb([0, 1, 2].map(|index| {
+        under[index] + (over[index] - under[index]) * role.a
+    })))
 }
 
 #[cfg(test)]

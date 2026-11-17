@@ -568,7 +568,7 @@ impl GpuiTitlebarReadingPanel {
     }
 
     /// CDXC:Notifications 2026-09-11 DECISION:
-    /// User: notification cards look like the Tips dropdown cards (square icon tile, bold title, muted body, check mark bottom right, UNREAD and READ groups), keeping the blue accents for ordinary unread cards. The 2026-11-02 approval decision in server/src/notification_feed/store.rs supersedes blue for an approval card, which uses the sidebar's approval red.
+    /// User: notification cards look like the Tips dropdown cards (square icon tile, bold title, muted body, check mark bottom right, UNREAD and READ groups), keeping the blue accents for ordinary unread cards. The 2026-11-02 approval decision in server/src/notification_feed/store.rs supersedes blue for an approval card, which uses the sidebar's approval red. A theme's Accent and Danger roles replace the blue and red (CDXC:Theming 2026-11-17 in notification_feed/mod.rs).
     /// User: no dismiss gutter; the X floats where the time is and, while the card is hovered, replaces the time in that same right-aligned slot.
     fn render_notification_row(
         &self,
@@ -589,7 +589,8 @@ impl GpuiTitlebarReadingPanel {
         let accent = if item.awaiting_approval {
             crate::app::native_sidebar::status::APPROVAL_COLOR
         } else {
-            item.kind.accent()
+            item.kind
+                .accent(CHROME_LIGHT_APPEARANCE.load(std::sync::atomic::Ordering::Relaxed))
         };
         let accent_text_light = if item.awaiting_approval {
             crate::notification_feed::NOTIFICATION_URGENT_RED_TEXT_LIGHT

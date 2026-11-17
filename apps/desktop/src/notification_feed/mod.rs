@@ -58,6 +58,24 @@ pub(crate) const NOTIFICATION_URGENT_RED: u32 = 0xf87171;
 /// The same red, darkened for unread meta text on pale light-mode cards.
 pub(crate) const NOTIFICATION_URGENT_RED_TEXT_LIGHT: u32 = 0xc42b2b;
 
+/// The attention blue of unread cards and the bell's badge, in one appearance.
+///
+/// CDXC:Theming 2026-11-17 DECISION: User, through the coordinator: "The notification dropdown stays blue after a theme is applied ... make it follow the applied theme (accent, surfaces, text, borders) like the rest of the app." The attention blue (kept for ordinary unread cards by CDXC:Notifications 2026-09-11) is what a theme leaves alone: the Accent theme role replaces it and the Danger role replaces the urgent red, each laid over the work area as the app's own accent is (`theme_role_over_work_area`). Without those roles the blue and red stay; the sidebar's approval red is the sidebar's status colour and stays too.
+pub(crate) fn notification_attention_color(light: bool) -> u32 {
+    themed_notification_color("accent", light).unwrap_or(NOTIFICATION_ATTENTION_BLUE)
+}
+
+/// The urgent red of unread cards and the bell's badge, in one appearance (the Danger theme role
+/// when it is set, `notification_attention_color`).
+pub(crate) fn notification_urgent_color(light: bool) -> u32 {
+    themed_notification_color("danger", light).unwrap_or(NOTIFICATION_URGENT_RED)
+}
+
+fn themed_notification_color(role: &str, light: bool) -> Option<u32> {
+    let snapshot = shared_settings::shared_sidebar_settings_snapshot();
+    crate::app::helpers::theme_role_over_work_area(snapshot.object(), role, light)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiNotificationFeedKind {
     Finished,
@@ -114,22 +132,25 @@ impl GpuiNotificationFeedKind {
         matches!(self, Self::ResetExpiring | Self::SendFailed | Self::Failed)
     }
 
-    /// The card's accent: red for urgent rows, the attention blue otherwise.
-    pub(crate) fn accent(self) -> u32 {
+    /// The card's accent in one appearance: red for urgent rows, the attention blue otherwise
+    /// (each following its theme role, `notification_attention_color`).
+    pub(crate) fn accent(self, light: bool) -> u32 {
         if self.urgent() {
-            NOTIFICATION_URGENT_RED
+            notification_urgent_color(light)
         } else {
-            NOTIFICATION_ATTENTION_BLUE
+            notification_attention_color(light)
         }
     }
 
-    /// The accent as unread meta text on a pale light-mode card.
+    /// The accent as unread meta text on a pale light-mode card: the Danger or Accent role's own
+    /// light colour when it is set, else a darker ink of the red or blue.
     pub(crate) fn accent_text_light(self) -> u32 {
-        if self.urgent() {
-            NOTIFICATION_URGENT_RED_TEXT_LIGHT
+        let (role, own) = if self.urgent() {
+            ("danger", NOTIFICATION_URGENT_RED_TEXT_LIGHT)
         } else {
-            NOTIFICATION_ATTENTION_BLUE_TEXT_LIGHT
-        }
+            ("accent", NOTIFICATION_ATTENTION_BLUE_TEXT_LIGHT)
+        };
+        themed_notification_color(role, true).unwrap_or(own)
     }
 
     /// Card tile icon when the session has no agent logo to show.
@@ -577,9 +598,9 @@ impl GhostexGpuiApp {
         let badge_color = if unread().any(|item| item.awaiting_approval) {
             crate::app::native_sidebar::status::APPROVAL_COLOR
         } else if unread().any(|item| item.kind.urgent()) {
-            NOTIFICATION_URGENT_RED
+            notification_urgent_color(appearance.light)
         } else {
-            NOTIFICATION_ATTENTION_BLUE
+            notification_attention_color(appearance.light)
         };
         let icon_color = if open {
             titlebar_active_text_color()
