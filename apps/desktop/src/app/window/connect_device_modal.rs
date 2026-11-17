@@ -799,6 +799,42 @@ impl GpuiConnectDeviceWindow {
             .into_any_element()
     }
 
+    /// Asking for the code failed and there is none to show: gxserver or this app said why (most
+    /// often this app's owner key still waits for an Approve, `owner_security::owner_refusal`).
+    ///
+    /// CDXC:RemotePairing 2026-11-17 WHY: On m7-arch, whose first owner key was another computer's app, this app's own key waits for an Approve, so every ask for the code is refused with what to approve. Connect a computer never drew that answer and Connect a device drew it under a square that still said "Getting a code ready…", so the window spun forever. The answer now takes the square's place, and the next ask after the Approve brings the code in.
+    pub(super) fn code_refused(&self) -> bool {
+        self.stage == Stage::Ready && self.code.is_none() && self.poll_error.is_some()
+    }
+
+    /// Why there is no code, in the square the code appears in.
+    fn code_refused_content(&self, message: String) -> AnyElement {
+        let p = self.palette;
+        v_flex()
+            .w_full()
+            .min_w_0()
+            .items_center()
+            .gap(px(8.0))
+            .px(px(16.0))
+            .text_center()
+            .child(
+                h_flex()
+                    .gap(px(8.0))
+                    .items_center()
+                    .child(modal_icon(ICON_ALERT, 16.0, p.foreground))
+                    .child(
+                        div()
+                            .text_size(px(15.0))
+                            .line_height(px(21.0))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(hsla(p.foreground))
+                            .child("Can't show the code yet"),
+                    ),
+            )
+            .child(self.muted(message).w_full())
+            .into_any_element()
+    }
+
     /// The dashed square the code appears in (at least `height` tall, taller for the helper's
     /// screens): what is happening, or what went wrong.
     fn code_placeholder(&self, height: f32, cx: &mut Context<Self>) -> AnyElement {
@@ -808,6 +844,9 @@ impl GpuiConnectDeviceWindow {
             Stage::NeedsHelper(error) => self.helper_missing_content(error.clone(), cx),
             Stage::InstallingHelper(note) => self.helper_installing_content(note.clone()),
             Stage::Preparing(Some(note)) => self.spinner_line(note.clone()),
+            Stage::Ready if self.code_refused() => {
+                self.code_refused_content(self.poll_error.clone().unwrap_or_default())
+            }
             _ => self.spinner_line("Getting a code ready…"),
         };
         div()

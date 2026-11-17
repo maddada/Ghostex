@@ -10,6 +10,9 @@
 //! `computer-words` (a pasted code, waiting for Approve there), `computer-done` (connected, with
 //! Connect both ways), `computer-password` (the other computer kept no key: its password),
 //! `computer-both` (Connect both ways finished).
+//! Asking for the code refused (this app's owner key waits for an Approve): `refused` (Connect a
+//! device), `refused-computer` (Connect a computer's Code tab), `refused-headless` (its Headless
+//! server tab).
 use super::connect_device_modal::*;
 use super::settings_modal::tabs::remote::tailscale_checklist_of_status;
 use gpui::{App, AppContext as _, Entity, WindowHandle};
@@ -58,7 +61,17 @@ fn with_view_window(
 /// The other computer's code the `computer-*` states paste.
 const OTHER_CODE: &str = "ghostex-ec1:eyJ2IjoxLCJhZGRyZXNzIjoidGNEYW1CMGhNYWdibU05aDdCTERBbmo1d0U0cjdKLUdmUTdCWTBUay1Ya2dWUHh1cmxvc0EwUTFNWDV4MUxNRCIsIm5hbWUiOiJNYWNCb29rIFBybyIsInVzZXIiOiJtYWRkYSIsInBvcnQiOjU4NzQ0LCJzc2hQb3J0IjoyMiwic2VjcmV0IjoiUHZOcUtlSndMeEJIM195dFY5c0E2cFIifQ";
 
+/// What this app answers while its owner key waits for an Approve (`owner_refusal`).
+const REFUSAL: &str = "This computer already has an owner. On your phone, approve \"Let Mohamad's Laptop (Ghostex app) show the pairing code of …\" once, only if it shows the key words candle cobalt river pony; then Ghostex here can show the code and approve devices.";
+
 fn poll_answer(state: &str) -> ConnectPoll {
+    if state.starts_with("refused") {
+        return ConnectPoll {
+            computer_name: Some("Mohamad's Laptop".to_string()),
+            error: Some(REFUSAL.to_string()),
+            ..ConnectPoll::default()
+        };
+    }
     let waiting = if matches!(state, "ask" | "presence" | "connected") {
         vec![WaitingDevice {
             name: "Mo's iPhone".to_string(),
@@ -126,6 +139,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                             modal.switch_way(ConnectWay::Tailscale, cx)
                         }),
                         "large" => with_view(&slot, cx, |modal, cx| modal.set_large_code(true, cx)),
+                        "refused-headless" => with_view_window(&slot, cx, |modal, window, cx| {
+                            modal.preview_headless_tab(window, cx)
+                        }),
                         _ => {}
                     }
                 })
@@ -311,7 +327,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     });
     let config = ConnectDeviceConfig {
         palette: demo.palette,
-        kind: if demo.state.starts_with("computer") {
+        kind: if demo.state.starts_with("computer") || demo.state.starts_with("refused-") {
             ConnectDeviceKind::Computer
         } else {
             ConnectDeviceKind::Phone

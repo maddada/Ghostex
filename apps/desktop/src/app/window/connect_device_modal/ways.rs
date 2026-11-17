@@ -98,6 +98,7 @@ impl GpuiConnectDeviceWindow {
             _ if self.way == ConnectWay::Tailscale => 10 + self.tailscale.screen(),
             (Stage::Ready, None) if self.code.is_some() && self.code_error.is_some() => 19,
             (Stage::Ready, None) if self.code.is_some() => 5,
+            _ if self.code_refused() => 18,
             (Stage::NeedsHelper(None), _) => 6,
             (Stage::NeedsHelper(Some(_)), _) => 7,
             (Stage::InstallingHelper(_), _) => 8,
@@ -388,7 +389,12 @@ impl GpuiConnectDeviceWindow {
             .children(
                 self.poll_error
                     .clone()
-                    .filter(|_| self.stage == Stage::Ready && self.way != ConnectWay::Tailscale)
+                    // Without a code the square says it already (`code_refused`).
+                    .filter(|_| {
+                        self.stage == Stage::Ready
+                            && self.code.is_some()
+                            && self.way != ConnectWay::Tailscale
+                    })
                     .map(|error| modal_error(&self.palette, error)),
             )
             .child(self.footer(cx))

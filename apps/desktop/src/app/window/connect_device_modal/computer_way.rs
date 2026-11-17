@@ -472,6 +472,12 @@ impl GpuiConnectDeviceWindow {
         self.join(window, cx);
     }
 
+    /// The preview binary's `refused-headless` state: the Headless server tab picked.
+    #[allow(dead_code)]
+    pub(crate) fn preview_headless_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.set_computer_tab(ComputerTab::Headless, window, cx);
+    }
+
     /// The preview binary's `computer-both` state: Connect both ways pressed.
     #[allow(dead_code)]
     pub(crate) fn preview_connect_back(&mut self, cx: &mut Context<Self>) {
@@ -771,6 +777,9 @@ impl GpuiConnectDeviceWindow {
     fn code_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
         let ready = self.stage == Stage::Ready && self.code.is_some();
+        // Pasting the other computer's code doesn't need this one's (`/api/pairComputer` isn't a
+        // door call), so a code this app may not show yet doesn't hold up the box.
+        let can_join = self.stage == Stage::Ready;
         let own_code: AnyElement = if ready {
             let text = self
                 .code
@@ -839,7 +848,7 @@ impl GpuiConnectDeviceWindow {
         } else {
             self.code_placeholder(120.0, cx)
         };
-        let paste = self.paste_row(ready, window, cx);
+        let paste = self.paste_row(can_join, window, cx);
         v_flex()
             .w_full()
             .gap(px(14.0))
@@ -890,7 +899,8 @@ impl GpuiConnectDeviceWindow {
     /// User picked variant A on the Headless server page (Q3594, "A. A Headless server tab beside the code"), and on SSH details: "i like ssh details being a tab there". Connect a computer opens on three tabs: Code (this computer's code and the box for the other's), Headless server (what it means, then four steps: gxserver must be running there, run `ghostex computer-code` in its terminal, paste the code it prints, compare the three words and approve there) and SSH details (the address, username and password form, which lives in Settings > Remote's Add a computer). The paste box is the same one on Code and Headless server.
     fn headless_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
-        let ready = self.stage == Stage::Ready && self.code.is_some();
+        // The tab never shows this computer's code, so it waits only for Easy Connect to be on.
+        let ready = self.stage == Stage::Ready;
         if !ready {
             return self.code_placeholder(120.0, cx);
         }
@@ -1117,28 +1127,36 @@ impl GpuiConnectDeviceWindow {
                         Some(true),
                     ),
                 ]))
-                .child(modal_footer(vec![
-                    modal_action_button(
-                        &p,
-                        "connect-computer-both-ways",
-                        "Connect both ways",
-                        None,
-                        ModalButtonTone::Neutral,
-                        false,
-                        |this: &mut Self, _window, cx| this.connect_back(cx),
-                        cx,
-                    ),
-                    modal_action_button(
-                        &p,
-                        "connect-computer-done",
-                        "Done",
-                        None,
-                        ModalButtonTone::Primary,
-                        false,
-                        |this: &mut Self, window, cx| this.close(window, cx),
-                        cx,
-                    ),
-                ]))
+                .child(modal_footer(
+                    // Connect both ways sends this computer's code: without one (this app may not
+                    // show it yet) the button would do nothing.
+                    self.code
+                        .is_some()
+                        .then(|| {
+                            modal_action_button(
+                                &p,
+                                "connect-computer-both-ways",
+                                "Connect both ways",
+                                None,
+                                ModalButtonTone::Neutral,
+                                false,
+                                |this: &mut Self, _window, cx| this.connect_back(cx),
+                                cx,
+                            )
+                        })
+                        .into_iter()
+                        .chain([modal_action_button(
+                            &p,
+                            "connect-computer-done",
+                            "Done",
+                            None,
+                            ModalButtonTone::Primary,
+                            false,
+                            |this: &mut Self, window, cx| this.close(window, cx),
+                            cx,
+                        )])
+                        .collect(),
+                ))
                 .into_any_element(),
             JoinStep::ConnectingBack { step, .. } => {
                 let state = |at: BackStep| match (step, at) {
