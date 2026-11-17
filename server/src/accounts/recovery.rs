@@ -20,6 +20,8 @@ type SessionKey = (String, String);
 struct PendingRecovery {
     observed: BTreeMap<SessionKey, String>,
     pending: BTreeSet<SessionKey>,
+    /// Saved accounts a new usage reading shows reset before their reset time (reset_used.rs).
+    resets: Vec<(Provider, String)>,
 }
 /// CDXC:AgentProviders 2026-09-22 WHY:
 /// A limit already visible in chat used to wait for the 30-second recovery sweep. Fresh visible notices now wake a targeted pass; remembering each instance prevents the pass's own screen probe from scheduling itself forever.
@@ -61,6 +63,19 @@ impl RecoverySignals {
     }
     fn take(&self) -> BTreeSet<SessionKey> {
         std::mem::take(&mut self.state.lock().unwrap_or_else(|e| e.into_inner()).pending)
+    }
+    /// A usage reading says this saved account was reset early (runtime.rs): the recovery loop,
+    /// which holds the app state, continues the sessions waiting on it (reset_used.rs).
+    pub(crate) fn note_reset(&self, provider: Provider, account_id: String) {
+        self.state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .resets
+            .push((provider, account_id));
+        self.changed.notify_one();
+    }
+    fn take_resets(&self) -> Vec<(Provider, String)> {
+        std::mem::take(&mut self.state.lock().unwrap_or_else(|e| e.into_inner()).resets)
     }
 }
 const CONTINUE: &str = "Continue the unfinished task from the last confirmed progress after the temporary error or usage limit. Check the current state first and do not repeat completed actions. If the task is already complete, report that and stop.";
@@ -132,6 +147,14 @@ pub(crate) fn start(state: Arc<AppState>) {
                     Some(state.accounts.recovery.take())
                 }
             };
+            for (provider, account) in state.accounts.recovery.take_resets() {
+                super::reset_used::spawn(
+                    &state,
+                    provider,
+                    super::reset_used::Login::Account(account),
+                    super::reset_used::Source::Reading,
+                );
+            }
             let scan = state.clone();
             let restart = first;
             match tokio::task::spawn_blocking(move || collect(&scan, restart, targets)).await {
@@ -984,7 +1007,7 @@ pub(crate) fn plan_session(
     // A try sent while the API host cannot be reached fails the same way and spends a try for
     // nothing, so a connection error waits here, looking again every few seconds.
     if connection_error {
-        if !super::api_errors::api_reachable(provider) {
+        if !super::api_errors::api_reachable(&session) {
             if recovery["waitingForNetwork"] != true {
                 recovery["waitingForNetwork"] = json!(true);
                 recovery["updatedAt"] = json!(now.to_rfc3339());
@@ -1418,7 +1441,7 @@ pub(super) fn ranked<'a>(
     });
     rows.into_iter().map(|(a, _)| a).collect()
 }
-async fn deliver(state: Arc<AppState>, plan: Plan) {
+pub(super) async fn deliver(state: Arc<AppState>, plan: Plan) {
     // A newly resumed CLI needs time to paint its composer. Waiting here has not sent any bytes.
     let detector = SessionChatOptionDetector::new(&state);
     // What the screen showed while the composer was not ready, for a try it turns away.
@@ -1665,6 +1688,66 @@ pub(crate) fn retry_now(
     let state = Arc::new(state.clone());
     tokio::spawn(async move { deliver(state, plan).await });
     Ok(())
+}
+/// The user used a reset (reset_used.rs): claims a usage-limit Continue for a running session whose
+/// turn has ended, whatever the schedule, Stop or the Continue automatically switch said, like
+/// `retry_now`. `None` when another continuation is already on its way. The caller holds
+/// `accounts.mutations`.
+pub(super) fn claim_after_reset(
+    state: &AppState,
+    repo: &DomainRepository<'_>,
+    db: &rusqlite::Connection,
+    session: &Value,
+) -> Result<Option<Plan>, DomainStateError> {
+    let (Some(pid), Some(sid)) = (session["projectId"].as_str(), session["sessionId"].as_str())
+    else {
+        return Ok(None);
+    };
+    if session["lifecycleState"].as_str() != Some("running") {
+        return Ok(None);
+    }
+    let mut runtime = session["runtimeSettings"]
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    let previous = runtime
+        .get("accountRecovery")
+        .cloned()
+        .unwrap_or(Value::Null);
+    if previous["status"] == "retrying" {
+        return Ok(None);
+    }
+    super::limit_wait::forget(state, repo, session);
+    let claim = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    runtime.insert("accountRecoverySuppressed".into(), json!(false));
+    let mut recovery = json!({
+        "status": "retrying",
+        "trigger": crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT,
+        "claim": claim,
+        "attempt": 0,
+        "reason": "The usage limit was reset.",
+        "previousAttemptAt": previous["lastAttemptAt"],
+        "lastAttemptAt": now,
+        "updatedAt": now,
+    });
+    // The card's compaction choice carries over, so an unchecked box is not read as "unset".
+    if let Some(checked) = previous.get("compactFirst") {
+        recovery["compactFirst"] = checked.clone();
+    }
+    runtime.insert("accountRecovery".into(), recovery);
+    let members = &["accountRecoverySuppressed", "accountRecovery"];
+    endpoint::update_session_members(repo, session, &runtime, members)?;
+    if let Some(row) = repo.get_session(pid, sid)? {
+        endpoint::publish(state, repo, &row)?;
+    }
+    let queue = crate::session_chat_queue::read_session_chat_queue_snapshot_with(db, pid, sid);
+    Ok(Some(Plan {
+        project: pid.into(),
+        session: sid.into(),
+        claim,
+        prompt: queue.deliverable_head().map(|p| p.id.clone()),
+    }))
 }
 /// Whether a session without its own Customize settings is covered by an enabled provider default, so Stop and the next send still record the recovery suppression flag.
 fn follows_enabled_defaults(

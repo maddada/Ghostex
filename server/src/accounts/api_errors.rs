@@ -6,7 +6,6 @@
 //! Recovery used to start only when the screen showed a known error line, and Claude's current wordings ("Can't reach the API server … (ENOTFOUND)", "Connection refused … (ECONNREFUSED)", "Connection lost mid-response") were not in that list, so three threads that died together when the network dropped were never retried. Claude records every such failure as a synthetic `isApiErrorMessage` row with `error: "server_error"` (logins, limits, refusals and bad models carry other codes), so for Claude the transcript is the trigger and the screen list is only the fallback; Codex keeps no record of its errors, so it still relies on the screen.
 //! SEE-ALSO: recovery.rs (plan_session, the 2026-10-15 schedule DECISION), session_chat_decode_claude.rs (`apiError` on the row), packages/gx-chat-core/src/transcript/api_errors.rs (the card), coordinators/state.rs (a thread stays working while a quick try is pending).
 
-use super::model::Provider;
 use crate::{
     domain::{DomainRepository, DomainStateError},
     server::AppState,
@@ -216,9 +215,10 @@ pub(crate) fn clear_blocked(recovery: &mut Value) {
 /// BLOCKING (a DNS lookup and a TCP connect, a few seconds at most). Whether the provider's API
 /// host answers on its HTTPS port: cheap, and enough to tell "the network is back" from "still
 /// down" without spending a try. The same probe and answers as Ghostex's online check
-/// (network_status), which also honours a proxy or base URL in gxserver's environment.
-pub(crate) fn api_reachable(provider: Provider) -> bool {
-    crate::network_status::agent_reachable_now(provider.id(), PROBE_TTL)
+/// (network_status), which also honours a proxy or base URL in gxserver's environment and the
+/// endpoint the session's own Codex config names.
+pub(crate) fn api_reachable(session: &Value) -> bool {
+    crate::network_status::session_reachable_now(session, PROBE_TTL)
 }
 
 /// Runs the recovery pass for one session at `at`, so a quick try does not wait for the 30-second

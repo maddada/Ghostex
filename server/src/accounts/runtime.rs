@@ -100,7 +100,16 @@ impl AccountRuntime {
             }
         });
         next.fetched_at = Some(started);
-        *SNAPSHOT.write().unwrap_or_else(|e| e.into_inner()) = next.clone();
+        let previous = std::mem::replace(
+            &mut *SNAPSHOT.write().unwrap_or_else(|e| e.into_inner()),
+            next.clone(),
+        );
+        // A reset used outside Ghostex (or one whose Redeem answer was lost) shows first here.
+        for (provider, account) in
+            super::reset_used::reset_early(&previous, &next, chrono::Utc::now())
+        {
+            self.recovery.note_reset(provider, account);
+        }
         next
     }
 }

@@ -258,6 +258,8 @@ pub struct ThreadScreenWait {
     approval: bool,
     /// The agent is no longer running: its screen is back at the shell.
     agent_gone: bool,
+    /// The screen shows a usage limit, which counts even while hooks say working.
+    at_limit: bool,
     /// The notice itself, as a chat frame carries it, for a permission prompt or a folder-trust
     /// question: the card its coordinator's chat relays (relay.rs).
     notice: Option<Value>,
@@ -271,7 +273,13 @@ impl ThreadScreenWait {
         prompt: Option<&SessionChatInteractivePrompt>,
         thread_ref: &str,
     ) -> Option<Self> {
-        if let Some(notice) = notice.filter(|notice| notice.blocks_input() && !notice.auto_trust) {
+        // CDXC:Coordinators 2026-11-17 WHY:
+        // A Codex at a usage limit can sleep inside its turn on the provider's Retry-After (days, through a local proxy), so its hooks say working and its screen never changes. As a working thread it was nudged, which cost one more refused request each time, and its coordinator got "still not moving" every 8 minutes: 206 reports overnight, none of which it could act on. A usage limit on screen now makes the thread wait on it, working or not: one report saying so, no nudges, and the next report once something else happens (accounts/reset_used.rs continues it after a reset).
+        let at_limit =
+            |notice: &SessionChatTerminalNotice| notice.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT;
+        if let Some(notice) = notice
+            .filter(|notice| (notice.blocks_input() || at_limit(notice)) && !notice.auto_trust)
+        {
             let title = notice.title.trim();
             let detail = notice
                 .detail
@@ -292,6 +300,7 @@ impl ThreadScreenWait {
                 asks: notice.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
                 approval: notice.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
                 agent_gone: notice.kind == SESSION_CHAT_NOTICE_AGENT_EXITED,
+                at_limit: at_limit(notice),
                 notice: matches!(
                     notice.kind.as_str(),
                     SESSION_CHAT_NOTICE_PERMISSION_PROMPT | SESSION_CHAT_NOTICE_TRUST_PROMPT
@@ -310,6 +319,7 @@ impl ThreadScreenWait {
             asks: true,
             approval: matches!(prompt, SessionChatInteractivePrompt::Approval { .. }),
             agent_gone: false,
+            at_limit: false,
             notice: None,
         })
     }
@@ -385,7 +395,8 @@ fn recorded_screen_wait(session: &Value) -> Option<ThreadScreenWait> {
 /// CDXC:Coordinators 2026-11-04 WHY:
 /// An exited agent counts even while hooks say working. A Claude that dies without a Stop hook (the computer crashed mid-turn, then Ghostex's restore printed "No conversation found" because the crash had zeroed the transcript) leaves its last hook state at working forever, so G80sv on 2026-11-04 sat under Working at a bare PowerShell prompt for 20 minutes before the transcript check reported it. A shell prompt is stronger evidence than a hook that can no longer fire.
 fn applicable_screen_wait(session: &Value, hook_working: bool) -> Option<ThreadScreenWait> {
-    recorded_screen_wait(session).filter(|wait| wait.asks || wait.agent_gone || !hook_working)
+    recorded_screen_wait(session)
+        .filter(|wait| wait.asks || wait.agent_gone || wait.at_limit || !hook_working)
 }
 
 /// True when a thread's last screen reading shows a permission prompt or an approval, which only

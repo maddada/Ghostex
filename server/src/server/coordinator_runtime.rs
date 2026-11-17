@@ -910,6 +910,20 @@ fn supervise(
         if crate::session_self_heal::daemon_lost(&coordinator.0, &coordinator.1) {
             continue;
         }
+        // CDXC:Coordinators 2026-11-17 WHY: a coordinator at its own usage limit cannot read a
+        // report, and one asleep in its turn on the limit's Retry-After took 206 of them in one
+        // night. Its reports wait, worked out again on each tick as during an outage
+        // (CDXC:OfflineHold above), and go out once a reset continued it (accounts/reset_used.rs).
+        if repository
+            .get_session(&coordinator.0, &coordinator.1)
+            .ok()
+            .flatten()
+            .is_some_and(|session| {
+                crate::accounts::reset_used::waits_at_usage_limit(state, &session)
+            })
+        {
+            continue;
+        }
         if waits_for_retry(&mut memory.retry, &coordinator, now) {
             continue;
         }

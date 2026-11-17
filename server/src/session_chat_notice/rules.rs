@@ -28,6 +28,16 @@ const RESTART_CODEX: NoticeActionSpec = NoticeActionSpec {
     send: None,
 };
 
+/// The usage-limit card's "I reset it, continue" (accounts/reset_used.rs): the user used a reset,
+/// so every session waiting on that login's limit is interrupted and continued. A `restartAgent`
+/// action, so the chat clients route it to gxserver by its id without a new action kind.
+const RESET_USED: NoticeActionSpec = NoticeActionSpec {
+    id: crate::accounts::reset_used::ACTION_RESET_USED,
+    label: "I reset it, continue",
+    kind: SessionChatTerminalNoticeActionKind::RestartAgent,
+    send: None,
+};
+
 const RESTART_ZCODE: NoticeActionSpec = NoticeActionSpec {
     id: "restartAgent",
     label: "Restart ZCode",
@@ -244,8 +254,20 @@ const CODEX_RULES: &[NoticeRule] = &[
                 parts: &[NoticePart::Text("Quota exceeded. Check your plan")],
                 corroborators: &[],
             },
+            // CDXC:AgentScreenDetection 2026-11-17 WHY:
+            // A Codex that reaches its API through a local proxy (`model_provider` with a `base_url`) never sees OpenAI's "hit your usage limit": the proxy answers 429 with a Retry-After of days, and Codex shows only "exceeded retry limit, last status: 429" while it sleeps in its turn. As a stream error it got five quick Continues against a proxy that refused each one, and the coordinator heard "not moving" every 8 minutes all night. A 429 is the provider refusing on quota, so it is the usage limit; these come before the stream-error rule, whose "last status" and "unexpected status" lines would match first otherwise.
+            NoticeSignature {
+                scope: NoticeScope::Banner,
+                parts: &[NoticePart::Text("last status: 429")],
+                corroborators: &[],
+            },
+            NoticeSignature {
+                scope: NoticeScope::Banner,
+                parts: &[NoticePart::Text("unexpected status 429")],
+                corroborators: &[],
+            },
         ],
-        actions: &[OPEN_TERMINAL],
+        actions: &[RESET_USED, OPEN_TERMINAL],
         quote_evidence: true,
     },
     NoticeRule {
@@ -771,7 +793,7 @@ const CLAUDE_RULES: &[NoticeRule] = &[
                 corroborators: &[],
             },
         ],
-        actions: &[OPEN_TERMINAL],
+        actions: &[RESET_USED, OPEN_TERMINAL],
         quote_evidence: true,
     },
 ];

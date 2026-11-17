@@ -25,10 +25,12 @@ fn instance(notice: &SessionChatTerminalNotice) -> String {
     format!("{}\n{}", notice.identity(), notice.detected_at)
 }
 
-/// Whether a transcript error record is the agent reporting a usage limit: Claude's "You've hit your session limit", "You've reached your weekly limit" and "You're out of usage credits", Codex's "hit your usage limit".
+/// Whether a transcript error record is the agent reporting a usage limit: Claude's "You've hit your session limit", "You've reached your weekly limit" and "You're out of usage credits", Codex's "hit your usage limit", and a Codex turn that ended on a 429 (the usage-limit screen rule in session_chat_notice/rules.rs says why).
 fn transcript_usage_limit_message(message: &str) -> bool {
     let text = message.to_lowercase();
     text.contains("usage limit")
+        || text.contains("last status: 429")
+        || text.contains("unexpected status 429")
         || text.contains("out of usage credits")
         || ((text.contains("hit your") || text.contains("reached your")) && text.contains("limit"))
 }

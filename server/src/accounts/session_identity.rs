@@ -98,6 +98,53 @@ pub(crate) fn transcript_login_identity(
     login_identity(provider, &transcript_home(session, provider)?, home)
 }
 
+/// The provider folder a session's agent runs in (`CODEX_HOME`, `CLAUDE_CONFIG_DIR`): the one its
+/// transcript lives under, else the one its command sets. `None` means the CLI's default folder.
+pub(crate) fn session_home(session: &Value, provider: Provider) -> Option<PathBuf> {
+    configured_home(session, provider).or_else(|| command_home(session, provider))
+}
+
+/// The folder an agent command assigns before its executable (`CODEX_HOME=~/.codex-hub codex`).
+fn command_home(session: &Value, provider: Provider) -> Option<PathBuf> {
+    let variable = match provider {
+        Provider::Codex => "CODEX_HOME=",
+        Provider::Claude => "CLAUDE_CONFIG_DIR=",
+    };
+    let command = session
+        .pointer("/runtimeSettings/agentCommand")
+        .and_then(Value::as_str)?;
+    let start = command
+        .match_indices(variable)
+        .map(|(at, _)| at)
+        .find(|&at| {
+            command[..at]
+                .chars()
+                .next_back()
+                .is_none_or(char::is_whitespace)
+        })?;
+    let rest = &command[start + variable.len()..];
+    // A quoted value runs to its closing quote (`CODEX_HOME="/Users/a/Codex Work"`); anything
+    // that does not parse whole gives no folder rather than part of one.
+    let value = match rest.chars().next() {
+        Some(quote @ ('\'' | '"')) => {
+            let inner = &rest[1..];
+            &inner[..inner.find(quote)?]
+        }
+        _ => {
+            let word = rest.split(char::is_whitespace).next().unwrap_or_default();
+            if word.contains(['\'', '"', '\\']) {
+                return None;
+            }
+            word
+        }
+    };
+    let path = match value.strip_prefix("~/") {
+        Some(rest) => ghostex_paths::user_home_dir().join(rest),
+        None => PathBuf::from(value),
+    };
+    path.is_absolute().then_some(path)
+}
+
 fn configured_home(session: &Value, provider: Provider) -> Option<PathBuf> {
     if let Some(root) = session
         .pointer("/runtimeSettings/externalAgentHome")
