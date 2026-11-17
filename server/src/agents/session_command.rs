@@ -519,9 +519,11 @@ pub(crate) fn command_names_effort(command: &str, agent: &str) -> bool {
         if std::mem::take(&mut config_value) && word.starts_with("model_reasoning_effort=") {
             return true;
         }
-        if std::mem::take(&mut skip_value) || !is_option_word(&command[start..end], &word) {
+        if std::mem::take(&mut skip_value) {
             continue;
         }
+        // The decoded word, so a quoted `'--effort'` the shell hands the agent as a flag counts;
+        // an option's value (`--append-system-prompt '… --effort …'`) was skipped above.
         let flag = word.split('=').next().unwrap_or(&word);
         if matches!(
             flag,
@@ -529,6 +531,9 @@ pub(crate) fn command_names_effort(command: &str, agent: &str) -> bool {
         ) || word.starts_with("--config=model_reasoning_effort=")
         {
             return true;
+        }
+        if !is_option_word(&command[start..end], &word) {
+            continue;
         }
         if matches!(word.as_str(), "-c" | "--config") {
             config_value = true;
