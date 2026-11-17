@@ -383,6 +383,8 @@ pub fn ensure_bundled_skill_installed(
         write_if_changed(&canonical.join("SKILL.md"), skill_md)
             .map_err(|error| install_error(&canonical, error))?;
     }
+    // Slash-only for a Claude Ghostex didn't start (agent_skills_session.rs).
+    crate::agent_skills_session::keep_ghostex_skills_manual_outside_ghostex(home);
     let agent_root = orchestrator_skill_agent(family).and_then(|agent_id| {
         ghostex_agent_sync::agent_catalog(home)
             .into_iter()

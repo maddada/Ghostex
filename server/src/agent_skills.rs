@@ -248,6 +248,11 @@ fn install_agent_skills_blocking(
         ));
         skill_sources.insert(skill_name.clone(), json!(source_kind));
     }
+    // A skill the model may pick up stays slash-only for a Claude Ghostex didn't start
+    // (agent_skills_session.rs).
+    crate::agent_skills_session::keep_ghostex_skills_manual_outside_ghostex(
+        paths.agent_config_home_dir(),
+    );
     let install_command =
         describe_agent_skill_install_command(&package_source, &skill_names, &agent_ids);
     let mut status = read_agent_skill_status_for_names(paths, params, skill_names)?

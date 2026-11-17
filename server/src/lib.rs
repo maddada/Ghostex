@@ -12,6 +12,7 @@ pub(crate) mod agent_sign_in;
 pub mod agent_skills;
 pub mod agent_skills_remote;
 pub mod agent_skills_renamed;
+pub mod agent_skills_session;
 pub mod agent_transcripts;
 pub(crate) mod agentbox;
 pub mod agents;

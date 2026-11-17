@@ -7145,7 +7145,14 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   type to use it, such as `$ghostex-computer-use`. Each skill is installed
   once, in `~/.agents/skills`; agents that do not read that folder (Claude
   Code, Kiro, Droid, Hermes and others) get a link to it in their own skills
-  folder, so every agent uses the same copy. When the computer is
+  folder, so every agent uses the same copy. In a Claude Code session you
+  start yourself, outside Ghostex, Ghostex's skills work only when you type
+  their command (`/ghostex-help`, `/ghostex-coordinator`): Claude never picks
+  one up on its own there. Ghostex keeps a skill Claude would otherwise pick
+  up by itself (the coordinator playbook, Ghostex Secrets, the agent guide, an
+  extension's skill) at `user-invocable-only` under `skillOverrides` in
+  Claude's settings, and turns it back on for the sessions Ghostex starts. A
+  value you set there yourself is left alone. When the computer is
   online they are downloaded from the Ghostex GitHub repository, so skill fixes
   arrive between releases, and installed skills are refreshed automatically
   each time Ghostex starts; a copy an older Ghostex left in an agent's own

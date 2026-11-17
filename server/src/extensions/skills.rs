@@ -114,7 +114,10 @@ pub(crate) fn install_skill(
         .map_err(|error| error.message)?;
     let canonical = home.join(CANONICAL_AGENT_SKILLS_DIR).join(&skill.name);
     fs::write(canonical.join(OWNER_MARKER), extension_id)
-        .map_err(|error| format!("Couldn't finish installing the skill: {error}"))
+        .map_err(|error| format!("Couldn't finish installing the skill: {error}"))?;
+    // Slash-only for a Claude Ghostex didn't start (agent_skills_session.rs).
+    crate::agent_skills_session::keep_ghostex_skills_manual_outside_ghostex(home);
+    Ok(())
 }
 
 /// Removes the extension's skill when the copy is still the one it installed.

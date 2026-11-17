@@ -423,7 +423,12 @@ pub(crate) fn create_agent_session_params_for_project(
                     .map(|command| {
                         (
                             command.to_string(),
-                            super::with_claude_compaction_settings(family.as_deref(), command),
+                            // Ghostex's skills, slash-only for a Claude Ghostex didn't start,
+                            // back on for the model here (agent_skills_session.rs).
+                            crate::agent_skills_session::with_ghostex_skills_on(
+                                family.as_deref(),
+                                &super::with_claude_compaction_settings(family.as_deref(), command),
+                            ),
                         )
                     })
                     .and_then(|(before, after)| (after != before).then_some(after))

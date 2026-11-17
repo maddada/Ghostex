@@ -377,6 +377,10 @@ pub(crate) fn to_agent_resume_input(
         let command = super::with_claude_bypass_consent(agent_id.as_deref(), &command);
         // Claude's idle compaction and cache length from Settings (claude_idle_compaction.rs).
         let command = super::with_claude_compaction_settings(agent_id.as_deref(), &command);
+        // Ghostex's skills, slash-only for a Claude Ghostex didn't start, back on for the model
+        // here (agent_skills_session.rs).
+        let command =
+            crate::agent_skills_session::with_ghostex_skills_on(agent_id.as_deref(), &command);
         // The home folder's secret folders (home_secret_folders.rs), and a GBot's screen tools
         // when it may not use them (gbot_computer_use.rs).
         let command = super::with_home_secret_folders_denied(

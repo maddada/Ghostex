@@ -19,7 +19,7 @@ pub(super) fn read_text(path: &Path) -> io::Result<Option<String>> {
 /// A JSON object file read for editing, with the `//` comment lines that open it (Copilot heads its
 /// `config.json` with two). `None` when the file does not exist or is empty. A file that holds
 /// anything but a JSON object is an error, so it is never overwritten.
-pub(super) fn read_json_object(path: &Path) -> io::Result<Option<JsonFile>> {
+pub(crate) fn read_json_object(path: &Path) -> io::Result<Option<JsonFile>> {
     let Some(text) = read_text(path)? else {
         return Ok(None);
     };
@@ -44,12 +44,12 @@ pub(super) fn read_json_object(path: &Path) -> io::Result<Option<JsonFile>> {
 
 /// A JSON object file and the comment lines above it.
 #[derive(Default)]
-pub(super) struct JsonFile {
-    pub(super) header: String,
-    pub(super) object: Map<String, Value>,
+pub(crate) struct JsonFile {
+    pub(crate) header: String,
+    pub(crate) object: Map<String, Value>,
 }
 
-pub(super) fn write_json_object(path: &Path, file: &JsonFile) -> io::Result<()> {
+pub(crate) fn write_json_object(path: &Path, file: &JsonFile) -> io::Result<()> {
     let mut text = file.header.clone();
     text.push_str(&serde_json::to_string_pretty(&file.object).map_err(io::Error::other)?);
     text.push('\n');
@@ -85,7 +85,7 @@ pub(super) fn write_atomically(path: &Path, contents: &str) -> io::Result<()> {
 
 /// Every `<root>/<entry>/<file_name>` that exists, for profile folders such as cswap's
 /// `sessions/<slot>` or xswap's `accounts/<slot>`.
-pub(super) fn existing_files_in_subfolders(root: &Path, file_name: &str) -> Vec<PathBuf> {
+pub(crate) fn existing_files_in_subfolders(root: &Path, file_name: &str) -> Vec<PathBuf> {
     let Ok(entries) = fs::read_dir(root) else {
         return Vec::new();
     };
@@ -99,7 +99,7 @@ pub(super) fn existing_files_in_subfolders(root: &Path, file_name: &str) -> Vec<
 }
 
 /// Drops files that are the same file under another spelling (a symlinked profile config).
-pub(super) fn dedupe_files(files: Vec<PathBuf>) -> Vec<PathBuf> {
+pub(crate) fn dedupe_files(files: Vec<PathBuf>) -> Vec<PathBuf> {
     let mut seen: Vec<PathBuf> = Vec::new();
     let mut unique = Vec::new();
     for file in files {

@@ -152,6 +152,21 @@ pub async fn run_gxserver_foreground(
             });
         }
     }
+    // Ghostex's skills that a model may pick up answer only to their slash command in a Claude
+    // Ghostex didn't start (agent_skills_session.rs).
+    if let Some(moved) = crate::agent_skills_session::keep_ghostex_skills_manual_at_startup(&paths)
+    {
+        let _ = logger.log(GxserverLogInput {
+            level: crate::logging::LogLevel::Warn,
+            event: "ghostexSkillsManualOutsideGhostex".to_string(),
+            server_id: None,
+            request_id: None,
+            client: None,
+            duration_ms: None,
+            error: None,
+            details: Some(moved),
+        });
+    }
     // A coordinator's first message still waiting in its queue names the skill's new name too.
     match crate::storage::open_gxserver_database(&paths)
         .map_err(|error| error.to_string())

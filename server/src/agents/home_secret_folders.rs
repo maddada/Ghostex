@@ -159,7 +159,7 @@ pub(super) fn with_claude_deny_rules(command: &str, rules: Vec<Value>) -> Option
 /// Lets `edit` change the command's one `--settings` JSON (Claude keeps only the last
 /// `--settings`), or an empty one appended to the command. `None` when the command names a
 /// `--settings` that isn't inline JSON (a file of the user's), or `edit` gives up.
-pub(super) fn with_claude_settings(
+pub(crate) fn with_claude_settings(
     command: &str,
     edit: impl FnOnce(&mut Map<String, Value>) -> Option<()>,
 ) -> Option<String> {
