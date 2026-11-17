@@ -179,6 +179,24 @@ fn gpui_linux_client_window_frame(
         .into_any_element()
 }
 
+impl GhostexGpuiApp {
+    /// What a crash report says was on screen (crash_report/context.rs): the view and where the
+    /// keyboard is, as fixed labels. Nothing happens when they did not change.
+    fn note_screen_for_crash_report(&self) {
+        let view = match self.active_mode {
+            TitlebarMode::Extension(_) => "Extension",
+            mode => mode.display_label(),
+        };
+        let focus = match self.shell_focus {
+            ShellFocusTarget::AgentsPane(_) => "an agent pane",
+            ShellFocusTarget::CommandPane => "the commands pane",
+            ShellFocusTarget::BrowserSurface | ShellFocusTarget::BrowserPane(_) => "a browser page",
+            ShellFocusTarget::ProjectEditorSurface(_) => "the view",
+        };
+        crate::crash_report::note_screen(view, focus);
+    }
+}
+
 impl Render for GhostexGpuiApp {
     fn render(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let _profile = crate::profiling::span(crate::profiling::Metric::AppRender);
@@ -191,6 +209,7 @@ impl Render for GhostexGpuiApp {
         self.note_voice_agent_space_free(window, cx);
         self.sync_read_aloud_on_screen(window, cx);
         self.main_window_handle = Some(gpui::Window::window_handle(window));
+        self.note_screen_for_crash_report();
         // The Focus Sidebar hotkey's entry ends at once when its sidebar is no longer drawn.
         self.check_native_sidebar_keyboard_entry(cx);
         crate::app::workspace_windows::sync_workspace_window_title(window, &self.project_name, cx);

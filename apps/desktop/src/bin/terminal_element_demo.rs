@@ -40,6 +40,7 @@ mod crash_report {
     pub(crate) fn record_panic(_details: &serde_json::Value) {}
     #[allow(dead_code)]
     pub(crate) fn record_uncaught_exception(_name: &str, _reason: &str, _call_stack: &[String]) {}
+    pub(crate) fn note_event(_event: &str) {}
 }
 #[path = "../terminal_element.rs"]
 mod terminal_element;

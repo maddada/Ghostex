@@ -150,8 +150,76 @@ pub(crate) fn read_crash_file(path: &Path, written_ms: u64) -> Option<CrashRecor
         location,
         message,
         stack: frames,
-        log_tail: Vec::new(),
+        log_tail: super::record::log_tail_before(at_ms),
+        thread: crash.as_ref().map(|crash| {
+            let ghostty_name = tag(&envelope.event, "thread-type");
+            match (crash.is_main_thread, ghostty_name) {
+                (true, _) => "main".to_string(),
+                (false, Some(name)) => format!("another thread (terminal {name})"),
+                (false, None) => "another thread".to_string(),
+            }
+        }),
+        screen: super::context::screen_text(
+            tag(&envelope.event, super::context::VIEW_TAG).unwrap_or_default(),
+            tag(&envelope.event, super::context::FOCUS_TAG).unwrap_or_default(),
+        ),
+        recent_events: recent_events(&envelope.event),
+        build_id: main.debug_id.clone().filter(|_| same_binary),
     })
+}
+
+/// A tag of the crash event, kept only when it is a short plain label.
+fn tag<'a>(event: &'a Value, name: &str) -> Option<&'a str> {
+    event
+        .pointer("/tags")
+        .and_then(|tags| tags.get(name))
+        .and_then(Value::as_str)
+        .filter(|value| {
+            !value.is_empty()
+                && value.len() <= 60
+                && value
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || " .,_:-()".contains(c))
+        })
+}
+
+/// The breadcrumbs context.rs left in the crash handler's scope, oldest first, as
+/// `13:33:02 gpui.cefRuntime.ready`.
+fn recent_events(event: &Value) -> Vec<String> {
+    // Sentry writes them as a list, or as `{ "values": [...] }`.
+    let list = event.get("breadcrumbs").and_then(|crumbs| {
+        crumbs
+            .as_array()
+            .or_else(|| crumbs.get("values")?.as_array())
+    });
+    let Some(list) = list else {
+        return Vec::new();
+    };
+    let events: Vec<String> = list
+        .iter()
+        .filter_map(|crumb| {
+            let message = crumb.get("message")?.as_str()?;
+            let clean: String = message
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | ':' | '-'))
+                .take(80)
+                .collect();
+            if clean.is_empty() {
+                return None;
+            }
+            let clock = crumb
+                .get("timestamp")
+                .and_then(Value::as_str)
+                .and_then(|time| chrono::DateTime::parse_from_rfc3339(time).ok())
+                .map(|time| time.format("%H:%M:%S ").to_string())
+                .unwrap_or_default();
+            Some(format!("{clock}{clean}"))
+        })
+        .collect();
+    let skip = events
+        .len()
+        .saturating_sub(super::context::RECENT_EVENTS_MAX);
+    events[skip..].to_vec()
 }
 
 /// `EXC_BAD_ACCESS reading 0x10` and the like, from the minidump's Mac exception codes.
@@ -213,6 +281,8 @@ struct Image {
     base: u64,
     size: u64,
     name: String,
+    /// The Mach-O UUID (`debug_id`, dashes removed), which names the exact binary.
+    debug_id: Option<String>,
 }
 
 struct Images {
@@ -241,7 +311,22 @@ impl Images {
                             .rsplit(['/', '\\'])
                             .next()?
                             .to_string();
-                        Some(Image { base, size, name })
+                        let debug_id = image
+                            .get("debug_id")
+                            .and_then(Value::as_str)
+                            .filter(|id| {
+                                id.len() <= 40
+                                    && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+                            })
+                            // Without dashes: plain hex is what the report's scrubber keeps
+                            // (a dashed id reads as a key to it).
+                            .map(|id| id.replace('-', ""));
+                        Some(Image {
+                            base,
+                            size,
+                            name,
+                            debug_id,
+                        })
                     })
                     .collect()
             })
@@ -269,6 +354,8 @@ struct CrashingThread {
     flags: u32,
     address: u64,
     frames: Vec<u64>,
+    /// The first thread of the process (the one AppKit and GPUI run on) crashed.
+    is_main_thread: bool,
 }
 
 struct Minidump;
@@ -323,6 +410,7 @@ impl Minidump {
         let context = bytes.get(context_at..context_at.checked_add(context_size)?)?;
         let (pc, lr, fp, address_mask) = Self::registers(context)?;
         let stack = Self::thread_stack(bytes, thread_id);
+        let is_main_thread = Self::first_thread_id(bytes) == Some(thread_id);
         let mut frames = vec![pc];
         if let Some(lr) = lr {
             frames.push(lr);
@@ -353,7 +441,20 @@ impl Minidump {
             flags,
             address,
             frames,
+            is_main_thread,
         })
+    }
+
+    /// The id of the thread list's first thread: the process's main thread (Breakpad lists the
+    /// task's threads in the order the kernel gives them, main first).
+    fn first_thread_id(bytes: &[u8]) -> Option<u32> {
+        let (size, list) = Self::stream(bytes, Self::THREAD_LIST_STREAM)?;
+        let count = Self::u32_at(bytes, list)? as usize;
+        if count == 0 {
+            return None;
+        }
+        let first = (list + size).checked_sub(count.checked_mul(48)?)?;
+        Self::u32_at(bytes, first)
     }
 
     /// The program counter, the link register (arm64), the frame pointer, and the mask that

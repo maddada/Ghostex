@@ -107,6 +107,7 @@ fn body_text(
     log_tail: &[String],
     (frames_left_out, lines_left_out): (usize, usize),
 ) -> String {
+    let recent_events = &record.recent_events;
     let what = match record.kind {
         CrashKind::Panic => "Ghostex closed unexpectedly (a Rust panic on the main thread).",
         CrashKind::UncaughtException => {
@@ -123,6 +124,9 @@ fn body_text(
         _ => ghostex.push_str(" · commit unknown"),
     }
     ghostex.push_str(&format!(" · {}", facts.installed_as));
+    if let Some(build_id) = &record.build_id {
+        ghostex.push_str(&format!(" · build id {build_id}"));
+    }
     let mut system = facts.os.clone();
     if let Some(model) = &facts.model {
         system.push_str(&format!(" · {model}"));
@@ -146,6 +150,12 @@ fn body_text(
         format!("- When: {when}"),
         format!("- Crash id: {fingerprint}"),
     ];
+    if let Some(thread) = &record.thread {
+        lines.push(format!("- Thread: {thread}"));
+    }
+    if let Some(screen) = &record.screen {
+        lines.push(format!("- On screen: {screen}"));
+    }
     if !note.is_empty() {
         lines.push(String::new());
         lines.push(format!("What they were doing: {}", one_line(note)));
@@ -158,6 +168,13 @@ fn body_text(
         if frames_left_out > 0 {
             lines.push(format!("… {frames_left_out} more frames left out to fit"));
         }
+        lines.push("```".to_string());
+    }
+    if !recent_events.is_empty() {
+        lines.push(String::new());
+        lines.push("Last app events (UTC)".to_string());
+        lines.push("```text".to_string());
+        lines.extend(recent_events.iter().map(|event| fenced(event)));
         lines.push("```".to_string());
     }
     if !log_tail.is_empty() || lines_left_out > 0 {

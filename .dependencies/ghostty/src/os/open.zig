@@ -49,23 +49,26 @@ pub fn open(
     // before spawning the process.
     spawn_opts.stderr = .pipe;
 
-    const exe = if (comptime build_config.snap) local_env: {
+    // Ghostex patch (2026-11-18, GitHub #653): every release passes the
+    // environment explicitly. Without a map, `spawn` copies the environment
+    // the I/O implementation was given at init, which an embedding app's
+    // later `setenv` can leave pointing at freed memory (see
+    // `global.processEnviron`); `global.environMap()` reads it as it is now.
+    //
+    // Note that `spawn` copies the passed in `Environ.Map` into a
+    // fresh `Environ` block, so this is safe to release immediately
+    // after spawn.
+    var environ_map = try global.environMap();
+    defer environ_map.deinit();
+    if (comptime build_config.snap) {
         // In the snap on Linux the launcher exports LD_LIBRARY_PATH
         // pointing at the snap's bundled libraries. Leaking this into
         // child process can can be problematic, so let's drop it from the
         // env.
-        //
-        // Note that `spawn` copies the passed in `Environ.Map` into a
-        // fresh `Environ` block, so this is safe to release immediately
-        // after spawn.
-        var environ_map = try global.environMap();
-        defer environ_map.deinit();
         _ = environ_map.orderedRemove("LD_LIBRARY_PATH");
-        spawn_opts.environ_map = &environ_map;
-        break :local_env try std.process.spawn(global.io(), spawn_opts);
-    } else
-        // Non-snap releases don't need to alter the env.
-        try std.process.spawn(global.io(), spawn_opts);
+    }
+    spawn_opts.environ_map = &environ_map;
+    const exe = try std.process.spawn(global.io(), spawn_opts);
 
     const thread = try std.Thread.spawn(.{}, openThread, .{ global.io(), exe });
     thread.detach();

@@ -64,6 +64,13 @@ pub fn init(opts: InitOpts) !void {
             .main, .tool => |m| m.environ,
             .c => |c| c.environ,
         },
+        // Ghostex patch (2026-11-18, GitHub #653): see `processEnviron`.
+        .environ_follows_process = switch (opts) {
+            .main, .tool => false,
+            .c => builtin.link_libc and
+                builtin.target.os.tag != .windows and
+                std.process.Environ.Block == std.process.Environ.PosixBlock,
+        },
         .args = switch (opts) {
             .main, .tool => |m| m.args,
             // TODO: Using the C API from Windows is unsupported at this time.
@@ -208,6 +215,14 @@ pub fn init(opts: InitOpts) !void {
     try internal_os.ensureLocale();
     syncEnviron();
 
+    // Ghostex patch (2026-11-18, GitHub #653): the I/O implementation scans
+    // the environment once, the first time it needs it, from the copy it was
+    // given at init. Embedded, that copy can point at freed memory later (see
+    // `processEnviron`), so take the scan now while it is still valid.
+    if (comptime builtin.target.os.tag != .windows and builtin.target.os.tag != .wasi) {
+        if (self.environ_follows_process) _ = self.io_impl.environString("PATH");
+    }
+
     // Initialize glslang for shader compilation
     try glslang.init();
 
@@ -274,7 +289,29 @@ pub fn alloc() std.mem.Allocator {
 pub fn environ() std.process.Environ {
     if (builtin.is_test) return std.testing.environ;
 
+    if (state.?.environ_follows_process) return processEnviron();
     return state.?.environ;
+}
+
+/// The process environment as it is right now, read from libc's `environ`.
+///
+/// Ghostex patch (2026-11-18, GitHub #653): an app that embeds Ghostty through
+/// the C API owns the process environment and may call `setenv` or `unsetenv`
+/// at any time after `ghostty_init` (Ghostex does when the web runtime is
+/// installed). `setenv` can move libc's `environ` array to a new allocation and
+/// free the old one, so the slice saved at init then points at freed memory.
+/// Reading it crashed Ghostex 11.9.0 with EXC_BAD_ACCESS while a settings change
+/// reloaded the terminal config (the config reads SHELL). Embedded state
+/// therefore reads `environ` afresh on every call instead of keeping a copy.
+fn processEnviron() std.process.Environ {
+    switch (builtin.target.os.tag) {
+        .windows => unreachable,
+        else => return .{ .block = .{ .slice = std.c.environ[0..env_len: {
+            var len: usize = 0;
+            while (std.c.environ[len]) |_| : (len += 1) {}
+            break :env_len len;
+        } :null] } },
+    }
 }
 
 /// Helper to create an environment map off of the state's environment, or one
@@ -284,7 +321,7 @@ pub fn environ() std.process.Environ {
 pub fn environMap() !std.process.Environ.Map {
     if (builtin.is_test) return std.testing.environ.createMap(std.testing.allocator);
 
-    return state.?.environ.createMap(state.?.alloc);
+    return environ().createMap(state.?.alloc);
 }
 
 /// Re-synchronizes the global Environ (both the higher-level and I/O versions)
@@ -310,11 +347,7 @@ pub fn syncEnviron() void {
         else => {
             assert(builtin.link_libc);
             assert(!builtin.is_test);
-            const new_environ: std.process.Environ = .{ .block = .{ .slice = std.c.environ[0..env_len: {
-                var len: usize = 0;
-                while (std.c.environ[len]) |_| : (len += 1) {}
-                break :env_len len;
-            } :null] } };
+            const new_environ = processEnviron();
             state.?.environ = new_environ;
             state.?.io_impl.environ = .{ .process_environ = new_environ };
         },
@@ -381,6 +414,10 @@ pub const GlobalState = struct {
     gpa: ?GPA,
     alloc: std.mem.Allocator,
     environ: std.process.Environ,
+    /// True when `environ` is libc's process environment, which the embedding
+    /// app may change at any time; `environ()` then reads it live (Ghostex
+    /// patch, see `processEnviron`).
+    environ_follows_process: bool = false,
     args: std.process.Args,
     tmp_dir_path: ?[]const u8,
     action: ?cli.ghostty.Action,

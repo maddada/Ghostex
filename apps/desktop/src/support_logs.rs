@@ -153,6 +153,8 @@ pub fn scenario_id_enabled(scenario_id: &str) -> bool {
 /// Appends a support event. Routine breadcrumbs require both "Show debug UI
 /// controls" and the log's scenario; important diagnostics bypass both gates.
 pub fn append(log: GpuiSupportLog, event: &str, details: serde_json::Value) {
+    // Every event's name is kept in memory for a crash report, written to the log or not.
+    crate::crash_report::note_event(event);
     let important = is_important_diagnostic(log, event, &details);
     if !important && !debug_ui_controls_enabled() {
         return;
@@ -175,6 +177,7 @@ pub fn append_for_scenario(
     event: &str,
     details: serde_json::Value,
 ) {
+    crate::crash_report::note_event(event);
     let important = is_important_diagnostic(log, event, &details);
     if !important && (!debug_ui_controls_enabled() || !scenario_id_enabled(scenario_id)) {
         return;
@@ -196,6 +199,7 @@ pub fn append_profile_sample(details: serde_json::Value) {
 /// live presentation arriving). A handful of lines per launch, so it needs no Settings switch; each
 /// line carries `sinceLaunchMs` so two launches can be compared from the file alone.
 pub fn append_startup_timing(event: &str, mut details: serde_json::Value) {
+    crate::crash_report::note_event(event);
     if let Some(object) = details.as_object_mut() {
         object.insert("pid".into(), std::process::id().into());
         object.insert("sinceLaunchMs".into(), ms_since_launch().into());
@@ -270,6 +274,7 @@ fn diagnostic_value_present(value: &serde_json::Value) -> bool {
 /// Appends an event that is kept whatever the debug switches say, for the few lines a later
 /// reader needs to see that something happened at all (a connect that started and how it ended).
 pub fn append_always(log: GpuiSupportLog, event: &str, details: serde_json::Value) {
+    crate::crash_report::note_event(event);
     append_unconditionally(log, event, details);
 }
 
