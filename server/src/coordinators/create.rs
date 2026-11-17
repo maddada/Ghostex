@@ -205,22 +205,19 @@ pub fn coordinator_create_params(launch: CoordinatorLaunch<'_>) -> Value {
 /// `/api/createAgentSession` for a coordinator: the model and effort the sender took from its own
 /// Coordinator settings are taken again from this computer's (`settings`), so a coordinator started
 /// here from another computer or the CLI starts on the settings of the computer it runs on. Values
-/// the user chose are kept. A create whose agent family is unknown here keeps what it was sent.
+/// the user chose are kept. `family` is the agent's family as this computer launches it (its
+/// project or global agent config, so a custom launcher another computer names only by id
+/// resolves too); without one the create keeps what it was sent.
 pub(crate) fn apply_destination_coordinator_start(
     params: &mut Map<String, Value>,
     settings: &Value,
+    family: Option<&str>,
 ) {
     let (from_model, from_effort) = coordinator_start_from_settings(params);
     if !from_model && !from_effort {
         return;
     }
-    let launch = params.get("launchSettings");
-    let row = serde_json::json!({
-        "agentId": params.get("agentId").cloned().unwrap_or(Value::Null),
-        "icon": launch.and_then(|launch| launch.get("icon")).cloned().unwrap_or(Value::Null),
-        "command": launch.and_then(|launch| launch.get("agentCommand")).cloned().unwrap_or(Value::Null),
-    });
-    if let Some(family) = coordinator_launcher_family(&row) {
+    if let Some(family) = family {
         apply_coordinator_start_settings(params, family, settings, !from_model, !from_effort);
     }
 }

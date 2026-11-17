@@ -106,9 +106,11 @@ pub(super) async fn route_sessions_http(
                     state.accounts.refresh(&state.paths.home_dir, false);
                 }
                 let mut prepared = coordinator_runtime::prepare_coordinator_create_params(params)?;
+                let family = crate::agents::requested_agent_family_id(db, &project, &prepared);
                 crate::coordinators::apply_destination_coordinator_start(
                     &mut prepared,
                     &crate::session_chat_catch_up::read_settings(&state.paths),
+                    family.as_deref(),
                 );
                 let params = &prepared;
                 let create_params = create_agent_session_params_for_project(db, &project, params)?;
