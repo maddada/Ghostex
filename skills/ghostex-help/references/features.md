@@ -7427,6 +7427,30 @@ Ghostex, and Cmd+Q quits it with all its windows.
 
 Related settings: none; window positions and layouts are saved automatically.
 
+### Popups (a session in a window of its own)
+
+**Open in a Popup** (a session's right-click menu, the button at the right of
+the work area header, a split pane's bar menu, the Open in a Popup hotkey, or
+Option-click, Alt-click on Windows and Linux, on a session in the sidebar)
+moves a chat or terminal session into a small window of its own; its pane shows
+a card with **Show Window** and **Bring Back**. Popping out another session
+adds it as a tab to the popup you used last, and a tab bar shows at the top of
+the popup once it has two or more sessions: click a tab to show it, drag it
+along the bar to reorder, and click its **×** (or press Cmd+W, Ctrl+W on
+Windows and Linux) to send that session back to its pane. Drag a tab out of the
+window to give it a popup of its own, or onto another popup to move it there;
+the tab's right-click menu has the same as **Move to New Popup** and **Move to
+Popup ›**, plus **Bring Back**. The popup's header has **Keep on Top** (pin,
+for the whole popup; not on Wayland), **Bring Back** for the session on show
+and **Expand** / **Shrink**. Closing the popup sends all its sessions back.
+With transparency on, popups show the same glass as the main window. Popups
+open again with their tabs at the next launch. Browser tabs stay in the main
+window. A popup shows sessions of the project the main window is on; a session
+of another project shows a card until the main window switches to its project.
+
+Hotkey: Open in a Popup (`popOutPane`) pops the focused pane's session out, or
+brings it back when it is already in a popup.
+
 ## Updates (Settings > Updates)
 
 Settings > Updates (`ghostex settings open --tab updates`, first in the Settings

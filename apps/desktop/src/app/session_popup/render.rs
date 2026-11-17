@@ -1,6 +1,7 @@
-//! What a session's own window draws (its header and the session), and the card its pane shows
-//! meanwhile.
+//! What a popup window draws (its header, its tabs and their sessions), and the card a session's
+//! pane shows meanwhile.
 
+use ghostex_gx_core::SessionKey;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, Entity, FontWeight, InteractiveElement as _, IntoElement, MouseButton,
@@ -8,7 +9,7 @@ use gpui::{
     Styled as _, Subscription, WeakEntity, Window, div, px,
 };
 
-use super::pin_supported;
+use super::{SessionPopupId, pin_supported};
 use crate::GhostexGpuiApp;
 use crate::app::helpers::*;
 use crate::app::model::*;
@@ -25,10 +26,10 @@ const HEADER_LEADING: f32 = 80.0;
 #[cfg(not(target_os = "macos"))]
 const HEADER_LEADING: f32 = 12.0;
 
-/// The window's root: it draws the app's session and redraws when what it shows changes.
+/// The window's root: it draws the app's sessions and redraws when what it shows changes.
 pub(crate) struct SessionPopupRoot {
     app: WeakEntity<GhostexGpuiApp>,
-    row_id: String,
+    id: SessionPopupId,
     /// What the window last drew from; see `popup_signature`.
     drawn: Option<PopupSignature>,
     /// The window's own focus, so its keys reach the handlers below before the chat or the
@@ -37,39 +38,57 @@ pub(crate) struct SessionPopupRoot {
     _subscriptions: Vec<Subscription>,
 }
 
-/// What the window's own drawing depends on. The chat and the terminal are views of their own that
-/// redraw themselves, so the window ignores the app's other notifications (terminal output, chat
-/// streaming, indicator ticks), as the board's window does (CDXC:ProjectBoard 2026-10-13).
-type PopupSignature = (
+/// What one tab of the window draws from.
+type TabSignature = (
+    SessionKey,
     Option<TerminalSessionId>,
     bool,
     Option<gpui::EntityId>,
     Option<gpui::EntityId>,
     Option<TerminalSessionPresentationState>,
     String,
-    bool,
-    bool,
-    bool,
-    u64,
+    Option<&'static str>,
 );
 
-fn popup_signature(app: &GhostexGpuiApp, row_id: &str) -> Option<PopupSignature> {
-    let popup = app.session_popups.get(row_id)?;
-    let shell = app.session_popup_shell_session(&popup.key);
-    let session = shell.and_then(|id| app.agents_workspace.session(id));
+/// What the window's own drawing depends on. The chat and the terminal are views of their own that
+/// redraw themselves, so the window ignores the app's other notifications (terminal output, chat
+/// streaming, indicator ticks), as the board's window does (CDXC:ProjectBoard 2026-10-13).
+type PopupSignature = (Vec<TabSignature>, u64, bool, bool, bool, u64);
+
+fn popup_signature(app: &GhostexGpuiApp, id: SessionPopupId) -> Option<PopupSignature> {
+    let popup = app.session_popups.get(id)?;
+    let tabs = popup
+        .keys_in_order()
+        .into_iter()
+        .map(|key| {
+            let shell = app.session_popup_shell_session(&key);
+            let session = shell.and_then(|id| app.agents_workspace.session(id));
+            (
+                shell,
+                shell.is_some_and(|id| app.agents_chat_mode_sessions.contains(&id)),
+                shell
+                    .and_then(|id| app.native_chat_views.get(&id))
+                    .map(Entity::entity_id),
+                shell
+                    .and_then(|id| app.agents_gpui_engine_terminals.get(&id))
+                    .map(|record| record.view.entity_id()),
+                session.map(|session| session.presentation_state),
+                shell
+                    .map(|id| app.agents_workspace_tab_display_title(id))
+                    .unwrap_or_default(),
+                session.and_then(|session| session.agent_icon),
+                key,
+            )
+        })
+        .map(
+            |(shell, chat, chat_view, terminal, state, title, icon, key)| {
+                (key, shell, chat, chat_view, terminal, state, title, icon)
+            },
+        )
+        .collect();
     Some((
-        shell,
-        shell.is_some_and(|id| app.agents_chat_mode_sessions.contains(&id)),
-        shell
-            .and_then(|id| app.native_chat_views.get(&id))
-            .map(Entity::entity_id),
-        shell
-            .and_then(|id| app.agents_gpui_engine_terminals.get(&id))
-            .map(|record| record.view.entity_id()),
-        session.map(|session| session.presentation_state),
-        session
-            .map(|session| session.title.clone())
-            .unwrap_or_default(),
+        tabs,
+        popup.revision,
         popup.pinned,
         popup.expanded,
         app.gx_store_sidebar_list_ready(),
@@ -80,14 +99,12 @@ fn popup_signature(app: &GhostexGpuiApp, row_id: &str) -> Option<PopupSignature>
 impl SessionPopupRoot {
     pub(crate) fn new(
         app: Entity<GhostexGpuiApp>,
-        row_id: String,
+        id: SessionPopupId,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let observe_row = row_id.clone();
-        let bounds_row = row_id.clone();
         let observed = cx.observe(&app, move |root: &mut Self, app, cx| {
-            let signature = popup_signature(app.read(cx), &observe_row);
+            let signature = popup_signature(app.read(cx), id);
             if root.drawn != signature {
                 root.drawn = signature;
                 cx.notify();
@@ -97,36 +114,51 @@ impl SessionPopupRoot {
         let bounds = cx.observe_window_bounds(window, move |_, window, cx| {
             let frame = window.bounds();
             let display = window.display(cx).map(|display| display.id());
-            let row_id = bounds_row.clone();
             let _ = bounds_app.update(cx, |app, _| {
-                app.session_popup_note_bounds(&row_id, frame, display)
+                app.session_popup_note_bounds(id, frame, display)
             });
         });
+        // The popup the user was in last is the one the next popped-out session joins.
+        let active_app = app.downgrade();
+        let activation = cx.observe_window_activation(window, move |_, window, cx| {
+            if window.is_window_active() {
+                let _ = active_app.update(cx, |app, _| app.session_popup_note_active(id));
+            }
+        });
         Self {
-            drawn: popup_signature(app.read(cx), &row_id),
+            drawn: popup_signature(app.read(cx), id),
             app: app.downgrade(),
-            row_id,
+            id,
             focus: {
                 let focus = cx.focus_handle();
                 window.focus(&focus, cx);
                 focus
             },
-            _subscriptions: vec![observed, bounds],
+            _subscriptions: vec![observed, bounds, activation],
         }
     }
 
-    /// Cmd+W (and the menu's Close Pane) in this window: the window closes and the session goes
-    /// back to its pane, as its close button does.
-    fn close_window(&mut self, cx: &mut Context<Self>) {
-        let Some(app) = self.app.upgrade() else {
-            return;
-        };
-        let row_id = self.row_id.clone();
-        app.update(cx, |app, cx| app.close_session_popup(&row_id, cx));
+    /// The session of the window's selected tab, as a sidebar row id.
+    fn active_row(&self, cx: &Context<Self>) -> Option<String> {
+        let app = self.app.upgrade()?;
+        let popup = app.read(cx).session_popups.get(self.id)?;
+        popup.active_key().map(|key| key.to_sidebar_session_id())
     }
 
-    /// The Ghostex hotkeys pressed in this window. Open in a Popup (`popOutPane`) brings the session back; the rest
-    /// run in the main window, as the floating sidebar's do (floating_reveal/window.rs).
+    /// Cmd+W (and the menu's Close Pane) in this window: the selected tab's session goes back to
+    /// its pane, as its tab's close button does; the window closes with its last tab.
+    fn close_tab(&mut self, cx: &mut Context<Self>) {
+        let (Some(app), Some(row_id)) = (self.app.upgrade(), self.active_row(cx)) else {
+            return;
+        };
+        app.update(cx, |app, cx| {
+            app.close_session_popup(&row_id, cx);
+        });
+    }
+
+    /// The Ghostex hotkeys pressed in this window. Open in a Popup (`popOutPane`) brings the
+    /// selected tab's session back; the rest run in the main window, as the floating sidebar's do
+    /// (floating_reveal/window.rs).
     fn run_hotkey(
         &mut self,
         action: &crate::app::hotkeys::RunConfiguredGhostexHotkey,
@@ -136,10 +168,11 @@ impl SessionPopupRoot {
         let Some(app) = self.app.upgrade() else {
             return;
         };
-        let row_id = self.row_id.clone();
         match action.action_id.as_str() {
             "popOutPane" => {
-                app.update(cx, |app, cx| app.bring_back_session_popup(&row_id, cx));
+                if let Some(row_id) = self.active_row(cx) {
+                    app.update(cx, |app, cx| app.bring_back_session_popup(&row_id, cx));
+                }
             }
             _ => {
                 let Some(main) = app.read(cx).main_window_handle else {
@@ -165,53 +198,145 @@ impl Render for SessionPopupRoot {
             return div().into_any_element();
         };
         sync_own_window_glass(window);
-        let row_id = self.row_id.clone();
+        let id = self.id;
         let body = app.update(cx, |app, cx| {
-            app.render_session_popup_window(&row_id, window, cx)
+            app.render_session_popup_window(id, window, cx)
         });
+        let drop_app = self.app.clone();
         div()
             .size_full()
             .track_focus(&self.focus)
             .on_action(cx.listener(Self::run_hotkey))
             .on_action(cx.listener(
-                |root, _: &crate::app::actions::CloseFocusedSurface, _, cx| root.close_window(cx),
+                |root, _: &crate::app::actions::CloseFocusedSurface, _, cx| root.close_tab(cx),
             ))
             .on_action(cx.listener(
                 |root, _: &crate::app::actions::CloseFocusedSurfaceMenuOnly, _, cx| {
-                    root.close_window(cx)
+                    root.close_tab(cx)
                 },
             ))
+            // A tab released outside the window leaves for another popup or a popup of its own
+            // (tabs.rs); one released inside was handled by what it was dropped on.
+            .on_mouse_up_out(MouseButton::Left, move |event, window, cx| {
+                let position = event.position;
+                let outside = !gpui::Bounds::new(gpui::Point::default(), window.viewport_size())
+                    .contains(&position);
+                let origin = super::window_global_bounds(window, cx).origin;
+                let _ = drop_app.update(cx, |app, cx| {
+                    app.session_popup_tab_released(id, outside.then(|| origin + position), cx)
+                });
+            })
+            .on_mouse_up(MouseButton::Left, {
+                let app = self.app.clone();
+                move |_, _, cx| {
+                    let _ = app.update(cx, |app, cx| app.session_popup_tab_released(id, None, cx));
+                }
+            })
             .child(body)
             .into_any_element()
     }
 }
 
 impl GhostexGpuiApp {
-    /// The window's header and the session under it.
+    /// The window's header and its sessions under it.
     fn render_session_popup_window(
         &mut self,
-        row_id: &str,
+        id: SessionPopupId,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let Some(popup) = self.session_popups.get(row_id) else {
+        let Some(popup) = self.session_popups.get(id) else {
             return div().into_any_element();
         };
-        let key = popup.key.clone();
         let (expanded, pinned) = (popup.expanded, popup.pinned);
-        let shell = self.session_popup_shell_session(&key);
-        let title = self.session_popup_title(&key);
-        let agent_icon = shell
+        let active = popup.active_key();
+        let pane = popup.layout.focused_pane;
+        let title = active
+            .as_ref()
+            .map(|key| self.session_popup_title(key))
+            .unwrap_or_default();
+        let agent_icon = active
+            .as_ref()
+            .and_then(|key| self.session_popup_shell_session(key))
             .and_then(|id| self.agents_workspace.session(id))
             .and_then(|session| session.agent_icon);
-        let chat = shell.is_some_and(|id| self.agents_chat_mode_sessions.contains(&id));
         window.set_window_title(&title);
+        let body = self.render_session_popup_pane(id, pane, window, cx);
+        div()
+            .id("session-popup-window")
+            .size_full()
+            .min_w_0()
+            .min_h_0()
+            .flex()
+            .flex_col()
+            // The work area's tint over the glass, as the session has in its pane (opaque without
+            // glass).
+            .bg(workspace_column_background())
+            .child(self.render_session_popup_header(
+                id,
+                active.map(|key| key.to_sidebar_session_id()),
+                &title,
+                agent_icon,
+                expanded,
+                pinned,
+                cx,
+            ))
+            .child(body)
+            .into_any_element()
+    }
+
+    /// One pane of the window: its tab bar when it has more than one tab, then the selected tab's
+    /// session.
+    pub(crate) fn render_session_popup_pane(
+        &mut self,
+        id: SessionPopupId,
+        pane: WorkspacePaneId,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let Some(popup) = self.session_popups.get(id) else {
+            return div().into_any_element();
+        };
+        let Some(leaf) = popup.layout.find_leaf(pane) else {
+            return div().into_any_element();
+        };
+        let shows_strip = leaf.tab_group.tabs.len() > 1;
+        let key = leaf
+            .tab_group
+            .active_session_id()
+            .and_then(|tab| popup.keys.get(&tab).cloned());
+        let strip = shows_strip.then(|| self.render_session_popup_tab_strip(id, pane, cx));
+        let body = key
+            .map(|key| self.render_session_popup_session(&key, cx))
+            .unwrap_or_else(|| div().into_any_element());
+        div()
+            .id(format!("session-popup-pane-{}", pane.0))
+            .flex_1()
+            .min_h_0()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .children(strip)
+            .child(body)
+            .into_any_element()
+    }
+
+    /// The session `key` in a pane of a popup: its chat or terminal, or the state it is in.
+    fn render_session_popup_session(
+        &mut self,
+        key: &SessionKey,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let row_id = key.to_sidebar_session_id();
+        let shell = self.session_popup_shell_session(key);
+        let title = self.session_popup_title(key);
+        let chat = shell.is_some_and(|id| self.agents_chat_mode_sessions.contains(&id));
         let body = match shell {
             Some(session_id) if chat => self.render_session_chat_surface_content(session_id),
-            Some(session_id) => self.render_session_popup_terminal(row_id, session_id, cx),
+            Some(session_id) => self.render_session_popup_terminal(&row_id, session_id, cx),
             None if !self.gx_store_sidebar_list_ready() => self.render_session_chat_skeleton(),
             None => self.render_session_popup_card(
-                row_id,
+                &row_id,
                 format!("{title} isn't open in the main window"),
                 "Ghostex's window shows another project, or the session isn't open there yet.",
                 "Show Session",
@@ -228,27 +353,12 @@ impl GhostexGpuiApp {
             )
         };
         div()
-            .id("session-popup-window")
-            .size_full()
-            .min_w_0()
+            .flex_1()
             .min_h_0()
-            .flex()
-            .flex_col()
-            // The work area's tint over the glass, as the session has in its pane (opaque without
-            // glass).
-            .bg(workspace_column_background())
-            .child(
-                self.render_session_popup_header(row_id, &title, agent_icon, expanded, pinned, cx),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .min_w_0()
-                    .relative()
-                    .bg(background)
-                    .child(body),
-            )
+            .min_w_0()
+            .relative()
+            .bg(background)
+            .child(body)
             .into_any_element()
     }
 
@@ -294,7 +404,10 @@ impl GhostexGpuiApp {
         match state {
             Some(TerminalSessionPresentationState::Sleeping) => self.render_session_popup_card(
                 row_id,
-                format!("{} is asleep", self.session_popup_title_for(row_id)),
+                format!(
+                    "{} is asleep",
+                    self.agents_workspace_tab_display_title(session_id)
+                ),
                 "Wake it to see its terminal here.",
                 "Wake",
                 cx,
@@ -321,13 +434,6 @@ impl GhostexGpuiApp {
                 glass_clear(workspace_terminal_placeholder_color()),
             ),
         }
-    }
-
-    fn session_popup_title_for(&self, row_id: &str) -> String {
-        self.session_popups
-            .get(row_id)
-            .map(|popup| self.session_popup_title(&popup.key))
-            .unwrap_or_default()
     }
 
     /// A centred card in the window with one button that shows the session in the main window
@@ -370,7 +476,7 @@ impl GhostexGpuiApp {
                     .child(
                         div().mt(px(14.0)).child(
                             view_card_button(button)
-                                .id("session-popup-card-button")
+                                .id(SharedString::from(format!("session-popup-card-{row}")))
                                 .on_click(cx.listener(move |app, _, _, cx| {
                                     app.gx_store_focus_session_row(
                                         &row,
@@ -384,12 +490,14 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    /// The window's header: the agent and title, then Pin, Bring Back and Expand or Shrink. On
-    /// macOS it is the titlebar (the traffic lights sit at its left and a drag of it moves the
-    /// window); elsewhere it sits under the system titlebar.
+    /// The window's header: the selected tab's agent and title, then Pin, Bring Back and Expand or
+    /// Shrink. On macOS it is the titlebar (the traffic lights sit at its left and a drag of it
+    /// moves the window); elsewhere it sits under the system titlebar.
+    #[allow(clippy::too_many_arguments)]
     fn render_session_popup_header(
         &self,
-        row_id: &str,
+        id: SessionPopupId,
+        active_row: Option<String>,
         title: &str,
         agent_icon: Option<&'static str>,
         expanded: bool,
@@ -398,9 +506,6 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         let text = titlebar_project_text_color();
         let icon = titlebar_icon_color();
-        let pin_row = row_id.to_string();
-        let back_row = row_id.to_string();
-        let size_row = row_id.to_string();
         let row = div()
             .id("session-popup-header")
             .h(px(HEADER_HEIGHT))
@@ -458,27 +563,29 @@ impl GhostexGpuiApp {
                         cx.listener(move |app, _, window, cx| {
                             window.prevent_default();
                             cx.stop_propagation();
-                            app.toggle_session_popup_pin(&pin_row, cx);
+                            app.toggle_session_popup_pin(id, cx);
                         }),
                     ),
                 )
             })
-            .child(
-                header_button(
-                    "session-popup-back",
-                    "titlebar/arrow-back-up.svg",
-                    "Bring Back",
-                    false,
+            .when_some(active_row, |row, back_row| {
+                row.child(
+                    header_button(
+                        "session-popup-back",
+                        "titlebar/arrow-back-up.svg",
+                        "Bring Back",
+                        false,
+                    )
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |app, _, window, cx| {
+                            window.prevent_default();
+                            cx.stop_propagation();
+                            app.bring_back_session_popup(&back_row, cx);
+                        }),
+                    ),
                 )
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |app, _, window, cx| {
-                        window.prevent_default();
-                        cx.stop_propagation();
-                        app.bring_back_session_popup(&back_row, cx);
-                    }),
-                ),
-            )
+            })
             .child(
                 header_button(
                     "session-popup-size",
@@ -495,7 +602,7 @@ impl GhostexGpuiApp {
                     cx.listener(move |app, _, window, cx| {
                         window.prevent_default();
                         cx.stop_propagation();
-                        app.toggle_session_popup_expanded(&size_row, window, cx);
+                        app.toggle_session_popup_expanded(id, window, cx);
                     }),
                 ),
             );
@@ -504,7 +611,7 @@ impl GhostexGpuiApp {
         row.into_any_element()
     }
 
-    /// The pane's card while its session is in its own window, in the board's style
+    /// The pane's card while its session is in a popup, in the board's style
     /// (`render_native_kanban_detached_card`).
     pub(crate) fn render_session_popup_placeholder(
         &self,
@@ -513,11 +620,11 @@ impl GhostexGpuiApp {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let ink = chrome_ink();
-        let row_id = self
-            .session_popup_for_shell(session_id)
-            .map(|popup| popup.key.to_sidebar_session_id())
+        let key = self.workspace_terminal_session_key(session_id);
+        let row_id = key
+            .as_ref()
+            .map(SessionKey::to_sidebar_session_id)
             .unwrap_or_default();
-        let show_row = row_id.clone();
         let back_row = row_id;
         let title = self.agents_workspace_tab_display_title(session_id);
         div()
@@ -570,11 +677,7 @@ impl GhostexGpuiApp {
                                 view_card_button("Show Window")
                                     .id("session-popup-placeholder-show")
                                     .on_click(cx.listener(move |app, _, _, cx| {
-                                        if let Some(key) = app
-                                            .session_popups
-                                            .get(&show_row)
-                                            .map(|popup| popup.key.clone())
-                                        {
+                                        if let Some(key) = key.clone() {
                                             app.open_session_popup(key, cx);
                                         }
                                     })),

@@ -1,6 +1,6 @@
 //! What a session's own window keeps between runs, in `gpui-session-popups.json`: per session its
 //! small and expanded frames, its Pin and whether it was expanded; per workspace window the
-//! pop-ups it had open, which open again at launch.
+//! popups it had open and their tabs, which open again at launch.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -72,8 +72,11 @@ struct SavedSessionRecord {
 struct SavedState {
     /// By the session's sidebar row id.
     sessions: BTreeMap<String, SavedSessionRecord>,
-    /// By workspace window slot: the row ids of the pop-ups it had open.
+    /// By workspace window slot: the row ids of every session it had in a popup, one list. Still
+    /// written for builds from before popups had tabs, which open each as its own popup.
     open: BTreeMap<String, Vec<String>>,
+    /// By workspace window slot: its popups, each the row ids of its tabs in order.
+    groups: BTreeMap<String, Vec<Vec<String>>>,
 }
 
 /// A session's saved pop-up, as the window code reads it.
@@ -158,22 +161,43 @@ pub(super) fn update_session(row_id: &str, change: impl FnOnce(&mut SavedSession
     write(&state);
 }
 
-/// The pop-ups window `slot` had open.
-pub(super) fn open(slot: u32) -> Vec<String> {
-    read().open.remove(&slot.to_string()).unwrap_or_default()
-}
-
-/// The pop-ups window `slot` has open now.
-pub(super) fn set_open(slot: u32, rows: Vec<String>) {
+/// The popups window `slot` had open, each the sessions of its tabs. A file from before popups
+/// had tabs gives one popup per session.
+pub(super) fn open(slot: u32) -> Vec<Vec<String>> {
     let mut state = read();
     let key = slot.to_string();
-    if state.open.get(&key).map(Vec::as_slice).unwrap_or_default() == rows.as_slice() {
+    if let Some(groups) = state.groups.remove(&key) {
+        return groups;
+    }
+    state
+        .open
+        .remove(&key)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|row| vec![row])
+        .collect()
+}
+
+/// The popups window `slot` has open now, each the sessions of its tabs.
+pub(super) fn set_open(slot: u32, groups: Vec<Vec<String>>) {
+    let mut state = read();
+    let key = slot.to_string();
+    if state
+        .groups
+        .get(&key)
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        == groups.as_slice()
+        && state.open.contains_key(&key) == !groups.is_empty()
+    {
         return;
     }
-    if rows.is_empty() {
+    if groups.is_empty() {
         state.open.remove(&key);
+        state.groups.remove(&key);
     } else {
-        state.open.insert(key, rows);
+        state.open.insert(key.clone(), groups.concat());
+        state.groups.insert(key, groups);
     }
     write(&state);
 }
