@@ -37,7 +37,7 @@ pub use ghostex_gx_protocol::approval::{ApprovalRequest, SensitiveAction};
 pub use owner::{OwnerChallenges, OwnerError, OWNER_CHALLENGE_TTL_MS};
 pub use policy::{
     opens_door, DOOR_SESSION_ENDPOINTS, DOOR_SESSION_TTL_MS, EASY_CONNECT_ENABLE,
-    FIRST_KEY_HANDOFF_FILE, TOKEN_FILE_CODE_WINDOW_MS,
+    FIRST_KEY_HANDOFF_FILE, OWNER_KEY_RESUME, TOKEN_FILE_CODE_WINDOW_MS,
 };
 pub use presence::{requester_for, PresenceGrant, PresenceOutcome};
 pub use session_tokens::{
@@ -132,6 +132,8 @@ pub struct SecurityState {
     /// The first computer this computer's terminal let in while only its own app owned it, and
     /// when (CDXC:Security 2026-11-17 at `terminal_may_approve` in `policy.rs`): request id, name, ms.
     terminal_join: Arc<std::sync::Mutex<Option<(String, String, u64)>>>,
+    /// The terminal let a computer in during this run: it lets in no other (only the first join).
+    terminal_join_used: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl SecurityState {
@@ -151,6 +153,7 @@ impl SecurityState {
             events: broadcast::channel(256).0,
             token_file_code_until: Arc::default(),
             terminal_join: Arc::default(),
+            terminal_join_used: Arc::default(),
             door_only_keys: Arc::default(),
             retired_owner_keys: Arc::default(),
             app_owner_keys: Arc::default(),

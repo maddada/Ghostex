@@ -256,9 +256,7 @@ const FIRST_KEY_SECRET_PARAM: &str = "firstKeySecret";
 const OWNER_KEY_REQUESTS_WAITING: usize = 3;
 /// The answer when the token file made too many "act as you" requests this hour (R3-2).
 pub(crate) const OWNER_KEY_FLOODED: &str = "ownerKeyRequestsFlooded";
-/// The data an owner-key request keeps ([`security::ApprovalStore::attach`]): the key and its
-/// scope, so gxserver lets the key in the moment the owner approves.
-const OWNER_KEY_RESUME: &str = "ownerKey";
+use crate::security::OWNER_KEY_RESUME;
 
 /*
 CDXC:Security 2026-11-17 FIX:
@@ -948,7 +946,8 @@ fn handle(
             // shown, because this computer's own app is its only owner (CDXC:Security 2026-11-17
             // DECISION at `terminal_may_approve`); `ghostex computer-code` then asks y/n.
             "terminalMayApproveJoin": matches!(caller, Principal::LocalAgent)
-                && security.only_own_app_owns(),
+                && security.only_own_app_owns()
+                && !security.terminal_join_used(),
             // Retired keys (`retire_owner_key`) aren't listed: they sign nothing here.
             "ownerKeys": security.listed_owner_keys(),
             "approverKeys": security.approver_keys.list(),

@@ -48,6 +48,10 @@ pub const FIRST_KEY_HANDOFF_FILE: &str = "first-key-handoff";
 /// How long one Approve lets the token file get pairing codes (`ghostex computer-code`'s idle limit).
 pub const TOKEN_FILE_CODE_WINDOW_MS: u64 = 10 * 60 * 1000;
 
+/// The data an owner-key request keeps (`ApprovalStore::attach`): the key and its scope
+/// (`doorOnly`), so gxserver lets the key in the moment the owner approves.
+pub const OWNER_KEY_RESUME: &str = "ownerKey";
+
 /*
 CDXC:Security 2026-11-16 FIX:
 Review M2 of the owner-only door: the session the app opens for the door was a full owner session (every capability, secrets included, no end), while the card that lets it in says it shows codes and approves devices. The app now asks for a door session (`scope: "door"` on `/api/openOwnerSession`): it is never in the owner session table, so no route, socket or relay but the door's own (`DOOR_SESSION_ENDPOINTS`) knows it, and it lapses after `DOOR_SESSION_TTL_MS` (the app opens a new one, no card: the key is enrolled). A key enrolled with `scope: "door"` (this app's keys, and a key let in through its card) opens only door sessions. An app from before this (11.2.2 and earlier keep their owner session for every call) enrolls without a scope and opens a full session as before; its card says that it acts as you for everything here.
@@ -244,14 +248,23 @@ impl SecurityState {
         }
         let summary = request.summary.trim();
         match request.action {
-            // A computer joining (gxserver writes "Let a <system> computer that calls itself …").
-            SensitiveAction::PairingApproveDevice => summary.starts_with("Let a "),
+            // A computer joining (gxserver writes "Let a <system> computer that calls itself …";
+            // a phone's starts "Pair "), and only the first one this run: approving another join,
+            // or the same code shown again, doesn't open a second join or restart the ten minutes
+            // of the ask below (review of 8abb0a8db).
+            SensitiveAction::PairingApproveDevice => {
+                summary.starts_with("Let a ") && !self.terminal_join_used()
+            }
             // The computer that joined asking to manage this one: a door-only ask made after that
             // join, within its ten minutes (an app names itself by its host name, which can differ
-            // from the name it joined with, so the words the user matches are the check).
+            // from the name it joined with, so the words the user matches are the check). Door-only
+            // is read from the key's scope kept with the request, not from the summary, which
+            // carries the asking app's own label (an "act as you" ask whose label says "show the
+            // pairing code of" must not pass, review of 8abb0a8db).
             SensitiveAction::AddApproverKey => {
-                summary.starts_with("Let ")
-                    && summary.contains(" show the pairing code of ")
+                self.approvals
+                    .resume_of(&request.id, OWNER_KEY_RESUME)
+                    .is_some_and(|saved| saved["doorOnly"].as_bool() == Some(true))
                     && self
                         .terminal_join_at(now_ms)
                         .is_some_and(|at| request.created_at_ms >= at)
@@ -260,8 +273,16 @@ impl SecurityState {
         }
     }
 
+    /// Whether the terminal already let a computer in during this run (it lets in only one).
+    pub fn terminal_join_used(&self) -> bool {
+        self.terminal_join_used
+            .load(std::sync::atomic::Ordering::SeqCst)
+    }
+
     /// The terminal let computer `name` in (request `id`).
     pub fn note_terminal_join(&self, id: &str, name: &str, now_ms: u64) {
+        self.terminal_join_used
+            .store(true, std::sync::atomic::Ordering::SeqCst);
         *self
             .terminal_join
             .lock()

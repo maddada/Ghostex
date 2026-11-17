@@ -51,7 +51,10 @@ pub fn plain_ask(request: &ApprovalRequest, computer: &str) -> Option<PlainAsk> 
             let name = quoted_name(summary)?;
             let words = detail_words(request.detail.as_deref());
             if summary.starts_with("Pair ") {
-                let body = if summary.contains("signs in over SSH") {
+                // gxserver ends an SSH phone's sentence with this; the phone's own name sits
+                // before it, so a name saying "signs in over SSH" can't make a new phone read as
+                // one that is already in (review of 8abb0a8db).
+                let body = if summary.ends_with("\" and signs in over SSH") {
                     format!(
                         "It already reads and replies on {computer} over SSH; adding it also lets it approve asks like this one."
                     )
@@ -88,15 +91,20 @@ pub fn plain_ask(request: &ApprovalRequest, computer: &str) -> Option<PlainAsk> 
         }),
         SensitiveAction::AddApproverKey => {
             let rest = summary.strip_prefix("Let ")?;
-            let (label, does) =
-                if let Some((label, _)) = rest.split_once(" show the pairing code of ") {
-                    (label, ManageKind::Door)
-                } else if let Some((label, _)) = rest.split_once(" act as you on ") {
-                    (label, ManageKind::Everything)
-                } else {
-                    return None;
-                };
-            let asker = app_name(label);
+            // The asking app writes its own label, which comes first; gxserver's phrase is the
+            // last one, so a label saying "show the pairing code of" can't make an "act as you"
+            // ask read as the door-only kind (review of 8abb0a8db).
+            let door = rest.rfind(" show the pairing code of ");
+            let everything = rest.rfind(" act as you on ");
+            let (label, does) = match (door, everything) {
+                (Some(door), Some(everything)) if everything > door => {
+                    (&rest[..everything], ManageKind::Everything)
+                }
+                (Some(door), _) => (&rest[..door], ManageKind::Door),
+                (None, Some(everything)) => (&rest[..everything], ManageKind::Everything),
+                (None, None) => return None,
+            };
+            let asker = one_line(&app_name(label));
             let words = key_words(summary);
             if asker.is_empty() || words.is_empty() {
                 return None;
@@ -133,7 +141,30 @@ fn quoted_name(summary: &str) -> Option<String> {
         .split_once('"')?
         .0
         .trim();
-    (!name.is_empty()).then(|| name.to_string())
+    let name = one_line(name);
+    (!name.is_empty()).then_some(name)
+}
+
+/// Longest name a question shows: past it the rest is cut ("…").
+const NAME_MAX_CHARS: usize = 80;
+
+/// A name the asker chose, as one short line: line breaks and other control characters become
+/// spaces and it stops at [`NAME_MAX_CHARS`], so it can't push the question's own words off the
+/// card or the Touch ID prompt (review of 8abb0a8db; an app's key label has no limit).
+fn one_line(name: &str) -> String {
+    let flat = name
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if flat.chars().count() <= NAME_MAX_CHARS {
+        return flat;
+    }
+    let mut cut: String = flat.chars().take(NAME_MAX_CHARS).collect();
+    cut.push('…');
+    cut
 }
 
 /// The three words in `… the same three words: a · b · c. …`.

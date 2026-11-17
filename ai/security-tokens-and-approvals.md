@@ -84,7 +84,8 @@ owner key is enrolled, or a phone paired with its own token, remembered for good
   `pairing_code_gate`). Each code opens a ten-minute window (`TOKEN_FILE_CODE_WINDOW_MS`). While
   this computer's only owner is its own app (`only_own_app_owns`: only `appOwnerKeys`, never a
   phone), the token file may approve, inside that window, a computer (never a phone) joining with
-  the code, then within ten minutes that computer's door-only ask to manage it
+  the code (one per gxserver run, `terminal_join_used`), then within ten minutes that computer's
+  door-only ask to manage it (door-only read from the key's scope kept with the request)
   (`terminal_may_approve`, Q-4B); gxserver logs both ("ownership.terminalJoin",
   "ownership.handover"), tells the joining computer (`looksAfter` in `/api/pairingStatus`), and
   once that key is in the terminal approves nothing more. Otherwise the terminal never approves here, even on a
