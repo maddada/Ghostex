@@ -322,6 +322,34 @@ pub(super) fn has_active_run(
     Ok(count > 0)
 }
 
+/// The run record for a due run that cannot start because an earlier run of the same automation
+/// is still going. It names how long that run has been going and counts as unread, so a held
+/// automation shows in the runs list instead of looking as if it never fired (GitHub #656).
+pub(super) fn skipped_run_record(
+    db: &Connection,
+    automation: &AutomationDefinitionRecord,
+) -> Result<AutomationRunRecord, DomainStateError> {
+    let started: Option<String> = db
+        .query_row(
+            "SELECT MIN(createdAt) FROM automation_runs WHERE automationId = ?1 AND status IN ('queued', 'running')",
+            [&automation.id],
+            |row| row.get(0),
+        )
+        .map_err(sql_error)?;
+    let minutes = started
+        .and_then(|started| chrono::DateTime::parse_from_rfc3339(&started).ok())
+        .map(|started| (chrono::Utc::now().timestamp() - started.timestamp()).max(0) / 60);
+    let message = match minutes {
+        Some(0) => "Skipped because this automation's previous run, started less than a minute ago, is still going.".to_string(),
+        Some(1) => "Skipped because this automation's previous run, started a minute ago, is still going.".to_string(),
+        Some(minutes) => format!("Skipped because this automation's previous run, started {minutes} minutes ago, is still going."),
+        None => "Skipped because another run for this automation is still active.".to_string(),
+    };
+    let mut run = create_run_record(automation, "skipped", Some(&message));
+    run.is_unread = true;
+    Ok(run)
+}
+
 pub(super) fn is_run_active(
     db: &Connection,
     project_id: &str,

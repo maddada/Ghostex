@@ -15,6 +15,10 @@ pub(super) fn recover_running_automation_runs(
 ) -> Result<(), DomainStateError> {
     let running = read_running_runs(db)?;
     for run in running {
+        // A run its watcher still follows is the watcher's to end (runtime.rs `RunWatch`).
+        if is_run_watched(&run.id) {
+            continue;
+        }
         let Some(session_id) = run.session_id.as_deref() else {
             fail_run(
                 db,

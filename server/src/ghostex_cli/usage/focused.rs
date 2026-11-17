@@ -179,6 +179,9 @@ Run results:
   Automation prompts require a final `AUTOMATION_RESULT: <status>` line.
   Replace <status> with exactly findings, no_findings, or needs_attention.
   gxserver records that marker in run history.
+  A run ends as failed when its prompt never reaches the agent (10 minutes for a new session,
+  30 for a thread's busy session), and as needs_attention when the agent finishes its turn
+  without the line, or after an hour. While a run is going, due runs are recorded as skipped.
 
 Safety:
   Inspect exact automation and run ids before destructive operations.
