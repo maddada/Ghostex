@@ -1,5 +1,5 @@
 //! Preview of the Connect a phone window. States: `code` (default: the QR, waiting for a phone),
-//! `preparing` (turning SSH access on, never answers), `failed` (turning on failed), `ask` (a phone
+//! `preparing` (turning Easy Connect on, never answers), `failed` (turning on failed), `ask` (a phone
 //! scanned: its three words and Approve), `connected` (after Approve), `computer` (Connect a
 //! computer's code), `presence` (`ask` with Approve asking for Touch ID first), `helper` (the
 //! Easy Connect helper isn't installed: Install runs a pretend install, then the code shows),
@@ -13,6 +13,10 @@
 //! Asking for the code refused (this app's owner key waits for an Approve): `refused` (Connect a
 //! device), `refused-computer` (Connect a computer's Code tab), `refused-headless` (its Headless
 //! server tab).
+//! SSH access off here: `ssh-off` (the phone's code asks to turn it on), `computer-ssh-off` (Connect
+//! a computer: the code's square asks, the paste box works), `computer-done-ssh-off` (Connect both
+//! ways offers Turn on SSH first); Turn on SSH pretends to succeed, `ssh-fail` in the state makes
+//! it fail.
 use super::connect_device_modal::*;
 use super::settings_modal::tabs::remote::tailscale_checklist_of_status;
 use gpui::{App, AppContext as _, Entity, WindowHandle};
@@ -109,7 +113,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                     match state.as_str() {
                         "preparing" => with_view(&slot, cx, |modal, cx| {
                             modal.prepare_progress(
-                                "Turning on SSH access. Your computer may ask for your password.".to_string(),
+                                "Turning on Easy Connect…".to_string(),
                                 cx,
                             )
                         }),
@@ -132,7 +136,10 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                                 cx,
                             )
                         }),
-                        _ => with_view(&slot, cx, |modal, cx| modal.prepared(Ok(()), cx)),
+                        _ => with_view(&slot, cx, |modal, cx| {
+                            modal.ssh_checked(!state.contains("ssh-off"), cx);
+                            modal.prepared(Ok(()), cx)
+                        }),
                     }
                     match state.as_str() {
                         "tailscale" | "tailscale-off" => with_view(&slot, cx, |modal, cx| {
@@ -144,6 +151,18 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                         }),
                         _ => {}
                     }
+                })
+                .detach();
+            }
+            ConnectDeviceCommand::EnableSsh => {
+                cx.spawn(async move |cx| {
+                    cx.background_executor().timer(Duration::from_millis(900)).await;
+                    let result = if state.contains("ssh-fail") {
+                        Err("Installing the OpenSSH Server feature failed: Add-WindowsCapability failed (0x800f0950).".to_string())
+                    } else {
+                        Ok(true)
+                    };
+                    with_view(&slot, cx, |modal, cx| modal.ssh_turned_on(result, cx));
                 })
                 .detach();
             }
@@ -177,7 +196,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                     with_view(&slot, cx, |modal, cx| {
                         modal.poll_answered(poll_answer(&state), cx)
                     });
-                    if state.starts_with("computer-") {
+                    if state.starts_with("computer-") && !state.starts_with("computer-ssh-off") {
                         with_view_window(&slot, cx, |modal, window, cx| {
                             modal.preview_join(OTHER_CODE, window, cx)
                         });

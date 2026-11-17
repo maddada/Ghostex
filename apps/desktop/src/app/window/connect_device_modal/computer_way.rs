@@ -1228,12 +1228,42 @@ impl GpuiConnectDeviceWindow {
                         ))
                         .into_any_element(),
                 }))
+                // Connect both ways has the other computer connect to this one, which needs SSH
+                // access here: while it is off, the window says so and offers Turn on SSH first
+                // (CDXC:RemotePairing 2026-11-18 DECISION in connect_device_modal.rs).
+                .when(self.own_code_needs_ssh(), |this| {
+                    this.child(match &self.ssh {
+                        SshAccess::Failed(message) => modal_error(&p, message.clone()),
+                        _ => self
+                            .muted(format!(
+                                "To connect both ways, {name} connects to this computer over SSH, which is off here. {}",
+                                Self::ssh_turn_on_sentence()
+                            ))
+                            .text_size(px(12.5))
+                            .into_any_element(),
+                    })
+                })
                 .child(modal_footer(
                     // Connect both ways sends this computer's code: without one (this app may not
                     // show it yet) the button would do nothing.
-                    self.code
-                        .is_some()
-                        .then(|| {
+                    if self.own_code_needs_ssh() {
+                        let turning_on = self.ssh == SshAccess::TurningOn;
+                        Some(modal_action_button(
+                            &p,
+                            "connect-computer-turn-on-ssh",
+                            if turning_on {
+                                "Turning on SSH…"
+                            } else {
+                                "Turn on SSH"
+                            },
+                            turning_on.then(|| modal_spinner(p.foreground)),
+                            ModalButtonTone::Neutral,
+                            turning_on,
+                            |this: &mut Self, _window, cx| this.turn_on_ssh(cx),
+                            cx,
+                        ))
+                    } else {
+                        self.code.is_some().then(|| {
                             modal_action_button(
                                 &p,
                                 "connect-computer-both-ways",
@@ -1245,7 +1275,8 @@ impl GpuiConnectDeviceWindow {
                                 cx,
                             )
                         })
-                        .into_iter()
+                    }
+                    .into_iter()
                         .chain([modal_action_button(
                             &p,
                             "connect-computer-done",
