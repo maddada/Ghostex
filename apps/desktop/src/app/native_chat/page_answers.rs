@@ -31,19 +31,36 @@ fn answered_tile(p: &ChatAppearance) -> AnyElement {
         .into_any_element()
 }
 
-/// A question's tag (or its number) in the muted mono type, kept whole.
-fn tag_word(tag: String, p: &ChatAppearance) -> AnyElement {
+/// One picked answer as a quiet pill: the card's neutral hairline and a faint fill, the answer in
+/// the foreground's medium type, cut with an ellipsis rather than past the card.
+fn answer_pill(label: String, p: &ChatAppearance) -> AnyElement {
     let s = p.scale;
     div()
         .flex_shrink_0()
-        .whitespace_nowrap()
-        .font_family(crate::app::native_chat::fonts::CHAT_MONO)
-        .text_size(px(11.5 * s))
-        .line_height(px(16.0 * s))
+        .max_w_full()
+        .min_w_0()
+        .truncate()
+        .px(px(8.0 * s))
+        .py(px(1.0 * s))
+        .rounded_full()
+        .border(px(s))
+        .border_color(p.foreground.opacity(0.1))
+        .bg(p.foreground.opacity(0.04))
+        .text_size(px(12.5 * s))
+        .line_height(px(18.0 * s))
         .font_weight(gpui::FontWeight::MEDIUM)
-        .text_color(p.muted)
-        .child(tag)
+        .text_color(p.foreground)
+        .child(label)
         .into_any_element()
+}
+
+/// A question's tooltip: its tag, then the whole question.
+fn question_hint(tag: &str, label: &str) -> SharedString {
+    if tag.is_empty() {
+        label.to_string().into()
+    } else {
+        format!("{tag} \u{b7} {label}").into()
+    }
 }
 
 /// The green the chat's charts use for good news, which also marks an answered page.
@@ -270,8 +287,12 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// The opened card's rows: each question once (its tag, one line of question, the answer, the
-    /// note), the reader's own notes, then the skipped questions on one line.
+    /// The opened card's rows: the reader's own note as a quoted line, each answered question once
+    /// (one line of question, its picks as quiet pills or its words, its note), then one "N skipped"
+    /// row that opens onto the skipped questions.
+    ///
+    /// CDXC:SessionChat 2026-11-17 DECISION:
+    /// User, of the opened card for a 9-question form skipped with a note: the note was big and bold, every skipped question was crammed into one comma-joined run after "Skipped" with mono Q tags and whole long titles, the links were flattened to plain text, and there was no structure. They picked Q3764 B from ~/.local/share/agent-work/Ghostex/answers-card/page.html ("Answers as pills, skips folded") and Q3765 "Yes, the same look on the phone". The reader's notes box ("Anything else?") leads as "Your note" over a quoted line in normal type (two lines, then More); each answered question shows its question on one muted line with no tag (the tag and the whole question are in its tooltip), then each pick as a quiet neutral pill (the core's `picks`), or the reader's own words in quotes with "Your own answer" when they picked Other, or the answer's words when it is text; skipped questions fold into one "N skipped" row, shut by default, that opens onto one dimmed line each with their links kept. Supersedes, on this card, the 2026-11-13 tags beside each question and the one line of skipped questions. The phone matches (PageAnswersCard.tsx).
     fn answers_rows(
         &self,
         answers: &Value,
@@ -297,84 +318,118 @@ impl NativeChatView {
             .min_w_0()
             .pl(px(indent * s));
         let mut drawn = 0;
+        let row_box = |drawn: usize| {
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(2.0 * s))
+                .w_full()
+                .min_w_0()
+                .py(px(7.0 * s))
+                .when(drawn > 0, |row| row.border_t_1().border_color(hairline))
+        };
+        // The reader's own notes come first: what they said about the whole form.
+        for (index, row) in rows
+            .iter()
+            .enumerate()
+            .filter(|(_, row)| row["extra"] == true)
+        {
+            column = column.child(
+                row_box(drawn)
+                    .child(
+                        div()
+                            .text_size(px(11.5 * s))
+                            .line_height(px(16.0 * s))
+                            .text_color(p.muted)
+                            .child("Your note"),
+                    )
+                    .child(self.answers_note(
+                        text(row, "value"),
+                        &format!("{key}:note:{index}"),
+                        true,
+                        p,
+                        cx,
+                    )),
+            );
+            drawn += 1;
+        }
         for (index, row) in rows.iter().enumerate() {
-            if row["skipped"] == true {
+            if row["skipped"] == true || row["extra"] == true {
                 continue;
             }
-            let extra = row["extra"] == true;
-            let tag = text(row, "tag");
-            // Older answers carry no tags: their place in the list stands in.
-            let marker = if extra {
-                String::new()
-            } else if tag.is_empty() {
-                format!("{}.", index + 1)
-            } else {
-                tag
+            let question = self.answers_question_line(answers, row, index, p, cx);
+            let mut note = text(row, "note");
+            // Other's words are the question's note: they are the answer, not a note on it.
+            let own = (row["other"] == true && !note.is_empty()).then(|| std::mem::take(&mut note));
+            let answer: Option<AnyElement> = match row["picks"].as_array() {
+                Some(picks) => {
+                    let mut labels: Vec<String> = picks
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect();
+                    if row["other"] == true && own.is_none() {
+                        labels.push("Other".to_string());
+                    }
+                    (!labels.is_empty()).then(|| {
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .gap(px(4.0 * s))
+                            .mt(px(1.0 * s))
+                            .w_full()
+                            .min_w_0()
+                            .children(labels.into_iter().map(|label| answer_pill(label, p)))
+                            .into_any_element()
+                    })
+                }
+                None => Some(
+                    div()
+                        .min_w_0()
+                        .text_size(px(14.0 * s))
+                        .line_height(px(20.0 * s))
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .text_color(p.foreground)
+                        .child(text(row, "value"))
+                        .into_any_element(),
+                ),
             };
-            let label = if extra {
-                "Your note".to_string()
-            } else {
-                text(row, "label")
-            };
-            let question = self.answers_question_line(answers, row, index, marker, label, p, cx);
-            let answer = div()
-                .min_w_0()
-                .text_size(px(14.0 * s))
-                .line_height(px(20.0 * s))
-                .font_weight(if extra {
-                    gpui::FontWeight::NORMAL
-                } else {
-                    gpui::FontWeight::MEDIUM
-                })
-                .text_color(p.foreground)
-                .child(text(row, "value"));
-            let note = text(row, "note");
-            let note = (!note.is_empty())
-                .then(|| self.answers_note(note, &format!("{key}:note:{index}"), p, cx));
-            column = column.child(
+            let own = own.map(|words| {
                 div()
                     .flex()
                     .flex_col()
-                    .gap(px(2.0 * s))
                     .w_full()
                     .min_w_0()
-                    .py(px(8.0 * s))
-                    .when(drawn > 0, |row| row.border_t_1().border_color(hairline))
+                    .child(
+                        div()
+                            .min_w_0()
+                            .text_size(px(13.0 * s))
+                            .line_height(px(19.0 * s))
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .text_color(p.foreground)
+                            .child(format!("\u{201c}{words}\u{201d}")),
+                    )
+                    .child(answer_aside("Your own answer".to_string(), false, p))
+                    .into_any_element()
+            });
+            let note = (!note.is_empty())
+                .then(|| self.answers_note(note, &format!("{key}:note:{index}"), false, p, cx));
+            column = column.child(
+                row_box(drawn)
                     .child(question)
-                    .child(answer)
+                    .children(answer)
+                    .children(own)
                     .children(note),
             );
             drawn += 1;
         }
-        let skipped: Vec<&Value> = rows.iter().filter(|row| row["skipped"] == true).collect();
+        let skipped: Vec<(usize, &Value)> = rows
+            .iter()
+            .enumerate()
+            .filter(|(_, row)| row["skipped"] == true)
+            .collect();
         if !skipped.is_empty() {
-            let mut line = div()
-                .flex()
-                .flex_wrap()
-                .items_baseline()
-                .gap_x(px(6.0 * s))
-                .w_full()
-                .min_w_0()
-                .py(px(8.0 * s))
-                .when(drawn > 0, |line| line.border_t_1().border_color(hairline))
-                .text_size(px(12.5 * s))
-                .line_height(px(18.0 * s))
-                .text_color(p.muted)
-                .child("Skipped");
-            for (at, row) in skipped.iter().enumerate() {
-                let tag = text(row, "tag");
-                let comma = if at + 1 < skipped.len() { "," } else { "" };
-                line = line.child(
-                    div()
-                        .flex()
-                        .items_baseline()
-                        .gap(px(6.0 * s))
-                        .min_w_0()
-                        .when(!tag.is_empty(), |item| item.child(tag_word(tag, p)))
-                        .child(format!("{}{comma}", text(row, "label"))),
-                );
-            }
-            column = column.child(line);
+            column = column.child(self.answers_skipped(answers, key, &skipped, drawn > 0, p, cx));
         }
         if more > 0 {
             column = column.child(div().pt(px(4.0 * s)).child(answer_aside(
@@ -386,22 +441,147 @@ impl NativeChatView {
         column.into_any_element()
     }
 
-    /// A row's first line: its tag (or number) and its question on one line, the whole question in
-    /// a tooltip; a question's links open on a click (`labelRuns`, gx-chat-core
-    /// questions/form_links.rs).
-    #[allow(clippy::too_many_arguments)]
+    /// The skipped questions: one "N skipped" row, shut by default, that opens onto one dimmed line
+    /// per question, its links kept and the whole question (with its tag) in a tooltip.
+    fn answers_skipped(
+        &self,
+        answers: &Value,
+        key: &str,
+        skipped: &[(usize, &Value)],
+        after_rows: bool,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let fold_key = format!("{key}:skipped");
+        let open = self.is_expanded(&fold_key, false);
+        let toggle_key = fold_key.clone();
+        let label = format!("{} skipped", skipped.len());
+        let head = div()
+            .id(SharedString::from(format!("{fold_key}:head")))
+            .role(gpui::Role::Button)
+            .aria_label(if open {
+                "Hide the skipped questions"
+            } else {
+                "Show the skipped questions"
+            })
+            .aria_expanded(open)
+            .flex()
+            .items_center()
+            .gap(px(4.0 * s))
+            .w_full()
+            .min_w_0()
+            .pt(px(7.0 * s))
+            .pb(px(if open { 3.0 } else { 7.0 } * s))
+            .when(after_rows, |line| {
+                line.border_t_1().border_color(p.foreground.opacity(0.05))
+            })
+            .text_size(px(12.5 * s))
+            .line_height(px(18.0 * s))
+            .text_color(p.muted)
+            .chat_cursor_pointer()
+            .hover(move |style| style.text_color(p.foreground))
+            .child(
+                svg()
+                    .path(if open {
+                        "titlebar/chevron-down.svg"
+                    } else {
+                        "titlebar/chevron-right.svg"
+                    })
+                    .size(px(13.0 * s))
+                    .flex_shrink_0()
+                    .text_color(p.muted),
+            )
+            .child(label)
+            .on_click(cx.listener(move |this, _, _, cx| {
+                cx.stop_propagation();
+                let open = this.is_expanded(&toggle_key, false);
+                this.anchor_disclosure_toggle(&toggle_key, !open);
+                if open {
+                    this.expanded.remove(&toggle_key);
+                    this.collapsed.insert(toggle_key.clone());
+                } else {
+                    this.collapsed.remove(&toggle_key);
+                    this.expanded.insert(toggle_key.clone());
+                }
+                cx.notify();
+            }));
+        let mut fold = div().flex().flex_col().w_full().min_w_0().child(head);
+        if open {
+            let mut list = div().flex().flex_col().w_full().min_w_0().pb(px(4.0 * s));
+            for (index, row) in skipped {
+                list = list.child(self.answers_skipped_line(answers, row, *index, p, cx));
+            }
+            fold = fold.child(list);
+        }
+        fold.into_any_element()
+    }
+
+    /// One skipped question, dimmed, on one line; the whole of it and its tag on hover.
+    fn answers_skipped_line(
+        &self,
+        answers: &Value,
+        row: &Value,
+        index: usize,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let label = text(row, "label");
+        let color = p.muted.opacity(0.75);
+        let words: AnyElement = if row["labelRuns"].is_array() {
+            self.link_words(
+                &format!("answers-skipped:{}:{index}", text(answers, "pageId")),
+                LinkWords {
+                    plain: label.clone(),
+                    runs: &row["labelRuns"],
+                    size: 12.5,
+                    line_height: 22.0,
+                    weight: gpui::FontWeight::NORMAL,
+                    color,
+                },
+                p,
+                cx,
+            )
+        } else {
+            div().child(label.clone()).into_any_element()
+        };
+        let hint = question_hint(&text(row, "tag"), &label);
+        div()
+            .id(SharedString::from(format!(
+                "answers-skipped-line:{}:{index}",
+                text(answers, "pageId")
+            )))
+            .w_full()
+            .min_w_0()
+            .truncate()
+            .text_size(px(12.5 * s))
+            .line_height(px(22.0 * s))
+            .text_color(color)
+            .child(words)
+            .managed_tooltip_with(
+                Some(gpui_component::Placement::Top),
+                Some(super::ask_card::QUICK_TOOLTIP_DELAY),
+                move |window, cx| {
+                    gpui_component::tooltip::Tooltip::new(hint.clone()).build(window, cx)
+                },
+            )
+            .into_any_element()
+    }
+
+    /// A row's first line: its question on one line, the whole question and its tag in a tooltip;
+    /// a question's links open on a click (`labelRuns`, gx-chat-core questions/form_links.rs).
     fn answers_question_line(
         &self,
         answers: &Value,
         row: &Value,
         index: usize,
-        marker: String,
-        label: String,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
-        let question: AnyElement = if row["labelRuns"].is_array() && row["extra"] != true {
+        let label = text(row, "label");
+        let question: AnyElement = if row["labelRuns"].is_array() {
             self.link_words(
                 &format!("answers-question:{}:{index}", text(answers, "pageId")),
                 LinkWords {
@@ -418,43 +598,36 @@ impl NativeChatView {
         } else {
             div().child(label.clone()).into_any_element()
         };
-        let hint: SharedString = label.into();
+        let hint = question_hint(&text(row, "tag"), &label);
         div()
-            .flex()
-            .items_baseline()
-            .gap(px(8.0 * s))
+            .id(SharedString::from(format!(
+                "answers-question-line:{}:{index}",
+                text(answers, "pageId")
+            )))
             .w_full()
             .min_w_0()
-            .when(!marker.is_empty(), |line| line.child(tag_word(marker, p)))
-            .child(
-                div()
-                    .id(SharedString::from(format!(
-                        "answers-question-line:{}:{index}",
-                        text(answers, "pageId")
-                    )))
-                    .flex_1()
-                    .min_w_0()
-                    .truncate()
-                    .text_size(px(13.0 * s))
-                    .line_height(px(RECEIPT_QUESTION_LINE * s))
-                    .text_color(p.muted)
-                    .child(question)
-                    .managed_tooltip_with(
-                        Some(gpui_component::Placement::Top),
-                        Some(super::ask_card::QUICK_TOOLTIP_DELAY),
-                        move |window, cx| {
-                            gpui_component::tooltip::Tooltip::new(hint.clone()).build(window, cx)
-                        },
-                    ),
+            .truncate()
+            .text_size(px(13.0 * s))
+            .line_height(px(RECEIPT_QUESTION_LINE * s))
+            .text_color(p.muted)
+            .child(question)
+            .managed_tooltip_with(
+                Some(gpui_component::Placement::Top),
+                Some(super::ask_card::QUICK_TOOLTIP_DELAY),
+                move |window, cx| {
+                    gpui_component::tooltip::Tooltip::new(hint.clone()).build(window, cx)
+                },
             )
             .into_any_element()
     }
 
-    /// A note under its answer: muted, behind a thin rule, two lines until More opens it.
+    /// A note behind a thin rule, two lines until More opens it: muted under its answer, or, for the
+    /// reader's own note on the whole form (`lead`), in the foreground's normal type.
     fn answers_note(
         &self,
         note: String,
         key: &str,
+        lead: bool,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
@@ -463,6 +636,7 @@ impl NativeChatView {
         // About two lines of the card's width; a shorter note never needs More.
         let long = note.chars().count() > NOTE_TWO_LINES || note.lines().count() > 2;
         let toggle_key = key.to_string();
+        let (size, line) = if lead { (13.0, 19.0) } else { (12.5, 18.0) };
         div()
             .flex()
             .flex_col()
@@ -470,7 +644,7 @@ impl NativeChatView {
             .gap(px(1.0 * s))
             .w_full()
             .min_w_0()
-            .mt(px(3.0 * s))
+            .mt(px(if lead { 1.0 } else { 3.0 } * s))
             .child(
                 div()
                     .w_full()
@@ -478,9 +652,9 @@ impl NativeChatView {
                     .pl(px(8.0 * s))
                     .border_l_2()
                     .border_color(p.foreground.opacity(0.1))
-                    .text_size(px(12.5 * s))
-                    .line_height(px(18.0 * s))
-                    .text_color(p.muted)
+                    .text_size(px(size * s))
+                    .line_height(px(line * s))
+                    .text_color(if lead { p.foreground } else { p.muted })
                     .when(long && !open, |text| text.line_clamp(2))
                     .child(note),
             )

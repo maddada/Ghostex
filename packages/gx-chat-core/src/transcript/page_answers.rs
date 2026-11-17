@@ -26,6 +26,8 @@ const CLOSE: &str = "</ghostex-page-answers>";
 /// Rows the card lists before it summarises the rest.
 const MAX_ROWS: usize = 40;
 const MAX_VALUE_CHARS: usize = 600;
+/// The longest page answer still drawn as a pick's pill; a longer one reads as text.
+const MAX_PICK_CHARS: usize = 48;
 /// How the question kit (server/src/visual_pages/kit.rs) names a question's note.
 const NOTE_SUFFIX: &str = " (note)";
 /// Between a question's key and a choice in the note a page keeps under that choice's mockup.
@@ -322,12 +324,7 @@ fn sentence_case(text: &str) -> String {
 /// CDXC:SessionChat 2026-10-11 DECISION:
 /// User: the answers card shows answers starting with a capital letter ("No confirm", not "no confirm") on desktop and the phone, without changing what the agent receives; when the card knows the choice's label it shows the label.
 fn display_answer(value: &Value, asked: Option<&FormQuestion>) -> String {
-    let shown = |text: &str| {
-        asked
-            .and_then(|asked| asked.choices.iter().find(|choice| choice.value == text))
-            .map(|choice| choice.label.clone())
-            .unwrap_or_else(|| sentence_case(text))
-    };
+    let shown = |text: &str| shown_pick(text, asked);
     match value {
         Value::String(text) => clip(shown(text)),
         Value::Array(items) if items.iter().all(Value::is_string) => clip(
@@ -340,6 +337,48 @@ fn display_answer(value: &Value, asked: Option<&FormQuestion>) -> String {
         ),
         other => display_value(other),
     }
+}
+
+/// One picked value as the card shows it (`display_answer`).
+fn shown_pick(text: &str, asked: Option<&FormQuestion>) -> String {
+    asked
+        .and_then(|asked| asked.choices.iter().find(|choice| choice.value == text))
+        .map(|choice| choice.label.clone())
+        .unwrap_or_else(|| sentence_case(text))
+}
+
+/// The choices a choice answer picked, as the card shows them one pill each, and whether
+/// "Other / none of these" was among them (it is left out of the picks: the question's note holds
+/// the reader's own words). `None` for a text answer, or for a page's answer that is too long or
+/// more than a line to read as a pick (a page's question carries no choices here).
+///
+/// CDXC:SessionChat 2026-11-17 DECISION:
+/// User picked Q3764 B from ~/.local/share/agent-work/Ghostex/answers-card/page.html: each answer on
+/// the answers card is a quiet pill under its question, so the card needs the picks one by one
+/// (`picks`, `other` on the row) rather than the comma-joined `value`, which stays for older apps
+/// and Quiet View's count.
+fn answer_picks(value: &Value, asked: Option<&FormQuestion>) -> Option<(Vec<String>, bool)> {
+    if asked.is_some_and(|asked| asked.text || asked.choices.is_empty()) {
+        return None;
+    }
+    let items: Vec<&str> = match value {
+        Value::String(text) => vec![text.as_str()],
+        Value::Array(items) if !items.is_empty() && items.iter().all(Value::is_string) => {
+            items.iter().filter_map(Value::as_str).collect()
+        }
+        _ => return None,
+    };
+    let other = items.contains(&ghostex_gx_visual::questions::OTHER_CHOICE);
+    let picks: Vec<String> = items
+        .into_iter()
+        .filter(|item| *item != ghostex_gx_visual::questions::OTHER_CHOICE)
+        .map(|item| plain_words(&shown_pick(item, asked)))
+        .collect();
+    let fits = |pick: &String| pick.chars().count() <= MAX_PICK_CHARS && !pick.contains('\n');
+    if asked.is_none() && !picks.iter().all(fits) {
+        return None;
+    }
+    Some((picks, other))
 }
 
 /// A field name as a label: `preferred_name` and `preferredName` read as "Preferred name". A key
@@ -390,7 +429,7 @@ fn note_owner<'a>(
         .then_some((question, Some(choice)))
 }
 
-/// The message's `pageAnswers` key: `{pageId, title, rows: [{label, value, note?}], more,
+/// The message's `pageAnswers` key: `{pageId, title, rows: [{label, value, picks?, other?, note?}], more,
 /// withText}`, `withText` when the message has the user's own words besides (drawn below the card
 /// as an ordinary message). The
 /// question kit sends a question's note as `"<key> (note)"`; it is shown under that question's
@@ -458,6 +497,15 @@ pub fn project_page_answers(answers: &PageAnswers, form: Option<&QuestionForm>) 
                 }
                 if extra {
                     row["extra"] = json!(true);
+                }
+                if let Some((picks, other)) = (!skipped && !extra && note_as_answer.is_none())
+                    .then(|| answer_picks(value, asked))
+                    .flatten()
+                {
+                    row["picks"] = json!(picks);
+                    if other {
+                        row["other"] = json!(true);
+                    }
                 }
                 // The question's links, drawn as links (`questions/form_links.rs`).
                 if let Some(runs) = word_runs(&label) {

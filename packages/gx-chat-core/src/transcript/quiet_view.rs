@@ -109,7 +109,7 @@ pub struct QuietAnswers {
     pub key: String,
     /// "You answered “Sidebar picks”".
     pub text: String,
-    /// "7 answers", "7 skipped" or the one short answer.
+    /// "7 answers", "7 skipped", "4 answers · 1 skipped · 1 note" or the one short answer.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub count: String,
     /// Starts open (`chatQuietViewExpandLast`, the newest answers after the last reply).
@@ -130,8 +130,8 @@ fn clip(text: &str, most: usize) -> String {
     }
 }
 
-/// The short count after the title: the one short answer, "N skipped" when every one was, else
-/// "N answers".
+/// A finished turn's short count after the title: the one short answer, "N skipped" when every
+/// one was, else "N answers".
 fn answers_count(values: &[String], total: usize) -> String {
     if let Some(only) = values
         .first()
@@ -150,6 +150,44 @@ fn answers_count(values: &[String], total: usize) -> String {
     plural(total, "answer", "answers")
 }
 
+/// A page's or a form's count, from its card's rows (gx-chat-core `transcript/page_answers.rs`):
+/// the one short answer, else what it holds, "4 answers · 1 skipped", "9 skipped · 1 note".
+///
+/// CDXC:SessionChat 2026-11-17 DECISION:
+/// A form of 9 skipped questions and a note read "10 answers": the reader's own notes box
+/// ("Anything else?", the row marked `extra`) is not a question, and a skipped question is no
+/// answer. The count names answers, skipped questions and notes, leaving out what is none
+/// (`more`, the rows past the card's limit, count as answers).
+fn page_answers_count(rows: &[&Value], more: usize) -> String {
+    let is_skipped = |row: &&&Value| {
+        row["skipped"] == true || matches!(row["value"].as_str(), Some("Skipped" | "Not answered"))
+    };
+    let questions: Vec<&Value> = rows
+        .iter()
+        .copied()
+        .filter(|row| row["extra"] != true)
+        .collect();
+    let notes = rows.len() - questions.len();
+    let skipped = questions.iter().filter(is_skipped).count();
+    let answered = questions.len() - skipped + more;
+    let mut parts = Vec::new();
+    if answered > 0 {
+        let only = (questions.len() + more == 1)
+            .then(|| questions.first())
+            .flatten()
+            .and_then(|row| row["value"].as_str())
+            .filter(|only| !only.is_empty() && only.chars().count() <= SHORT_ANSWER);
+        parts.push(only.map_or_else(|| plural(answered, "answer", "answers"), str::to_string));
+    }
+    if skipped > 0 {
+        parts.push(format!("{skipped} skipped"));
+    }
+    if notes > 0 {
+        parts.push(plural(notes, "note", "notes"));
+    }
+    parts.join(" \u{b7} ")
+}
+
 /// A page's or a form's answers row, unless the user wrote words of his own with it.
 fn page_answers(row: &Value) -> Option<QuietAnswers> {
     if row["role"] != "user" {
@@ -161,15 +199,12 @@ fn page_answers(row: &Value) -> Option<QuietAnswers> {
         return None;
     }
     let id = row["id"].as_str()?.to_string();
-    let mut values = Vec::new();
-    let mut total = 0usize;
+    let mut entries: Vec<&Value> = Vec::new();
+    let mut more = 0usize;
     let mut titles = Vec::with_capacity(cards.len());
     for card in &cards {
-        let rows = card["rows"].as_array().map_or(&[][..], Vec::as_slice);
-        for entry in rows {
-            values.push(entry["value"].as_str().unwrap_or_default().to_string());
-        }
-        total += rows.len() + card["more"].as_u64().unwrap_or(0) as usize;
+        entries.extend(card["rows"].as_array().into_iter().flatten());
+        more += card["more"].as_u64().unwrap_or(0) as usize;
         titles.push(card["title"].as_str().unwrap_or("the page"));
     }
     let text = match titles.as_slice() {
@@ -186,7 +221,7 @@ fn page_answers(row: &Value) -> Option<QuietAnswers> {
     Some(QuietAnswers {
         key: format!("quiet-answers:{id}"),
         text,
-        count: answers_count(&values, total),
+        count: page_answers_count(&entries, more),
         id,
         open: false,
     })
