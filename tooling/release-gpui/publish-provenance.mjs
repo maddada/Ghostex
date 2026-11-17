@@ -53,7 +53,9 @@ export function isNonProductArtifactDirectory(name) {
     /* The Windows jobs' SignPath round-trip uploads (release-gpui-windows.yml). */
     name.startsWith('signpath-') ||
     /* The phone app's over-the-air update, published by release-gpui.yml's publish_ota job. */
-    name.startsWith('ota-')
+    name.startsWith('ota-') ||
+    /* The macOS job's private link map, kept per build id and never published (release-gpui-macos.yml). */
+    name.startsWith('ghostex-symbols-')
   );
 }
 

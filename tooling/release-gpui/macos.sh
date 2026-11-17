@@ -29,6 +29,9 @@ set -euo pipefail
 #   build-desktop  opt-in cargo pre-warm of apps/desktop/ (never part of `all`)
 #   assemble       build-macos-app.sh (vite, cargo, Swift helper, bundle, sign),
 #                  component publishing, bundle validation
+#   symbols        keep the link map of the shipped ghostex-gpui, named by its Mach-O UUID (the
+#                  build id crash reports carry), for a private Actions artifact; opt-in, never
+#                  part of `all`, and it warns instead of failing
 #   dmg            DMG creation, size budget, on-demand asset copy
 #   notarize       notarytool submit + poll + staple
 #   finalize       appcast, sealed checksum verification, manifest
@@ -53,10 +56,10 @@ if [[ "${1:-}" == "--phase" ]]; then
 	shift 2
 fi
 case "$PHASE" in
-all | prepare | prepare-sources | prepare-runtime | build-server | stage-runtime | build-desktop | assemble | sign-app | publish-components | dmg | notarize | finalize) ;;
+all | prepare | prepare-sources | prepare-runtime | build-server | stage-runtime | build-desktop | assemble | sign-app | symbols | publish-components | dmg | notarize | finalize) ;;
 *)
 	echo "Unknown macOS release phase: $PHASE" >&2
-	echo "Expected one of: all prepare prepare-sources prepare-runtime build-server stage-runtime build-desktop assemble dmg notarize finalize" >&2
+	echo "Expected one of: all prepare prepare-sources prepare-runtime build-server stage-runtime build-desktop assemble sign-app symbols publish-components dmg notarize finalize" >&2
 	exit 2
 	;;
 esac
@@ -94,6 +97,12 @@ APP_PATH="$REPO_ROOT/apps/desktop/build/macos.noindex/Ghostex.app"
 INFO_PLIST="$APP_PATH/Contents/Info.plist"
 DMG="$OUTPUT/ghostex-$VERSION-arm64.dmg"
 ON_DEMAND_ROOT="$REPO_ROOT/build/on-demand-assets/$VERSION"
+# The private symbol map (phase_symbols). Exported so every cargo build of the desktop crate (the
+# build-desktop pre-warm and build-macos-app.sh's own build in assemble) links with the same
+# arguments: apps/desktop/build.rs reruns when this variable changes, and a build that lacked it
+# would relink ghostex-gpui without a map.
+SYMBOLS_ROOT="$REPO_ROOT/build/release-symbols"
+export GHOSTEX_LINK_MAP_DIR="${GHOSTEX_LINK_MAP_DIR:-$SYMBOLS_ROOT/link-maps}"
 
 release_gpui_truthy() {
 	case "$(printf '%s' "${1:-0}" | tr '[:upper:]' '[:lower:]')" in
@@ -171,6 +180,13 @@ phase_prepare_runtime() {
 	prepare_runtime_inputs
 }
 
+# CDXC:Release 2026-11-18 WHY: crash #653: `zig build` without `-Doptimize` is a Debug build, and
+# every release through 11.9.0 shipped a Debug GhosttyKit (unoptimized terminal code with Debug
+# safety checks). Every other Ghostty and zmx build path passes ReleaseSafe (build.rs,
+# build-libghostty-vt.sh, prepare-macos-runtime.sh, TERMINAL-SHADERS.md). The same flags are
+# duplicated in macos-prerequisite.sh and warm-rust-build-cache.yml, and the GhosttyKit cache key
+# names the mode (`-releasesafe-`) so a cached Debug kit is never restored;
+# tooling/release-ghosttykit-optimize.test.mjs keeps all of them in step.
 prepare_ghosttykit() {
 	if [[ "$USE_PREBUILT_RUST" != "1" && ! -d "$GHOSTTY_KIT" ]]; then
 		GHOSTTY_ZIG="${GHOSTEX_ZIG:-${ZIG:-}}"
@@ -193,7 +209,8 @@ prepare_ghosttykit() {
 				"$GHOSTTY_ZIG" build \
 				-Demit-xcframework \
 				-Dxcframework-target=universal \
-				-Demit-macos-app=false
+				-Demit-macos-app=false \
+				-Doptimize=ReleaseSafe
 		)
 	fi
 	if [[ "$USE_PREBUILT_RUST" != "1" ]]; then
@@ -336,6 +353,99 @@ phase_assemble() {
 # without the variable keep the historical single-step order.
 signatures_deferred() {
 	[[ "${GHOSTEX_COMPONENT_SIGNATURES_DEFERRED:-0}" == "1" ]]
+}
+
+# Prints the Mach-O UUID of a binary's arm64 slice as 32 lowercase hex digits, the form crash
+# reports print as "build id" (apps/desktop/src/crash_report/native.rs drops the dashes).
+macho_build_id() {
+	/usr/bin/dwarfdump --uuid --arch arm64 "$1" 2>/dev/null |
+		awk '$1 == "UUID:" { gsub("-", "", $2); print tolower($2); exit }'
+}
+
+# Every section of a binary's arm64 slice as "segment section address size" (hex, lowercase, no
+# leading zeros), so ld64's link map (`# Sections:`) and the binary compare line for line.
+macho_sections() {
+	/usr/bin/otool -arch arm64 -l "$1" | awk '
+		function norm(v) { v = tolower(v); sub(/^0x0*/, "", v); return v == "" ? "0" : v }
+		$1 == "sectname" { sect = $2 }
+		$1 == "segname" && sect != "" { seg = $2 }
+		$1 == "addr" && sect != "" { addr = $2 }
+		$1 == "size" && sect != "" { print seg, sect, norm(addr), norm($2); sect = "" }
+	' | LC_ALL=C sort
+}
+
+link_map_sections() {
+	awk '
+		function norm(v) { v = tolower(v); sub(/^0x0*/, "", v); return v == "" ? "0" : v }
+		/^# Sections:/ { in_sections = 1; next }
+		in_sections && /^# Address/ { next }
+		in_sections && /^#/ { exit }
+		in_sections && NF >= 4 { print $3, $4, norm($1), norm($2) }
+	' "$1" | LC_ALL=C sort
+}
+
+symbols_warn() {
+	echo "::warning::No symbol map kept for this build: $1"
+	if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+		echo "- Symbol map: not kept ($1)" >>"$GITHUB_STEP_SUMMARY"
+	fi
+}
+
+# CDXC:CrashReports 2026-11-18 WHY: crash #653 was mapped by hand because the shipped executable
+# has no symbol table. ld64 writes a link map of ghostex-gpui while linking it
+# (GHOSTEX_LINK_MAP_DIR, apps/desktop/build.rs), and this phase keeps it beside the build id a
+# crash report prints, for a private Actions artifact (release-gpui-macos.yml) that never ships in
+# the app or on the GitHub release. The map is kept only when every section it lists matches the
+# shipped binary (same addresses and sizes), so it can never describe another build. A missing or
+# mismatched map (for example when kache restored the linked executable, so ld64 never ran) only
+# warns: symbols must not hold back a release.
+phase_symbols() {
+	local shipped="$APP_PATH/Contents/MacOS/Ghostex"
+	local link_map="$GHOSTEX_LINK_MAP_DIR/ghostex-gpui.map"
+	local out="$SYMBOLS_ROOT/macos-arm64"
+	local build_id binary_sections map_sections text_vmaddr
+	rm -rf "$out"
+	if [[ ! -f "$shipped" ]]; then
+		symbols_warn "the app bundle has no $shipped (run --phase assemble first)"
+		return 0
+	fi
+	if [[ ! -s "$link_map" ]]; then
+		symbols_warn "ld64 wrote no link map at $link_map"
+		return 0
+	fi
+	build_id="$(macho_build_id "$shipped")"
+	if [[ ! "$build_id" =~ ^[0-9a-f]{32}$ ]]; then
+		symbols_warn "could not read the Mach-O UUID of $shipped"
+		return 0
+	fi
+	binary_sections="$(macho_sections "$shipped")"
+	map_sections="$(link_map_sections "$link_map")"
+	if [[ -z "$map_sections" || "$binary_sections" != "$map_sections" ]]; then
+		symbols_warn "the link map's sections do not match the shipped binary (a map from another link)"
+		diff <(printf '%s\n' "$map_sections") <(printf '%s\n' "$binary_sections") | head -20 || true
+		return 0
+	fi
+	mkdir -p "$out"
+	cp "$link_map" "$out/ghostex-gpui.map"
+	text_vmaddr="$(/usr/bin/otool -arch arm64 -l "$shipped" | awk '$1 == "segname" && $2 == "__TEXT" { getline; print $2; exit }')"
+	printf '%s\n' "$build_id" >"$out/build-id.txt"
+	cat >"$out/README.txt" <<EOF
+Ghostex $VERSION (build $BUILD_NUMBER) for macOS arm64, commit ${GITHUB_SHA:-unknown}
+Build id (Mach-O UUID of Ghostex.app/Contents/MacOS/Ghostex): $build_id
+__TEXT vmaddr: $text_vmaddr
+
+ghostex-gpui.map is ld64's link map of this exact executable: every symbol it placed, with its
+address and size (# Symbols:), GhosttyKit's included. The shipped executable is stripped, so this
+is the only place its names live. A crash report frame "Ghostex +0xOFFSET" is at address
+(__TEXT vmaddr + OFFSET); its function is the last # Symbols: entry at or below that address.
+EOF
+	echo "Kept the link map of build id $build_id ($(du -h "$out/ghostex-gpui.map" | cut -f1)) in $out"
+	if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+		echo "build_id=$build_id" >>"$GITHUB_OUTPUT"
+	fi
+	if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+		echo "- Symbol map: kept for build id $build_id (private artifact ghostex-symbols-$VERSION-macos-arm64-$build_id)" >>"$GITHUB_STEP_SUMMARY"
+	fi
 }
 
 phase_sign_app() {
@@ -644,6 +754,7 @@ stage-runtime) phase_stage_runtime ;;
 build-desktop) phase_build_desktop ;;
 assemble) phase_assemble ;;
 sign-app) phase_sign_app ;;
+symbols) phase_symbols ;;
 publish-components) phase_publish_components ;;
 dmg) phase_dmg ;;
 notarize) phase_notarize ;;

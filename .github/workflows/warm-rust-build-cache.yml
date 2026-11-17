@@ -188,7 +188,7 @@ jobs:
         id: ghosttykit_cache
         with:
           path: .dependencies/ghostty/macos/GhosttyKit.xcframework
-          key: warm-ghosttykit-macos-arm64-zig0.17.1-${{ steps.cache_keys.outputs.zig }}
+          key: warm-ghosttykit-macos-arm64-zig0.17.1-releasesafe-${{ steps.cache_keys.outputs.zig }}
       - name: Install build tools
         run: tooling/release-gpui/retry.sh 3 5 -- brew install cmake ninja rsync xcodegen
       - name: Install pinned Zig toolchain
@@ -210,7 +210,7 @@ jobs:
       # DUPLICATED COMMAND (not a cargo command): mirrors the GhosttyKit build
       # in tooling/release-gpui/macos.sh prepare_ghosttykit (the
       # `zig build -Demit-xcframework -Dxcframework-target=universal
-      # -Demit-macos-app=false` block with DEVELOPER_DIR / SDKROOT /
+      # -Demit-macos-app=false -Doptimize=ReleaseSafe` block with DEVELOPER_DIR / SDKROOT /
       # GHOSTTY_METAL_DEVELOPER_DIR). Only runs on a GhosttyKit cache miss.
       - name: Build GhosttyKit
         if: ${{ steps.ghosttykit_cache.outputs.cache-hit != 'true' }}
@@ -226,7 +226,8 @@ jobs:
             "$GHOSTEX_ZIG" build \
             -Demit-xcframework \
             -Dxcframework-target=universal \
-            -Demit-macos-app=false
+            -Demit-macos-app=false \
+            -Doptimize=ReleaseSafe
           [[ -d macos/GhosttyKit.xcframework ]]
       # macos.sh refuses every phase but the prepare ones unless the release output
       # directory already exists (the prologue of tooling/release-gpui/macos.sh);
