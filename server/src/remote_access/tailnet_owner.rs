@@ -90,7 +90,7 @@ pub trait TailnetProbe {
 }
 
 /// Names the SSH server's per-login process goes by (OpenSSH 9.8 and later split it out).
-const SSH_SESSION_COMMANDS: &[&str] = &["sshd-session", "sshd"];
+pub(crate) const SSH_SESSION_COMMANDS: &[&str] = &["sshd-session", "sshd"];
 
 /// Whether `ip` is a Tailscale address: 100.64.0.0/10 or fd7a:115c:a1e0::/48.
 pub fn is_tailnet_ip(ip: IpAddr) -> bool {
@@ -156,7 +156,7 @@ pub fn parse_lsof(text: &str) -> Vec<LsofProcess> {
 
 /// The process (other than `own_pid`) holding the client end of the loopback connection
 /// `client` made to this gxserver's `server_port`.
-fn client_process<'a>(
+pub(crate) fn client_process<'a>(
     processes: &'a [LsofProcess],
     own_pid: u32,
     client: SocketAddr,

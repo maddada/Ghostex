@@ -49,8 +49,9 @@ Once this computer has an owner (the Ghostex app on one of your other computers,
 phone), the code prints at once, and each computer or phone that uses it shows here with its
 three words. Approve it in Ghostex on one of them, where it asks \"Let <it> connect to <this
 computer>?\" with the same words; this terminal names them. You don't need this computer's screen.
-When this computer's only owner is its own Ghostex app, the first computer to join can be let in
-here instead (y), and it can then ask to manage this computer (y again, with its words).
+When this computer's only owner is its own Ghostex app, a computer that joins can be let in here
+instead (y). It gets the connection only, and signs in with your SSH login here; once it has, it
+can ask to manage this computer, which shows here too (y again, with its words).
 On a computer with no owner yet, nothing asks: check the words match the ones on the other
 computer, then answer y to approve it or n to deny it here.
 
@@ -74,6 +75,11 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         return Ok(());
     }
     let parsed = parse_args(args);
+    // Run by a joined computer's app through its SSH login, not by people (CDXC:Security
+    // 2026-11-17 DECISION at `terminal_may_approve` in server/src/security/policy.rs).
+    if let Some(id) = parsed.flags.text("proveHandover") {
+        return prove_handover(&id, &parsed.flags);
+    }
     if let Some(extra) = parsed.rest.first() {
         return Err(CliError::Other(format!(
             "computer-code takes no arguments (got {extra}).\n\n{HELP}"
@@ -163,7 +169,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             let phone = matches!(device.platform.as_str(), "ios" | "android");
             if hands_over && !answers_here && interactive && !phone {
                 println!(
-                    "Only {here}'s own Ghostex app owns {here}, so you can let {} in here. It can then ask to manage {here}.",
+                    "Only {here}'s own Ghostex app owns {here}, so you can let {} in here. It gets the connection only and signs in with your SSH login here; then it can ask to manage {here}.",
                     device.name
                 );
                 let approve =
@@ -466,50 +472,66 @@ struct WaitingDevice {
 }
 
 /// After this terminal let `name` in on a computer only its own app owned: waits (ten minutes at
-/// most) for `name`'s app to ask to manage `here`, and approves it on y with matching words
-/// (CDXC:Security 2026-11-17 DECISION at `terminal_may_approve` in server/src/security/policy.rs).
+/// most) for `name`'s app to sign in over SSH and ask to manage `here`, and approves it on y with
+/// matching words. Only asks a joined computer proved through its SSH login show here
+/// (`terminalHandovers`, CDXC:Security 2026-11-17 DECISIONs at `terminal_may_approve` in
+/// server/src/security/policy.rs); any other app's ask waits for the app or a phone.
 fn hand_over(name: &str, here: &str, flags: &super::args::Flags) {
-    println!("Let in: {name}.");
+    println!("Let in: {name}. It signs in with your SSH login for {here}.");
     println!(
-        "Waiting for {name} to ask to manage {here}: it shows the words to check there. (Ctrl+C to skip; {name} still connects.)"
+        "Waiting for {name} to sign in and ask to manage {here}: it shows the words to check there. (Ctrl+C to skip; {name} still connects.)"
     );
     let started = Instant::now();
     let mut seen: HashSet<String> = HashSet::new();
     while started.elapsed() < IDLE_LIMIT {
         std::thread::sleep(POLL_EVERY);
+        let Ok(status) =
+            call_gxserver_rpc(crate::security::SECURITY_STATUS_ENDPOINT, &json!({}), flags)
+        else {
+            continue;
+        };
+        let proven: Vec<(String, String)> = status
+            .get("terminalHandovers")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|ask| {
+                Some((
+                    ask.get("id")?.as_str()?.to_string(),
+                    ask.get("name")?.as_str()?.to_string(),
+                ))
+            })
+            .collect();
+        if proven.iter().all(|(id, _)| seen.contains(id)) {
+            continue;
+        }
         let Ok(listed) = call_gxserver_rpc("/api/listApprovalRequests", &json!({}), flags) else {
             continue;
         };
-        let asks = listed
+        let asks: Vec<ghostex_gx_protocol::approval::ApprovalRequest> = listed
             .get("requests")
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
-            .filter_map(|request| {
-                serde_json::from_value::<ghostex_gx_protocol::approval::ApprovalRequest>(
-                    request.clone(),
-                )
-                .ok()
-            })
-            .filter(|request| {
-                request.status == ghostex_gx_protocol::approval::ApprovalStatus::Pending
-                    && request.action
-                        == ghostex_gx_protocol::approval::SensitiveAction::AddApproverKey
-            });
-        for request in asks {
-            if !seen.insert(request.id.clone()) {
+            .filter_map(|request| serde_json::from_value(request.clone()).ok())
+            .collect();
+        for (id, joined) in &proven {
+            if !seen.insert(id.clone()) {
                 continue;
             }
-            let Some(ask) = ghostex_gx_protocol::plain_ask::plain_ask(&request, here) else {
+            let Some(request) = asks.iter().find(|request| &request.id == id) else {
                 continue;
             };
-            if !ask.question.contains(" manage ") {
+            let Some(ask) = ghostex_gx_protocol::plain_ask::plain_ask(request, here) else {
                 continue;
-            }
+            };
             println!("\n{}", ask.question);
-            println!("Its words: {}", ask.words.join(" "));
+            println!(
+                "Asked through {joined}'s SSH login here. Its words: {}",
+                ask.words.join(" ")
+            );
             if !ask_yes_no(&format!(
-                "Do they match the words on {name}? Approve it? [y/N] "
+                "Do they match the words on {joined}? Approve it? [y/N] "
             )) {
                 let _ = call_gxserver_rpc(
                     "/api/denyApprovalRequest",
@@ -517,7 +539,7 @@ fn hand_over(name: &str, here: &str, flags: &super::args::Flags) {
                     flags,
                 );
                 println!(
-                    "Denied. {name} can still open {here}; it can't add phones or computers to it."
+                    "Denied. {joined} can still open {here}; it can't add phones or computers to it."
                 );
                 return;
             }
@@ -528,7 +550,7 @@ fn hand_over(name: &str, here: &str, flags: &super::args::Flags) {
             ) {
                 Ok(_) => {
                     println!(
-                        "{name} now manages {here}. Approve new phones and computers for {here} in Ghostex on {name}; this terminal approves nothing more."
+                        "{joined} now manages {here}. Approve new phones and computers for {here} in Ghostex on {joined}; this terminal approves nothing more."
                     );
                     return;
                 }
@@ -539,6 +561,26 @@ fn hand_over(name: &str, here: &str, flags: &super::args::Flags) {
     println!(
         "{name} didn't ask to manage {here} within 10 minutes. It can still open {here}, but can't add phones or computers to it."
     );
+}
+
+/// `--prove-handover=<ask id>`: run by a joined computer's app through its SSH login here, with
+/// the one-time secret this computer gave it on stdin. Prints `{ ok, proven, name }` as JSON.
+fn prove_handover(id: &str, flags: &super::args::Flags) -> CliResult<()> {
+    let mut secret = String::new();
+    std::io::stdin()
+        .read_line(&mut secret)
+        .map_err(|error| CliError::Other(format!("Couldn't read the secret: {error}")))?;
+    let answer = call_gxserver_rpc(
+        crate::security::PROVE_OWNER_HANDOVER_ENDPOINT,
+        &json!({ "id": id.trim(), "secret": secret.trim() }),
+        flags,
+    )?;
+    print_json(&json!({
+        "ok": true,
+        "proven": answer.get("proven").and_then(Value::as_bool) == Some(true),
+        "name": answer.get("name"),
+    }));
+    Ok(())
 }
 
 /// `/api/pairedDevices` `pending`: the computers and phones waiting for approval.

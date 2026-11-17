@@ -146,6 +146,13 @@ pub(crate) struct JoinFlow {
     pub(crate) looks_after: bool,
     /// The words of that ask, to match in that computer's terminal; `Some("")` once it is in.
     pub(crate) manage_words: Option<String>,
+    /// Why that ask couldn't be made or proven.
+    pub(crate) manage_failure: Option<String>,
+    /// That computer's one-time secret for the ask, sent once through this app's SSH login there.
+    pub(crate) handover: Option<String>,
+    /// That computer's terminal let this one in: the connection only, so this computer signs in
+    /// with the user's own SSH login there (no key of its own).
+    pub(crate) tunnel_only: bool,
 }
 
 /// The fields the Connect a computer pane types into.
@@ -239,7 +246,10 @@ impl GpuiConnectDeviceWindow {
             flow.manage_words = Some(match answer {
                 Ok(Some(words)) => words,
                 Ok(None) => "in".to_string(),
-                Err(_) => "failed".to_string(),
+                Err(message) => {
+                    flow.manage_failure = Some(message);
+                    "failed".to_string()
+                }
             });
         }
         cx.notify();
@@ -264,6 +274,11 @@ impl GpuiConnectDeviceWindow {
             (Some("pending"), _) => {}
             (Some("approved"), Ok(answer)) => {
                 flow.looks_after = answer.get("looksAfter").and_then(Value::as_bool) == Some(true);
+                flow.tunnel_only = answer.get("tunnelOnly").and_then(Value::as_bool) == Some(true);
+                flow.handover = answer
+                    .get("handover")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
                 let key_installed =
                     answer.get("sshKeyInstalled").and_then(Value::as_bool) == Some(true);
                 let mut target = flow.target.clone();
@@ -380,6 +395,7 @@ impl GpuiConnectDeviceWindow {
                     (self.host)(
                         ConnectDeviceCommand::AskToManage {
                             remote_machine_id: remote_machine_id.clone(),
+                            handover: flow.handover.take(),
                         },
                         cx,
                     );
@@ -490,6 +506,9 @@ impl GpuiConnectDeviceWindow {
             step: JoinStep::Asking,
             looks_after: false,
             manage_words: None,
+            manage_failure: None,
+            handover: None,
+            tunnel_only: false,
         });
         cx.notify();
         (self.host)(ConnectDeviceCommand::JoinComputer { code }, cx);
@@ -1062,6 +1081,8 @@ impl GpuiConnectDeviceWindow {
         let name = flow.computer_name.clone();
         let this_computer = self.computer_name.clone();
         let manage_words = flow.manage_words.clone();
+        let manage_failure = flow.manage_failure.clone();
+        let tunnel_only = flow.tunnel_only;
         let step = flow.step.clone();
         let approved = "Approved".to_string();
         let opens = format!("This computer can open {name}");
@@ -1117,9 +1138,18 @@ impl GpuiConnectDeviceWindow {
             JoinStep::NeedsPassword { error, saving, .. } => v_flex()
                 .w_full()
                 .gap(px(14.0))
-                .child(self.muted(format!(
-                    "{name} runs an older Ghostex, so this computer signs in with its password. Update Ghostex there to skip this next time."
-                )))
+                .child(self.muted(if tunnel_only {
+                    // CDXC:Security 2026-11-17 DECISION at `terminal_may_approve` in
+                    // server/src/security/policy.rs: a computer let in from a terminal gets the
+                    // connection only, never a key of its own.
+                    format!(
+                        "{name}'s terminal let this computer connect, so sign in with your own login there once."
+                    )
+                } else {
+                    format!(
+                        "{name} runs an older Ghostex, so this computer signs in with its password. Update Ghostex there to skip this next time."
+                    )
+                }))
                 .child(
                     v_flex()
                         .gap(px(6.0))
@@ -1176,9 +1206,14 @@ impl GpuiConnectDeviceWindow {
                         ))
                         .into_any_element(),
                     "failed" => self
-                        .muted(format!(
-                            "This computer couldn't ask to manage {name}. It can still open it."
-                        ))
+                        .muted(match &manage_failure {
+                            Some(why) => format!(
+                                "This computer couldn't ask to manage {name} ({why}). It can still open it."
+                            ),
+                            None => format!(
+                                "This computer couldn't ask to manage {name}. It can still open it."
+                            ),
+                        })
                         .into_any_element(),
                     words => v_flex()
                         .w_full()

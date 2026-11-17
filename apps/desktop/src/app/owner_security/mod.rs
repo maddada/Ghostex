@@ -21,6 +21,7 @@
 //! door's calls alone (pairing codes and Approve, [`door_token`]), which gxserver keeps from the
 //! token file once this computer has an owner device.
 
+pub(crate) mod handover;
 pub(crate) mod plain;
 pub(crate) mod ui;
 
@@ -1799,6 +1800,7 @@ pub(crate) fn note_owner_key_approved(transport: &Transport) {
 /// when this app manages it already.
 pub(crate) fn ask_to_manage(
     target: &GpuiRemoteGxserverRequestTarget,
+    handover: Option<&str>,
 ) -> Result<Option<String>, String> {
     let transport = Transport::Remote(target.clone());
     let key = transport.key();
@@ -1816,6 +1818,14 @@ pub(crate) fn ask_to_manage(
             Ok(None)
         }
         Err(error) if error == OWNER_WAITING_ERROR => {
+            // That computer approves this ask from its terminal only once this app proves it
+            // through its SSH login there, with the one-time secret it gave this computer
+            // (CDXC:Security 2026-11-17 DECISION at `terminal_may_approve`).
+            if let Some(secret) = handover.map(str::trim).filter(|secret| !secret.is_empty()) {
+                let asked = with_session(&key, |session| session.waiting_approval.clone())
+                    .ok_or_else(|| "The ask to manage that computer went away.".to_string())?;
+                handover::prove_handover(&target.machine_id, &asked, secret)?;
+            }
             Ok(with_session(&key, |session| session.key_words.clone()))
         }
         Err(error) => Err(error),

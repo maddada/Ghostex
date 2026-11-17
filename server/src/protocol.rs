@@ -1299,7 +1299,11 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         "/api/enrollOwnerKey"
         | "/api/ownerChallenge"
         | "/api/openOwnerSession"
-        | "/api/approveWithOwnerKey" => full_local(path),
+        | "/api/approveWithOwnerKey"
+        // A joined computer's SSH login proves its ask to manage this one (CDXC:Security
+        // 2026-11-17 DECISION at `terminal_may_approve` in security/policy.rs): loopback only,
+        // where the caller's process can be traced.
+        | "/api/proveOwnerHandover" => full_local(path),
         "/api/updateAuth"
         | "/api/updateListenerConfig"
         | "/api/installTool"

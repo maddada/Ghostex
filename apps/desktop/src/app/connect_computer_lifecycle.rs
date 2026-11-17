@@ -158,14 +158,17 @@ impl GhostexGpuiApp {
             ConnectDeviceCommand::Reconnect { remote_machine_id } => {
                 self.reconnect_saved_machine(&remote_machine_id, cx);
             }
-            ConnectDeviceCommand::AskToManage { remote_machine_id } => {
+            ConnectDeviceCommand::AskToManage {
+                remote_machine_id,
+                handover,
+            } => {
                 let Some(target) = self.gpui_remote_gxserver_request_target(&remote_machine_id)
                 else {
                     return;
                 };
-                let asked = cx
-                    .background_executor()
-                    .spawn(async move { crate::app::owner_security::ask_to_manage(&target) });
+                let asked = cx.background_executor().spawn(async move {
+                    crate::app::owner_security::ask_to_manage(&target, handover.as_deref())
+                });
                 cx.spawn(async move |this, cx| {
                     let answer = asked.await;
                     let _ = this.update(cx, |this, cx| {

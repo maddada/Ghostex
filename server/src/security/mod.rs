@@ -76,6 +76,10 @@ pub const OWNER_SESSION_ENDPOINT: &str = "/api/openOwnerSession";
 pub const APPROVE_WITH_OWNER_KEY_ENDPOINT: &str = "/api/approveWithOwnerKey";
 /// Whether an owner key and approver keys are enrolled, and who the caller is (any caller).
 pub const SECURITY_STATUS_ENDPOINT: &str = "/api/securityStatus";
+/// A computer the terminal let in proves its ask to manage this one through its SSH login
+/// (`ghostex computer-code --prove-handover`; CDXC:Security 2026-11-17 DECISION at
+/// `terminal_may_approve` in policy.rs).
+pub const PROVE_OWNER_HANDOVER_ENDPOINT: &str = "/api/proveOwnerHandover";
 
 pub const SECURITY_ENDPOINTS: &[&str] = &[
     APPROVALS_LIST_ENDPOINT,
@@ -90,6 +94,7 @@ pub const SECURITY_ENDPOINTS: &[&str] = &[
     OWNER_SESSION_ENDPOINT,
     APPROVE_WITH_OWNER_KEY_ENDPOINT,
     SECURITY_STATUS_ENDPOINT,
+    PROVE_OWNER_HANDOVER_ENDPOINT,
 ];
 
 /// Everything security-related one gxserver holds; cheap to clone (shared inside).
@@ -129,11 +134,9 @@ pub struct SecurityState {
     /// Until when (ms) a pairing code shown to the token file (a terminal's `ghostex
     /// computer-code`) counts as just shown (`policy.rs`).
     token_file_code_until: Arc<std::sync::Mutex<u64>>,
-    /// The first computer this computer's terminal let in while only its own app owned it, and
-    /// when (CDXC:Security 2026-11-17 at `terminal_may_approve` in `policy.rs`): request id, name, ms.
-    terminal_join: Arc<std::sync::Mutex<Option<(String, String, u64)>>>,
-    /// The terminal let a computer in during this run: it lets in no other (only the first join).
-    terminal_join_used: Arc<std::sync::atomic::AtomicBool>,
+    /// The computers this computer's terminal let in while only its own app owned it
+    /// (CDXC:Security 2026-11-17 at `terminal_may_approve` in `policy.rs`).
+    terminal_joins: Arc<std::sync::Mutex<Vec<policy::TerminalJoin>>>,
 }
 
 impl SecurityState {
@@ -152,8 +155,7 @@ impl SecurityState {
             save_lock: Arc::default(),
             events: broadcast::channel(256).0,
             token_file_code_until: Arc::default(),
-            terminal_join: Arc::default(),
-            terminal_join_used: Arc::default(),
+            terminal_joins: Arc::default(),
             door_only_keys: Arc::default(),
             retired_owner_keys: Arc::default(),
             app_owner_keys: Arc::default(),

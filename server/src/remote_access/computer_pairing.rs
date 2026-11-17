@@ -442,6 +442,12 @@ pub fn computer_pairing_status(paths: &GxserverPaths, pending_id: &str) -> Resul
         // computer may now ask to manage it (CDXC:Security 2026-11-17 DECISION at
         // `terminal_may_approve` in security/policy.rs). Older computers don't say.
         "looksAfter": answer.get("looksAfter").and_then(Value::as_bool) == Some(true),
+        // Its one-time secret for that ask, handed to the app once (this answer is the last:
+        // the pairing is forgotten above) and proven through the app's SSH login there.
+        "handover": answer.get("handover").and_then(Value::as_str),
+        // Let in by that computer's terminal: only the tunnel, so the app signs in with the
+        // user's own SSH login there.
+        "tunnelOnly": answer.get("tunnelOnly").and_then(Value::as_bool) == Some(true),
     }))
 }
 

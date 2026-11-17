@@ -83,12 +83,40 @@ owner key is enrolled, or a phone paired with its own token, remembered for good
   still get no code; a program that reads the token file itself does (the reviewer's note at
   `pairing_code_gate`). Each code opens a ten-minute window (`TOKEN_FILE_CODE_WINDOW_MS`). While
   this computer's only owner is its own app (`only_own_app_owns`: only `appOwnerKeys`, never a
-  phone), the token file may approve, inside that window, a computer (never a phone) joining with
-  the code (one per gxserver run, `terminal_join_used`), then within ten minutes that computer's
-  door-only ask to manage it (door-only read from the key's scope kept with the request)
-  (`terminal_may_approve`, Q-4B); gxserver logs both ("ownership.terminalJoin",
-  "ownership.handover"), tells the joining computer (`looksAfter` in `/api/pairingStatus`), and
-  once that key is in the terminal approves nothing more. Otherwise the terminal never approves here, even on a
+  phone), the token file may approve (`terminal_may_approve`, Q-4B and the review of 8abb0a8db):
+  - a computer (never a phone) joining with a code a terminal was shown in that window, as many
+    as the user lets in (no once-only limit, the user's Q3). Any program holding the token file,
+    an agent too, can do this, so such a join is **tunnel only**: approved by the token file while
+    this computer has an owner device (`decided_by` `localAgent`, read from the stored request in
+    `pairing_status`, so a restart in between changes nothing), it gets the Easy Connect
+    allow-list entry and never an SSH key line (`tunnelOnly`, `sshKeyInstalled: false`), and the
+    joining app signs in with the user's own SSH login there (the Connect a Computer window's
+    password step). An agent's made-up computer reaches sshd and nothing more;
+  - then, within ten minutes of that join, one door-only ask to manage this computer that the
+    joined computer **proved**: the finished pairing hands it a one-time secret (`handover` in its
+    signed `/api/pairingStatus` answer, passed to its app by `/api/computerPairingStatus`; only
+    that computer gets it, once), its app asks to manage this computer through its tunnel as
+    before (`enrollOwnerKey`, door scope), then runs `computer-code --prove-handover=<ask id>`
+    through its SSH login here with the secret on stdin (`owner_security/handover.rs`).
+    `/api/proveOwnerHandover` (token file only, loopback listener only) traces the calling process
+    in the kernel's socket table (`remote_access/ssh_login_trace.rs`: `lsof` and `ps` on macOS,
+    `/proc` on Linux, refused elsewhere) up to a root `sshd-session`/`sshd` within three steps,
+    every process below it this user's, and only then ties the ask to the join and spends the
+    secret (`prove_terminal_handover`: a waiting door-only ask made after the join; the scope is
+    read from the key kept with the request, never the summary). `/api/securityStatus` lists the
+    proven asks to the token file (`terminalHandovers`), which is all `computer-code` offers. That
+    ask is the one request its asker may approve (`approve_plain_as`'s `own_ok`): the joined app
+    reaches gxserver with this computer's token file too. Any other ask in the window, an agent's
+    included, stays unapprovable here.
+
+  gxserver logs each step ("ownership.terminalJoin", "ownership.handoverProven",
+  "ownership.handoverRefused", "ownership.handover"), and once the proven key is in, this
+  computer has another owner and the terminal approves nothing more (every join's secret is void,
+  `clear_terminal_joins`). Joins and secrets are kept in memory: after a gxserver restart the
+  joined computer gets a new secret only by joining again. Same-user limits: a program that can
+  already sign in here over SSH (the user's key in `authorized_keys` and a private key it can
+  read), or inject code into a process in the user's SSH login, passes the trace; either could
+  already add its own SSH key without gxserver. Otherwise the terminal never approves here, even on a
   headless computer (the user, 17 Nov, Q-3A); instead `/api/securityStatus` names who can
   (`approvesHere`: each owner app by its computer's name, `thisApp` for this computer's own, each
   paired phone and computer), and `ghostex computer-code` and the CLI's approval wait say "Approve it
@@ -301,6 +329,7 @@ let grant = match require_owner_presence(&state, &caller, action, &body_json, &p
 | `/api/securityStatus` | none | any but guests | `{ serverId, caller, plainApprovals: true, approveWithOwnerKey: true, requirePresence, mayApproveDevices, ownerKeys, approverKeys, pendingApprovals }` |
 | `/api/listApproverKeys`, `/api/enrollApproverKey`, `/api/removeApproverKey` | as before | you | kept for older apps: an approver key enrolls at once and is listed, but approving checks no signature |
 | `/api/approveWithOwnerKey` | `{ id, keyId, signature }` | any caller that may ask, on the loopback listener or its tunnels; the enrolled owner key's signature over that one `addApproverKey` request is the approval | since 17 Nov; `securityStatus` says `approveWithOwnerKey: true` |
+| `/api/proveOwnerHandover` | `{ id, secret }` | the token file, on the loopback listener, from a process traced to an SSH login here | `{ proven, name, id }`: ties a joined computer's ask to manage this one to its terminal join (see the owner-only door); since the review of 8abb0a8db |
 | `/api/enrollOwnerKey`, `/api/ownerChallenge`, `/api/openOwnerSession` | as before (`askOwner`, `approverKey` accepted) | the token file or an owner session (an agent's session token can't add an owner key) | kept for desktops from before plain approvals: a key enrolls at once, no "act as the owner" card (#532) |
 
 Statuses: `pending`, `approved`, `denied`, `expired`, `consumed` (a replaced request is `expired`
@@ -457,9 +486,11 @@ Code: `server/src/remote_access/pair_device.rs`, `packages/gx-protocol/src/pairi
   entries. `ghostex server endpoint` lists the `pairOverSsh` capability.
 - Computers pair the same way (`kind: "computer"` on `/api/pairDevice`, sent by the connecting
   computer's gxserver from `/api/pairComputer`, `remote_access/computer_pairing.rs`): Pending, three
-  words, the signed approval; what it grants is only the computer's tailcat client key on the
-  allow-list (no SSH line, no token: a computer signs in with its own SSH login and reaches
-  gxserver through connected-computer grants). An empty Easy Connect allow-list is closed.
+  words, the signed approval; what it grants is the computer's tailcat client key on the
+  allow-list and, when it sent one, its SSH key as a restricted line (since 14 Nov), never a token:
+  a computer reaches gxserver through connected-computer grants. A computer the token file
+  approved while this computer has an owner gets the allow-list entry only and signs in with the
+  user's own SSH login (see the owner-only door). An empty Easy Connect allow-list is closed.
 - Rows from before 11.0.1 are `legacy`: no token, SSH line removed at start where no Windows
   administrator prompt is needed. `remote_access::has_active_easy_connect_devices(&db)` and
   `easy_connect_devices_to_pair_again(&db)` are for the one-time re-pair notice.

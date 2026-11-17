@@ -508,6 +508,20 @@ impl ApprovalStore {
         by: &Principal,
         now_ms: u64,
     ) -> Result<ApprovalRequest, ApprovalError> {
+        self.approve_plain_as(id, by, now_ms, false)
+    }
+
+    /// [`ApprovalStore::approve_plain`], where `own_ok` lets the caller that asked approve it: only
+    /// for an ask a joined computer proved through its SSH login, which reached gxserver with the
+    /// same token file the terminal approves with (CDXC:Security 2026-11-17 DECISION at
+    /// `terminal_may_approve` in security/policy.rs).
+    pub fn approve_plain_as(
+        &self,
+        id: &str,
+        by: &Principal,
+        now_ms: u64,
+        own_ok: bool,
+    ) -> Result<ApprovalRequest, ApprovalError> {
         let mut requests = self.lock();
         self.sweep_and_save(&mut requests, now_ms);
         let stored = requests.get_mut(id).ok_or(ApprovalError::NotFound)?;
@@ -516,7 +530,7 @@ impl ApprovalStore {
             ApprovalStatus::Expired => return Err(lapsed(stored)),
             other => return Err(ApprovalError::NotPending(other.clone())),
         }
-        if stored.requester == *by {
+        if stored.requester == *by && !own_ok {
             return Err(ApprovalError::OwnRequest);
         }
         stored.request.status = ApprovalStatus::Approved;

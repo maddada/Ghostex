@@ -12,6 +12,7 @@ pub mod pairing_code;
 pub mod probe_cache;
 pub mod repository;
 pub mod ssh_enable;
+pub mod ssh_login_trace;
 pub mod ssh_status;
 pub mod tailnet_owner;
 pub mod tailscale;

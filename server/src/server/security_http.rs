@@ -729,9 +729,19 @@ fn handle(
                     return Err(("forbidden", DOOR_REFUSAL.to_string()));
                 }
             }
+            // The proven ask to manage this computer reached gxserver with the token file the
+            // terminal approves with, so it is the one request its own asker may approve.
+            let own_ok = by_terminal
+                && security
+                    .approvals
+                    .read(&id, caller, now)
+                    .is_some_and(|asked| {
+                        asked.action
+                            == ghostex_gx_protocol::approval::SensitiveAction::AddApproverKey
+                    });
             let request = security
                 .approvals
-                .approve_plain(&id, caller, now)
+                .approve_plain_as(&id, caller, now, own_ok)
                 .map_err(|error| approval_error(&error))?;
             let key_id = if key_id.is_empty() {
                 caller.kind().to_string()
@@ -829,6 +839,67 @@ fn handle(
                 .open_owner_session(&key_id, &challenge, &signature, now)
                 .map(|opened| json!(opened))
                 .map_err(|error| ("forbidden", error.to_string()))
+        }
+        security::PROVE_OWNER_HANDOVER_ENDPOINT => {
+            // CDXC:Security 2026-11-17 DECISION at `terminal_may_approve` in security/policy.rs:
+            // the joined computer's own SSH login, carrying its one-time secret, names its ask.
+            if !matches!(caller, Principal::LocalAgent) {
+                return Err((
+                    "forbidden",
+                    "Only a computer signed in here over SSH can prove its ask.".to_string(),
+                ));
+            }
+            let text = |name: &str| {
+                params
+                    .get(name)
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_string)
+            };
+            let (Some(id), Some(secret)) = (text("id"), text("secret")) else {
+                return Err(("badRequest", "id and secret are required.".to_string()));
+            };
+            let refuse = |reason: String| {
+                crate::audit::record(
+                    crate::audit::Action::new(
+                        "ownership.handoverRefused",
+                        "A computer's ask to manage this one wasn't proven",
+                    )
+                    .target(id.clone()),
+                    crate::audit::Actor::from(caller),
+                    crate::audit::Outcome::Refused(reason.clone()),
+                    None,
+                );
+                ("forbidden", reason)
+            };
+            // The trace first: a caller that isn't an SSH login learns nothing about the asks.
+            if let Err(reason) = crate::remote_access::ssh_login_trace::check(
+                crate::server::request_client_address(),
+                state.config.listeners.local.port,
+            ) {
+                return Err(refuse(format!(
+                    "This didn't come through an SSH login here ({reason}), so it proves nothing."
+                )));
+            }
+            let request = security
+                .approvals
+                .read(&id, caller, now)
+                .ok_or(("notFound", "That ask expired. Ask again.".to_string()))?;
+            let name = security
+                .prove_terminal_handover(&secret, &request, now)
+                .map_err(|reason| refuse(reason.to_string()))?;
+            crate::audit::record(
+                crate::audit::Action::new(
+                    "ownership.handoverProven",
+                    format!("{name} asked to manage this computer through its SSH login"),
+                )
+                .target(name.clone()),
+                crate::audit::Actor::from(caller),
+                crate::audit::Outcome::Pending,
+                Some(crate::audit::ApprovalRef::from(&request)),
+            );
+            Ok(json!({ "proven": true, "name": name, "id": request.id }))
         }
         security::APPROVE_WITH_OWNER_KEY_ENDPOINT => {
             // One waiting request for a new owner key, approved by an enrolled owner key's
@@ -946,8 +1017,18 @@ fn handle(
             // shown, because this computer's own app is its only owner (CDXC:Security 2026-11-17
             // DECISION at `terminal_may_approve`); `ghostex computer-code` then asks y/n.
             "terminalMayApproveJoin": matches!(caller, Principal::LocalAgent)
-                && security.only_own_app_owns()
-                && !security.terminal_join_used(),
+                && security.only_own_app_owns(),
+            // The asks to manage this computer that a computer the terminal let in proved through
+            // its SSH login: the only ones `ghostex computer-code` offers to approve.
+            "terminalHandovers": if matches!(caller, Principal::LocalAgent) {
+                security
+                    .proven_handovers(now)
+                    .into_iter()
+                    .map(|(id, name)| json!({ "id": id, "name": name }))
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            },
             // Retired keys (`retire_owner_key`) aren't listed: they sign nothing here.
             "ownerKeys": security.listed_owner_keys(),
             "approverKeys": security.approver_keys.list(),
@@ -1052,17 +1133,14 @@ fn note_terminal_handover(
                 .target(name.clone()),
                 crate::audit::Actor::SharedToken { claimed_session: None },
                 crate::audit::Outcome::ApprovedBy(format!(
-                    "Approved in {here}'s terminal (ghostex computer-code): {here}'s own Ghostex app was its only owner, so {name} may now ask to manage {here}"
+                    "Approved in {here}'s terminal (ghostex computer-code) while {here}'s own Ghostex app was its only owner: {name} gets the Easy Connect tunnel only and signs in with your SSH login; once signed in it may ask to manage {here}"
                 )),
                 Some(crate::audit::ApprovalRef::from(request)),
             );
         }
         ghostex_gx_protocol::approval::SensitiveAction::AddApproverKey if enrolled => {
-            let name = security
-                .terminal_join(now)
-                .map(|(_, name)| name)
-                .unwrap_or_default();
-            security.clear_terminal_join();
+            let name = security.handover_name(&request.id).unwrap_or_default();
+            security.clear_terminal_joins();
             crate::audit::record(
                 crate::audit::Action::new(
                     "ownership.handover",
@@ -1071,7 +1149,7 @@ fn note_terminal_handover(
                 .target(name.clone()),
                 crate::audit::Actor::SharedToken { claimed_session: None },
                 crate::audit::Outcome::ApprovedBy(format!(
-                    "Approved in {here}'s terminal: {name} was the first computer to join {here} while only {here}'s own Ghostex app owned it. {name} now approves new phones and computers for {here}; the terminal approves nothing more"
+                    "Approved in {here}'s terminal: {name} joined {here} from that terminal while only {here}'s own Ghostex app owned it, and asked through its SSH login. {name} now approves new phones and computers for {here}; the terminal approves nothing more"
                 )),
                 Some(crate::audit::ApprovalRef::from(request)),
             );

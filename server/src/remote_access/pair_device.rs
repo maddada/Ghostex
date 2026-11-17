@@ -933,6 +933,14 @@ pub fn pairing_status(
         .security
         .approvals
         .read(&pending.approval_id, &Principal::Anonymous, now);
+    // Who approved it: the token file (`localAgent`) on a computer that has an owner device did
+    // so only for a computer joining through `ghostex computer-code` (CDXC:Security 2026-11-17
+    // DECISIONs at `terminal_may_approve` in security/policy.rs). Read from the stored request,
+    // so a restart between the Approve and this ask changes nothing.
+    let by_token_file = request
+        .as_ref()
+        .and_then(|request| request.decided_by.as_deref())
+        == Some(Principal::LocalAgent.kind());
     let status = request.map(|request| request.status);
     match status {
         Some(ApprovalStatus::Pending) => Ok(PairingStatusAnswer {
@@ -976,17 +984,35 @@ pub fn pairing_status(
                     approval_id: approval.id.clone(),
                     caller: Principal::Anonymous,
                 });
-            match finish_pairing(context, &pending) {
+            // A computer the terminal let in while this computer has an owner gets the Easy
+            // Connect tunnel only: no SSH key line, so it signs in with the user's own SSH login
+            // (the user's Q1 "Tunnel only" on the review of 8abb0a8db).
+            let tunnel_only = by_token_file
+                && pending.kind == PairingDeviceKind::Computer
+                && context.security.has_owner_device();
+            let finished = if tunnel_only {
+                let mut tunnel = pending.clone();
+                tunnel.ssh_public_key = String::new();
+                finish_pairing(context, &tunnel)
+            } else {
+                finish_pairing(context, &pending)
+            };
+            match finished {
                 Ok(mut answer) => {
                     // Let in by this computer's terminal while only its own app owned it: the
-                    // computer that joined may now ask to manage it, and is told so
-                    // (CDXC:Security 2026-11-17 DECISION at `terminal_may_approve`).
-                    if context
-                        .security
-                        .terminal_join(now)
-                        .is_some_and(|(id, _)| id == pending.approval_id)
-                    {
-                        answer["looksAfter"] = serde_json::json!(true);
+                    // computer that joined may now ask to manage it once it has signed in over
+                    // SSH, with the one-time secret only it gets here (CDXC:Security 2026-11-17
+                    // DECISIONs at `terminal_may_approve`).
+                    if tunnel_only {
+                        answer["sshKeyInstalled"] = serde_json::json!(false);
+                        answer["tunnelOnly"] = serde_json::json!(true);
+                        if let Some(secret) = context
+                            .security
+                            .terminal_join_secret(&pending.approval_id, now)
+                        {
+                            answer["looksAfter"] = serde_json::json!(true);
+                            answer["handover"] = serde_json::json!(secret);
+                        }
                     }
                     runtime.finish_pending(&ask.id, answer.clone(), now);
                     Ok(PairingStatusAnswer {

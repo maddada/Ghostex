@@ -52,6 +52,24 @@ pub const TOKEN_FILE_CODE_WINDOW_MS: u64 = 10 * 60 * 1000;
 /// (`doorOnly`), so gxserver lets the key in the moment the owner approves.
 pub const OWNER_KEY_RESUME: &str = "ownerKey";
 
+/// A computer this computer's terminal let in while only its own app owned it
+/// (CDXC:Security 2026-11-17 DECISIONs at `terminal_may_approve`). Kept in memory: after a
+/// restart that computer asks again through a new join.
+#[derive(Clone, Debug)]
+pub struct TerminalJoin {
+    /// Its pairing request.
+    pub id: String,
+    /// The name it gave itself.
+    pub name: String,
+    pub at_ms: u64,
+    /// SHA-256 of its one-time handover secret, until it is spent.
+    secret_hash: Option<Vec<u8>>,
+    /// The secret was handed out (once, with its finished pairing).
+    secret_given: bool,
+    /// Its ask to manage this computer, once proven through its SSH login.
+    handover_request: Option<String>,
+}
+
 /*
 CDXC:Security 2026-11-16 FIX:
 Review M2 of the owner-only door: the session the app opens for the door was a full owner session (every capability, secrets included, no end), while the card that lets it in says it shows codes and approves devices. The app now asks for a door session (`scope: "door"` on `/api/openOwnerSession`): it is never in the owner session table, so no route, socket or relay but the door's own (`DOOR_SESSION_ENDPOINTS`) knows it, and it lapses after `DOOR_SESSION_TTL_MS` (the app opens a new one, no card: the key is enrolled). A key enrolled with `scope: "door"` (this app's keys, and a key let in through its card) opens only door sessions. An app from before this (11.2.2 and earlier keep their owner session for every call) enrolls without a scope and opens a full session as before; its card says that it acts as you for everything here.
@@ -231,91 +249,159 @@ impl SecurityState {
 
     /*
     CDXC:Security 2026-11-17 DECISION:
-    User (Q-4B, on a headless computer whose only owner is its own Ghostex app, which they never look at): "that app hands ownership to the first computer that joins it through ghostex computer-code (after the user's Approve of the join, with the matching words). Keep it as tight as possible: only the first join through computer-code, only while that computer has no other owner besides its own app, never through an agent, logged in the security log in plain words, and the new owner is told." The token file (the user's terminal; an agent in a Ghostex session holds a session token instead, which never gets a code or approves) may approve here only while (1) this computer's own app is its only owner (`only_own_app_owns`), and (2) a terminal was shown a pairing code in the last ten minutes, and only (a) a computer (never a phone) joining with that code, then (b) within ten minutes of that join, that same computer's app asking to manage this one (its door-only owner key), which gxserver lets in at the click (CDXC:Security 2026-11-17 at `enroll_owner_key_on_approval`). Once (b) is in, this computer has another owner and (1) no longer holds, so the terminal approves nothing again. A program that reads the token file itself (not through a Ghostex session) is the user's terminal here, as everywhere the token file decides (W524).
+    User (Q-4B, on a headless computer whose only owner is its own Ghostex app, which they never look at): "that app hands ownership to the first computer that joins it through ghostex computer-code (after the user's Approve of the join, with the matching words). Keep it as tight as possible: only the first join through computer-code, only while that computer has no other owner besides its own app, never through an agent, logged in the security log in plain words, and the new owner is told." The token file (the user's terminal; an agent in a Ghostex session holds a session token instead, which never gets a code or approves) may approve here only while (1) this computer's own app is its only owner (`only_own_app_owns`), and only (a) a computer (never a phone) joining with a code a terminal was shown in the last ten minutes, then (b) within ten minutes of that join, that same computer's app asking to manage this one (its door-only owner key), which gxserver lets in at the click (CDXC:Security 2026-11-17 at `enroll_owner_key_on_approval`). Once (b) is in, this computer has another owner and (1) no longer holds, so the terminal approves nothing again. A program that reads the token file itself (not through a Ghostex session) is the user's terminal here, as everywhere the token file decides (W524).
     */
-    /// Whether the token file may approve `request` here: CDXC:Security 2026-11-17 DECISION above.
+    /*
+    CDXC:Security 2026-11-17 DECISION:
+    Review of 8abb0a8db (any program holding the token file, an agent too, could get a code, pair a computer of its own and approve it, which wrote that computer's SSH key: a shell here). The user: Q1 "Tunnel only", Q2 "Build it", Q3 "allow multiple even without restart", and the coordinator: the handover to owner must not reopen the hole. So (a) may happen any number of times, but a computer the token file let in while this computer has an owner gets the Easy Connect tunnel only, never an SSH key line (`pairing_status` in remote_access/pair_device.rs): it signs in with the user's own SSH login, and an agent's made-up computer reaches sshd and nothing more. (b) is approved only for the ask a joined computer proves: its app reaches here through its SSH login and runs `computer-code --prove-handover` in it, which hands gxserver that join's one-time secret (given only to that computer, in its signed `/api/pairingStatus`) and the id of its own ask; gxserver traces the process that called (`remote_access/ssh_login_trace.rs`) to a root-owned SSH server within three steps, which no process an agent starts can claim without a real SSH login. Only that proven ask, door-only and made after the join, is approvable here, and it is the one request the token file may approve though the token file asked it (`approve_plain`'s `own_ok`): the joined app reaches gxserver with this computer's token file. A same-user program that already holds an SSH login here (the user's key in `authorized_keys` and a private key it can read) passes too; that is the same-user limit. Supersedes "only the first join" above.
+    */
+    /// Whether the token file may approve `request` here: CDXC:Security 2026-11-17 DECISIONs above.
     pub fn terminal_may_approve(
         &self,
         caller: &Principal,
         request: &ApprovalRequest,
         now_ms: u64,
     ) -> bool {
-        if !matches!(caller, Principal::LocalAgent)
-            || !self.only_own_app_owns()
-            || !self.token_file_code_shown_lately(now_ms)
-        {
+        if !matches!(caller, Principal::LocalAgent) || !self.only_own_app_owns() {
             return false;
         }
-        let summary = request.summary.trim();
         match request.action {
             // A computer joining (gxserver writes "Let a <system> computer that calls itself …";
-            // a phone's starts "Pair "), and only the first one this run: approving another join,
-            // or the same code shown again, doesn't open a second join or restart the ten minutes
-            // of the ask below (review of 8abb0a8db).
+            // a phone's starts "Pair "), with a code a terminal was just shown.
             SensitiveAction::PairingApproveDevice => {
-                summary.starts_with("Let a ") && !self.terminal_join_used()
+                request.summary.trim().starts_with("Let a ")
+                    && self.token_file_code_shown_lately(now_ms)
             }
-            // The computer that joined asking to manage this one: a door-only ask made after that
-            // join, within its ten minutes (an app names itself by its host name, which can differ
-            // from the name it joined with, so the words the user matches are the check). Door-only
-            // is read from the key's scope kept with the request, not from the summary, which
-            // carries the asking app's own label (an "act as you" ask whose label says "show the
-            // pairing code of" must not pass, review of 8abb0a8db).
-            SensitiveAction::AddApproverKey => {
-                self.approvals
-                    .resume_of(&request.id, OWNER_KEY_RESUME)
-                    .is_some_and(|saved| saved["doorOnly"].as_bool() == Some(true))
-                    && self
-                        .terminal_join_at(now_ms)
-                        .is_some_and(|at| request.created_at_ms >= at)
-            }
+            // The ask a computer the terminal let in proved through its SSH login, within ten
+            // minutes of that join (`prove_terminal_handover`).
+            SensitiveAction::AddApproverKey => self.is_proven_handover(&request.id, now_ms),
             _ => false,
         }
     }
 
-    /// Whether the terminal already let a computer in during this run (it lets in only one).
-    pub fn terminal_join_used(&self) -> bool {
-        self.terminal_join_used
-            .load(std::sync::atomic::Ordering::SeqCst)
-    }
-
-    /// The terminal let computer `name` in (request `id`).
+    /// The terminal let computer `name` in (pairing request `id`): it may ask to manage this
+    /// computer within [`TOKEN_FILE_CODE_WINDOW_MS`].
     pub fn note_terminal_join(&self, id: &str, name: &str, now_ms: u64) {
-        self.terminal_join_used
-            .store(true, std::sync::atomic::Ordering::SeqCst);
-        *self
-            .terminal_join
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()) =
-            Some((id.to_string(), name.to_string(), now_ms));
+        let mut joins = self.lock_terminal_joins();
+        joins.retain(|join| now_ms < join.at_ms + TOKEN_FILE_CODE_WINDOW_MS && join.id != id);
+        joins.push(TerminalJoin {
+            id: id.to_string(),
+            name: name.to_string(),
+            at_ms: now_ms,
+            secret_hash: None,
+            secret_given: false,
+            handover_request: None,
+        });
     }
 
-    /// The computer the terminal let in within [`TOKEN_FILE_CODE_WINDOW_MS`]: (request id, name).
-    pub fn terminal_join(&self, now_ms: u64) -> Option<(String, String)> {
-        self.terminal_join
+    /// The one-time secret for the computer the terminal let in with pairing request `id`, made
+    /// the first time its pairing finishes and never again: `None` for any other pairing.
+    pub fn terminal_join_secret(&self, id: &str, now_ms: u64) -> Option<String> {
+        use sha2::{Digest, Sha256};
+        let mut joins = self.lock_terminal_joins();
+        let join = joins.iter_mut().find(|join| {
+            join.id == id && !join.secret_given && now_ms < join.at_ms + TOKEN_FILE_CODE_WINDOW_MS
+        })?;
+        let secret = super::random_b64(32);
+        join.secret_hash = Some(Sha256::digest(secret.as_bytes()).to_vec());
+        join.secret_given = true;
+        Some(secret)
+    }
+
+    /// Ties ask `request` to the join whose one-time `secret` it carries, spending the secret:
+    /// called only once the caller is traced to an SSH login (`/api/proveOwnerHandover`). The
+    /// ask must be a waiting door-only owner key made after that join. Answers the joined
+    /// computer's name, or why not.
+    pub fn prove_terminal_handover(
+        &self,
+        secret: &str,
+        request: &ApprovalRequest,
+        now_ms: u64,
+    ) -> Result<String, &'static str> {
+        use ghostex_gx_protocol::approval::ApprovalStatus;
+        use sha2::{Digest, Sha256};
+        if !self.only_own_app_owns() {
+            return Err("This computer already has an owner besides its own app.");
+        }
+        let presented = Sha256::digest(secret.trim().as_bytes());
+        let mut joins = self.lock_terminal_joins();
+        let join = joins
+            .iter_mut()
+            .find(|join| {
+                now_ms < join.at_ms + TOKEN_FILE_CODE_WINDOW_MS
+                    && join.handover_request.is_none()
+                    && join
+                        .secret_hash
+                        .as_deref()
+                        .is_some_and(|hash| same_bytes(hash, &presented))
+            })
+            .ok_or("That secret isn't one this computer gave, or it was used or expired.")?;
+        if request.action != SensitiveAction::AddApproverKey
+            || request.status != ApprovalStatus::Pending
+            || request.created_at_ms < join.at_ms
+        {
+            return Err(
+                "That ask isn't a waiting ask to manage this computer made after the join.",
+            );
+        }
+        let door_only = self
+            .approvals
+            .resume_of(&request.id, OWNER_KEY_RESUME)
+            .is_some_and(|saved| saved["doorOnly"].as_bool() == Some(true));
+        if !door_only {
+            return Err("Only an ask to show the code and approve devices can be proven.");
+        }
+        join.secret_hash = None;
+        join.handover_request = Some(request.id.clone());
+        Ok(join.name.clone())
+    }
+
+    /// Whether `request_id` is an ask proven by a computer the terminal let in, in its ten minutes.
+    pub fn is_proven_handover(&self, request_id: &str, now_ms: u64) -> bool {
+        self.lock_terminal_joins().iter().any(|join| {
+            now_ms < join.at_ms + TOKEN_FILE_CODE_WINDOW_MS
+                && join.handover_request.as_deref() == Some(request_id)
+        })
+    }
+
+    /// The proven asks waiting for this terminal (`securityStatus`), oldest join first.
+    pub fn proven_handovers(&self, now_ms: u64) -> Vec<(String, String)> {
+        self.lock_terminal_joins()
+            .iter()
+            .filter(|join| now_ms < join.at_ms + TOKEN_FILE_CODE_WINDOW_MS)
+            .filter_map(|join| {
+                join.handover_request
+                    .clone()
+                    .map(|request| (request, join.name.clone()))
+            })
+            .collect()
+    }
+
+    /// The name of the computer whose proven ask is `request_id`.
+    pub fn handover_name(&self, request_id: &str) -> Option<String> {
+        self.lock_terminal_joins()
+            .iter()
+            .find(|join| join.handover_request.as_deref() == Some(request_id))
+            .map(|join| join.name.clone())
+    }
+
+    /// Whether the terminal let the computer of pairing request `id` in, in its ten minutes.
+    pub fn is_terminal_join(&self, id: &str, now_ms: u64) -> bool {
+        self.lock_terminal_joins()
+            .iter()
+            .any(|join| join.id == id && now_ms < join.at_ms + TOKEN_FILE_CODE_WINDOW_MS)
+    }
+
+    /// The handover is done: this computer has another owner, so the terminal approves nothing
+    /// more and no join may ask again.
+    pub fn clear_terminal_joins(&self) {
+        self.lock_terminal_joins().clear();
+    }
+
+    fn lock_terminal_joins(&self) -> std::sync::MutexGuard<'_, Vec<TerminalJoin>> {
+        self.terminal_joins
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
-            .filter(|(_, _, at)| now_ms < at + TOKEN_FILE_CODE_WINDOW_MS)
-            .map(|(id, name, _)| (id, name))
-    }
-
-    /// When the terminal let a computer in, within [`TOKEN_FILE_CODE_WINDOW_MS`].
-    pub fn terminal_join_at(&self, now_ms: u64) -> Option<u64> {
-        self.terminal_join
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .as_ref()
-            .map(|(_, _, at)| *at)
-            .filter(|at| now_ms < at + TOKEN_FILE_CODE_WINDOW_MS)
-    }
-
-    /// The handover is done (or given up): the terminal approves nothing more.
-    pub fn clear_terminal_join(&self) {
-        *self
-            .terminal_join
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
     }
 
     fn window(&self, until: &std::sync::Mutex<u64>) -> u64 {

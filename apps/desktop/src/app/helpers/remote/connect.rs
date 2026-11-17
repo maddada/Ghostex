@@ -1028,6 +1028,45 @@ macro_rules! gpui_remote_newest_gxserver_selection {
     };
 }
 
+/// Finds the gxserver and ghostex programs there (`GXSERVER_BIN`, `GHOSTEX_BIN`), its state
+/// folder and token file, the way [`gpui_remote_token_read_command`] always has.
+macro_rules! gpui_remote_gxserver_bin_selection {
+    () => {
+        concat!(
+            "case \"${GHOSTEX_HOME:-}\" in /*) GHOSTEX_REMOTE_STATE_DIR=\"$GHOSTEX_HOME/state\"; GHOSTEX_REMOTE_DATA_DIR=\"$GHOSTEX_HOME\";; ",
+            "*) case \"${XDG_STATE_HOME:-}\" in /*) GHOSTEX_REMOTE_STATE_DIR=\"${XDG_STATE_HOME%/}/ghostex\";; *) GHOSTEX_REMOTE_STATE_DIR=\"$HOME/.local/state/ghostex\";; esac; ",
+            "case \"${XDG_DATA_HOME:-}\" in /*) GHOSTEX_REMOTE_DATA_DIR=\"${XDG_DATA_HOME%/}/ghostex\";; *) GHOSTEX_REMOTE_DATA_DIR=\"$HOME/.local/share/ghostex\";; esac;; esac; ",
+            "GHOSTEX_REMOTE_TOKEN_FILE=\"$GHOSTEX_REMOTE_STATE_DIR/gxserver/auth/token\"; ",
+            "GHOSTEX_REMOTE_LEGACY_ROOT=\"$HOME/.ghostex/gxserver\"; ",
+            "GXSERVER_BIN=\"$GHOSTEX_REMOTE_DATA_DIR/gxserver/package/bin/gxserver\"; ",
+            "if [ ! -x \"$GXSERVER_BIN\" ] && [ -x \"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/gxserver\" ]; then GXSERVER_BIN=\"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/gxserver\"; fi; ",
+            "if [ ! -x \"$GXSERVER_BIN\" ] && [ -x \"$HOME/.local/bin/gxserver\" ]; then GXSERVER_BIN=\"$HOME/.local/bin/gxserver\"; fi; ",
+            "if [ ! -x \"$GXSERVER_BIN\" ] && [ -x \"/Applications/Ghostex.app/Contents/Resources/Web/gxserver/bin/gxserver\" ]; then GXSERVER_BIN=\"/Applications/Ghostex.app/Contents/Resources/Web/gxserver/bin/gxserver\"; fi; ",
+            gpui_remote_newest_gxserver_selection!(),
+            "GHOSTEX_BIN=\"$GHOSTEX_REMOTE_DATA_DIR/gxserver/package/bin/ghostex\"; ",
+            "if [ ! -x \"$GHOSTEX_BIN\" ] && [ -x \"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/ghostex\" ]; then GHOSTEX_BIN=\"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/ghostex\"; fi; ",
+            "if [ ! -x \"$GHOSTEX_BIN\" ] && [ -x \"$HOME/.local/bin/ghostex\" ]; then GHOSTEX_BIN=\"$HOME/.local/bin/ghostex\"; fi; ",
+        )
+    };
+}
+
+/// Runs `computer-code --prove-handover=<request_id>` there through this SSH login, reading the
+/// one-time secret from stdin (CDXC:Security 2026-11-17 DECISION at `terminal_may_approve` in
+/// server/src/security/policy.rs). `exec`, so gxserver traces the command straight to the SSH
+/// server. `None` for an id that isn't plain letters, digits, `_` and `-`.
+pub(crate) fn gpui_remote_prove_handover_command(request_id: &str) -> Option<String> {
+    let safe = !request_id.is_empty()
+        && request_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    safe.then(|| {
+        format!(
+            "{}if [ -x \"$GXSERVER_BIN\" ]; then exec \"$GXSERVER_BIN\" computer-code --prove-handover={request_id}; elif [ -x \"$GHOSTEX_BIN\" ]; then exec \"$GHOSTEX_BIN\" computer-code --prove-handover={request_id}; else exit 127; fi",
+            gpui_remote_gxserver_bin_selection!()
+        )
+    })
+}
+
 pub(crate) fn gpui_remote_token_read_command() -> &'static str {
     /*
     Remote packages released before the platform-storage migration remain
@@ -1037,19 +1076,7 @@ pub(crate) fn gpui_remote_token_read_command() -> &'static str {
     keeps its matching token contract until that remote package is upgraded.
     */
     concat!(
-        "case \"${GHOSTEX_HOME:-}\" in /*) GHOSTEX_REMOTE_STATE_DIR=\"$GHOSTEX_HOME/state\"; GHOSTEX_REMOTE_DATA_DIR=\"$GHOSTEX_HOME\";; ",
-        "*) case \"${XDG_STATE_HOME:-}\" in /*) GHOSTEX_REMOTE_STATE_DIR=\"${XDG_STATE_HOME%/}/ghostex\";; *) GHOSTEX_REMOTE_STATE_DIR=\"$HOME/.local/state/ghostex\";; esac; ",
-        "case \"${XDG_DATA_HOME:-}\" in /*) GHOSTEX_REMOTE_DATA_DIR=\"${XDG_DATA_HOME%/}/ghostex\";; *) GHOSTEX_REMOTE_DATA_DIR=\"$HOME/.local/share/ghostex\";; esac;; esac; ",
-        "GHOSTEX_REMOTE_TOKEN_FILE=\"$GHOSTEX_REMOTE_STATE_DIR/gxserver/auth/token\"; ",
-        "GHOSTEX_REMOTE_LEGACY_ROOT=\"$HOME/.ghostex/gxserver\"; ",
-        "GXSERVER_BIN=\"$GHOSTEX_REMOTE_DATA_DIR/gxserver/package/bin/gxserver\"; ",
-        "if [ ! -x \"$GXSERVER_BIN\" ] && [ -x \"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/gxserver\" ]; then GXSERVER_BIN=\"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/gxserver\"; fi; ",
-        "if [ ! -x \"$GXSERVER_BIN\" ] && [ -x \"$HOME/.local/bin/gxserver\" ]; then GXSERVER_BIN=\"$HOME/.local/bin/gxserver\"; fi; ",
-        "if [ ! -x \"$GXSERVER_BIN\" ] && [ -x \"/Applications/Ghostex.app/Contents/Resources/Web/gxserver/bin/gxserver\" ]; then GXSERVER_BIN=\"/Applications/Ghostex.app/Contents/Resources/Web/gxserver/bin/gxserver\"; fi; ",
-        gpui_remote_newest_gxserver_selection!(),
-        "GHOSTEX_BIN=\"$GHOSTEX_REMOTE_DATA_DIR/gxserver/package/bin/ghostex\"; ",
-        "if [ ! -x \"$GHOSTEX_BIN\" ] && [ -x \"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/ghostex\" ]; then GHOSTEX_BIN=\"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/ghostex\"; fi; ",
-        "if [ ! -x \"$GHOSTEX_BIN\" ] && [ -x \"$HOME/.local/bin/ghostex\" ]; then GHOSTEX_BIN=\"$HOME/.local/bin/ghostex\"; fi; ",
+        gpui_remote_gxserver_bin_selection!(),
         "GHOSTEX_REMOTE_START_FAILED=0; ",
         "GHOSTEX_REMOTE_START_LOG=\"$(mktemp 2>/dev/null || printf /dev/null)\"; ",
         "if [ -x \"$GXSERVER_BIN\" ]; then ",

@@ -5397,10 +5397,13 @@ sessions, so any client can control agents on any machine.
   at once, and B waits to be approved there: the card asks "Let B connect to
   A?" with the same three words, and A's terminal names where to approve (A's
   own screen is never needed; the terminal can't approve it). When A's only
-  owner is A's own Ghostex app (one you never look at), the first computer to
-  join can be let in from A's terminal with y, and its app then asks once to
-  manage A, which you approve with y in the same terminal after matching its
-  words; from then on that computer approves A's new phones and computers. The command stops after the first computer you
+  owner is A's own Ghostex app (one you never look at), a computer that joins
+  can be let in from A's terminal with y. It gets the connection only, not a
+  key of its own, so B then asks once for your login on A (your username and
+  password there, or the SSH key you already use). Once signed in, B's app asks
+  to manage A through that login, and you approve it with y in the same
+  terminal after matching its words; from then on that computer approves A's
+  new phones and computers, and A's terminal approves nothing more. The command stops after the first computer you
   approve (run it again to connect another), after 10 minutes with nobody
   waiting, or when you press Ctrl+C, and B then finishes signing in as usual.
   `--copy` also puts each code on the clipboard (on a server reached over SSH,

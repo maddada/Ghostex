@@ -128,6 +128,40 @@ pub(crate) fn gpui_run_remote_ssh_raw(
     )
 }
 
+/// [`gpui_run_remote_ssh_raw`] with `input` on the remote command's stdin: a secret goes there,
+/// never on a command line other accounts there can read.
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+pub(crate) fn gpui_run_remote_ssh_raw_with_stdin_bytes(
+    config: &GpuiRemoteMachineConfig,
+    remote_command: &str,
+    input: Vec<u8>,
+    timeout: Duration,
+) -> GpuiRemoteProcessResult {
+    let target_arguments = match gpui_remote_ssh_target_arguments(config) {
+        Ok(target_arguments) => target_arguments,
+        Err(message) => return gpui_remote_ssh_refused_process_result(message),
+    };
+    let askpass = match gpui_remote_ssh_askpass_script(config) {
+        Ok(askpass) => askpass,
+        Err(message) => return gpui_remote_ssh_refused_process_result(message),
+    };
+    let mut arguments = gpui_remote_ssh_client_options(config.has_saved_password);
+    arguments.extend(gpui_remote_ssh_shared_connection_arguments(config));
+    match gpui_remote_ssh_reuse_connection_arguments(config) {
+        Ok(reuse) => arguments.extend(reuse),
+        Err(message) => return gpui_remote_ssh_refused_process_result(message),
+    }
+    arguments.extend(target_arguments);
+    arguments.push(remote_command.to_string());
+    gpui_run_remote_process_with_stdin_bytes(
+        &gpui_remote_ssh_executable(),
+        &arguments,
+        gpui_remote_ssh_askpass_environment(askpass.as_ref()),
+        input,
+        timeout,
+    )
+}
+
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 pub(crate) fn gpui_run_remote_ssh_with_stdin_file_in_execution_target(
     config: &GpuiRemoteMachineConfig,

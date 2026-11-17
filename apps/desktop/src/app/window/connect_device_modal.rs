@@ -190,6 +190,9 @@ pub(crate) enum ConnectDeviceCommand {
     /// own app owned it); the host answers `join_manage_answer`.
     AskToManage {
         remote_machine_id: String,
+        /// The one-time secret that computer gave this one with the join, proven through this
+        /// app's SSH login there (CDXC:Security 2026-11-17 DECISION at `terminal_may_approve`).
+        handover: Option<String>,
     },
     /// Connect both ways with this computer's own `code`; the host answers
     /// `connect_back_progress`.
