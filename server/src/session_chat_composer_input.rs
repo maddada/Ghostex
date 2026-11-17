@@ -23,6 +23,55 @@ pub(super) fn rule_input_region(lines: &[String], markers: &[char]) -> Option<Ra
         .then_some(start..foot)
 }
 
+/// Claude Code's input box, including one that scrolled (`claude_scrolled_input_region`).
+pub(super) fn claude_input_region(lines: &[String]) -> Option<Range<usize>> {
+    claude_scrolled_input_region(lines)
+        .or_else(|| rule_input_region(lines, CLAUDE_COMPOSER_MARKERS))
+}
+
+/// CDXC:SessionChat 2026-11-18 WHY:
+/// GitHub #654: once a draft has more rows than Claude Code's input box shows (758 CJK characters on one line at 24 x 200, reproduced on Claude Code 2.1.326), the box scrolls to its cursor: its top rule reads `─── ↑ 2 more ───` and its first visible row is a continuation with no `❯`. Every reader asked for the `❯`, so the box read as missing: the pasted message was never confirmed and never submitted, and it and every later message waited as "The claude input box is not on screen yet." while the text sat in the box. A box under that rule is still the input box, so readiness, the paste check (whose #643 tail rule needs the box's text) and clearing all read it. Checked before `rule_input_region`, whose head search skips this three-dash rule and could reach an older rule above it.
+fn claude_scrolled_input_region(lines: &[String]) -> Option<Range<usize>> {
+    let foot = lines.iter().rposition(|line| is_horizontal_rule(line))?;
+    let head = lines[..foot]
+        .iter()
+        .rposition(|line| is_claude_scrolled_top_rule(line) || is_titled_horizontal_rule(line))?;
+    if !is_claude_scrolled_top_rule(&lines[head]) {
+        return None;
+    }
+    let start = (head + 1..foot).find(|&i| !lines[i].trim().is_empty())?;
+    Some(start..foot)
+}
+
+/// `─── ↑ 2 more ─────…`: the top rule Claude Code draws over an input box whose first rows
+/// scrolled out of it.
+fn is_claude_scrolled_top_rule(line: &str) -> bool {
+    if line
+        .chars()
+        .any(|ch| matches!(ch, '\u{2502}' | '\u{2503}' | '\u{256d}' | '\u{2570}'))
+    {
+        return false;
+    }
+    let trimmed = line.trim();
+    let Some(rest) = trimmed.strip_prefix('\u{2500}') else {
+        return false;
+    };
+    let Some(rest) = rest
+        .trim_start_matches('\u{2500}')
+        .trim_start()
+        .strip_prefix('\u{2191}')
+    else {
+        return false;
+    };
+    let rest = rest.trim_start();
+    let digits = rest.chars().take_while(char::is_ascii_digit).count();
+    digits > 0
+        && rest[digits..]
+            .strip_prefix(" more")
+            .is_some_and(|rest| rest.trim_start().starts_with('\u{2500}'))
+        && trimmed.ends_with('\u{2500}')
+}
+
 /// CDXC:AgentScreenDetection 2026-10-11 WHY:
 /// While any background task runs, Antigravity CLI (measured on 1.3.3) draws its active-items list between rules under the input box, one `● [09:47:11] ping -n 900 127.0.0.1 running` row per task. The last rule pair then framed the task rows, so the input box read as missing: every chat send was refused ("The antigravity input box is not on screen yet"), and a model change, and every message held behind it or behind a waking session, waited forever while the terminal took input normally (a 2026-10-11 customer report, reproduced with a dev-server task). The input box is the sandwich above that list; any other block under it still reads as no input box.
 pub(super) fn antigravity_input_region(lines: &[String]) -> Option<Range<usize>> {
@@ -556,8 +605,10 @@ pub fn claude_composer_draft(screen: &str) -> Option<String> {
         return None;
     }
     let lines: Vec<_> = screen.lines().map(strip_ansi_sgr).collect();
-    let region = rule_input_region(&lines, CLAUDE_COMPOSER_MARKERS)?;
+    let region = claude_input_region(&lines)?;
     let first = lines[region.start].trim_start();
+    // A scrolled box's first visible row is a continuation, so there is no marker or pill on it.
+    let marked = first.starts_with(CLAUDE_COMPOSER_MARKERS);
     let text = first.strip_prefix('❯').unwrap_or(first).trim_start();
     // A plain capture has no colours, so the IDE pill is told by its shape alone here.
     let (shell, rest) = match text.strip_prefix('!') {
@@ -565,6 +616,7 @@ pub fn claude_composer_draft(screen: &str) -> Option<String> {
         None => ("", text),
     };
     let text = match claude_ide_pill_len(rest) {
+        _ if !marked => first.to_string(),
         Some(len) => format!(
             "{shell} {}",
             rest.char_indices()
@@ -809,7 +861,7 @@ fn codex_composer_start(lines: &[StyledLine]) -> Option<usize> {
     (marker != '!' && style.bold && !style.faint).then_some(start)
 }
 
-fn codex_input_region(lines: &[StyledLine]) -> Option<Range<usize>> {
+fn codex_input_region(lines: &[StyledLine], cursor_row: Option<usize>) -> Option<Range<usize>> {
     let start = codex_composer_start(lines)?;
     // Selection rows make both the marker and label bold. The textarea only adds bold with inverse for search matches, which can remain after accepting a Vim search.
     if lines[start].chars[1..]
@@ -819,7 +871,7 @@ fn codex_input_region(lines: &[StyledLine]) -> Option<Range<usize>> {
     {
         return None;
     }
-    let foot = if let Some(background) = lines[start].chars[0].1.background_rgb {
+    let padded = if let Some(background) = lines[start].chars[0].1.background_rgb {
         // The composer owns one bottom padding row, even with no statusline or a multiline footer.
         let end = (start + 1..lines.len())
             .find(|&i| {
@@ -829,29 +881,40 @@ fn codex_input_region(lines: &[StyledLine]) -> Option<Range<usize>> {
                     .is_none_or(|(_, style)| style.background_rgb != Some(background))
             })
             .unwrap_or(lines.len());
-        end.checked_sub(1).filter(|&foot| foot > start)?
+        end.checked_sub(1).filter(|&foot| foot > start)
     } else {
-        let last = (start + 1..lines.len()).rfind(|&i| !lines[i].text.trim().is_empty())?;
-        (start + 1..last).rfind(|&i| lines[i].text.trim().is_empty())?
-    };
-    if !lines[foot].text.trim().is_empty() {
-        return None;
+        (start + 1..lines.len())
+            .rfind(|&i| !lines[i].text.trim().is_empty())
+            .and_then(|last| (start + 1..last).rfind(|&i| lines[i].text.trim().is_empty()))
     }
+    .filter(|&foot| lines[foot].text.trim().is_empty());
+    let foot = match (padded, codex_footerless_end(lines, start, cursor_row)) {
+        // A blank line inside a draft that runs to the bottom is not the padding row.
+        (Some(foot), Some(end)) => foot.max(end),
+        (Some(foot), None) => foot,
+        (None, Some(end)) => end,
+        (None, None) => return None,
+    };
     // History/Vim searches keep the draft visible but route input into a separate footer editor.
-    if lines[foot + 1..].iter().any(|line| {
-        let text = line.text.trim();
-        text.starts_with("reverse-i-search:")
-            || line
-                .chars
-                .iter()
-                .find(|(ch, _)| !ch.is_whitespace())
-                .is_some_and(|(ch, style)| {
-                    matches!(ch, '/' | '?')
-                        && !style.bold
-                        && !style.faint
-                        && style.foreground_index == Some(6)
-                })
-    }) {
+    if lines
+        .get(foot + 1..)
+        .unwrap_or_default()
+        .iter()
+        .any(|line| {
+            let text = line.text.trim();
+            text.starts_with("reverse-i-search:")
+                || line
+                    .chars
+                    .iter()
+                    .find(|(ch, _)| !ch.is_whitespace())
+                    .is_some_and(|(ch, style)| {
+                        matches!(ch, '/' | '?')
+                            && !style.bold
+                            && !style.faint
+                            && style.foreground_index == Some(6)
+                    })
+        })
+    {
         return None;
     }
     let body = &lines[start].text;
@@ -864,6 +927,49 @@ fn codex_input_region(lines: &[StyledLine]) -> Option<Range<usize>> {
         return None;
     }
     Some(start..foot)
+}
+
+/// CDXC:SessionChat 2026-11-18 WHY:
+/// GitHub #654: a pasted draft with more lines than Codex's composer shows (36 short lines at 50 rows, 19 at 24; reproduced on Codex CLI 0.169.0) makes the composer scroll to its cursor and grow to the bottom of the screen: the footer and the blank padding row under the draft go away (only a blank last row may stay). The padding row was how the composer's end was found, so the input box read as missing, the paste was never confirmed or submitted, and the message and every one after it waited while the text sat in the composer. The VT capture's cursor is the witness for this shape: the draft's rows run from the `›` row down to the cursor, nothing but blank rows follow, and every row after the first is indented like the composer's continuation rows. A popup or footer under the composer leaves rows after the cursor, so it never qualifies, and a capture with no cursor (wmx) keeps today's reading.
+fn codex_footerless_end(
+    lines: &[StyledLine],
+    start: usize,
+    cursor_row: Option<usize>,
+) -> Option<usize> {
+    let row = cursor_row.filter(|&row| row >= start && row < lines.len())?;
+    let blank = |line: &StyledLine| line.text.trim().is_empty();
+    // Continuation rows start in the composer's text column; a VT capture may draw the gap as a
+    // cursor move, which the styled reader drops, so only the first column is sure to be blank.
+    (!blank(&lines[row])
+        && lines[row + 1..].iter().all(blank)
+        && lines[start + 1..=row]
+            .iter()
+            .all(|line| blank(line) || line.text.starts_with(char::is_whitespace)))
+    .then_some(row + 1)
+}
+
+/// Codex marks a scrolled composer with a faint `↑` (more above) or `↓` (more below) at the right
+/// end of its first or last visible row. It is not draft text, so it is cleared like the particles
+/// above; otherwise a box that scrolled could never read as holding exactly the message.
+fn clear_codex_scroll_arrows(lines: &mut [StyledLine]) {
+    let Some(start) = codex_composer_start(lines) else {
+        return;
+    };
+    for line in &mut lines[start..] {
+        let Some(last) = line.chars.iter().rposition(|(ch, _)| !ch.is_whitespace()) else {
+            continue;
+        };
+        let (ch, style) = line.chars[last];
+        let before = line.chars[..last]
+            .iter()
+            .rev()
+            .take_while(|(ch, _)| ch.is_whitespace())
+            .count();
+        if matches!(ch, '\u{2191}' | '\u{2193}') && style.faint && before > 0 && last > 0 {
+            line.chars[last].0 = ' ';
+            line.text = line.chars.iter().map(|(ch, _)| *ch).collect();
+        }
+    }
 }
 
 /// Codex renders remote attachments above the marker, separated from its textarea by a blank row.
@@ -956,6 +1062,7 @@ pub fn session_chat_composer_input(agent: &str, screen: &str) -> Option<SessionC
     }
     if agent == "codex" {
         clear_codex_composer_particles(&mut lines);
+        clear_codex_scroll_arrows(&mut lines);
     }
     let plain: Vec<_> = lines.iter().map(|line| line.text.clone()).collect();
     if matches!(agent, "pi" | "omp" | "zcode") {
@@ -993,13 +1100,13 @@ pub fn session_chat_composer_input(agent: &str, screen: &str) -> Option<SessionC
         });
     }
     let region = match agent {
-        "claude" | "openclaude" => rule_input_region(&plain, CLAUDE_COMPOSER_MARKERS)?,
+        "claude" | "openclaude" => claude_input_region(&plain)?,
         "antigravity" => antigravity_input_region(&plain)?,
         "cursor" => cursor_input_region(&plain)?,
         "hermes-agent" => hermes_input_region(&plain)?,
         // CDXC:AgentScreenDetection 2026-09-11 DECISION:
         // User: keep Codex 0.153 and earlier working alongside 0.154, with or without stars. The bold prompt and dim placeholder identify input independently of optional particles and background colors.
-        "codex" => codex_input_region(&lines)?,
+        "codex" => codex_input_region(&lines, vt_capture_cursor(screen).map(|(row, _)| row))?,
         _ => return None,
     };
     let first = &lines[region.start];
@@ -1010,13 +1117,18 @@ pub fn session_chat_composer_input(agent: &str, screen: &str) -> Option<SessionC
             !ch.is_whitespace()
         }
     })?;
+    // Claude's scrolled box (`claude_scrolled_input_region`) starts on a continuation row: its first
+    // character is the draft's, not a marker.
+    let unmarked = matches!(agent, "claude" | "openclaude")
+        && !CLAUDE_COMPOSER_MARKERS.contains(&first.chars[marker].0);
     let shell_mode = matches!(agent, "claude" | "openclaude") && first.chars[marker].0 == '!';
-    let ide_pill = matches!(agent, "claude" | "openclaude")
+    let ide_pill = (matches!(agent, "claude" | "openclaude") && !unmarked)
         .then(|| claude_ide_pill(&first.chars[marker + 1..]))
         .flatten()
         .map(|pill| marker + 1 + pill.start..marker + 1 + pill.end);
     let outside_pill = |index: &usize| !ide_pill.as_ref().is_some_and(|pill| pill.contains(index));
-    let body: Vec<_> = (marker + 1..first.chars.len())
+    let body_start = if unmarked { marker } else { marker + 1 };
+    let body: Vec<_> = (body_start..first.chars.len())
         .filter(outside_pill)
         .map(|index| &first.chars[index])
         .chain(
@@ -1027,7 +1139,7 @@ pub fn session_chat_composer_input(agent: &str, screen: &str) -> Option<SessionC
         .filter(|(ch, _)| !ch.is_whitespace())
         .collect();
     // The shell marker is part of the logical draft, including for paste and returned-prompt comparisons.
-    let text_start = if shell_mode { marker } else { marker + 1 };
+    let text_start = if shell_mode { marker } else { body_start };
     let text = std::iter::once(
         (text_start..first.chars.len())
             .filter(outside_pill)
