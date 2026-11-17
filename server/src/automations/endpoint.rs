@@ -27,6 +27,18 @@ pub async fn handle_automation_endpoint(
         "/api/saveAutomation" => {
             let project = resolve_automation_project(&repository, &params)?;
             let automation = normalize_definition_payload(&project, &params)?;
+            if automation.model.is_some() || automation.effort.is_some() {
+                let project_value = repository
+                    .get_project(&automation.project_id)?
+                    .ok_or_else(|| DomainStateError::not_found("Automation project not found."))?;
+                crate::agents::check_requested_agent_model(
+                    &db,
+                    &project_value,
+                    &automation.agent_id,
+                    automation.model.as_deref(),
+                    automation.effort.as_deref(),
+                )?;
+            }
             upsert_automation(&db, &automation)?;
             let stored = resolve_project_by_id(&repository, &automation.project_id)?;
             read_project_automation_state(&repository, &db, &stored)

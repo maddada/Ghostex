@@ -39,6 +39,11 @@ pub(super) struct AutomationDefinitionRecord {
     pub(super) precheck: Option<Value>,
     /// Where a routine's result goes: `chat` (its own chat) or `chief`.
     pub(super) deliver: Option<String>,
+    /// The model a run's new session starts on (`ghostex create-agent --model`); `None` keeps the
+    /// agent's own (GitHub #662).
+    pub(super) model: Option<String>,
+    /// The effort a run's new session starts on (`--effort`); `None` keeps the agent's own.
+    pub(super) effort: Option<String>,
 }
 
 #[derive(Clone)]

@@ -320,6 +320,17 @@ fn create_and_start_agent_session(
     }
     params.insert("runtimeSettings".to_string(), runtime_settings);
     params.insert("requireLaunchCommand".to_string(), Value::Bool(true));
+    // CDXC:Automations 2026-11-18 WHY: GitHub #662: a run's session starts on the automation's
+    // model and effort through the same create parameters `ghostex create-agent --model/--effort`
+    // sends, so they are launch flags for this session only and never change the agent's default.
+    for (key, value) in [
+        ("agentModel", &automation.model),
+        ("agentEffort", &automation.effort),
+    ] {
+        if let Some(value) = value {
+            params.insert(key.to_string(), Value::String(value.clone()));
+        }
+    }
     let project_value = repository
         .get_project(&project.project_id)?
         .ok_or_else(|| DomainStateError::not_found("Automation project not found."))?;

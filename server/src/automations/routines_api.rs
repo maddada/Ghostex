@@ -107,6 +107,8 @@ pub(crate) fn save_routine(
         owner_bot_id: Some(save.bot_id.to_string()),
         precheck: precheck.clone(),
         deliver: Some(save.deliver.to_string()),
+        model: None,
+        effort: None,
     };
     upsert_automation(db, &record)?;
     // A new or changed check starts from a fresh look, so it never runs on what was there before.

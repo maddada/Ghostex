@@ -199,4 +199,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0078_drop_gemini_cli_agent",
     "0079_unpark_done_coordinator_threads",
     "0080_session_chat_queue_version",
+    "0081_automation_model_effort",
 ];

@@ -265,12 +265,23 @@ impl AutomationDialog {
             no_agents,
             cx,
         ));
+        // CDXC:Automations 2026-11-18 WHY: GitHub #662: a run's session started on the agent's
+        // defaults, with no way to pick a cheaper model or a lower effort for routine work. The
+        // pickers list this computer's model catalog, the lineup the New Coordinator dialog
+        // offers, and a run's new session starts on them through create-agent's launch flags.
+        let launch_choice = self.shows_launch_choice().then(|| {
+            Self::grid(vec![
+                self.select_field("Model", DialogSelect::Model, "Agent default", false, cx),
+                self.select_field("Effort", DialogSelect::Effort, "Agent default", false, cx),
+            ])
+        });
         v_flex()
             .w_full()
             .gap(px(18.0))
             .pb(px(2.0))
             .child(self.text_field("Name", DialogField::Name, window, cx))
             .child(Self::grid(top_row))
+            .children(launch_choice)
             .child(self.render_timing(window, cx))
             .child(self.render_execution(window, cx))
             .child(self.field(

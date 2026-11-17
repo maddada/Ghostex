@@ -131,6 +131,11 @@ pub(crate) struct AutomationDraft {
     pub(crate) enabled: bool,
     pub(crate) execution_kind: ExecutionKind,
     pub(crate) expires_at: String,
+    /// The model a run's new session starts on (the catalog's model value); empty keeps the
+    /// agent's own.
+    pub(crate) model: String,
+    /// The effort a run's new session starts on; empty keeps the agent's own.
+    pub(crate) effort: String,
     pub(crate) name: String,
     pub(crate) prompt: String,
     pub(crate) project_id: String,
@@ -161,6 +166,8 @@ impl AutomationDraft {
                 ExecutionKind::Local
             },
             expires_at: String::new(),
+            model: String::new(),
+            effort: String::new(),
             name: String::new(),
             prompt: String::new(),
             project_id,
@@ -185,6 +192,8 @@ impl AutomationDraft {
         draft.enabled = definition.enabled;
         draft.name = definition.name.clone();
         draft.prompt = definition.prompt.clone();
+        draft.model = definition.model.clone().unwrap_or_default();
+        draft.effort = definition.effort.clone().unwrap_or_default();
         draft.schedule_preset = schedule_preset_for(&definition.schedule);
         match &definition.schedule {
             AutomationSchedule::Once { run_at } => {
@@ -333,6 +342,15 @@ impl AutomationDraft {
             "schedule": schedule.to_json(),
             "updatedAt": now,
         });
+        // A thread run uses a session that already exists, which keeps its own model and effort.
+        if self.execution_kind != ExecutionKind::Thread {
+            for (key, value) in [("model", &self.model), ("effort", &self.effort)] {
+                let value = value.trim();
+                if !value.is_empty() {
+                    definition[key] = serde_json::Value::String(value.to_string());
+                }
+            }
+        }
         if self.enabled
             && let Some(next_run_at) = compute_next_run_at(&schedule)
         {

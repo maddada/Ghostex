@@ -9,6 +9,7 @@ use super::drafts::{
 use super::model::{AutomationSessionOption, AutomationState};
 use super::view::NativeAutomateView;
 use crate::app::window::{ModalPalette, ModalScrollFit, ModalSelect, ModalSelectKey};
+use ghostex_gx_chat_core::menus::catalog::{AgentModelCatalog, CatalogAgent};
 use gpui::{
     AppContext as _, Context, Entity, FocusHandle, KeyDownEvent, Subscription, WeakEntity, Window,
 };
@@ -27,6 +28,8 @@ pub(crate) struct AutomationDialogConfig {
 pub(crate) enum DialogSelect {
     Project,
     Agent,
+    Model,
+    Effort,
     Repeat,
     Weekday,
     TimerUnit,
@@ -34,9 +37,11 @@ pub(crate) enum DialogSelect {
 }
 
 impl DialogSelect {
-    pub(crate) const ALL: [Self; 6] = [
+    pub(crate) const ALL: [Self; 8] = [
         Self::Project,
         Self::Agent,
+        Self::Model,
+        Self::Effort,
         Self::Repeat,
         Self::Weekday,
         Self::TimerUnit,
@@ -51,6 +56,8 @@ impl DialogSelect {
         match self {
             Self::Project => "automation-dialog-project",
             Self::Agent => "automation-dialog-agent",
+            Self::Model => "automation-dialog-model",
+            Self::Effort => "automation-dialog-effort",
             Self::Repeat => "automation-dialog-repeat",
             Self::Weekday => "automation-dialog-weekday",
             Self::TimerUnit => "automation-dialog-timer-unit",
@@ -62,6 +69,8 @@ impl DialogSelect {
         match self {
             Self::Project => "automation-dialog-project-menu",
             Self::Agent => "automation-dialog-agent-menu",
+            Self::Model => "automation-dialog-model-menu",
+            Self::Effort => "automation-dialog-effort-menu",
             Self::Repeat => "automation-dialog-repeat-menu",
             Self::Weekday => "automation-dialog-weekday-menu",
             Self::TimerUnit => "automation-dialog-timer-unit-menu",
@@ -125,6 +134,8 @@ pub(crate) struct AutomationDialog {
     pub(crate) state: AutomationState,
     pub(crate) sessions: Vec<AutomationSessionOption>,
     pub(crate) draft: AutomationDraft,
+    /// This computer's agent model catalog, the lineup the New Coordinator dialog offers.
+    pub(crate) catalog: Option<AgentModelCatalog>,
     pub(crate) inputs: Vec<(DialogField, Entity<InputState>)>,
     /// The Prompt text area, which writes `draft.prompt`.
     pub(crate) prompt: Entity<TextareaState>,
@@ -190,6 +201,7 @@ impl AutomationDialog {
             state: config.state,
             sessions: config.sessions,
             draft: config.draft,
+            catalog: crate::app::gx_chat::current_model_catalog(),
             inputs,
             prompt,
             selects: DialogSelect::ALL
@@ -238,6 +250,91 @@ impl AutomationDialog {
         }
     }
 
+    /// The catalog lineup of the chosen agent: by its id, else by its icon (a custom agent that
+    /// runs Claude or Codex carries that agent's icon).
+    fn catalog_agent(&self) -> Option<&CatalogAgent> {
+        let agents = &self.catalog.as_ref()?.agents;
+        let option = self.state.agent(&self.draft.agent_id);
+        agents.get(self.draft.agent_id.as_str()).or_else(|| {
+            option
+                .and_then(|agent| agent.icon.as_deref())
+                .and_then(|icon| agents.get(icon))
+        })
+    }
+
+    /// Whether the Model and Effort pickers show: not for a thread run, whose session keeps its
+    /// own, and not for an agent the catalog has no lineup for unless a choice is already saved.
+    pub(crate) fn shows_launch_choice(&self) -> bool {
+        self.draft.execution_kind != ExecutionKind::Thread
+            && (self
+                .catalog_agent()
+                .is_some_and(|agent| !agent.models.is_empty())
+                || !self.draft.model.trim().is_empty()
+                || !self.draft.effort.trim().is_empty())
+    }
+
+    /// The Model picker's values after "Agent default" (an empty value): the catalog's models,
+    /// plus the saved one when the catalog does not list it, so an edit never drops it.
+    fn model_values(&self) -> Vec<(String, String)> {
+        let mut values = self
+            .catalog_agent()
+            .map(|agent| {
+                agent
+                    .models
+                    .iter()
+                    .map(|model| (model.value.clone(), model.label.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let saved = self.draft.model.trim();
+        if !saved.is_empty() && !values.iter().any(|(value, _)| value == saved) {
+            values.push((saved.to_string(), saved.to_string()));
+        }
+        values
+    }
+
+    /// The Effort picker's values after "Agent default": the chosen model's efforts (every effort
+    /// the agent knows while no model is chosen), plus the saved one when it is not among them.
+    fn effort_values(&self) -> Vec<(String, String)> {
+        let label = |effort: &str| {
+            self.catalog
+                .as_ref()
+                .map(|catalog| catalog.effort_label(effort))
+                .unwrap_or_else(|| effort.to_string())
+        };
+        let mut values = self
+            .catalog_agent()
+            .map(|agent| {
+                let model = self.draft.model.trim();
+                if model.is_empty() {
+                    agent.efforts.clone()
+                } else {
+                    agent.efforts_for_model(model)
+                }
+            })
+            .unwrap_or_default()
+            .into_iter()
+            .map(|effort| {
+                let shown = label(&effort);
+                (effort, shown)
+            })
+            .collect::<Vec<_>>();
+        let saved = self.draft.effort.trim();
+        if !saved.is_empty() && !values.iter().any(|(value, _)| value == saved) {
+            values.push((saved.to_string(), label(saved)));
+        }
+        values
+    }
+
+    fn launch_values(&self, kind: DialogSelect) -> Vec<(String, String)> {
+        let mut values = vec![(String::new(), "Agent default".to_string())];
+        values.extend(match kind {
+            DialogSelect::Model => self.model_values(),
+            _ => self.effort_values(),
+        });
+        values
+    }
+
     pub(crate) fn items(&self, kind: DialogSelect) -> Vec<String> {
         match kind {
             DialogSelect::Project => self
@@ -251,6 +348,11 @@ impl AutomationDialog {
                 .agents
                 .iter()
                 .map(|agent| agent.display_label().to_string())
+                .collect(),
+            DialogSelect::Model | DialogSelect::Effort => self
+                .launch_values(kind)
+                .into_iter()
+                .map(|(_, label)| label)
                 .collect(),
             DialogSelect::Repeat => SCHEDULE_PRESETS
                 .iter()
@@ -282,6 +384,14 @@ impl AutomationDialog {
                 .agents
                 .iter()
                 .position(|agent| agent.agent_id == draft.agent_id),
+            DialogSelect::Model => self
+                .launch_values(kind)
+                .iter()
+                .position(|(value, _)| value == draft.model.trim()),
+            DialogSelect::Effort => self
+                .launch_values(kind)
+                .iter()
+                .position(|(value, _)| value == draft.effort.trim()),
             DialogSelect::Repeat => SCHEDULE_PRESETS
                 .iter()
                 .position(|preset| *preset == draft.schedule_preset),
@@ -339,8 +449,30 @@ impl AutomationDialog {
                 }
             }
             DialogSelect::Agent => {
-                if let Some(agent) = self.state.agents.get(index) {
+                if let Some(agent) = self.state.agents.get(index)
+                    && agent.agent_id != self.draft.agent_id
+                {
                     self.draft.agent_id = agent.agent_id.clone();
+                    // A model and effort belong to the agent they were picked for.
+                    self.draft.model.clear();
+                    self.draft.effort.clear();
+                }
+            }
+            DialogSelect::Model => {
+                if let Some((value, _)) = self.launch_values(kind).into_iter().nth(index) {
+                    self.draft.model = value;
+                    // Keep the effort only when the new model offers it.
+                    let effort = self.draft.effort.trim().to_string();
+                    if !effort.is_empty()
+                        && !self.effort_values().iter().any(|(value, _)| *value == effort)
+                    {
+                        self.draft.effort.clear();
+                    }
+                }
+            }
+            DialogSelect::Effort => {
+                if let Some((value, _)) = self.launch_values(kind).into_iter().nth(index) {
+                    self.draft.effort = value;
                 }
             }
             DialogSelect::Repeat => {

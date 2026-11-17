@@ -19,6 +19,7 @@ pub(super) fn normalize_definition_payload(
     let object = value
         .as_object()
         .ok_or_else(|| DomainStateError::bad_request("Automation definition must be an object."))?;
+    refuse_unknown_definition_fields(object)?;
     let now = now_iso();
     let id = read_value_text(object, "id")
         .unwrap_or_else(|| format!("automation-{}", uuid::Uuid::new_v4()));
@@ -30,6 +31,15 @@ pub(super) fn normalize_definition_payload(
         .ok_or_else(|| DomainStateError::bad_request("Automation prompt is required."))?;
     let schedule = normalize_schedule(object.get("schedule"))?;
     let execution_mode = normalize_execution_mode(object.get("executionMode"))?;
+    let model = definition_launch_choice(object, "model")?;
+    let effort = definition_launch_choice(object, "effort")?;
+    if (model.is_some() || effort.is_some())
+        && execution_mode.get("kind").and_then(Value::as_str) == Some("thread")
+    {
+        return Err(DomainStateError::bad_request(
+            "A thread automation runs in a session that already exists, which keeps its own model and effort. Remove model and effort, or use the local or worktree mode.",
+        ));
+    }
     let project_id = object
         .get("projectIds")
         .and_then(Value::as_array)
@@ -72,7 +82,79 @@ pub(super) fn normalize_definition_payload(
         owner_bot_id: None,
         precheck: None,
         deliver: None,
+        model,
+        effort,
     })
+}
+
+/// Every field a definition may carry: what automation-save reads, plus the fields
+/// automation-state returns for a definition so one read back and saved again is accepted
+/// (`ownerBotId`, `precheck` and `deliver` belong to a GBot routine and are kept as stored).
+const DEFINITION_FIELDS: [&str; 16] = [
+    "agentId",
+    "createdAt",
+    "deliver",
+    "effort",
+    "enabled",
+    "executionMode",
+    "id",
+    "model",
+    "name",
+    "nextRunAt",
+    "ownerBotId",
+    "precheck",
+    "projectIds",
+    "prompt",
+    "schedule",
+    "updatedAt",
+];
+
+/*
+CDXC:Automations 2026-11-18 WHY:
+GitHub #662: `model` and `effort` in a definition were dropped without a word, so automation-save
+answered ok and the run started on the agent's defaults. A field the definition does not have is
+now refused by name, listing the fields it does have, so neither a person nor an agent believes a
+setting was saved when it was not.
+*/
+fn refuse_unknown_definition_fields(object: &Map<String, Value>) -> Result<(), DomainStateError> {
+    let mut unknown = object
+        .keys()
+        .filter(|key| !DEFINITION_FIELDS.contains(&key.as_str()))
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    if unknown.is_empty() {
+        return Ok(());
+    }
+    unknown.sort_unstable();
+    let named = unknown
+        .iter()
+        .map(|key| format!("\"{key}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let noun = if unknown.len() == 1 { "field" } else { "fields" };
+    Err(DomainStateError::bad_request(format!(
+        "Automation definition has unknown {noun} {named}, so nothing was saved. A definition takes: name, agentId, prompt, enabled, schedule, executionMode, model, effort, id, projectIds, createdAt, updatedAt and nextRunAt."
+    )))
+}
+
+/// The definition's `model` or `effort`: the value `ghostex create-agent --model`/`--effort`
+/// takes, or `None` (absent, null or empty) to keep the agent's own.
+fn definition_launch_choice(
+    object: &Map<String, Value>,
+    key: &str,
+) -> Result<Option<String>, DomainStateError> {
+    match object.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(value)) if value.trim().is_empty() => Ok(None),
+        Some(Value::String(value)) => {
+            let mut params = Map::new();
+            params.insert(key.to_string(), Value::String(value.clone()));
+            crate::agents::requested_agent_model_option(&params, key)
+        }
+        Some(_) => Err(DomainStateError::bad_request(format!(
+            "Automation {key} must be a string, such as the value ghostex create-agent --{key} takes."
+        ))),
+    }
 }
 
 pub(super) fn normalize_schedule(value: Option<&Value>) -> Result<Value, DomainStateError> {
