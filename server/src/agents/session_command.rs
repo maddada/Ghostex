@@ -370,7 +370,7 @@ pub(crate) fn with_agent_model_options(
         offset = word.1;
         words.push(word);
     }
-    let codex_effort = |value: &str| value.starts_with("model_reasoning_effort=");
+    let codex_effort = |value: &str| is_codex_effort_override(value);
     let mut removed = Vec::new();
     let mut index = 0;
     while index < words.len() {
@@ -507,6 +507,14 @@ pub(crate) fn command_names_model(command: &str, agent: &str) -> bool {
     false
 }
 
+/// A Codex `-c` override that sets the effort: `model_reasoning_effort=…`, with or without spaces
+/// around the `=` (Codex trims the key and the value).
+fn is_codex_effort_override(value: &str) -> bool {
+    value
+        .split_once('=')
+        .is_some_and(|(key, _)| key.trim() == "model_reasoning_effort")
+}
+
 /// True when `command` already passes an effort option (any agent's spelling, and on Codex
 /// `-c model_reasoning_effort=…`), read shell-aware like [`command_names_model`] so prompt text
 /// that mentions `--effort` does not count.
@@ -516,7 +524,7 @@ pub(crate) fn command_names_effort(command: &str, agent: &str) -> bool {
     let mut config_value = false;
     while let Some((start, end, word)) = command_word(command, offset) {
         offset = end;
-        if std::mem::take(&mut config_value) && word.starts_with("model_reasoning_effort=") {
+        if std::mem::take(&mut config_value) && is_codex_effort_override(&word) {
             return true;
         }
         if std::mem::take(&mut skip_value) {
@@ -528,7 +536,10 @@ pub(crate) fn command_names_effort(command: &str, agent: &str) -> bool {
         if matches!(
             flag,
             "--effort" | "--reasoning-effort" | "--reasoning" | "--thinking"
-        ) || (agent == "codex" && word.starts_with("--config=model_reasoning_effort="))
+        ) || (agent == "codex"
+            && word
+                .strip_prefix("--config=")
+                .is_some_and(is_codex_effort_override))
         {
             return true;
         }
