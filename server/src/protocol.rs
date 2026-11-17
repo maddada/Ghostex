@@ -1223,6 +1223,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         "/api/readVisualPageSource" | "/api/refreshVisualPage" => full_local(path),
         // CDXC:ServerApi 2026-11-13 WHY: `ghostex visual export` reads an HTML file on this computer (visual_pages/exported.rs), so like publishing it is for this computer's own clients only; the page card and window download through `GET /visual/<id>/export` instead.
         "/api/exportVisualPage" => full_local(path),
+        // CDXC:ServerApi 2026-11-17 WHY: `ghostex page retire` (visual_pages/retire.rs) is what an agent on this computer runs for a page it published here, like publishing, so only this computer's own clients accept it; it was handled in route_http/chat.rs but never registered here, so it answered "No gxserver endpoint" from 11.8.0 on.
+        crate::visual_pages::RETIRE_VISUAL_PAGES_ENDPOINT => full_local(path),
         // CDXC:RemoteMachines 2026-11-03 WHY: the desktop app registers the computers it is connected to (and, through its tunnel, how a connected computer reaches this one back); it carries a loopback address and that computer's token, so only this computer's own clients and the tunnel may call these.
         "/api/registerConnectedComputer"
         | "/api/unregisterConnectedComputer"
