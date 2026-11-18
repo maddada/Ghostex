@@ -83,6 +83,26 @@ pub(crate) fn detach_native_views_of_closing_window(window_id: gpui::WindowId) {
     }
 }
 
+/// CDXC:CefRuntime 2026-11-19 WHY:
+/// Quitting skips the `on_window_closed` detach above: GPUI's `App::shutdown` drops every remaining window (destroying its X11 window and every embed host and Chromium child inside it) without calling the window-closed observers, and the browsers close only afterwards. On 2026-11-19 a Linux quit that way left Chromium's GPU process recreating a page's output surface on a vanished window; ANGLE's WindowSurfaceGLX read the null visual of the failed XGetWindowAttributes and the GPU helper crashed (SIGSEGV, a desktop crash notice) as the app was closing. Quit observers run before GPUI drops the windows, so every embed host leaves its GPUI window there, as it does when one window closes.
+#[cfg(target_os = "linux")]
+pub(crate) fn register_linux_quit_detach(cx: &gpui::App) {
+    cx.on_app_quit(|_| {
+        let parents: Vec<usize> = NATIVE_PARENT_BY_GPUI_WINDOW.with(|parents| {
+            parents
+                .borrow_mut()
+                .drain()
+                .map(|(_, parent)| parent)
+                .collect()
+        });
+        for parent in parents {
+            platform::detach_native_views_from_parent(parent as *mut c_void);
+        }
+        async {}
+    })
+    .detach();
+}
+
 thread_local! {
     /// What each page does when Chromium tells it the page took focus (`on_got_focus`), by native
     /// view. Only Windows calls these (`receive_native_page_focus`).

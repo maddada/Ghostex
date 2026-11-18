@@ -359,6 +359,8 @@ fn main() {
         session_link_handoff::start_receiving(launch_links, cx);
         #[cfg(target_os = "windows")]
         cef::register_windows_shutdown(cx);
+        #[cfg(target_os = "linux")]
+        cef::register_linux_quit_detach(cx);
         gpui_component::init(cx);
         // A session pill's tooltip is its hover card (native_chat/session_card.rs).
         crate::app::native_chat::session_card::install(cx);
