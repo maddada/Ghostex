@@ -25,14 +25,12 @@ const SESSION_VARIABLES: [&str; 4] = [
 
 /// The `ghostex` CLI's lookup (ghostex_cli/mod.rs), for a command whose environment lacks its
 /// session or its session's token:
-/// - no session variable: the session's routing, as for a hook, and the session's own `gxs_` token
-///   from the agent process that owns this process tree;
+/// - no session variable: the session's routing, as for a hook, and, when the token is missing too,
+///   the session's own `gxs_` token from the agent process that owns this process tree;
 /// - a session variable but no token (a Codex that drops only `*TOKEN*` variables): that token, only
 ///   when this tree's pane is the session the variable names. The variable's routing stays.
 pub(crate) fn adopt_ancestor_session_for_cli() {
-    if env::var_os(crate::security::SESSION_TOKEN_ENV).is_some() {
-        return;
-    }
+    let has_token = env::var_os(crate::security::SESSION_TOKEN_ENV).is_some();
     let named = SESSION_VARIABLES.into_iter().find_map(|key| {
         env::var(key)
             .ok()
@@ -40,6 +38,9 @@ pub(crate) fn adopt_ancestor_session_for_cli() {
             .filter(|value| !value.is_empty())
             .map(|value| (key, value))
     });
+    if named.is_some() && has_token {
+        return;
+    }
     let Some((zmx_name, agent)) = ancestor_zmx_session() else {
         return;
     };
@@ -47,7 +48,7 @@ pub(crate) fn adopt_ancestor_session_for_cli() {
         None => adopt_ancestor_routing(&zmx_name),
         Some((key, value)) => pane_is_session(&zmx_name, key, value),
     };
-    if same_session {
+    if same_session && !has_token {
         adopt_agent_session_token(agent, &zmx_name);
     }
 }
@@ -268,8 +269,9 @@ pub(crate) fn zmx_session_owning_agent(_agent: u32) -> Option<String> {
 /// sandbox found no session (security review of #669), while the arguments read is allowed there.
 #[cfg(unix)]
 fn zmx_run_session_name(pid: u32) -> Option<String> {
-    let launch = crate::accounts::process_launch(i64::from(pid))?;
-    let mut words = launch.arguments.iter();
+    // Arguments only: on Linux an unreadable `/proc/<pid>/environ` must not hide the name.
+    let arguments = crate::accounts::process_arguments(i64::from(pid))?;
+    let mut words = arguments.iter();
     words.next()?;
     (words.next()? == "run").then(|| words.next().cloned())?
 }

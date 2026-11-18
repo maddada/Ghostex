@@ -131,13 +131,31 @@ fn process_arguments_and_environment(process_id: i64) -> Option<(Vec<String>, Ve
 
 #[cfg(target_os = "linux")]
 fn process_arguments_and_environment(process_id: i64) -> Option<(Vec<String>, Vec<u8>)> {
-    let arguments = std::fs::read(format!("/proc/{process_id}/cmdline"))
-        .ok()?
-        .split(|byte| *byte == 0)
-        .filter(|argument| !argument.is_empty())
-        .map(|argument| String::from_utf8_lossy(argument).into_owned())
-        .collect();
-    Some((arguments, process_environment(process_id)?))
+    Some((
+        process_arguments(process_id)?,
+        process_environment(process_id)?,
+    ))
+}
+
+/// The argv of `process_id` alone, read even where its environment is not readable (a Linux
+/// `/proc/<pid>/environ` can be closed while `cmdline` is open). The pane lookup needs only this
+/// (agent_hooks/ancestor_session.rs `zmx_run_session_name`).
+#[cfg(target_os = "linux")]
+pub(crate) fn process_arguments(process_id: i64) -> Option<Vec<String>> {
+    Some(
+        std::fs::read(format!("/proc/{process_id}/cmdline"))
+            .ok()?
+            .split(|byte| *byte == 0)
+            .filter(|argument| !argument.is_empty())
+            .map(|argument| String::from_utf8_lossy(argument).into_owned())
+            .collect(),
+    )
+}
+
+/// The argv of `process_id` (macOS reads it with the environment in one `KERN_PROCARGS2` call).
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn process_arguments(process_id: i64) -> Option<Vec<String>> {
+    process_arguments_and_environment(process_id).map(|(arguments, _)| arguments)
 }
 
 /// Windows gives no other process's argv here, so only the environment is returned.

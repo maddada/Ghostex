@@ -76,7 +76,7 @@ fn require_own_session(
             ..
         } if own_project == project_id && own_session == session_id => Ok(()),
         _ => Err(forbidden(
-            "A secret request can only be made and waited for by the agent asking, from inside its own session.",
+            "Only the agent that asked for a secret can make, wait for or cancel its request, from inside its own session.",
         )),
     }
 }
