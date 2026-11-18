@@ -273,3 +273,10 @@ pub(crate) fn gpui_remote_machine_name_from_settings(_machine_id: &str) -> Optio
 pub(crate) fn sidebar_toggle_leading_x(_lights_reserved: bool) -> f32 {
     crate::app::consts::SIDEBAR_TOGGLE_LEADING_X
 }
+/// The browser draws no work area frame (the desktop's `work_area_frame_active` in
+/// helpers/work_area_frame.rs), so the sidebar's usage meters keep their own right inset.
+pub(crate) fn work_area_frame_active() -> bool {
+    false
+}
+/// The desktop frame's gutter (helpers/work_area_frame.rs), read only while the frame is on.
+pub(crate) const WORK_AREA_FRAME_MARGIN: f32 = 6.0;
