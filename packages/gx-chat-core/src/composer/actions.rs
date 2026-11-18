@@ -684,13 +684,12 @@ fn open_reference(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     }
     // A mention of another session switches to it, as its pill does in the transcript.
     if let Some(target) = ghostex_gx_protocol::parse_global_session_ref(href.trim()) {
-        return vec![Effect::HostAction {
-            action: "openAgentSession".to_string(),
-            params: Box::new(json!({
-                "projectId": target.project_id,
-                "sessionId": target.session_id,
-            })),
-        }];
+        return vec![crate::transcript::actions::open_session_effect(
+            state,
+            target.project_id,
+            target.session_id,
+            target.server_id,
+        )];
     }
     match classify_link_href(href) {
         LinkTarget::File(path) => {

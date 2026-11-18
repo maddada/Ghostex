@@ -341,28 +341,12 @@ fn handle_action(state: &mut ChatState, action: &UserAction, context: &ChatConte
             if project_id.is_empty() || session_id.is_empty() {
                 return Vec::new();
             }
-            let mut params = json!({ "projectId": project_id, "sessionId": session_id });
-            // CDXC:RemoteMachines 2026-11-14 WHY: a card's session on another computer than the
-            // chat's ("Message from <a thread on the Linux PC>" in a coordinator on the Mac) said
-            // only its project and session ids, so the host looked for them on the chat's own
-            // computer and the click failed. The renderers now hand on the card's `serverId`, and
-            // it goes to the host whenever it is not the chat's own gxserver (also when the host's
-            // list doesn't say which that is), as a mention's does (`open_mentioned_session`).
-            let server_id = text(action, "serverId");
-            if !server_id.is_empty() {
-                let own_server = crate::transcript::session_mentions::chat_server(
-                    &state.transcript_view.session_directory,
-                    &state.identity.project_id,
-                    &state.identity.session_id,
-                );
-                if own_server != server_id {
-                    params["serverId"] = server_id.into();
-                }
-            }
-            vec![Effect::HostAction {
-                action: "openAgentSession".to_string(),
-                params: Box::new(params),
-            }]
+            vec![open_session_effect(
+                state,
+                &project_id,
+                &session_id,
+                &text(action, "serverId"),
+            )]
         }
         // A command in a reply goes to a terminal of the Commands panel, which only the host can
         // reach (`run_command.rs`): Run types it and presses Enter, Paste only types it.
@@ -591,19 +575,45 @@ fn open_mentioned_session(
         }
         None => return Vec::new(),
     };
-    let own_server = crate::transcript::session_mentions::chat_server(
-        sessions,
-        &state.identity.project_id,
-        &state.identity.session_id,
-    );
+    vec![open_session_effect(
+        state,
+        &project_id,
+        &session_id,
+        target.server_id,
+    )]
+}
+
+/// The host's `openAgentSession` for a session pill (a mention in a message or in the chat box, a
+/// card's session): its ids, and `serverId` whenever that names another gxserver than the chat's.
+///
+/// CDXC:RemoteMachines 2026-11-18 WHY: a pill for a session on another computer than the chat's
+/// (a coordinator on the Linux PC, viewed from the Mac, naming a thread on Windows) must carry that
+/// computer to the host, or the host looks for the ids on the chat's own computer: it asked the
+/// Linux PC to wake a Windows session and toasted "Couldn't open it". A mention dropped it when the
+/// host's list did not (yet) say which gxserver the chat is on, and a pill in the chat box dropped
+/// it always. So `serverId` goes on unless it is known to be the chat's own, as a card's did since
+/// 2026-11-14; the host resolves the chat's own server as well (`machine_for_server_session`).
+pub(crate) fn open_session_effect(
+    state: &ChatState,
+    project_id: &str,
+    session_id: &str,
+    server_id: &str,
+) -> Effect {
     let mut params = json!({ "projectId": project_id, "sessionId": session_id });
-    if !own_server.is_empty() && own_server != target.server_id {
-        params["serverId"] = target.server_id.into();
+    if !server_id.is_empty() {
+        let own_server = crate::transcript::session_mentions::chat_server(
+            &state.transcript_view.session_directory,
+            &state.identity.project_id,
+            &state.identity.session_id,
+        );
+        if own_server != server_id {
+            params["serverId"] = server_id.into();
+        }
     }
-    vec![Effect::HostAction {
+    Effect::HostAction {
         action: "openAgentSession".to_string(),
         params: Box::new(params),
-    }]
+    }
 }
 
 #[cfg(test)]
