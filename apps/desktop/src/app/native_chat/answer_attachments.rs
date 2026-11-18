@@ -106,7 +106,7 @@ impl NativeChatView {
             self.async_answer_echo.hovered_image = None;
             self.cancel_composer_reference_open();
         }
-        let replacements = composer_references::replacements(&self.async_answer_echo.references, p);
+        let replacements = composer_references::replacements(&self.async_answer_echo.references, p, 13.0);
         input.update(cx, |input, cx| {
             input.set_inline_replacements(replacements, cx)
         });

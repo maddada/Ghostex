@@ -162,7 +162,7 @@ impl NativeChatView {
             .unwrap_or(Value::Null);
             entry.references = composer_references::parse(&text, &parsed);
             entry.reference_draft = Some(text);
-            let replacements = composer_references::replacements(&entry.references, &p);
+            let replacements = composer_references::replacements(&entry.references, &p, 13.5);
             entry.input.update(cx, |input, cx| {
                 input.set_inline_replacements(replacements, cx)
             });

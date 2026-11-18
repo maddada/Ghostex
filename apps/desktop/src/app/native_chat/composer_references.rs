@@ -8,6 +8,7 @@ use std::{ops::Range, time::Duration};
 /// icon. The composer's own `1em` is `14 * scale`, matching `Input::text_size` in `composer.rs`.
 const ICON_INSET_REM: f32 = 0.1;
 const ROOT_FONT_PX: f32 = 16.0;
+/// The chat box's own text size, unscaled.
 const COMPOSER_FONT_PX: f32 = 14.0;
 const SESSION_ICON_PX: f32 = 12.0;
 
@@ -72,9 +73,18 @@ pub(super) fn parse(draft: &str, parsed: &Value) -> Vec<ComposerReference> {
 }
 
 /// Turn the draft's references into the input's display projection.
+///
+/// CDXC:SessionChat 2026-11-18 DECISION:
+/// User, of the Reply popover's picture pill ("pls in this reply the icon is too close to 'Image'
+/// text"): the pill's room for its icon is spaces in the core's pill text, so it grows and shrinks
+/// with the input's font, while the icon was always sized for the chat box's 14px. In the 13px
+/// reply field the icon filled that room and touched the label. `font_px` is the unscaled size of
+/// the input the pills are drawn in, and the icon follows it, which keeps the chat box's gap in
+/// every field that draws pills.
 pub(super) fn replacements(
     references: &[ComposerReference],
     appearance: &ChatAppearance,
+    font_px: f32,
 ) -> Vec<InlineReplacement> {
     references
         .iter()
@@ -83,7 +93,7 @@ pub(super) fn replacements(
             let color = markdown_links::composer_color(&reference.kind, appearance)?;
             // A mention of another session (gx-chat-core `session_mentions.rs`) leads with that
             // session's agent logo, as its pill does in the transcript.
-            let mut icon_size = COMPOSER_FONT_PX * markdown_links::VISUAL.icon_em;
+            let mut icon_size = font_px * markdown_links::VISUAL.icon_em;
             let icon = if reference.kind == "session" {
                 // An agent logo fills its whole box where the outline icons above keep a margin,
                 // so at the full 1em it touched the title. It draws at the sent pill's 12px
@@ -296,7 +306,7 @@ impl NativeChatView {
             self.cancel_composer_reference_open();
             self.composer_image_hover = None;
         }
-        let replacements = replacements(&self.composer_references, appearance);
+        let replacements = replacements(&self.composer_references, appearance, COMPOSER_FONT_PX);
         if let Some(input) = self.input.clone() {
             input.update(cx, |input, cx| {
                 input.set_inline_replacements(replacements, cx)

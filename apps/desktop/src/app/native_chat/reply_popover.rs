@@ -1150,7 +1150,7 @@ impl ReplyPopover {
         self.references = super::composer_references::parse(&text, &parsed);
         self.reference_draft = Some(text);
         let replacements =
-            super::composer_references::replacements(&self.references, &self.appearance);
+            super::composer_references::replacements(&self.references, &self.appearance, 13.0);
         self.input.update(cx, |input, cx| {
             input.set_inline_replacements(replacements, cx)
         });
