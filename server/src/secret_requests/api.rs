@@ -61,7 +61,7 @@ CDXC:Secrets 2026-11-08 DECISION:
 Only the session that asks for a secret makes its card and waits for the answer: the caller must be that session's own `gxs_` token (`Principal::Session` with the same project and session). Anyone else (another session, the token file, the owner's devices, connected computers) is refused, so no one can put a card in another session's chat or collect the file its answer was saved to.
 
 CDXC:Secrets 2026-11-18 DECISION:
-User (GitHub #669, 18 Nov): a Codex whose sandbox hides Ghostex's variables (`inherit = "core"`) must be able to ask too. Its `ghostex` CLI now reads the session's `gxs_` token from the `codex` process it runs under, in the pane that owns that exact process tree, never from the token file or another session's pane (agent_hooks/ancestor_session.rs `adopt_agent_session_token`). This rule is unchanged: the request still needs that session's own token.
+User (GitHub #669, 18 Nov): a Codex whose environment policy hides Ghostex's variables (`inherit = "core"`) must be able to ask too. Its `ghostex` CLI now reads the session's `gxs_` token from the `codex` process it runs under, in the pane that owns that exact process tree (also when only the token is hidden and a session variable names that same pane), never from the token file or another session's pane (agent_hooks/ancestor_session.rs `adopt_agent_session_token`). This rule is unchanged: the request still needs that session's own token.
 */
 /// Refuses a caller that is not session `project_id`/`session_id` itself.
 fn require_own_session(
@@ -199,11 +199,22 @@ async fn wait(
     Ok(result)
 }
 
-fn cancel(state: &Arc<AppState>, params: &Map<String, Value>) -> Result<Value, DomainStateError> {
+/// CDXC:Secrets 2026-11-18 WHY:
+/// Cancelling is the asking session's own step too, like waiting: the security review of #669 found
+/// any caller holding a request's id could close another session's card. Only the CLI cancels, with
+/// the session's token; the app and phone decline through `answerSecretRequest`.
+fn cancel(
+    state: &Arc<AppState>,
+    caller: &Principal,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
     let id = required(params, "requestId")?;
-    let session = store::session_of(&id);
+    let Some((project_id, session_id)) = store::session_of(&id) else {
+        return Ok(json!({ "requestId": id, "cancelled": false }));
+    };
+    require_own_session(caller, &project_id, &session_id)?;
     let cancelled = store::cancel(&id);
-    if let (true, Some((project_id, session_id))) = (cancelled, session) {
+    if cancelled {
         republish(state, &project_id, &session_id);
     }
     Ok(json!({ "requestId": id, "cancelled": cancelled }))
@@ -283,7 +294,7 @@ pub(crate) async fn handle_secret_request_http(
     let result = match endpoint_path.as_str() {
         "/api/createSecretRequest" => create(state, caller, &params),
         "/api/waitSecretRequest" => wait(state, caller, params).await,
-        "/api/cancelSecretRequest" => cancel(state, &params),
+        "/api/cancelSecretRequest" => cancel(state, caller, &params),
         "/api/answerSecretRequest" => answer(state, caller, params).await,
         _ => Err(DomainStateError::not_found(
             "Unknown secret request endpoint.",

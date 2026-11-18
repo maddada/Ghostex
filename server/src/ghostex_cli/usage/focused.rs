@@ -936,8 +936,8 @@ list: the open to-dos (--all adds the ones settled lately and how).
 done: you saw it happen yourself (the port answers now), so it leaves the user's list.
 drop: it is no longer needed.
 --session: the session the to-do belongs to. Without it the calling session is used, read from
-the variables every Ghostex pane exports, or, in a sandbox that hides them (a Codex with
-shell_environment_policy inherit = "core"), from the Ghostex pane the agent runs in."#
+the variables every Ghostex pane exports, or, when the agent hides them (a Codex whose
+shell_environment_policy is inherit = "core"), from the Ghostex pane the agent runs in."#
         .to_string()
 }
 
@@ -979,7 +979,7 @@ pub fn notify_usage() -> String {
 
 Posts a notification to the Ghostex titlebar bell for a session. Without --session-id the
 calling session is used, read from the Ghostex session environment every pane exports, or from
-the Ghostex pane the agent runs in when a sandbox hides that environment.
+the Ghostex pane the agent runs in when the agent hides that environment.
 The row shows the title, the session's project, and the body, and counts as unread until
 the session is opened or the row is marked read."#
         .to_string()

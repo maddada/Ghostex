@@ -14,24 +14,75 @@ pub(crate) fn adopt_ancestor_session_routing() {
     }
 }
 
-/// The `ghostex` CLI's lookup (ghostex_cli/mod.rs): the session's routing, as for a hook, and the
-/// session's own `gxs_` token, read from the agent process that owns this process tree.
+/// The session variables the `ghostex` CLI reads its own session from, in the order it reads them
+/// (ghostex_cli/rpc.rs `caller_session_from_env`).
+const SESSION_VARIABLES: [&str; 4] = [
+    "GHOSTEX_GLOBAL_SESSION_REF",
+    "GHOSTEX_NATIVE_SESSION_ID",
+    "GHOSTEX_SESSION_ID",
+    "ZMX_SESSION",
+];
+
+/// The `ghostex` CLI's lookup (ghostex_cli/mod.rs), for a command whose environment lacks its
+/// session or its session's token:
+/// - no session variable: the session's routing, as for a hook, and the session's own `gxs_` token
+///   from the agent process that owns this process tree;
+/// - a session variable but no token (a Codex that drops only `*TOKEN*` variables): that token, only
+///   when this tree's pane is the session the variable names. The variable's routing stays.
 pub(crate) fn adopt_ancestor_session_for_cli() {
-    if env::var_os("GHOSTEX_GLOBAL_SESSION_REF").is_some() {
+    if env::var_os(crate::security::SESSION_TOKEN_ENV).is_some() {
         return;
     }
+    let named = SESSION_VARIABLES.into_iter().find_map(|key| {
+        env::var(key)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .map(|value| (key, value))
+    });
     let Some((zmx_name, agent)) = ancestor_zmx_session() else {
         return;
     };
-    if adopt_ancestor_routing(&zmx_name) {
+    let same_session = match &named {
+        None => adopt_ancestor_routing(&zmx_name),
+        Some((key, value)) => pane_is_session(&zmx_name, key, value),
+    };
+    if same_session {
         adopt_agent_session_token(agent, &zmx_name);
     }
 }
 
+/// Whether the zmx pane `zmx_name` (`S90-P3lv0-G4sp7`) is the session `value` of variable `key`
+/// names, in that variable's own form.
+fn pane_is_session(zmx_name: &str, key: &str, value: &str) -> bool {
+    let Some((server, project, session)) = ghostex_session_parts(zmx_name) else {
+        return false;
+    };
+    match key {
+        "GHOSTEX_GLOBAL_SESSION_REF" => {
+            value == crate::ids::create_global_session_ref(server, project, session)
+        }
+        "GHOSTEX_NATIVE_SESSION_ID" => value == format!("{project}:{session}"),
+        _ => value == zmx_name,
+    }
+}
+
+/// The server, project and session ids of a Ghostex zmx session name; `None` for any other name.
+fn ghostex_session_parts(zmx_name: &str) -> Option<(&str, &str, &str)> {
+    let mut parts = zmx_name.split('-');
+    let (Some(server), Some(project), Some(session), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return None;
+    };
+    (server.starts_with('S') && project.starts_with('P') && session.starts_with('G'))
+        .then_some((server, project, session))
+}
+
 /*
 CDXC:Secrets 2026-11-18 DECISION:
-User (GitHub #669, 18 Nov): `ghostex secret request` must work from a Codex whose sandbox hides
-Ghostex's variables (`shell_environment_policy.inherit = "core"`), so the CLI there reads its
+User (GitHub #669, 18 Nov): `ghostex secret request` must work from a Codex whose environment policy
+hides Ghostex's variables (`shell_environment_policy.inherit = "core"`), so the CLI there reads its
 session's own `gxs_` token from the pane's environment. The 8 Nov rule stands: only the asking
 session makes and waits for its request (secret_requests/api.rs `require_own_session`). The token is
 taken only from the `codex` or `empryo` process this command runs under, the agent of the pane the
@@ -68,15 +119,9 @@ fn adopt_agent_session_token(agent: u32, zmx_name: &str) {
 /// Points this process at the Ghostex session `zmx_name` names, with the local gxserver address.
 /// False when the name is not a Ghostex session name.
 fn adopt_ancestor_routing(zmx_name: &str) -> bool {
-    let mut parts = zmx_name.split('-');
-    let (Some(server), Some(project), Some(session), None) =
-        (parts.next(), parts.next(), parts.next(), parts.next())
-    else {
+    let Some((server, project, session)) = ghostex_session_parts(zmx_name) else {
         return false;
     };
-    if !(server.starts_with('S') && project.starts_with('P') && session.starts_with('G')) {
-        return false;
-    }
     env::set_var(
         "GHOSTEX_GLOBAL_SESSION_REF",
         crate::ids::create_global_session_ref(server, project, session),
@@ -216,15 +261,15 @@ pub(crate) fn zmx_session_owning_agent(_agent: u32) -> Option<String> {
 }
 
 /// The `<name>` of a `zmx run <name> …` command line; a `zmx attach` client yields nothing.
+///
+/// CDXC:AgentSandbox 2026-11-18 WHY:
+/// Read from the process's own arguments (`KERN_PROCARGS2` on macOS, `/proc` on Linux), not by
+/// running `/bin/ps`: Codex's macOS sandbox refuses `ps`, so a `ghostex` command it ran inside the
+/// sandbox found no session (security review of #669), while the arguments read is allowed there.
 #[cfg(unix)]
 fn zmx_run_session_name(pid: u32) -> Option<String> {
-    let output = std::process::Command::new("/bin/ps")
-        .args(["-o", "command=", "-p", &pid.to_string()])
-        .env("LC_ALL", "C")
-        .output()
-        .ok()?;
-    let command = String::from_utf8_lossy(&output.stdout);
-    let mut words = command.split_whitespace();
+    let launch = crate::accounts::process_launch(i64::from(pid))?;
+    let mut words = launch.arguments.iter();
     words.next()?;
-    (words.next()? == "run").then(|| words.next().map(str::to_string))?
+    (words.next()? == "run").then(|| words.next().cloned())?
 }
