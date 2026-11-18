@@ -554,11 +554,16 @@ pub(super) fn merge_machines(
         // While another computer is in the list every project names its computers, one only this
         // computer has too; with this computer alone none does.
         if !guests.is_empty() || entry_names.len() > 1 || plans[entry].remote_machine.is_some() {
+            let several = entry_names.len() > 1;
             plans[entry].machine_names = entry_names;
-            hide_machines(
-                &mut plans[entry],
-                &input.inputs.ui.collapse.hidden_project_machines,
-            );
+            // CDXC:RemoteMachines 2026-11-18 DECISION:
+            // User: "don't allow me to click on the apple machine logo here to toggle it since it's just 1 machine for this project". A project on one computer has nothing to switch between, so its icon is only a label and a hiding saved while it had other copies no longer applies.
+            if several {
+                hide_machines(
+                    &mut plans[entry],
+                    &input.inputs.ui.collapse.hidden_project_machines,
+                );
+            }
         }
     }
     for (entry, entry_copies) in &copies {

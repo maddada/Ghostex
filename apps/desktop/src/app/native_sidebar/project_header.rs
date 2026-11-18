@@ -175,7 +175,14 @@ impl GhostexGpuiApp {
                         .iter()
                         .filter(|_| home.is_none())
                         .map(|chip| {
-                            self.project_machine_toggle(&id, chip, tooltip_span, appearance, cx)
+                            self.project_machine_toggle(
+                                &id,
+                                chip,
+                                group.machine_names.len() > 1,
+                                tooltip_span,
+                                appearance,
+                                cx,
+                            )
                         }),
                 )
                 .when_some(tooltip.filter(|_| home.is_none()), |title, tooltip| {
@@ -496,10 +503,15 @@ impl GhostexGpuiApp {
     /// computer's sessions in this project (CDXC:RemoteMachines 2026-11-15 in gx-core
     /// `sidebar_view/merged.rs`). A hidden computer's icon draws dimmed; while a row it hides
     /// waits on the user, the icon carries that row's status dot at its top right.
+    ///
+    /// With one computer (`toggles` false) the icon is only a label: no hover, pointer or click,
+    /// and its tooltip just names the computer (CDXC:RemoteMachines 2026-11-18 in gx-core
+    /// `sidebar_view/merged.rs`).
     fn project_machine_toggle(
         &self,
         group_id: &str,
         chip: &super::model::SidebarMachineChip,
+        toggles: bool,
         tooltip_span: super::tooltips::SidebarTooltipSpan,
         appearance: &SidebarAppearance,
         cx: &mut gpui::Context<Self>,
@@ -518,6 +530,7 @@ impl GhostexGpuiApp {
                 _ => rgb(0x95d7f6),
             });
         let tooltip = match (chip.hidden, dot.is_some()) {
+            _ if !toggles => format!("On {}", chip.name),
             (true, true) => format!(
                 "{}: sessions hidden, one needs you. Click to show",
                 chip.name
@@ -543,10 +556,12 @@ impl GhostexGpuiApp {
             .justify_center()
             .size(px(16.0 * scale))
             .rounded(px(3.0 * scale))
-            .cursor_pointer()
-            .role(gpui::Role::Button)
             .aria_label(tooltip.clone())
-            .hover(move |chip| chip.bg(hover))
+            .when(toggles, |icon| {
+                icon.cursor_pointer()
+                    .role(gpui::Role::Button)
+                    .hover(move |chip| chip.bg(hover))
+            })
             .child(
                 div()
                     .when(chip.hidden, |icon| icon.opacity(0.35))
@@ -564,12 +579,14 @@ impl GhostexGpuiApp {
                 )
             })
             // The header's own press starts a drag and its click folds the project; a click on
-            // the icon does neither.
-            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .on_click(cx.listener(move |app, _, _, cx| {
-                cx.stop_propagation();
-                app.dispatch_native_sidebar_ui(command.clone(), cx);
-            }))
+            // the icon does neither. A label icon lets both through, like the title.
+            .when(toggles, |icon| {
+                icon.on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .on_click(cx.listener(move |app, _, _, cx| {
+                        cx.stop_propagation();
+                        app.dispatch_native_sidebar_ui(command.clone(), cx);
+                    }))
+            })
             .when(
                 self.native_sidebar.pointer_inside
                     && self.native_sidebar.menu.is_none()
