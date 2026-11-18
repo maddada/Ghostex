@@ -88,13 +88,16 @@ where
             } else {
                 GitFolders::WorkTree
             };
-            if let Some(answer) = cache.unchanged(&key, std::path::Path::new(path), folders) {
-                return Ok(answer);
-            }
             // A read of the same project already running answers this one too, unless something
-            // changed again since: the second look either finds its answer or reads afresh.
-            let in_flight = in_flight_lock(&key);
-            let _same_project = in_flight.lock().await;
+            // changed again since. The cache is looked at only under the project's lock: a look
+            // before it would take a change meant for this request, and the read running then
+            // (from before the change) would come back as unchanged (review of 6bc6f491d). A
+            // folder that cannot be watched keeps nothing to share, so it takes no lock.
+            let in_flight = (!cache.unwatched(&key)).then(|| in_flight_lock(&key));
+            let _same_project = match &in_flight {
+                Some(lock) => Some(lock.lock().await),
+                None => None,
+            };
             if let Some(answer) = cache.unchanged(&key, std::path::Path::new(path), folders) {
                 return Ok(answer);
             }
@@ -115,8 +118,12 @@ where
 /// reads, and two misses for one project both ran git, so once reads took longer than the poll's
 /// cycle they stacked up (eight git processes for each full read). A read of the same project
 /// already running now answers the others (`in_flight_lock`), and at most `MAX_GIT_READS` reads
-/// run at once; the rest wait their turn. Git actions the user runs never pass through here.
+/// run at once; the rest wait their turn, but never longer than `MAX_GIT_READ_WAIT`, so a few
+/// projects whose git hangs cannot hold up a healthy one, and the Git state the titlebar reads
+/// after a commit (which comes through here too) is never more than that late. Git actions
+/// themselves (commit, push, checkout) do not come through here.
 const MAX_GIT_READS: usize = 4;
+const MAX_GIT_READ_WAIT: std::time::Duration = std::time::Duration::from_secs(8);
 
 async fn capped<V, F, Fut>(read: F) -> Result<V, TypedOperationError>
 where
@@ -124,8 +131,8 @@ where
     Fut: Future<Output = Result<V, TypedOperationError>>,
 {
     static GIT_READS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(MAX_GIT_READS);
-    // The semaphore is never closed, so acquiring only waits.
-    let _turn = GIT_READS.acquire().await;
+    // The semaphore is never closed, so acquiring only waits; past the wait the read runs anyway.
+    let _turn = tokio::time::timeout(MAX_GIT_READ_WAIT, GIT_READS.acquire()).await;
     read().await
 }
 

@@ -135,6 +135,14 @@ impl<V: Clone> ChangeGatedCache<V> {
         entry.answer.clone()
     }
 
+    /// Whether `key`'s folders were found unwatchable (a network share, a folder in no repository
+    /// on Windows), so nothing is kept for it. `false` before the first look.
+    pub(crate) fn unwatched(&self, key: &str) -> bool {
+        self.entries
+            .lock()
+            .is_ok_and(|entries| entries.get(key).is_some_and(|entry| entry.watch.is_none()))
+    }
+
     /// Keeps `answer` for `key`, when its folders are watched.
     pub(crate) fn remember(&self, key: &str, answer: V) {
         if let Ok(mut entries) = self.entries.lock() {
