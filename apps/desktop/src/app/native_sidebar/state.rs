@@ -43,6 +43,11 @@ pub(crate) struct NativeSidebarState {
     pub(crate) pending_scroll_offset: Option<gpui::Point<gpui::Pixels>>,
     pub(crate) pending_reveal: Option<super::model::NativeSidebarRevealRequest>,
     pub(crate) handled_rename: Option<u64>,
+    /// A sessions group a session's Move to New Group / New Sessions Group just made: its inline
+    /// rename opens once the group is in the snapshot, and its header is scrolled into view once
+    /// it has been drawn (render.rs, `begin_pending_group_rename`).
+    pub(crate) pending_group_rename: Option<(String, web_time::Instant)>,
+    pub(crate) pending_group_reveal: Option<String>,
     pub(crate) handled_reveal: Option<u64>,
     pub(crate) scroll_animation: Option<super::scroll::SidebarScrollAnimation>,
     pub(crate) reveal_flash: Option<(String, web_time::Instant)>,

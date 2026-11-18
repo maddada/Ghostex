@@ -198,6 +198,15 @@ impl GhostexGpuiApp {
                     let remote_group = (!project.machine.is_local()).then(|| {
                         ghostex_gx_core::encode_workspace_subgroup_id(&project, &group_id)
                     });
+                    // CDXC:ContextMenus 2026-11-18 DECISION:
+                    // User: "when i click on this please make it start a new group and put my caret
+                    // to rename the default name of this so i can create -> rename right away".
+                    // The group a session's Move to New Group / New Sessions Group made opens the
+                    // same inline rename as its menu's Rename, name selected, once it is drawn.
+                    self.native_sidebar.pending_group_rename = Some((
+                        ghostex_gx_core::encode_workspace_subgroup_id(&project, &group_id),
+                        web_time::Instant::now(),
+                    ));
                     let output = self.gx_store.core.handle(
                         Event::Intent(Intent::FocusSubgroup { project, group_id }),
                         super::host::now_ms(),

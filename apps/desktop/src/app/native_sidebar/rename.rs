@@ -91,6 +91,59 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
+    /// Opens the inline rename on the sessions group a session's Move to New Group just made, once
+    /// the snapshot holds it, then scrolls its header into view once it has been drawn. A group
+    /// that never shows (a hidden project, a refused write) stops being waited for after a few
+    /// seconds, so a later snapshot cannot open a rename the user no longer expects.
+    pub(crate) fn begin_pending_group_rename(
+        &mut self,
+        scale: f32,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if let Some((id, asked)) = self.native_sidebar.pending_group_rename.clone() {
+            let drawn = self
+                .native_sidebar
+                .snapshot
+                .as_ref()
+                .is_some_and(|snapshot| snapshot.groups.iter().any(|group| group.group_id == id));
+            if drawn {
+                self.native_sidebar.pending_group_rename = None;
+                self.native_sidebar.pending_group_reveal = Some(id.clone());
+                cx.defer_in(window, move |app, window, cx| {
+                    app.begin_native_sidebar_rename("group", &id, window, cx);
+                });
+            } else if asked.elapsed() > std::time::Duration::from_secs(5) {
+                self.native_sidebar.pending_group_rename = None;
+            }
+        }
+        let Some(id) = self.native_sidebar.pending_group_reveal.clone() else {
+            return;
+        };
+        let Some(block) = self.native_sidebar.group_bounds.get(&id).copied() else {
+            return;
+        };
+        self.native_sidebar.pending_group_reveal = None;
+        // The header, not the whole block: a group of many sessions still shows its name field.
+        let header = gpui::Bounds {
+            origin: block.origin,
+            size: gpui::size(
+                block.size.width,
+                block.size.height.min(gpui::px(30.0 * scale)),
+            ),
+        };
+        let viewport = self.native_sidebar.scroll.bounds();
+        let delta = super::scroll::reveal_delta(viewport, header, scale);
+        if delta.abs() >= gpui::px(1.0) {
+            let from = self.native_sidebar.scroll.offset();
+            self.native_sidebar.scroll.set_offset(gpui::Point::new(
+                from.x,
+                (from.y - delta).min(gpui::px(0.0)),
+            ));
+            cx.notify();
+        }
+    }
+
     pub(crate) fn finish_native_sidebar_rename(
         &mut self,
         save: bool,

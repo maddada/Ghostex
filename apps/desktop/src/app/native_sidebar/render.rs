@@ -52,6 +52,7 @@ impl GhostexGpuiApp {
         let header_hover = self.native_sidebar.header_hover.clone();
         let (space_offset, space_opacity) = self.native_sidebar.space_gesture.presentation();
         let appearance = SidebarAppearance::from_hud(&snapshot.hud, window);
+        let appearance_scale = appearance.scale;
         // The Unified sidebar draws its own header and list in the classic ones' places; nothing
         // else of the sidebar changes (native_sidebar/unified/).
         //
@@ -242,6 +243,7 @@ impl GhostexGpuiApp {
                                 view.update(cx, |app, cx| {
                                     app.update_native_sidebar_scroll(window, cx);
                                     app.update_native_space_transition(window, cx);
+                                    app.begin_pending_group_rename(appearance_scale, window, cx);
                                     // The store's own request wins over the publish's.
                                     //
                                     // CDXC:Projects 2026-09-21 WHY:
