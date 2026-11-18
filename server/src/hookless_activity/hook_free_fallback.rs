@@ -203,7 +203,7 @@ impl FallbackWatch {
             candidates.push((agent, (project_id, session_id), zmx_name));
         }
         let names: Vec<String> = candidates.iter().map(|(_, _, name)| name.clone()).collect();
-        let identities = match crate::zmx::read_cached_zmx_session_process_identities(
+        let identities = match crate::zmx::read_display_zmx_session_process_identities(
             &names,
             &state.paths.home_dir,
         ) {

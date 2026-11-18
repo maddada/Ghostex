@@ -56,7 +56,7 @@ pub(super) struct CodexObserver {
     root_rollouts: HashMap<PathBuf, Option<String>>,
 }
 
-/// How often the open rollouts are read again: the process scan is cached for about as long.
+/// How often the open rollouts are read again; the display process snapshot they come from is shared and can be up to six seconds old (`read_display_zmx_session_process_identities`).
 const OPEN_ROLLOUTS_REFRESH: Duration = Duration::from_secs(2);
 
 /// The hook event a rollout line stands for. `quiet_calls` holds the call ids of tools Codex
@@ -138,7 +138,7 @@ impl CodexObserver {
             names.push(name);
         }
         let Ok(identities) =
-            crate::zmx::read_cached_zmx_session_process_identities(&names, home_dir)
+            crate::zmx::read_display_zmx_session_process_identities(&names, home_dir)
         else {
             // A failed scan keeps what the last one found.
             return;
