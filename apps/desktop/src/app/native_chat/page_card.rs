@@ -87,7 +87,137 @@ impl PageThumbnails {
     }
 }
 
+/// What a drawn page card's Open needs.
+#[derive(Clone, PartialEq)]
+struct TagPage {
+    page_id: String,
+    url: String,
+    title: String,
+    file: Option<String>,
+}
+
+/// The page cards this view drew, by each Q-tag they ask (upper case): `None` once two different
+/// pages asked the same tag, which only the core can tell apart.
+#[derive(Default)]
+pub(crate) struct TagPages {
+    by_tag: RefCell<HashMap<String, Option<TagPage>>>,
+}
+
+/// Whether the Work panel lists an ask named `tag` (gx-chat-core work_panel.rs `ask_row`, whose
+/// rows carry `"ask"` and `"askRow": true`): its Q-tag pill focuses that row, not a page.
+fn names_work_ask(value: &Value, tag: &str) -> bool {
+    match value {
+        Value::Object(map) => {
+            (map.get("askRow") == Some(&Value::Bool(true))
+                && map
+                    .get("ask")
+                    .and_then(Value::as_str)
+                    .is_some_and(|ask| ask.eq_ignore_ascii_case(tag)))
+                || map.values().any(|child| names_work_ask(child, tag))
+        }
+        Value::Array(items) => items.iter().any(|child| names_work_ask(child, tag)),
+        _ => false,
+    }
+}
+
 impl NativeChatView {
+    /// Remembers a page card's tags as it is drawn, for `open_tag_page`.
+    pub(super) fn remember_tag_page(&self, page: &gxv::PageRef) {
+        let (Some(page_id), Some(tags)) = (page.page_id(), page.questions.as_ref()) else {
+            return;
+        };
+        let seen = TagPage {
+            page_id: page_id.to_string(),
+            url: page.url.clone(),
+            title: page.title.clone(),
+            file: page.file.clone(),
+        };
+        let mut by_tag = self.visual.tag_pages.by_tag.borrow_mut();
+        for tag in tags {
+            let entry = by_tag
+                .entry(tag.to_ascii_uppercase())
+                .or_insert_with(|| Some(seen.clone()));
+            match entry {
+                Some(known) if known.page_id != seen.page_id => *entry = None,
+                Some(_) => *entry = Some(seen.clone()),
+                None => {}
+            }
+        }
+    }
+
+    /// A Q-tag pill's click that names a page card this view drew: the page opens at once, as the
+    /// card's Open does, instead of after the core's answer. False leaves the click to the core.
+    ///
+    /// CDXC:SessionChat 2026-11-18 WHY:
+    /// User: "when i click this Q4170 it doesn't open right away, takes a while to open", with the page's card right above the pill. The card's Open floats the page from the view, but the pill sent `openMarkdownLink` to the chat core and waited for its Open effect; on a long chat the core's queue was seconds deep (`gxChat.host.slowTurn` waited 15 to 27 s while a reply streamed), so the page came up late, while the window itself opens in about 150 ms (`gpui.visualPage.openTiming`). The view now opens the page itself when it drew exactly one page card asking that tag and the Work panel has no ask by it; anything else (a form, a page not drawn yet, a tag two pages ask, a work ask) still goes to the core's `jump_to_tag`.
+    pub(super) fn open_tag_page(&mut self, tag: &str, cx: &mut Context<Self>) -> bool {
+        if !super::visual_popup::FLOATING_PAGES {
+            return false;
+        }
+        let Some(page) = self
+            .visual
+            .tag_pages
+            .by_tag
+            .borrow()
+            .get(&tag.to_ascii_uppercase())
+            .cloned()
+            .flatten()
+        else {
+            return false;
+        };
+        if self.snapshot["withdrawnPages"][&page.page_id]["replaced"] == true
+            || names_work_ask(&self.snapshot["coordinatorBoard"], tag)
+        {
+            return false;
+        }
+        self.open_page_card(page.url, page.title, page.file, Some(page.page_id), cx);
+        true
+    }
+
+    /// A page card's Open: where Settings > Chat > Open Ghostex pages in says on a host that floats
+    /// pages, else where the chat opens every web link. Every card goes to the host's setting
+    /// whatever the block's `"open"` says (CDXC:SessionChat DECISION in
+    /// app/visual_page_modal_lifecycle.rs).
+    pub(super) fn open_page_card(
+        &mut self,
+        url: String,
+        title: String,
+        file: Option<String>,
+        page_id: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let floating = super::visual_popup::FLOATING_PAGES;
+        // The floating window pictures a page that has no picture yet once it has loaded
+        // (app/visual_page_thumbnails.rs); ask for it again a moment after opening.
+        if let (true, Some(page_id)) = (floating, page_id) {
+            let timer = cx.background_executor().timer(PICTURE_AFTER_OPEN);
+            cx.spawn(async move |this, cx| {
+                timer.await;
+                let _ = this.update(cx, |this, cx| {
+                    this.invoke(
+                        json!({"type": "loadPageThumbnail", "pageId": page_id, "fresh": true}),
+                        cx,
+                    )
+                });
+            })
+            .detach();
+        }
+        if floating {
+            cx.emit(super::state::NativeChatEvent::Host(json!({
+                "type": "open",
+                "modal": "visualPage",
+                "url": url,
+                "title": title,
+                "file": file,
+            })));
+        } else {
+            self.invoke(
+                json!({"type":"openMarkdownLink","href":url,"external":false}),
+                cx,
+            )
+        }
+    }
+
     /// The page's picture, asking the core for it the first time the card is drawn and again,
     /// while the card is still drawn, each time the core said to wait.
     fn page_thumbnail(
@@ -203,10 +333,6 @@ impl NativeChatView {
         let s = p.scale;
         let v = &*VISUAL;
         let chat = cx.weak_entity();
-        // Every card goes to the host's Open Ghostex pages in setting where the host can float a page,
-        // whatever the block's `"open"` says (CDXC:SessionChat DECISION in
-        // app/visual_page_modal_lifecycle.rs).
-        let floating = super::visual_popup::FLOATING_PAGES;
         let page_id = page.page_id().map(str::to_string);
         // The reader already sent this page's answers (`answeredPages`, page_answers.rs).
         let answered = page_id.as_deref().is_some_and(|page_id| {
@@ -319,37 +445,7 @@ impl NativeChatView {
             let url = url.clone();
             let opened_page = opened_page.clone();
             let _ = chat.update(cx, |chat, cx| {
-                // The floating window pictures a page that has no picture yet once it has loaded
-                // (app/visual_page_thumbnails.rs); ask for it again a moment after opening.
-                if let (true, Some(page_id)) = (floating, opened_page) {
-                    let timer = cx.background_executor().timer(PICTURE_AFTER_OPEN);
-                    cx.spawn(async move |this, cx| {
-                        timer.await;
-                        let _ = this.update(cx, |this, cx| {
-                            this.invoke(
-                                json!({"type": "loadPageThumbnail", "pageId": page_id, "fresh": true}),
-                                cx,
-                            )
-                        });
-                    })
-                    .detach();
-                }
-                // The desktop opens it where Settings > Chat > Open Ghostex pages in says; a build that
-                // cannot float a page opens it where the chat opens every web link.
-                if floating {
-                    cx.emit(super::state::NativeChatEvent::Host(json!({
-                        "type": "open",
-                        "modal": "visualPage",
-                        "url": url,
-                        "title": page_title,
-                        "file": file,
-                    })));
-                } else {
-                    chat.invoke(
-                        json!({"type":"openMarkdownLink","href":url,"external":false}),
-                        cx,
-                    )
-                }
+                chat.open_page_card(url, page_title.clone(), file.clone(), opened_page, cx)
             });
         };
         let open_card = open.clone();

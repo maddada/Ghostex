@@ -98,6 +98,8 @@ pub(crate) struct ChatVisualCache {
     showing_source: HashSet<String>,
     /// The pictures of the transcript's page cards (`page_card.rs`).
     pub(super) page_thumbnails: super::page_card::PageThumbnails,
+    /// The drawn page cards by the Q-tags they ask, for a tag pill's click (`page_card.rs`).
+    pub(super) tag_pages: super::page_card::TagPages,
 }
 
 /// The region under the pointer and the pointer's place in scene units.
@@ -382,6 +384,7 @@ impl NativeChatView {
         let source = super::mermaid::fence_source(fence);
         if let Some(page) = gxv::page_reference(&source) {
             let page_id = page.page_id().map(str::to_string);
+            self.remember_tag_page(&page);
             let card = self.visual_page_card(&key, page, p, cx);
             return self.open_question_frame(page_id.as_deref(), card, p);
         }

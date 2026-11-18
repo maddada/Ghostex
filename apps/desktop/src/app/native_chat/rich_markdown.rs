@@ -784,6 +784,13 @@ impl NativeChatView {
                     return;
                 }
                 let _ = chat.update(cx, |chat, cx| {
+                    // A Q-tag pill naming a page card drawn here opens it at once (`open_tag_page`).
+                    if let Some(tag) =
+                            ghostex_gx_chat_core::questions::open_questions::link_tag(href)
+                        && chat.open_tag_page(tag, cx)
+                    {
+                        return;
+                    }
                     chat.invoke(
                         json!({"type":"openMarkdownLink","href":href,"external":event.modifiers().shift}),
                         cx,
