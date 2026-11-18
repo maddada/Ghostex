@@ -792,10 +792,13 @@ fn read_app_user_data_state(db: &Connection) -> DomainResult<Value> {
 fn create_unique_app_pinned_prompt_id(db: &Connection) -> DomainResult<String> {
     let millis = chrono::Utc::now().timestamp_millis();
     for attempt in 0..MAX_ID_GENERATION_ATTEMPTS {
+        // A random tail: two saves in the same millisecond each found the plain id free and then
+        // collided on insert (UNIQUE failed) when many ran at once (review of 973ad5b53).
+        let tail = &uuid::Uuid::new_v4().simple().to_string()[..8];
         let candidate = if attempt == 0 {
-            format!("gxserver-prompt-{millis}")
+            format!("gxserver-prompt-{millis}-{tail}")
         } else {
-            format!("gxserver-prompt-{millis}-{attempt}")
+            format!("gxserver-prompt-{millis}-{tail}-{attempt}")
         };
         let exists: bool = db
             .query_row(
@@ -919,10 +922,13 @@ fn replace_stashed_prompt_tag_links(
 fn create_unique_stashed_prompt_id(db: &Connection) -> DomainResult<String> {
     let millis = chrono::Utc::now().timestamp_millis();
     for attempt in 0..MAX_ID_GENERATION_ATTEMPTS {
+        // A random tail: two saves in the same millisecond each found the plain id free and then
+        // collided on insert (UNIQUE failed) when many ran at once (review of 973ad5b53).
+        let tail = &uuid::Uuid::new_v4().simple().to_string()[..8];
         let candidate = if attempt == 0 {
-            format!("gxserver-stash-{millis}")
+            format!("gxserver-stash-{millis}-{tail}")
         } else {
-            format!("gxserver-stash-{millis}-{attempt}")
+            format!("gxserver-stash-{millis}-{tail}-{attempt}")
         };
         let exists: bool = db
             .query_row(
@@ -1268,10 +1274,13 @@ fn normalize_stashed_prompt_tag_color(color: Option<&str>) -> DomainResult<Strin
 fn create_unique_stashed_prompt_tag_id(db: &Connection) -> DomainResult<String> {
     let millis = chrono::Utc::now().timestamp_millis();
     for attempt in 0..MAX_ID_GENERATION_ATTEMPTS {
+        // A random tail: two saves in the same millisecond each found the plain id free and then
+        // collided on insert (UNIQUE failed) when many ran at once (review of 973ad5b53).
+        let tail = &uuid::Uuid::new_v4().simple().to_string()[..8];
         let candidate = if attempt == 0 {
-            format!("gxserver-prompt-tag-{millis}")
+            format!("gxserver-prompt-tag-{millis}-{tail}")
         } else {
-            format!("gxserver-prompt-tag-{millis}-{attempt}")
+            format!("gxserver-prompt-tag-{millis}-{tail}-{attempt}")
         };
         let exists: bool = db
             .query_row(

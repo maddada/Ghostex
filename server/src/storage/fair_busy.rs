@@ -27,12 +27,15 @@ use std::time::{Duration, Instant};
 
 /// The busy budget of the waiter at the head of the queue (`storage/pool.rs` `DEFAULT_BUSY_TIMEOUT`).
 const HEAD_BUDGET: Duration = super::pool::DEFAULT_BUSY_TIMEOUT;
-/// The longest a write waits for its turn before it gives up as busy.
-const QUEUE_WAIT: Duration = Duration::from_secs(30);
+/// The longest a write waits for its turn before it gives up as busy: under the clients' own
+/// limits (the CLI gives up at 15 s), so a save they reported failed never lands later.
+const QUEUE_WAIT: Duration = Duration::from_secs(10);
 /// A holder that has not retried for this long is taken to be done.
 const HOLDER_GONE: Duration = Duration::from_millis(500);
-/// The longest pause between two tries of the head (SQLite's own busy wait tops out at 100 ms).
-const MAX_RETRY_PAUSE: Duration = Duration::from_millis(25);
+/// The pause between two tries of the head. Only the head polls, so it polls often: a writer
+/// outside the queue that takes the lock again within a few milliseconds of releasing it starved a
+/// head that looked every 25 ms (review of 973ad5b53).
+const HEAD_RETRY_PAUSE: Duration = Duration::from_millis(1);
 
 struct Waiter {
     /// When its holder last tried or waited.
@@ -152,7 +155,7 @@ pub(crate) fn busy(count: i32) -> bool {
         release_current_thread();
         return false;
     }
-    std::thread::sleep(retry_pause(count));
+    std::thread::sleep(HEAD_RETRY_PAUSE);
     true
 }
 
@@ -164,5 +167,5 @@ fn retry_pause(count: i32) -> Duration {
         3 => 10,
         _ => 25,
     };
-    Duration::from_millis(millis).min(MAX_RETRY_PAUSE)
+    Duration::from_millis(millis)
 }
