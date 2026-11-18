@@ -8,8 +8,8 @@ use std::{
     os::unix::ffi::OsStrExt,
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, OnceLock,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc, OnceLock, RwLock,
     },
 };
 
@@ -127,28 +127,94 @@ const K_FS_EVENT_STREAM_EVENT_FLAGS_LOST: u32 = 0x01 | 0x02 | 0x04 | 0x20 | 0x40
 /// flag like any other write, so a busy project's Git answers were thrown away on almost every
 /// poll and read again with several git processes each time. A change inside a folder git
 /// ignores and that holds no tracked file cannot change any Git answer, so it no longer raises
-/// the flag (`folder_watch::git_ignored_folders` names those folders when the watch starts).
-/// Once an ignore rule may have changed (a `.gitignore` or `info/exclude` written), every change
-/// counts again for the life of the watch, as before.
+/// the flag. Which folders those are is asked of git off the cache's lock, on a thread of its own
+/// (`folder_watch::start_skip_probe`), and installed here; until then, and whenever the list may
+/// be out of date (an ignore rule or a watched Git folder's index written, a `git add -f` or a
+/// checkout among them, or events lost), every change counts, as before, and git is asked again.
+/// `generation` moves each time the list goes out of date, so a probe that began before cannot
+/// mark it current.
 struct Signal {
     changed: AtomicBool,
-    /// Each ignored folder's real path with a trailing `/`.
-    ignored: Vec<Vec<u8>>,
-    filtering_off: AtomicBool,
+    /// Each skipped folder's real path with a trailing `/`.
+    ignored: RwLock<Vec<Vec<u8>>>,
+    /// The skip list is not known to be current: nothing is skipped.
+    stale: AtomicBool,
+    generation: AtomicU64,
+    probing: AtomicBool,
+    /// The real paths of the watched Git folders' index files.
+    index_files: Vec<Vec<u8>>,
+    /// Whether this watch skips anything at all (a repository's watch).
+    skips: bool,
 }
 
 impl Signal {
+    fn mark_stale(&self) {
+        self.stale.store(true, Ordering::Release);
+        self.generation.fetch_add(1, Ordering::AcqRel);
+    }
+
     /// Whether one event can change a Git answer.
     fn counts(&self, path: &[u8], flags: u32) -> bool {
+        if !self.skips {
+            return true;
+        }
         if flags & K_FS_EVENT_STREAM_EVENT_FLAGS_LOST != 0 {
+            self.mark_stale();
             return true;
         }
-        if path.ends_with(b"/.gitignore") || path.ends_with(b"/info/exclude") {
-            self.filtering_off.store(true, Ordering::Release);
-            return true;
+        if !self.stale.load(Ordering::Acquire)
+            && self
+                .ignored
+                .read()
+                .is_ok_and(|ignored| ignored.iter().any(|folder| path.starts_with(folder)))
+        {
+            return false;
         }
-        self.filtering_off.load(Ordering::Acquire)
-            || !self.ignored.iter().any(|folder| path.starts_with(folder))
+        let index = |file: &Vec<u8>| {
+            path == file.as_slice()
+                || path
+                    .strip_suffix(b".lock")
+                    .is_some_and(|base| base == file.as_slice())
+        };
+        if path.ends_with(b"/.gitignore")
+            || path.ends_with(b"/info/exclude")
+            || self.index_files.iter().any(index)
+        {
+            self.mark_stale();
+        }
+        true
+    }
+}
+
+/// The right to ask git for one watch's skip list, held by one probe at a time.
+pub(super) struct SkipProbe {
+    signal: Arc<Signal>,
+    generation: u64,
+}
+
+impl SkipProbe {
+    /// Installs `ignored` (real paths) as the skipped folders; the list counts as current only when
+    /// nothing made it stale since the probe began.
+    pub(super) fn install(self, ignored: Vec<PathBuf>) {
+        if let Ok(mut list) = self.signal.ignored.write() {
+            *list = ignored
+                .iter()
+                .map(|folder| {
+                    let mut bytes = folder.as_os_str().as_bytes().to_vec();
+                    bytes.push(b'/');
+                    bytes
+                })
+                .collect();
+        }
+        if self.signal.generation.load(Ordering::Acquire) == self.generation {
+            self.signal.stale.store(false, Ordering::Release);
+        }
+    }
+}
+
+impl Drop for SkipProbe {
+    fn drop(&mut self) {
+        self.signal.probing.store(false, Ordering::Release);
     }
 }
 
@@ -199,31 +265,38 @@ unsafe impl Send for FolderWatch {}
 impl FolderWatch {
     /// Watches every folder with everything under it, or `None` when there are none or the stream cannot start.
     pub(super) fn new(folders: &[PathBuf]) -> Option<Self> {
-        Self::start(folders, &[], false)
+        Self::start(folders, false)
     }
 
-    /// `new` for a repository's folders: a change inside one of `ignored` (folders git ignores,
-    /// `Signal`) is not one, and a written ignore rule is noticed (`ignore_rules_changed`) even
-    /// when nothing is skipped yet, so a folder ignored later is skipped once the watch restarts.
-    pub(super) fn skipping(folders: &[PathBuf], ignored: &[PathBuf]) -> Option<Self> {
-        Self::start(folders, ignored, true)
+    /// `new` for a repository's folders (the project first, then its Git folders): it starts
+    /// counting every change, and skips the folders a `SkipProbe` installs (`Signal`).
+    pub(super) fn skipping(folders: &[PathBuf]) -> Option<Self> {
+        Self::start(folders, true)
     }
 
-    fn start(folders: &[PathBuf], ignored: &[PathBuf], file_events: bool) -> Option<Self> {
+    fn start(folders: &[PathBuf], file_events: bool) -> Option<Self> {
         if folders.is_empty() {
             return None;
         }
+        let real =
+            |folder: &PathBuf| std::fs::canonicalize(folder).unwrap_or_else(|_| folder.clone());
+        // The project's own `.git` folder, or the Git folders named after it.
+        let git_folders: Vec<PathBuf> = if folders.len() == 1 {
+            vec![real(&folders[0]).join(".git")]
+        } else {
+            folders[1..].iter().map(real).collect()
+        };
         let signal = Arc::new(Signal {
             changed: AtomicBool::new(false),
-            ignored: ignored
+            ignored: RwLock::new(Vec::new()),
+            stale: AtomicBool::new(true),
+            generation: AtomicU64::new(0),
+            probing: AtomicBool::new(false),
+            index_files: git_folders
                 .iter()
-                .map(|folder| {
-                    let mut bytes = folder.as_os_str().as_bytes().to_vec();
-                    bytes.push(b'/');
-                    bytes
-                })
+                .map(|folder| folder.join("index").as_os_str().as_bytes().to_vec())
                 .collect(),
-            filtering_off: AtomicBool::new(false),
+            skips: file_events,
         });
         let create_flags = if file_events {
             K_FS_EVENT_STREAM_CREATE_FLAG_NO_DEFER | K_FS_EVENT_STREAM_CREATE_FLAG_FILE_EVENTS
@@ -303,10 +376,21 @@ impl FolderWatch {
         self.signal.changed.swap(false, Ordering::AcqRel)
     }
 
-    /// Whether an ignore rule was written since the watch started, so its skipped folders may be
-    /// out of date (every change counts from then on).
-    pub(super) fn ignore_rules_changed(&self) -> bool {
-        self.signal.filtering_off.load(Ordering::Acquire)
+    /// The right to ask git for the skip list, when it is not current and no probe runs.
+    pub(super) fn skip_probe(&self) -> Option<SkipProbe> {
+        if !self.signal.skips || !self.signal.stale.load(Ordering::Acquire) {
+            return None;
+        }
+        // Read before the probe starts: a change after this makes its answer stale again.
+        let generation = self.signal.generation.load(Ordering::Acquire);
+        self.signal
+            .probing
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .ok()?;
+        Some(SkipProbe {
+            signal: self.signal.clone(),
+            generation,
+        })
     }
 }
 
