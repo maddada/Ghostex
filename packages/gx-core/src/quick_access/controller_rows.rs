@@ -704,9 +704,7 @@ impl QuickAccessController {
                 self.sessions.resolved_query_key.as_deref()
                     != Some(sessions_query_key(&self.sessions, &self.query).as_str())
             }
-            QuickAccessTab::SavedPrompts => {
-                prompts::saved_loading(&self.prompts)
-            }
+            QuickAccessTab::SavedPrompts => prompts::saved_loading(&self.prompts),
             QuickAccessTab::Files => self.files_loading(),
             QuickAccessTab::Commands => false,
         };

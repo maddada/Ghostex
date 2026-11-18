@@ -744,7 +744,10 @@ fn full_menu(
 
     let mut advanced: Vec<MenuItem> = vec![MenuItem::heading("Session")];
     // Sleep sits first in Advanced (CDXC:ContextMenus 2026-11-15 above).
-    if let Some(item) = rows.get(HoverAction::Sleep).filter(|_| shown(HoverAction::Sleep)) {
+    if let Some(item) = rows
+        .get(HoverAction::Sleep)
+        .filter(|_| shown(HoverAction::Sleep))
+    {
         advanced.push(item.clone());
     }
     if !enabled.contains(&HoverAction::Note) {
