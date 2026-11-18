@@ -275,9 +275,11 @@ impl CloudBoxesTab {
     }
 
     /// "Set it up for me": an agent session in the Ghostex folder project does the whole setup.
-    /// Settings closes so the new session is in view.
-    fn set_up_with_agent(&mut self, cx: &mut Context<Self>) {
+    /// Settings closes so the new session is in view: the window is removed here, as the shell's
+    /// own close does (settings_modal/shell.rs), since the store's close only tells the app.
+    fn set_up_with_agent(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         post_store_message(&self.store, json!({ "type": "setUpAgentboxWithAgent" }), cx);
+        window.remove_window();
         self.store.update(cx, |store, cx| store.close(cx));
     }
 
@@ -508,7 +510,7 @@ impl CloudBoxesTab {
             ButtonVariant::Outline,
             false,
             None,
-            |page: &mut Self, _window, cx| page.set_up_with_agent(cx),
+            |page: &mut Self, window, cx| page.set_up_with_agent(window, cx),
             cx,
         );
         info_row(

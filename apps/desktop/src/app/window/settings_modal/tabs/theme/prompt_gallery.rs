@@ -17,7 +17,7 @@ use super::ThemeTab;
 use super::colours::preview_scheme_dark;
 use gpui::{
     AnyElement, Context, Image, ImageFormat, IntoElement, ObjectFit, ParentElement as _,
-    SharedString, Styled as _, StyledImage as _, div, img, px,
+    SharedString, Styled as _, StyledImage as _, Window, div, img, px,
 };
 use gpui_component::{h_flex, v_flex};
 use serde_json::{Map, Value, json};
@@ -127,13 +127,15 @@ fn changes_for_this_computer(
 
 impl ThemeTab {
     /// Asks an agent: a Help chat opens with the starter prompt as its draft, and Settings closes
-    /// so the chat shows.
-    fn ask_agent_to_theme(&mut self, cx: &mut Context<Self>) {
+    /// so the chat shows. The window is removed here, as the shell's own close does
+    /// (settings_modal/shell.rs): the store's close only tells the app the modal is gone.
+    fn ask_agent_to_theme(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         post_store_message(
             &self.store,
             json!({ "type": "askGhostexHelp", "question": STARTER_PROMPT }),
             cx,
         );
+        window.remove_window();
         let store = self.store.clone();
         store.update(cx, |store, cx| store.close(cx));
     }
@@ -259,7 +261,7 @@ impl ThemeTab {
                 SizedButtonSize::Sm,
                 false,
                 None,
-                |page: &mut Self, _window, cx| page.ask_agent_to_theme(cx),
+                |page: &mut Self, window, cx| page.ask_agent_to_theme(window, cx),
                 cx,
             ))
             .into_any_element();
@@ -275,7 +277,13 @@ impl ThemeTab {
             while row.len() < COLUMNS {
                 row.push(div().flex_1().min_w_0().into_any_element());
             }
-            grid_rows.push(h_flex().w_full().items_start().gap(px(12.0)).children(row));
+            grid_rows.push(
+                h_flex()
+                    .w_full()
+                    .items_stretch()
+                    .gap(px(12.0))
+                    .children(row),
+            );
         }
         let gallery = v_flex()
             .w_full()
@@ -391,6 +399,7 @@ impl ThemeTab {
             )
             .child(
                 v_flex()
+                    .flex_1()
                     .gap(px(4.0))
                     .px(px(10.0))
                     .pt(px(8.0))
@@ -404,7 +413,9 @@ impl ThemeTab {
                             .child(theme.name.clone()),
                     )
                     .child(
+                        // It grows so every tile's buttons line up along the row's bottom.
                         div()
+                            .flex_1()
                             .text_size(px(11.0))
                             .line_height(px(16.0))
                             .text_color(hsla(p.muted))
