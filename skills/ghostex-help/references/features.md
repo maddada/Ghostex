@@ -5235,6 +5235,72 @@ Settings: `voiceAgentHidden` (off by default, which keeps the voice agent on), `
 Ghostex is a client/server system: gxserver runs on each computer and owns its
 sessions, so any client can control agents on any machine.
 
+### Several computers as one workspace
+
+Answer "can my computers share projects, move a conversation to another
+computer, or let agents talk to each other?" from here. Add each computer in
+Settings > Remote on the computer whose sidebar should show it (From another
+computer below); for agents, a connection from either side is enough.
+
+- **One sidebar, shared projects (yes, the default)**: with Separate by
+  machine off (Settings > Sidebar & Sessions, `sidebarSeparateByMachine`, off
+  by default) every connected computer's projects and sessions are in one
+  Project sidebar, with no tab per computer. A project on several computers
+  (the same git remote, else the same folder name) is one entry with the
+  sessions of every copy; each session shows its computer's name, and the
+  project header shows the computers' icons (click one to hide that
+  computer's sessions in that project). Spaces and project groups are shared
+  by all of them. The Unified sidebar (`sidebarView` `unified`) is one list of
+  every computer's sessions too. If you see a tab per computer, Separate by
+  machine is on: turn it off. To put a project on a computer that doesn't
+  have it yet, right-click the project > Clone on… and pick the computer.
+  Computers that aren't connected stay in the list, faded, unless Hide
+  sessions and projects from computers that aren't connected is on
+  (`sidebarHideDisconnectedMachines`). Details: One list for every computer,
+  in the Sidebar section. A session runs on one computer: each computer runs
+  its own sessions with its own CPU, memory and files.
+- **Continue a conversation on another computer (yes, by handing it off)**:
+  right-click the session > Handoff / Export > Handoff to an agent, then
+  Destination > Change… and pick the computer and project (the project with
+  the same repository there is picked for you; Clone it there adds it when
+  it's missing). Pick the agent under Continue with. Ghostex starts a new
+  session there with the conversation attached as a file (the last 20 turns
+  at first; turn on Whole conversation under Include for all of it), and
+  carries over the pictures and files the conversation used outside the
+  project. Write the first message there yourself. Only the conversation
+  moves: the old session keeps running until you close it, and the code
+  changes don't travel, so commit and push them (or pull them on the other
+  computer) first. It works from this computer to a remote one, back, and
+  between two remote ones. Ghostex doesn't move a session by itself when a
+  computer runs low on memory or disk; the Memory guard only acts on that
+  computer's own sessions.
+- **Agents talk across computers (yes, while the computers are connected)**:
+  any agent can list, start, message and read sessions on a connected
+  computer, and that computer's agents can do the same here. A coordinator
+  can run its threads there, and they report back like threads on this
+  computer.
+
+  ```bash
+  ghostex computers                                   # connected computers
+  ghostex sessions --computer <name>                  # its projects and sessions, with ids
+  ghostex agents create <agent> --computer <name> --project-id <id> --task "..."
+  ghostex agents send <session-ref> "..."             # a ref from that computer goes there
+  ghostex agents send --main-coordinator --path <folder> --computer <name> "..."
+  ghostex read-session-chat <session-ref> --last 2 --format text
+  ghostex coordinator start-thread --computer <name> --title "..." --task "..."
+  ```
+
+  It needs Ghostex 10.44 or later on both computers and **Agent access** on
+  (Settings > Remote, the machine's Edit dialog, Advanced; on by default).
+  Agents there can start, message, read, sleep, wake and close sessions,
+  nothing else.
+- **Machines on demand**: Ghostex doesn't make new computers for you. Add
+  each computer you own in Settings > Remote. For a machine per task in the
+  cloud, use a Cloud Box (see Cloud Boxes below): its sessions sit in their
+  project in the same sidebar.
+
+### Connecting a phone, another computer, the web app
+
 - **From a phone**: sidebar More Options > Connect a Phone. One window,
   Connect a device, opens with three ways listed at its left (Phone, Computer,
   Tailscale) and turns Easy Connect on by itself (if SSH access is off, it asks
@@ -5708,8 +5774,12 @@ sessions, so any client can control agents on any machine.
   newest, so updating Ghostex on that machine is enough; an older one still
   running is replaced without closing its sessions. What you type in that dialog (except the password) stays
   there when Settings closes or the app restarts, until you add the machine or
-  press Cancel. The machine appears as a sidebar section with its own
-  projects and sessions; its terminals stream into the desktop app. Windows,
+  press Cancel. Its projects and sessions join your sidebar, a project it
+  shares with this computer as one entry with the sessions of both (see
+  Several computers as one workspace above for shared projects, handing a
+  conversation to another computer and agents across computers; Separate by
+  machine gives each computer its own tab instead); its terminals stream into
+  the desktop app. Windows,
   Linux, and macOS clients use the connected computer's folders and shell.
   Agents can use a connected machine too: any agent on this computer can
   start, message and read sessions there, and the machine's agents can do the

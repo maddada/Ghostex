@@ -12843,7 +12843,7 @@
     {
       "key": "addMachine",
       "title": "Add a computer",
-      "subtitle": "Opens Connect a Computer to add a computer with its code, or with SSH details; saved computers appear as sidebar sections.",
+      "subtitle": "Opens Connect a Computer to add a computer with its code, or with SSH details; a saved computer's projects and sessions join your sidebar, and a project on both computers is one entry with the sessions of each (Separate by machine gives each computer its own tab instead).",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",

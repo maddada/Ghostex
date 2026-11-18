@@ -699,7 +699,7 @@ How to use this file:
 - **Tailscale on or off** `remoteTailscaleEnabled` (boolean, default true) [not agent-writable]: Offer the Tailscale path in Remote setup.
 ### Computers this machine connects to
 
-- **Add a computer** `addMachine` (Settings UI row without a settings key; use `ghostex settings open`): Opens Connect a Computer to add a computer with its code, or with SSH details; saved computers appear as sidebar sections.
+- **Add a computer** `addMachine` (Settings UI row without a settings key; use `ghostex settings open`): Opens Connect a Computer to add a computer with its code, or with SSH details; a saved computer's projects and sessions join your sidebar, and a project on both computers is one entry with the sessions of each (Separate by machine gives each computer its own tab instead).
 - **Show in sidebar** `showInSidebar` (Settings UI row without a settings key; use `ghostex settings open`): Hide a saved remote machine from the sidebar without deleting it.
 - **Computer icons** `machineIcon` (Settings UI row without a settings key; use `ghostex settings open`): Each saved computer's icon in the sidebar, picked in its settings while it is connected; it is kept on that computer.
 - **SSH host** `sshHost` (Settings UI row without a settings key; use `ghostex settings open`): Remote machine SSH host.
