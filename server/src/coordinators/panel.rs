@@ -198,6 +198,8 @@ pub fn insert_coordinator_threads(
     if let Some(value) = value {
         frame.insert("coordinatorThreads".to_string(), value);
     }
+    // An ordinary session's own work items ride beside it (session_work.rs).
+    super::session_work::insert_session_work(frame, project_id, session_id);
 }
 
 /// One thread's panel row, kept while nothing it was built from has changed.
@@ -244,6 +246,8 @@ struct PanelInputs {
     items: Vec<super::work::WorkItem>,
     custom_tags: Value,
     intro_hidden: bool,
+    /// The coordinator's Topic (session_work.rs), shown at the top of its Work panel.
+    topic: Value,
     /// The coordinator's idle floor (turns.rs): a new turn moves items in or out of In progress.
     idle_floor: chrono::DateTime<chrono::Utc>,
     built_at: std::time::Instant,
@@ -769,6 +773,11 @@ pub fn refresh_coordinator_panels(
     let Ok(coordinators) = list_coordinators(db) else {
         return Vec::new();
     };
+    // Coordinators and their threads keep no work items of their own (session_work.rs).
+    let mut not_ordinary: std::collections::HashSet<SessionKey> = coordinators
+        .iter()
+        .map(|coordinator| coordinator.key())
+        .collect();
     // The open threads read now, the resolved ones from memory unless one changed (thread_reads.rs).
     let all_threads = super::read_all_threads(db).ok();
     let threads = all_threads
@@ -779,6 +788,7 @@ pub fn refresh_coordinator_panels(
     let mut board_items = super::work::list_all_work_items(db);
     super::work::load_deliveries(db);
     let intro_hidden = super::intro::intro_hidden(db);
+    let topics = super::session_work::read_topics(db);
     let generated_at = now_iso();
     let now = chrono::Utc::now();
     let mut session_rows = db
@@ -798,6 +808,7 @@ pub fn refresh_coordinator_panels(
     // for every coordinator.
     let mut threads_of: HashMap<SessionKey, Vec<&Arc<ThreadRecord>>> = HashMap::new();
     for thread in threads.iter().copied() {
+        not_ordinary.insert(thread.key());
         threads_of
             .entry(thread.coordinator_key())
             .or_default()
@@ -944,8 +955,10 @@ pub fn refresh_coordinator_panels(
     let mut kept: Vec<SessionKey> = Vec::new();
     for (key, row_ids, remote_rows, idle_floor) in built {
         let items = board_items.remove(&key).unwrap_or_default();
+        let topic = super::session_work::topic_in(&topics, &key);
         if let Some(last) = inputs.remove(&key).filter(|last| {
             panels.contains_key(&key)
+                && last.topic == topic
                 && last.built_at.elapsed() < PANEL_REBUILD_EVERY
                 && last.intro_hidden == intro_hidden
                 && last.custom_tags == custom_tags
@@ -981,6 +994,8 @@ pub fn refresh_coordinator_panels(
             Some(&key),
         );
         super::work::add_work_tag_looks(&mut work, &custom_tags);
+        // The line at the top of its Work panel (session_work.rs).
+        work["topic"] = topic.clone();
         let panel = cached_panel(
             panel_rows,
             board,
@@ -998,6 +1013,7 @@ pub fn refresh_coordinator_panels(
                 items,
                 custom_tags: custom_tags.clone(),
                 intro_hidden,
+                topic,
                 idle_floor,
                 built_at: std::time::Instant::now(),
             },
@@ -1027,6 +1043,13 @@ pub fn refresh_coordinator_panels(
     if let Ok(mut inputs) = panel_inputs().lock() {
         *inputs = next_inputs;
     }
+    drop(panels);
+    // The items left are ordinary sessions' own (session_work.rs).
+    changed.extend(super::session_work::refresh_session_work(
+        board_items,
+        &topics,
+        not_ordinary,
+    ));
     changed
 }
 

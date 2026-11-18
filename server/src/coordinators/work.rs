@@ -1635,11 +1635,11 @@ pub fn handle_work_request(
     let number = item_number_of(&reference)
         .ok_or_else(|| bad(format!("{reference} is not an item: name one as W7.")))?;
     let mut item = read_item(db, key, number)?
-        .ok_or_else(|| bad(format!("This coordinator has no item W{number}.")))?;
+        .ok_or_else(|| bad(format!("This session has no item W{number}.")))?;
     let name = item.reference();
     if item.dropped_at.is_some() && !matches!(op.as_str(), "restore" | "tag") {
         return Err(bad(format!(
-            "{name} was dropped. ghostex coordinator item restore {name} brings it back."
+            "{name} was dropped. ghostex work item restore {name} brings it back."
         )));
     }
     match op.as_str() {

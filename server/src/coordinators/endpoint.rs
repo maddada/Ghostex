@@ -81,7 +81,10 @@ pub fn handle_coordinator_endpoint(
         // The board: read it, or add, move, note, mark done or drop an item (board.rs).
         "/api/coordinatorBoard" => {
             let key = required_ids(params, "projectId", "sessionId")?;
-            resolve_coordinator(db, &key)?;
+            // An ordinary session's Work panel answers, finishes and drops its own items too.
+            if resolve_coordinator(db, &key).is_err() {
+                super::session_work::require_session_work(repository, &key)?;
+            }
             // "Don't show again" on the coordinator tips, for every coordinator (intro.rs).
             if params.get("op").and_then(Value::as_str) == Some("hideIntro") {
                 super::intro::hide_intro(db)?;
@@ -100,7 +103,27 @@ pub fn handle_coordinator_endpoint(
         // The work items: list them, or add, update, ask, wait on, finish or drop one (work.rs).
         "/api/coordinatorWork" => {
             let key = required_ids(params, "projectId", "sessionId")?;
-            resolve_coordinator(db, &key)?;
+            // An ordinary session keeps its own while Work items is on (session_work.rs).
+            let ordinary = match resolve_coordinator(db, &key) {
+                Ok(_) => false,
+                Err(_) => {
+                    super::session_work::require_session_work(repository, &key)?;
+                    true
+                }
+            };
+            // The line at the top of the Work panel, for every session.
+            if params.get("op").and_then(Value::as_str) == Some("topic") {
+                let words = params
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let by_user = params.get("byUser").and_then(Value::as_bool) == Some(true);
+                let topic = super::session_work::write_topic(db, &key, words, by_user)?;
+                return Ok(CoordinatorEndpointOutput {
+                    result: json!({ "topic": topic }),
+                    changed_sessions: Vec::new(),
+                });
+            }
             let threads = super::panel::cached_thread_rows(&key);
             let chat_tags = crate::session_chat_open_questions::asked_question_tags(&key.0, &key.1);
             // A coordinator's own Needs you to-dos hold their tags too (session_needs_you/).
@@ -110,9 +133,13 @@ pub fn handle_coordinator_endpoint(
             // `fromThread` is gxserver's own mark (session_needs_you/thread.rs), never a caller's.
             let mut params = params.clone();
             params.remove("fromThread");
-            let (result, _) = super::work::handle_work_request(
+            let (mut result, _) = super::work::handle_work_request(
                 db, &key, &threads, &params, ask_floor, &chat_tags,
             )?;
+            if params.get("op").and_then(Value::as_str).unwrap_or("list") == "list" {
+                result["topic"] = super::session_work::read_topic(db, &key);
+                result["ordinary"] = json!(ordinary);
+            }
             Ok(CoordinatorEndpointOutput {
                 result,
                 changed_sessions: Vec::new(),

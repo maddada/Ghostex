@@ -33,6 +33,7 @@ mod reopen;
 mod restore;
 mod role;
 mod seen_threads;
+mod session_work;
 mod sleep_threads;
 mod stale_report;
 mod stall;
@@ -76,6 +77,10 @@ pub use reopen::*;
 pub use restore::*;
 pub use role::*;
 pub(crate) use seen_threads::*;
+pub use session_work::{
+    insert_session_work, read_topic, work_items_extension_on, write_topic, WORK_ITEMS_EXTENSION,
+    WORK_ITEMS_OFF,
+};
 pub use sleep_threads::*;
 pub use stale_report::*;
 pub use stall::*;
