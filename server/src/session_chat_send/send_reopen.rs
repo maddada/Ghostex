@@ -27,6 +27,10 @@ pub(crate) async fn handle_send_session_chat_message_from(
     request_id: String,
     body: &Value,
 ) -> RoutedResponse {
+    // `agents send --with-next`: held for the session's next message, not typed (with_next.rs).
+    if let Some(held) = hold_with_next_response(state, &endpoint_path, &request_id, body) {
+        return held;
+    }
     let started_ms = chrono::Utc::now().timestamp_millis();
     let attempt_caller = caller.clone();
     let response = send_once(

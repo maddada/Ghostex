@@ -79,6 +79,7 @@ mod steps;
 pub(crate) mod test_terminal;
 #[cfg(test)]
 mod tests;
+mod with_next;
 mod worker;
 
 pub(crate) use answer_http::*;
@@ -99,4 +100,5 @@ pub(crate) use send_http::*;
 pub(crate) use send_reopen::*;
 pub(crate) use single_paste::*;
 pub use steps::*;
+pub(crate) use with_next::*;
 use worker::*;

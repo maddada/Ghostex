@@ -7,13 +7,13 @@ USAGE
                        [--task <text> | --body-file <path>] [--allow-hidden]
                        [--standalone] [--computer <name>]
   ghostex agents list [--all] [--json]
-  ghostex agents send <session-ref> <text> [--interrupt | --queue]
+  ghostex agents send <session-ref> <text> [--interrupt | --queue | --with-next]
                      [--request-id <id>]
-  ghostex agents send <session-ref> --body-file <path> [--interrupt | --queue]
+  ghostex agents send <session-ref> --body-file <path> [--interrupt | --queue | --with-next]
                      [--request-id <id>]
   ghostex agents send --main-coordinator (--project-id <id> | --path <folder>)
                      [--computer <name>] [--if-none create | session] [--title <name>]
-                     (<text> | --body-file <path>) [--interrupt | --queue]
+                     (<text> | --body-file <path>) [--interrupt | --queue | --with-next]
   ghostex agents close <session-ref>
   ghostex agents switch-account <session-ref> --account <number|email>
                                [--force] [--json]
@@ -155,6 +155,12 @@ DELIVERY
                 because the agent is busy or asleep; the default handles both.
                 If it cannot be delivered, it stays in the recipient's queue
                 marked Not delivered and a note is queued back to you.
+  --with-next   For a note that needs nothing from the recipient now (an
+                FYI, a status line for a lead session): Ghostex holds it and
+                types it right after the next message the recipient gets
+                (its user's, another session's report, a queued one), so it
+                never starts a turn by itself. A sleeping session is not
+                woken. Works for any session.
 
   Enter submits. send already submits; do not append another Enter.
   Escape interrupts. To interrupt without sending a message, use:
@@ -170,6 +176,8 @@ DELIVERY
     pending     The recipient is still starting; Ghostex types the message
                 as soon as its input box appears.
     queued      Sent with --queue.
+    held        Sent with --with-next: it goes in with the recipient's next
+                message.
   A message the agent did not take (Claude Code or Codex left it in its
   input box, a blocking dialog) fails with the reason instead. A paste the
   terminal is slow to show is watched longer and then submitted; one that

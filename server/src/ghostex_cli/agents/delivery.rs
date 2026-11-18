@@ -68,6 +68,9 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
             crate::zmx::GXSERVER_ZMX_SEND_TEXT_LIMIT_BYTES
         )));
     }
+    if args.delivery == Delivery::WithNext {
+        return hold_with_next(&sender, &recipient, &message, &body, args, &flags);
+    }
     // A sleeping or closed recipient has nothing to interrupt; the send itself wakes it and
     // resumes its conversation.
     let waking =
@@ -203,7 +206,7 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         "ok": true,
         "status": status,
         "note": note,
-        "mode": match args.delivery { Delivery::Normal => "normal", Delivery::Interrupt => "interrupt", Delivery::Queue => "queue" },
+        "mode": match args.delivery { Delivery::Normal => "normal", Delivery::Interrupt => "interrupt", Delivery::Queue => "queue", Delivery::WithNext => "with-next" },
         "interruptRequested": interrupted,
         "wakingRecipient": waking,
         "sendRequestId": send_request_id,
@@ -214,6 +217,51 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         "recipient": identity::summary(&recipient),
         "receipt": receipt,
         // CDXC:SessionChat 2026-10-10 WHY: the sender's chat card shows this text; the command line often holds only `$msg` or a `--body-file` path (gx-chat-core sent_message_script.rs).
+        "message": body,
+    }))
+}
+
+/// `--with-next`: gxserver holds the message and types it right after the next message the
+/// recipient gets (its user's, another session's report, a queued one), so it never starts a turn
+/// by itself (server/src/session_chat_send/with_next.rs).
+fn hold_with_next(
+    sender: &Value,
+    recipient: &Value,
+    message: &str,
+    body: &str,
+    args: &Arguments,
+    flags: &Flags,
+) -> CliResult<Value> {
+    let send_request_id = args
+        .request_id
+        .clone()
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let result = call_gxserver_rpc(
+        "/api/sendSessionChatMessage",
+        &json!({
+            "globalRef": recipient["globalRef"], "projectId": recipient["projectId"],
+            "sessionId": recipient["sessionId"], "text": message, "withNext": true,
+            "sendRequestId": send_request_id,
+        }),
+        flags,
+    )
+    .map_err(|error| CliError::Other(format!("The message was not held: {error}")))?;
+    if result["held"] != json!(true) {
+        return Err(CliError::Other(
+            "The recipient's Ghostex is too old to hold a message for its next one, so it took it as a normal message and sent it now.".into(),
+        ));
+    }
+    Ok(json!({
+        "ok": true,
+        "status": "held",
+        "note": format!(
+            "Held: it goes in right after the next message the recipient gets ({} held now). It never starts a turn by itself.",
+            result["count"].as_u64().unwrap_or(1)
+        ),
+        "mode": "with-next",
+        "sendRequestId": send_request_id,
+        "sender": identity::summary(sender),
+        "recipient": identity::summary(recipient),
         "message": body,
     }))
 }

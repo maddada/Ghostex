@@ -467,11 +467,59 @@ pub(crate) async fn send_session_chat_message_with_draft(
     .await;
     if sent.is_ok() {
         settle_work_replies(state, project_id, session_id, text, image_paths, source);
+        send_held_with_next(state, project_id, session_id, text, source).await;
         if let Some(notes) = notes {
             send_ghostex_notes(state, project_id, session_id, &notes).await;
         }
     }
     sent
+}
+
+/// The messages `agents send --with-next` held for this session, each typed as a message of its
+/// own right after the one just sent, under the same send lock (session_chat_send/with_next.rs).
+/// Only a message someone sent carries them (the chat box, another session's message, a queued
+/// row), never a slash or shell command. One that does not go is held again for the next.
+async fn send_held_with_next(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    text: &str,
+    source: SessionChatMessageSource,
+) {
+    if !matches!(
+        source,
+        SessionChatMessageSource::Composer
+            | SessionChatMessageSource::AutomaticQueue
+            | SessionChatMessageSource::ManualQueue
+    ) || matches!(text.trim_start().chars().next(), Some('/' | '!'))
+    {
+        return;
+    }
+    let held = crate::server::blocking_section(|| {
+        crate::session_chat_send::take_held_with_next(state, project_id, session_id)
+    });
+    for (index, message) in held.iter().enumerate() {
+        let sent = Box::pin(send_session_chat_message_locked(
+            state,
+            project_id,
+            session_id,
+            message,
+            &[],
+            source,
+            None,
+            false,
+        ))
+        .await;
+        if sent.is_err() {
+            crate::session_chat_send::put_back_held_with_next(
+                state,
+                project_id,
+                session_id,
+                &held[index..],
+            );
+            return;
+        }
+    }
 }
 
 /// Ghostex's notes for a coordinator (the playbook note, the drift reminder, the compaction note,

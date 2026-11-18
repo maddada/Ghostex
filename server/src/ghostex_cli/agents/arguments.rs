@@ -8,6 +8,8 @@ pub(super) enum Delivery {
     Normal,
     Interrupt,
     Queue,
+    /// `--with-next`: held, and given to the recipient with the next message it gets.
+    WithNext,
 }
 
 /// `--if-none`: what `send --main-coordinator` does when the project has no main coordinator.
@@ -98,16 +100,17 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                 });
             }
             "--force" => parsed.force = true,
-            "--interrupt" | "--queue" => {
+            "--interrupt" | "--queue" | "--with-next" => {
                 if parsed.delivery != Delivery::Normal {
                     return Err(CliError::Other(
-                        "Choose only one delivery flag: --interrupt or --queue.".into(),
+                        "Choose only one delivery flag: --interrupt, --queue or --with-next."
+                            .into(),
                     ));
                 }
-                parsed.delivery = if arg == "--interrupt" {
-                    Delivery::Interrupt
-                } else {
-                    Delivery::Queue
+                parsed.delivery = match arg.as_str() {
+                    "--interrupt" => Delivery::Interrupt,
+                    "--queue" => Delivery::Queue,
+                    _ => Delivery::WithNext,
                 };
             }
             "--body-file" | "--server" | "--computer" | "--task" | "--title" | "--project-id"
