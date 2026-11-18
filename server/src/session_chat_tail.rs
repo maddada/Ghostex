@@ -595,7 +595,7 @@ fn read_session_chat_transcript_tail_file_for_agent(
 
 /// Pagination wrapper (upstream chat spec §4). `include_trailing_line = true` so a live
 /// read can decode a torn final line's completed predecessors.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum SessionChatTailPage {
     NotFound,
     Page {
@@ -608,6 +608,9 @@ pub enum SessionChatTailPage {
     },
 }
 
+/// Answered from the last read of the same rows while the file is unchanged
+/// (session_chat_tail_cache.rs, GitHub #668).
+#[track_caller]
 pub fn read_session_chat_tail_page(
     agent: SessionChatTranscriptAgent,
     file_path: &Path,
@@ -617,6 +620,22 @@ pub fn read_session_chat_tail_page(
     if agent == SessionChatTranscriptAgent::OpenCode && before_offset.is_none() {
         crate::session_chat_opencode::refresh_for_path(file_path);
     }
+    crate::session_chat_tail_cache::tail_page(
+        agent,
+        file_path,
+        limit,
+        before_offset,
+        std::panic::Location::caller(),
+        || read_session_chat_tail_page_uncached(agent, file_path, limit, before_offset),
+    )
+}
+
+fn read_session_chat_tail_page_uncached(
+    agent: SessionChatTranscriptAgent,
+    file_path: &Path,
+    limit: usize,
+    before_offset: Option<u64>,
+) -> std::io::Result<SessionChatTailPage> {
     let decode = session_chat_line_decoder(agent);
     let decode_lifecycle = session_chat_lifecycle_decoder(agent);
     match read_session_chat_transcript_tail_file_for_agent(

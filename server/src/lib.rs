@@ -265,6 +265,7 @@ pub mod session_chat_stream;
 pub mod session_chat_subagent;
 pub mod session_chat_successor;
 pub mod session_chat_tail;
+pub(crate) mod session_chat_tail_cache;
 pub mod session_chat_terminal_activity;
 pub mod session_chat_terminal_dialog;
 #[cfg(test)]

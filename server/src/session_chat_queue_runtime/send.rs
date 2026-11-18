@@ -448,8 +448,12 @@ pub(crate) async fn send_session_chat_message_with_draft(
 ) -> std::result::Result<usize, DomainStateError> {
     let lock = session_send_lock(project_id, session_id);
     let _owned = lock.lock().await;
-    // Read before the message goes, so the open questions it answers by tag are left out.
-    let notes = coordinator_playbook_note(state, project_id, session_id, text, source);
+    // Read before the message goes, so the open questions it answers by tag are left out. Off the
+    // async worker: it opens SQLite and reads the coordinator's transcript tail and open questions
+    // (GitHub #668).
+    let notes = crate::server::blocking_section(|| {
+        coordinator_playbook_note(state, project_id, session_id, text, source)
+    });
     let sent = send_session_chat_message_locked(
         state,
         project_id,
