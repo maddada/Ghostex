@@ -188,6 +188,12 @@ const CODEX_RULES: &[NoticeRule] = &[
                 parts: &[NoticePart::Text("Unable to restore Codex session")],
                 corroborators: &[],
             },
+            // ...and when its title lookup found no conversation to resume.
+            NoticeSignature {
+                scope: NoticeScope::Exit,
+                parts: &[NoticePart::Text("Unable to find restorable Codex session id")],
+                corroborators: &[],
+            },
             // CDXC:AgentScreenDetection 2026-11-13 WHY: GitHub #595: a Codex that quits before
             // its thread was saved (before or right after its first message) prints only
             // "Session ID: <id>" (codex-rs tui exit_summary.rs, no resume hint), and on Windows

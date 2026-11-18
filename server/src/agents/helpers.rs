@@ -259,10 +259,13 @@ pub(crate) fn wrap_restored_terminal_resume_command(
 ) -> String {
     // CDXC:AgentProviders 2026-11-18 WHY:
     // On Windows the fallback never ran: `$?` after `& { … }` stays true in PowerShell 7 when the
-    // agent exits 1, when its CLI is not found and when a resume lookup fails with Write-Error
-    // (checked in pwsh 7.6), and `$LASTEXITCODE` alone misses the last two. The block records
-    // `$?` after its own last statement instead. As on POSIX, an exit that is an interrupt (128
-    // and up, or a negative NTSTATUS such as Ctrl+C's 0xC000013A) is not a failed resume.
+    // agent exits 1 and when a resume lookup fails with Write-Error (checked in pwsh 7.6). The block
+    // records its own last statement's `$?` together with `$LASTEXITCODE`, since `$?` also stays
+    // true after a PowerShell function that ran the native CLI (the `codex` function in
+    // zmx/codex_wrapper.rs, the default-login block in accounts/default_login.rs) and Write-Error
+    // leaves `$LASTEXITCODE` at 0. A terminating error still stops the script, as before. As on
+    // POSIX, an exit that is an interrupt (128 and up, or a negative NTSTATUS such as Ctrl+C's
+    // 0xC000013A) is not a failed resume, and the same line announces the fallback.
     #[cfg(windows)]
     {
         let banner = format!(
@@ -271,7 +274,7 @@ pub(crate) fn wrap_restored_terminal_resume_command(
         );
         return match fallback_command.filter(|fallback| *fallback != command) {
             Some(fallback) => format!(
-                "{banner}$global:LASTEXITCODE = 0; $ghostexRestore = @{{ Ok = $true }}; & {{ {command}\n$ghostexRestore.Ok = $? }}; if (-not $ghostexRestore.Ok -and $LASTEXITCODE -ge 0 -and $LASTEXITCODE -lt 128) {{ & {{ {fallback} }} }}; Remove-Item -LiteralPath Variable:ghostexRestore -ErrorAction Ignore"
+                "{banner}$global:LASTEXITCODE = 0; $ghostexRestore = @{{ Ok = $true }}; try {{ & {{ {command}\n$ghostexRestore.Ok = $? -and $LASTEXITCODE -eq 0 }}; if (-not $ghostexRestore.Ok -and $LASTEXITCODE -ge 0 -and $LASTEXITCODE -lt 128) {{ $Host.UI.WriteLine('Exact resume failed; trying saved fallback resume command.'); & {{ {fallback} }} }} }} finally {{ Remove-Item -LiteralPath Variable:ghostexRestore -ErrorAction Ignore }}"
             ),
             None => format!("{banner}& {{ {command} }}"),
         };

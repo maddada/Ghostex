@@ -64,8 +64,11 @@ pub(crate) fn missing_resume_on_screen(agent: Option<&str>, screen: &str) -> Opt
                 line.contains("Unable to find restorable Claude session id")
                     .then_some(MissingResume { reference: None })
             }),
+        // The title lookup's own failure too (resume_plan.rs): under Windows PowerShell 5.1 the
+        // fallback's error record can push "Unable to restore Codex session" out of the window.
         "codex" => (line.contains("No saved session found")
-            || line.contains("Unable to restore Codex session"))
+            || line.contains("Unable to restore Codex session")
+            || line.contains("Unable to find restorable Codex session id"))
         .then(|| MissingResume {
             reference: crate::agents::resume_plan::get_uuid_from_text(line),
         }),
