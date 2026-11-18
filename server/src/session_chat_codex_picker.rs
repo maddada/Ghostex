@@ -401,6 +401,8 @@ struct CodexPickerPlan {
     /// Apply the pick to this session without saving the agent's default. Claude only.
     session_only: bool,
     claude_statusline: Option<(std::path::PathBuf, String)>,
+    /// Claude only: when its SessionStart hook last reported the CLI starting (`sessionChatClaudeStartedAt`), so a status line payload stored before it is not read as the running CLI's.
+    claude_started_at: Option<std::time::SystemTime>,
     /// Hermes only: the `--provider` a model from another provider needs.
     hermes_provider: Option<String>,
     /// Empryo only: the session's `session.jsonl`, whose `meta.json` names the tab's model.
@@ -1605,6 +1607,12 @@ pub(crate) async fn select_session_chat_model(
         session_only,
         claude_statusline: crate::server::read_runtime_text(&target.session, "agentSessionId")
             .map(|id| (state.paths.app_state_dir.join("agent-hooks"), id)),
+        claude_started_at: crate::server::read_runtime_text(
+            &target.session,
+            "sessionChatClaudeStartedAt",
+        )
+        .and_then(|started| chrono::DateTime::parse_from_rfc3339(&started).ok())
+        .map(std::time::SystemTime::from),
         hermes_provider,
         empryo_session_log: empryo_picker::plan_session_log(
             state,

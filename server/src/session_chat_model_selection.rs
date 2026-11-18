@@ -205,6 +205,9 @@ pub(crate) fn validate_selection(
 /// made for the agent being replaced (CDXC:SessionChat 2026-10-24 at `foreign_model_refusal`), and
 /// the switch carries a pick for the new agent on its launch line.
 pub(crate) fn discard_for_agent_switch(db: &Connection, project: &str, session: &str) {
+    if let Some(pending) = read_pending(db, project, session) {
+        forget_busy_run(&pending.id);
+    }
     let _ = db.execute(
         "DELETE FROM session_chat_model_selections WHERE projectId = ?1 AND sessionId = ?2",
         params![project, session],
@@ -381,6 +384,9 @@ fn enqueue_selection(
         params![project, session_id, id, model, effort, serde_json::to_string(&options).map_err(storage_error)?, scope],
     ).map_err(storage_error)?;
     transaction.commit().map_err(storage_error)?;
+    if let Some(previous) = previous.as_ref() {
+        forget_busy_run(&previous.id);
+    }
     // A new pick is a new attempt; a failure it meets marks the session again.
     crate::session_chat_model_selection_alert::clear_model_selection_failure(
         state, project, session_id,
@@ -396,64 +402,94 @@ fn enqueue_selection(
 }
 
 /// CDXC:SessionChat 2026-10-17 WHY:
-/// A pick whose command was typed but never confirmed on screen (a timeout) is retried only this many times before it counts as failed. One footer the reader could not parse (omp 18.11's compact model segment) retyped `/switch` every ~12s for over 13 minutes; only closing the session ended it. A busy agent (a dialog in front of its input box) is not counted here; it has its own limit (`BUSY_LIMIT_MS`).
+/// A pick whose command was typed but never confirmed on screen (a timeout) is retried only this many times before it counts as failed. One footer the reader could not parse (omp 18.11's compact model segment) retyped `/switch` every ~12s for over 13 minutes; only closing the session ended it. A busy agent (a dialog in front of its input box) is not counted here; it is paced instead (`busy_retry`).
 const MAX_UNCONFIRMED_ATTEMPTS: u32 = 3;
 
 /// CDXC:SessionChat 2026-11-18 WHY:
-/// GitHub #666: `agentBusy` (a turn running, a dialog in front of the input box) was never counted, so a pick retried every 5 seconds for as long as the agent stayed busy, a day for one session, and each try cost screen captures, three database writes and two broadcasts that redraw every app window. A busy pick now waits twice as long after each busy answer, from 5 seconds up to a minute, and fails with its reason after 30 minutes of busy answers in a row (the chat and the sidebar's red dot show it; picking again starts over). While a chat message waits behind the pick, the pick keeps the 5-second pace and never gives up, as before: a failed pick holds the messages behind it until the user picks again, and a slower pace would hold them longer once the agent is free. Any other answer, or a message waiting, ends the busy run.
-const BUSY_RETRY_FIRST_MS: i64 = 5_000;
+/// GitHub #666: `agentBusy` (a turn running, a dialog in front of the input box) was never counted, so a pick retried every 5 seconds for as long as the agent stayed busy, a day for one session, and each try cost screen captures, three database writes and two broadcasts that redraw every app window. A busy pick now waits twice as long after each busy answer, from 5 seconds up to a minute, and after 30 minutes of busy time tries only every 5 minutes. It never fails for being busy: a failed pick holds every later message until the user picks again (the 2026-09-27 decision in session_chat_model_selection_alert.rs), and a pick left behind a permission prompt while the user is away, or Ghostex's own plan-mode restore, would then hold their next message. Busy time counts only the waits the pick planned (plus one retry of slack), so a computer asleep or a stalled queue does not add to it; a session that sleeps answers `sessionNotRunning`, which ends the run. While a message waits behind the pick (a queued chat message, or a new coordinator's first message waiting for its box), the pick keeps the 5-second pace, and the queue cuts a longer wait short as soon as one arrives (`BUSY_WAIT_SHORTCUT_MS`), so the message waits no longer than before.
+/// The usual wait before a failed pick is tried again, and a busy pick's first wait.
+pub(crate) const RETRY_MS: i64 = 5_000;
 const BUSY_RETRY_MAX_MS: i64 = 60_000;
-const BUSY_LIMIT_MS: i64 = 30 * 60_000;
+const BUSY_SLOW_AFTER_MS: i64 = 30 * 60_000;
+const BUSY_RETRY_SLOW_MS: i64 = 5 * 60_000;
+/// A pick waiting longer than this is in a busy back-off: midway between `RETRY_MS` and the first
+/// doubled wait, so a usual 5-second retry is never taken for one on a late queue tick.
+pub(crate) const BUSY_WAIT_SHORTCUT_MS: i64 = RETRY_MS * 3 / 2;
 
-/// When each pick's current run of busy answers began, and how many it has had.
-fn busy_since() -> &'static Mutex<HashMap<String, (i64, u32)>> {
-    static SINCE: OnceLock<Mutex<HashMap<String, (i64, u32)>>> = OnceLock::new();
-    SINCE.get_or_init(|| Mutex::new(HashMap::new()))
+/// One pick's current run of busy answers.
+struct BusyRun {
+    busy_ms: i64,
+    last_ms: i64,
+    last_wait_ms: i64,
+    count: u32,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-enum BusyRetry {
-    /// Not a busy answer: the usual 5-second retry.
-    NotBusy,
-    /// Busy: try again after this many milliseconds.
-    After(i64),
-    /// Busy for `BUSY_LIMIT_MS`: stop.
-    Exhausted,
+fn busy_runs() -> &'static Mutex<HashMap<String, BusyRun>> {
+    static RUNS: OnceLock<Mutex<HashMap<String, BusyRun>>> = OnceLock::new();
+    RUNS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// Notes this failure and answers when a busy pick tries again, or that it has been busy too long.
-/// `message_waiting`: a chat message waits behind the pick.
+/// Ends a pick's busy run: it was applied, failed, replaced or discarded.
+fn forget_busy_run(selection_id: &str) {
+    if let Ok(mut runs) = busy_runs().lock() {
+        runs.remove(selection_id);
+    }
+}
+
+/// Notes this failure and answers how long a busy pick waits before its next try (`None` when the
+/// failure is not a busy one). `message_waiting`: a message waits behind the pick.
 fn busy_retry(
     selection_id: &str,
     error: &DomainStateError,
     now_ms: i64,
     message_waiting: bool,
-) -> BusyRetry {
-    let Ok(mut since) = busy_since().lock() else {
-        return BusyRetry::NotBusy;
+) -> Option<i64> {
+    let Ok(mut runs) = busy_runs().lock() else {
+        return None;
     };
     if error.code != "agentBusy" {
-        since.remove(selection_id);
-        return BusyRetry::NotBusy;
+        runs.remove(selection_id);
+        return None;
     }
     if message_waiting {
-        since.remove(selection_id);
-        return BusyRetry::After(BUSY_RETRY_FIRST_MS);
+        runs.remove(selection_id);
+        return Some(RETRY_MS);
     }
-    let (first, count) = since.entry(selection_id.to_string()).or_insert((now_ms, 0));
-    *count += 1;
-    if now_ms - *first >= BUSY_LIMIT_MS {
-        return BusyRetry::Exhausted;
-    }
-    let doublings = (*count - 1).min(8);
-    BusyRetry::After((BUSY_RETRY_FIRST_MS << doublings).min(BUSY_RETRY_MAX_MS))
+    let run = runs.entry(selection_id.to_string()).or_insert(BusyRun {
+        busy_ms: 0,
+        last_ms: now_ms,
+        last_wait_ms: 0,
+        count: 0,
+    });
+    run.busy_ms += (now_ms - run.last_ms).clamp(0, run.last_wait_ms + RETRY_MS);
+    run.last_ms = now_ms;
+    run.count += 1;
+    let wait = if run.busy_ms >= BUSY_SLOW_AFTER_MS {
+        BUSY_RETRY_SLOW_MS
+    } else {
+        (RETRY_MS << (run.count - 1).min(8)).min(BUSY_RETRY_MAX_MS)
+    };
+    run.last_wait_ms = wait;
+    Some(wait)
 }
 
-/// Whether a chat message waits behind this session's pending pick.
+/// Whether a message waits behind the session's pending pick: a queued chat message, or a new
+/// coordinator's first message waiting for its box (session_chat_first_message.rs holds it while a
+/// pick is pending).
+pub(crate) fn message_waits(
+    snapshot: &crate::session_chat_queue::SessionChatQueueSnapshot,
+) -> bool {
+    snapshot.deliverable_head().is_some()
+        || snapshot
+            .first_message
+            .as_ref()
+            .is_some_and(|message| message.state == crate::session_chat_first_message::WAITING)
+}
+
 fn message_waits_behind(db: &Connection, project: &str, session: &str) -> bool {
-    crate::session_chat_queue::read_session_chat_queue_snapshot_with(db, project, session)
-        .deliverable_head()
-        .is_some()
+    message_waits(
+        &crate::session_chat_queue::read_session_chat_queue_snapshot_with(db, project, session),
+    )
 }
 
 /// CDXC:SessionChat 2026-10-24 WHY:
@@ -633,20 +669,14 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                     tried.remove(&pending.id);
                 }
             }
-            let busy = result.as_ref().err().map(|error| {
+            let busy_wait = result.as_ref().err().and_then(|error| {
                 let message_waiting = error.code == "agentBusy"
                     && open_gxserver_database(&state.paths)
                         .is_ok_and(|db| message_waits_behind(&db, &project, &session));
                 busy_retry(&pending.id, error, now_ms, message_waiting)
             });
             let result = result.map_err(|error| {
-                if busy == Some(BusyRetry::Exhausted) {
-                    crate::session_chat_codex_picker::unsupported_selection(format!(
-                        "The agent stayed busy for {} minutes, so Ghostex stopped trying to apply this change. Pick it again when the agent is free. {}",
-                        BUSY_LIMIT_MS / 60_000,
-                        error.message
-                    ))
-                } else if unconfirmed_attempts_exhausted(&pending.id, &error) {
+                if unconfirmed_attempts_exhausted(&pending.id, &error) {
                     crate::session_chat_codex_picker::unsupported_selection(format!(
                         "The agent never confirmed this change after {MAX_UNCONFIRMED_ATTEMPTS} tries, so Ghostex stopped retrying it. {}",
                         error.message
@@ -670,9 +700,7 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                 if let Ok(mut since) = missing_input_box_since().lock() {
                     since.remove(&pending.id);
                 }
-                if let Ok(mut since) = busy_since().lock() {
-                    since.remove(&pending.id);
-                }
+                forget_busy_run(&pending.id);
             }
             let refused_mode = result.as_ref().err().is_some_and(mode_was_refused);
             if let Ok(db) = open_gxserver_database(&state.paths) {
@@ -695,10 +723,7 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                         let _ = db.execute("UPDATE session_chat_model_selections SET state = 'failed', errorMessage = ?4, retryAt = 0 WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3", params![project, session, pending.id, error.message]);
                     }
                     Err(error) => {
-                        let delay = match busy {
-                            Some(BusyRetry::After(delay)) => delay,
-                            _ => 5_000,
-                        };
+                        let delay = busy_wait.unwrap_or(RETRY_MS);
                         let _ = db.execute("UPDATE session_chat_model_selections SET state = 'queued', errorMessage = ?4, retryAt = ?5 WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3", params![project, session, pending.id, error.message, chrono::Utc::now().timestamp_millis() + delay]);
                     }
                 }

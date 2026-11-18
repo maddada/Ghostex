@@ -81,6 +81,37 @@ fn claude_fast_unavailable(screen: &str) -> Option<String> {
         .map(|line| line.trim().replace(" · ", ". Run ").to_string())
 }
 
+/// How many of the bottom non-empty lines may hold Codex's model segment.
+const CODEX_FOOTER_LINES: usize = 3;
+
+/// The part of a busy screen that holds the agent's footer, when it can be found: Claude's lines
+/// below the last rule (`────`), Codex's bottom non-empty lines.
+fn busy_footer(screen: &str, agent: SessionChatOptionAgent) -> Option<String> {
+    let lines = screen_lines(screen);
+    let footer: Vec<&String> = if agent == SessionChatOptionAgent::Claude {
+        let rule = lines.iter().rposition(|line| {
+            let line = line.trim();
+            line.chars().count() >= 10 && line.chars().all(|ch| ch == '─')
+        })?;
+        lines[rule + 1..].iter().collect()
+    } else {
+        let mut bottom: Vec<&String> = lines
+            .iter()
+            .rev()
+            .filter(|line| !line.trim().is_empty())
+            .take(CODEX_FOOTER_LINES)
+            .collect();
+        bottom.reverse();
+        bottom
+    };
+    let footer = footer
+        .into_iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join("\n");
+    (!footer.trim().is_empty()).then_some(footer)
+}
+
 /// The requested options a busy agent already shows in effect (`options_in_effect_while_busy`).
 #[derive(Default)]
 struct OptionsInEffect {
@@ -90,7 +121,7 @@ struct OptionsInEffect {
 
 impl PickerDriver<'_> {
     /// CDXC:SessionChat 2026-11-18 WHY:
-    /// GitHub #666: a Plan or Fast mode change that met a busy agent was retried for as long as it worked (a day for one session), even when the agent already showed the asked-for setting, because the current value was only read once the input box was ready. While the input box is not ready, a requested mode or Fast mode the agent already shows counts as done; the rest wait for the input box as before. Only a value the agent names counts: Claude's mode badge, Codex's plan marker, Codex's `fast` word, or the Fast mode in Claude's status line payload. Codex's default mode and Fast off are read from what is missing, which a busy screen cannot prove, and Codex permissions are left to the ready path.
+    /// GitHub #666: a Plan or Fast mode change that met a busy agent was retried for as long as it worked (a day for one session), even when the agent already showed the asked-for setting, because the current value was only read once the input box was ready. While the input box is not ready, a requested mode or Fast mode the agent already shows counts as done; the rest wait for the input box as before. Only a value the agent names counts: Claude's mode badge, Codex's plan marker, Codex's `fast` word, or the Fast mode in Claude's status line payload. Codex's default mode and Fast off are read from what is missing, which a busy screen cannot prove, and Codex permissions are left to the ready path. The footer must be found where it belongs, or prose and scrollback could pass for it: Claude's below the screen's last rule, Codex's model segment on the bottom lines. Claude's status line payload counts only when it was stored after the CLI last started.
     async fn options_in_effect_while_busy(
         &self,
         plan: &CodexPickerPlan,
@@ -111,7 +142,11 @@ impl PickerDriver<'_> {
         if ready(&screen, agent) || claude_fast_panel_open(&screen) {
             return OptionsInEffect::default();
         }
-        let selection = detect_session_chat_selection(agent, &screen);
+        let selection = busy_footer(&screen, agent)
+            .and_then(|footer| detect_session_chat_selection(agent, &footer))
+            .filter(|selection| {
+                agent == SessionChatOptionAgent::Claude || selection.model.is_some()
+            });
         let fast = plan.options.fast_mode.as_deref().is_some_and(|target| {
             let target = target == "on";
             let shown = if agent == SessionChatOptionAgent::Claude {
@@ -121,6 +156,11 @@ impl PickerDriver<'_> {
                         crate::agent_hooks::statusline::read_claude_statusline_payload(
                             directory, session_id,
                         )
+                    })
+                    .filter(|stored| {
+                        plan.claude_started_at
+                            .zip(stored.modified)
+                            .is_some_and(|(started, stored)| stored > started)
                     })
                     .and_then(|stored| stored.payload.get("fast_mode").and_then(Value::as_bool))
             } else {

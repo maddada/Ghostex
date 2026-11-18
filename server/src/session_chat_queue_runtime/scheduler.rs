@@ -747,11 +747,13 @@ impl SessionChatQueueRuntime {
                     hold(head, WaitReason::ModelChangeFailed)
                 });
             }
-            // A busy pick's longer wait (up to a minute, `BUSY_RETRY_MAX_MS` in
-            // session_chat_model_selection.rs) ends once a message waits behind it, so the message
-            // waits no longer than the usual 5-second retry.
+            // A busy pick's longer wait (session_chat_model_selection.rs `busy_retry`) ends once a
+            // message waits behind it, so the message waits no longer than the usual retry.
             let wait_ms = selection.retry_at - now.timestamp_millis();
-            if wait_ms > 0 && !(head.is_some() && wait_ms > 5_000) {
+            if wait_ms > 0
+                && !(crate::session_chat_model_selection::message_waits(&snapshot)
+                    && wait_ms > crate::session_chat_model_selection::BUSY_WAIT_SHORTCUT_MS)
+            {
                 return head.map_or(Assessment::Skip, |head| hold(head, WaitReason::ModelChange));
             }
             return Assessment::Deliver(ReadyDelivery {
