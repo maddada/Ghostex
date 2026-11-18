@@ -235,13 +235,15 @@ adds it as a project the user sees in the sidebar (creating the folder if it
 doesn't exist yet) and starts the work there:
 
 ```
-ghostex coordinator create --path ~/Developer/site --title "Site" \
+ghostex coordinator create --path ~/Developer/site --title "Site" --start \
   --task "Set up the site: <what the user asked for>"
 ghostex coordinator start-thread --path ~/Developer/site \
   --title "<3 to 6 words>" --task "<brief>"
 ghostex agents create <agent-id> --path ~/Developer/site
 ```
 
+- `--start` sends the coordinator's first message at once; without it (Ghostex
+  newer than 11.9.0) the message waits in its agent's box for the user's Start.
 - For a project that already exists, pass `--project-id <id>` instead
   (`ghostex state` lists the projects). Work for a project that already has a
   coordinator goes to its main coordinator instead: `ghostex agents send

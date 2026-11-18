@@ -55,6 +55,9 @@ reporting back ("be my lead on this", "run these as parallel threads and tell
 me when they are done"), a Ghostex coordinator does that with supervision built
 in: Ghostex sends it each thread's final message and every question a thread is
 stuck on, so nothing has to poll. Start one with `ghostex coordinator create`.
+On Ghostex newer than 11.9.0, its first message waits in its agent's input box until
+the user presses Start in its chat (so they can pick its model first); add
+`--start` when you give it a `--task` it should begin on right away.
 `ghostex coordinator …` works on every release since 2026-09-30 (`ghostex orchestrator …`
 is an alias on releases from 2026-10-10 on, and older briefs use it), so if
 `ghostex coordinator --help` is missing, the installed Ghostex is older, so use

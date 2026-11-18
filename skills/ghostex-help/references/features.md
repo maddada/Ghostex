@@ -3946,9 +3946,19 @@ version of the Projects features in Cursor and Claude Code.
   press **Next**: the agent picker opens, titled **Pick the coordinator's agent**,
   with every agent set up on that computer (any agent can run a coordinator;
   press Tab on Claude or Codex to pick an account). Pick one and the coordinator
-  starts with its first message sent. It starts on Opus 5.5 at High on Claude,
-  High effort on Codex and Antigravity, and every other agent on its own
-  default model; change it afterwards in its chat like any session's. Use a very
+  starts with its first message typed into the agent's input box but not sent,
+  so you can change the model and effort first. It starts on Opus 5.5 at High on
+  Claude, High effort on Codex and Antigravity, and every other agent on its own
+  default model. In its chat the message shows as a **First message** card at
+  the top of the chat box (Show all, **Edit**, **Start**): change the model or
+  effort with the model pill under the box (Ghostex takes the message out of the
+  agent's box while the agent's own picker runs, then types it back) or in its
+  terminal, then press **Start**. **Edit** moves the message into the chat box.
+  Pressing Enter in its terminal starts it too, and so does any message you send
+  it (typing your first request and pressing Enter starts the coordinator with
+  the first message, then your request right behind it). From a terminal or
+  another agent, `ghostex coordinator create` does the same unless you add
+  `--start`, which sends the first message at once. Use a very
   good model: the coordinator is the agent you talk to all day, and the main way
   Ghostex itself is built. When the highlighted agent would start on a model
   other than Opus, Fable, GPT Sol or GPT Astra, below medium effort, or on a
@@ -4391,7 +4401,7 @@ agent. An Empryo coordinator runs as the Empryo agent `ghostex-coordinator`: Gho
 keeps its playbook in `~/.empryo/agents/ghostex-coordinator.md` and switches the
 session to it with `/agent ghostex-coordinator` before anything else, so leave that
 file in place. From a terminal or another agent: `ghostex coordinator create --title <name>
-[--path <folder> | --project-id <id>] [--model <m>] [--effort <e>] [--goal <text>] [--task <first request>]`, `ghostex coordinator
+[--path <folder> | --project-id <id>] [--model <m>] [--effort <e>] [--goal <text>] [--task <first request>] [--start]` (its first message waits for Start in its chat unless `--start` sends it at once), `ghostex coordinator
 promote <session> [--goal <text>] [--computer <name>]` (make an existing session a coordinator; in versions after 10.49.0 this works on a connected computer's session too, and so does the sidebar's Advanced > Make Coordinator on its rows: that computer installs the coordinator skill and keeps the coordinator), `ghostex coordinator status`,
 `ghostex coordinator options` (the agents, models and efforts a coordinator can use),
 `ghostex coordinator start-thread --title <title> --task <brief> [--worktree]
