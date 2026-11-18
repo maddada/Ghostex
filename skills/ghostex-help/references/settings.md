@@ -342,7 +342,6 @@ How to use this file:
 
 - **Show debug UI controls** `debuggingMode` (boolean, default false): Show diagnostic logs. From the next start, also opens Chromium's DevTools port (9334) for developer tools.
 - **Diagnostic logs** `diagnosticLogging` (structured value; change it in Settings, not with `ghostex settings set`): Pick the areas to log while you reproduce an issue, and when logging turns off. Warnings, errors, and crashes are always captured.
-- **Use agent hooks** `useAgentHooks` (boolean, default false): Install hooks for Claude, Codex and OpenCode and follow them through their hooks. Ghostex follows these three without hooks, so turn this on only if it can't follow them on this computer. When off, a session Ghostex can't follow asks in its chat before turning that agent's hook on. Other agents always use their hooks.
 ## About (tab `about`)
 
 ### About
@@ -469,6 +468,7 @@ How to use this file:
 ### Agent configs
 
 - **Read live status from Claude Code and Cursor** `readAgentLiveStatus` (boolean, default true) [advanced]: Claude Code and Cursor hand their live model, effort, fast mode, context, cost and 5h / 7d limits only to a status line command, so the chat needs this to show them. Ghostex adds a small one to their settings: it keeps your own status line, draws nothing of its own in Claude, and does nothing outside Ghostex. It also adds the model to Codex's footer when you listed your own footer items. Off, Ghostex removes it and puts your own command back: the chat's model and effort update only after the next reply, fast mode, cost and More details stay empty, and limits show only for saved accounts.
+- **Use agent hooks** `useAgentHooks` (boolean, default false) [advanced]: Install hooks for Claude, Codex and OpenCode and follow them through their hooks. Ghostex follows these three without hooks, so turn this on only if it can't follow them on this computer. When off, a session Ghostex can't follow asks in its chat before turning that agent's hook on. Other agents always use their hooks.
 ## Integrations (tab `integrations`)
 
 ### Integrations
@@ -592,7 +592,7 @@ How to use this file:
 - **Workspaces** `workspaces` (Settings UI row without a settings key; use `ghostex settings open`): Keep each company's projects, Spaces, browser sign-ins, Linear key and Claude account in its own workspace, pick each one's primary tracker, and share a team backend for your team's Slack flow.
 - **Connectors** `connectors` (Settings UI row without a settings key; use `ghostex settings open`): Connect Gmail, Slack, Linear and more apps to a workspace so its agents can use them, from the Connectors page and the ghostex connectors commands.
 - **OS Integration** `osIntegration` (Settings UI row without a settings key; use `ghostex settings open`): Make Ghostex your default editor, terminal-link handler and script runner, and check how this computer opens its files and links.
-- **Debugging** `debugging` (Settings UI row without a settings key; use `ghostex settings open`): The Debugging page in Settings: debug UI controls, the diagnostic logs you turn on while reproducing an issue, and Use agent hooks.
+- **Debugging** `debugging` (Settings UI row without a settings key; use `ghostex settings open`): The Debugging page in Settings: debug UI controls and the diagnostic logs you turn on while reproducing an issue.
 - **Extensions** `extensionsButton` (Settings UI row without a settings key; use `ghostex settings open`): An entry under Tools in the sidebar's menu that lists your installed extensions.
 - **Hide Bots** `botsHidden` (boolean, default true): Stop offering Bots, the sidebar mode with one row per Hermes profile. Hidden by default; offered only where the Hermes CLI is installed.
 - **GBots** `gbotsEnabled` (boolean, default false): Turn GBots on or off: your own team of bots under Chief of Staff in Main Hub, running on your Claude Code or Codex. Needs Main Hub. Off by default.

@@ -2144,7 +2144,7 @@ opening its terminal: the first message starts OpenCode's background service
 when it is not running and creates the conversation, and the chat keeps reading
 and sending after the terminal sleeps or exits. Opening the terminal later shows
 the same conversation.
-Installing the OpenCode plugin (Settings > Debugging > Use agent hooks) also adds a "ghostex" OpenCode theme with a see-through
+Installing the OpenCode plugin (Settings > Agents > Advanced > Use agent hooks) also adds a "ghostex" OpenCode theme with a see-through
 background, so OpenCode's terminal shows the window's glass like Claude Code and
 Codex, in colours that match Ghostex's light and dark terminal. Ghostex turns it
 on only when you have not picked an OpenCode theme yourself; to go back, pick
@@ -3755,7 +3755,7 @@ Nothing is installed unless you agree. Once it is on, the chat says so with a
 Restart button, since the hook takes over the next time the agent starts there. Claude Code older than 2.1.172 keeps its hook, and a Codex
 older than 0.163 can't show its approvals without one, so its chat asks you to
 update it (Update Codex). To use the hooks for these three again, turn on
-Settings > Debugging > Use agent hooks (`useAgentHooks`). Every other
+Settings > Agents > Advanced > Use agent hooks (`useAgentHooks`). Every other
 agent still uses its hooks. To install hooks on another computer, use Settings >
 Agents with that computer picked. From a terminal, `ghostex agent-hooks status`,
 `ghostex agent-hooks install <agent>` (or `--all`) and `ghostex agent-hooks
@@ -8032,10 +8032,9 @@ Enable that switch to see Diagnostic logs. Diagnostic logs has one switch per ar
 sidebar, chat, modals, board, remote machines, agent activity, prompt editor,
 app lifecycle, server requests) and one Turn logs off after choice (15 min,
 1 hour, or 3 days) shared by all of them, so no area stays on longer than 3 days;
-warnings, errors, and crashes are always captured. Below them, whatever Show debug UI
-controls says, sits Use agent hooks (`useAgentHooks`, off by default): it installs hooks for
-Claude Code, Codex and OpenCode again, for a computer where Ghostex can't follow them without
-hooks (see Agent Hooks). Open the page with `ghostex settings open --tab debugging`.
+warnings, errors, and crashes are always captured. Use agent hooks (`useAgentHooks`) moved
+from this page to Settings > Agents > Advanced, under Read live status (see Agent Hooks).
+Open the page with `ghostex settings open --tab debugging`.
 Settings that depend on a setting above them have an indented ↳ before their
 name. They appear when the parent setting enables them.
 In the Settings table of contents, click a page or section title to go there.

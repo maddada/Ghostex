@@ -17,9 +17,18 @@ use super::model::{
 };
 use super::select::DropdownOption;
 
-/// The Advanced fold's section and its one row.
+/// The Advanced fold's section and its rows.
 pub(super) const AGENTS_ADVANCED: &str = "agentsAdvanced";
 const READ_AGENT_LIVE_STATUS: &str = "readAgentLiveStatus";
+/// Claude, Codex and OpenCode use their hooks (off: Ghostex follows them without; CDXC:AgentHooks
+/// 2026-11-12 in server/src/agent_hooks/hook_free.rs).
+///
+/// CDXC:AgentHooks 2026-11-19 DECISION: the user moved this switch here from Settings >
+/// Debugging, under Read live status (Q4170: only this row moves into Agents > Advanced). The
+/// same switch: gxserver installs or removes the three agents' hooks within a few seconds of the
+/// change (hookless_activity/hook_free_fallback.rs), and the Agents page reads the hooks again
+/// when it opens.
+const USE_AGENT_HOOKS: &str = "useAgentHooks";
 use gpui::{AnyElement, Context, Div, IntoElement, Window};
 use serde_json::{Value, json};
 use std::rc::Rc;
@@ -459,6 +468,20 @@ impl AgentsTab {
                     "Claude Code and Cursor hand their live model, effort, fast mode, context, cost and 5h / 7d limits only to a status line command, so the chat needs this to show them. Ghostex adds a small one to their settings: it keeps your own status line, draws nothing of its own in Claude, and does nothing outside Ghostex. It also adds the model to Codex's footer when you listed your own footer items. Off, Ghostex removes it and puts your own command back: the chat's model and effort update only after the next reply, fast mode, cost and More details stay empty, and limits show only for saved accounts.",
                 ),
                 values.bool(READ_AGENT_LIVE_STATUS),
+                cx,
+            ));
+        }
+        if should_show_setting(&section, USE_AGENT_HOOKS, None) {
+            rows.push(toggle_field(
+                self,
+                p,
+                USE_AGENT_HOOKS,
+                RowSpec::new("Use agent hooks")
+                    .description(
+                        "Install hooks for Claude, Codex and OpenCode. Ghostex follows them without hooks, so turn this on only if it can't follow them on this computer.",
+                    )
+                    .keyed(&values, USE_AGENT_HOOKS),
+                values.bool(USE_AGENT_HOOKS),
                 cx,
             ));
         }

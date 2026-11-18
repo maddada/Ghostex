@@ -318,8 +318,7 @@ pub(crate) fn extra_tab_search(
             section
                 .settings
                 .iter()
-                // Use agent hooks shows whatever Show debug UI controls says (debugging.rs).
-                .filter(|row| matches!(row.key.as_str(), "debuggingMode" | "useAgentHooks"))
+                .filter(|row| row.key == "debuggingMode")
                 .cloned()
                 .collect()
         } else {

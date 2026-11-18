@@ -9265,18 +9265,6 @@
       "agentWritable": false
     },
     {
-      "key": "useAgentHooks",
-      "title": "Use agent hooks",
-      "subtitle": "Install hooks for Claude, Codex and OpenCode and follow them through their hooks. Ghostex follows these three without hooks, so turn this on only if it can't follow them on this computer. When off, a session Ghostex can't follow asks in its chat before turning that agent's hook on. Other agents always use their hooks.",
-      "tab": "debugging",
-      "tabTitle": "Debugging",
-      "section": "controls",
-      "sectionTitle": "Debug controls",
-      "type": "boolean",
-      "default": false,
-      "agentWritable": true
-    },
-    {
       "key": "version",
       "title": "Version",
       "subtitle": "Ghostex app version.",
@@ -10655,6 +10643,19 @@
       "agentWritable": true
     },
     {
+      "key": "useAgentHooks",
+      "title": "Use agent hooks",
+      "subtitle": "Install hooks for Claude, Codex and OpenCode and follow them through their hooks. Ghostex follows these three without hooks, so turn this on only if it can't follow them on this computer. When off, a session Ghostex can't follow asks in its chat before turning that agent's hook on. Other agents always use their hooks.",
+      "tab": "agents",
+      "tabTitle": "Agents",
+      "section": "agentsAdvanced",
+      "sectionTitle": "Agent configs",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
       "key": "ghostexCapture",
       "title": "Floating Capture",
       "subtitle": "A small button that floats over every app and shows how many agents are working, waiting for you, or asking a question. Screenshot an area, an app or the whole screen, mark it up, and send a prompt to any project or session without switching to Ghostex. Cmd+Ctrl+Shift+S (Alt+Ctrl+Shift+S on Windows and Linux) opens it; A, Space, F or T instead of S capture an area, the current app or the full screen, or write a prompt, right away.",
@@ -11855,7 +11856,7 @@
     {
       "key": "debugging",
       "title": "Debugging",
-      "subtitle": "The Debugging page in Settings: debug UI controls, the diagnostic logs you turn on while reproducing an issue, and Use agent hooks.",
+      "subtitle": "The Debugging page in Settings: debug UI controls and the diagnostic logs you turn on while reproducing an issue.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",

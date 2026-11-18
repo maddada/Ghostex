@@ -212,7 +212,7 @@ impl AgentsTab {
                         .text_color(hsla(p.foreground))
                         // CDXC:AgentHooks 2026-11-13 WHY: Claude Code, Codex and OpenCode need no
                         // hook (server/src/agent_hooks/hook_free.rs), so the card no longer says
-                        // hooks are what make resume work; Use agent hooks moved to Debugging.
+                        // hooks are what make resume work; Use agent hooks is in the Advanced fold.
                         .child("Claude Code, Codex and OpenCode need no hook. Other agents use one to resume the exact conversation after sleep, reload or restart."),
                 )
                 .child(small(summary));
