@@ -135,6 +135,9 @@ fn agent_busy(message: impl Into<String>) -> DomainStateError {
 /// dialog or a running turn.
 pub(crate) const STATE_UNREADABLE_CODE: &str = "agentStateUnreadable";
 pub(crate) const TERMINAL_UNREACHABLE_CODE: &str = "terminalUnreachable";
+/// A Codex pick that met a running turn (`codex_turn_running`): paced like `agentBusy`, retried as
+/// soon as the session stops working, and never raised as a failed change.
+pub(crate) const TURN_RUNNING_CODE: &str = "agentTurnRunning";
 
 pub(crate) fn state_unreadable(message: impl Into<String>) -> DomainStateError {
     DomainStateError {
@@ -264,12 +267,16 @@ const CODEX_STATUS_TAIL_ROWS: usize = 20;
 /// only check. The message queued behind the pick then went out as soon as the pick finished, and
 /// Codex takes a message typed during a turn into that turn: it answered only the message and
 /// dropped the 1-to-300 list it was writing. Claude's pick and message waited for the turn to end.
-/// A Codex pick now waits (`agentBusy`) while Codex's live status row shows, so the message behind
-/// it waits too and both go to an idle Codex. This narrows the 2026-09-05 decision in
+/// A Codex pick now waits (`TURN_RUNNING_CODE`) while Codex's live status row shows, so the message
+/// behind it waits too and both go to an idle Codex. This narrows the 2026-09-05 decision in
 /// session_chat_queue_runtime/scheduler.rs ("model changes run during a turn whenever the CLI
-/// accepts them") for Codex. The row starts in column zero (`• Working (12s • esc to interrupt)`,
-/// `• Requesting user input (…)`, `• Compacting context (…)`); quoted copies in messages and tool
-/// output are indented (the 2026-09-15 WHY in session_chat_terminal_activity/line_parsers.rs).
+/// accepts them") for Codex. The row is `<label> (<clock> • <key> to interrupt)` in column zero,
+/// after a `•`, a `◦` (drawn on alternate frames without truecolor) or no marker at all
+/// (`tui.animations = false`), with any key name (a remapped interrupt key), a clock that parses,
+/// and nothing after it but ` · …` status (`• Working (12s • esc to interrupt)`,
+/// `• Requesting user input (…)`, `• Compacting context (…) · 1 background terminal running`).
+/// Quoted copies in messages and tool output are indented or carry other text (the 2026-09-15 WHY
+/// in session_chat_terminal_activity/line_parsers.rs).
 fn codex_turn_running(screen: &str) -> bool {
     screen
         .lines()
@@ -279,14 +286,34 @@ fn codex_turn_running(screen: &str) -> bool {
         .iter()
         .rev()
         .take(CODEX_STATUS_TAIL_ROWS)
-        .any(|line| {
-            line.strip_prefix('•').is_some_and(|status| {
-                status
-                    .split_once('(')
-                    .and_then(|(_, metadata)| metadata.split_once(')'))
-                    .is_some_and(|(metadata, _)| metadata.contains("esc to interrupt"))
-            })
-        })
+        .any(|line| codex_status_row(line))
+}
+
+fn codex_status_row(line: &str) -> bool {
+    let line = line.trim_end();
+    let row = ['\u{2022}', '\u{25e6}']
+        .iter()
+        .find_map(|marker| line.strip_prefix(*marker)?.strip_prefix(' '))
+        .unwrap_or(line);
+    if row.starts_with(char::is_whitespace) {
+        return false;
+    }
+    row.match_indices(" (").any(|(open, _)| {
+        let label = &row[..open];
+        let Some((metadata, suffix)) = row[open + 2..].split_once(')') else {
+            return false;
+        };
+        let Some((clock, interrupt)) = metadata.split_once(" \u{2022} ") else {
+            return false;
+        };
+        let key_words = interrupt
+            .strip_suffix(" to interrupt")
+            .map_or(0, |key| key.split_whitespace().count());
+        label.starts_with(char::is_alphabetic)
+            && (suffix.is_empty() || suffix.starts_with(" \u{b7} "))
+            && (1..=3).contains(&key_words)
+            && crate::session_chat_terminal_activity::parse_elapsed_seconds(clock).is_some()
+    })
 }
 
 fn model_picker_rows(screen: &str) -> Option<Vec<PickerRow>> {
@@ -864,13 +891,16 @@ impl PickerDriver<'_> {
         }
     }
 
-    /// A Codex pick waits while Codex's turn runs (`codex_turn_running`). A screen that cannot be
-    /// read is left to the drive's own capture, which says so.
+    /// A Codex pick is refused while Codex's turn runs (`codex_turn_running`). A screen that
+    /// cannot be read is left to the drive's own capture, which says so.
     async fn wait_for_codex_turn_end(&self) -> Result<(), DomainStateError> {
         match self.capture().await {
-            Some(screen) if codex_turn_running(&screen) => Err(agent_busy(
-                "Codex is still working on its turn, so the change waits for the turn to end.",
-            )),
+            Some(screen) if codex_turn_running(&screen) => Err(DomainStateError {
+                code: TURN_RUNNING_CODE,
+                message:
+                    "Codex is working on a turn, so its settings were not changed while it runs."
+                        .to_string(),
+            }),
             _ => Ok(()),
         }
     }

@@ -50,6 +50,19 @@ pub(crate) async fn note_model_selection_failure(
     error: &DomainStateError,
     final_failure: bool,
 ) {
+    // A Codex pick waiting for its turn to end is not stuck: the turn can run for hours, and the
+    // pick goes in once it ends (CDXC:SessionChat 2026-11-18 in session_chat_codex_picker.rs). The
+    // 30 seconds start again after it, so a turn's wait never counts toward them.
+    if error.code == crate::session_chat_codex_picker::TURN_RUNNING_CODE {
+        if let Ok(mut failures) = first_failures().lock() {
+            failures.remove(&(
+                project_id.to_string(),
+                session_id.to_string(),
+                pending.id.clone(),
+            ));
+        }
+        return;
+    }
     let now = chrono::Utc::now().timestamp_millis();
     let since = first_failures().lock().map_or(now, |mut failures| {
         *failures

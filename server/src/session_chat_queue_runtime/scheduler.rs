@@ -753,7 +753,8 @@ impl SessionChatQueueRuntime {
             }
             // A busy pick's longer wait (session_chat_model_selection.rs `busy_retry`) ends once a
             // message waits behind it: the message waits at most about 7.5 s for the next try, or
-            // about 90 s for a queued chat message once the pick has been busy for 30 minutes
+            // about 90 s for a queued chat message once the pick has been busy for 30 minutes, and a
+            // pick that met Codex's running turn is tried again once the session stops working
             // (`busy_wait_ends_early`).
             let wait_ms = selection.retry_at - now.timestamp_millis();
             if wait_ms > 0
@@ -761,6 +762,8 @@ impl SessionChatQueueRuntime {
                     &selection.id,
                     &snapshot,
                     wait_ms,
+                    presentation_activity(&session, generated_at) == "working",
+                    now.timestamp_millis(),
                 )
             {
                 return head.map_or(Assessment::Skip, |head| hold(head, WaitReason::ModelChange));
