@@ -56,6 +56,10 @@ export interface GxserverRemoteSshAccessStatus {
   checkedAt: string;
   /** Per-OS service detail (launchd / systemd / Windows service state). */
   detail: string | null;
+  /** Linux only: whether the OpenSSH server is installed (absent elsewhere). */
+  installed?: boolean;
+  /** Linux only, while it is not installed: this distribution's install command. */
+  installCommand?: string;
 }
 
 export interface GxserverRemoteTailscaleStatus {

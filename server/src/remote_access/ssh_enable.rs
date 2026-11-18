@@ -37,14 +37,16 @@ pub struct SshEnableResult {
     pub message: Option<String>,
 }
 
-pub fn enable_ssh_access(port: u16) -> SshEnableResult {
+/// `install`: on Linux, install the OpenSSH server first when it is missing (the window's Install
+/// click, `ssh_install.rs`); without it a missing server fails with the command to install it.
+pub fn enable_ssh_access(port: u16, install: bool) -> SshEnableResult {
     if ssh_port_accepts_connections(port) {
         return SshEnableResult {
             outcome: SshEnableOutcome::Enabled,
             message: None,
         };
     }
-    let result = run_privileged_enable();
+    let result = run_privileged_enable(install);
     if result.outcome != SshEnableOutcome::Enabled {
         return result;
     }
@@ -74,7 +76,7 @@ pub fn enable_ssh_access(port: u16) -> SshEnableResult {
 // idempotent. `do shell script … with administrator privileges` shows the
 // standard macOS administrator prompt.
 #[cfg(target_os = "macos")]
-fn run_privileged_enable() -> SshEnableResult {
+fn run_privileged_enable(_install: bool) -> SshEnableResult {
     const SCRIPT: &str = "/bin/launchctl enable system/com.openssh.sshd && (/bin/launchctl print system/com.openssh.sshd >/dev/null 2>&1 || /bin/launchctl bootstrap system /System/Library/LaunchDaemons/ssh.plist)";
     let output = Command::new("/usr/bin/osascript")
         .arg("-e")
@@ -277,7 +279,7 @@ exit 0
 }
 
 #[cfg(windows)]
-fn run_privileged_enable() -> SshEnableResult {
+fn run_privileged_enable(_install: bool) -> SshEnableResult {
     windows_enable::run()
 }
 
@@ -291,7 +293,8 @@ fn run_privileged_enable() -> SshEnableResult {
 // internal text agent is disabled so that a session without an agent fails
 // immediately instead of waiting for a terminal that does not exist.
 #[cfg(all(unix, not(target_os = "macos")))]
-fn run_privileged_enable() -> SshEnableResult {
+fn run_privileged_enable(install: bool) -> SshEnableResult {
+    use super::ssh_install::{install_command_hint, LinuxPackageManager};
     use super::ssh_status::{probe_linux_ssh_units, LinuxSshProbe};
 
     let units = match probe_linux_ssh_units() {
@@ -302,10 +305,23 @@ fn run_privileged_enable() -> SshEnableResult {
             )
         }
         LinuxSshProbe::NotInstalled => {
-            return failed(
-                "The OpenSSH server is not installed. Install it with your package manager (for example `sudo apt install openssh-server`, `sudo dnf install openssh-server`, or `sudo pacman -S openssh`), then try again."
-                    .to_string(),
-            )
+            let manager = LinuxPackageManager::detect();
+            let Some(manager) = manager.filter(|_| install) else {
+                return failed(format!(
+                    "The OpenSSH server isn't installed on this computer. Install it with {}, then try again.",
+                    install_command_hint(manager)
+                ));
+            };
+            let manual = manager.user_command();
+            return run_pkexec(
+                &manager.root_install_and_start_script(),
+                manual,
+                |detail| {
+                    format!(
+                        "Installing the OpenSSH server failed: {detail}. Install it yourself with `{manual}` in a terminal, then try again."
+                    )
+                },
+            );
         }
         LinuxSshProbe::Installed(units) => units,
     };
@@ -319,8 +335,18 @@ fn run_privileged_enable() -> SshEnableResult {
     } else {
         format!("systemctl enable --now {unit}.service")
     };
+    let manual = format!("sudo {command}");
+    run_pkexec(&command, &manual, |detail| {
+        format!("Turning on SSH access failed: {detail}.")
+    })
+}
+
+/// Runs `script` as root behind the desktop's polkit prompt. `manual` is what the user can type
+/// instead; `failure` words a failed run from its output.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn run_pkexec(script: &str, manual: &str, failure: impl Fn(&str) -> String) -> SshEnableResult {
     let output = Command::new("pkexec")
-        .args(["--disable-internal-agent", "/bin/sh", "-c", &command])
+        .args(["--disable-internal-agent", "/bin/sh", "-c", script])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -329,7 +355,7 @@ fn run_privileged_enable() -> SshEnableResult {
         Ok(output) => output,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return failed(format!(
-                "pkexec (polkit) is not installed, so Ghostex cannot show an administrator prompt. Run `sudo {command}` in a terminal instead."
+                "pkexec (polkit) is not installed, so Ghostex cannot show an administrator prompt. Run `{manual}` in a terminal instead."
             ))
         }
         Err(error) => {
@@ -347,20 +373,35 @@ fn run_privileged_enable() -> SshEnableResult {
     match output.status.code() {
         Some(126) => cancelled(),
         Some(127) => failed(format!(
-            "The administrator prompt did not authorize the change. If no password dialog appeared, this desktop session has no polkit authentication agent; run `sudo {command}` in a terminal instead."
+            "The administrator prompt did not authorize the change. If no password dialog appeared, this desktop session has no polkit authentication agent; run `{manual}` in a terminal instead."
         )),
         _ => {
             let combined = combined_output(&output.stdout, &output.stderr);
-            failed(format!(
-                "Turning on SSH access failed: {}.",
-                trimmed_or_exit_code(&combined, &output.status)
-            ))
+            failed(failure(&last_lines(
+                &trimmed_or_exit_code(&combined, &output.status),
+                3,
+            )))
         }
     }
 }
 
+/// The last `count` non-empty lines of a command's output, joined: a package manager's useful
+/// error is at the end of a long log.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn last_lines(text: &str, count: usize) -> String {
+    let lines: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    lines[lines.len().saturating_sub(count)..]
+        .join(" ")
+        .trim_end_matches('.')
+        .to_string()
+}
+
 #[cfg(not(any(target_os = "macos", windows, unix)))]
-fn run_privileged_enable() -> SshEnableResult {
+fn run_privileged_enable(_install: bool) -> SshEnableResult {
     failed("Ghostex cannot turn on SSH access on this platform.".to_string())
 }
 

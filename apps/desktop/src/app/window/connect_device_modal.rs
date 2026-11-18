@@ -130,8 +130,9 @@ pub(crate) enum ConnectDeviceCommand {
     /// `prepared`. It never turns SSH access on: only `EnableSsh` does.
     Prepare,
     /// Turn SSH access on (the window's Turn on SSH button, after it said what that does); the
-    /// host answers `ssh_turned_on`.
-    EnableSsh,
+    /// host answers `ssh_turned_on`. `install`: the Install button on Linux, which installs a
+    /// missing OpenSSH server first (`/api/enableSshAccess`'s `install`).
+    EnableSsh { install: bool },
     /// Install the Easy Connect helper (the window's Install button); the host reports each step
     /// with `helper_install_progress` and answers with `helper_installed` or `needs_helper`.
     InstallHelper,
@@ -254,8 +255,46 @@ pub(super) enum SshAccess {
     Off,
     /// The Turn on SSH click is running (the OS may be asking for a password).
     TurningOn,
+    /// The Install click is running: installing the OpenSSH server, then starting it (Linux).
+    Installing,
     /// Turning it on failed; why.
     Failed(String),
+}
+
+/*
+CDXC:RemotePairing 2026-11-18 DECISION:
+On Linux, Turn on SSH was a dead end when the OpenSSH server wasn't installed: it failed with a
+list of three install commands and nothing to click. User's pick (Q3975): "give ppl both options
+(copy and install)". While gxserver says the server isn't installed, the SSH step shows this
+distribution's one install command with Copy, and Install, which installs and starts it behind one
+admin password prompt (server/src/remote_access/ssh_install.rs). When the server is installed but
+stopped, the step says so. Only the clicks change anything, and the #663 rule stays: the paste
+box and the Headless server tab never wait on SSH. macOS and Windows never get these facts, so
+their wording is unchanged.
+*/
+/// What gxserver knows about this computer's SSH server beside whether it answers (Linux only).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct SshServer {
+    /// `Some(false)`: the OpenSSH server isn't installed; `None`: unknown, or not Linux.
+    pub(crate) installed: Option<bool>,
+    /// This distribution's install command, while it isn't installed and the package manager is
+    /// known.
+    pub(crate) install_command: Option<String>,
+}
+
+impl SshServer {
+    /// The `ssh` object of a `/api/remoteAccessStatus` or `/api/enableSshAccess` answer.
+    pub(crate) fn of_status(ssh: &Value) -> Self {
+        Self {
+            installed: ssh.get("installed").and_then(Value::as_bool),
+            install_command: ssh
+                .get("installCommand")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|command| !command.is_empty())
+                .map(str::to_string),
+        }
+    }
 }
 
 pub(crate) struct GpuiConnectDeviceWindow {
@@ -273,6 +312,8 @@ pub(crate) struct GpuiConnectDeviceWindow {
     stage: Stage,
     /// SSH access on this computer: this computer's own code waits for it, pasting doesn't.
     ssh: SshAccess,
+    /// Whether the SSH server is installed here, and its install command (Linux).
+    ssh_server: SshServer,
     code: Option<ConnectCode>,
     qr: Option<(String, Option<QrGrid>)>,
     waiting: Option<WaitingDevice>,
@@ -330,6 +371,7 @@ impl GpuiConnectDeviceWindow {
             require_presence: config.require_presence,
             stage: Stage::Preparing(None),
             ssh: SshAccess::On,
+            ssh_server: SshServer::default(),
             code: None,
             qr: None,
             waiting: None,
@@ -398,7 +440,7 @@ impl GpuiConnectDeviceWindow {
 
     /// Whether SSH access is on here, read while turning things on.
     pub(crate) fn ssh_checked(&mut self, on: bool, cx: &mut Context<Self>) {
-        if self.ssh != SshAccess::TurningOn {
+        if !self.ssh_busy() {
             self.ssh = if on { SshAccess::On } else { SshAccess::Off };
             cx.notify();
         }
@@ -414,18 +456,53 @@ impl GpuiConnectDeviceWindow {
         cx.notify();
     }
 
+    /// What gxserver says about the SSH server (read with SSH access, and again after a click).
+    pub(crate) fn ssh_server_read(&mut self, server: SshServer, cx: &mut Context<Self>) {
+        self.ssh_server = server;
+        cx.notify();
+    }
+
+    /// Turn on SSH or Install is running.
+    pub(super) fn ssh_busy(&self) -> bool {
+        matches!(self.ssh, SshAccess::TurningOn | SshAccess::Installing)
+    }
+
+    /// The OpenSSH server isn't installed here (Linux), so Turn on SSH alone can't help.
+    pub(super) fn ssh_server_missing(&self) -> bool {
+        self.ssh_server.installed == Some(false)
+    }
+
     /// This computer's own code waits for SSH access (pasting another computer's code doesn't).
     pub(super) fn own_code_needs_ssh(&self) -> bool {
         self.ssh != SshAccess::On
     }
 
-    fn turn_on_ssh(&mut self, cx: &mut Context<Self>) {
-        if self.ssh == SshAccess::TurningOn {
+    pub(super) fn turn_on_ssh(&mut self, cx: &mut Context<Self>) {
+        self.start_ssh(false, cx);
+    }
+
+    /// The preview binary's `computer-ssh-installing` state: Install clicked.
+    #[allow(dead_code)]
+    pub(crate) fn preview_install_ssh(&mut self, cx: &mut Context<Self>) {
+        self.install_ssh(cx);
+    }
+
+    /// Install: install the OpenSSH server, then start it (one admin prompt).
+    pub(super) fn install_ssh(&mut self, cx: &mut Context<Self>) {
+        self.start_ssh(true, cx);
+    }
+
+    fn start_ssh(&mut self, install: bool, cx: &mut Context<Self>) {
+        if self.ssh_busy() {
             return;
         }
-        self.ssh = SshAccess::TurningOn;
+        self.ssh = if install {
+            SshAccess::Installing
+        } else {
+            SshAccess::TurningOn
+        };
         cx.notify();
-        (self.host)(ConnectDeviceCommand::EnableSsh, cx);
+        (self.host)(ConnectDeviceCommand::EnableSsh { install }, cx);
     }
 
     /// Easy Connect is on (or couldn't be turned on): start asking for the code.
@@ -903,6 +980,89 @@ impl GpuiConnectDeviceWindow {
             .into_any_element()
     }
 
+    /// What turning SSH access on does here: the OS's sentence, or on Linux, that the server is
+    /// installed but not running, or not installed.
+    /// gxserver sends `installed` only on Linux, so macOS and Windows keep their sentence.
+    pub(super) fn ssh_turn_on_line(&self) -> String {
+        match self.ssh_server.installed {
+            Some(true) => "The OpenSSH server is installed here but not running. Ghostex starts it, after it asks for your password.".to_string(),
+            Some(false) => format!(
+                "The OpenSSH server isn't installed here. {}",
+                self.ssh_missing_how(true)
+            ),
+            None => Self::ssh_turn_on_sentence().to_string(),
+        }
+    }
+
+    /// How to install a missing OpenSSH server: Install (`done_screen`: its Install SSH button) or
+    /// the command below, or with no known package manager, the short list.
+    fn ssh_missing_how(&self, done_screen: bool) -> &'static str {
+        match (self.ssh_server.install_command.is_some(), done_screen) {
+            (true, true) => "Install SSH sets it up after your password, or run this in a terminal:",
+            (true, false) => {
+                "Install sets it up after your password, or run this in a terminal and then click Turn on SSH:"
+            }
+            (false, _) => {
+                "Install it with your package manager (for example: sudo apt install openssh-server, sudo dnf install openssh-server or sudo pacman -S openssh), then click Turn on SSH."
+            }
+        }
+    }
+
+    /// This distribution's install command with Copy, while the server is missing and the
+    /// command is known.
+    pub(super) fn ssh_install_command_row(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if !self.ssh_server_missing() {
+            return None;
+        }
+        let command = self.ssh_server.install_command.clone()?;
+        let p = self.palette;
+        Some(
+            h_flex()
+                .w_full()
+                .gap(px(8.0))
+                .items_center()
+                .child(
+                    div()
+                        .id("connect-device-ssh-install-command")
+                        .flex_1()
+                        .min_w_0()
+                        .h(px(MODAL_CONTROL_HEIGHT))
+                        .px(px(12.0))
+                        .flex()
+                        .items_center()
+                        .rounded(px(MODAL_RADIUS_CONTROL))
+                        .border_1()
+                        .border_color(hsla(p.hairline))
+                        .bg(hsla(p.panel))
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_left()
+                        .font_family(MODAL_MONO_FONT)
+                        .text_size(px(12.0))
+                        .text_color(hsla(p.foreground))
+                        .child(command.clone()),
+                )
+                .child(div().flex_shrink_0().child(modal_action_button(
+                    &p,
+                    "connect-device-copy-ssh-install",
+                    if self.copied { "Copied" } else { "Copy" },
+                    Some(
+                        modal_icon(
+                            if self.copied { ICON_CHECK } else { ICON_COPY },
+                            14.0,
+                            p.foreground,
+                        )
+                        .into_any_element(),
+                    ),
+                    ModalButtonTone::Neutral,
+                    false,
+                    move |this: &mut Self, _window, cx| this.copy_text(command.clone(), cx),
+                    cx,
+                )))
+                .into_any_element(),
+        )
+    }
+
     /// What turning SSH access on does on this computer's OS, in one sentence.
     pub(super) fn ssh_turn_on_sentence() -> &'static str {
         if cfg!(windows) {
@@ -919,15 +1079,28 @@ impl GpuiConnectDeviceWindow {
     fn ssh_ask_content(&self, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
         let computer = self.kind() == ConnectDeviceKind::Computer;
-        if self.ssh == SshAccess::TurningOn {
-            return self.spinner_line("Turning on SSH. Your computer may ask for your password.");
+        match self.ssh {
+            SshAccess::TurningOn => {
+                return self
+                    .spinner_line("Turning on SSH. Your computer may ask for your password.");
+            }
+            SshAccess::Installing => {
+                return self
+                    .spinner_line("Installing OpenSSH. Your computer may ask for your password.");
+            }
+            _ => {}
         }
         let failed = match &self.ssh {
             SshAccess::Failed(message) => Some(message.clone()),
             _ => None,
         };
+        let missing = self.ssh_server_missing();
+        // Install needs the package manager gxserver found (it names its command).
+        let can_install = missing && self.ssh_server.install_command.is_some();
         let heading = if failed.is_some() {
             "SSH didn't turn on"
+        } else if missing {
+            "The OpenSSH server isn't installed"
         } else if computer {
             "This computer's code needs SSH"
         } else {
@@ -942,9 +1115,19 @@ impl GpuiConnectDeviceWindow {
                 } else {
                     "Your phone connects to this computer over SSH."
                 },
-                Self::ssh_turn_on_sentence()
+                if missing {
+                    // The heading already says it isn't installed.
+                    self.ssh_missing_how(false).to_string()
+                } else {
+                    self.ssh_turn_on_line()
+                }
             )
             .into(),
+        };
+        let turn_on_label = if failed.is_some() && !can_install {
+            "Try again"
+        } else {
+            "Turn on SSH"
         };
         v_flex()
             .w_full()
@@ -987,20 +1170,43 @@ impl GpuiConnectDeviceWindow {
                     }))
                     .child(explanation),
             )
-            .child(div().pt(px(2.0)).w(px(160.0)).child(modal_action_button(
-                &p,
-                "connect-device-turn-on-ssh",
-                if failed.is_some() {
-                    "Try again"
-                } else {
-                    "Turn on SSH"
-                },
-                None,
-                ModalButtonTone::Primary,
-                false,
-                |this: &mut Self, _window, cx| this.turn_on_ssh(cx),
-                cx,
-            )))
+            .children(self.ssh_install_command_row(cx))
+            .child(
+                h_flex()
+                    .pt(px(2.0))
+                    .gap(px(8.0))
+                    .justify_center()
+                    .when(can_install, |row| {
+                        row.child(div().w(px(160.0)).child(modal_action_button(
+                            &p,
+                            "connect-device-install-ssh",
+                            if failed.is_some() {
+                                "Install again"
+                            } else {
+                                "Install"
+                            },
+                            None,
+                            ModalButtonTone::Primary,
+                            false,
+                            |this: &mut Self, _window, cx| this.install_ssh(cx),
+                            cx,
+                        )))
+                    })
+                    .child(div().w(px(160.0)).child(modal_action_button(
+                        &p,
+                        "connect-device-turn-on-ssh",
+                        turn_on_label,
+                        None,
+                        if can_install {
+                            ModalButtonTone::Neutral
+                        } else {
+                            ModalButtonTone::Primary
+                        },
+                        false,
+                        |this: &mut Self, _window, cx| this.turn_on_ssh(cx),
+                        cx,
+                    ))),
+            )
             .when(computer, |this| {
                 this.child(
                     self.muted("Pasting the other computer's code below works without it.")

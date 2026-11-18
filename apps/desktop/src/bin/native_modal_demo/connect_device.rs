@@ -17,6 +17,11 @@
 //! a computer: the code's square asks, the paste box works), `computer-done-ssh-off` (Connect both
 //! ways offers Turn on SSH first); Turn on SSH pretends to succeed, `ssh-fail` in the state makes
 //! it fail.
+//! Linux without an OpenSSH server: `computer-ssh-missing` (its apt command with Copy, Install and
+//! Turn on SSH; Install pretends to install, then succeeds), `computer-ssh-missing-fail` (Install
+//! clicked, then fails), `computer-ssh-missing-nopm` (no known package manager: the short list, no Install),
+//! `computer-ssh-installing` (Install running), `computer-ssh-stopped` (installed but not
+//! running), `computer-done-ssh-missing` (Connect both ways offers Install SSH).
 use super::connect_device_modal::*;
 use super::settings_modal::tabs::remote::tailscale_checklist_of_status;
 use gpui::{App, AppContext as _, Entity, WindowHandle};
@@ -67,6 +72,24 @@ const OTHER_CODE: &str = "ghostex-ec1:eyJ2IjoxLCJhZGRyZXNzIjoidGNEYW1CMGhNYWdibU
 
 /// What this app answers while its owner key waits for an Approve (`owner_refusal`).
 const REFUSAL: &str = "This computer already has an owner. On your phone, approve \"Let Mohamad's Laptop (Ghostex app) show the pairing code of …\" once, only if it shows the key words candle cobalt river pony; then Ghostex here can show the code and approve devices.";
+
+/// What gxserver says about the SSH server in the Linux states.
+fn ssh_server_of(state: &str) -> SshServer {
+    if state.contains("ssh-stopped") {
+        return SshServer {
+            installed: Some(true),
+            install_command: None,
+        };
+    }
+    if state.contains("ssh-missing") || state.contains("ssh-installing") {
+        return SshServer {
+            installed: Some(false),
+            install_command: (!state.contains("nopm"))
+                .then(|| "sudo apt install openssh-server".to_string()),
+        };
+    }
+    SshServer::default()
+}
 
 fn poll_answer(state: &str) -> ConnectPoll {
     if state.starts_with("refused") {
@@ -137,7 +160,14 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                             )
                         }),
                         _ => with_view(&slot, cx, |modal, cx| {
-                            modal.ssh_checked(!state.contains("ssh-off"), cx);
+                            modal.ssh_server_read(ssh_server_of(&state), cx);
+                            modal.ssh_checked(
+                                !(state.contains("ssh-off")
+                                    || state.contains("ssh-missing")
+                                    || state.contains("ssh-stopped")
+                                    || state.contains("ssh-installing")),
+                                cx,
+                            );
                             modal.prepared(Ok(()), cx)
                         }),
                     }
@@ -149,20 +179,38 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                         "refused-headless" => with_view_window(&slot, cx, |modal, window, cx| {
                             modal.preview_headless_tab(window, cx)
                         }),
+                        "computer-ssh-installing" | "computer-ssh-missing-fail" => {
+                            with_view(&slot, cx, |modal, cx| modal.preview_install_ssh(cx))
+                        }
                         _ => {}
                     }
                 })
                 .detach();
             }
-            ConnectDeviceCommand::EnableSsh => {
+            ConnectDeviceCommand::EnableSsh { install } => {
+                eprintln!("enable ssh install={install}");
+                if state == "computer-ssh-installing" {
+                    return;
+                }
                 cx.spawn(async move |cx| {
-                    cx.background_executor().timer(Duration::from_millis(900)).await;
-                    let result = if state.contains("ssh-fail") {
+                    cx.background_executor()
+                        .timer(Duration::from_millis(if install { 2500 } else { 900 }))
+                        .await;
+                    let result = if state == "computer-ssh-missing-fail" {
+                        Err("Installing the OpenSSH server failed: E: Unable to locate package openssh-server. Install it yourself with `sudo apt install openssh-server` in a terminal, then try again.".to_string())
+                    } else if state.contains("ssh-missing") && !install {
+                        Err("The OpenSSH server isn't installed on this computer. Install it with `sudo apt install openssh-server`, then try again.".to_string())
+                    } else if state.contains("ssh-fail") {
                         Err("Installing the OpenSSH Server feature failed: Add-WindowsCapability failed (0x800f0950).".to_string())
                     } else {
                         Ok(true)
                     };
-                    with_view(&slot, cx, |modal, cx| modal.ssh_turned_on(result, cx));
+                    with_view(&slot, cx, |modal, cx| {
+                        if result.is_ok() {
+                            modal.ssh_server_read(SshServer::default(), cx);
+                        }
+                        modal.ssh_turned_on(result, cx)
+                    });
                 })
                 .detach();
             }
@@ -196,7 +244,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                     with_view(&slot, cx, |modal, cx| {
                         modal.poll_answered(poll_answer(&state), cx)
                     });
-                    if state.starts_with("computer-") && !state.starts_with("computer-ssh-off") {
+                    if state.starts_with("computer-") && !state.starts_with("computer-ssh-") {
                         with_view_window(&slot, cx, |modal, window, cx| {
                             modal.preview_join(OTHER_CODE, window, cx)
                         });

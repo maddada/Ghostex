@@ -26,6 +26,31 @@ pub struct SshAccessStatus {
     pub port: u16,
     pub checked_at: String,
     pub detail: Option<String>,
+    /// Linux only: whether the OpenSSH server is installed (`None` elsewhere, or unknown).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installed: Option<bool>,
+    /// Linux only, while it is not installed: the one command that installs it with this
+    /// computer's package manager (`ssh_install.rs`); `None` when Ghostex doesn't know it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub install_command: Option<String>,
+}
+
+/// What the per-OS service query tells beside the port probe.
+struct SshServerFacts {
+    detail: String,
+    installed: Option<bool>,
+    install_command: Option<String>,
+}
+
+impl SshServerFacts {
+    #[cfg_attr(all(unix, not(target_os = "macos")), allow(dead_code))]
+    fn detail_only(detail: String) -> Self {
+        Self {
+            detail,
+            installed: None,
+            install_command: None,
+        }
+    }
 }
 
 /*
@@ -74,11 +99,14 @@ pub fn read_ssh_access_status_now(port: u16) -> SshAccessStatus {
 
 fn probe_ssh_access_status(port: u16) -> SshAccessStatus {
     let enabled = ssh_port_accepts_connections(port);
+    let facts = read_ssh_server_facts();
     SshAccessStatus {
         enabled,
         port,
         checked_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-        detail: Some(read_ssh_server_detail()),
+        detail: Some(facts.detail),
+        installed: facts.installed,
+        install_command: facts.install_command,
     }
 }
 
@@ -102,6 +130,11 @@ pub fn ssh_port_accepts_connections(port: u16) -> bool {
 // non-zero status when the job is not bootstrapped, which is exactly the
 // Remote Login off state.
 #[cfg(target_os = "macos")]
+fn read_ssh_server_facts() -> SshServerFacts {
+    SshServerFacts::detail_only(read_ssh_server_detail())
+}
+
+#[cfg(target_os = "macos")]
 fn read_ssh_server_detail() -> String {
     let loaded = command_succeeds("/bin/launchctl", &["print", "system/com.openssh.sshd"]);
     if loaded {
@@ -118,6 +151,11 @@ fn read_ssh_server_detail() -> String {
 // the service (see the CDXC:RemotePairing WHY in `ssh_enable.rs`). `Status`
 // and `StartType` are both on ServiceController in Windows PowerShell 5.1,
 // the floor Microsoft's OpenSSH guide sets.
+#[cfg(windows)]
+fn read_ssh_server_facts() -> SshServerFacts {
+    SshServerFacts::detail_only(read_ssh_server_detail())
+}
+
 #[cfg(windows)]
 fn read_ssh_server_detail() -> String {
     const QUERY: &str = "$s = Get-Service -Name sshd -ErrorAction SilentlyContinue; if ($null -ne $s) { '{0} {1}' -f $s.Status, $s.StartType } elseif (Test-Path -LiteralPath 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\sshd') { 'unreadable' } else { 'absent' }";
@@ -148,8 +186,27 @@ fn read_ssh_server_detail() -> String {
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
-fn read_ssh_server_detail() -> String {
-    match probe_linux_ssh_units() {
+fn read_ssh_server_facts() -> SshServerFacts {
+    let probe = probe_linux_ssh_units();
+    let installed = match &probe {
+        LinuxSshProbe::NoSystemctl => None,
+        LinuxSshProbe::NotInstalled => Some(false),
+        LinuxSshProbe::Installed(_) => Some(true),
+    };
+    let install_command = (installed == Some(false))
+        .then(super::ssh_install::LinuxPackageManager::detect)
+        .flatten()
+        .map(|manager| manager.user_command().to_string());
+    SshServerFacts {
+        detail: read_ssh_server_detail(probe),
+        installed,
+        install_command,
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn read_ssh_server_detail(probe: LinuxSshProbe) -> String {
+    match probe {
         LinuxSshProbe::NoSystemctl => {
             "systemctl is not available, so the SSH service state could not be read.".to_string()
         }
@@ -174,6 +231,11 @@ fn read_ssh_server_detail() -> String {
             }
         }
     }
+}
+
+#[cfg(not(any(target_os = "macos", windows, unix)))]
+fn read_ssh_server_facts() -> SshServerFacts {
+    SshServerFacts::detail_only(read_ssh_server_detail())
 }
 
 #[cfg(not(any(target_os = "macos", windows, unix)))]

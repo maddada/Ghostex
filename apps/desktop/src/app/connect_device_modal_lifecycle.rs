@@ -13,6 +13,8 @@ use std::time::Duration;
 const RPC_TIMEOUT: Duration = Duration::from_secs(15);
 /// `/api/enableSshAccess` waits on the admin prompt until the user answers it.
 const ENABLE_SSH_TIMEOUT: Duration = Duration::from_secs(300);
+/// The same with Install on Linux: the package manager downloads the OpenSSH server too.
+const INSTALL_SSH_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 /// How long the window follows the Easy Connect helper's install (it downloads and builds).
 const INSTALL_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 /// How often the window reads the install's step.
@@ -28,6 +30,8 @@ struct PrepareNeeds {
     install_error: Option<String>,
     /// SSH access is off here: the window asks before turning it on (`EnableSsh`).
     ssh_off: bool,
+    /// Whether the OpenSSH server is installed, and its install command (Linux).
+    ssh_server: SshServer,
     turn_on: bool,
 }
 
@@ -61,6 +65,10 @@ fn prepare_needs() -> Result<PrepareNeeds, String> {
         installing: status.get("installing").and_then(Value::as_bool) == Some(true),
         install_error: status_error(&status, "installError"),
         ssh_off: access.pointer("/ssh/enabled").and_then(Value::as_bool) == Some(false),
+        ssh_server: access
+            .get("ssh")
+            .map(SshServer::of_status)
+            .unwrap_or_default(),
         turn_on: status.get("enabled").and_then(Value::as_bool) != Some(true),
     })
 }
@@ -95,19 +103,34 @@ fn install_step(status: &Value) -> InstallStep {
     )
 }
 
-/// One admin prompt, only after the window's Turn on SSH click; a cancelled prompt is not an
-/// error (Remote Setup's Connect did the same). `Ok(on)`: whether SSH access is on now.
-fn enable_ssh() -> Result<bool, String> {
-    let enabled = rpc("/api/enableSshAccess", json!({}), ENABLE_SSH_TIMEOUT)?;
+/// One admin prompt, only after the window's Turn on SSH (or, on Linux, Install) click; a
+/// cancelled prompt is not an error (Remote Setup's Connect did the same). `Ok(on)`: whether SSH
+/// access is on now; beside it, what the answer says about the SSH server, when it says.
+fn enable_ssh(install: bool) -> (Result<bool, String>, Option<SshServer>) {
+    let enabled = match rpc(
+        "/api/enableSshAccess",
+        json!({ "install": install }),
+        if install {
+            INSTALL_SSH_TIMEOUT
+        } else {
+            ENABLE_SSH_TIMEOUT
+        },
+    ) {
+        Ok(enabled) => enabled,
+        Err(error) => return (Err(error), None),
+    };
+    let server = enabled.get("ssh").map(SshServer::of_status);
     if enabled.get("outcome").and_then(Value::as_str) == Some("failed") {
-        return Err(enabled
+        let message = enabled
             .get("message")
             .and_then(Value::as_str)
             .filter(|message| !message.is_empty())
             .unwrap_or("SSH access could not be turned on.")
-            .to_string());
+            .to_string();
+        return (Err(message), server);
     }
-    Ok(enabled.pointer("/ssh/enabled").and_then(Value::as_bool) != Some(false))
+    let on = enabled.pointer("/ssh/enabled").and_then(Value::as_bool) != Some(false);
+    (Ok(on), server)
 }
 
 fn turn_on() -> Result<(), String> {
@@ -282,11 +305,17 @@ impl GhostexGpuiApp {
         match command {
             ConnectDeviceCommand::Prepare => self.prepare_connect_device(cx),
             ConnectDeviceCommand::InstallHelper => self.install_connect_device_helper(true, cx),
-            ConnectDeviceCommand::EnableSsh => {
+            ConnectDeviceCommand::EnableSsh { install } => {
                 cx.spawn(async move |this, cx| {
-                    let result = cx.background_executor().spawn(async { enable_ssh() }).await;
+                    let (result, server) = cx
+                        .background_executor()
+                        .spawn(async move { enable_ssh(install) })
+                        .await;
                     let _ = this.update(cx, |app, cx| {
                         app.update_connect_device_window(cx, |modal, cx| {
+                            if let Some(server) = server {
+                                modal.ssh_server_read(server, cx);
+                            }
                             modal.ssh_turned_on(result, cx)
                         });
                     });
@@ -485,6 +514,7 @@ impl GhostexGpuiApp {
                 return;
             }
             let ssh_on = !needs.ssh_off;
+            let ssh_server = needs.ssh_server;
             let result: Result<(), String> = async {
                 if needs.turn_on {
                     progress(&this, cx, "Turning on Easy Connect…");
@@ -495,6 +525,7 @@ impl GhostexGpuiApp {
             .await;
             let _ = this.update(cx, |app, cx| {
                 app.update_connect_device_window(cx, |modal, cx| {
+                    modal.ssh_server_read(ssh_server, cx);
                     modal.ssh_checked(ssh_on, cx);
                     modal.prepared(result, cx)
                 });

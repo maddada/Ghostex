@@ -1237,29 +1237,41 @@ impl GpuiConnectDeviceWindow {
                         _ => self
                             .muted(format!(
                                 "To connect both ways, {name} connects to this computer over SSH, which is off here. {}",
-                                Self::ssh_turn_on_sentence()
+                                self.ssh_turn_on_line()
                             ))
                             .text_size(px(12.5))
                             .into_any_element(),
                     })
+                    // Linux without an OpenSSH server: its install command to copy (the footer's
+                    // button installs it; CDXC:RemotePairing 2026-11-18 in connect_device_modal.rs).
+                    .children(self.ssh_install_command_row(cx))
                 })
                 .child(modal_footer(
                     // Connect both ways sends this computer's code: without one (this app may not
                     // show it yet) the button would do nothing.
                     if self.own_code_needs_ssh() {
-                        let turning_on = self.ssh == SshAccess::TurningOn;
+                        let busy = self.ssh_busy();
+                        let install =
+                            self.ssh_server_missing() && self.ssh_server.install_command.is_some();
                         Some(modal_action_button(
                             &p,
                             "connect-computer-turn-on-ssh",
-                            if turning_on {
-                                "Turning on SSH…"
-                            } else {
-                                "Turn on SSH"
+                            match (&self.ssh, install) {
+                                (SshAccess::Installing, _) => "Installing SSH…",
+                                (SshAccess::TurningOn, _) => "Turning on SSH…",
+                                (_, true) => "Install SSH",
+                                _ => "Turn on SSH",
                             },
-                            turning_on.then(|| modal_spinner(p.foreground)),
+                            busy.then(|| modal_spinner(p.foreground)),
                             ModalButtonTone::Neutral,
-                            turning_on,
-                            |this: &mut Self, _window, cx| this.turn_on_ssh(cx),
+                            busy,
+                            move |this: &mut Self, _window, cx| {
+                                if install {
+                                    this.install_ssh(cx)
+                                } else {
+                                    this.turn_on_ssh(cx)
+                                }
+                            },
                             cx,
                         ))
                     } else {

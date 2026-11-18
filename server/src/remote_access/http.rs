@@ -78,11 +78,14 @@ pub(crate) async fn handle_remote_access_http(
             .await
         }
         "/api/enableSshAccess" => {
+            // Linux: `install: true` (the Connect window's Install click) installs a missing
+            // OpenSSH server first (CDXC:RemotePairing 2026-11-18 DECISION in ssh_install.rs).
+            let install = params.get("install").and_then(Value::as_bool) == Some(true);
             tokio::task::spawn_blocking(move || {
                 let served_ports =
                     read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime).ports;
                 let port = ssh_port_for_pairing(&served_ports);
-                let result = enable_ssh_access(port);
+                let result = enable_ssh_access(port, install);
                 crate::audit::record(
                     crate::audit::Action::new(
                         "pairing.enableSsh",
