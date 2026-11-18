@@ -861,9 +861,14 @@ fn store_statusline_payload(
     };
     fs::create_dir_all(parent).map_err(io_error)?;
     let is_new_session = !path.exists();
+    // A dated store's `updatedAt` is that same time (agent_model_pins.rs reads it).
+    let updated_at = dated.map_or_else(now_iso, |dated| {
+        chrono::DateTime::<chrono::Utc>::from(dated)
+            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+    });
     let data = json!({
         "version": 1,
-        "updatedAt": now_iso(),
+        "updatedAt": updated_at,
         "payload": payload,
     });
     let text = serde_json::to_string(&data).map_err(|error| {
@@ -872,11 +877,16 @@ fn store_statusline_payload(
     let temp_path = temp_path_for(path);
     fs::write(&temp_path, text).map_err(io_error)?;
     if let Some(dated) = dated {
-        fs::File::options()
+        let set = fs::File::options()
             .write(true)
             .open(&temp_path)
-            .and_then(|file| file.set_modified(dated))
-            .map_err(io_error)?;
+            .and_then(|file| file.set_modified(dated));
+        // Undated, it would read as newer than it is; this late payload is dropped instead and the
+        // line is still printed.
+        if set.is_err() {
+            let _ = fs::remove_file(&temp_path);
+            return Ok(());
+        }
     }
     fs::rename(&temp_path, path).map_err(io_error)?;
     if is_new_session {
