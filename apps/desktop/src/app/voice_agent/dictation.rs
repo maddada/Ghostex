@@ -31,8 +31,8 @@ const TICK: Duration = Duration::from_millis(50);
 const ENGINE_CHECK_TIMEOUT: Duration = Duration::from_secs(2);
 /// The bars of the recording pill's waveform (1.2 s of levels).
 pub(crate) const WAVEFORM_BARS: usize = 24;
-/// Below this level the microphone counts as hearing nothing (about -40 dBFS).
-const QUIET_LEVEL: f32 = 0.04;
+/// Below this level the microphone counts as hearing nothing (-40 dBFS on `level_meter.rs`'s scale).
+const QUIET_LEVEL: f32 = 0.25;
 /// How long near-silence lasts before the pill says it can't hear (Q2919).
 const QUIET_FOR: Duration = Duration::from_secs(3);
 
