@@ -519,14 +519,6 @@ pub(crate) fn command_names_model(command: &str, agent: &str) -> bool {
     false
 }
 
-/// A Codex `-c` override that sets the effort: `model_reasoning_effort=…`, with or without spaces
-/// around the `=` (Codex trims the key and the value).
-fn is_codex_effort_override(value: &str) -> bool {
-    value
-        .split_once('=')
-        .is_some_and(|(key, _)| key.trim() == "model_reasoning_effort")
-}
-
 /// True when `command` already passes an effort option (any agent's spelling, and on Codex
 /// `-c model_reasoning_effort=…`), read shell-aware like [`command_names_model`] so prompt text
 /// that mentions `--effort` does not count.
