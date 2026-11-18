@@ -88,7 +88,7 @@ pub(crate) fn cursor_forward_cells(params: &str) -> usize {
 
 /// Claude renders its thread title inside a long `─` rule, and Codex renders
 /// `─ Worked for … ─`. Skipping those lines keeps titles out of the scan.
-pub(super) fn is_divider_line(line: &str) -> bool {
+pub(crate) fn is_divider_line(line: &str) -> bool {
     let mut run = 0usize;
     for ch in line.chars() {
         if ch == '\u{2500}' {

@@ -126,6 +126,23 @@ fn agent_busy(message: impl Into<String>) -> DomainStateError {
     }
 }
 
+/// CDXC:SessionChat 2026-11-18 WHY:
+/// GitHub #666 review: a pick that met a ready agent whose current setting Ghostex cannot read (a
+/// footer the reader does not parse, no stored status line), or whose terminal it could not reach,
+/// answered `agentBusy`. Those states do not clear by waiting, and a busy pick never fails, so it
+/// held every later message for good. They have their own codes, which the queue gives up on after
+/// a while (session_chat_model_selection.rs `UNAPPLIABLE_LIMIT_MS`); `agentBusy` is kept for a
+/// dialog or a running turn.
+pub(crate) const STATE_UNREADABLE_CODE: &str = "agentStateUnreadable";
+pub(crate) const TERMINAL_UNREACHABLE_CODE: &str = "terminalUnreachable";
+
+pub(crate) fn state_unreadable(message: impl Into<String>) -> DomainStateError {
+    DomainStateError {
+        code: STATE_UNREADABLE_CODE,
+        message: message.into(),
+    }
+}
+
 fn dialog_mismatch(step: &str, detail: &str) -> DomainStateError {
     DomainStateError {
         code: "dialogMismatch",
@@ -843,7 +860,7 @@ impl PickerDriver<'_> {
             .iter()
             .position(|effort| *effort == current)
             .ok_or_else(|| {
-                agent_busy("Codex's current effort could not be read, so it was not changed.")
+                state_unreadable("Codex's current effort could not be read, so it was not changed.")
             })?;
         let target_index = CODEX_EFFORTS
             .iter()
@@ -1101,7 +1118,7 @@ impl PickerDriver<'_> {
 
         let selection = detect_session_chat_selection(SessionChatOptionAgent::Codex, &screen)
             .ok_or_else(|| {
-                agent_busy(
+                state_unreadable(
                     "Codex's current model could not be read, so its settings were not changed.",
                 )
             })?;
@@ -1111,7 +1128,7 @@ impl PickerDriver<'_> {
             .is_some_and(|model| model.value == plan.model)
         {
             let effort = selection.effort.as_ref().ok_or_else(|| {
-                agent_busy("Codex's current effort could not be read, so it was not changed.")
+                state_unreadable("Codex's current effort could not be read, so it was not changed.")
             })?;
             if effort.value == plan.effort {
                 return Ok(());
@@ -1638,10 +1655,10 @@ pub(crate) async fn select_session_chat_model(
     match (send, outcome) {
         (_, Some(Err(error))) => return Err(error),
         (Err(error), _) => {
-            return Err(agent_busy(format!(
-                "{} The model was not changed.",
-                error.message
-            )));
+            return Err(DomainStateError {
+                code: TERMINAL_UNREACHABLE_CODE,
+                message: format!("{} The model was not changed.", error.message),
+            });
         }
         (Ok(()), None) => {
             return Err(agent_busy(

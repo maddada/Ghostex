@@ -85,24 +85,24 @@ fn claude_fast_unavailable(screen: &str) -> Option<String> {
 const CODEX_FOOTER_LINES: usize = 3;
 
 /// The part of a busy screen that holds the agent's footer, when it can be found: Claude's lines
-/// below the last rule (`────`), Codex's bottom non-empty lines.
+/// below its input box (the `❯` row between two rules, as `claude_ultracode_on_lines` finds it, so
+/// a dialog's diff with rules in it is not read as the footer), Codex's bottom non-empty lines.
 fn busy_footer(screen: &str, agent: SessionChatOptionAgent) -> Option<String> {
     let lines = screen_lines(screen);
+    let lines: Vec<&String> = lines
+        .iter()
+        .filter(|line| !line.trim().is_empty())
+        .collect();
     let footer: Vec<&String> = if agent == SessionChatOptionAgent::Claude {
-        let rule = lines.iter().rposition(|line| {
-            let line = line.trim();
-            line.chars().count() >= 10 && line.chars().all(|ch| ch == '─')
-        })?;
-        lines[rule + 1..].iter().collect()
+        let is_rule = |line: &&String| crate::session_chat_options::is_divider_line(line);
+        let bottom = lines.iter().rposition(is_rule)?;
+        let top = lines[..bottom].iter().rposition(is_rule)?;
+        if !lines.get(top + 1)?.trim_start().starts_with('\u{276f}') {
+            return None;
+        }
+        lines[bottom + 1..].to_vec()
     } else {
-        let mut bottom: Vec<&String> = lines
-            .iter()
-            .rev()
-            .filter(|line| !line.trim().is_empty())
-            .take(CODEX_FOOTER_LINES)
-            .collect();
-        bottom.reverse();
-        bottom
+        lines[lines.len().saturating_sub(CODEX_FOOTER_LINES)..].to_vec()
     };
     let footer = footer
         .into_iter()
@@ -277,7 +277,7 @@ impl PickerDriver<'_> {
                 }
                 let screen = self.option_screen(agent).await?;
                 let current = current_fast(&screen, agent, plan).ok_or_else(|| {
-                    agent_busy("Waiting for the agent to report its Fast mode state.")
+                    state_unreadable("Ghostex could not read the agent's Fast mode state.")
                 })?;
                 if current != target {
                     self.type_option_command(agent, "/fast").await?;
@@ -330,7 +330,7 @@ impl PickerDriver<'_> {
             for _ in 0..8 {
                 let screen = self.option_screen(agent).await?;
                 let current = current_mode(&screen, agent).ok_or_else(|| {
-                    agent_busy("Waiting for the agent to report its current mode.")
+                    state_unreadable("Ghostex could not read the agent's current mode.")
                 })?;
                 if current == target {
                     return Ok(());
