@@ -150,20 +150,7 @@ pub fn install_agent_hooks(
         .cloned()
         .unwrap_or_default();
     status.insert("installedPaths".to_string(), json!(installed_paths));
-    if !refused_agents.is_empty() {
-        // Every client shows a row's detail, so the reason goes there too (review of 86df410e5).
-        if let Some(rows) = status.get_mut("agents").and_then(Value::as_array_mut) {
-            for refused in &refused_agents {
-                if let Some(row) = rows
-                    .iter_mut()
-                    .find(|row| row["agentId"] == refused["agentId"])
-                {
-                    row["detail"] = refused["error"].clone();
-                }
-            }
-        }
-        status.insert("refusedAgents".to_string(), json!(refused_agents));
-    }
+    note_refused_agents(&mut status, refused_agents);
     Ok(Value::Object(status))
 }
 
@@ -343,6 +330,25 @@ pub fn repair_installed_agent_hook_paths(
     Ok(repaired_paths)
 }
 
+/// Puts each refused agent's reason in its row's detail, which every client shows, and lists
+/// them as `refusedAgents` (review of 86df410e5).
+fn note_refused_agents(status: &mut Map<String, Value>, refused_agents: Vec<Value>) {
+    if refused_agents.is_empty() {
+        return;
+    }
+    if let Some(rows) = status.get_mut("agents").and_then(Value::as_array_mut) {
+        for refused in &refused_agents {
+            if let Some(row) = rows
+                .iter_mut()
+                .find(|row| row["agentId"] == refused["agentId"])
+            {
+                row["detail"] = refused["error"].clone();
+            }
+        }
+    }
+    status.insert("refusedAgents".to_string(), json!(refused_agents));
+}
+
 /// The repairs refused in this gxserver run, by agent and the size and time of its config files.
 fn refused_repairs() -> std::sync::MutexGuard<'static, std::collections::HashSet<String>> {
     static REFUSED: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<String>>> =
@@ -371,6 +377,7 @@ pub fn uninstall_agent_hooks(
     let hook_paths = HookPaths::from_paths(paths);
     let agent_ids = normalize_agent_ids(params.get("agentIds"));
     let mut removed_paths = Vec::new();
+    let mut refused_agents = Vec::new();
     /*
     CDXC:AgentHooks 2026-06-19-14:15:
     Advanced Settings uninstall must remove only Ghostex-owned hook commands, marked YAML blocks, plugin registrations, and Ghostex extension files while leaving user-managed provider hooks intact. The notify executable is shared by every provider, so remove it only after the last Ghostex-owned provider hook is gone. Status is reread for the complete catalog with auto-upgrade disabled so a scoped uninstall returns an authoritative UI snapshot without recreating hooks it just removed.
@@ -389,8 +396,19 @@ pub fn uninstall_agent_hooks(
         ) {
             continue;
         }
-        for removed_path in uninstall_agent_hook(definition, &hook_paths)? {
-            push_unique_path(&mut removed_paths, removed_path);
+        // CDXC:AgentHooks 2026-11-18 WHY: review of 487b7cd2e: one config Ghostex refuses to
+        // edit stopped Uninstall all, leaving every agent after it installed. Its reason goes in
+        // refusedAgents (and the row's detail), and the rest are removed.
+        match uninstall_agent_hook(definition, &hook_paths) {
+            Ok(paths) => {
+                for removed_path in paths {
+                    push_unique_path(&mut removed_paths, removed_path);
+                }
+            }
+            Err(error) => refused_agents.push(json!({
+                "agentId": definition.agent_id,
+                "error": error.message,
+            })),
         }
     }
     let has_remaining_provider_hook = HOOK_DEFINITIONS.iter().any(|definition| {
@@ -417,6 +435,7 @@ pub fn uninstall_agent_hooks(
         .cloned()
         .unwrap_or_default();
     status.insert("removedPaths".to_string(), json!(removed_paths));
+    note_refused_agents(&mut status, refused_agents);
     Ok(Value::Object(status))
 }
 

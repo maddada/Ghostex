@@ -190,7 +190,7 @@ fn inspect_json_hook_config(
     definition: &HookDefinition,
     command: &str,
 ) -> HookInspection {
-    let data = read_json_object(&read_file_text(config_path));
+    let data = read_agent_json_object(definition.agent_id, &read_file_text(config_path));
     let stale_ghostex_hook_present = json_contains_stale_ghostex_owned_hook_command(&data, command);
     let timeout_current =
         !matches!(
@@ -359,7 +359,7 @@ fn json_contains_ghostex_owned_hook_command(value: &Value, command: &str) -> boo
 }
 
 pub(crate) fn read_json_object(text: &str) -> Value {
-    let (_, text) = split_comment_header(text);
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     if text.trim().is_empty() {
         return json!({});
     }
@@ -400,6 +400,20 @@ pub(crate) fn claude_all_hooks_disabled(text: &str) -> bool {
         .get("disableAllHooks")
         .and_then(Value::as_bool)
         == Some(true)
+}
+
+/// The agents whose JSON config may open with `//` comment lines: Copilot CLI heads its own
+/// `config.json` with two, and Devin and OpenCode read JSONC. Another agent's commented config
+/// reads as `{}` (no hook) and is never rewritten (json_merge.rs `read_json_config`).
+pub(crate) const COMMENTED_JSON_AGENTS: &[&str] = &["copilot", "devin", "opencode"];
+
+/// `agent_id`'s JSON config as an object, past its `//` header when that agent allows one.
+pub(crate) fn read_agent_json_object(agent_id: &str, text: &str) -> Value {
+    if COMMENTED_JSON_AGENTS.contains(&agent_id) {
+        read_json_object(split_comment_header(text).1)
+    } else {
+        read_json_object(text)
+    }
 }
 
 /// The `//` comment lines that open a JSON config (Copilot CLI heads its `config.json` with two),

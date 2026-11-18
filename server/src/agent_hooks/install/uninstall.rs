@@ -150,7 +150,19 @@ fn remove_json_hook_with(
     definition: &HookDefinition,
     command: &str,
 ) -> Result<Option<Value>, DomainStateError> {
-    let config = read_json_config(definition.agent_id, config_path)?;
+    let config = match read_json_config(definition.agent_id, config_path) {
+        Ok(config) => config,
+        // A file Ghostex can't edit that holds no hook of Ghostex's has nothing to remove.
+        Err(error) => {
+            let text = std::fs::read(config_path)
+                .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+                .unwrap_or_default();
+            if text.contains(command) || text_contains_ghostex_owned_hook_command(&text) {
+                return Err(error);
+            }
+            return Ok(None);
+        }
+    };
     if config.empty {
         return Ok(None);
     }

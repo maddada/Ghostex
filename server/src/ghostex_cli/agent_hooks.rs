@@ -104,17 +104,30 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
     } else {
         json!({ "agentIds": requested })
     };
-    let result = call_gxserver_rpc(endpoint, &params, flags)?;
+    let mut result = call_gxserver_rpc(endpoint, &params, flags)?;
     let any_refused = result["refusedAgents"]
         .as_array()
         .is_some_and(|refused| !refused.is_empty());
+    let failure = if command == "install" {
+        "Some hooks were not installed"
+    } else {
+        "Some hooks were not removed"
+    };
     if json_output {
-        print_json(&result);
-        if command == "install" && any_refused {
-            return Err(CliError::Other(
-                "Some hooks were not installed: see refusedAgents.".to_string(),
-            ));
+        // One document: the result itself says it failed, and the command exits 1.
+        if any_refused {
+            if let Some(object) = result.as_object_mut() {
+                object.insert("ok".to_string(), json!(false));
+                object.insert(
+                    "error".to_string(),
+                    json!(format!("{failure} on {computer}: see refusedAgents.")),
+                );
+            }
+            print_json(&result);
+            super::set_exit_code(1);
+            return Ok(());
         }
+        print_json(&result);
         return Ok(());
     }
     let shown: Vec<String> = if all { Vec::new() } else { requested.clone() };
@@ -133,10 +146,8 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                 .collect()
         })
         .unwrap_or_default();
-    if command == "install" && !refused.is_empty() {
-        for (agent, error) in &refused {
-            eprintln!("{agent}: {error}");
-        }
+    for (agent, error) in &refused {
+        eprintln!("{agent}: {error}");
     }
     if command == "install" {
         let installed = agents_with(&result, &shown, |status| status == "installed");
@@ -175,6 +186,9 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                 "Ghostex hooks removed on {computer}, except: {}.",
                 left.join(", ")
             );
+        }
+        if !refused.is_empty() {
+            return Err(CliError::Other(format!("{failure} on {computer}.")));
         }
     }
     Ok(())

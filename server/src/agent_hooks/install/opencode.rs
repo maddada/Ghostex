@@ -74,10 +74,13 @@ fn retired_plugin_present(config_dir: &Path) -> bool {
     retired_plugin_paths(config_dir)
         .iter()
         .any(|path| is_retired_plugin_file(path))
-        || read_json_object(&read_file_text(&config_dir.join("opencode.json")))
-            .get("plugin")
-            .and_then(Value::as_array)
-            .is_some_and(|plugins| plugins.iter().any(is_retired_plugin_registration))
+        || read_agent_json_object(
+            "opencode",
+            &read_file_text(&config_dir.join("opencode.json")),
+        )
+        .get("plugin")
+        .and_then(Value::as_array)
+        .is_some_and(|plugins| plugins.iter().any(is_retired_plugin_registration))
 }
 
 /// Removes what `retired_plugin_present` reports and returns the files it changed.

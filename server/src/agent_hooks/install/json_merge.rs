@@ -158,10 +158,6 @@ pub(super) fn merge_json_hook(
     Ok(before)
 }
 
-/// The agents whose JSON config may open with `//` comment lines: Copilot CLI heads its own
-/// `config.json` with two, and Devin reads JSONC.
-const COMMENTED_JSON_AGENTS: &[&str] = &["copilot", "devin"];
-
 /// A JSON hook config read for editing: the `//` comment lines that open it, kept to be written
 /// back, and its object (`{}` for a missing or empty file).
 pub(crate) struct JsonConfig {
