@@ -1488,9 +1488,10 @@ trash button to delete one (sessions that carried it become untagged). The
 mobile app shows the same tags. `ghostex tag-session <selector> <tag>` accepts a
 custom tag by name. Claude, Codex and OpenCode name their own sessions; Ghostex
 syncs those names without running a first-prompt title job or blocking terminal
-input. If Codex has not named a session about a minute after a prompt, Ghostex
-names it in the background with the Title Generation Agent, without blocking
-typing, and Codex's own name replaces it if Codex names the session later.
+input. If Claude or Codex has not named a session about a minute after a
+prompt, Ghostex names it in the background with the Title Generation Agent,
+without blocking typing, and the agent's own name replaces it if the agent names
+the session later.
 Pi uses the Title Generation Agent for first-prompt names. OMP names its own
 sessions once a prompt says enough to name, and Ghostex syncs that name; renaming
 an OMP session from Ghostex sends OMP's own `/rename <name>`, which OMP keeps.
@@ -3259,7 +3260,9 @@ picks the account that can absorb the most usage before any of its limits
 resets, Most limit remaining picks the account with the most limit left, Soonest
 reset the one whose limit resets first, Most used first keeps draining the
 account already in use, and Same as last session reuses the account of the last
-session. Pick a specific account instead to always start
+session. Every automatic rule puts accounts at a limit last, counting only the
+limits the new session's model uses: a model's own window, such as Fable 7d,
+counts only for a session on that model. Pick a specific account instead to always start
 with it. When the rule finds no account, new sessions use the current CLI login.
 A custom agent that brings its own login keeps it: when its command sets
 `CLAUDE_CONFIG_DIR` (or `CODEX_HOME` for Codex), or runs your own wrapper

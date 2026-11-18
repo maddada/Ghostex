@@ -106,12 +106,13 @@ pub(crate) fn first_prompt_auto_title_strategy(agent_name: Option<&str>) -> Opti
         CDXC:SessionTitles 2026-09-11 DECISION:
         User: disable Claude's first-prompt `/rename` after verifying in Ghostex Web that Claude generates its own title without it.
         Let the normal title sync adopt Claude's name without claiming a job or blocking input; manual rename and Generate Name remain available.
+        Extended 2026-11-18 (GitHub #664): a Claude session Claude never names gets Codex's quiet fallback (CDXC:SessionTitles 2026-11-18 in title_fallback.rs); the first-prompt job still never runs for Claude.
         */
         Some("claude") => Some("agentAutoTitle"),
         /*
         CDXC:SessionTitles 2026-10-17 DECISION:
         User chose the "quiet fallback": if Codex hasn't named a session about a minute after its first prompt, Ghostex names it in the background, with no typing blocker and no "Generating title..." state; Codex's own name stays the first choice and a name the user set is never overwritten.
-        This supersedes the 2026-09-11 decision, which left the naming to Codex alone, so sessions stayed "Codex Session" when codex-cli 0.163 named none of its threads. The first-prompt job still never runs for Codex; the fallback is `schedule_codex_title_fallback` in codex_fallback.rs.
+        This supersedes the 2026-09-11 decision, which left the naming to Codex alone, so sessions stayed "Codex Session" when codex-cli 0.163 named none of its threads. The first-prompt job still never runs for Codex; the fallback is `schedule_agent_title_fallback` in title_fallback.rs.
         */
         Some("codex") => Some("agentAutoTitle"),
         // Names every conversation itself about a second after the first

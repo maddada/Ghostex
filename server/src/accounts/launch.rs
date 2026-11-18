@@ -447,7 +447,13 @@ pub(crate) fn apply_new_session(
         .map(str::to_string)
         .or(workspace_account)
         .or_else(|| {
-            super::default_account::quick_launch_account(&registry, &snapshot, provider)
+            // The model the session starts on decides which usage windows apply (#664).
+            let base = runtime
+                .get("accountBaseCommand")
+                .or_else(|| runtime.get("agentCommand"))
+                .and_then(Value::as_str);
+            let model = super::default_account::launch_model(provider, base);
+            super::default_account::quick_launch_account(&registry, &snapshot, provider, &model)
                 .map(|a| a.id.clone())
         });
     let Some(id) = id else {
@@ -512,7 +518,8 @@ fn one_shot_account_command(
         .and_then(|id| registry.accounts.iter().find(|account| account.id == id))
         .filter(|account| usable(account))
         .or_else(|| {
-            super::default_account::quick_launch_account(&registry, &snapshot, provider)
+            let model = super::default_account::launch_model(provider, Some(command));
+            super::default_account::quick_launch_account(&registry, &snapshot, provider, &model)
                 .filter(|account| usable(account))
         })?;
     let wrapper = launch_command(&home().ok()?, account).ok()?;

@@ -171,7 +171,9 @@ pub(crate) fn rebind_target(
         policy.priority,
     );
     let new_session_account = unusable
-        .then(|| super::default_account::quick_launch_account(&registry, &snapshot, provider))
+        .then(|| {
+            super::default_account::quick_launch_account(&registry, &snapshot, provider, &model)
+        })
         .flatten()
         .filter(|account| {
             account.id != current
