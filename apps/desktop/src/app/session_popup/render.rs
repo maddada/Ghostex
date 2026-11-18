@@ -15,16 +15,15 @@ use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::app::render::sleeping_card::{view_card_button, view_card_frame};
 use crate::app::render::terminal_content_layout::terminal_content_frame;
-#[cfg(target_os = "macos")]
 use crate::app::render::window_drag_region::window_drag_region;
 
 /// The header row's height: the work area header's, so the traffic lights sit on its centreline.
-const HEADER_HEIGHT: f32 = 38.0;
-/// Room for the traffic lights on macOS; elsewhere the system titlebar sits above the header.
+pub(super) const HEADER_HEIGHT: f32 = 38.0;
+/// Room for the traffic lights on macOS; elsewhere the header starts at the window's left edge.
 #[cfg(target_os = "macos")]
-const HEADER_LEADING: f32 = 80.0;
+pub(super) const HEADER_LEADING: f32 = 80.0;
 #[cfg(not(target_os = "macos"))]
-const HEADER_LEADING: f32 = 12.0;
+pub(super) const HEADER_LEADING: f32 = 8.0;
 
 /// The window's root: it draws the app's sessions and redraws when what it shows changes.
 pub(crate) struct SessionPopupRoot {
@@ -280,6 +279,14 @@ impl GhostexGpuiApp {
             .and_then(|id| self.agents_workspace.session(id))
             .and_then(|session| session.agent_icon);
         window.set_window_title(&title);
+        // An unsplit popup's tabs sit in its header, even its only tab; a split popup's panes each
+        // keep their own bar over them, and the header names the selected session.
+        let header_strip = match &root {
+            WorkspaceNode::Leaf(leaf) => {
+                Some(self.render_session_popup_tab_strip(id, leaf.pane_id, None, true, cx))
+            }
+            WorkspaceNode::Split(_) => None,
+        };
         let body = self.render_session_popup_node(id, &root, window, cx);
         div()
             .id("session-popup-window")
@@ -294,18 +301,20 @@ impl GhostexGpuiApp {
             .child(self.render_session_popup_header(
                 id,
                 active.map(|key| key.to_sidebar_session_id()),
+                header_strip,
                 &title,
                 agent_icon,
                 expanded,
                 pinned,
+                window,
                 cx,
             ))
             .child(body)
             .into_any_element()
     }
 
-    /// One pane of the window: its tab bar when it has more than one tab or the window is split
-    /// (a split pane's bar names its project), then the selected tab's session.
+    /// One pane of the window: its tab bar when the window is split (the bar names the pane's
+    /// project; an unsplit popup's bar is in its header), then the selected tab's session.
     pub(crate) fn render_session_popup_pane(
         &mut self,
         id: SessionPopupId,
@@ -320,7 +329,6 @@ impl GhostexGpuiApp {
             return div().into_any_element();
         };
         let split = matches!(popup.layout.root, WorkspaceNode::Split(_));
-        let shows_strip = split || leaf.tab_group.tabs.len() > 1;
         let key = leaf
             .tab_group
             .active_session_id()
@@ -331,7 +339,8 @@ impl GhostexGpuiApp {
                     .map(|key| self.session_popup_project_title(key))
             })
             .flatten();
-        let strip = shows_strip.then(|| self.render_session_popup_tab_strip(id, pane, project, cx));
+        let strip =
+            split.then(|| self.render_session_popup_tab_strip(id, pane, project, false, cx));
         let body = key
             .map(|key| self.render_session_popup_session(&key, cx))
             .unwrap_or_else(|| div().into_any_element());
@@ -523,22 +532,42 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    /// The window's header: the selected tab's agent and title, then Pin, Bring Back and Expand or
-    /// Shrink. On macOS it is the titlebar (the traffic lights sit at its left and a drag of it
-    /// moves the window); elsewhere it sits under the system titlebar.
+    /// The window's title bar: the tabs (`strip`, an unsplit popup's) or else the selected tab's
+    /// agent and title, then Pin, Bring Back and Expand or Shrink. It is the window's own title
+    /// band on every platform: the traffic lights sit at its left on macOS, the minimize, maximize
+    /// and close buttons at its right on Windows and Linux (where Ghostex draws the caption), and
+    /// a drag of its empty space moves the window while a double-click there does what the
+    /// platform's title bar does (`window_drag_region`). Its tabs and buttons take their own
+    /// presses, so a tab drag stays a tab drag.
+    ///
+    /// CDXC:SessionPopup 2026-11-18 DECISION:
+    /// User: "for the pop ups, we should always show the tabs bar even if just 1 tab is there and i wish we show the tabs bar in the title bar of the pop up itself instead of below the titlebar". An unsplit popup draws its tab bar inside this header, right of the traffic lights, in the band its own buttons use, like a browser's tab strip, and draws it with one tab too. Windows hides its system caption and Linux asks for client decorations (mod.rs), so the header is the title band there as well, ending in the main window's caption buttons. A split popup keeps a bar over each pane, which names the pane's project and takes a tab dropped back onto it to unsplit (panes.rs), and its header keeps the selected session's title. Supersedes the 2026-11-17 rule that a popup showed its tab bar under the header and only from two tabs.
     #[allow(clippy::too_many_arguments)]
     fn render_session_popup_header(
         &self,
         id: SessionPopupId,
         active_row: Option<String>,
+        strip: Option<AnyElement>,
         title: &str,
         agent_icon: Option<&'static str>,
         expanded: bool,
         pinned: bool,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let text = titlebar_project_text_color();
         let icon = titlebar_icon_color();
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        let caption = app_draws_window_caption(window).then(|| {
+            self.render_titlebar_window_controls(window, cx)
+                .into_any_element()
+        });
+        #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+        let caption: Option<AnyElement> = {
+            let _ = window;
+            None
+        };
+        let has_strip = strip.is_some();
         let row = div()
             .id("session-popup-header")
             .h(px(HEADER_HEIGHT))
@@ -548,11 +577,15 @@ impl GhostexGpuiApp {
             .items_center()
             .gap(px(6.0))
             .pl(px(HEADER_LEADING))
-            .pr(px(8.0))
+            // The caption buttons reach the window's top-right corner, as the main window's do.
+            .pr(px(if caption.is_some() { 0.0 } else { 8.0 }))
             .border_b_1()
             .border_color(chrome_ink().opacity(0.08))
+            .children(strip)
             .when_some(
-                agent_icon.and_then(workspace_tab_agent_icon_path),
+                agent_icon
+                    .and_then(workspace_tab_agent_icon_path)
+                    .filter(|_| !has_strip),
                 |row, path| {
                     row.child(titlebar_svg_icon(
                         path,
@@ -565,16 +598,18 @@ impl GhostexGpuiApp {
                     ))
                 },
             )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .truncate()
-                    .text_size(px(13.0))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(text)
-                    .child(title.to_string()),
-            )
+            .when(!has_strip, |row| {
+                row.child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .text_size(px(13.0))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(text)
+                        .child(title.to_string()),
+                )
+            })
             .when(pin_supported(), |row| {
                 row.child(
                     header_button(
@@ -638,10 +673,9 @@ impl GhostexGpuiApp {
                         app.toggle_session_popup_expanded(id, window, cx);
                     }),
                 ),
-            );
-        #[cfg(target_os = "macos")]
-        let row = window_drag_region(row);
-        row.into_any_element()
+            )
+            .children(caption);
+        window_drag_region(row).into_any_element()
     }
 
     /// The pane's card while its session is in a popup, in the board's style

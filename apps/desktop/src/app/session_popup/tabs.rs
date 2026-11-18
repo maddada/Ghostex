@@ -18,7 +18,7 @@ use crate::app::consts::*;
 use crate::app::context_menu::GpuiContextMenu;
 use crate::app::helpers::*;
 use crate::app::model::*;
-use crate::app::render::view_tab_strip::{ViewStripTabSlot, view_strip_drop_line};
+use crate::app::render::view_tab_strip::{ViewStripTabSlot, view_strip_drop_line, view_tab_icon};
 
 const POPUP_TAB_GROUP: &str = "session-popup-tab";
 /// The icon a tab whose agent has none of its own shows.
@@ -41,12 +41,16 @@ pub(crate) enum SessionPopupTarget {
 
 impl GhostexGpuiApp {
     /// The tab bar of popup `id`'s pane `pane`, led by the name of the project its session belongs
-    /// to when `project` is given (a split popup's panes).
+    /// to when `project` is given (a split popup's panes). `in_header` draws it inside the
+    /// window's header (an unsplit popup): it fills the header's height and the space between its
+    /// leading inset and its buttons, on the header's glass with no fill of its own, and its empty
+    /// space past the last tab moves the window as the rest of the header does.
     pub(crate) fn render_session_popup_tab_strip(
         &self,
         id: SessionPopupId,
         pane: WorkspacePaneId,
         project: Option<String>,
+        in_header: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let Some(popup) = self.session_popups.get(id) else {
@@ -90,14 +94,18 @@ impl GhostexGpuiApp {
                 "session-popup-tab-strip-{}",
                 pane.0
             )))
-            .flex_shrink_0()
-            .h(px(WORKAREA_VIEW_TAB_STRIP_HEIGHT))
-            .w_full()
+            .when(in_header, |strip| strip.flex_1().min_w_0().h_full())
+            .when(!in_header, |strip| {
+                strip
+                    .flex_shrink_0()
+                    .h(px(WORKAREA_VIEW_TAB_STRIP_HEIGHT))
+                    .w_full()
+                    .px(px(6.0))
+                    .bg(glass_clear(project_editor_shell_background_color()))
+            })
             .items_center()
             .gap(px(WORKAREA_VIEW_TAB_GAP))
-            .px(px(6.0))
             .overflow_hidden()
-            .bg(glass_clear(project_editor_shell_background_color()))
             .text_color(titlebar_text_color())
             .font_family(crate::ui_fonts::UI_FONT)
             // Leaving the bar takes its drop line away.
@@ -279,11 +287,8 @@ impl GhostexGpuiApp {
                 app.session_popup_strip_drop(id, pane, at, dragged, cx);
             }),
         )
-        .child(titlebar_svg_icon(
-            icon_path,
-            WORKAREA_VIEW_TAB_ICON_SIZE,
-            icon_color,
-        ))
+        // The view strip's icon box: the Claude logo at the size that matches its neighbours.
+        .child(view_tab_icon(icon_path, icon_color))
         .child(
             div()
                 .flex_1()
@@ -533,8 +538,15 @@ impl GhostexGpuiApp {
                 .update(cx, |_, window, _| window.bounds().size)
                 .unwrap_or_else(|_| gpui::size(px(super::SMALL_WIDTH), px(super::SMALL_HEIGHT)));
             let target = target.map(SessionPopupTarget::Popup).unwrap_or_else(|| {
-                // The new window's tab bar comes to rest under the pointer.
-                SessionPopupTarget::New(Bounds::new(point - gpui::point(px(80.0), px(52.0)), size))
+                // The new window's first tab, in its header, comes to rest under the pointer.
+                SessionPopupTarget::New(Bounds::new(
+                    point
+                        - gpui::point(
+                            px(super::render::HEADER_LEADING + 40.0),
+                            px(super::render::HEADER_HEIGHT / 2.0),
+                        ),
+                    size,
+                ))
             });
             let _ = app.update(cx, |app, cx| {
                 app.session_popup_move_tab(drag.key, target, cx)
