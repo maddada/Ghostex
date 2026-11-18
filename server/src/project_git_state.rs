@@ -403,11 +403,7 @@ async fn read_diff_stats(
                 .into_iter()
                 .filter(|path| {
                     root.as_ref().is_none_or(|root| {
-                        let path = root.join(path);
-                        // One it cannot open (no permission, locked on Windows) is not counted
-                        // either: its lines cannot be read.
-                        std::fs::metadata(&path).is_ok_and(|meta| meta.is_file())
-                            && std::fs::File::open(&path).is_ok()
+                        std::fs::metadata(root.join(path)).is_ok_and(|meta| meta.is_file())
                     })
                 })
                 .collect()
@@ -415,6 +411,9 @@ async fn read_diff_stats(
         .await
         .map_err(|error| TypedOperationError::dependency_unavailable(error.to_string()))?;
         let mut lines = 0_i64;
+        // A file the count could not open or read (no permission, locked on Windows) is not
+        // counted either: `countedFiles` says how many were.
+        let mut counted_files = 0_i64;
         for chunk in paths.chunks(UNTRACKED_LINE_COUNT_BATCH_SIZE) {
             let mut extra = Map::new();
             extra.insert("filePaths".to_string(), json!(chunk));
@@ -432,9 +431,13 @@ async fn read_diff_stats(
                 return Ok(json!({ "diffStats": null, "isRepo": true }));
             }
             lines += stdout(&result).trim().parse::<i64>().unwrap_or(0);
+            counted_files += result
+                .get("countedFiles")
+                .and_then(Value::as_i64)
+                .unwrap_or(chunk.len() as i64);
         }
         additions += lines;
-        file_count += paths.len() as i64;
+        file_count += counted_files;
     }
     Ok(json!({
         "diffStats": {

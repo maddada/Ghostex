@@ -185,11 +185,14 @@ fn setup_action_value_to_string(input: Option<&Value>) -> String {
     }
 }
 
+/// The lines of `file_paths` together, and how many of them were counted.
 pub(crate) fn count_project_file_lines(
     cwd: &str,
     file_paths: &[String],
-) -> Result<usize, TypedOperationError> {
+) -> Result<(usize, usize), TypedOperationError> {
     let mut total = 0;
+    // The files whose lines were read; the ones left out below are not counted.
+    let mut counted = 0;
     // Each file is counted a chunk at a time, so a large one is never held in memory whole.
     let mut buffer = vec![0u8; 64 * 1024];
     for file_path in file_paths {
@@ -210,18 +213,22 @@ pub(crate) fn count_project_file_lines(
             continue;
         };
         let mut lines = 0;
+        let mut readable = true;
         loop {
             match file.read(&mut buffer) {
                 Ok(0) => break,
                 Ok(read) => lines += buffer[..read].iter().filter(|byte| **byte == b'\n').count(),
                 Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(_) => {
-                    lines = 0;
+                    readable = false;
                     break;
                 }
             }
         }
-        total += lines;
+        if readable {
+            total += lines;
+            counted += 1;
+        }
     }
-    Ok(total)
+    Ok((total, counted))
 }

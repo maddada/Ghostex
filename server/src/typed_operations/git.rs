@@ -23,7 +23,7 @@ pub(crate) async fn run_git_action(
         let file_paths = optional_relative_file_paths(params.get("filePaths"))?;
         // Reads whole files: off the async worker.
         let cwd = context.cwd.clone();
-        let line_count =
+        let (line_count, counted_files) =
             tokio::task::spawn_blocking(move || count_project_file_lines(&cwd, &file_paths))
                 .await
                 .map_err(|error| {
@@ -31,6 +31,7 @@ pub(crate) async fn run_git_action(
                 })??;
         return Ok(json!({
             "action": action,
+            "countedFiles": counted_files,
             "exitCode": 0,
             "stderr": "",
             "stdout": line_count.to_string(),
