@@ -566,13 +566,13 @@
     {
       "key": "coordinatorEffort",
       "title": "Coordinator effort",
-      "subtitle": "The effort a new coordinator starts on. Medium is plenty for most coordinators; Agent default uses the agent's usual effort. Change a running coordinator's effort in its chat.",
+      "subtitle": "The effort a new coordinator starts on: High unless you pick another. Agent default uses the agent's usual effort. Change a running coordinator's effort in its chat.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "chat",
       "sectionTitle": "Chat",
       "type": "enum",
-      "default": "medium",
+      "default": "high",
       "options": [
         {
           "label": "Agent default",
@@ -600,7 +600,7 @@
     {
       "key": "orchestratorAllEfforts",
       "title": "Every effort level in coordinator pickers",
-      "subtitle": "Also lists the levels above XHigh (Max, Ultra and the like) in the coordinator effort pickers, where the agent has them. Coordinators work best on Medium or higher.",
+      "subtitle": "Also lists the levels above XHigh (Max, Ultra and the like) in the coordinator effort pickers, where the agent has them. Coordinators work best on High or XHigh.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "chat",

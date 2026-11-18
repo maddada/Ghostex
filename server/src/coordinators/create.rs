@@ -160,7 +160,7 @@ pub struct CoordinatorLaunch<'a> {
 }
 
 /// The `/api/createAgentSession` params of a new coordinator, with the defaults `create` applies:
-/// the Coordinator model and Coordinator effort settings (Opus 5.5 at Medium unless changed).
+/// the Coordinator model and Coordinator effort settings (Opus 5.5 at High unless changed).
 pub fn coordinator_create_params(launch: CoordinatorLaunch<'_>) -> Value {
     let family = launch
         .agent_rows
@@ -181,7 +181,7 @@ pub fn coordinator_create_params(launch: CoordinatorLaunch<'_>) -> Value {
         "runtimeSettings": { "titleSource": title_source },
         "coordinator": { "goal": launch.goal, "firstRequest": launch.task },
     });
-    // CDXC:Coordinators 2026-11-17 SEE-ALSO: `coordinator_start_model` in packages/gx-protocol/src/coordinator.rs (the user's decision: Opus 5.5 at Medium, or the agent's own default). ZCode takes no effort choice; its model rides agentModel and gxserver queues it as a `/model` line ahead of the first message.
+    // CDXC:Coordinators 2026-11-17 SEE-ALSO: `coordinator_start_model` in packages/gx-protocol/src/coordinator.rs (the user's decision: Opus 5.5 at High, or the agent's own default). ZCode takes no effort choice; its model rides agentModel and gxserver queues it as a `/model` line ahead of the first message.
     let chosen_model = launch.model.is_some();
     let chosen_effort = launch.effort.is_some();
     if let Some(model) = launch.model {

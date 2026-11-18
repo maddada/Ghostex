@@ -3946,8 +3946,8 @@ version of the Projects features in Cursor and Claude Code.
   press **Next**: the agent picker opens, titled **Pick the coordinator's agent**,
   with every agent set up on that computer (any agent can run a coordinator;
   press Tab on Claude or Codex to pick an account). Pick one and the coordinator
-  starts with its first message sent. It starts on Opus 5.5 at Medium on Claude,
-  Medium effort on Codex and Antigravity, and every other agent on its own
+  starts with its first message sent. It starts on Opus 5.5 at High on Claude,
+  High effort on Codex and Antigravity, and every other agent on its own
   default model; change it afterwards in its chat like any session's.
   **Coordinator model** (Opus 5.5 or Agent default) and **Coordinator effort**
   (Agent default, Low, Medium, High or XHigh) in Settings > Chat, on the
@@ -3974,7 +3974,7 @@ version of the Projects features in Cursor and Claude Code.
   coordinator's chat the effort picker offers the same Low, Medium, High and XHigh only.
   To pick from every level the agent has (Max, Ultra and the like), turn on
   **Every effort level in coordinator pickers** (an advanced setting in Settings > Chat);
-  a coordinator works best on Medium or higher. From a terminal: `ghostex coordinator
+  a coordinator works best on High or XHigh. From a terminal: `ghostex coordinator
   create [--agent <id>] [--model <m>] [--effort <e>] [--goal <text>] [--task <first request>]`
   (settings keys `coordinatorModel`, `coordinatorEffort`, `orchestratorAllEfforts`).
 - **Model warning**: while a coordinator runs on a model other than Opus,

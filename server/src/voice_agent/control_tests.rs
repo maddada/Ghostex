@@ -193,7 +193,7 @@ fn a_voice_coordinator_is_created_like_ghostex_coordinator_create() {
     assert_eq!(params["title"], "Coordinator");
     assert_eq!(params["runtimeSettings"]["titleSource"], "placeholder");
     assert_eq!(params["agentModel"], "opus[1m]");
-    assert_eq!(params["agentEffort"], "medium");
+    assert_eq!(params["agentEffort"], "high");
     assert_eq!(
         params["launchSettings"],
         json!({"agentCommand": "claude", "icon": "claude"})

@@ -60,22 +60,22 @@ pub fn coordinator_default_model_label(family: &str) -> Option<&'static str> {
 /// The Coordinator model setting: `opus` (Opus 5.5 on a Claude agent, the default) or `agent` (the
 /// agent's own default: the model Ghostex remembers for it, else the agent's configured one).
 pub const COORDINATOR_MODEL_SETTING: &str = "coordinatorModel";
-/// The Coordinator effort setting: `agent` (the agent's own default) or `low`, `medium` (the
-/// default), `high` or `xhigh`.
+/// The Coordinator effort setting: `agent` (the agent's own default) or `low`, `medium`, `high` (the
+/// default) or `xhigh`.
 pub const COORDINATOR_EFFORT_SETTING: &str = "coordinatorEffort";
 /// The setting value that leaves a coordinator's model or effort to the agent's own default.
 pub const COORDINATOR_AGENT_DEFAULT: &str = "agent";
 /// Opus 5.5's row in the Claude lineup, the model a Claude coordinator starts on by default.
 pub const COORDINATOR_OPUS_MODEL: &str = "opus[1m]";
 /// The effort a coordinator starts on by default.
-pub const DEFAULT_COORDINATOR_EFFORT: &str = "medium";
+pub const DEFAULT_COORDINATOR_EFFORT: &str = "high";
 
 /// The model a new coordinator on `family` is created with, from the Coordinator model setting
 /// (`setting`, `None` while unset): Opus 5.5 on Claude unless the setting is Agent default. `None`
 /// sends no model, so the agent starts on its own default (Ghostex's remembered model for it).
 ///
 /// CDXC:Coordinators 2026-11-17 DECISION:
-/// User: "For a coordinator, medium is plenty." Two Settings rows (Chat page, desktop and phone) pick what a new coordinator starts on: Coordinator model (Opus 5.5 or Agent default) and Coordinator effort (Agent default, Low, Medium, High or XHigh). The default for everyone is Opus 5.5 at Medium. Agent default leaves the choice to the agent's own default, the model and effort Ghostex remembers for it. New Coordinator gets no Model or Effort pickers back (the 2026-11-13 Q2980 decision stands); a coordinator's model and effort still change in its chat, and `--model`/`--effort` on `ghostex coordinator create` still win. Supersedes the 2026-10-01 decision that started a Claude coordinator on Opus 5.5 with no setting and the 2026-10-29 one that started every coordinator on High.
+/// User: "For a coordinator, medium is plenty." The maintainer then asked for Opus 5.5 at High by default, which the user agreed to. Two Settings rows (Chat page, desktop and phone) pick what a new coordinator starts on: Coordinator model (Opus 5.5 or Agent default) and Coordinator effort (Agent default, Low, Medium, High or XHigh). The default for everyone is Opus 5.5 at High. Agent default leaves the choice to the agent's own default, the model and effort Ghostex remembers for it. New Coordinator gets no Model or Effort pickers back (the 2026-11-13 Q2980 decision stands); a coordinator's model and effort still change in its chat, and `--model`/`--effort` on `ghostex coordinator create` still win. Supersedes the 2026-10-01 decision that started a Claude coordinator on Opus 5.5 with no setting and the 2026-10-29 one that started every coordinator on High with no setting.
 /// SEE-ALSO: packages/settings-catalog/src/data/defaults.rs (the two keys), server/src/coordinators/create.rs (`ghostex coordinator create`, the voice agent, the phone), server/src/ghostex_cli/coordinator/command.rs (`coordinator options`, which older phones preselect from), apps/desktop/src/app/gx_store/create/coordinator.rs (New Coordinator), server/src/agents/launch_plan.rs (Agent default model with a chosen effort), apps/mobile/app/src/settings/ (the phone's rows).
 pub fn coordinator_start_model(family: &str, setting: Option<&str>) -> Option<&'static str> {
     (family == "claude" && setting.map(str::trim) != Some(COORDINATOR_AGENT_DEFAULT))
@@ -83,7 +83,7 @@ pub fn coordinator_start_model(family: &str, setting: Option<&str>) -> Option<&'
 }
 
 /// The effort a new coordinator on `family` is created with, from the Coordinator effort setting
-/// (`setting`; unset or unknown reads as Medium). Only Claude, Codex and Antigravity coordinators
+/// (`setting`; unset or unknown reads as High). Only Claude, Codex and Antigravity coordinators
 /// get one (the others take no effort, or none Ghostex picks for them); Antigravity has no XHigh, so
 /// XHigh starts it on High. `None` sends no effort: the agent's own default.
 pub fn coordinator_start_effort(family: &str, setting: Option<&str>) -> Option<&'static str> {

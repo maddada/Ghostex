@@ -38,7 +38,7 @@ fn coordinator_family(agent: &Value) -> Option<String> {
 }
 
 /// The model and effort a new coordinator on `family` starts on, as the create sends them: the
-/// Coordinator model and Coordinator effort settings in `settings` (Opus 5.5 at Medium unless
+/// Coordinator model and Coordinator effort settings in `settings` (Opus 5.5 at High unless
 /// changed); `None` keeps the agent's own.
 fn coordinator_start_options(
     family: &str,

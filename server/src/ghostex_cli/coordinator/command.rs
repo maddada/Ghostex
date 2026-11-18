@@ -521,7 +521,7 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
     let agents: Vec<Value> = agents.into_iter().map(|(_, agent)| agent).collect();
     let result = json!({
         "agents": agents,
-        // CDXC:Coordinators 2026-11-17 SEE-ALSO: `coordinator_start_effort` in packages/gx-protocol/src/coordinator.rs (the user's decision: Medium unless the Coordinator effort setting says otherwise); each model's own `defaultEffort` is that level where the model offers it.
+        // CDXC:Coordinators 2026-11-17 SEE-ALSO: `coordinator_start_effort` in packages/gx-protocol/src/coordinator.rs (the user's decision: High unless the Coordinator effort setting says otherwise); each model's own `defaultEffort` is that level where the model offers it.
         "defaultEffort": coordinator_start_effort("claude", effort_setting).unwrap_or(DEFAULT_COORDINATOR_EFFORT),
     });
     if parsed.flags.truthy("json") {
