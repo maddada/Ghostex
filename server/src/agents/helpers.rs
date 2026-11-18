@@ -257,17 +257,24 @@ pub(crate) fn wrap_restored_terminal_resume_command(
     display_command: &str,
     fallback_command: Option<&str>,
 ) -> String {
+    // CDXC:AgentProviders 2026-11-18 WHY:
+    // On Windows the fallback never ran: `$?` after `& { … }` stays true in PowerShell 7 when the
+    // agent exits 1, when its CLI is not found and when a resume lookup fails with Write-Error
+    // (checked in pwsh 7.6), and `$LASTEXITCODE` alone misses the last two. The block records
+    // `$?` after its own last statement instead. As on POSIX, an exit that is an interrupt (128
+    // and up, or a negative NTSTATUS such as Ctrl+C's 0xC000013A) is not a failed resume.
     #[cfg(windows)]
     {
-        let mut script = format!(
-            "$Host.UI.WriteLine('Restoring session...'); $Host.UI.WriteLine({}); & {{ {} }}",
+        let banner = format!(
+            "$Host.UI.WriteLine('Restoring session...'); $Host.UI.WriteLine({}); ",
             crate::platform::shell::powershell_single_quote(display_command),
-            command
         );
-        if let Some(fallback) = fallback_command.filter(|fallback| *fallback != command) {
-            script.push_str(&format!("; if (-not $?) {{ & {{ {} }} }}", fallback));
-        }
-        return script;
+        return match fallback_command.filter(|fallback| *fallback != command) {
+            Some(fallback) => format!(
+                "{banner}$global:LASTEXITCODE = 0; $ghostexRestore = @{{ Ok = $true }}; & {{ {command}\n$ghostexRestore.Ok = $? }}; if (-not $ghostexRestore.Ok -and $LASTEXITCODE -ge 0 -and $LASTEXITCODE -lt 128) {{ & {{ {fallback} }} }}; Remove-Item -LiteralPath Variable:ghostexRestore -ErrorAction Ignore"
+            ),
+            None => format!("{banner}& {{ {command} }}"),
+        };
     }
     #[cfg(not(windows))]
     {
