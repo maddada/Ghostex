@@ -7801,6 +7801,14 @@ the card and the command say what is hard to read. `ghostex theme undo` and `gho
 step through the last 20 changes, kept across restarts, and `ghostex theme history` lists them
 with when they were made, by which agent or by you, and what changed; Undo is refused once a
 setting it would put back was changed again.
+Settings > Interface opens with **Theme it in your words**, which says an agent can do this:
+**Ask an agent** opens a Help chat with a starter prompt as its draft to edit and send, and six
+example themes (Firefly Forest, Ember Forge, Synthwave '84, Polar Night, Inkstone and Orchid
+Dusk) each show a picture, the prompt that describes them, **Copy prompt** and **Apply**. Apply
+sets the whole look as one theme change, the same as `ghostex theme set`, and its button then
+reads **Undo** (`ghostex theme undo` works too). The examples are dark mode looks: applying one
+while the app shows light mode switches Appearance to Dark, and a font the theme names that this
+computer doesn't have is left as it is.
 Theme colours go further than the colour squares: borders, dividers, text, grey text, the
 accent, cards, controls, menus, the selected and hovered rows, your messages, the chat box and
 the success, warning and danger colours, each set apart for dark and light mode. A colour is an
@@ -7817,7 +7825,7 @@ Commands: `ghostex theme read`, `ghostex theme set <key>=<value> ...`, `ghostex 
 
 Theme colours, colourfulness, the work area frame, window glass, and active pane outline live on the
 Interface page in Settings, right below General (`ghostex settings open --tab theme`).
-It has Text, UI Scale, Presets, Colours and Transparency sections, with Advanced controls and links
+It has Theme it in your words, Text, UI Scale, Presets, Colours and Transparency sections, with Advanced controls and links
 to related settings on General; a search for a row inside More opens it.
 Text: App font lists the fonts installed on this computer, with a search field and
 each name drawn in its own font; monospaced fonts sit at the end of the list. The

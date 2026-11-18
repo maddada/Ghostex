@@ -12,6 +12,7 @@ mod font;
 mod gallery;
 mod interface_scale;
 pub(crate) mod presets;
+mod prompt_gallery;
 mod roles;
 mod swatches;
 pub(super) mod transparency;
@@ -151,6 +152,9 @@ pub(crate) struct ThemeTab {
     pending_monospace_font: Option<String>,
     /// The Presets row's sideways scroll (presets.rs).
     presets_row: presets::PresetsRow,
+    /// "Theme it in your words": the example theme being applied or undone, and the last one
+    /// applied (prompt_gallery.rs).
+    prompt_gallery: prompt_gallery::PromptGallery,
     /// The Colours card's width at the last paint, so rows too narrow for their label and control
     /// side by side put the control under the label (`stacks`).
     row_width: Rc<Cell<f32>>,
@@ -219,6 +223,7 @@ impl ThemeTab {
             monospace_font_dropdown: DropdownState::default(),
             pending_monospace_font: None,
             presets_row: presets::PresetsRow::default(),
+            prompt_gallery: prompt_gallery::PromptGallery::default(),
             row_width: Rc::new(Cell::new(f32::INFINITY)),
         };
         page.apply_preview_state(window, cx);
@@ -1178,6 +1183,13 @@ impl Render for ThemeTab {
                 &matching,
                 move |tab, _window, cx| store.update(cx, |store, cx| store.set_active_tab(tab, cx)),
             )));
+        }
+        // "Theme it in your words" leads the page, above Text (prompt_gallery.rs).
+        if !t.searching {
+            blocks.extend(
+                self.prompt_gallery_section(&p, cx)
+                    .map(|section| PageBlock::section("themeByPrompt", section)),
+            );
         }
         // CDXC:Settings 2026-10-31: User, of the Text section: "move this section to the top of the
         // interface page in settings".

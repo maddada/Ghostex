@@ -153,6 +153,15 @@ impl GhostexGpuiApp {
             | "toggleCloseAfterDone" => {
                 self.handle_gpui_app_modal_dialog_command(command_type, command, cx);
             }
+            // Settings > Interface's "Ask an agent" (settings_modal/tabs/theme/theme_gallery.rs).
+            "askGhostexHelp" => {
+                let question = command
+                    .get("question")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                self.ask_ghostex_help(question, cx);
+            }
             "openWorkspaceWelcome" | "runGhostexHotkeyAction" => {
                 self.handle_gpui_app_modal_hotkey_action_command(command_type, command, window, cx);
             }

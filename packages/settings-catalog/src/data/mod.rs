@@ -20,6 +20,7 @@ mod session_tags;
 mod sidebar_agents;
 mod sidebar_commands;
 mod terminal_fonts;
+mod theme_gallery;
 mod theme_presets;
 
 pub use agent_accept_all::*;
@@ -41,4 +42,5 @@ pub use session_tags::*;
 pub use sidebar_agents::*;
 pub use sidebar_commands::*;
 pub use terminal_fonts::*;
+pub use theme_gallery::*;
 pub use theme_presets::*;

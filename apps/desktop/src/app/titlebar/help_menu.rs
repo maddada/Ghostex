@@ -262,6 +262,21 @@ impl GhostexGpuiApp {
             return;
         }
         self.help_chat_timing_start(question_index);
+        self.open_ghostex_help_chat(prompt, cx);
+    }
+
+    /// Settings > Interface's "Ask an agent" (`askGhostexHelp`): the chat a Help row opens, with
+    /// `prompt` staged as its editable draft.
+    pub(crate) fn ask_ghostex_help(&mut self, prompt: String, cx: &mut gpui::Context<Self>) {
+        if self.ask_chief_help_question(&prompt, cx) {
+            return;
+        }
+        self.open_ghostex_help_chat(prompt, cx);
+    }
+
+    /// Opens a Help chat with `prompt` as its draft once the ghostex-help skill is installed (or
+    /// after `HELP_SKILL_INSTALL_WAIT`).
+    fn open_ghostex_help_chat(&mut self, prompt: String, cx: &mut gpui::Context<Self>) {
         // Help chats live in one project rooted at the Ghostex config folder
         // (OS-specific, resolved by ghostex_paths), not in a fresh Quick
         // project per question.
