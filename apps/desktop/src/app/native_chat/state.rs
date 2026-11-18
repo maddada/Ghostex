@@ -90,6 +90,9 @@ pub(crate) enum NativeChatEvent {
     /// context percentage moved. The app draws the header and does not redraw for the chat's own
     /// changes, so without this the ring showed whatever the last unrelated redraw caught.
     SessionDetailsRing,
+    /// The where pill started or stopped showing the project (`where_pill_shows_project`). The app
+    /// draws the header, which leaves the project out of its breadcrumb meanwhile.
+    WherePillProject,
 }
 
 pub(crate) struct NativeChatView {
@@ -479,6 +482,9 @@ pub(crate) struct NativeChatView {
     /// The transcript starts at the window's top edge under the floating work area header, so its
     /// first row reserves the header's height (`set_under_workarea_header`).
     pub(crate) under_workarea_header: bool,
+    /// The where pill is on screen in the chat box's strip and shows the project, not cut down to
+    /// the computer's icon (`set_where_pill_shows_project`, read by the work area header).
+    pub(crate) where_pill_shows_project: bool,
 }
 
 impl EventEmitter<NativeChatEvent> for NativeChatView {}
@@ -770,6 +776,7 @@ impl NativeChatView {
             api_error_tick: std::cell::Cell::new(false),
             tool_clock_tick: std::cell::Cell::new(false),
             under_workarea_header: false,
+            where_pill_shows_project: false,
         }
     }
 

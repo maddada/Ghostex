@@ -575,6 +575,18 @@ impl NativeChatView {
                 || self.open_question_pill_text().is_some())
     }
 
+    /// Whether the strip is up with the where pill naming the project: a tier that keeps the
+    /// project (`WhereTier::Icon` drops it) and a project to name.
+    pub(super) fn where_pill_project_in_strip(&self) -> bool {
+        self.pills_strip_shown()
+            && self.pills_strip.plan.borrow().where_tier != super::where_pill::WhereTier::Icon
+            && self.where_pill().is_some_and(|pill| {
+                pill["project"]
+                    .as_str()
+                    .is_some_and(|project| !project.trim().is_empty())
+            })
+    }
+
     /// The strip for the top of the chat box, or `None` once it has shrunk away.
     pub(super) fn render_pills_strip(
         &mut self,

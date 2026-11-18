@@ -260,6 +260,21 @@ impl NativeChatView {
         Some(&self.snapshot["wherePill"]).filter(|pill| pill.is_object())
     }
 
+    /// CDXC:Titlebar 2026-11-18 DECISION:
+    /// User, of the header reading "Ghostex / Big Chungus": "no need for the name of the project
+    /// in titlebar since we now show it in a pill above the composer", and for when, they picked
+    /// "Only while the where pill shows it". The work area header leaves out "<project> /" while
+    /// the chat it names has this pill on screen naming the project; terminal view, a hidden strip
+    /// and the `WhereTier::Icon` tier (which drops the project at narrow widths) keep it
+    /// (`workarea_header_where_pill_shows_project`). The app does not redraw for the chat's own
+    /// changes, so a flip is told to it (`NativeChatEvent::WherePillProject`).
+    pub(super) fn set_where_pill_shows_project(&mut self, shows: bool, cx: &mut Context<Self>) {
+        if self.where_pill_shows_project != shows {
+            self.where_pill_shows_project = shows;
+            cx.emit(super::state::NativeChatEvent::WherePillProject);
+        }
+    }
+
     /// The pill's border box width at each tier (unscaled), before it is drawn, for the strip's
     /// fit (`plan_strip_with_where`).
     pub(super) fn where_pill_widths(&self, p: &ChatAppearance, cx: &gpui::App) -> Option<[f32; 3]> {

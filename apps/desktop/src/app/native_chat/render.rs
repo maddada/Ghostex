@@ -232,7 +232,8 @@ impl Render for NativeChatView {
             )
         };
         if covered {
-            // The composer is not drawn, so neither is its working card.
+            // The composer is not drawn, so neither is its working card, nor its where pill.
+            self.set_where_pill_shows_project(false, cx);
             overlay.set(indicator_overlay::WORKING_LEAD, None);
             overlay.set(indicator_overlay::WORKING_TRACK, None);
         }

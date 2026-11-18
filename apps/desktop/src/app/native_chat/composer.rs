@@ -778,9 +778,13 @@ impl NativeChatView {
         // The chat's pills ride in a strip along the box's top edge, inside its border
         // (pills_strip.rs); what the box holds under it is unchanged.
         let pills_strip = if maximized || self.collab_guest() {
+            self.set_where_pill_shows_project(false, cx);
             None
         } else {
-            self.render_pills_strip(p, cx)
+            let strip = self.render_pills_strip(p, cx);
+            let shows = self.where_pill_project_in_strip();
+            self.set_where_pill_shows_project(shows, cx);
+            strip
         };
         footer = footer.child(
             div()
