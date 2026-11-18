@@ -465,6 +465,10 @@ pub(crate) struct CoordinatorBoardView {
     /// The panel's window once open, and while it opens.
     pub(super) dock_modal_window: Option<gpui::AnyWindowHandle>,
     pub(super) dock_modal_opening: bool,
+    /// Whether the panel's last left press began on one of its controls that close it
+    /// (dock_ask_modal.rs `closes_panel`): a drag that only ends on one selected text, and
+    /// leaves the panel open.
+    pub(super) dock_modal_press: std::rc::Rc<std::cell::Cell<bool>>,
     /// Clears the panel when its window is closed from outside (the main window going away).
     pub(super) dock_modal_closed: Option<gpui::Subscription>,
     /// When each page row last asked its gxserver for its counts (work_cards.rs

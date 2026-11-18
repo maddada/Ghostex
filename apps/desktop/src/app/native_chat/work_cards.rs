@@ -1902,6 +1902,7 @@ impl NativeChatView {
                 // CDXC:Coordinators 2026-11-12 DECISION:
                 // User: "make cursor shown on the text inside the card not show caret please".
                 arrow: true,
+                quiet_links: false,
             },
             cx,
         )

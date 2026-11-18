@@ -187,9 +187,29 @@ impl Render for DockAskPanel {
             return div().size_full().into_any_element();
         };
         let chat = self.chat.clone();
-        div()
+        let press = self.chat.read(cx).board.dock_modal_press.clone();
+        let focus = self.focus.clone();
+        let panel = div()
             .id("dock-ask-panel")
             .track_focus(&self.focus)
+            .capture_any_mouse_down(move |_, window, cx| {
+                // Every press starts as one on no control (`closes_panel` marks its own after this).
+                press.set(false);
+                // A press in the panel gives it the keyboard, so Cmd+C (Ctrl+C off macOS) copies
+                // what is selected in it rather than reaching the chat (voice_agent/panel_copy.rs
+                // `take_keyboard` does the same for its non-activating panel).
+                if !window.is_window_active() {
+                    window.activate_window();
+                }
+                focus.focus(window, cx);
+            });
+        // Edit › Copy (Cmd+C on macOS goes through the app menu) copies the panel's selection, as
+        // Cmd+C does through `Root`.
+        #[cfg(not(ghostex_web))]
+        let panel = panel.on_action(|_: &crate::app::actions::GpuiEditMenuCopy, window, cx| {
+            window.dispatch_action(Box::new(gpui_component::input::Copy), cx);
+        });
+        panel
             .relative()
             .size_full()
             .flex()
@@ -454,13 +474,53 @@ impl NativeChatView {
     /// `element`, closing the panel once a click on it has done what it does (an answer, Open, a
     /// link to the work): the press is seen on its way in and the close runs after it.
     fn closes_panel(&self, element: AnyElement, cx: &Context<Self>) -> AnyElement {
+        let pressed = self.board.dock_modal_press.clone();
+        let released = pressed.clone();
         div()
             .flex_shrink_0()
-            .capture_any_mouse_up(cx.listener(|_, _: &gpui::MouseUpEvent, window, cx| {
+            // Only a press that began here closes it: a drag across the text to select it that
+            // ends on an answer or a link leaves the panel as it is (the panel's own press, in
+            // `DockAskPanel::render`, clears this first).
+            .capture_any_mouse_down(move |event: &gpui::MouseDownEvent, _, _| {
+                if event.button == gpui::MouseButton::Left {
+                    pressed.set(true);
+                }
+            })
+            .capture_any_mouse_up(cx.listener(move |_, _: &gpui::MouseUpEvent, window, cx| {
+                if !released.replace(false) {
+                    return;
+                }
                 cx.defer_in(window, |this, _, cx| this.close_dock_ask_modal(cx));
             }))
             .child(element)
             .into_any_element()
+    }
+
+    /// A right press on the panel's title or text: Copy for what is selected in it, as the
+    /// transcript's menu has it (transcript_menu.rs). Its Add to Chat and Reply are left out:
+    /// the panel is about its ask, and the chat box is behind it.
+    fn panel_text_menu(
+        &mut self,
+        event: &gpui::MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let selection = gpui_component::TextSelection::selected_text(window, cx)
+            .trim()
+            .to_owned();
+        if selection.is_empty() {
+            return;
+        }
+        let rows: Vec<Value> = self
+            .transcript_menu_rows(None, &selection)
+            .into_iter()
+            .filter(|row| row["command"]["type"] == "copyText")
+            .collect();
+        if rows.is_empty() {
+            return;
+        }
+        cx.stop_propagation();
+        self.show_chat_menu_in_window_at(rows, event.position, 180.0, window, cx);
     }
 
     /// The panel's content, drawn in its window (`DockAskPanel`): the band with the controls, the
@@ -586,18 +646,23 @@ impl NativeChatView {
                     .flex_1()
                     .min_w_0()
                     .font_weight(gpui::FontWeight::MEDIUM)
-                    .child(self.ask_title(
-                        &key,
-                        &title,
-                        &row["titleRuns"],
-                        false,
-                        body,
-                        title_size,
-                        title_line,
+                    .child(self.text_view_look(
+                        format!("dock-ask-title:{key}"),
+                        title_markdown(&title, &row["titleRuns"]),
+                        &Value::Null,
                         p,
+                        super::rich_markdown::TextLook {
+                            color: body,
+                            semibold: false,
+                            size: title_size,
+                            line_height: title_line,
+                            arrow: true,
+                            quiet_links: true,
+                        },
                         cx,
                     )),
-            );
+            )
+            .on_mouse_down(gpui::MouseButton::Right, cx.listener(Self::panel_text_menu));
 
         // The text: the work it belongs to, the whole description, where it stands. It scrolls
         // when the panel is shorter than it.
@@ -681,20 +746,33 @@ impl NativeChatView {
                 cx,
             )));
         }
-        for line in row["detail"]
+        for (index, line) in row["detail"]
             .as_array()
             .into_iter()
             .flatten()
             .filter_map(Value::as_str)
             .filter(|line| !line.is_empty())
+            .enumerate()
         {
             column = column.child(
                 div()
                     .min_w_0()
                     .when(first_body, |line| line.mt(px(body_lead * s)))
-                    .whitespace_normal()
-                    .text_color(p.card_muted)
-                    .child(line.to_string()),
+                    .child(self.text_view_look(
+                        format!("dock-ask-detail:{key}:{index}"),
+                        title_markdown(line, &Value::Null),
+                        &Value::Null,
+                        p,
+                        super::rich_markdown::TextLook {
+                            color: p.card_muted,
+                            semibold: false,
+                            size: PROSE_SIZE,
+                            line_height: PROSE_LINE_HEIGHT,
+                            arrow: true,
+                            quiet_links: false,
+                        },
+                        cx,
+                    )),
             );
             first_body = false;
         }
@@ -839,6 +917,10 @@ impl NativeChatView {
                     panel.child(
                         div()
                             .id("dock-ask-text")
+                            .on_mouse_down(
+                                gpui::MouseButton::Right,
+                                cx.listener(Self::panel_text_menu),
+                            )
                             .flex_1()
                             .min_h_0()
                             .overflow_y_scroll()
@@ -861,6 +943,57 @@ impl NativeChatView {
                 .into_any_element(),
         )
     }
+}
+
+/// The ask's title (or a line of where it stands) as Markdown for the chat's selectable text view: its words as written (every
+/// Markdown character escaped, so `*`, `_` or a leading `1.` show as they are, the way the dock
+/// row's words do), its links (the core's `titleRuns`) as links, and a `#562` left for the view to
+/// link to the project's GitHub (`issue_linked`).
+///
+/// CDXC:Coordinators 2026-11-19 DECISION:
+/// User, of a to-do whose title held an IP address in this panel: they could not select its text
+/// to copy it. The panel's title and text are selectable the way a chat message's are, with
+/// Cmd+C, Edit › Copy and a right-click Copy; its title is drawn by the chat's Markdown view
+/// rather than word by word (link_words.rs), so its links are underlined in the title's own colour
+/// there instead of dotted. A press that ends on an answer or a link closes the panel only when it
+/// began there, so a drag to select never does.
+fn title_markdown(title: &str, runs: &Value) -> String {
+    fn escape(words: &str, out: &mut String) {
+        for c in words.chars() {
+            if c.is_ascii_punctuation() && c != '#' && c != '/' && c != ':' {
+                out.push('\\');
+            }
+            if c == '\n' {
+                out.push(' ');
+            } else {
+                out.push(c);
+            }
+        }
+    }
+    let mut out = String::new();
+    match runs.as_array() {
+        None => escape(title, &mut out),
+        Some(runs) => {
+            for run in runs {
+                let words = run["text"].as_str().unwrap_or_default();
+                match run["href"].as_str() {
+                    Some(href) => {
+                        out.push('[');
+                        escape(words, &mut out);
+                        out.push_str("](<");
+                        out.push_str(&href.replace('<', "%3C").replace('>', "%3E"));
+                        out.push_str(">)");
+                    }
+                    None => escape(words, &mut out),
+                }
+            }
+        }
+    }
+    // A `#` that starts the title is a heading unless a number follows it (an issue).
+    if out.starts_with('#') && !out[1..].starts_with(|c: char| c.is_ascii_digit()) {
+        out.insert(0, '\\');
+    }
+    out
 }
 
 #[cfg(test)]
@@ -887,5 +1020,25 @@ mod tests {
         assert_eq!(fitted_height(120.0, 900.0), PANEL_MIN_HEIGHT);
         assert_eq!(fitted_height(480.0, 900.0), 480.0);
         assert_eq!(fitted_height(2000.0, 900.0), 900.0 * PANEL_MAX_SHARE);
+    }
+
+    #[test]
+    fn the_title_is_its_words_as_written_with_its_links_as_links() {
+        assert_eq!(
+            title_markdown("1. enter 192.168.1.177 *now*", &Value::Null),
+            r"1\. enter 192\.168\.1\.177 \*now\*"
+        );
+        assert_eq!(title_markdown("# not a heading", &Value::Null), r"\# not a heading");
+        assert_eq!(title_markdown("#562 stays an issue", &Value::Null), "#562 stays an issue");
+        let runs = json!([
+            { "text": "see " },
+            { "text": "the [docs]", "href": "https://example.com/a>b" },
+            { "text": " and " },
+            { "text": "#7", "issue": "7" },
+        ]);
+        assert_eq!(
+            title_markdown("ignored", &runs),
+            r"see [the \[docs\]](<https://example.com/a%3Eb>) and #7"
+        );
     }
 }

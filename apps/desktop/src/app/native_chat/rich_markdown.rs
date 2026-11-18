@@ -568,6 +568,10 @@ pub(super) struct TextLook {
     /// The arrow over the text instead of the I-beam; its links keep the hand
     /// (`TextViewStyle::with_arrow_over_text`). The text stays selectable.
     pub arrow: bool,
+    /// Links in the text's own colour, underlined, instead of the chat's link colour: a
+    /// question's words draw their links that way (link_words.rs), and the floating ask panel's
+    /// title (dock_ask_modal.rs) is those words, drawn here so it can be selected.
+    pub quiet_links: bool,
 }
 
 impl NativeChatView {
@@ -634,6 +638,7 @@ impl NativeChatView {
             size: PROSE_SIZE,
             line_height: PROSE_LINE_HEIGHT,
             arrow: false,
+            quiet_links: false,
         };
         self.text_view_look(id, content, references, p, look, cx)
     }
@@ -652,6 +657,10 @@ impl NativeChatView {
         let header_chat = cx.weak_entity();
         let header_appearance = p.clone();
         let mut style = super::markdown_style::text_style(p);
+        if look.quiet_links {
+            style.link = Some(look.color);
+            style.link_underline = true;
+        }
         style.is_dark = !p.light;
         style.highlight_theme = super::markdown_style::highlight_theme(p.light);
         // CDXC:SessionChat 2026-10-01 DECISION: "For larger tables that flow out of the screen, please add the ability for text to wrap. No need to scroll on VS Code (better)." A table fits the transcript's width: short columns (ids, refs) stay on one line, long ones share the rest and wrap, and it scrolls sideways only when even those floors are wider than the pane (the component's adaptive layout, set in `markdown_style::text_style`). Supersedes the 2026-09-25 capped columns that kept a wide table wider than the pane; cells still always wrap, never collapse.

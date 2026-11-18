@@ -46,19 +46,13 @@ impl NativeChatView {
         self.show_transcript_menu_for(None, text.trim().to_owned(), at, window, cx)
     }
 
-    fn show_transcript_menu_for(
-        &mut self,
-        href: Option<String>,
-        selection: String,
-        at: Point<Pixels>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> bool {
+    /// The core's transcript menu rows for `selection` (and `href`, the reference it was opened
+    /// on): its reference rows, then Copy, Add to Chat and Reply.
+    pub(super) fn transcript_menu_rows(&self, href: Option<String>, selection: &str) -> Vec<Value> {
         // The composer hides behind a question card (composer.rs), which is when Add to Chat is disabled.
         let question_active = self.snapshot["questionCard"]["visible"] == true
             && self.snapshot["prompt"]["kind"] == "question";
-        let mut rows: Vec<Value> = self
-            .runtime
+        self.runtime
             .as_ref()
             .and_then(|runtime| {
                 runtime.query_for_gesture(
@@ -70,7 +64,18 @@ impl NativeChatView {
                 )
             })
             .and_then(|rows| rows.as_array().cloned())
-            .unwrap_or_default();
+            .unwrap_or_default()
+    }
+
+    fn show_transcript_menu_for(
+        &mut self,
+        href: Option<String>,
+        selection: String,
+        at: Point<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let mut rows = self.transcript_menu_rows(href, &selection);
         self.keep_available_file_rows(&mut rows);
         // The Reply popover opens where the menu did (reply_popover.rs).
         for row in &mut rows {
