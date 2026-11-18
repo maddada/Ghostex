@@ -578,44 +578,89 @@ pub fn run_statusline_hook(args: Vec<String>) -> Result<(), DomainStateError> {
 }
 
 /// CDXC:AgentHooks 2026-11-18 WHY:
-/// GitHub #666 (Windows, about 40 agents): a statusline helper read its stdin with no time limit, so one whose writer never closed the pipe waited for ever, and they piled up (about 7 an hour). Claude Code and Cursor write the whole payload at once, so a helper that has nothing after this long gives up quietly: it stores and prints nothing, as an empty update would.
+/// GitHub #666 (Windows, about 40 agents): a statusline helper read its stdin with no time limit, so one whose writer never closed the pipe waited for ever, and they piled up (about 7 an hour). Claude Code and Cursor write the whole payload at once, so after this long the helper uses what arrived when it is a whole JSON object (a writer that sent the payload but kept the pipe open), and otherwise gives up quietly: it stores and prints nothing, as an empty update would.
 const STATUSLINE_INPUT_LIMIT: Duration = Duration::from_secs(5);
 
-/// The payload on stdin, or `None` when it did not end within `STATUSLINE_INPUT_LIMIT`. The reading thread is left blocked; returning ends the process with it.
+/// The payload on stdin, or `None` when it did not end within `STATUSLINE_INPUT_LIMIT` and what arrived is not a whole JSON object. The reading thread is left blocked; returning ends the process with it.
 fn read_statusline_input() -> Option<String> {
+    let received = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let (sender, receiver) = std::sync::mpsc::channel();
+    let buffer = received.clone();
     std::thread::spawn(move || {
-        let mut input = String::new();
-        let _ = std::io::stdin().read_to_string(&mut input);
-        let _ = sender.send(input);
+        let mut stdin = std::io::stdin().lock();
+        let mut chunk = [0_u8; 8192];
+        loop {
+            match stdin.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(count) => match buffer.lock() {
+                    Ok(mut buffer) => buffer.extend_from_slice(&chunk[..count]),
+                    Err(_) => break,
+                },
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(_) => break,
+            }
+        }
+        let _ = sender.send(());
     });
-    receiver.recv_timeout(STATUSLINE_INPUT_LIMIT).ok()
+    let ended = receiver.recv_timeout(STATUSLINE_INPUT_LIMIT).is_ok();
+    let bytes = received
+        .lock()
+        .map(|buffer| buffer.clone())
+        .unwrap_or_default();
+    // Not UTF-8: empty, as `read_to_string` left it.
+    let text = String::from_utf8(bytes).unwrap_or_default();
+    if ended {
+        return Some(text);
+    }
+    serde_json::from_str::<Value>(&text)
+        .is_ok_and(|value| value.is_object())
+        .then_some(text)
 }
 
 /// CDXC:AgentHooks 2026-11-18 WHY:
-/// GitHub #666: on Windows, killing the shell that ran the statusline command leaves gxserver running, and one waiting on a wrapped user command whose parent was killed waited for ever. This watches the process that started it and exits when that one does; the kill-on-close job (`kill_children_with_this_process`) then takes the wrapped command down too. Best effort: a parent that cannot be opened is not watched. A parent pid that now names a process started after this one was reused, so the real parent is already gone.
+/// GitHub #666: on Windows, killing the shell that ran the statusline command leaves gxserver running, and one waiting on a wrapped user command whose parent was killed waited for ever. This watches the process that started it and exits when that one does; the kill-on-close job (`kill_children_with_this_process`) then takes the wrapped command down too. A parent that is already gone (OpenProcess answers ERROR_INVALID_PARAMETER for a pid no process has, and a pid that now names a process started after this one was reused) exits at once; one that cannot be opened for another reason (access denied), or a wait that fails, is not watched. The parent pid comes from this process's own basic information, not a snapshot of every process, since this runs on every refresh.
 #[cfg(windows)]
 fn exit_when_parent_exits() {
-    use windows_sys::Win32::{
-        Foundation::{CloseHandle, FILETIME},
-        System::Threading::{
-            GetProcessTimes, OpenProcess, WaitForSingleObject, INFINITE,
-            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+    use std::mem::size_of;
+    use windows_sys::{
+        Wdk::System::Threading::{NtQueryInformationProcess, ProcessBasicInformation},
+        Win32::{
+            Foundation::{
+                CloseHandle, GetLastError, ERROR_INVALID_PARAMETER, FILETIME, WAIT_OBJECT_0,
+            },
+            System::Threading::{
+                GetCurrentProcess, GetProcessTimes, OpenProcess, WaitForSingleObject, INFINITE,
+                PROCESS_BASIC_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+            },
         },
     };
-    let parent = super::install::parent_process_id();
-    if parent == 0 {
-        return;
-    }
-    let own_created =
-        crate::platform::process::process_creation_filetime(i64::from(std::process::id()));
     unsafe {
+        let mut information: PROCESS_BASIC_INFORMATION = std::mem::zeroed();
+        let mut length = 0_u32;
+        let status = NtQueryInformationProcess(
+            GetCurrentProcess(),
+            ProcessBasicInformation,
+            (&mut information as *mut PROCESS_BASIC_INFORMATION).cast(),
+            size_of::<PROCESS_BASIC_INFORMATION>() as u32,
+            &mut length,
+        );
+        let Some(parent) = u32::try_from(information.InheritedFromUniqueProcessId)
+            .ok()
+            .filter(|parent| status >= 0 && *parent != 0)
+        else {
+            return;
+        };
+        let own_created =
+            crate::platform::process::process_creation_filetime(i64::from(std::process::id()));
         let process = OpenProcess(
             PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
             0,
             parent,
         );
         if process.is_null() {
+            if GetLastError() == ERROR_INVALID_PARAMETER {
+                std::process::exit(0);
+            }
             return;
         }
         let mut times: [FILETIME; 4] = std::mem::zeroed();
@@ -631,8 +676,9 @@ fn exit_when_parent_exits() {
         // A raw handle is not `Send`; the thread owns it until the process ends.
         let process = process as usize;
         std::thread::spawn(move || {
-            WaitForSingleObject(process as _, INFINITE);
-            std::process::exit(0);
+            if WaitForSingleObject(process as _, INFINITE) == WAIT_OBJECT_0 {
+                std::process::exit(0);
+            }
         });
     }
 }
