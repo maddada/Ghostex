@@ -1097,6 +1097,9 @@ fn work_row(item: &Value, turns: &[Turn], now_ms: i64, done_key: Option<String>)
         "buttons": [],
         "mention": mention_of(item),
         "dismiss": card["dismiss"],
+        // A finished row asks nothing, so its silent dismiss reads Mark as read (the desktop's
+        // hover check and both menus, the phone's trailing check).
+        "dismissLabel": if done_key.is_some() { json!("Mark as read") } else { Value::Null },
         "chips": card["chips"],
         "showInChat": show_in_chat(turns, changed_at, &key),
         "needs": false,

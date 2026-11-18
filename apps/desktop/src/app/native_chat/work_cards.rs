@@ -1825,19 +1825,43 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
-        let pinned = self
-            .board
-            .dock_menu_row
-            .as_ref()
-            .is_some_and(|(row, menu)| {
-                row == key
-                    && self
-                        .option_menu
-                        .as_ref()
-                        .is_some_and(|open| open.entity_id() == *menu)
-            });
+        // A row for what the newest turn finished asks nothing: its hover button is Mark as read
+        // itself (the app's check, as a notification card's), not the ⋯. It runs the row's own
+        // silent `dismissWorkDockCard`, the same as its right-click menu's Mark as read: the row
+        // leaves the dock, the agent is sent nothing and the item stays Done in the Work panel.
+        //
+        // CDXC:Coordinators 2026-11-18 DECISION:
+        // User, of a Done row in the dock: "i need a button on the right there to mark this one as
+        // read pls. since it's just telling me something is done but i saw it so i wanna get rid
+        // of this. should be an icon button on the right side shown only when hovered".
+        let mark_read = row["kind"] == "finished" && row["dismiss"].is_object();
+        let pinned = !mark_read
+            && self
+                .board
+                .dock_menu_row
+                .as_ref()
+                .is_some_and(|(row, menu)| {
+                    row == key
+                        && self
+                            .option_menu
+                            .as_ref()
+                            .is_some_and(|open| open.entity_id() == *menu)
+                });
         let row = row.clone();
         let menu_key = key.to_owned();
+        let (button_id, label, icon) = if mark_read {
+            (
+                format!("dock-row-read:{key}"),
+                "Mark as read",
+                "titlebar/check.svg",
+            )
+        } else {
+            (
+                format!("dock-row-menu:{key}"),
+                "More actions",
+                "titlebar/dots.svg",
+            )
+        };
         div()
             .relative()
             .flex_shrink_0()
@@ -1855,9 +1879,9 @@ impl NativeChatView {
             )
             .child(
                 div()
-                    .id(gpui::SharedString::from(format!("dock-row-menu:{key}")))
+                    .id(gpui::SharedString::from(button_id))
                     .role(gpui::Role::Button)
-                    .aria_label("More actions")
+                    .aria_label(label)
                     .absolute()
                     .right(px(-2.0 * s))
                     .top(px((PROSE_LINE_HEIGHT - 22.0) / 2.0 * s))
@@ -1872,18 +1896,17 @@ impl NativeChatView {
                     .group_hover(hover.clone(), |style| style.opacity(1.0))
                     .chat_cursor_pointer()
                     .hover(|style| style.bg(p.foreground.opacity(0.08)))
-                    .tooltip(|window, cx| {
-                        gpui_component::tooltip::Tooltip::new("More actions").build(window, cx)
+                    .tooltip(move |window, cx| {
+                        gpui_component::tooltip::Tooltip::new(label).build(window, cx)
                     })
-                    .child(
-                        svg()
-                            .path("titlebar/dots.svg")
-                            .size(px(14.0 * s))
-                            .text_color(p.card_muted),
-                    )
+                    .child(svg().path(icon).size(px(14.0 * s)).text_color(p.card_muted))
                     .on_click(
                         cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
                             cx.stop_propagation();
+                            if mark_read {
+                                this.invoke(row["dismiss"].clone(), cx);
+                                return;
+                            }
                             let rows = this.row_menu(&row, cx);
                             this.show_dock_row_menu(rows, event.position(), window, cx);
                             this.board.dock_menu_row = this
