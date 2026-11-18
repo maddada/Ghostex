@@ -14,6 +14,7 @@ mod gallery;
 mod interface_scale;
 pub(crate) mod presets;
 mod prompt_gallery;
+pub(crate) mod role_defaults;
 mod roles;
 mod swatches;
 pub(super) mod transparency;
@@ -258,7 +259,7 @@ impl ThemeTab {
                 .as_str()
                 .map_or("#808080", |raw| raw.get(..7).unwrap_or(raw))
                 .to_string();
-            self.open_role_picker("userMessage", false, &hex, window, cx);
+            self.open_role_picker("userMessage", false, &hex, None, window, cx);
         }
         if state == "theme-light-scheme" {
             self.scheme_dark = false;

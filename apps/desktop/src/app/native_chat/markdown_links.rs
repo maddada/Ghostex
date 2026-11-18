@@ -66,7 +66,13 @@ pub(super) fn transcript_link_color(appearance: &ChatAppearance) -> Option<Hsla>
     {
         return Some(role.into());
     }
-    let palette = if appearance.light {
+    own_link_color(appearance.light)
+}
+
+/// The link colour while neither the Links nor the Accent role is set: the transcript's
+/// web-reference tone for one appearance.
+pub(super) fn own_link_color(light: bool) -> Option<Hsla> {
+    let palette = if light {
         &VISUAL.transcript.light
     } else {
         &VISUAL.transcript.dark

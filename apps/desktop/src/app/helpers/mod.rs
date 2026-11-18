@@ -29,6 +29,7 @@ pub(crate) mod source_server;
 pub(crate) mod telemetry;
 pub(crate) mod terminal_glass;
 pub(crate) mod terminal_links;
+pub(crate) mod theme_role_defaults;
 pub(crate) mod theme_roles;
 pub(crate) mod titlebar;
 pub(crate) mod titlebar_split_button;

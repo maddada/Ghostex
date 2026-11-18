@@ -9,7 +9,10 @@
 //! User (Q3195, agent theming stage B): "if the user should see the roles, a compact Theme colours section on the Interface page (dependent rows hidden per the AGENTS.md rule), with a Reset to default per role". A role's field for an appearance the app does not show is hidden: Dark mode only shows the dark field, Light mode only the light one, System both. A field takes an opacity (4%) or a colour (#7dd3fc, #7dd3fc80); it saves once what is typed reads as one, and an empty field puts the theme's own colour back.
 //!
 //! CDXC:Theming 2026-11-18 DECISION:
-//! User (Q3980 "all", Q3981 "both"): every Theme colours row is a colour editor, a swatch opening the Pick Color dialog, an opacity slider and Reset, with the text box kept for exact values; More theme colours opens itself while one of its colours is set and says how many are. The slider keeps a role's kind: an opacity stays an opacity, a colour keeps its colour and changes its alpha. Picking a colour keeps the opacity the role had. A role not set shows an empty dashed swatch and no slider until a colour is picked or typed.
+//! User (Q3980 "all", Q3981 "both"): every Theme colours row is a colour editor, a swatch opening the Pick Color dialog, an opacity slider and Reset, with the text box kept for exact values; More theme colours opens itself while one of its colours is set and says how many are. The slider keeps a role's kind: an opacity stays an opacity, a colour keeps its colour and changes its alpha. Picking a colour keeps the opacity the role had. A role not set shows an empty dashed swatch and no slider until a colour is picked or typed (superseded below).
+//!
+//! CDXC:Theming 2026-11-18 DECISION:
+//! User: "when we pick default for these colors we still need to show the actual color value and transparency we set there by default so user can adjust it slightly easily". A role not set shows what it paints now in the active theme (role_defaults.rs, from the app's own derivation, app/helpers/theme_role_defaults.rs): a filled swatch with a dashed rim, its value in grey in the text box and the slider at its opacity. Picking a colour or moving the slider starts from that value and saves it as the role's own; Reset puts the default back.
 
 use super::super::super::super::native_modal_kit::hsla;
 use super::super::super::fields::{
@@ -18,6 +21,7 @@ use super::super::super::fields::{
 };
 use super::super::super::palette::SettingsPalette;
 use super::controls::more_options_button;
+use super::role_defaults::role_default;
 use super::{MoreGroup, ThemeCx, ThemeTab};
 use ghostex_settings_catalog::theme_roles::{
     RoleValue, THEME_ROLES, THEME_ROLES_SETTING, ThemeRole, appearance_key, format_role_value,
@@ -45,7 +49,8 @@ const SWATCH: f32 = 24.0;
 const TEXT_BOX: f32 = 108.0;
 const READOUT: f32 = 36.0;
 
-/// The colour the Pick Color dialog starts on for a role not set.
+/// The colour the Pick Color dialog starts on for a role not set whose default is not known (the
+/// preview binary).
 const UNSET_PICK: &str = "#808080";
 
 /// The appearances the app shows with this Appearance setting: `(light, label)`.
@@ -191,12 +196,13 @@ impl ThemeTab {
     }
 
     /// The Pick Color dialog of role `role` in one appearance, opened on its colour; its picks keep
-    /// the role's opacity.
+    /// the role's opacity, or for a role not set the opacity of `default`, what it paints now.
     pub(super) fn open_role_picker(
         &mut self,
         role: &'static str,
         light: bool,
         hex: &str,
+        default: Option<RoleValue>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -214,7 +220,7 @@ impl ThemeTab {
                 |current| {
                     Some(RoleValue::Colour {
                         rgb,
-                        alpha: current.map_or(1.0, alpha_of),
+                        alpha: current.or(default).map_or(1.0, alpha_of),
                     })
                 },
                 cx,
@@ -244,7 +250,12 @@ impl ThemeTab {
             .unwrap_or_default()
             .to_string();
         let value = parse_role_value(&raw).ok();
-        let hex = value.map_or_else(|| UNSET_PICK.to_string(), |value| hex_of(value, light));
+        // What the role paints while not set, which the row shows (muted, with a dashed rim) so
+        // the user adjusts it from there; a pick or a drag saves it as the role's own.
+        let default = role_default(saved, role, light);
+        let shown = value.or(default);
+        let on_default = value.is_none() && default.is_some();
+        let hex = shown.map_or_else(|| UNSET_PICK.to_string(), |shown| hex_of(shown, light));
         // The swatch, and its dialog while it is open.
         let colour_key = field_key("colour", role, light);
         let picker_open = self
@@ -259,8 +270,8 @@ impl ThemeTab {
         };
         let rim = hsla(p.hairline);
         let dashed = hsla(p.foreground_alpha(0.4));
-        let fill = value.map(|value| {
-            let [r, g, b, a] = value.rgba(light);
+        let fill = shown.map(|shown| {
+            let [r, g, b, a] = shown.rgba(light);
             gpui::Hsla::from(gpui::Rgba { r, g, b, a })
         });
         let pick_hex = hex.clone();
@@ -272,26 +283,37 @@ impl ThemeTab {
             .rounded(px(6.0))
             .border_1()
             .cursor_pointer()
-            .tooltip(tooltip_text("Pick a colour"))
+            .tooltip(tooltip_text(if on_default {
+                "The theme's own colour. Pick a colour to change it"
+            } else {
+                "Pick a colour"
+            }))
             .map(|swatch| match fill {
                 // The surface under the colour, so a see-through one reads as see-through.
                 Some(fill) => swatch
-                    .border_color(rim)
+                    .when(on_default, |swatch| swatch.border_dashed())
+                    .border_color(if on_default { dashed } else { rim })
                     .bg(hsla(p.surface))
                     .child(div().size_full().rounded(px(5.0)).bg(fill)),
                 None => swatch.border_dashed().border_color(dashed),
             })
             .on_click(cx.listener(move |page, _: &ClickEvent, window, cx| {
-                page.open_role_picker(role, light, &pick_hex, window, cx)
+                page.open_role_picker(role, light, &pick_hex, default, window, cx)
             }))
             .children(picker);
-        // The text box: any opacity or colour, saved once it reads as one; empty resets.
-        let id = SharedString::from(format!("theme-role-{role}-{}", appearance_key(light)));
+        // The text box: any opacity or colour, saved once it reads as one; empty resets. Empty, it
+        // shows the default in grey; the default is in the field's id because a field keeps the
+        // placeholder it was made with.
+        let placeholder = default.map_or_else(|| "default".to_string(), format_role_value);
+        let id = SharedString::from(format!(
+            "theme-role-{role}-{}-{placeholder}",
+            appearance_key(light)
+        ));
         let input = FieldStates::text_state(
             self,
             &id,
             &raw,
-            Some("default"),
+            Some(&placeholder),
             move |page: &mut Self, text, _window, cx| {
                 let text = text.trim();
                 if text.is_empty() {
@@ -311,8 +333,8 @@ impl ThemeTab {
             window,
             cx,
         );
-        // The opacity slider, only for a role that is set.
-        let slider = value.map(|value| {
+        // The opacity slider, at the role's opacity or its default's.
+        let slider = shown.map(|value| {
             let alpha = alpha_of(value);
             let shown = match reads {
                 SliderReads::Opacity => alpha,
@@ -337,7 +359,7 @@ impl ThemeTab {
                     role,
                     commit,
                     |current| {
-                        current.map(|current| match current {
+                        current.or(default).map(|current| match current {
                             RoleValue::Ink(_) => RoleValue::Ink(alpha),
                             RoleValue::Colour { rgb, .. } => RoleValue::Colour { rgb, alpha },
                         })

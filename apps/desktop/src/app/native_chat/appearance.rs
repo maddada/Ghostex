@@ -146,20 +146,22 @@ impl ChatAppearance {
     /// The `--destructive` tone the React transcript painted failed tool results and failed writes in.
     /// The Danger theme role when it is set (helpers/theme_roles.rs).
     pub(crate) fn error(&self) -> Hsla {
-        crate::app::helpers::theme_role_or(
-            "danger",
-            self.light,
-            rgb(if self.light { 0xc53030 } else { 0xef9999 }).into(),
-        )
+        crate::app::helpers::theme_role_or("danger", self.light, Self::own_error(self.light))
+    }
+
+    /// [`Self::error`] while the Danger role is not set.
+    pub(crate) fn own_error(light: bool) -> Hsla {
+        rgb(if light { 0xc53030 } else { 0xef9999 }).into()
     }
 
     /// A finished tool call's check (the 2026-10-11 work look, gx-chat-core `work_summary.rs`).
     pub(crate) fn success(&self) -> Hsla {
-        crate::app::helpers::theme_role_or(
-            "success",
-            self.light,
-            rgb(if self.light { 0x059669 } else { 0x34d399 }).into(),
-        )
+        crate::app::helpers::theme_role_or("success", self.light, Self::own_success(self.light))
+    }
+
+    /// [`Self::success`] while the Success role is not set.
+    pub(crate) fn own_success(light: bool) -> Hsla {
+        rgb(if light { 0x059669 } else { 0x34d399 }).into()
     }
 
     /// The look of the agent's thinking: a thought's prose, its lane marker and a reasoning
@@ -225,6 +227,17 @@ impl ChatAppearance {
     /// Markdown table popup follows the app's appearance, which can differ from the chat theme.
     pub(crate) fn for_variant(light: bool) -> Self {
         Self::resolve(&serde_json::Value::Null, light)
+    }
+
+    /// The chat's look in one appearance with no theme role laid over it: what each role paints
+    /// while it is not set, which Settings shows on a role's row (helpers/theme_role_defaults.rs).
+    pub(crate) fn without_theme_roles(light: bool) -> Self {
+        Self::derive(&serde_json::Value::Null, light)
+    }
+
+    /// A link's colour while neither the Links nor the Accent role is set.
+    pub(crate) fn own_link(light: bool) -> Option<Hsla> {
+        super::markdown_links::own_link_color(light)
     }
 
     fn resolve(state: &serde_json::Value, light: bool) -> Self {
