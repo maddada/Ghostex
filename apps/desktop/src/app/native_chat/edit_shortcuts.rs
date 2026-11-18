@@ -600,6 +600,13 @@ impl NativeChatView {
             )
             .chain(self.terminal_picker_focus_handle(cx))
             .chain(self.secret_fields().map(|input| input.focus_handle(cx)))
+            // The Work panel's Topic being rewritten (work_topic.rs).
+            .chain(
+                self.board
+                    .topic_edit
+                    .iter()
+                    .map(|(input, _)| input.focus_handle(cx)),
+            )
             .any(|focus| focus.is_focused(window))
             || self.terminal_dialog_key_focus.is_focused(window)
     }

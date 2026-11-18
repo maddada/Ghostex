@@ -43,7 +43,7 @@ pub(super) const SESSION_DETAILS_MENU: &str = "sessionDetails";
 pub(crate) struct SessionDetailsView {
     /// The app wants this chat's panel on screen (the header button is on and this is the chat it
     /// belongs to).
-    wanted: bool,
+    pub(super) wanted: bool,
     /// Where the header's button was last painted, in the window's content, which the floating
     /// card opens under.
     anchor: Option<Rc<Cell<Bounds<Pixels>>>>,

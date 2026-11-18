@@ -224,14 +224,14 @@ impl GhostexGpuiApp {
                     let Some((_, view)) = app.native_chats.get(&session).cloned() else {
                         return;
                     };
-                    if !view.read(cx).work_panel_shown()
-                        && app.session_details_choices.is_open(&key)
-                    {
+                    let details_put_away = !view.read(cx).work_panel_shown()
+                        && app.session_details_choices.is_open(&key);
+                    if details_put_away {
                         app.session_details_choices.set(&key, false);
                     }
                     let anchor = app.work_button_bounds.get();
                     view.update(cx, |view, cx| {
-                        view.toggle_work_panel_from_header(anchor, window, cx)
+                        view.toggle_work_panel_from_header(anchor, details_put_away, window, cx)
                     });
                     cx.notify();
                 }))
@@ -521,8 +521,10 @@ impl Render for GhostexGpuiApp {
                 && self
                     .session_details_choices
                     .is_open(&key.to_sidebar_session_id());
+            let work_anchor = self.work_button_bounds.clone();
             view.update(cx, |view, cx| {
-                view.set_session_details_wanted(wanted, Some(anchor.clone()), cx)
+                view.set_session_details_wanted(wanted, Some(anchor.clone()), cx);
+                view.set_work_header_anchor(work_anchor);
             });
         }
         let header = self.render_workarea_header(cx);

@@ -368,6 +368,16 @@ impl GhostexGpuiApp {
             Some("showSessionDetails") => {
                 self.session_details_choices
                     .set(&session.to_sidebar_session_id(), true);
+                // One panel at a time beside the chat: the Work panel makes way.
+                if let Some((_, view)) = self.native_chats.get(&session).cloned() {
+                    view.update(cx, |view, cx| view.close_work_panel(cx));
+                }
+                cx.notify();
+            }
+            // The chat's Work panel took the spot beside it (native_chat/work_topic.rs).
+            Some("closeSessionDetails") => {
+                self.session_details_choices
+                    .set(&session.to_sidebar_session_id(), false);
                 cx.notify();
             }
             // The Session details panel's card was dismissed (shell.rs): it goes off for this chat

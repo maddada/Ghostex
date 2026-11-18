@@ -137,23 +137,38 @@ impl GhostexGpuiApp {
         window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        let Some(chat) = self.session_details_target_chat() else {
+        let Some(session_id) = self.session_details_target_session() else {
+            return;
+        };
+        let anchor = self.session_details.work_button_bounds.get();
+        self.toggle_work_panel_for(session_id, anchor, window, cx);
+    }
+
+    /// `session_id`'s chat's Work panel opens (under `anchor` when it can't dock) or closes; its
+    /// Session details makes way while it opens. The main header's button and a popup's.
+    pub(crate) fn toggle_work_panel_for(
+        &mut self,
+        session_id: TerminalSessionId,
+        anchor: gpui::Bounds<gpui::Pixels>,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(chat) = self.native_chat_views.get(&session_id).cloned() else {
             return;
         };
         let opening = !chat.read(cx).work_panel_shown();
-        if opening && self.session_details_target_open() {
-            if let Some(key) = self
-                .session_details_target_session()
-                .and_then(|session_id| self.session_details_chat_key(session_id))
-            {
-                self.session_details.choices.set(&key, false);
-                self.session_details.save();
-                self.sync_session_details_chats(cx);
-            }
+        let key = self.session_details_chat_key(session_id);
+        let details_put_away = opening
+            && key
+                .as_ref()
+                .is_some_and(|key| self.session_details.choices.is_open(key));
+        if let Some(key) = key.filter(|_| details_put_away) {
+            self.session_details.choices.set(&key, false);
+            self.session_details.save();
+            self.sync_session_details_chats(cx);
         }
-        let anchor = self.session_details.work_button_bounds.get();
         chat.update(cx, |chat, cx| {
-            chat.toggle_work_panel_from_header(anchor, window, cx)
+            chat.toggle_work_panel_from_header(anchor, details_put_away, window, cx)
         });
         cx.notify();
     }
@@ -174,6 +189,10 @@ impl GhostexGpuiApp {
         if !self.session_details.choices.is_open(&key) {
             self.session_details.choices.set(&key, true);
             self.session_details.save();
+        }
+        // One panel at a time beside the chat: the Work panel makes way.
+        if let Some(chat) = self.native_chat_views.get(&session_id).cloned() {
+            chat.update(cx, |chat, cx| chat.close_work_panel(cx));
         }
         cx.notify();
     }
@@ -220,10 +239,12 @@ impl GhostexGpuiApp {
             .flatten()
             .map(|chat| chat.entity_id());
         let anchor = self.session_details.button_bounds.clone();
+        let work_anchor = self.session_details.work_button_bounds.clone();
         for chat in self.native_chat_views.values() {
             let wanted = target == Some(chat.entity_id());
             chat.update(cx, |chat, cx| {
-                chat.set_session_details_wanted(wanted, Some(anchor.clone()), cx)
+                chat.set_session_details_wanted(wanted, Some(anchor.clone()), cx);
+                chat.set_work_header_anchor(work_anchor.clone());
             });
         }
     }
@@ -295,6 +316,16 @@ impl GhostexGpuiApp {
         match action {
             "sessionDetailsDismissed" => self.session_details_dismissed(session_id, cx),
             "showSessionDetails" => self.show_session_details_for_chat(session_id, cx),
+            // The chat's Work panel took the spot beside it (native_chat/work_topic.rs).
+            "closeSessionDetails" => {
+                if let Some(key) = self.session_details_chat_key(session_id) {
+                    if self.session_details.choices.is_open(&key) {
+                        self.session_details.choices.set(&key, false);
+                        self.session_details.save();
+                        cx.notify();
+                    }
+                }
+            }
             "openAgentsHubSkill" => {
                 let name = message
                     .get("name")

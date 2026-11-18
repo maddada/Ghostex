@@ -45,7 +45,7 @@ pub(super) const BOARD_COLUMNS_MENU: &str = "boardColumns";
 /// The setting that says which view the pill opens, and its two values.
 const VIEW_SETTING: &str = "coordinatorBoardView";
 const LIST_VIEW: &str = "list";
-const COLUMNS_VIEW: &str = "columns";
+pub(super) const COLUMNS_VIEW: &str = "columns";
 /// A collapsed column's strip in the columns view, unscaled.
 const STRIP_WIDTH: f32 = 36.0;
 /// The overlay's distance from the chat's edges, and a column's least width, unscaled.
@@ -361,6 +361,9 @@ pub(crate) struct CoordinatorBoardView {
     pub(super) dock_width: std::rc::Rc<std::cell::Cell<f32>>,
     /// The dock's rows' scroll position.
     pub(super) dock_scroll: gpui::ScrollHandle,
+    /// Where the window header's Work button was painted (the app's, set every frame): the
+    /// floating card opens under it (work_topic.rs).
+    pub(super) header_anchor: Option<std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>>,
     /// The Topic line being rewritten in place, and what hears its Enter and Escape
     /// (work_topic.rs).
     pub(super) topic_edit: Option<(
@@ -477,7 +480,7 @@ impl NativeChatView {
     }
 
     /// The pane has room for the docked board beside the chat (and the docked Session details).
-    fn board_fits(&self, p: &ChatAppearance) -> bool {
+    pub(super) fn board_fits(&self, p: &ChatAppearance) -> bool {
         let pane = self.session_details_pane_bounds().get().size.width.as_f32();
         let details = if self.session_details.docked {
             super::session_details::PANEL_WIDTH
@@ -488,7 +491,7 @@ impl NativeChatView {
     }
 
     /// The view the Board pill opens: the switch's pick here, else the setting, else the list.
-    fn board_view(&self) -> &'static str {
+    pub(super) fn board_view(&self) -> &'static str {
         if let Some(view) = self.board.view_override {
             return view;
         }
@@ -517,6 +520,9 @@ impl NativeChatView {
         let p = ChatAppearance::current(&self.snapshot);
         if self.board_fits(&p) {
             self.board.open = !self.board.open;
+            if self.board.open {
+                self.work_panel_takes_the_spot(cx);
+            }
             cx.notify();
         } else {
             self.toggle_pill_menu(BOARD_MENU, pill, window, cx);
@@ -2359,6 +2365,14 @@ impl NativeChatView {
             }
         } else if self.board_fits(p) {
             self.board.open = true;
+            self.work_panel_takes_the_spot(cx);
+        } else if let Some(anchor) = self.work_header_anchor() {
+            // Under the header's Work button, as that button opens it.
+            if !self.chat_menu_is_open(BOARD_TRIGGER) {
+                cx.defer_in(window, move |this, window, cx| {
+                    this.open_work_card_under(anchor, window, cx);
+                });
+            }
         } else if !self.chat_menu_is_open(BOARD_TRIGGER) {
             let pill = self.pill_bounds.cell(BOARD_MENU).get();
             cx.defer_in(window, move |this, window, cx| {

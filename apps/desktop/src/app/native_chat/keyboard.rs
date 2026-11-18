@@ -165,6 +165,12 @@ impl NativeChatView {
     ) {
         // React dropped a pending pill open on any key press (`onKeyDownCapture` on its composer).
         self.cancel_composer_reference_open();
+        // The Work panel's Topic field owns Escape while it has focus: it cancels the rewrite.
+        if self.work_topic_key_down(event, window, cx) {
+            cx.stop_propagation();
+            window.prevent_default();
+            return;
+        }
         // The search field owns Enter, the arrows and Escape while it has focus.
         if self.search_key_down(event, window, cx) {
             cx.stop_propagation();

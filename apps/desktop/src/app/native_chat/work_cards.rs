@@ -568,6 +568,11 @@ impl NativeChatView {
         if rows.is_empty() && snoozed.is_empty() && !board.is_object() {
             return None;
         }
+        // An ordinary session's bar stays away until it has an item (the user's "Nothing in
+        // progress" bar is a coordinator's).
+        if rows.is_empty() && snoozed.is_empty() && board["own"] == true && board["empty"] == true {
+            return None;
+        }
         let long_draft = self
             .input
             .as_ref()
@@ -867,7 +872,6 @@ impl NativeChatView {
         } - 12.0
             - 5.0
             - 8.0
-            - if board.is_object() { 26.0 + 6.0 } else { 0.0 }
             - if collapsible { 24.0 + 6.0 } else { 0.0 };
         let named_width: f32 = counts
             .iter()
@@ -908,15 +912,27 @@ impl NativeChatView {
                     "blocked" => "Blocked",
                     _ => "In progress",
                 };
+                // A count opens the Work panel at its group, as the header's Work button opens it
+                // (docked where there is room, else under that button).
                 div()
                     .id(gpui::SharedString::from(format!("work-dock-count:{group}")))
                     .flex()
                     .items_center()
                     .gap(px(5.0 * s))
                     .flex_shrink_0()
+                    .role(gpui::Role::Button)
+                    .aria_label(tip)
+                    .chat_cursor_pointer()
                     .tooltip(move |window, cx| {
                         gpui_component::tooltip::Tooltip::new(tip).build(window, cx)
                     })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.invoke(
+                            json!({"type": "showCoordinatorBoardGroup", "group": group}),
+                            cx,
+                        );
+                    }))
                     .child(
                         svg()
                             .path(icon)

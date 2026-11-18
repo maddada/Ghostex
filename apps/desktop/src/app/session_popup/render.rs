@@ -52,10 +52,38 @@ type TabSignature = (
 /// What the window's own drawing depends on. The chat and the terminal are views of their own that
 /// redraw themselves, so the window ignores the app's other notifications (terminal output, chat
 /// streaming, indicator ticks), as the board's window does (CDXC:ProjectBoard 2026-10-13).
-type PopupSignature = (Vec<TabSignature>, u64, bool, bool, bool, u64);
+/// The last part is each tab's chat's Work panel (has one, shown, how many wait on the user), for
+/// the header's Work button.
+type PopupSignature = (
+    Vec<TabSignature>,
+    u64,
+    bool,
+    bool,
+    bool,
+    u64,
+    Vec<(bool, bool, usize)>,
+);
 
-fn popup_signature(app: &GhostexGpuiApp, id: SessionPopupId) -> Option<PopupSignature> {
+fn popup_signature(
+    app: &GhostexGpuiApp,
+    id: SessionPopupId,
+    cx: &gpui::App,
+) -> Option<PopupSignature> {
     let popup = app.session_popups.get(id)?;
+    let work = popup
+        .keys_in_order()
+        .into_iter()
+        .filter_map(|key| app.session_popup_shell_session(&key))
+        .filter_map(|id| app.native_chat_views.get(&id))
+        .map(|chat| {
+            let chat = chat.read(cx);
+            (
+                chat.work_panel_available(),
+                chat.work_panel_shown(),
+                chat.work_panel_waiting(),
+            )
+        })
+        .collect();
     let tabs = popup
         .keys_in_order()
         .into_iter()
@@ -92,6 +120,7 @@ fn popup_signature(app: &GhostexGpuiApp, id: SessionPopupId) -> Option<PopupSign
         popup.expanded,
         app.gx_store_sidebar_list_ready(),
         window_glass_redraw_key(),
+        work,
     ))
 }
 
@@ -103,7 +132,7 @@ impl SessionPopupRoot {
         cx: &mut Context<Self>,
     ) -> Self {
         let observed = cx.observe(&app, move |root: &mut Self, app, cx| {
-            let signature = popup_signature(app.read(cx), id);
+            let signature = popup_signature(app.read(cx), id, cx);
             if root.drawn != signature {
                 root.drawn = signature;
                 cx.notify();
@@ -125,7 +154,7 @@ impl SessionPopupRoot {
             }
         });
         Self {
-            drawn: popup_signature(app.read(cx), id),
+            drawn: popup_signature(app.read(cx), id, cx),
             app: app.downgrade(),
             id,
             focus: {
@@ -279,6 +308,11 @@ impl GhostexGpuiApp {
             .and_then(|id| self.agents_workspace.session(id))
             .and_then(|session| session.agent_icon);
         window.set_window_title(&title);
+        // The selected session's Work panel, from the popup's own header.
+        let work = active
+            .as_ref()
+            .and_then(|key| self.session_popup_shell_session(key))
+            .and_then(|session_id| self.render_session_popup_work_button(session_id, cx));
         // An unsplit popup's tabs sit in its header, even its only tab; a split popup's panes each
         // keep their own bar over them, and the header names the selected session.
         let header_strip = match &root {
@@ -306,6 +340,7 @@ impl GhostexGpuiApp {
                 agent_icon,
                 expanded,
                 pinned,
+                work,
                 window,
                 cx,
             ))
@@ -552,6 +587,7 @@ impl GhostexGpuiApp {
         agent_icon: Option<&'static str>,
         expanded: bool,
         pinned: bool,
+        work: Option<AnyElement>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -610,6 +646,7 @@ impl GhostexGpuiApp {
                         .child(title.to_string()),
                 )
             })
+            .children(work)
             .when(pin_supported(), |row| {
                 row.child(
                     header_button(

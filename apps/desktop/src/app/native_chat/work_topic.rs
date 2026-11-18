@@ -14,6 +14,7 @@
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::AppContext as _;
+use gpui::Focusable as _;
 use gpui::{
     AnyElement, Bounds, Context, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
     StatefulInteractiveElement as _, Styled as _, Window, div, px,
@@ -57,12 +58,16 @@ impl NativeChatView {
         if let Some((input, _)) = &self.board.topic_edit {
             return Some(
                 row.id("chat-work-topic-field")
-                    .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, _, cx| {
-                        if event.keystroke.key == "escape" {
-                            cx.stop_propagation();
-                            this.finish_work_topic_edit(false, cx);
-                        }
-                    }))
+                    // Its Escape is the chat's key handler's (`work_topic_key_down`), before the
+                    // chat box sees it.
+                    .capture_key_down(cx.listener(
+                        |this, event: &gpui::KeyDownEvent, window, cx| {
+                            if this.work_topic_key_down(event, window, cx) {
+                                cx.stop_propagation();
+                                window.prevent_default();
+                            }
+                        },
+                    ))
                     .child(
                         div().flex_1().min_w_0().child(
                             Input::new(input)
@@ -116,6 +121,25 @@ impl NativeChatView {
         )
     }
 
+    /// Escape in the Topic field cancels the rewrite; true when it took the key.
+    pub(super) fn work_topic_key_down(
+        &mut self,
+        event: &gpui::KeyDownEvent,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let focused = self
+            .board
+            .topic_edit
+            .as_ref()
+            .is_some_and(|(input, _)| input.focus_handle(cx).is_focused(window));
+        if !focused || event.keystroke.key != "escape" {
+            return false;
+        }
+        self.finish_work_topic_edit(false, cx);
+        true
+    }
+
     /// Turns the Topic into a field holding its words, with the keyboard in it.
     fn start_work_topic_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let words = self.snapshot["coordinatorBoard"]["topic"]["text"]
@@ -127,7 +151,15 @@ impl NativeChatView {
                 .default_value(words)
                 .placeholder("What this session is about, in one line")
         });
-        input.update(cx, |input, cx| input.focus(window, cx));
+        // The caret after the words, ready to go on typing.
+        input.update(cx, |input, cx| {
+            input.set_cursor_position(
+                gpui_component::input::Position::new(0, u32::MAX),
+                window,
+                cx,
+            );
+            input.focus(window, cx);
+        });
         let subscription = cx.subscribe_in(
             &input,
             window,
@@ -184,17 +216,83 @@ impl NativeChatView {
     }
 
     /// The header's Work button: the panel opens beside the chat where there is room (else as a
-    /// card under the button), or closes.
+    /// card under the button, as Session details' does), or closes. `details_put_away`: Session
+    /// details was just put away for it, so its width no longer counts against docking.
     pub(crate) fn toggle_work_panel_from_header(
+        &mut self,
+        anchor: Bounds<Pixels>,
+        details_put_away: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if details_put_away {
+            self.session_details.docked = false;
+        }
+        self.pill_bounds
+            .cell(super::coordinator_board::BOARD_MENU)
+            .set(anchor);
+        let p = ChatAppearance::current(&self.snapshot);
+        if self.board_view() == super::coordinator_board::COLUMNS_VIEW || self.board_fits(&p) {
+            self.toggle_coordinator_board(anchor, window, cx);
+            return;
+        }
+        if self.chat_menu_toggled_shut(super::coordinator_board::BOARD_TRIGGER, cx) {
+            return;
+        }
+        self.open_work_card_under(anchor, window, cx);
+    }
+
+    /// The app's say: where its header's Work button is painted, for the floating card.
+    pub(crate) fn set_work_header_anchor(
+        &mut self,
+        anchor: std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>,
+    ) {
+        self.board.header_anchor = Some(anchor);
+    }
+
+    /// The header's Work button's bounds, while it has been painted.
+    pub(super) fn work_header_anchor(&self) -> Option<Bounds<Pixels>> {
+        self.board
+            .header_anchor
+            .as_ref()
+            .map(|anchor| anchor.get())
+            .filter(|anchor| anchor.size.width > gpui::px(0.0))
+    }
+
+    /// The Work panel as a floating card under `anchor` (the header's button), as Session
+    /// details' card opens.
+    pub(super) fn open_work_card_under(
         &mut self,
         anchor: Bounds<Pixels>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.pill_bounds
-            .cell(super::coordinator_board::BOARD_MENU)
-            .set(anchor);
-        self.toggle_coordinator_board(anchor, window, cx);
+        let trigger = super::coordinator_board::BOARD_TRIGGER;
+        let Some(height) = self.coordinator_board_menu_height() else {
+            return;
+        };
+        self.menu_side = Some(super::option_menu::MenuSide::Right);
+        self.show_chat_menu(
+            vec![
+                json!({"pillMenu": {"id": super::coordinator_board::BOARD_MENU, "height": height}}),
+            ],
+            anchor,
+            super::coordinator_board::BOARD_WIDTH,
+            window,
+            cx,
+        );
+        if let Some(menu) = &self.option_menu {
+            menu.update(cx, |menu, _| menu.set_pill(trigger));
+        }
+    }
+
+    /// The Work panel docked by any way in (its pill, a count, Show in Work): Session details,
+    /// sharing the spot beside the chat, goes away (one panel at a time).
+    pub(super) fn work_panel_takes_the_spot(&mut self, cx: &mut Context<Self>) {
+        if self.session_details.wanted {
+            self.session_details.docked = false;
+            self.host("closeSessionDetails", json!({}), cx);
+        }
     }
 
     /// Session details opened in this chat's spot: the Work panel makes way.
