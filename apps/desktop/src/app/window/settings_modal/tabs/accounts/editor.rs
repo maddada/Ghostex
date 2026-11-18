@@ -236,10 +236,8 @@ impl AccountsTab {
                 Some(from) => format!(
                     "Added from {from}. Logins stay on each computer, so sign in on this one once to use it here."
                 ),
-                None => {
-                    "Its login stopped working. Reconnect to see its usage and use it again."
-                        .to_string()
-                }
+                None => "Its login stopped working. Reconnect to see its usage and use it again."
+                    .to_string(),
             };
             let reason = match &helper_missing {
                 Some(missing) => format!("{reason} {missing}"),
