@@ -501,7 +501,9 @@ impl GpuiTitlebarReadingPanel {
                     .rounded(px(POPUP_MENU_RADIUS))
                     .border_1()
                     .border_color(titlebar_popup_menu_border_color())
-                    .bg(titlebar_popup_menu_background())
+                    // CDXC:Notifications 2026-11-18 DECISION:
+                    // User: "this menu not transparent fix". The "..." menu took the opaque menu colour (`titlebar_popup_menu_background`), a near-black slab on window glass. It takes the sidebar menus' surface (`popup_menu_surface`), frosted under glass and solid otherwise, in light and dark.
+                    .bg(popup_menu_surface())
                     .shadow_lg()
                     .occlude()
                     .child(Self::render_notifications_menu_item(
