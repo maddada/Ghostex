@@ -179,8 +179,22 @@ impl GhostexGpuiApp {
                 self.git_refresh_scoped(&scoped_id, true, cx);
             }
         }
+        // CDXC:Git 2026-11-18 WHY:
+        // GitHub #666 (Windows, 14 projects, large repositories): this full read (about eight git
+        // processes) was started every cycle whether or not the previous one had finished, so once
+        // a read took longer than a cycle they stacked up. The poll skips the project while its
+        // last poll-driven read is still running; a read the user asks for is never skipped.
         if !scope.is_remote() && self.git_scope_is_active(&scope) {
-            self.git_refresh_state(
+            let pending_key = scope.scoped_id();
+            if !self
+                .gx_store
+                .git
+                .pending_poll_state_reads
+                .insert(pending_key.clone())
+            {
+                return;
+            }
+            let read = self.git_refresh_state(
                 scope,
                 GitReadOptions {
                     defer_git_hub: true,
@@ -188,7 +202,16 @@ impl GhostexGpuiApp {
                     ..GitReadOptions::default()
                 },
                 cx,
-            )
+            );
+            cx.spawn(async move |this, cx| {
+                read.await;
+                let _ = this.update(cx, |this, _| {
+                    this.gx_store
+                        .git
+                        .pending_poll_state_reads
+                        .remove(&pending_key);
+                });
+            })
             .detach();
         }
     }

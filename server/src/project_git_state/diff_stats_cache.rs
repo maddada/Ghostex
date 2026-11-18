@@ -91,12 +91,54 @@ where
             if let Some(answer) = cache.unchanged(&key, std::path::Path::new(path), folders) {
                 return Ok(answer);
             }
-            let result = read().await;
+            // A read of the same project already running answers this one too, unless something
+            // changed again since: the second look either finds its answer or reads afresh.
+            let in_flight = in_flight_lock(&key);
+            let _same_project = in_flight.lock().await;
+            if let Some(answer) = cache.unchanged(&key, std::path::Path::new(path), folders) {
+                return Ok(answer);
+            }
+            let result = capped(read).await;
             if let Ok(answer) = &result {
                 cache.remember(&key, answer.clone());
             }
             return result;
         }
     }
+    capped(read).await
+}
+
+/// Background Git reads running at once across every project.
+///
+/// CDXC:Git 2026-11-18 WHY:
+/// GitHub #666 (Windows, 14 projects, large repositories): nothing bounded the sidebar's Git
+/// reads, and two misses for one project both ran git, so once reads took longer than the poll's
+/// cycle they stacked up (eight git processes for each full read). A read of the same project
+/// already running now answers the others (`in_flight_lock`), and at most `MAX_GIT_READS` reads
+/// run at once; the rest wait their turn. Git actions the user runs never pass through here.
+const MAX_GIT_READS: usize = 4;
+
+async fn capped<V, F, Fut>(read: F) -> Result<V, TypedOperationError>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<V, TypedOperationError>>,
+{
+    static GIT_READS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(MAX_GIT_READS);
+    // The semaphore is never closed, so acquiring only waits.
+    let _turn = GIT_READS.acquire().await;
     read().await
+}
+
+/// One lock per kept answer, held while its read runs.
+#[cfg(any(windows, target_os = "macos"))]
+fn in_flight_lock(key: &str) -> std::sync::Arc<tokio::sync::Mutex<()>> {
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex, OnceLock};
+    static LOCKS: OnceLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>> = OnceLock::new();
+    let Ok(mut locks) = LOCKS.get_or_init(Default::default).lock() else {
+        return Arc::new(tokio::sync::Mutex::new(()));
+    };
+    // Locks nobody holds or waits on are dropped, so the map stays as small as the reads running.
+    locks.retain(|_, lock| Arc::strong_count(lock) > 1);
+    locks.entry(key.to_string()).or_default().clone()
 }

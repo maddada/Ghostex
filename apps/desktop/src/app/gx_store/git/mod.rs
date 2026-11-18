@@ -76,6 +76,8 @@ pub(crate) struct GitHost {
     pub(super) visibility_watch: Option<gpui::Subscription>,
     pub(super) diff_stats: HashMap<String, ProjectDiffStats>,
     pub(super) pending_diff_probes: HashSet<String>,
+    /// The active projects whose poll-driven full read is still running (`git_poll_probe`).
+    pub(super) pending_poll_state_reads: HashSet<String>,
     /// Open review dialogs by request id.
     pub(super) reviews: HashMap<String, PendingGitReview>,
     pub(super) trusted_worktrees: Option<TrustedWorktreeList>,
@@ -99,6 +101,7 @@ impl Default for GitHost {
             visibility_watch: None,
             diff_stats: HashMap::new(),
             pending_diff_probes: HashSet::new(),
+            pending_poll_state_reads: HashSet::new(),
             reviews: HashMap::new(),
             trusted_worktrees: None,
             export: ExportTranscriptHost::default(),
