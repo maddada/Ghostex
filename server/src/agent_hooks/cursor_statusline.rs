@@ -8,17 +8,14 @@ repair pass registers the statusLine once Cursor has written it) and a file that
 does not parse as a JSON object is never overwritten.
 */
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
 use crate::domain::DomainStateError;
 
 use super::config::HookPaths;
-use super::probing::{io_error, read_file_text, temp_path_for};
+use super::probing::{io_error, read_config_text, write_config_file};
 use super::statusline::{register_statusline, unregister_statusline, StatuslineAgent};
 
 /// `cli-config.json` beside the `hooks.json` a Cursor install writes.
@@ -26,11 +23,10 @@ pub(crate) fn cursor_cli_config_path(hooks_path: &Path) -> Option<PathBuf> {
     Some(hooks_path.parent()?.join("cli-config.json"))
 }
 
+/// Cursor's config, or `None` when it is missing, unreadable or not a JSON object: nothing to
+/// change then, and nothing is written over it.
 fn read_config(path: &Path) -> Option<Value> {
-    let text = read_file_text(path);
-    if text.trim().is_empty() {
-        return None;
-    }
+    let text = read_config_text(path).ok()??;
     serde_json::from_str::<Value>(&text)
         .ok()
         .filter(Value::is_object)
@@ -40,9 +36,7 @@ fn write_config(path: &Path, data: &Value) -> Result<(), DomainStateError> {
     let text = serde_json::to_string_pretty(data).map_err(|error| {
         DomainStateError::corrupt_state(format!("Cursor config is not serializable: {error}"))
     })?;
-    let temp_path = temp_path_for(path);
-    fs::write(&temp_path, format!("{text}\n")).map_err(io_error)?;
-    fs::rename(&temp_path, path).map_err(io_error)
+    write_config_file(path, format!("{text}\n").as_bytes()).map_err(io_error)
 }
 
 /// Points Cursor's statusLine at the Ghostex script, wrapping the user's own

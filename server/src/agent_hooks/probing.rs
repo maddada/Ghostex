@@ -435,6 +435,76 @@ pub(crate) fn read_file_text(path: &Path) -> String {
     fs::read_to_string(path).unwrap_or_default()
 }
 
+/// An agent config's text: `Ok(None)` when the file does not exist, an error for anything else
+/// (a refused read, or bytes that are not UTF-8), so a caller never takes an unreadable config
+/// for an empty one and writes over it.
+///
+/// CDXC:AgentHooks 2026-11-18 WHY: review of c33dcd576: `read_file_text` turned every read error
+/// into "", so a settings.json Ghostex could not read (UTF-16, invalid UTF-8, a passing error) was
+/// replaced by `{}` plus the statusLine, losing the user's permissions, model and env. Only a
+/// missing file reads as empty, as in packages/paths/src/settings_file.rs.
+pub(crate) fn read_config_text(path: &Path) -> std::io::Result<Option<String>> {
+    match fs::read(path) {
+        Ok(bytes) => String::from_utf8(bytes)
+            .map(Some)
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+/// Replaces an agent config in one step: through a symlink to the file it points at, with a temp
+/// file beside that file renamed over it, keeping the file's permissions. A file nobody may write
+/// (read-only) is left alone and reported as an error.
+///
+/// CDXC:AgentHooks 2026-11-18 WHY: review of c33dcd576: `fs::write` truncated the config before
+/// writing it (a crash in between left it empty), replaced a symlinked config (a dotfiles repo)
+/// with a plain file, and a rewrite through a temp file gave Cursor's 0600 cli-config.json, which
+/// holds its login, the default 0644.
+pub(crate) fn write_config_file(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let target = match fs::symlink_metadata(path) {
+        Ok(meta) if meta.file_type().is_symlink() => fs::canonicalize(path)?,
+        _ => path.to_path_buf(),
+    };
+    let permissions = match fs::metadata(&target) {
+        Ok(meta) => Some(meta.permissions()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error),
+    };
+    if permissions.as_ref().is_some_and(fs::Permissions::readonly) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!("{} is read-only", target.display()),
+        ));
+    }
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let temp = temp_path_for(&target);
+    let written = (|| {
+        use std::io::Write as _;
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
+            options.mode(permissions.as_ref().map_or(0o644, |p| p.mode() & 0o7777));
+        }
+        let mut file = options.open(&temp)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        drop(file);
+        if let Some(permissions) = permissions.clone() {
+            fs::set_permissions(&temp, permissions)?;
+        }
+        fs::rename(&temp, &target)
+    })();
+    if written.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
+    written
+}
+
 pub(crate) fn display_path(path: &str, home_dir: &Path) -> String {
     let home = path_string(home_dir);
     path.strip_prefix(&format!("{home}/"))

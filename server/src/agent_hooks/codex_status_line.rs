@@ -18,7 +18,7 @@ use toml_edit::{Array, DocumentMut, Item, Value};
 
 use crate::domain::DomainStateError;
 
-use super::probing::{io_error, read_file_text, temp_path_for};
+use super::probing::{io_error, read_config_text, write_config_file};
 
 pub(crate) const CODEX_MODEL_STATUS_LINE_ITEM: &str = "model-with-reasoning";
 
@@ -33,7 +33,10 @@ fn array_names_model(array: &Array) -> bool {
 pub(crate) fn ensure_codex_status_line_names_model(
     config_path: &Path,
 ) -> Result<bool, DomainStateError> {
-    let text = read_file_text(config_path);
+    // A missing or unreadable config is left alone.
+    let Ok(Some(text)) = read_config_text(config_path) else {
+        return Ok(false);
+    };
     if text.trim().is_empty() {
         return Ok(false);
     }
@@ -49,12 +52,11 @@ pub(crate) fn ensure_codex_status_line_names_model(
     else {
         return Ok(false);
     };
-    if array_names_model(array) {
+    // An empty list is the user hiding the footer: leave it empty.
+    if array.is_empty() || array_names_model(array) {
         return Ok(false);
     }
     array.push(Value::from(CODEX_MODEL_STATUS_LINE_ITEM));
-    let temp_path = temp_path_for(config_path);
-    std::fs::write(&temp_path, document.to_string()).map_err(io_error)?;
-    std::fs::rename(&temp_path, config_path).map_err(io_error)?;
+    write_config_file(config_path, document.to_string().as_bytes()).map_err(io_error)?;
     Ok(true)
 }

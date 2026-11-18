@@ -643,7 +643,27 @@ fn upkeep(state: &AppState, previous: Option<bool>) -> bool {
     }
     // Read live status from Claude Code and Cursor is not a hook setting, but it keeps the same
     // configs, so it rides on this pass (agent_hooks/statusline_setting.rs).
-    let _ = crate::agent_hooks::statusline_setting::keep_in_step(&state.paths);
+    let changed = crate::agent_hooks::statusline_setting::keep_in_step(&state.paths);
+    if !changed.is_empty() {
+        // Like the cleanup below: the paths in the comparison area, the count always.
+        let entry = |details: Value| GxserverLogInput {
+            level: LogLevel::Info,
+            event: "agentLiveStatusConfigs".to_string(),
+            server_id: Some(state.metadata.server_id.clone()),
+            request_id: None,
+            client: None,
+            duration_ms: None,
+            error: None,
+            details: Some(details),
+        };
+        let _ = state.logger.log_routine(
+            DiagnosticLogScenario::HooklessActivityComparison,
+            entry(json!({ "changedPaths": changed })),
+        );
+        let _ = state
+            .logger
+            .log_record(entry(json!({ "filesChanged": changed.len() })));
+    }
     hook_free::forget_cached_setting();
     let use_hooks = hook_free::use_agent_hooks(&state.paths);
     let (event, details) = match (previous, use_hooks) {

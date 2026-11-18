@@ -10,7 +10,7 @@
 //! by default (2026-11-12) that installer skipped Claude, so a fresh install never got the helper.
 //! On, every Claude config folder (the default one and each cswap profile) and Cursor's
 //! `cli-config.json` get it, wrapping the user's own command; Codex's footer gets
-//! `model-with-reasoning` when the user's `tui.status_line` lacks it. Off, Ghostex puts the
+//! `model-with-reasoning` once when the user's `tui.status_line` lacks it. Off, Ghostex puts the
 //! user's own command back (or drops the entry it created) and stops adding the Codex item; it
 //! does not take that item out, since it can't tell it from one the user listed. Account hub
 //! profiles follow the setting when Ghostex next prepares them.
@@ -30,7 +30,7 @@ use super::config::HookPaths;
 use super::cursor_statusline::{
     cursor_cli_config_path, ensure_cursor_statusline, remove_cursor_statusline,
 };
-use super::probing::{path_string, read_file_text};
+use super::probing::{path_string, read_config_text, write_config_file};
 use super::resolution::provider_hook_paths;
 use super::statusline::{
     ghostex_statusline_registered, register_statusline, statusline_is_current,
@@ -45,23 +45,49 @@ pub(crate) const READ_AGENT_LIVE_STATUS: &str = "readAgentLiveStatus";
 /// installed after gxserver started, or a config the agent rewrote, gets the helper within this.
 const RECHECK_EVERY: Duration = Duration::from_secs(60);
 
-/// Whether the helper should be registered. A missing key is the shipped default (on).
-pub(crate) fn read_agent_live_status(paths: &GxserverPaths) -> bool {
-    crate::shared_settings_file::read_shared_settings(paths)
+/// The Codex configs Ghostex already gave `model-with-reasoning`, under the hook state folder.
+const CODEX_ITEM_ADDED_FILE: &str = "codex-model-footer-item.json";
+
+/// The last value read, kept for a read the system refuses.
+static LAST_KNOWN: Mutex<Option<bool>> = Mutex::new(None);
+
+/// The setting as saved: `None` while Ghostex's settings file can't be read (CDXC:AgentHooks
+/// 2026-11-18, review of c33dcd576: a refused read is not "nothing configured", so it must not
+/// flip the configs to the default).
+fn read_saved_setting(paths: &GxserverPaths) -> Option<bool> {
+    let saved = crate::shared_settings_file::read_shared_settings_checked(paths).ok()?;
+    let on = saved
         .and_then(|settings| {
             settings
                 .get(READ_AGENT_LIVE_STATUS)
                 .and_then(Value::as_bool)
         })
+        .unwrap_or(true);
+    *LAST_KNOWN
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(on);
+    Some(on)
+}
+
+/// Whether the helper should be registered. A missing key is the shipped default (on); an
+/// unreadable settings file keeps the last value read.
+pub(crate) fn read_agent_live_status(paths: &GxserverPaths) -> bool {
+    read_saved_setting(paths)
+        .or(*LAST_KNOWN
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()))
         .unwrap_or(true)
 }
 
 static LAST_PASS: Mutex<Option<(bool, Instant)>> = Mutex::new(None);
 
 /// Registers or removes the helper when the setting changed, at the first call, and every
-/// `RECHECK_EVERY` otherwise. Returns the config files it changed.
+/// `RECHECK_EVERY` otherwise. Returns the config files it changed. Does nothing while Ghostex's
+/// settings can't be read.
 pub(crate) fn keep_in_step(paths: &GxserverPaths) -> Vec<String> {
-    let on = read_agent_live_status(paths);
+    let Some(on) = read_saved_setting(paths) else {
+        return Vec::new();
+    };
     {
         let mut last = LAST_PASS
             .lock()
@@ -76,8 +102,8 @@ pub(crate) fn keep_in_step(paths: &GxserverPaths) -> Vec<String> {
 
 /// Brings every config in line with `on`. Errors are skipped: the next pass tries again.
 pub(crate) fn apply(hook_paths: &HookPaths, on: bool) -> Vec<String> {
-    if on {
-        // The script must exist before a config names it.
+    // The script must exist before a config names it; rewritten only when out of date.
+    if on && !super::statusline::are_statusline_hooks_current(hook_paths) {
         let _ = super::statusline::install_statusline_hook(hook_paths);
     }
     let portable = ghostex_paths::portable::current().is_some();
@@ -93,13 +119,52 @@ pub(crate) fn apply(hook_paths: &HookPaths, on: bool) -> Vec<String> {
         }
     }
     if on {
-        for hooks_path in provider_hook_paths("codex", hook_paths) {
-            let config = super::codex_trust::codex_config_path_for_hooks(&hooks_path);
-            if super::codex_status_line::ensure_codex_status_line_names_model(&config)
-                .unwrap_or(false)
-            {
-                changed.push(path_string(&config));
+        changed.extend(add_codex_footer_items(hook_paths));
+    }
+    changed
+}
+
+/*
+CDXC:AgentHooks 2026-11-18 WHY:
+Review of c33dcd576: the 60-second pass put `model-with-reasoning` back into a Codex footer every
+time the user took it out, and filled a footer the user had emptied. Each Codex config gets the
+item once, remembered under the hook state folder, and an empty list is left empty
+(codex_status_line.rs).
+*/
+/// Adds `model-with-reasoning` to each Codex config not given it before. Returns the configs it
+/// changed.
+fn add_codex_footer_items(hook_paths: &HookPaths) -> Vec<String> {
+    let memory = hook_paths.hook_state_directory.join(CODEX_ITEM_ADDED_FILE);
+    let mut done: Vec<String> = read_config_text(&memory)
+        .ok()
+        .flatten()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default();
+    let mut changed = Vec::new();
+    let mut remembered = false;
+    for hooks_path in provider_hook_paths("codex", hook_paths) {
+        let config = super::codex_trust::codex_config_path_for_hooks(&hooks_path);
+        let key = path_string(&config);
+        // A config Codex has not written yet (or that can't be read) waits for a later pass.
+        if done.contains(&key)
+            || !matches!(read_config_text(&config), Ok(Some(text)) if !text.trim().is_empty())
+        {
+            continue;
+        }
+        match super::codex_status_line::ensure_codex_status_line_names_model(&config) {
+            Ok(added) => {
+                if added {
+                    changed.push(key.clone());
+                }
+                done.push(key);
+                remembered = true;
             }
+            Err(_) => continue,
+        }
+    }
+    if remembered {
+        if let Ok(text) = serde_json::to_string_pretty(&done) {
+            let _ = write_config_file(&memory, text.as_bytes());
         }
     }
     changed
@@ -118,13 +183,16 @@ fn wanted_change(data: &Value, script: &Path, on: bool, portable: bool) -> Optio
     }
 }
 
-/// Claude's `settings.json` (or a profile's). A folder Claude never created is left alone; a
-/// file that does not parse as a JSON object is never overwritten.
+/// Claude's `settings.json` (or a profile's). A folder Claude never created is left alone, and so
+/// is a file that can't be read or does not parse as a JSON object; a missing file is created.
 fn update_claude_settings(path: &Path, script: &Path, on: bool, portable: bool) -> bool {
     if !path.parent().is_some_and(Path::is_dir) {
         return false;
     }
-    let text = read_file_text(path);
+    let Ok(text) = read_config_text(path) else {
+        return false;
+    };
+    let text = text.unwrap_or_default();
     let mut data = if text.trim().is_empty() {
         Value::Object(Default::default())
     } else {
@@ -148,7 +216,7 @@ fn update_cursor_config(
     portable: bool,
 ) -> Option<PathBuf> {
     let config = cursor_cli_config_path(hooks_path)?;
-    let text = read_file_text(&config);
+    let text = read_config_text(&config).ok()??;
     let data = serde_json::from_str::<Value>(&text)
         .ok()
         .filter(Value::is_object)?;

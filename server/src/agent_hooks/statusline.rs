@@ -120,7 +120,9 @@ Ghostex's line is the stand-in that names the session and model (see
 nothing outside Ghostex, by the notify hook's test (a session ref and a gxserver
 address in the environment): it starts no gxserver there, only runs their own
 command, so a Claude in another terminal, over ssh or in another app pays two
-shell tests per refresh. Version 2 of the script, so installed ones are rewritten.
+shell tests per refresh. Cursor without a command of the user's still starts gxserver
+there to draw its footer's stand-in (stored nowhere), or its footer would be empty.
+Version 2 of the script, so installed ones are rewritten.
 */
 pub(crate) fn build_statusline_hook_script(
     executable: &str,
@@ -133,14 +135,12 @@ pub(crate) fn build_statusline_hook_script(
 # Claude Code statusLine command installed by Ghostex. Claude pipes its status
 # JSON on stdin; inside Ghostex gxserver stores it for the session's chat view.
 # A wrapped user statusline command ($1) draws the line; otherwise {silence}.
-# Outside Ghostex nothing is stored and no gxserver starts.
+# Outside Ghostex nothing is stored, and no gxserver starts unless it must draw the line.
 if [ -z "${{GHOSTEX_GLOBAL_SESSION_REF:-}}" ] || [ -z "${{GHOSTEX_GXSERVER_BASE_URL:-}}" ]; then
   if [ -n "${{1:-}}" ]; then
     exec /bin/sh -c "$1"
   fi
-  read -r -d '' _ || true
-  exit 0
-fi
+{outside_without_command}fi
 INPUT="$(cat)"
 DEFAULT_HOOK_STATE_DIR={hook_state_directory}
 HOOK_STATE_DIR="${{GHOSTEX_AGENT_HOOK_STATE_DIR:-$DEFAULT_HOOK_STATE_DIR}}"
@@ -159,6 +159,13 @@ exit 0
             " --render"
         } else {
             " >/dev/null"
+        },
+        // Cursor's footer is replaced by its statusLine, so outside Ghostex it still draws the
+        // stand-in (gxserver stores nothing there: the payload is keyed by the Ghostex session).
+        outside_without_command = if agent.renders_own_line() {
+            ""
+        } else {
+            "  read -r -d '' _ || true\n  exit 0\n"
         },
         silence = if agent.renders_own_line() {
             "gxserver prints Ghostex's stand-in for the footer"
@@ -347,36 +354,72 @@ fn windows_wrapped_statusline_command(command: &str) -> Option<Option<String>> {
     Some(wrapped)
 }
 
-/// True for any command that runs Ghostex's statusline script, current path or
-/// not: Ghostex owns it and may rewrite or remove it.
+/// True for a command in the exact form Ghostex writes (its script, current path or not, alone or
+/// wrapping one user command): Ghostex owns it and may rewrite or remove it.
+///
+/// CDXC:AgentHooks 2026-11-18 WHY: review of c33dcd576: any command containing
+/// `agent-statusline.sh` was claimed, so a user's own `my-agent-statusline.sh` was taken for
+/// Ghostex's, dropped when the helper was turned off and never wrapped. Only Ghostex's own shapes
+/// count now; anything else is a user command and is wrapped like one.
 pub(crate) fn is_ghostex_statusline_command(command: &str) -> bool {
-    command.contains("agent-statusline.sh")
+    parse_ghostex_statusline_command(command).is_some()
 }
 
-/// Inverse of `shell_quote`.
-fn shell_unquote(value: &str) -> Option<String> {
-    let inner = value.trim().strip_prefix('\'')?.strip_suffix('\'')?;
-    Some(inner.replace("'\\''", "'"))
+/// Ghostex's statusLine command split into the user command it wraps: `None` when the command is
+/// not Ghostex's, `Some(None)` when it wraps nothing.
+fn parse_ghostex_statusline_command(command: &str) -> Option<Option<String>> {
+    #[cfg(windows)]
+    if let Some(wrapped) = windows_wrapped_statusline_command(command) {
+        return Some(wrapped);
+    }
+    // `'<hooks>/agent-statusline.sh'` or `'<hooks>/cursor-agent-statusline.sh'`, then nothing or
+    // one more single-quoted word (`shell_quote`).
+    let (script, rest) = take_shell_quoted(command.trim())?;
+    if !is_ghostex_statusline_script(&script) {
+        return None;
+    }
+    let rest = rest.trim();
+    if rest.is_empty() {
+        return Some(None);
+    }
+    let (wrapped, tail) = take_shell_quoted(rest)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    Some(Some(wrapped).filter(|wrapped| !wrapped.trim().is_empty()))
+}
+
+/// A path that names one of Ghostex's statusline scripts: `agent-statusline.sh` or
+/// `cursor-agent-statusline.sh` in a `hooks` folder.
+fn is_ghostex_statusline_script(script: &str) -> bool {
+    let mut parts = script.rsplit(['/', '\\']);
+    matches!(
+        parts.next(),
+        Some("agent-statusline.sh" | "cursor-agent-statusline.sh")
+    ) && parts.next() == Some("hooks")
+}
+
+/// The first `shell_quote`d word of `text` (`'...'`, with `'\\''` for a quote) and what follows it.
+fn take_shell_quoted(text: &str) -> Option<(String, &str)> {
+    let mut rest = text.strip_prefix('\'')?;
+    let mut word = String::new();
+    loop {
+        let end = rest.find('\'')?;
+        word.push_str(&rest[..end]);
+        rest = &rest[end + 1..];
+        match rest.strip_prefix("\\''") {
+            Some(after) => {
+                word.push('\'');
+                rest = after;
+            }
+            None => return Some((word, rest)),
+        }
+    }
 }
 
 /// The user command a Ghostex statusline command wraps, if any.
 pub(crate) fn wrapped_statusline_command(command: &str) -> Option<String> {
-    if !is_ghostex_statusline_command(command) {
-        return None;
-    }
-    #[cfg(windows)]
-    if let Some(wrapped) = windows_wrapped_statusline_command(command) {
-        return wrapped;
-    }
-    // `'<script>' '<wrapped>'` — the script token is single-quoted, so the
-    // argument starts at the first quote after it.
-    let after_script = command.trim().strip_prefix('\'')?;
-    let script_end = after_script.find("' ")?;
-    let rest = after_script[script_end + 1..].trim();
-    if rest.is_empty() {
-        return None;
-    }
-    shell_unquote(rest).filter(|wrapped| !wrapped.trim().is_empty())
+    parse_ghostex_statusline_command(command).flatten()
 }
 
 fn statusline_entry(data: &Value) -> Option<&Map<String, Value>> {

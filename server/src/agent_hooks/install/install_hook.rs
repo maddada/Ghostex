@@ -36,14 +36,11 @@ fn enable_antigravity_ghostex_hook(
 }
 
 pub(crate) fn write_json_file(path: &Path, data: &Value) -> Result<(), DomainStateError> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(io_error)?;
-    }
     let text = format!(
         "{}\n",
         serde_json::to_string_pretty(data).map_err(json_error)?
     );
-    fs::write(path, text).map_err(io_error)
+    crate::agent_hooks::probing::write_config_file(path, text.as_bytes()).map_err(io_error)
 }
 
 pub(super) fn remove_file_if_exists(path: &Path) -> Result<bool, DomainStateError> {
