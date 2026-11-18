@@ -615,6 +615,9 @@ impl GhostexGpuiApp {
             .when(shown(HeaderControl::ClaudeCloud), |this| {
                 this.children(self.render_workarea_header_claude_cloud_button(compact, cx))
             })
+            // Work and Session details: one spot beside the chat, one panel at a time
+            // (work_button.rs).
+            .children(self.render_workarea_header_work_button(cx))
             .when(shown(HeaderControl::SessionDetails), |this| {
                 this.children(self.render_workarea_header_session_details_button(cx))
             })

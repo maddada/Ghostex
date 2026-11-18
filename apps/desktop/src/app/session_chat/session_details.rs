@@ -24,6 +24,9 @@ pub(crate) struct SessionDetailsSwitch {
     choices: SessionDetailsChoices,
     /// The button's bounds in the window's content, which the floating card opens under.
     pub(crate) button_bounds: Rc<Cell<gpui::Bounds<gpui::Pixels>>>,
+    /// The header's Work button's bounds, which the Work panel's floating card opens under
+    /// (render/workarea_header/work_button.rs).
+    pub(crate) work_button_bounds: Rc<Cell<gpui::Bounds<gpui::Pixels>>>,
     dismissed_at: Option<Instant>,
     /// The chat session that last had focus, which the button keeps following while focus is
     /// somewhere that is not a chat (the sidebar, Files, a terminal, another window).
@@ -44,6 +47,7 @@ impl Default for SessionDetailsSwitch {
         Self {
             choices,
             button_bounds: Rc::default(),
+            work_button_bounds: Rc::default(),
             dismissed_at: None,
             last_chat: Cell::new(None),
         }
@@ -116,6 +120,41 @@ impl GhostexGpuiApp {
         }
         self.session_details.choices.set(&key, open);
         self.session_details.save();
+        // One panel at a time in the spot beside the chat: the Work panel makes way
+        // (native_chat/work_topic.rs).
+        if open {
+            if let Some(chat) = self.session_details_target_chat() {
+                chat.update(cx, |chat, cx| chat.close_work_panel(cx));
+            }
+        }
+        cx.notify();
+    }
+
+    /// The header's Work button: the focused chat's Work panel opens or closes, and Session
+    /// details makes way while it opens (one panel at a time beside the chat).
+    pub(crate) fn toggle_work_panel(
+        &mut self,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(chat) = self.session_details_target_chat() else {
+            return;
+        };
+        let opening = !chat.read(cx).work_panel_shown();
+        if opening && self.session_details_target_open() {
+            if let Some(key) = self
+                .session_details_target_session()
+                .and_then(|session_id| self.session_details_chat_key(session_id))
+            {
+                self.session_details.choices.set(&key, false);
+                self.session_details.save();
+                self.sync_session_details_chats(cx);
+            }
+        }
+        let anchor = self.session_details.work_button_bounds.get();
+        chat.update(cx, |chat, cx| {
+            chat.toggle_work_panel_from_header(anchor, window, cx)
+        });
         cx.notify();
     }
 

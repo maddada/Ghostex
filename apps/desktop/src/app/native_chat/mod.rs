@@ -121,6 +121,7 @@ mod user_message_look;
 mod where_pill;
 mod work_actions;
 mod work_cards;
+mod work_topic;
 mod worktree_tray;
 
 mod code_block;

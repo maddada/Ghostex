@@ -144,6 +144,7 @@ impl GhostexGpuiApp {
                 },
             )
             .child(self.render_web_git_button(cx))
+            .children(self.render_web_work_button(cx))
             .children(self.render_web_session_details_button(cx))
             .child(Self::render_disabled_header_button(
                 "web-header-panel-bottom",
@@ -153,6 +154,90 @@ impl GhostexGpuiApp {
             .child(self.render_web_beads_button(cx))
             .child(self.render_web_changes_button(cx))
             .into_any_element()
+    }
+
+    /// The Work button, as the desktop header draws it (`render/workarea_header/work_button.rs`):
+    /// the open chat's Work panel, with how many wait on the user; Session details makes way while
+    /// it opens.
+    fn render_web_work_button(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let session = self.open_session.as_ref()?;
+        if self.web_shows_terminal(session) {
+            return None;
+        }
+        let (open, waiting) = {
+            let view = self.native_chats.get(session)?.1.read(cx);
+            if !view.work_panel_available() {
+                return None;
+            }
+            (view.work_panel_shown(), view.work_panel_waiting())
+        };
+        let key = session.to_sidebar_session_id();
+        let bounds = self.work_button_bounds.clone();
+        let text = titlebar_active_text_color();
+        Some(
+            div()
+                .id("web-header-work")
+                .flex()
+                .flex_none()
+                .items_center()
+                .gap(px(5.0))
+                .px(px(6.0))
+                .py(px(3.0))
+                .rounded(px(6.0))
+                .cursor_pointer()
+                .when(open, |button| button.bg(titlebar_popup_menu_hover_color()))
+                .hover(|button| button.bg(titlebar_popup_menu_hover_color()))
+                .child(
+                    gpui::svg()
+                        .path("titlebar/layout-board-split.svg")
+                        .size(px(14.0))
+                        .flex_none()
+                        .text_color(text),
+                )
+                .child(div().text_size(px(12.0)).text_color(text).child("Work"))
+                .when(waiting > 0, |button| {
+                    button.child(
+                        div()
+                            .px(px(5.0))
+                            .h(px(16.0))
+                            .flex()
+                            .items_center()
+                            .rounded(px(8.0))
+                            .bg(rgb(0xf472b6))
+                            .text_size(px(10.5))
+                            .text_color(rgb(0x1a1a1a))
+                            .child(waiting.to_string()),
+                    )
+                })
+                .tooltip(move |window, cx| {
+                    Tooltip::new(if open {
+                        "Hide work items"
+                    } else {
+                        "Show work items"
+                    })
+                    .build(window, cx)
+                })
+                .on_click(cx.listener(move |app, _, window, cx| {
+                    let Some(session) = app.open_session.clone() else {
+                        return;
+                    };
+                    let Some((_, view)) = app.native_chats.get(&session).cloned() else {
+                        return;
+                    };
+                    if !view.read(cx).work_panel_shown()
+                        && app.session_details_choices.is_open(&key)
+                    {
+                        app.session_details_choices.set(&key, false);
+                    }
+                    let anchor = app.work_button_bounds.get();
+                    view.update(cx, |view, cx| {
+                        view.toggle_work_panel_from_header(anchor, window, cx)
+                    });
+                    cx.notify();
+                }))
+                .on_prepaint(move |painted, _, _| bounds.set(painted))
+                .into_any_element(),
+        )
     }
 
     /// The Session details button, as the desktop header draws it
@@ -225,6 +310,14 @@ impl GhostexGpuiApp {
                             .is_some_and(|at| at.elapsed() < std::time::Duration::from_millis(350));
                     if !reopening {
                         app.session_details_choices.set(&key, !open);
+                        // One panel at a time beside the chat: the Work panel makes way.
+                        if !open {
+                            if let Some(session) = app.open_session.as_ref() {
+                                if let Some((_, view)) = app.native_chats.get(session) {
+                                    view.update(cx, |view, cx| view.close_work_panel(cx));
+                                }
+                            }
+                        }
                         cx.notify();
                     }
                 }))

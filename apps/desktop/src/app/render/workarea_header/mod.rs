@@ -18,5 +18,6 @@ pub(crate) mod session_links;
 pub(crate) mod share_button;
 pub(crate) mod shell;
 pub(crate) mod toggles;
+pub(crate) mod work_button;
 
 pub(crate) use anchor::*;

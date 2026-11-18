@@ -256,7 +256,7 @@ fn expanded_card_height(row: &Value) -> f32 {
 pub(super) fn board_height(board: &Value) -> f32 {
     // The header, and room under the last group's line: the panel's own bottom padding cut the
     // last line ("Finished today") when everything fit.
-    let mut height = HEADER_HEIGHT + 8.0 + LIST_BOTTOM;
+    let mut height = HEADER_HEIGHT + 8.0 + LIST_BOTTOM + super::work_topic::topic_height(board);
     for group in board["groups"].as_array().into_iter().flatten() {
         height += GROUP_HEIGHT;
         for row in group["rows"].as_array().into_iter().flatten() {
@@ -361,6 +361,12 @@ pub(crate) struct CoordinatorBoardView {
     pub(super) dock_width: std::rc::Rc<std::cell::Cell<f32>>,
     /// The dock's rows' scroll position.
     pub(super) dock_scroll: gpui::ScrollHandle,
+    /// The Topic line being rewritten in place, and what hears its Enter and Escape
+    /// (work_topic.rs).
+    pub(super) topic_edit: Option<(
+        gpui::Entity<gpui_component::input::InputState>,
+        Vec<gpui::Subscription>,
+    )>,
     /// The dock row whose ask is shown in its floating panel, by key (dock_ask_modal.rs).
     pub(super) dock_modal: Option<String>,
     /// What the row said it was replied to when the panel showed it: a change means a Reply from
@@ -2651,7 +2657,7 @@ impl NativeChatView {
         } else {
             ""
         };
-        div()
+        let row = div()
             .flex_shrink_0()
             .h(px(HEADER_HEIGHT * s))
             .flex()
@@ -2681,8 +2687,18 @@ impl NativeChatView {
                     .child(note),
             )
             .child(switch)
-            .children(close)
-            .into_any_element()
+            .children(close);
+        // The Work panel's Topic under its title (work_topic.rs).
+        match self.work_topic_row(board, p, cx) {
+            Some(topic) => div()
+                .flex_shrink_0()
+                .flex()
+                .flex_col()
+                .child(row)
+                .child(topic)
+                .into_any_element(),
+            None => row.into_any_element(),
+        }
     }
 
     /// Every group: its line (a click folds it), its rows and its "N more".
