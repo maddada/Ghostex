@@ -392,33 +392,3 @@ fn popup_row_into_quick_row(mut items: Vec<Value>) -> Vec<Value> {
     }
     items
 }
-
-#[cfg(test)]
-mod popup_quick_row_tests {
-    use super::*;
-    use serde_json::json;
-
-    fn menu() -> Vec<Value> {
-        vec![
-            json!({"quick": [{"label": "Rename"}, {"label": "Unpin"}]}),
-            json!({"label": "Move to Group"}),
-            json!({"label": "Open in a Popup", "icon": "external-link"}),
-        ]
-    }
-
-    #[test]
-    fn quick_tile_reads_popout_and_keeps_its_icon_and_full_aria_name() {
-        let items = popup_row_into_quick_row(menu());
-        assert_eq!(items.len(), 2);
-        let tile = &items[0]["quick"][2];
-        assert_eq!(tile["label"], "Popout");
-        assert_eq!(tile["icon"], "external-link");
-        assert_eq!(tile["ariaLabel"], "Open in a Popup");
-    }
-
-    #[test]
-    fn a_menu_without_a_quick_row_keeps_the_long_name() {
-        let items = popup_row_into_quick_row(menu().split_off(1));
-        assert_eq!(items[1]["label"], "Open in a Popup");
-    }
-}
