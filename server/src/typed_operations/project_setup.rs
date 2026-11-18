@@ -190,6 +190,8 @@ pub(crate) fn count_project_file_lines(
     file_paths: &[String],
 ) -> Result<usize, TypedOperationError> {
     let mut total = 0;
+    // Each file is counted a chunk at a time, so a large one is never held in memory whole.
+    let mut buffer = vec![0u8; 64 * 1024];
     for file_path in file_paths {
         let absolute = Path::new(cwd).join(file_path);
         if !is_path_inside(cwd, &absolute.to_string_lossy()) {
@@ -207,8 +209,6 @@ pub(crate) fn count_project_file_lines(
         let Ok(mut file) = fs::File::open(&absolute) else {
             continue;
         };
-        // Counted a chunk at a time, so a large file is never held in memory whole.
-        let mut buffer = [0u8; 64 * 1024];
         let mut lines = 0;
         loop {
             match file.read(&mut buffer) {

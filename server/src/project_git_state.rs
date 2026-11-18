@@ -403,7 +403,11 @@ async fn read_diff_stats(
                 .into_iter()
                 .filter(|path| {
                     root.as_ref().is_none_or(|root| {
-                        std::fs::metadata(root.join(path)).is_ok_and(|meta| meta.is_file())
+                        let path = root.join(path);
+                        // One it cannot open (no permission, locked on Windows) is not counted
+                        // either: its lines cannot be read.
+                        std::fs::metadata(&path).is_ok_and(|meta| meta.is_file())
+                            && std::fs::File::open(&path).is_ok()
                     })
                 })
                 .collect()

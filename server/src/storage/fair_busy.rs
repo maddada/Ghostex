@@ -151,7 +151,9 @@ pub(crate) fn busy(count: i32) -> bool {
     drop(queue);
     let head_since = head_since.unwrap_or_else(Instant::now);
     SINCE.set(Some((since, Some(head_since))));
-    if head_since.elapsed() >= HEAD_BUDGET {
+    // The head's budget, and never past the whole wait's: a waiter that reached the head late
+    // would otherwise answer up to `HEAD_BUDGET` after `QUEUE_WAIT` (review of 5b69c183f).
+    if head_since.elapsed() >= HEAD_BUDGET || since.elapsed() >= QUEUE_WAIT {
         release_current_thread();
         return false;
     }

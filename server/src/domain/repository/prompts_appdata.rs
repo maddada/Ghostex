@@ -407,6 +407,12 @@ impl<'a> DomainRepository<'a> {
         let requested_tag_id = optional_trimmed_string_param(params, "tagId")?;
         let timestamp = now_iso();
 
+        // The name check and the insert or rename in one write transaction: two saves of the same
+        // name at once both found it free and both landed (review of 5b69c183f). Dropped without
+        // a commit (any early return) it rolls back.
+        let transaction =
+            rusqlite::Transaction::new_unchecked(self.db, rusqlite::TransactionBehavior::Immediate)
+                .map_err(sql_error)?;
         let conflicting_tag_id: Option<String> = self
             .db
             .query_row(
@@ -459,6 +465,7 @@ impl<'a> DomainRepository<'a> {
                 tag_id
             }
         };
+        transaction.commit().map_err(sql_error)?;
 
         let tag = read_stashed_prompt_tag_row(self.db, &tag_id)?
             .ok_or_else(|| DomainStateError::corrupt_state("Tag vanished during save."))?;

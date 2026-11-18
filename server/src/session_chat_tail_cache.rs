@@ -33,7 +33,9 @@ const KEPT_BYTES: u64 = 48 * 1024 * 1024;
 /// are the ones worth it, GitHub #668) but within their own budget, `LARGE_PAGES_BYTES`, so they
 /// never push small ones out.
 const LARGE_PAGE_BYTES: u64 = KEPT_BYTES / 4;
-const LARGE_PAGES_BYTES: u64 = KEPT_BYTES / 2;
+/// Room for two or three large pages (an alternating pair of heavy transcripts each evicted the
+/// other within half the cap, review of e31727594); the one just kept is never evicted.
+const LARGE_PAGES_BYTES: u64 = KEPT_BYTES / 4 * 3;
 /// The answers kept at most, whatever their size (`KEPT_BYTES` bounds the memory).
 const KEPT_ANSWERS: usize = 256;
 /// Asks for one transcript within `HOT_WINDOW` past which its callers are logged.
