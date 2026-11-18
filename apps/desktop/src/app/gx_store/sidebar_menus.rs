@@ -363,6 +363,9 @@ fn text(value: &Value, key: &str) -> String {
 
 /// CDXC:ContextMenus 2026-11-18 DECISION:
 /// User: "move Popup to be the 3rd button after rename and pin". Open in a Popup (added by `session_popup::with_open_in_new_window_row`) moves into the menu's quick row right after Rename and Pin, and leaves the list; a menu with no quick row keeps it where it was added.
+/// User (2026-11-18): the quick tile cut the name off ("Open in..."), so "please make the Open in Popup shorter name so it fits ... I think 'Popout' sounds good?". Only that tile reads "Popout" (icon kept); its `ariaLabel` keeps the full name for assistive tech. Quick buttons have no tooltip: no tooltip shows while a context menu is open (CDXC:Tooltips 2026-10-17). A row left in the list keeps "Open in a Popup".
+const QUICK_POPUP_LABEL: &str = "Popout";
+
 fn popup_row_into_quick_row(mut items: Vec<Value>) -> Vec<Value> {
     let Some(popup_at) = items
         .iter()
@@ -373,7 +376,9 @@ fn popup_row_into_quick_row(mut items: Vec<Value>) -> Vec<Value> {
     let Some(quick_at) = items.iter().position(|item| item["quick"].is_array()) else {
         return items;
     };
-    let popup = items.remove(popup_at);
+    let mut popup = items.remove(popup_at);
+    popup["ariaLabel"] = Value::from("Open in a Popup");
+    popup["label"] = Value::from(QUICK_POPUP_LABEL);
     // Removing an earlier row shifts the quick row down by one; the quick row leads the menu, so
     // this only matters for odd shapes.
     let quick_at = if popup_at < quick_at {
@@ -386,4 +391,34 @@ fn popup_row_into_quick_row(mut items: Vec<Value>) -> Vec<Value> {
         buttons.insert(at, popup);
     }
     items
+}
+
+#[cfg(test)]
+mod popup_quick_row_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn menu() -> Vec<Value> {
+        vec![
+            json!({"quick": [{"label": "Rename"}, {"label": "Unpin"}]}),
+            json!({"label": "Move to Group"}),
+            json!({"label": "Open in a Popup", "icon": "external-link"}),
+        ]
+    }
+
+    #[test]
+    fn quick_tile_reads_popout_and_keeps_its_icon_and_full_aria_name() {
+        let items = popup_row_into_quick_row(menu());
+        assert_eq!(items.len(), 2);
+        let tile = &items[0]["quick"][2];
+        assert_eq!(tile["label"], "Popout");
+        assert_eq!(tile["icon"], "external-link");
+        assert_eq!(tile["ariaLabel"], "Open in a Popup");
+    }
+
+    #[test]
+    fn a_menu_without_a_quick_row_keeps_the_long_name() {
+        let items = popup_row_into_quick_row(menu().split_off(1));
+        assert_eq!(items[1]["label"], "Open in a Popup");
+    }
 }

@@ -1153,6 +1153,10 @@ impl GhostexGpuiApp {
                         .pb(px(6.0 * scale));
                     for (button_index, button) in buttons.iter().enumerate() {
                         let label = button["label"].as_str().unwrap_or_default().to_owned();
+                        // A short tile label ("Popout") may carry its full name for assistive tech.
+                        let aria_label = button["ariaLabel"]
+                            .as_str()
+                            .map_or_else(|| label.clone(), str::to_owned);
                         let icon_path =
                             gpui_sidebar_command_icon_asset_path(button["icon"].as_str());
                         let disabled = button["disabled"] == true;
@@ -1162,7 +1166,7 @@ impl GhostexGpuiApp {
                                     "native-menu-quick-{panel_index}-{item_index}-{button_index}"
                                 ))
                                 .role(gpui::Role::Button)
-                                .aria_label(label.clone())
+                                .aria_label(aria_label)
                                 .flex_1()
                                 .min_w(px(QUICK_BUTTON_MIN_WIDTH * scale))
                                 .h_full()
