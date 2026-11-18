@@ -379,19 +379,32 @@ async fn read_diff_stats(
     */
     if count_untracked_when_clean && additions == 0 && deletions == 0 {
         let untracked = answered(git(projects, project_id, "listUntracked").await?)?;
-        // A link to a folder (a shared `node_modules`) is listed as an untracked file, since an
-        // ignore rule like `node_modules/` matches only a real folder; it is not a file of lines.
+        // Only regular files have lines: a link to a folder (a shared `node_modules`, listed as
+        // untracked because an ignore rule like `node_modules/` matches only a real folder), a
+        // dangling link (that link in a fresh worktree) or a file deleted since the listing is
+        // not counted. The checks stat each path, so they run off the async worker.
         let root = projects
             .first()
             .and_then(|project| project.get("path"))
             .and_then(Value::as_str)
-            .map(std::path::Path::new);
-        let paths: Vec<String> = stdout(&untracked)
+            .map(std::path::PathBuf::from);
+        let listed: Vec<String> = stdout(&untracked)
             .split('\0')
             .filter(|path| !path.is_empty())
-            .filter(|path| !root.is_some_and(|root| root.join(path).is_dir()))
             .map(str::to_string)
             .collect();
+        let paths: Vec<String> = tokio::task::spawn_blocking(move || {
+            listed
+                .into_iter()
+                .filter(|path| {
+                    root.as_ref().is_none_or(|root| {
+                        std::fs::metadata(root.join(path)).is_ok_and(|meta| meta.is_file())
+                    })
+                })
+                .collect()
+        })
+        .await
+        .map_err(|error| TypedOperationError::dependency_unavailable(error.to_string()))?;
         let mut lines = 0_i64;
         for chunk in paths.chunks(UNTRACKED_LINE_COUNT_BATCH_SIZE) {
             let mut extra = Map::new();

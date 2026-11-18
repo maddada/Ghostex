@@ -197,13 +197,16 @@ pub(crate) fn count_project_file_lines(
                 "filePath must stay inside the project.",
             ));
         }
-        // A folder, or a link to one, has no lines; reading it failed the whole count
-        // ("Is a directory").
-        if absolute.is_dir() {
+        // Only a regular file has lines: a folder or a link to one failed the whole count ("Is a
+        // directory"), and a dangling link or a file deleted since it was listed ("No such file").
+        if !fs::metadata(&absolute).is_ok_and(|meta| meta.is_file()) {
             continue;
         }
-        let mut file = fs::File::open(&absolute)
-            .map_err(|error| TypedOperationError::not_found(error.to_string()))?;
+        let mut file = match fs::File::open(&absolute) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(TypedOperationError::not_found(error.to_string())),
+        };
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes)
             .map_err(|error| TypedOperationError::bad_request(error.to_string()))?;

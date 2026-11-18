@@ -21,7 +21,14 @@ pub(crate) async fn run_git_action(
     }
     if action == "countFileLines" {
         let file_paths = optional_relative_file_paths(params.get("filePaths"))?;
-        let line_count = count_project_file_lines(&context.cwd, &file_paths)?;
+        // Reads whole files: off the async worker.
+        let cwd = context.cwd.clone();
+        let line_count =
+            tokio::task::spawn_blocking(move || count_project_file_lines(&cwd, &file_paths))
+                .await
+                .map_err(|error| {
+                    TypedOperationError::dependency_unavailable(error.to_string())
+                })??;
         return Ok(json!({
             "action": action,
             "exitCode": 0,
