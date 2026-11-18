@@ -1039,8 +1039,14 @@ mod tests {
             title_markdown("1. enter 192.168.1.177 *now*", &Value::Null),
             r"1\. enter 192\.168\.1\.177 \*now\*"
         );
-        assert_eq!(title_markdown("# not a heading", &Value::Null), r"\# not a heading");
-        assert_eq!(title_markdown("#562 stays an issue", &Value::Null), "#562 stays an issue");
+        assert_eq!(
+            title_markdown("# not a heading", &Value::Null),
+            r"\# not a heading"
+        );
+        assert_eq!(
+            title_markdown("#562 stays an issue", &Value::Null),
+            "#562 stays an issue"
+        );
         // A bare address in a row with no runs is a link, its address whole.
         assert_eq!(
             title_markdown("Open http://192.168.1.177:8080/admin now", &Value::Null),
