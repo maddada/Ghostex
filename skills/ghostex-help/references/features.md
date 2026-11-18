@@ -947,7 +947,7 @@ Click a project header (or the chevron beside it) or a group header to expand
 or collapse it; rename a group from its right-click menu.
 Sessions groups gather some of a project's sessions under a header of their
 own, with a folder icon. To make one, right-click a session and choose
-Advanced > Move to New Sessions Group. Once the project has a sessions group, the
+Advanced > Move to New Group. Once the project has a sessions group, the
 session menu's Advanced > Move to Group page lists the project's groups: pick
 one to move the session there, or Remove from Group to put it back in the
 project's own list. Dragging a session onto another of its project's groups,
@@ -1129,7 +1129,7 @@ Grouping never moves a project out of its Space: a group made with Project Group
 of a group (Remove from Group, Ungroup, or dragging it out) stays in that
 group's Space. Adding a project to an existing group in another Space moves it
 to that group's Space, and the sidebar switches there with the project focused.
-A sessions group made with a session's Move to New Sessions Group shows in the
+A sessions group made with a session's Move to New Group shows in the
 project's Space.
 In Add Project, select the computer whose folders you want to browse. Local
 folder starts in your home folder, and External drives and other folders shows
@@ -5238,10 +5238,51 @@ sessions, so any client can control agents on any machine.
 ### Several computers as one workspace
 
 Answer "can my computers share projects, move a conversation to another
-computer, or let agents talk to each other?" from here. Add each computer in
-Settings > Remote on the computer whose sidebar should show it (From another
-computer below); for agents, a connection from either side is enough.
+computer, or let agents talk to each other?" from here. The short answer is
+yes to all three: a coordinator's threads can run on another computer and
+report back, any agent can message sessions on another computer, a
+conversation can be handed over to another computer, and every computer's
+projects share one sidebar. Add each computer in Settings > Remote on the
+computer whose sidebar should show it (From another computer below); for
+agents, a connection from either side is enough.
 
+- **Threads on another computer (yes)**: a coordinator can run its threads
+  on any connected computer, and they report back to it like threads on this
+  computer. Ask it in plain words ("run this in a thread on my Windows PC"),
+  or `ghostex coordinator start-thread --computer <name>`.
+- **Agents message each other across computers (yes)**: any agent can
+  message, start and read sessions on a connected computer, and that
+  computer's agents can do the same here, while the computers are connected.
+
+  ```bash
+  ghostex computers                                   # connected computers
+  ghostex sessions --computer <name>                  # its projects and sessions, with ids
+  ghostex agents create <agent> --computer <name> --project-id <id> --task "..."
+  ghostex agents send <session-ref> "..."             # a ref from that computer goes there
+  ghostex agents send --main-coordinator --path <folder> --computer <name> "..."
+  ghostex read-session-chat <session-ref> --last 2 --format text
+  ghostex coordinator start-thread --computer <name> --title "..." --task "..."
+  ```
+
+  It needs Ghostex 10.44 or later on both computers and **Agent access** on
+  (Settings > Remote, the machine's Edit dialog, Advanced; on by default).
+  Agents there can start, message, read, sleep, wake and close sessions,
+  nothing else.
+- **Hand a conversation over to another computer (yes)**: right-click the
+  session > Handoff / Export > Handoff to an agent, then Destination >
+  Change… and pick the computer and project (the project with
+  the same repository there is picked for you; Clone it there adds it when
+  it's missing). Pick the agent under Continue with. Ghostex starts a new
+  session there with the conversation attached as a file (the last 20 turns
+  at first; turn on Whole conversation under Include for all of it), and
+  carries over the pictures and files the conversation used outside the
+  project. Write the first message there yourself. Only the conversation
+  moves: the old session keeps running until you close it, and the code
+  changes don't travel, so commit and push them (or pull them on the other
+  computer) first. It works from this computer to a remote one, back, and
+  between two remote ones. Ghostex doesn't move a session by itself when a
+  computer runs low on memory or disk; the Memory guard only acts on that
+  computer's own sessions.
 - **One sidebar, shared projects (yes, the default)**: with Separate by
   machine off (Settings > Sidebar & Sessions, `sidebarSeparateByMachine`, off
   by default) every connected computer's projects and sessions are in one
@@ -5259,41 +5300,6 @@ computer below); for agents, a connection from either side is enough.
   (`sidebarHideDisconnectedMachines`). Details: One list for every computer,
   in the Sidebar section. A session runs on one computer: each computer runs
   its own sessions with its own CPU, memory and files.
-- **Continue a conversation on another computer (yes, by handing it off)**:
-  right-click the session > Handoff / Export > Handoff to an agent, then
-  Destination > Change… and pick the computer and project (the project with
-  the same repository there is picked for you; Clone it there adds it when
-  it's missing). Pick the agent under Continue with. Ghostex starts a new
-  session there with the conversation attached as a file (the last 20 turns
-  at first; turn on Whole conversation under Include for all of it), and
-  carries over the pictures and files the conversation used outside the
-  project. Write the first message there yourself. Only the conversation
-  moves: the old session keeps running until you close it, and the code
-  changes don't travel, so commit and push them (or pull them on the other
-  computer) first. It works from this computer to a remote one, back, and
-  between two remote ones. Ghostex doesn't move a session by itself when a
-  computer runs low on memory or disk; the Memory guard only acts on that
-  computer's own sessions.
-- **Agents talk across computers (yes, while the computers are connected)**:
-  any agent can list, start, message and read sessions on a connected
-  computer, and that computer's agents can do the same here. A coordinator
-  can run its threads there, and they report back like threads on this
-  computer.
-
-  ```bash
-  ghostex computers                                   # connected computers
-  ghostex sessions --computer <name>                  # its projects and sessions, with ids
-  ghostex agents create <agent> --computer <name> --project-id <id> --task "..."
-  ghostex agents send <session-ref> "..."             # a ref from that computer goes there
-  ghostex agents send --main-coordinator --path <folder> --computer <name> "..."
-  ghostex read-session-chat <session-ref> --last 2 --format text
-  ghostex coordinator start-thread --computer <name> --title "..." --task "..."
-  ```
-
-  It needs Ghostex 10.44 or later on both computers and **Agent access** on
-  (Settings > Remote, the machine's Edit dialog, Advanced; on by default).
-  Agents there can start, message, read, sleep, wake and close sessions,
-  nothing else.
 - **Machines on demand**: Ghostex doesn't make new computers for you. Add
   each computer you own in Settings > Remote. For a machine per task in the
   cloud, use a Cloud Box (see Cloud Boxes below): its sessions sit in their
