@@ -27,7 +27,10 @@ pub fn project_drop_landing(
     let mut collections = None;
     for write in &plan.writes {
         match write {
-            ProjectWrite::GroupOrder { group_ids } => group_order = Some(group_ids.as_slice()),
+            ProjectWrite::GroupOrder { group_ids }
+            | ProjectWrite::MergedGroupOrder { group_ids, .. } => {
+                group_order = Some(group_ids.as_slice())
+            }
             ProjectWrite::EditCollections { document } => collections = Some(&document.state),
             _ => {}
         }

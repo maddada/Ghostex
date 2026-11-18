@@ -63,6 +63,14 @@ pub enum ProjectWrite {
     /// The order goes into the store so the rows move under the user's finger, and the message is
     /// what edits the workspace session groups document's `projectOrder`.
     GroupOrder { group_ids: Vec<String> },
+    /// The one list's order after a drag there (`merged_project_move.rs`): `group_ids` as the list
+    /// draws them, for the drop line, and `project_ids`, every computer's projects by workspace
+    /// project id, for this computer's own project order
+    /// (`plan_merged_project_order_write`).
+    MergedGroupOrder {
+        group_ids: Vec<String>,
+        project_ids: Vec<String>,
+    },
     /// `ui.renameRequest`: the Rename dialog opens on the collection that was just created, so the
     /// user names it instead of living with "Group 7".
     RequestCollectionRename { collection_id: String },
@@ -97,6 +105,12 @@ impl ProjectWrite {
             }
             Self::GroupOrder { group_ids } => {
                 json!({ "write": "groupOrder", "groupIds": group_ids })
+            }
+            Self::MergedGroupOrder {
+                group_ids,
+                project_ids,
+            } => {
+                json!({ "write": "mergedGroupOrder", "groupIds": group_ids, "projectIds": project_ids })
             }
             Self::RequestCollectionRename { collection_id } => {
                 json!({ "write": "renameCollection", "collectionId": collection_id })
@@ -136,7 +150,7 @@ pub struct ProjectMovePlan {
 }
 
 impl ProjectMovePlan {
-    fn refused(reason: &'static str) -> Self {
+    pub(super) fn refused(reason: &'static str) -> Self {
         Self {
             writes: Vec::new(),
             refusal: Some(reason),
@@ -144,7 +158,7 @@ impl ProjectMovePlan {
         }
     }
 
-    fn of(writes: Vec<ProjectWrite>) -> Self {
+    pub(super) fn of(writes: Vec<ProjectWrite>) -> Self {
         Self {
             writes,
             refusal: None,

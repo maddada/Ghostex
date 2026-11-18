@@ -19,6 +19,7 @@
 
 mod added_project;
 mod inventory;
+mod merged_project_move;
 mod order_write;
 mod pinned_order;
 mod project_drop;
@@ -35,6 +36,7 @@ pub use added_project::{
     NewProjectPlacement,
 };
 pub use inventory::sidebar_group_membership;
+pub use merged_project_move::plan_merged_project_move;
 pub use order_write::{
     owns_order_write_message, plan_order_write, OrderWrite, OrderWritePlan,
     ORDER_WRITE_MESSAGE_TYPES,
@@ -47,7 +49,8 @@ pub use project_move::{
     PROJECT_MOVE_COMMAND_TYPES,
 };
 pub use project_order_write::{
-    owns_project_order_message, plan_project_order_write, PROJECT_ORDER_MESSAGE_TYPE,
+    owns_project_order_message, plan_merged_project_order_write, plan_project_order_write,
+    PROJECT_ORDER_MESSAGE_TYPE,
 };
 pub use session_drop::{
     owns_session_drop_command, plan_section_move, plan_session_drop, SessionDrop,

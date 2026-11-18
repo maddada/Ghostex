@@ -771,6 +771,7 @@ impl SidebarViewModel {
 
         // Every machine's projects in this one list (`merged.rs`), unless Separate by machine.
         let mut project_copies = std::collections::BTreeMap::new();
+        let mut merged_project_rows = Vec::new();
         if merging {
             let (cache, outcome) = super::merged::merge_machines(
                 previous.as_mut().and_then(|previous| previous.merge.take()),
@@ -795,6 +796,7 @@ impl SidebarViewModel {
                 drawn_focus.active_group_id = Some(entry.clone());
             }
             project_copies = outcome.copies;
+            merged_project_rows = outcome.rows;
         }
 
         // Every coordinator's threads, wherever they are drawn: a worktree thread is in its
@@ -918,6 +920,7 @@ impl SidebarViewModel {
         );
         state.view.machines_with_home = super::chief::machines_with_home(store, &state.view.chiefs);
         state.view.project_copies = project_copies;
+        state.view.merged_project_rows = merged_project_rows;
         // A project leaves Active projects once its 8 hours are up, with no store change.
         state.next_deadline_ms =
             min_deadline(state.next_deadline_ms, state.view.active_projects_until_ms);

@@ -73,6 +73,9 @@ pub struct SidebarView {
     /// group id (`merged.rs`), whether or not the entry is drawn. Read through
     /// [`SidebarView::project_copies`].
     pub project_copies: BTreeMap<String, Arc<Vec<ProjectCopy>>>,
+    /// Every group of the one list in its order, drawn or not (`merged_order.rs`); empty unless
+    /// the list merges every computer's projects. A project drag there is computed against it.
+    pub merged_project_rows: Vec<super::merged_order::MergedProjectRow>,
 }
 
 /// One copy of a merged project: another computer's, or a second clone here

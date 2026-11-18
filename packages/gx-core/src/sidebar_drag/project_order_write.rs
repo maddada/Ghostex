@@ -77,14 +77,103 @@ pub fn plan_project_order_write(
     // group) leaves the project order alone rather than emptying it.
     if !project_ids.is_empty() {
         let normalized = normalize_project_order(core, inputs, &project_ids);
+        // Another computer's projects placed by a drag in the one list keep their places
+        // (`sidebar_view/merged_order.rs`): this order names this computer's projects only.
+        let normalized = keep_missing_ids(&document.project_order, &normalized, |id| {
+            ProjectKey::parse_workspace_project_id(id)
+                .is_some_and(|project| !project.machine.is_local())
+        });
         if let Some(document) = next.sync_project_order(&normalized) {
             next = document;
             edited = true;
         }
     }
-    // The subgroup orders, by project, in the order the projects first appear.
+    sync_subgroup_orders(&mut next, &mut edited, &group_ids);
+    // `if (this.workspaceGroups === before) return`: nothing moved, so no key is written and no
+    // push is booked. This is the one place in the project moves where a write really is skipped,
+    // and it is skipped because the shipped code skips it.
+    if !edited {
+        return Some(OrderWritePlan::refused("orderUnchanged"));
+    }
+    Some(OrderWritePlan::edit(next))
+}
+
+/// The order a drag in the one list writes (`merged_project_move.rs`): every computer's projects
+/// by workspace project id, into this computer's own project order, and each project's user-made
+/// groups in the order the list now draws them.
+pub fn plan_merged_project_order_write(
+    document: &crate::workspace_groups::WorkspaceGroupsDocument,
+    group_ids: &[String],
+    project_ids: &[String],
+) -> OrderWritePlan {
+    let mut next = document.clone();
+    let mut edited = false;
+    if !project_ids.is_empty() {
+        // A project the list does not hold now (a computer left out while it is offline, a project
+        // parked in Recent Projects) keeps its place for when it is back.
+        let order = keep_missing_ids(&document.project_order, project_ids, |_| true);
+        if let Some(document) = next.sync_project_order(&order) {
+            next = document;
+            edited = true;
+        }
+    }
+    let group_ids: Vec<&str> = group_ids.iter().map(String::as_str).collect();
+    sync_subgroup_orders(&mut next, &mut edited, &group_ids);
+    if !edited {
+        return OrderWritePlan::refused("orderUnchanged");
+    }
+    OrderWritePlan::edit(next)
+}
+
+/// `next` with every id of `previous` it does not name and `keep` accepts put back right after
+/// the id it followed in `previous` (at the front when none did).
+fn keep_missing_ids(
+    previous: &[String],
+    next: &[String],
+    keep: impl Fn(&str) -> bool,
+) -> Vec<String> {
+    let mut order: Vec<String> = next.to_vec();
+    let mut anchor: Option<String> = None;
+    let mut inserted_at_front = 0;
+    // Where the last id put back after each anchor went, so several keep their own order.
+    let mut last_after: std::collections::HashMap<String, String> = Default::default();
+    for id in previous {
+        if next.contains(id) {
+            anchor = Some(id.clone());
+            continue;
+        }
+        if !keep(id) || order.contains(id) {
+            continue;
+        }
+        let at = match &anchor {
+            None => {
+                inserted_at_front += 1;
+                inserted_at_front - 1
+            }
+            Some(anchor_id) => {
+                let after = last_after.get(anchor_id).unwrap_or(anchor_id);
+                order
+                    .iter()
+                    .position(|candidate| candidate == after)
+                    .map_or(order.len(), |index| index + 1)
+            }
+        };
+        order.insert(at, id.clone());
+        if let Some(anchor_id) = &anchor {
+            last_after.insert(anchor_id.clone(), id.clone());
+        }
+    }
+    order
+}
+
+/// The subgroup orders, by project, in the order the projects first appear.
+fn sync_subgroup_orders(
+    next: &mut crate::workspace_groups::WorkspaceGroupsDocument,
+    edited: &mut bool,
+    group_ids: &[&str],
+) {
     let mut by_project: Vec<(String, Vec<String>)> = Vec::new();
-    for group_id in &group_ids {
+    for group_id in group_ids {
         // A remote project's user-made groups live in this document too, under its machine-scoped
         // key, and `parseGpuiWorkspaceSessionSubgroupId` reads them like any other.
         let Some((project, subgroup_id)) = parse_workspace_subgroup_id(group_id) else {
@@ -101,17 +190,10 @@ pub fn plan_project_order_write(
     }
     for (project_id, order) in &by_project {
         if let Some(document) = next.sync_subgroup_order(project_id, order) {
-            next = document;
-            edited = true;
+            *next = document;
+            *edited = true;
         }
     }
-    // `if (this.workspaceGroups === before) return`: nothing moved, so no key is written and no
-    // push is booked. This is the one place in the project moves where a write really is skipped,
-    // and it is skipped because the shipped code skips it.
-    if !edited {
-        return Some(OrderWritePlan::refused("orderUnchanged"));
-    }
-    Some(OrderWritePlan::edit(next))
 }
 
 /// `normalizeWorkspaceProjectOrder`: re-nest the ids so every worktree follows its parent.
@@ -193,5 +275,48 @@ fn plan_remote_project_order(core: &Core, group_ids: &[&str]) -> OrderWritePlan 
             }),
         }],
         refusal: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::keep_missing_ids;
+
+    fn ids(list: &[&str]) -> Vec<String> {
+        list.iter().map(|id| id.to_string()).collect()
+    }
+
+    #[test]
+    fn another_computers_projects_keep_their_places_in_a_local_reorder() {
+        let previous = ids(&[
+            "remote:arch:project:P9",
+            "P1",
+            "remote:win:project:P7",
+            "remote:win:project:P8",
+            "P2",
+        ]);
+        // P2 dragged above P1 on this computer's own list.
+        let next = keep_missing_ids(&previous, &ids(&["P2", "P1"]), |id| {
+            id.starts_with("remote:")
+        });
+        assert_eq!(
+            next,
+            ids(&[
+                "remote:arch:project:P9",
+                "P2",
+                "P1",
+                "remote:win:project:P7",
+                "remote:win:project:P8"
+            ])
+        );
+    }
+
+    #[test]
+    fn ids_the_filter_refuses_are_dropped() {
+        let previous = ids(&["P1", "P3", "P2"]);
+        let next = keep_missing_ids(&previous, &ids(&["P2", "P1"]), |id| {
+            id.starts_with("remote:")
+        });
+        assert_eq!(next, ids(&["P2", "P1"]));
     }
 }

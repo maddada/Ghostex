@@ -33,6 +33,7 @@ mod machine_tab_layout;
 mod machines;
 pub(crate) mod membership;
 pub(crate) mod merged;
+pub(crate) mod merged_order;
 mod model;
 pub(crate) mod ordering;
 mod program_status;
@@ -113,6 +114,7 @@ pub use machine_switch::{
 pub use machine_tab_layout::{
     machine_tab_layout, machine_tab_reveal_offset, machine_tabs_out_of_view, MachineTabLayout,
 };
+pub use merged_order::MergedProjectRow;
 pub use model::{SidebarUpdateWork, SidebarViewModel};
 pub use ordering::session_is_snoozed;
 pub use project_drop_landing::{ProjectDropLanding, ProjectDropRow};

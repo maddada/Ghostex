@@ -25,8 +25,9 @@
 //! apps/desktop/src/app/gx_store/client_document.rs.
 
 use ghostex_gx_core::{
-    CollectionsDocument, MachineId, ProjectDropLanding, ProjectWrite, SideStateUpdate,
-    SpacesDocument, owns_project_move_command, plan_project_move, project_body_drop_command,
+    CollectionsDocument, MachineId, OrderWrite, ProjectDropLanding, ProjectWrite, SideStateUpdate,
+    SpacesDocument, owns_project_move_command, plan_merged_project_move,
+    plan_merged_project_order_write, plan_project_move, project_body_drop_command,
     project_drop_command, project_drop_landing,
 };
 use serde_json::{Value, json};
@@ -164,12 +165,12 @@ impl GhostexGpuiApp {
         // In the one list a project only another machine has is filed in THAT machine's documents,
         // as its own tab would; settings sync then gives every other computer the same
         // (server/src/settings_sync/).
-        let merged_remote = self
-            .gx_store
-            .sidebar_list
-            .last_inputs
-            .host
-            .merge_machines
+        // A reorder in the one list is computed against the list itself and saved in this
+        // computer's own order, whichever computers the two projects are on (gx-core
+        // `merged_project_move.rs`), so it reads this computer's documents.
+        let merged_order = self.gx_store_merged_order_move(command);
+        let merged_remote = (!merged_order
+            && self.gx_store.sidebar_list.last_inputs.host.merge_machines)
             .then(|| merged_move_machine(command))
             .flatten();
         let remote_machine_id = self
@@ -200,7 +201,18 @@ impl GhostexGpuiApp {
             }
         }
         let (collections, spaces) = self.gx_store_project_documents(remote_machine_id.as_deref());
-        let plan = {
+        let plan = if merged_order {
+            let store = &self.gx_store;
+            plan_merged_project_move(
+                &store.core,
+                &store.sidebar_list.last_inputs,
+                &store.sidebar_list.view().merged_project_rows,
+                &collections,
+                spaces.as_ref(),
+                command,
+                super::host::now_ms() as i64,
+            )
+        } else {
             let store = &self.gx_store;
             let mut machine_inputs;
             let inputs = match &merged_remote {
@@ -286,15 +298,27 @@ impl GhostexGpuiApp {
         };
         let remote_machine_id = self.gx_store_selected_remote_machine_id();
         let (collections, spaces) = self.gx_store_project_documents(remote_machine_id.as_deref());
+        let merged_order = self.gx_store_merged_order_move(command);
         let store = &self.gx_store;
-        let plan = plan_project_move(
-            &store.core,
-            &store.sidebar_list.last_inputs,
-            &collections,
-            spaces.as_ref(),
-            command,
-            super::host::now_ms() as i64,
-        )?;
+        let plan = match merged_order {
+            true => plan_merged_project_move(
+                &store.core,
+                &store.sidebar_list.last_inputs,
+                &store.sidebar_list.view().merged_project_rows,
+                &collections,
+                spaces.as_ref(),
+                command,
+                super::host::now_ms() as i64,
+            ),
+            false => plan_project_move(
+                &store.core,
+                &store.sidebar_list.last_inputs,
+                &collections,
+                spaces.as_ref(),
+                command,
+                super::host::now_ms() as i64,
+            ),
+        }?;
         project_drop_landing(store.sidebar_list.view(), &collections, &plan, kind, id)
             .map(|landing| (command.clone(), landing))
     }
@@ -347,6 +371,20 @@ impl GhostexGpuiApp {
         )
     }
 
+    /// Whether this is a reorder in the one list that holds every computer's projects
+    /// (gx-core `merged_project_move.rs`).
+    fn gx_store_merged_order_move(&self, command: &Value) -> bool {
+        command.get("type").and_then(Value::as_str) == Some("moveGroup")
+            && self.gx_store.sidebar_list.last_inputs.host.merge_machines
+            && self.gx_store_selected_remote_machine_id().is_none()
+            && !self
+                .gx_store
+                .sidebar_list
+                .view()
+                .merged_project_rows
+                .is_empty()
+    }
+
     fn gx_store_run_project_write(
         &mut self,
         write: ProjectWrite,
@@ -377,6 +415,24 @@ impl GhostexGpuiApp {
                 let message = json!({ "type": "syncGroupOrder", "groupIds": group_ids });
                 if !self.gx_store_run_project_order_message(&message, cx) {
                     self.dispatch_native_sidebar_command(message, cx);
+                }
+            }
+            ProjectWrite::MergedGroupOrder {
+                group_ids,
+                project_ids,
+            } => {
+                self.gx_store.project_moves.group_orders += 1;
+                let plan = plan_merged_project_order_write(
+                    self.gx_store.workspace_groups.sync.document(),
+                    &group_ids,
+                    &project_ids,
+                );
+                self.gx_store.sidebar_drag.order_writes += 1;
+                for write in plan.writes {
+                    if let OrderWrite::EditDocument { document } = write {
+                        self.gx_store.sidebar_drag.document_edits += 1;
+                        self.gx_store_edit_workspace_groups(document, cx);
+                    }
                 }
             }
             ProjectWrite::RequestCollectionRename { collection_id } => {

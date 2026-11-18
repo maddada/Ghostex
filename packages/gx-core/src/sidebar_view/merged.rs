@@ -78,6 +78,8 @@ pub(super) struct MergeOutcome {
     /// Every copy of each entry that holds more than one, keyed by each copy's group id
     /// (`SidebarView::project_copies`).
     pub(super) copies: BTreeMap<String, Arc<Vec<ProjectCopy>>>,
+    /// Every group of the list in its order, for the drag (`merged_order.rs`).
+    pub(super) rows: Vec<super::merged_order::MergedProjectRow>,
 }
 
 /// One copy of a project an entry lists.
@@ -575,6 +577,21 @@ pub(super) fn merge_machines(
             }
         }
     }
+    // The ids each entry is ordered by: every copy's, so the entry keeps its place whichever copy
+    // it is drawn as (`merged_order.rs`).
+    let mut order_ids: Vec<Vec<String>> = plans
+        .iter()
+        .enumerate()
+        .map(|(index, plan)| {
+            let copies = copies.get(&index).map(|copies| {
+                copies
+                    .iter()
+                    .map(|copy| super::merged_order::workspace_id(&copy.machine, &copy.project_id))
+                    .collect()
+            });
+            super::merged_order::plan_order_ids(plan, copies)
+        })
+        .collect();
     if !dropped.is_empty() {
         let mut index = 0;
         plans.retain(|_| {
@@ -582,7 +599,20 @@ pub(super) fn merge_machines(
             index += 1;
             keep
         });
+        let mut index = 0;
+        order_ids.retain(|_| {
+            let keep = !dropped.contains(&index);
+            index += 1;
+            keep
+        });
     }
+    let stored_order = store
+        .machine(&MachineId::Local)
+        .and_then(|entry| entry.side_state().workspace_groups.as_ref())
+        .map(|groups| groups.project_order.as_slice())
+        .unwrap_or_default();
+    super::merged_order::sort_plans(plans, &mut order_ids, stored_order);
+    outcome.rows = super::merged_order::merged_rows(plans, &order_ids);
     (cache, outcome)
 }
 
