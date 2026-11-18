@@ -571,18 +571,19 @@ pub fn run_statusline_hook(args: Vec<String>) -> Result<(), DomainStateError> {
             .and_then(|index| args.get(index + 1))
             .map(String::as_str),
     );
-    let Some(input) = read_statusline_input() else {
+    let Some((input, late_since)) = read_statusline_input() else {
         return Ok(());
     };
-    store_and_render_statusline(&hook_state_dir, agent, render, &input)
+    store_and_render_statusline(&hook_state_dir, agent, render, &input, late_since)
 }
 
 /// CDXC:AgentHooks 2026-11-18 WHY:
 /// GitHub #666 (Windows, about 40 agents): a statusline helper read its stdin with no time limit, so one whose writer never closed the pipe waited for ever, and they piled up (about 7 an hour). Claude Code and Cursor write the whole payload at once, so after this long the helper uses what arrived when it is a whole JSON object (a writer that sent the payload but kept the pipe open), and otherwise gives up quietly: it stores and prints nothing, as an empty update would.
 const STATUSLINE_INPUT_LIMIT: Duration = Duration::from_secs(5);
 
-/// The payload on stdin, or `None` when it did not end within `STATUSLINE_INPUT_LIMIT` and what arrived is not a whole JSON object. The reading thread is left blocked; returning ends the process with it.
-fn read_statusline_input() -> Option<String> {
+/// The payload on stdin, or `None` when it did not end within `STATUSLINE_INPUT_LIMIT` and what arrived is not a whole JSON object. A payload used at the limit comes with when this helper began reading (`store_and_render_statusline` then never stores it over a newer one). The reading thread is left blocked; returning ends the process with it.
+fn read_statusline_input() -> Option<(String, Option<SystemTime>)> {
+    let started = SystemTime::now();
     let received = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let (sender, receiver) = std::sync::mpsc::channel();
     let buffer = received.clone();
@@ -610,11 +611,11 @@ fn read_statusline_input() -> Option<String> {
     // Not UTF-8: empty, as `read_to_string` left it.
     let text = String::from_utf8(bytes).unwrap_or_default();
     if ended {
-        return Some(text);
+        return Some((text, None));
     }
     serde_json::from_str::<Value>(&text)
         .is_ok_and(|value| value.is_object())
-        .then_some(text)
+        .then_some((text, Some(started)))
 }
 
 /// CDXC:AgentHooks 2026-11-18 WHY:
@@ -720,13 +721,13 @@ pub fn run_native_statusline_hook(args: Vec<String>) -> Result<(), DomainStateEr
         })
         .and_then(|bytes| String::from_utf8(bytes).ok())
         .filter(|wrapped| !wrapped.trim().is_empty());
-    let Some(input) = read_statusline_input() else {
+    let Some((input, late_since)) = read_statusline_input() else {
         return Ok(());
     };
     let Some(wrapped) = wrapped else {
-        return store_and_render_statusline(&hook_state_dir, agent, true, &input);
+        return store_and_render_statusline(&hook_state_dir, agent, true, &input, late_since);
     };
-    let _ = store_and_render_statusline(&hook_state_dir, agent, false, &input);
+    let _ = store_and_render_statusline(&hook_state_dir, agent, false, &input, late_since);
     kill_children_with_this_process();
     // The user's command was written for the shell Claude Code runs it in: Git Bash when Git for Windows is installed, PowerShell otherwise.
     let mut command = super::statusline_launch_windows::wrapped_command(&wrapped);
@@ -783,6 +784,7 @@ fn store_and_render_statusline(
     agent: StatuslineAgent,
     render: bool,
     input: &str,
+    late_since: Option<SystemTime>,
 ) -> Result<(), DomainStateError> {
     let payload = serde_json::from_str::<Value>(input)
         .ok()
@@ -802,7 +804,19 @@ fn store_and_render_statusline(
                 })
         }
     };
-    if let Some(path) = path {
+    // CDXC:AgentHooks 2026-11-18 WHY: a payload used at the input limit is up to 5 s old, and a
+    // later helper for the same session may already have stored a newer one (seen in review: the
+    // file read NEW, then OLD 4 s later), which left the chat's pills and the shared 5h/7d limits
+    // stale. Such a payload is stored only when the file has not changed since this helper began
+    // reading; its line is still printed.
+    let newer_stored = |path: &Path| {
+        late_since.is_some_and(|started| {
+            fs::metadata(path)
+                .and_then(|meta| meta.modified())
+                .is_ok_and(|modified| modified > started)
+        })
+    };
+    if let Some(path) = path.filter(|path| !newer_stored(path)) {
         store_statusline_payload(&path, &payload)?;
     }
     if render {
