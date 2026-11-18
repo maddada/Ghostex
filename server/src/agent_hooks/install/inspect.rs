@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use crate::agent_hooks::codex_status_line::codex_status_line_names_model;
 use crate::agent_hooks::config::{
     all_hook_events, hook_format, hook_marker, nested_event_timeout,
     pi_extension_path_is_loader_visible, HookDefinition, HookFormat, HookPaths,
@@ -14,7 +13,6 @@ use crate::agent_hooks::probing::{path_string, read_file_text};
 use crate::agent_hooks::resolution::{
     is_ghostex_owned_hook_command, text_contains_ghostex_owned_hook_command,
 };
-use crate::agent_hooks::statusline::claude_statusline_is_current;
 
 use super::*;
 
@@ -170,7 +168,7 @@ pub(crate) fn inspect_agent_hook_installation(
             }
             let inspections = paths_to_check
                 .iter()
-                .map(|path| inspect_json_hook_config(path, definition, hook_paths, &command))
+                .map(|path| inspect_json_hook_config(path, definition, &command))
                 .collect::<Vec<_>>();
             let installed_inspections = inspections
                 .iter()
@@ -190,7 +188,6 @@ pub(crate) fn inspect_agent_hook_installation(
 fn inspect_json_hook_config(
     config_path: &Path,
     definition: &HookDefinition,
-    hook_paths: &HookPaths,
     command: &str,
 ) -> HookInspection {
     let data = read_json_object(&read_file_text(config_path));
@@ -200,19 +197,8 @@ fn inspect_json_hook_config(
             definition.agent_id,
             "codex" | "grok" | "claude" | "openclaude"
         ) || nested_hook_timeouts_are_current(&data, definition.agent_id, command);
-    // CDXC:AgentHooks 2026-09-03 WHY: a Claude install is only current once
-    // its statusLine runs the Ghostex script, so an older install reads as
-    // updateRequired and the Update Hooks button (or daemon repair) adds it.
-    let claude_statusline_current =
-        definition.agent_id != "claude" || claude_statusline_is_current(&data, hook_paths);
-    // CDXC:AgentHooks 2026-09-03 WHY: a Codex footer that hides the
-    // model reads as updateRequired so Update Hooks (or daemon repair) lists it.
-    let cursor_statusline_current = definition.agent_id != "cursor"
-        || super::cursor_statusline::cursor_statusline_is_current(config_path, hook_paths);
-    let codex_status_line_current = definition.agent_id != "codex"
-        || codex_status_line_names_model(&super::codex_trust::codex_config_path_for_hooks(
-            config_path,
-        ));
+    // The Claude and Cursor statusLine and Codex's footer item no longer make a hook stale: Read
+    // live status from Claude Code and Cursor keeps them (statusline_setting.rs).
     HookInspection {
         current_hook_installed: json_contains_hook_command(&data, command)
             && !stale_ghostex_hook_present
@@ -223,9 +209,6 @@ fn inspect_json_hook_config(
                 hook_format(definition.agent_id),
             )
             && timeout_current
-            && claude_statusline_current
-            && cursor_statusline_current
-            && codex_status_line_current
             && (definition.agent_id != "zcode"
                 || data.pointer("/hooks/enabled") == Some(&json!(true))),
         ghostex_hook_present: json_contains_ghostex_owned_hook_command(&data, command),
@@ -328,7 +311,7 @@ fn json_contains_stale_ghostex_owned_hook_command(value: &Value, command: &str) 
     if let Some(object) = value.as_object() {
         // CDXC:AgentHooks 2026-09-03 WHY: Claude's `statusLine` names the
         // Ghostex statusline script, which is Ghostex-owned but not a hook;
-        // its currency is judged by `claude_statusline_is_current` instead.
+        // Read live status from Claude Code and Cursor keeps it (statusline_setting.rs).
         return object
             .iter()
             .filter(|(key, _)| key.as_str() != "statusLine")
@@ -366,7 +349,7 @@ fn json_contains_ghostex_owned_hook_command(value: &Value, command: &str) -> boo
     if let Some(object) = value.as_object() {
         // CDXC:AgentHooks 2026-09-03 WHY: Claude's `statusLine` names the
         // Ghostex statusline script, which is Ghostex-owned but not a hook;
-        // its currency is judged by `claude_statusline_is_current` instead.
+        // Read live status from Claude Code and Cursor keeps it (statusline_setting.rs).
         return object
             .iter()
             .filter(|(key, _)| key.as_str() != "statusLine")

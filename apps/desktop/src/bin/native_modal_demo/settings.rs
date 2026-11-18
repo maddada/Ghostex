@@ -10,6 +10,7 @@
 //! `dictation`, `dictation-hex-missing`, `dictation-openai` and `voice-agent` are Settings › Dictation and
 //! Voice Agent (settings_voice.rs).
 //! `page-<id>` opens the rail page with that id (`page-connectors`, `page-tools`).
+//! `agents-advanced` is Settings › Agents scrolled to its open Advanced fold.
 //! `about-reset-confirm` is Settings › About with the Reset all settings? confirmation open.
 //! `GHOSTEX_NATIVE_MODAL_DEMO_GLASS=1` previews the frosted palette.
 //! `GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS_WIDTH=<points>` opens the dialog narrower or wider than its
@@ -389,6 +390,10 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         }
         "tags" => {
             json!({ "initialSection": "sidebarTags", "initialSidebarTagsAction": "createTag" })
+        }
+        // Settings > Agents scrolled to its Advanced fold, opened by the deep link.
+        "agents-advanced" => {
+            json!({ "initialTab": "agents", "initialSection": "agentsAdvanced" })
         }
         _ => settings_updates::open_message(&state)
             .or_else(|| settings_machines::open_message(&state))

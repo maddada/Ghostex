@@ -335,11 +335,9 @@ pub fn uninstall_agent_hooks(
             .ghostex_hook_present
     });
     if !has_remaining_provider_hook {
-        for shared_path in [
-            &hook_paths.notify_hook_path,
-            &hook_paths.statusline_hook_path,
-            &hook_paths.cursor_statusline_hook_path,
-        ] {
+        // The statusline scripts stay: Claude's and Cursor's statusLine may still run them
+        // (statusline_setting.rs).
+        for shared_path in [&hook_paths.notify_hook_path] {
             match fs::remove_file(shared_path) {
                 Ok(()) => push_unique_path(&mut removed_paths, path_string(shared_path)),
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}

@@ -19,9 +19,7 @@ use crate::domain::DomainStateError;
 
 use super::config::HookPaths;
 use super::probing::{io_error, read_file_text, temp_path_for};
-use super::statusline::{
-    register_statusline, statusline_is_current, unregister_statusline, StatuslineAgent,
-};
+use super::statusline::{register_statusline, unregister_statusline, StatuslineAgent};
 
 /// `cli-config.json` beside the `hooks.json` a Cursor install writes.
 pub(crate) fn cursor_cli_config_path(hooks_path: &Path) -> Option<PathBuf> {
@@ -45,15 +43,6 @@ fn write_config(path: &Path, data: &Value) -> Result<(), DomainStateError> {
     let temp_path = temp_path_for(path);
     fs::write(&temp_path, format!("{text}\n")).map_err(io_error)?;
     fs::rename(&temp_path, path).map_err(io_error)
-}
-
-/// Whether Cursor's statusLine runs the current Ghostex script. A config Cursor
-/// has not written yet has nothing to repair.
-pub(crate) fn cursor_statusline_is_current(hooks_path: &Path, hook_paths: &HookPaths) -> bool {
-    let Some(data) = cursor_cli_config_path(hooks_path).and_then(|path| read_config(&path)) else {
-        return true;
-    };
-    statusline_is_current(&data, StatuslineAgent::Cursor.script_path(hook_paths))
 }
 
 /// Points Cursor's statusLine at the Ghostex script, wrapping the user's own

@@ -5,7 +5,13 @@ pub(crate) fn page() -> Page {
     Page {
         id: "agents",
         title: "Agents",
-        sections: vec![agent_list(), config(), agent_hooks(), home_folder()],
+        sections: vec![
+            agent_list(),
+            config(),
+            agent_hooks(),
+            home_folder(),
+            advanced(),
+        ],
     }
 }
 
@@ -67,5 +73,21 @@ pub(crate) fn agent_hooks() -> Section {
             row("agentResumeHooks", "Session resume hooks", "Claude Code, Codex and OpenCode need no hook: Ghostex follows them from the files they write themselves. Other agents use a hook so Ghostex can capture their native session id and resume the exact conversation after sleep, reload, or app restart. Install one agent's hook from its row, fix every agent that is on with Fix all, install every missing hook with Install all (shown only when a hook is missing), or remove every Ghostex hook with Uninstall all in the ⋯ menu.").options_of(AGENT_HOOK_SUPPORTED_DEFAULT_AGENTS, "name", "name"),
             row("agentHooksAutoInstall", "Install the hook when I turn on an agent", "Install an agent's session resume hook as soon as you turn it on, without asking."),
         ],
+    )
+}
+
+/*
+CDXC:AgentHooks 2026-11-18 DECISION:
+User (Q4160): the status line helper becomes a setting, on by default, "in the agents page under advanced", and "mention why this is essential in the tooltip". It is the first row of the Agents page's collapsed Advanced fold (server/src/agent_hooks/statusline_setting.rs keeps the configs in step).
+*/
+pub(crate) fn advanced() -> Section {
+    let advanced = |row: crate::rows::SettingRow| crate::rows::SettingRow {
+        advanced: true,
+        ..row
+    };
+    section(
+        "agentsAdvanced",
+        "Agent configs",
+        vec![advanced(row("readAgentLiveStatus", "Read live status from Claude Code and Cursor", "Claude Code and Cursor hand their live model, effort, fast mode, context, cost and 5h / 7d limits only to a status line command, so the chat needs this to show them. Ghostex adds a small one to their settings: it keeps your own status line, draws nothing of its own in Claude, and does nothing outside Ghostex. It also adds the model to Codex's footer when you listed your own footer items. Off, Ghostex removes it and puts your own command back: the chat's model and effort update only after the next reply, fast mode, cost and More details stay empty, and limits show only for saved accounts."))],
     )
 }

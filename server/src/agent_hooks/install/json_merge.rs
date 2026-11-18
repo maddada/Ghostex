@@ -10,7 +10,6 @@ use crate::agent_hooks::config::{
 };
 use crate::agent_hooks::probing::{path_string, read_file_text};
 use crate::agent_hooks::resolution::is_ghostex_owned_hook_command;
-use crate::agent_hooks::statusline::register_claude_statusline;
 
 use super::*;
 
@@ -149,10 +148,9 @@ pub(super) fn merge_json_hook(
         | HookFormat::MarkedYaml
         | HookFormat::TomlMarked => {}
     }
-    // CDXC:AgentHooks 2026-09-03 WHY: the same settings file carries the
-    // statusLine command, registered (or re-pointed) alongside the hooks.
+    // The statusLine in the same file follows Read live status from Claude Code and Cursor
+    // (statusline_setting.rs), not the hooks.
     if definition.agent_id == "claude" {
-        register_claude_statusline(&mut data, hook_paths);
         super::claude_retention::ensure_claude_transcript_retention(&mut data);
     }
     write_json_file(config_path, &data)?;

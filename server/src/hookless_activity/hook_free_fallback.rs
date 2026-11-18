@@ -641,6 +641,9 @@ fn upkeep(state: &AppState, previous: Option<bool>) -> bool {
     for agent in ["claude", "codex"] {
         hook_free::refresh_cli_version(agent, &home);
     }
+    // Read live status from Claude Code and Cursor is not a hook setting, but it keeps the same
+    // configs, so it rides on this pass (agent_hooks/statusline_setting.rs).
+    let _ = crate::agent_hooks::statusline_setting::keep_in_step(&state.paths);
     hook_free::forget_cached_setting();
     let use_hooks = hook_free::use_agent_hooks(&state.paths);
     let (event, details) = match (previous, use_hooks) {

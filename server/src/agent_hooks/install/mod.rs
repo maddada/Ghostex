@@ -21,4 +21,4 @@ pub(crate) use uninstall::*;
 
 // The moved bodies reach sibling agent_hooks modules through `super::<module>::…`
 // paths; these imports keep those paths resolving from inside `install/`.
-use super::{claude_retention, codex_trust, cursor_statusline, zcode};
+use super::{claude_retention, codex_trust, zcode};

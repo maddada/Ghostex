@@ -10642,6 +10642,19 @@
       "agentWritable": false
     },
     {
+      "key": "readAgentLiveStatus",
+      "title": "Read live status from Claude Code and Cursor",
+      "subtitle": "Claude Code and Cursor hand their live model, effort, fast mode, context, cost and 5h / 7d limits only to a status line command, so the chat needs this to show them. Ghostex adds a small one to their settings: it keeps your own status line, draws nothing of its own in Claude, and does nothing outside Ghostex. It also adds the model to Codex's footer when you listed your own footer items. Off, Ghostex removes it and puts your own command back: the chat's model and effort update only after the next reply, fast mode, cost and More details stay empty, and limits show only for saved accounts.",
+      "tab": "agents",
+      "tabTitle": "Agents",
+      "section": "agentsAdvanced",
+      "sectionTitle": "Agent configs",
+      "type": "boolean",
+      "default": true,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
       "key": "ghostexCapture",
       "title": "Floating Capture",
       "subtitle": "A small button that floats over every app and shows how many agents are working, waiting for you, or asking a question. Screenshot an area, an app or the whole screen, mark it up, and send a prompt to any project or session without switching to Ghostex. Cmd+Ctrl+Shift+S (Alt+Ctrl+Shift+S on Windows and Linux) opens it; A, Space, F or T instead of S capture an area, the current app or the full screen, or write a prompt, right away.",

@@ -22,34 +22,10 @@ use super::probing::{io_error, read_file_text, temp_path_for};
 
 pub(crate) const CODEX_MODEL_STATUS_LINE_ITEM: &str = "model-with-reasoning";
 
-fn status_line_array(document: &DocumentMut) -> Option<&Array> {
-    document
-        .as_table()
-        .get("tui")?
-        .as_table_like()?
-        .get("status_line")?
-        .as_array()
-}
-
 fn array_names_model(array: &Array) -> bool {
     array
         .iter()
         .any(|item| item.as_str() == Some(CODEX_MODEL_STATUS_LINE_ITEM))
-}
-
-/// Whether Codex's footer will name the model with this config: the key is
-/// absent (Codex's default lists it), or an explicit list contains it. A
-/// config that does not parse is reported as fine, since Codex itself refuses
-/// to start on it and there is nothing Ghostex could repair.
-pub(crate) fn codex_status_line_names_model(config_path: &Path) -> bool {
-    let text = read_file_text(config_path);
-    if text.trim().is_empty() {
-        return true;
-    }
-    let Ok(document) = text.parse::<DocumentMut>() else {
-        return true;
-    };
-    status_line_array(&document).is_none_or(array_names_model)
 }
 
 /// Appends `model-with-reasoning` to an explicit `tui.status_line` that lacks

@@ -14,7 +14,6 @@ use crate::agent_hooks::probing::{io_error, path_string, push_unique_path, read_
 use crate::agent_hooks::resolution::{
     is_ghostex_owned_hook_command, provider_hook_paths, text_contains_ghostex_owned_hook_command,
 };
-use crate::agent_hooks::statusline::unregister_statusline;
 
 use super::*;
 
@@ -22,21 +21,14 @@ pub(crate) fn uninstall_agent_hook(
     definition: &HookDefinition,
     hook_paths: &HookPaths,
 ) -> Result<Vec<String>, DomainStateError> {
-    uninstall_agent_hook_with(definition, hook_paths, false)
+    uninstall_agent_hook_entries(definition, hook_paths)
 }
 
-/// Removes only the agent's hook entries: Claude's `statusLine` stays (hook_free_cleanup.rs).
+/// Removes only the agent's hook entries. Claude's and Cursor's `statusLine` stay: Read live
+/// status from Claude Code and Cursor decides those (statusline_setting.rs).
 pub(crate) fn uninstall_agent_hook_entries(
     definition: &HookDefinition,
     hook_paths: &HookPaths,
-) -> Result<Vec<String>, DomainStateError> {
-    uninstall_agent_hook_with(definition, hook_paths, true)
-}
-
-fn uninstall_agent_hook_with(
-    definition: &HookDefinition,
-    hook_paths: &HookPaths,
-    keep_statusline: bool,
 ) -> Result<Vec<String>, DomainStateError> {
     if hook_format(definition.agent_id) == HookFormat::Opencode {
         return uninstall_opencode_hook(hook_paths);
@@ -56,19 +48,10 @@ fn uninstall_agent_hook_with(
         | HookFormat::NestedEventsJson => {
             let mut removed_paths = Vec::new();
             for config_path in config_paths {
-                // CDXC:AgentHooks 2026-09-24 WHY: Cursor's statusLine lives in
-                // its own file and leaves with the hooks, restoring the user's.
-                if definition.agent_id == "cursor" {
-                    if let Some(path) =
-                        super::cursor_statusline::remove_cursor_statusline(&config_path)?
-                    {
-                        removed_paths.push(path_string(&path));
-                    }
-                }
                 // CDXC:AgentHooks 2026-09-02: state keys are positional, so the
                 // trust pass gets the file exactly as the removal read it.
                 if let Some(codex_before) =
-                    remove_json_hook_with(&config_path, definition, &command, keep_statusline)?
+                    remove_json_hook_with(&config_path, definition, &command)?
                 {
                     removed_paths.push(path_string(&config_path));
                     if definition.agent_id == "codex"
@@ -159,14 +142,13 @@ pub(crate) fn remove_json_hook(
     definition: &HookDefinition,
     command: &str,
 ) -> Result<bool, DomainStateError> {
-    remove_json_hook_with(config_path, definition, command, false).map(|before| before.is_some())
+    remove_json_hook_with(config_path, definition, command).map(|before| before.is_some())
 }
 
 fn remove_json_hook_with(
     config_path: &Path,
     definition: &HookDefinition,
     command: &str,
-    keep_statusline: bool,
 ) -> Result<Option<Value>, DomainStateError> {
     let current_text = read_file_text(config_path);
     if current_text.trim().is_empty() {
@@ -175,12 +157,7 @@ fn remove_json_hook_with(
     ensure_json_config_is_rewritable(definition.agent_id, config_path, &current_text)?;
     let mut data = read_json_object(&current_text);
     let before = data.clone();
-    let mut changed = remove_owned_json_hooks(&mut data, hook_format(definition.agent_id), command);
-    // CDXC:AgentHooks 2026-09-03 WHY: the statusLine Ghostex registered (or
-    // wrapped) leaves with the hooks, restoring the user's own command.
-    if definition.agent_id == "claude" && !keep_statusline {
-        changed |= unregister_statusline(&mut data);
-    }
+    let changed = remove_owned_json_hooks(&mut data, hook_format(definition.agent_id), command);
     if !changed {
         return Ok(None);
     }

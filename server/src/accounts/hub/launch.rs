@@ -75,7 +75,12 @@ fn io(error: std::io::Error) -> DomainStateError {
 
 /// Claude's folder: the key file, `settings.json` with the hub's address and the key helper (the
 /// hooks Ghostex adds there are kept), and `.claude.json` marked as past Claude's first-run steps.
-fn prepare_claude(dir: &Path, url: &str, key: &str, statusline: &Path) -> std::io::Result<()> {
+fn prepare_claude(
+    dir: &Path,
+    url: &str,
+    key: &str,
+    statusline: Option<&Path>,
+) -> std::io::Result<()> {
     private_dir(dir)?;
     let key_file = dir.join(KEY_FILE);
     write_private(&key_file, key.as_bytes())?;
@@ -100,9 +105,17 @@ fn prepare_claude(dir: &Path, url: &str, key: &str, statusline: &Path) -> std::i
         )),
     );
     // What Ghostex gives every Claude profile with or without hooks: its statusLine (the model,
-    // effort and limits the chat shows) and transcripts kept for good.
+    // effort and limits the chat shows) while Read live status from Claude Code and Cursor is on
+    // (agent_hooks/statusline_setting.rs), and transcripts kept for good.
     let mut settings = Value::Object(settings);
-    crate::agent_hooks::statusline::register_statusline(&mut settings, statusline);
+    match statusline {
+        Some(script) => {
+            crate::agent_hooks::statusline::register_statusline(&mut settings, script);
+        }
+        None => {
+            crate::agent_hooks::statusline::unregister_statusline(&mut settings);
+        }
+    }
     crate::agent_hooks::claude_retention::ensure_claude_transcript_retention(&mut settings);
     write_private(
         &settings_path,
@@ -239,7 +252,11 @@ pub(crate) fn apply(
             &dir,
             &hub.url,
             &key,
-            &crate::agent_hooks::config::HookPaths::from_paths(paths).statusline_hook_path,
+            crate::agent_hooks::statusline_setting::read_agent_live_status(paths)
+                .then(|| {
+                    crate::agent_hooks::config::HookPaths::from_paths(paths).statusline_hook_path
+                })
+                .as_deref(),
         ),
         Provider::Codex => prepare_codex(&dir, &hub.url, &key),
     }

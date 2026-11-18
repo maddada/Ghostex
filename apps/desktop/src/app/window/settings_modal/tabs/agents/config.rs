@@ -16,6 +16,10 @@ use super::model::{
     title_generation_preview,
 };
 use super::select::DropdownOption;
+
+/// The Advanced fold's section and its one row.
+pub(super) const AGENTS_ADVANCED: &str = "agentsAdvanced";
+const READ_AGENT_LIVE_STATUS: &str = "readAgentLiveStatus";
 use gpui::{AnyElement, Context, Div, IntoElement, Window};
 use serde_json::{Value, json};
 use std::rc::Rc;
@@ -432,6 +436,36 @@ impl AgentsTab {
             return None;
         }
         settings_section(p, "Home folder", None, None, rows)
+    }
+
+    /// The Agent configs section in the Advanced fold at the bottom of the page: Read live status
+    /// from Claude Code and Cursor (CDXC:AgentHooks 2026-11-18 in
+    /// packages/settings-catalog/src/pages/agents.rs).
+    pub(super) fn render_agents_advanced(
+        &mut self,
+        p: &SettingsPalette,
+        search: &TabSearch,
+        cx: &mut Context<Self>,
+    ) -> Option<Div> {
+        let section = search.section(AGENTS_ADVANCED);
+        let values = self.store.read(cx).values();
+        let mut rows: Vec<AnyElement> = Vec::new();
+        if should_show_setting(&section, READ_AGENT_LIVE_STATUS, None) {
+            rows.push(toggle_field(
+                self,
+                p,
+                READ_AGENT_LIVE_STATUS,
+                RowSpec::new("Read live status from Claude Code and Cursor").description(
+                    "Claude Code and Cursor hand their live model, effort, fast mode, context, cost and 5h / 7d limits only to a status line command, so the chat needs this to show them. Ghostex adds a small one to their settings: it keeps your own status line, draws nothing of its own in Claude, and does nothing outside Ghostex. It also adds the model to Codex's footer when you listed your own footer items. Off, Ghostex removes it and puts your own command back: the chat's model and effort update only after the next reply, fast mode, cost and More details stay empty, and limits show only for saved accounts.",
+                ),
+                values.bool(READ_AGENT_LIVE_STATUS),
+                cx,
+            ));
+        }
+        if rows.is_empty() {
+            return None;
+        }
+        settings_section(p, "Agent configs", None, None, rows)
     }
 
     /// The Skip permissions? confirmation (`w-[25rem] gap-4 p-5`, nested).

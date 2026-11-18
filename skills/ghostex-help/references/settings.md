@@ -466,6 +466,9 @@ How to use this file:
 - **Ask before New Chat** `chiefConfirmNewChat` (boolean, default true): Ask before New Chat or Change Agent starts a new chat with Chief of Staff. Your earlier chats stay in Main Hub either way.
 - **Chief of Staff may add GBots on its own** `gbotsChiefAddsOnItsOwn` (boolean, default true): With GBots on, Chief of Staff adds a GBot when a job needs one and tells you in a card you can undo. Off, it asks you before adding each one.
 - **Folders agents can't read in your home folder** `homeSecretFolders` (structured value; change it in Settings, not with `ghostex settings set`): Agents Ghostex starts in your home folder are kept out of these folders and files. Claude Code's file tools and every Codex command are held to the list; Claude's shell commands and other agents are not.
+### Agent configs
+
+- **Read live status from Claude Code and Cursor** `readAgentLiveStatus` (boolean, default true) [advanced]: Claude Code and Cursor hand their live model, effort, fast mode, context, cost and 5h / 7d limits only to a status line command, so the chat needs this to show them. Ghostex adds a small one to their settings: it keeps your own status line, draws nothing of its own in Claude, and does nothing outside Ghostex. It also adds the model to Codex's footer when you listed your own footer items. Off, Ghostex removes it and puts your own command back: the chat's model and effort update only after the next reply, fast mode, cost and More details stay empty, and limits show only for saved accounts.
 ## Integrations (tab `integrations`)
 
 ### Integrations

@@ -7,15 +7,12 @@ use serde_json::{json, Value};
 
 use crate::domain::DomainStateError;
 
-use crate::agent_hooks::codex_status_line::ensure_codex_status_line_names_model;
 use crate::agent_hooks::codex_trust::{follow_codex_hook_trust, CodexTrustWriteMode};
 #[cfg(test)]
 use crate::agent_hooks::config::all_hook_events;
 use crate::agent_hooks::config::{hook_format, HookDefinition, HookFormat, HookPaths};
 use crate::agent_hooks::plugin_sources::{build_plugin_file_source, command_for_agent};
-use crate::agent_hooks::probing::{
-    io_error, json_error, path_string, push_unique_path, read_file_text,
-};
+use crate::agent_hooks::probing::{io_error, json_error, path_string, read_file_text};
 use crate::agent_hooks::resolution::provider_hook_paths;
 
 use super::*;
@@ -121,22 +118,6 @@ pub(crate) fn install_agent_hook(
                     let config_toml = super::codex_trust::codex_config_path_for_hooks(&config_path);
                     installed_paths.push(path_string(&config_toml));
                 }
-                // CDXC:AgentHooks 2026-09-03 WHY: the footer must name
-                // the model for the chat pills to have a pre-turn source.
-                if definition.agent_id == "codex" {
-                    let config_toml = super::codex_trust::codex_config_path_for_hooks(&config_path);
-                    if ensure_codex_status_line_names_model(&config_toml)? {
-                        push_unique_path(&mut installed_paths, path_string(&config_toml));
-                    }
-                }
-                if definition.agent_id == "cursor" {
-                    if let Some(path) = super::cursor_statusline::ensure_cursor_statusline(
-                        &config_path,
-                        hook_paths,
-                    )? {
-                        push_unique_path(&mut installed_paths, path_string(&path));
-                    }
-                }
             }
             Ok(installed_paths)
         }
@@ -213,20 +194,6 @@ pub(crate) fn repair_agent_hook_paths(
                 {
                     let config_toml = super::codex_trust::codex_config_path_for_hooks(&config_path);
                     repaired_paths.push(path_string(&config_toml));
-                }
-                if definition.agent_id == "codex" {
-                    let config_toml = super::codex_trust::codex_config_path_for_hooks(&config_path);
-                    if ensure_codex_status_line_names_model(&config_toml)? {
-                        push_unique_path(&mut repaired_paths, path_string(&config_toml));
-                    }
-                }
-                if definition.agent_id == "cursor" {
-                    if let Some(path) = super::cursor_statusline::ensure_cursor_statusline(
-                        &config_path,
-                        hook_paths,
-                    )? {
-                        push_unique_path(&mut repaired_paths, path_string(&path));
-                    }
                 }
             }
             Ok(repaired_paths)

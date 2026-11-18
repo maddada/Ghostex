@@ -11,8 +11,8 @@ installs a Ghostex-owned statusLine command:
   - it hands the payload to `gxserver agent-statusline`, which stores it under
     `<hook state dir>/claude-statusline/<claude session id>.json` where the
     chat option detector reads it as first-class evidence;
-  - with no user statusline it renders Ghostex's own line (`Fable | high |
-    Ctx 8% | $0.12`), whose `|` grammar the screen parser already understands;
+  - with no user statusline it rendered Ghostex's own line (`Fable | high |
+    Ctx 8% | $0.12`); since 2026-11-18 (Q4161, below) Claude's row stays empty;
   - with a user statusline it WRAPS it: the original command travels as the
     script's first argument, so the user's display is untouched, every profile
     keeps its own, and uninstall restores it verbatim.
@@ -86,6 +86,12 @@ impl StatuslineAgent {
         }
     }
 
+    /// Whether the helper prints a line of its own when no user command is wrapped: only
+    /// Cursor, whose footer a statusLine replaces (CDXC:AgentHooks 2026-11-18).
+    fn renders_own_line(self) -> bool {
+        matches!(self, Self::Cursor)
+    }
+
     /// Extra arguments the script passes to `gxserver agent-statusline`. Claude's
     /// stays empty so its installed script is unchanged.
     fn runtime_arguments(self) -> &'static str {
@@ -103,6 +109,19 @@ const CLAUDE_STATUSLINE_PAYLOAD_RETENTION: Duration = Duration::from_secs(14 * 2
 // Script + settings registration
 // ---------------------------------------------------------------------------
 
+/*
+CDXC:AgentHooks 2026-11-18 DECISION:
+The user chose (Q4161) that the helper prints nothing of its own in Claude's
+status row, or only their own wrapped line, so Claude looks as it would without
+Ghostex: the chat reads the stored payload, never the printed line. Cursor keeps
+its line, because a registered statusLine replaces Cursor's own footer and
+Ghostex's line is the stand-in that names the session and model (see
+`render_cursor_statusline`). They also chose (Q4162) that the script does
+nothing outside Ghostex, by the notify hook's test (a session ref and a gxserver
+address in the environment): it starts no gxserver there, only runs their own
+command, so a Claude in another terminal, over ssh or in another app pays two
+shell tests per refresh. Version 2 of the script, so installed ones are rewritten.
+*/
 pub(crate) fn build_statusline_hook_script(
     executable: &str,
     hook_state_directory: &Path,
@@ -112,9 +131,16 @@ pub(crate) fn build_statusline_hook_script(
         r#"#!/bin/bash
 # {STATUSLINE_HOOK_MARKER} v{STATUSLINE_HOOK_VERSION}
 # Claude Code statusLine command installed by Ghostex. Claude pipes its status
-# JSON on stdin; gxserver stores it for the session's chat view. With a wrapped
-# user statusline command as $1 that command renders the line; otherwise
-# gxserver renders Ghostex's own.
+# JSON on stdin; inside Ghostex gxserver stores it for the session's chat view.
+# A wrapped user statusline command ($1) draws the line; otherwise {silence}.
+# Outside Ghostex nothing is stored and no gxserver starts.
+if [ -z "${{GHOSTEX_GLOBAL_SESSION_REF:-}}" ] || [ -z "${{GHOSTEX_GXSERVER_BASE_URL:-}}" ]; then
+  if [ -n "${{1:-}}" ]; then
+    exec /bin/sh -c "$1"
+  fi
+  read -r -d '' _ || true
+  exit 0
+fi
 INPUT="$(cat)"
 DEFAULT_HOOK_STATE_DIR={hook_state_directory}
 HOOK_STATE_DIR="${{GHOSTEX_AGENT_HOOK_STATE_DIR:-$DEFAULT_HOOK_STATE_DIR}}"
@@ -123,12 +149,22 @@ if [ -n "${{1:-}}" ]; then
   printf '%s' "$INPUT" | /bin/sh -c "$1"
   exit 0
 fi
-printf '%s' "$INPUT" | {executable} agent-statusline "$HOOK_STATE_DIR"{arguments} --render 2>/dev/null
+printf '%s' "$INPUT" | {executable} agent-statusline "$HOOK_STATE_DIR"{arguments}{render} 2>/dev/null
 exit 0
 "#,
         executable = shell_quote(executable),
         hook_state_directory = shell_quote(&path_string(hook_state_directory)),
         arguments = agent.runtime_arguments(),
+        render = if agent.renders_own_line() {
+            " --render"
+        } else {
+            " >/dev/null"
+        },
+        silence = if agent.renders_own_line() {
+            "gxserver prints Ghostex's stand-in for the footer"
+        } else {
+            "the row stays empty"
+        },
     );
     match agent {
         StatuslineAgent::Claude => script,
@@ -136,6 +172,15 @@ exit 0
             .replace("# Claude Code statusLine", "# Cursor CLI statusLine")
             .replace("Claude pipes", "Cursor pipes"),
     }
+}
+
+#[cfg(windows)]
+/// Whether this process runs in a Ghostex session: the notify hook's test (CDXC:AgentHooks
+/// 2026-11-18 above).
+fn inside_ghostex_session() -> bool {
+    ["GHOSTEX_GLOBAL_SESSION_REF", "GHOSTEX_GXSERVER_BASE_URL"]
+        .iter()
+        .all(|key| std::env::var(key).is_ok_and(|value| !value.trim().is_empty()))
 }
 
 /// Writes both agents' statusline scripts.
@@ -354,17 +399,6 @@ pub(crate) fn ghostex_statusline_registered(data: &Value) -> bool {
     statusline_entry(data)
         .and_then(statusline_entry_command)
         .is_some_and(is_ghostex_statusline_command)
-}
-
-/// Ghostex's statusline is registered with the current script path.
-pub(crate) fn claude_statusline_is_current(data: &Value, hook_paths: &HookPaths) -> bool {
-    statusline_is_current(data, &hook_paths.statusline_hook_path)
-}
-
-/// Point Claude's `statusLine` at the Ghostex script, wrapping any user
-/// command already there. Returns whether the settings changed.
-pub(crate) fn register_claude_statusline(data: &mut Value, hook_paths: &HookPaths) -> bool {
-    register_statusline(data, &hook_paths.statusline_hook_path)
 }
 
 /// `statusLine` runs `script` through this gxserver, bare or wrapping a user command. The bash-script form an earlier build wrote is not current, so the next install or repair rewrites it.
@@ -742,10 +776,26 @@ pub fn run_native_statusline_hook(args: Vec<String>) -> Result<(), DomainStateEr
     let Some((input, late_since)) = read_statusline_input(started) else {
         return Ok(());
     };
+    let inside = inside_ghostex_session();
     let Some(wrapped) = wrapped else {
-        return store_and_render_statusline(&hook_state_dir, agent, true, &input, late_since);
+        if inside {
+            return store_and_render_statusline(
+                &hook_state_dir,
+                agent,
+                agent.renders_own_line(),
+                &input,
+                late_since,
+            );
+        }
+        // Outside Ghostex nothing is stored; Cursor still gets its footer's stand-in.
+        if agent.renders_own_line() {
+            println!("{}", render_agent_line(agent, &input));
+        }
+        return Ok(());
     };
-    let _ = store_and_render_statusline(&hook_state_dir, agent, false, &input, late_since);
+    if inside {
+        let _ = store_and_render_statusline(&hook_state_dir, agent, false, &input, late_since);
+    }
     kill_children_with_this_process();
     // The user's command was written for the shell Claude Code runs it in: Git Bash when Git for Windows is installed, PowerShell otherwise.
     let mut command = super::statusline_launch_windows::wrapped_command(&wrapped);
@@ -841,13 +891,26 @@ fn store_and_render_statusline(
         store_statusline_payload(&path, &payload, late_since)?;
     }
     if render {
-        let line = match agent {
-            StatuslineAgent::Claude => render_statusline(&payload),
-            StatuslineAgent::Cursor => render_cursor_statusline(&payload),
-        };
-        println!("{line}");
+        println!("{}", render_agent_payload_line(agent, &payload));
     }
     Ok(())
+}
+
+fn render_agent_payload_line(agent: StatuslineAgent, payload: &Map<String, Value>) -> String {
+    match agent {
+        StatuslineAgent::Claude => render_statusline(payload),
+        StatuslineAgent::Cursor => render_cursor_statusline(payload),
+    }
+}
+
+/// The line for a raw payload, without storing it.
+#[cfg(windows)]
+fn render_agent_line(agent: StatuslineAgent, input: &str) -> String {
+    let payload = serde_json::from_str::<Value>(input)
+        .ok()
+        .and_then(|value| value.as_object().cloned())
+        .unwrap_or_default();
+    render_agent_payload_line(agent, &payload)
 }
 
 /// `dated`: the modified time the stored file gets, instead of now.
