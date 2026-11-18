@@ -312,8 +312,9 @@ impl GhostexGpuiApp {
                             // window asks the same question and cleans up as the window
                             // manager's close (app/workspace_windows/close.rs).
                             GpuiWindowCaptionControl::Close => {
-                                let popup = this
-                                    .session_popup_in_window(window.window_handle().window_id());
+                                let popup = this.session_popup_in_window(
+                                    Window::window_handle(window).window_id(),
+                                );
                                 if let Some(popup) = popup {
                                     this.close_session_popup_window(popup, cx);
                                 } else if this.workspace_window_should_close(window, cx) {
