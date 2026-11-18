@@ -145,16 +145,24 @@ struct Signal {
     probing: AtomicBool,
     /// When the list was last installed, or a probe git did not answer gave up.
     asked_at: Mutex<Option<std::time::Instant>>,
-    /// The last probe got no answer from git: wait `RETRY_AFTER` before the next.
-    unanswered: AtomicBool,
+    /// Probes in a row git did not answer: the next waits `RETRY_AFTER` for that many.
+    unanswered: AtomicU64,
+    /// This watch's share of `REASK_JITTER`, so watches started together do not ask together.
+    reask_jitter: std::time::Duration,
     /// The real paths of the watched Git folders' index files.
     index_files: Vec<Vec<u8>>,
     /// Whether this watch skips anything at all (a repository's watch).
     skips: bool,
 }
 
-/// How long after git did not answer a probe before asking again.
-const RETRY_AFTER: std::time::Duration = std::time::Duration::from_secs(30);
+/// How long after git did not answer a probe before asking again: longer each time in a row.
+const RETRY_AFTER: [std::time::Duration; 3] = [
+    std::time::Duration::from_secs(30),
+    std::time::Duration::from_secs(60),
+    std::time::Duration::from_secs(5 * 60),
+];
+/// Up to this much is added to `REASK_AFTER`, a different amount per watch.
+const REASK_JITTER: std::time::Duration = std::time::Duration::from_secs(60);
 /// How long an installed list is trusted before git is asked again.
 const REASK_AFTER: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
@@ -211,19 +219,25 @@ impl SkipProbe {
     /// Installs `ignored` (real paths) as the skipped folders; the list counts as current only when
     /// nothing made it stale since the probe began.
     pub(super) fn install(self, ignored: Vec<PathBuf>) {
-        self.signal.unanswered.store(false, Ordering::Release);
+        self.signal.unanswered.store(0, Ordering::Release);
         if let Ok(mut asked_at) = self.signal.asked_at.lock() {
             *asked_at = Some(std::time::Instant::now());
         }
+        let ignored: Vec<Vec<u8>> = ignored
+            .iter()
+            .map(|folder| {
+                let mut bytes = folder.as_os_str().as_bytes().to_vec();
+                bytes.push(b'/');
+                bytes
+            })
+            .collect();
         if let Ok(mut list) = self.signal.ignored.write() {
-            *list = ignored
-                .iter()
-                .map(|folder| {
-                    let mut bytes = folder.as_os_str().as_bytes().to_vec();
-                    bytes.push(b'/');
-                    bytes
-                })
-                .collect();
+            // A different list (a re-ask found other rules): a change skipped under the old one
+            // may count now, so the kept answer goes (review of 6f2bf25bc).
+            if *list != ignored {
+                self.signal.changed.store(true, Ordering::Release);
+            }
+            *list = ignored;
         }
         self.signal
             .installed
@@ -232,7 +246,7 @@ impl SkipProbe {
 
     /// Git did not answer: the list stays as it was, and the next probe waits `RETRY_AFTER`.
     pub(super) fn unanswered(self) {
-        self.signal.unanswered.store(true, Ordering::Release);
+        self.signal.unanswered.fetch_add(1, Ordering::AcqRel);
         if let Ok(mut asked_at) = self.signal.asked_at.lock() {
             *asked_at = Some(std::time::Instant::now());
         }
@@ -321,7 +335,13 @@ impl FolderWatch {
             installed: AtomicU64::new(0),
             probing: AtomicBool::new(false),
             asked_at: Mutex::new(None),
-            unanswered: AtomicBool::new(false),
+            unanswered: AtomicU64::new(0),
+            // Spread over the watches by the order they start in.
+            reask_jitter: {
+                static STARTED: AtomicU64 = AtomicU64::new(0);
+                let nth = STARTED.fetch_add(1, Ordering::Relaxed);
+                REASK_JITTER.mul_f64((nth.wrapping_mul(7919) % 997) as f64 / 997.0)
+            },
             index_files: git_folders
                 .iter()
                 .map(|folder| folder.join("index").as_os_str().as_bytes().to_vec())
@@ -413,10 +433,13 @@ impl FolderWatch {
         }
         let asked_at = self.signal.asked_at.lock().ok().and_then(|at| *at);
         let since_asked = asked_at.map(|at| at.elapsed());
-        let due = if self.signal.unanswered.load(Ordering::Acquire) {
-            since_asked.is_none_or(|since| since >= RETRY_AFTER)
+        let unanswered = self.signal.unanswered.load(Ordering::Acquire) as usize;
+        let due = if unanswered > 0 {
+            let wait = RETRY_AFTER[(unanswered - 1).min(RETRY_AFTER.len() - 1)];
+            since_asked.is_none_or(|since| since >= wait)
         } else {
-            !self.signal.current() || since_asked.is_none_or(|since| since >= REASK_AFTER)
+            !self.signal.current()
+                || since_asked.is_none_or(|since| since >= REASK_AFTER + self.signal.reask_jitter)
         };
         if !due {
             return None;

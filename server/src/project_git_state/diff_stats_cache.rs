@@ -101,9 +101,16 @@ where
             if let Some(answer) = cache.unchanged(&key, std::path::Path::new(path), folders) {
                 return Ok(answer);
             }
+            // A read whose git just timed out answers the requests that waited behind it for a
+            // few seconds, instead of each running its own read that times out the same way.
+            if let Some(failure) = recent_timeout(&key) {
+                return Err(failure);
+            }
             let result = capped(read).await;
-            if let Ok(answer) = &result {
-                cache.remember(&key, answer.clone());
+            match &result {
+                Ok(answer) => cache.remember(&key, answer.clone()),
+                Err(error) if super::is_git_timeout(error) => note_timeout(&key, error),
+                Err(_) => {}
             }
             return result;
         }
@@ -146,6 +153,36 @@ where
         }
     }
     read.await
+}
+
+/// How long a read whose git timed out answers the next requests for the same project.
+#[cfg(any(windows, target_os = "macos"))]
+const TIMED_OUT_KEPT: std::time::Duration = std::time::Duration::from_secs(10);
+
+#[cfg(any(windows, target_os = "macos"))]
+fn timeouts() -> &'static std::sync::Mutex<
+    std::collections::HashMap<String, (std::time::Instant, TypedOperationError)>,
+> {
+    static TIMEOUTS: std::sync::OnceLock<
+        std::sync::Mutex<
+            std::collections::HashMap<String, (std::time::Instant, TypedOperationError)>,
+        >,
+    > = std::sync::OnceLock::new();
+    TIMEOUTS.get_or_init(Default::default)
+}
+
+#[cfg(any(windows, target_os = "macos"))]
+fn recent_timeout(key: &str) -> Option<TypedOperationError> {
+    let mut timeouts = timeouts().lock().ok()?;
+    timeouts.retain(|_, (at, _)| at.elapsed() < TIMED_OUT_KEPT);
+    timeouts.get(key).map(|(_, error)| error.clone())
+}
+
+#[cfg(any(windows, target_os = "macos"))]
+fn note_timeout(key: &str, error: &TypedOperationError) {
+    if let Ok(mut timeouts) = timeouts().lock() {
+        timeouts.insert(key.to_string(), (std::time::Instant::now(), error.clone()));
+    }
 }
 
 /// One lock per kept answer, held while its read runs.

@@ -123,11 +123,17 @@ pub(crate) async fn git(
 /// kept (diff_stats_cache.rs) as "not a repository" or as numbers (review of 23fa0ff90).
 fn answered(result: Value) -> Result<Value, TypedOperationError> {
     if result.pointer("/error/code").and_then(Value::as_str) == Some("timeout") {
-        return Err(TypedOperationError::dependency_unavailable(
-            "Git did not answer in time.",
-        ));
+        return Err(TypedOperationError::dependency_unavailable(GIT_TIMED_OUT));
     }
     Ok(result)
+}
+
+const GIT_TIMED_OUT: &str = "Git did not answer in time.";
+
+/// Whether `error` is a git call that ran out of time (`answered`).
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
+pub(super) fn is_git_timeout(error: &TypedOperationError) -> bool {
+    error.message == GIT_TIMED_OUT
 }
 
 pub(crate) fn exit_code(result: &Value) -> i64 {
@@ -372,7 +378,7 @@ async fn read_diff_stats(
     there are no tracked line changes.
     */
     if count_untracked_when_clean && additions == 0 && deletions == 0 {
-        let untracked = git(projects, project_id, "listUntracked").await?;
+        let untracked = answered(git(projects, project_id, "listUntracked").await?)?;
         // A link to a folder (a shared `node_modules`) is listed as an untracked file, since an
         // ignore rule like `node_modules/` matches only a real folder; it is not a file of lines.
         let root = projects
@@ -390,14 +396,16 @@ async fn read_diff_stats(
         for chunk in paths.chunks(UNTRACKED_LINE_COUNT_BATCH_SIZE) {
             let mut extra = Map::new();
             extra.insert("filePaths".to_string(), json!(chunk));
-            let result = run_project_operation(
-                "/api/runGitAction",
-                projects,
-                project_id,
-                "countFileLines",
-                extra,
-            )
-            .await?;
+            let result = answered(
+                run_project_operation(
+                    "/api/runGitAction",
+                    projects,
+                    project_id,
+                    "countFileLines",
+                    extra,
+                )
+                .await?,
+            )?;
             if exit_code(&result) != 0 {
                 return Ok(json!({ "diffStats": null, "isRepo": true }));
             }

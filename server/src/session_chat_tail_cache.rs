@@ -29,8 +29,9 @@ use crate::session_chat_tail::SessionChatTailPage;
 
 /// The bytes of transcript the kept answers may span together; the oldest go first past it.
 const KEPT_BYTES: u64 = 48 * 1024 * 1024;
-/// The largest single page kept, a quarter of `KEPT_BYTES`.
-const KEPT_PAGE_BYTES: u64 = KEPT_BYTES / 4;
+/// A page spanning more than this is kept too (the heaviest transcripts are the ones worth it,
+/// GitHub #668), but it is the first to go when the cache is full, so it never pushes small ones out.
+const LARGE_PAGE_BYTES: u64 = KEPT_BYTES / 4;
 /// The answers kept at most, whatever their size (`KEPT_BYTES` bounds the memory).
 const KEPT_ANSWERS: usize = 256;
 /// Asks for one transcript within `HOT_WINDOW` past which its callers are logged.
@@ -118,8 +119,8 @@ pub(crate) fn tail_page(
                 .saturating_sub(*from),
             SessionChatTailPage::NotFound => 0,
         };
-        // A page spanning more than `KEPT_PAGE_BYTES` is not kept: it would push every other one out.
-        if bytes <= KEPT_PAGE_BYTES {
+        // A page larger than the whole cache is never kept.
+        if bytes <= KEPT_BYTES {
             let shared = std::sync::Arc::new(page.clone());
             if let Ok(mut kept) = kept().lock() {
                 kept.insert(
@@ -139,7 +140,8 @@ pub(crate) fn tail_page(
     Ok(page)
 }
 
-/// Drops the least recently used answers past `KEPT_ANSWERS` or `KEPT_BYTES`.
+/// Drops answers past `KEPT_ANSWERS` or `KEPT_BYTES`: the large ones (`LARGE_PAGE_BYTES`) first,
+/// then the least recently used.
 fn trim(kept: &mut HashMap<Key, Kept>) {
     loop {
         let bytes = kept
@@ -150,7 +152,7 @@ fn trim(kept: &mut HashMap<Key, Kept>) {
         }
         let Some(oldest) = kept
             .iter()
-            .min_by_key(|(_, entry)| entry.used)
+            .min_by_key(|(_, entry)| (entry.bytes <= LARGE_PAGE_BYTES, entry.used))
             .map(|(key, _)| key.clone())
         else {
             return;
