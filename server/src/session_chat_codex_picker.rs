@@ -254,6 +254,41 @@ fn picker_rows_under(
     (!rows.is_empty()).then_some(rows)
 }
 
+/// How many of the screen's bottom non-empty rows may hold Codex's live status row: it sits above
+/// the queued follow-up previews, the input box and the footer.
+const CODEX_STATUS_TAIL_ROWS: usize = 20;
+
+/// CDXC:SessionChat 2026-11-18 WHY:
+/// GitHub #666 Windows test (M7-Desktop, real Codex): a Codex effort pick met a running turn and was
+/// applied inside it, because Codex draws its input box while it works and the input box was the
+/// only check. The message queued behind the pick then went out as soon as the pick finished, and
+/// Codex takes a message typed during a turn into that turn: it answered only the message and
+/// dropped the 1-to-300 list it was writing. Claude's pick and message waited for the turn to end.
+/// A Codex pick now waits (`agentBusy`) while Codex's live status row shows, so the message behind
+/// it waits too and both go to an idle Codex. This narrows the 2026-09-05 decision in
+/// session_chat_queue_runtime/scheduler.rs ("model changes run during a turn whenever the CLI
+/// accepts them") for Codex. The row starts in column zero (`• Working (12s • esc to interrupt)`,
+/// `• Requesting user input (…)`, `• Compacting context (…)`); quoted copies in messages and tool
+/// output are indented (the 2026-09-15 WHY in session_chat_terminal_activity/line_parsers.rs).
+fn codex_turn_running(screen: &str) -> bool {
+    screen
+        .lines()
+        .map(crate::session_chat_options::strip_ansi_sgr)
+        .filter(|line| !line.trim().is_empty())
+        .collect::<Vec<_>>()
+        .iter()
+        .rev()
+        .take(CODEX_STATUS_TAIL_ROWS)
+        .any(|line| {
+            line.strip_prefix('•').is_some_and(|status| {
+                status
+                    .split_once('(')
+                    .and_then(|(_, metadata)| metadata.split_once(')'))
+                    .is_some_and(|(metadata, _)| metadata.contains("esc to interrupt"))
+            })
+        })
+}
+
 fn model_picker_rows(screen: &str) -> Option<Vec<PickerRow>> {
     picker_rows_under(&screen_lines(screen), |line| {
         line == CODEX_MODEL_PICKER_TITLE
@@ -829,6 +864,17 @@ impl PickerDriver<'_> {
         }
     }
 
+    /// A Codex pick waits while Codex's turn runs (`codex_turn_running`). A screen that cannot be
+    /// read is left to the drive's own capture, which says so.
+    async fn wait_for_codex_turn_end(&self) -> Result<(), DomainStateError> {
+        match self.capture().await {
+            Some(screen) if codex_turn_running(&screen) => Err(agent_busy(
+                "Codex is still working on its turn, so the change waits for the turn to end.",
+            )),
+            _ => Ok(()),
+        }
+    }
+
     async fn cancel_dialog(&self) {
         for _ in 0..PICKER_CANCEL_ESCAPES {
             let still_open = self
@@ -1287,6 +1333,7 @@ pub(crate) async fn run_codex_model_picker_job(
         cancelled,
     };
     let outcome = async {
+        driver.wait_for_codex_turn_end().await?;
         if !plan.model.is_empty() {
             driver.run(&plan).await?;
         }

@@ -738,6 +738,7 @@ impl SessionChatQueueRuntime {
         // CDXC:SessionChat 2026-09-05 DECISION:
         // User: model changes run during a turn whenever the CLI accepts them; only actual delivery failure keeps them pending.
         // Prompt activity, transcript and stability gates below do not apply to model selection. The serialized driver checks a fresh terminal screen.
+        // A Codex pick waits for Codex's turn to end (CDXC:SessionChat 2026-11-18 at `codex_turn_running` in session_chat_codex_picker.rs).
         let snapshot = read_session_chat_queue_snapshot_with(db, project_id, session_id);
         if let Some(selection) = snapshot.pending_model_selection.as_ref() {
             let head = snapshot.deliverable_head();
