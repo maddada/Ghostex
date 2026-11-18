@@ -58,7 +58,7 @@ pub fn remove_stale_temporary_files(path: &Path, older_than: Duration) {
 
 /// Runs `operation`, trying again for a moment while another program holds the file: on Windows a
 /// virus scanner or a reader without delete sharing refuses access briefly. Elsewhere it runs once.
-pub(crate) fn retry_while_busy<T>(mut operation: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+pub fn retry_while_busy<T>(mut operation: impl FnMut() -> io::Result<T>) -> io::Result<T> {
     let mut wait = Duration::from_millis(5);
     for _ in 0..5 {
         match operation() {

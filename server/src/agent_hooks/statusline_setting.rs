@@ -152,14 +152,14 @@ fn add_codex_footer_items(hook_paths: &HookPaths) -> Vec<String> {
             continue;
         }
         match super::codex_status_line::ensure_codex_status_line_names_model(&config) {
-            Ok(added) => {
-                if added {
-                    changed.push(key.clone());
-                }
+            // Remembered only once added: a list that already names it, or an empty one, is
+            // looked at again (read only) on the next pass.
+            Ok(true) => {
+                changed.push(key.clone());
                 done.push(key);
                 remembered = true;
             }
-            Err(_) => continue,
+            Ok(false) | Err(_) => continue,
         }
     }
     if remembered {

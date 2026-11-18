@@ -70,10 +70,13 @@ pub(crate) fn temp_path_for(path: &Path) -> PathBuf {
         .file_name()
         .and_then(|value| value.to_str())
         .unwrap_or("hook-state");
+    // The counter keeps two writes of one file in the same millisecond apart.
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     path.with_file_name(format!(
-        ".{file_name}.{}.{}.tmp",
+        ".{file_name}.{}.{}.{}.tmp",
         std::process::id(),
-        chrono::Utc::now().timestamp_millis()
+        chrono::Utc::now().timestamp_millis(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ))
 }
 
@@ -461,48 +464,96 @@ pub(crate) fn read_config_text(path: &Path) -> std::io::Result<Option<String>> {
 /// writing it (a crash in between left it empty), replaced a symlinked config (a dotfiles repo)
 /// with a plain file, and a rewrite through a temp file gave Cursor's 0600 cli-config.json, which
 /// holds its login, the default 0644.
+/// CDXC:AgentHooks 2026-11-18 WHY: review of 67902fb2b: a config the temp-and-rename can't serve
+/// is written in place as before: a hard-linked one (a rename would split the link), a dangling
+/// symlink, a folder that refuses new files, a bind-mounted file the rename is refused on. The
+/// rename retries while Windows holds the file a moment, and a failed write removes only the temp
+/// file it created itself.
 pub(crate) fn write_config_file(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let target = match fs::symlink_metadata(path) {
-        Ok(meta) if meta.file_type().is_symlink() => fs::canonicalize(path)?,
+        Ok(meta) if meta.file_type().is_symlink() => match fs::canonicalize(path) {
+            Ok(target) => target,
+            // A dangling link: writing through it creates the file it names.
+            Err(_) => return fs::write(path, bytes),
+        },
         _ => path.to_path_buf(),
     };
-    let permissions = match fs::metadata(&target) {
-        Ok(meta) => Some(meta.permissions()),
+    let metadata = match fs::metadata(&target) {
+        Ok(meta) => Some(meta),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
         Err(error) => return Err(error),
     };
-    if permissions.as_ref().is_some_and(fs::Permissions::readonly) {
+    if metadata
+        .as_ref()
+        .is_some_and(|meta| meta.permissions().readonly())
+    {
         return Err(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
             format!("{} is read-only", target.display()),
         ));
     }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt as _;
+        if metadata.as_ref().is_some_and(|meta| meta.nlink() > 1) {
+            return fs::write(&target, bytes);
+        }
+    }
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent)?;
     }
-    let temp = temp_path_for(&target);
+    let permissions = metadata.map(|meta| meta.permissions());
+    match replace_through_temp(&target, bytes, permissions) {
+        Ok(()) => Ok(()),
+        Err(Refused::TempOrRename) => fs::write(&target, bytes),
+        Err(Refused::Write(error)) => Err(error),
+    }
+}
+
+/// Why [`replace_through_temp`] failed: a temp file or rename the folder refused (an in-place
+/// write may still work), or writing the bytes themselves (it would fail in place too, after
+/// truncating the config).
+enum Refused {
+    TempOrRename,
+    Write(std::io::Error),
+}
+
+fn replace_through_temp(
+    target: &Path,
+    bytes: &[u8],
+    permissions: Option<fs::Permissions>,
+) -> Result<(), Refused> {
+    use std::io::Write as _;
+    let temp = temp_path_for(target);
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
+        options.mode(permissions.as_ref().map_or(0o644, |p| p.mode() & 0o7777));
+    }
+    // Only a temp file this call created is ever removed.
+    let mut file = options.open(&temp).map_err(|_| Refused::TempOrRename)?;
     let written = (|| {
-        use std::io::Write as _;
-        let mut options = fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
-            options.mode(permissions.as_ref().map_or(0o644, |p| p.mode() & 0o7777));
-        }
-        let mut file = options.open(&temp)?;
         file.write_all(bytes)?;
-        file.sync_all()?;
-        drop(file);
-        if let Some(permissions) = permissions.clone() {
-            fs::set_permissions(&temp, permissions)?;
-        }
-        fs::rename(&temp, &target)
+        file.sync_all()
     })();
-    if written.is_err() {
+    drop(file);
+    let result = match written {
+        Err(error) => Err(Refused::Write(error)),
+        Ok(()) => permissions
+            .map_or(Ok(()), |permissions| {
+                fs::set_permissions(&temp, permissions)
+            })
+            .and_then(|()| {
+                ghostex_paths::durable_file::retry_while_busy(|| fs::rename(&temp, target))
+            })
+            .map_err(|_| Refused::TempOrRename),
+    };
+    if result.is_err() {
         let _ = fs::remove_file(&temp);
     }
-    written
+    result
 }
 
 pub(crate) fn display_path(path: &str, home_dir: &Path) -> String {

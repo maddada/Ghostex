@@ -8,7 +8,7 @@ use crate::agent_hooks::config::{
     all_hook_events, command_agent, hook_format, nested_event_timeout, nested_timeout,
     HookDefinition, HookFormat, HookPaths,
 };
-use crate::agent_hooks::probing::{path_string, read_file_text};
+use crate::agent_hooks::probing::{path_string, read_config_text};
 use crate::agent_hooks::resolution::is_ghostex_owned_hook_command;
 
 use super::*;
@@ -25,8 +25,26 @@ pub(super) fn merge_json_hook(
     if definition.agent_id == "zcode" {
         super::zcode::ensure_zcode_config(config_path, hook_paths)?;
     }
-    let current_text = read_file_text(config_path);
+    // CDXC:AgentHooks 2026-11-18 WHY: review of 67902fb2b: a config that can't be read (not
+    // UTF-8, a refused read) or holds something other than a JSON object read as `{}`, and the
+    // install wrote that over it. Only a missing or empty file starts from `{}` now.
+    let current_text = read_config_text(config_path)
+        .map_err(|error| {
+            DomainStateError::corrupt_state(format!(
+                "Ghostex could not read {}, so it left it alone: {error}",
+                path_string(config_path)
+            ))
+        })?
+        .unwrap_or_default();
     ensure_json_config_is_rewritable(definition.agent_id, config_path, &current_text)?;
+    if !current_text.trim().is_empty()
+        && !serde_json::from_str::<Value>(&current_text).is_ok_and(|value| value.is_object())
+    {
+        return Err(DomainStateError::corrupt_state(format!(
+            "{} is not a JSON object Ghostex can add its hook to, so it left it alone. Fix the file and run Install Hooks again.",
+            path_string(config_path)
+        )));
+    }
     let mut data = read_json_object(&current_text);
     let before = data.clone();
     let events = all_hook_events(definition.agent_id);

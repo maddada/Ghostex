@@ -122,7 +122,8 @@ address in the environment): it starts no gxserver there, only runs their own
 command, so a Claude in another terminal, over ssh or in another app pays two
 shell tests per refresh. Cursor without a command of the user's still starts gxserver
 there to draw its footer's stand-in (stored nowhere), or its footer would be empty.
-Version 2 of the script, so installed ones are rewritten.
+Version 2 of the script, so installed ones are rewritten; version 3 for the Cursor
+stand-in outside Ghostex.
 */
 pub(crate) fn build_statusline_hook_script(
     executable: &str,
