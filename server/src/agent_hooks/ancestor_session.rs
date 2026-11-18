@@ -4,7 +4,7 @@ use std::env;
 
 /// CDXC:AgentHooks 2026-10-06 WHY:
 /// Empryo 3.9.0-beta runs every hook with a filtered environment (its `*_PROJECT_DIR` variables plus a fixed safe list), so no GHOSTEX_* routing variable reaches a hook in `~/.empryo/hooks.json`. Instead, an Empryo hook finds its session by walking up its process tree to the `zmx run S60-<project>-<session>` daemon that owns the pane, and reaches gxserver at the machine-wide local address and token file the `ghostex` CLI uses. Routing variables already in the environment win, so this retires on its own once Empryo passes host variables through (the upstream ask). Native Windows (wmx) has no lookup yet: an Empryo hook there reports nothing.
-/// SEE-ALSO: server/src/agent_hooks/plugin_sources.rs (the notify script lets an `empryo` hook through without routing variables), server/src/accounts/codex_blockers.rs `zmx_owners` (the same daemon walk for live Codex processes), server/src/ghostex_cli/agents/identity.rs `caller` (a `ghostex` command run from Empryo's shell tool, which filters the same variables).
+/// SEE-ALSO: server/src/agent_hooks/plugin_sources.rs (the notify script lets an `empryo` hook through without routing variables), server/src/accounts/codex_blockers.rs `zmx_owners` (the same daemon walk for live Codex processes), server/src/ghostex_cli/mod.rs `adopt_caller_session_from_process_tree` (every `ghostex` command run from Empryo's or Codex's shell tool, which filter the same variables).
 pub(crate) fn adopt_ancestor_session_routing() {
     if env::var_os("GHOSTEX_GLOBAL_SESSION_REF").is_some() {
         return;

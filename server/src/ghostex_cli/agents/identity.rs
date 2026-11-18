@@ -88,10 +88,9 @@ fn lookup_caller() -> CliResult<CallerLookup> {
                 .map(|value| (key, value.trim().to_owned()))
         })
     };
-    let Some((key, reference)) = from_environment().or_else(|| {
-        crate::agent_hooks::adopt_ancestor_session_routing();
-        from_environment()
-    }) else {
+    // A session the environment lacks was already read from the process tree as the CLI started
+    // (ghostex_cli/mod.rs `adopt_caller_session_from_process_tree`).
+    let Some((key, reference)) = from_environment() else {
         return Ok(CallerLookup::NoSession);
     };
     let flags = inventory_flags(&Flags::default(), &reference)?;

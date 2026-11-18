@@ -918,10 +918,10 @@ up to five PNG, JPEG or WebP screenshots of 5 MB each with --image. The issue is
 
 pub fn needs_you_usage() -> String {
     r#"Usage:
-  ghostex needs-you add "<what to do>" [--detail <text>] [--command <command>] [--answer <label>]...
-  ghostex needs-you list [--all]
-  ghostex needs-you done Q<n>
-  ghostex needs-you drop Q<n>
+  ghostex needs-you add "<what to do>" [--detail <text>] [--command <command>] [--answer <label>]... [--session <alias|id|title>]
+  ghostex needs-you list [--all] [--session <alias|id|title>]
+  ghostex needs-you done Q<n> [--session <alias|id|title>]
+  ghostex needs-you drop Q<n> [--session <alias|id|title>]
 
 add: when a step can only be done by the user (a sudo command, a tap on their phone, a sign-in,
 a check by eye), put it above this session's chat box as a to-do with a Done button, without
@@ -934,20 +934,23 @@ own words). Inside a coordinator's thread the to-do goes to the coordinator's Ne
 and the user's answer still reaches you.
 list: the open to-dos (--all adds the ones settled lately and how).
 done: you saw it happen yourself (the port answers now), so it leaves the user's list.
-drop: it is no longer needed."#
+drop: it is no longer needed.
+--session: the session the to-do belongs to. Without it the calling session is used, read from
+the variables every Ghostex pane exports, or, in a sandbox that hides them (a Codex with
+shell_environment_policy inherit = "core"), from the Ghostex pane the agent runs in."#
         .to_string()
 }
 
 pub fn secret_usage() -> String {
     r#"Usage:
-  ghostex secret request --label <text> --reason <text> [--placeholder <text>] [--timeout-minutes N]
+  ghostex secret request --label <text> --reason <text> [--placeholder <text>] [--timeout-minutes N] [--session <alias|id|title>]
   ghostex secret providers [list]
   ghostex secret providers add --name <text> --account <1Password account>
   ghostex secret providers remove <id>
   ghostex secret providers check --provider <id> --reference op://vault/item/field
   ghostex secret install-skill
 
-request: shows a private card in the calling session's chat asking the user for a secret
+request: shows a private card in the calling session's chat (or --session's) asking the user for a secret
 (a password, API key or token) and waits for the answer (10 minutes unless --timeout-minutes,
 at most 60). The value never enters the chat, the transcript or your context. Prints JSON:
   {"status":"saved","file":"<owner-only file>","next":"…"}   read it inside the command
@@ -975,7 +978,8 @@ pub fn notify_usage() -> String {
   gx notify --title <text>
 
 Posts a notification to the Ghostex titlebar bell for a session. Without --session-id the
-calling session is used, read from the Ghostex session environment every pane exports.
+calling session is used, read from the Ghostex session environment every pane exports, or from
+the Ghostex pane the agent runs in when a sandbox hides that environment.
 The row shows the title, the session's project, and the body, and counts as unread until
 the session is opened or the row is marked read."#
         .to_string()

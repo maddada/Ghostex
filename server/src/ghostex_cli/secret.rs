@@ -64,7 +64,7 @@ fn request_session(parsed: &ParsedArgs) -> CliResult<(String, String)> {
     }
     notify::session_reference_from_environment().ok_or_else(|| {
         CliError::Other(
-            "secret request must run inside a Ghostex session, where the user sees the card."
+            "secret request must run inside a Ghostex session, where the user sees the card, or name one with --session."
                 .to_string(),
         )
     })

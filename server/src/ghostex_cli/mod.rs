@@ -113,6 +113,7 @@ pub fn run() -> i32 {
         return code;
     }
     let argv: Vec<String> = std::env::args().skip(1).collect();
+    adopt_caller_session_from_process_tree();
     if let Some(warning) = crate::paths::migrate_legacy_storage() {
         eprintln!("{warning}");
     }
@@ -129,6 +130,21 @@ pub fn run() -> i32 {
             }
             1
         }
+    }
+}
+
+/// CDXC:AgentSandbox 2026-11-18 WHY:
+/// GitHub #669: a Codex whose sandbox hides Ghostex's variables (`[shell_environment_policy]
+/// inherit = "core"`) ran `ghostex needs-you add` and `ghostex secret request` with no session,
+/// though 11.10.0 had taught `agents whoami` and `agents send` to find it from the process tree
+/// (#655). Every command that resolves its own session reads `GHOSTEX_GLOBAL_SESSION_REF` first,
+/// so the lookup runs once here, before any command: with no session variable set, the `zmx run`
+/// pane above the Codex or Empryo process that ran this command names it
+/// (agent_hooks/ancestor_session.rs). A plain terminal has no such pane above it and is left alone.
+/// SEE-ALSO: server/src/ghostex_cli/rpc.rs `caller_session_from_env`.
+fn adopt_caller_session_from_process_tree() {
+    if rpc::caller_session_from_env().is_none() {
+        crate::agent_hooks::adopt_ancestor_session_routing();
     }
 }
 
