@@ -132,6 +132,8 @@ where
 /// here too; Git actions themselves (commit, push, checkout) do not.
 const MAX_GIT_READS: usize = 4;
 const MAX_GIT_READ_WAIT: std::time::Duration = std::time::Duration::from_secs(8);
+/// The longest a background read runs before it counts as timed out.
+const MAX_GIT_READ_TIME: std::time::Duration = std::time::Duration::from_secs(50);
 
 async fn capped<V, F, Fut>(read: F) -> Result<V, TypedOperationError>
 where
@@ -144,7 +146,13 @@ where
         .await
         .ok()
         .and_then(Result::ok);
-    let read = read();
+    // Under the desktop's 60 s wait (gx_store/rpc.rs), so its retry finds this failure kept
+    // (`note_timeout`) instead of starting the read again; the git processes end with the read.
+    let read = async {
+        tokio::time::timeout(MAX_GIT_READ_TIME, read())
+            .await
+            .unwrap_or_else(|_| Err(super::git_timed_out()))
+    };
     tokio::pin!(read);
     if let Some(turn) = turn {
         tokio::select! {

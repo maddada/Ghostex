@@ -123,9 +123,14 @@ pub(crate) async fn git(
 /// kept (diff_stats_cache.rs) as "not a repository" or as numbers (review of 23fa0ff90).
 fn answered(result: Value) -> Result<Value, TypedOperationError> {
     if result.pointer("/error/code").and_then(Value::as_str) == Some("timeout") {
-        return Err(TypedOperationError::dependency_unavailable(GIT_TIMED_OUT));
+        return Err(git_timed_out());
     }
     Ok(result)
+}
+
+/// The error a git call that ran out of time answers with.
+pub(super) fn git_timed_out() -> TypedOperationError {
+    TypedOperationError::dependency_unavailable(GIT_TIMED_OUT)
 }
 
 const GIT_TIMED_OUT: &str = "Git did not answer in time.";

@@ -231,10 +231,11 @@ impl SkipProbe {
                 bytes
             })
             .collect();
+        // Only a list that was in force skipped anything: the kept answer goes when a re-ask
+        // finds different rules (review of 6f2bf25bc), not when a stale list is replaced.
+        let was_current = self.signal.current();
         if let Ok(mut list) = self.signal.ignored.write() {
-            // A different list (a re-ask found other rules): a change skipped under the old one
-            // may count now, so the kept answer goes (review of 6f2bf25bc).
-            if *list != ignored {
+            if was_current && *list != ignored {
                 self.signal.changed.store(true, Ordering::Release);
             }
             *list = ignored;

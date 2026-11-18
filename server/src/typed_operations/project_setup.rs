@@ -202,15 +202,26 @@ pub(crate) fn count_project_file_lines(
         if !fs::metadata(&absolute).is_ok_and(|meta| meta.is_file()) {
             continue;
         }
-        let mut file = match fs::File::open(&absolute) {
-            Ok(file) => file,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(error) => return Err(TypedOperationError::not_found(error.to_string())),
+        // A file that cannot be opened or read (gone since the listing, no permission, locked
+        // on Windows) is left out rather than failing the whole count.
+        let Ok(mut file) = fs::File::open(&absolute) else {
+            continue;
         };
-        let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes)
-            .map_err(|error| TypedOperationError::bad_request(error.to_string()))?;
-        total += bytes.iter().filter(|byte| **byte == b'\n').count();
+        // Counted a chunk at a time, so a large file is never held in memory whole.
+        let mut buffer = [0u8; 64 * 1024];
+        let mut lines = 0;
+        loop {
+            match file.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(read) => lines += buffer[..read].iter().filter(|byte| **byte == b'\n').count(),
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(_) => {
+                    lines = 0;
+                    break;
+                }
+            }
+        }
+        total += lines;
     }
     Ok(total)
 }

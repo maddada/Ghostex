@@ -29,9 +29,11 @@ use crate::session_chat_tail::SessionChatTailPage;
 
 /// The bytes of transcript the kept answers may span together; the oldest go first past it.
 const KEPT_BYTES: u64 = 48 * 1024 * 1024;
-/// A page spanning more than this is kept too (the heaviest transcripts are the ones worth it,
-/// GitHub #668), but it is the first to go when the cache is full, so it never pushes small ones out.
+/// A page spanning more than this is large: large pages are kept too (the heaviest transcripts
+/// are the ones worth it, GitHub #668) but within their own budget, `LARGE_PAGES_BYTES`, so they
+/// never push small ones out.
 const LARGE_PAGE_BYTES: u64 = KEPT_BYTES / 4;
+const LARGE_PAGES_BYTES: u64 = KEPT_BYTES / 2;
 /// The answers kept at most, whatever their size (`KEPT_BYTES` bounds the memory).
 const KEPT_ANSWERS: usize = 256;
 /// Asks for one transcript within `HOT_WINDOW` past which its callers are logged.
@@ -124,7 +126,7 @@ pub(crate) fn tail_page(
             let shared = std::sync::Arc::new(page.clone());
             if let Ok(mut kept) = kept().lock() {
                 kept.insert(
-                    key,
+                    key.clone(),
                     Kept {
                         version,
                         rewinds,
@@ -133,26 +135,38 @@ pub(crate) fn tail_page(
                         used: Instant::now(),
                     },
                 );
-                trim(&mut kept);
+                trim(&mut kept, &key);
             }
         }
     }
     Ok(page)
 }
 
-/// Drops answers past `KEPT_ANSWERS` or `KEPT_BYTES`: the large ones (`LARGE_PAGE_BYTES`) first,
-/// then the least recently used.
-fn trim(kept: &mut HashMap<Key, Kept>) {
+/// Drops answers past the budgets, never `inserted` (the page just kept): the oldest large page
+/// while large pages together pass `LARGE_PAGES_BYTES`, then the least recently used while all of
+/// them pass `KEPT_ANSWERS` or `KEPT_BYTES`.
+fn trim(kept: &mut HashMap<Key, Kept>, inserted: &Key) {
     loop {
-        let bytes = kept
-            .values()
-            .fold(0u64, |sum, entry| sum.saturating_add(entry.bytes));
-        if kept.len() <= KEPT_ANSWERS && bytes <= KEPT_BYTES {
+        let (bytes, large) = kept.values().fold((0u64, 0u64), |(all, large), entry| {
+            (
+                all.saturating_add(entry.bytes),
+                if entry.bytes > LARGE_PAGE_BYTES {
+                    large.saturating_add(entry.bytes)
+                } else {
+                    large
+                },
+            )
+        });
+        let only_large = large > LARGE_PAGES_BYTES;
+        if !only_large && kept.len() <= KEPT_ANSWERS && bytes <= KEPT_BYTES {
             return;
         }
         let Some(oldest) = kept
             .iter()
-            .min_by_key(|(_, entry)| (entry.bytes <= LARGE_PAGE_BYTES, entry.used))
+            .filter(|(key, entry)| {
+                *key != inserted && (!only_large || entry.bytes > LARGE_PAGE_BYTES)
+            })
+            .min_by_key(|(_, entry)| entry.used)
             .map(|(key, _)| key.clone())
         else {
             return;
