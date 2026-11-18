@@ -127,6 +127,8 @@ pub fn settle_rpc(
 /// and `{do: "openFolder", groupId}` (the Folder row's two buttons). Open folder
 /// is the sidebar's own Open Folder on the session's project, whose sidebar group the renderer
 /// names (`groupId`), because only the host knows the session's machine.
+/// It is offered, and answered, only for a session on this computer: a folder on another
+/// computer cannot be revealed in the local file manager.
 pub fn handle(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     let Some(data) = state.extras.where_pill.data.as_ref() else {
         return Vec::new();
@@ -134,7 +136,10 @@ pub fn handle(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     match action.param("do").and_then(Value::as_str) {
         // A row's value; the renderer says "Copied" beside it, so no toast.
         Some("copy") => {
-            let id = action.param("row").and_then(Value::as_str).unwrap_or_default();
+            let id = action
+                .param("row")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             document(state)["card"]["rows"]
                 .as_array()
                 .and_then(|rows| rows.iter().find(|row| row["id"] == id))
@@ -150,6 +155,9 @@ pub fn handle(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
             Some(folder) => vec![Effect::Copy { text: folder }],
             None => Vec::new(),
         },
+        // Only a session on this computer has the button, and a late click from a card that was
+        // drawn before the session's computer changed does nothing either.
+        Some("openFolder") if machine(state, data)["kind"] != "this" => Vec::new(),
         Some("openFolder") => {
             let group = action
                 .param("groupId")
@@ -293,7 +301,11 @@ pub fn document(state: &ChatState) -> Value {
                 branch.clone().unwrap_or_else(|| "No branch".to_string()),
                 lines,
             );
-            rows.push(if branch.is_some() { line } else { no_copy(line) });
+            rows.push(if branch.is_some() {
+                line
+            } else {
+                no_copy(line)
+            });
             let mut changes = Vec::new();
             if let Some(files) = number(git, "/changedFiles").filter(|files| *files > 0) {
                 changes.push(format!("{} not committed", count(files, "file", "files")));
@@ -351,20 +363,26 @@ pub fn document(state: &ChatState) -> Value {
         // The whole path, not the `~/` label, is what a paste needs.
         if let Some(path) = &path {
             line["copy"] = json!(path);
-            line["buttons"] = json!([
-                {
-                    "id": "copyPath",
-                    "icon": "copy",
-                    "label": "Copy path",
-                    "action": {"type": "wherePill", "do": "copyPath"},
-                },
-                {
+            let mut buttons = vec![json!({
+                "id": "copyPath",
+                "icon": "copy",
+                "label": "Copy path",
+                "action": {"type": "wherePill", "do": "copyPath"},
+            })];
+            // CDXC:SessionChat 2026-11-18 DECISION:
+            // User: Open folder should open the folder in the system's file manager, and a folder
+            // on another computer cannot be revealed in this computer's Finder (the sidebar's
+            // Open Folder sends a remote project to the Files panel instead). Chosen: the button
+            // is only there for a session on this computer; Copy path stays everywhere.
+            if machine["kind"] == "this" {
+                buttons.push(json!({
                     "id": "openFolder",
                     "icon": "folder-open",
                     "label": "Open folder",
                     "action": {"type": "wherePill", "do": "openFolder"},
-                },
-            ]);
+                }));
+            }
+            line["buttons"] = Value::Array(buttons);
         }
         rows.push(line);
     }
@@ -379,7 +397,10 @@ pub fn document(state: &ChatState) -> Value {
         let account = text(data, "/accountEmail")
             .or_else(|| text(data, "/account"))
             .map(|account| {
-                crate::menus::native_accounts::account_text(state.core.hide_account_emails, &account)
+                crate::menus::native_accounts::account_text(
+                    state.core.hide_account_emails,
+                    &account,
+                )
             });
         let mut line = row("agent", "user", "Agent", agent, account.clone());
         // The account, as shown, is what a click copies; the agent's name without one.

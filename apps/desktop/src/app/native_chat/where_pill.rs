@@ -472,6 +472,8 @@ impl NativeChatView {
     /// are the card's header and rows in the chat's own colours; a row with something to copy
     /// lights under the pointer and a click copies it, saying "Copied" in its detail's place, and
     /// the Folder row ends in Copy path and Open folder icon buttons. The menu stays open.
+    /// Open folder reveals the folder in the system file manager (Finder, Explorer), so the core
+    /// leaves that button out for a session on another computer: only Copy path is drawn there.
     pub(super) fn where_menu_body(
         &mut self,
         p: &ChatAppearance,
