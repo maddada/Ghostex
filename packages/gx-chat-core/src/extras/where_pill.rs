@@ -1,18 +1,24 @@
 //! The where pill at the left end of the chat box's pill strip: the computer's icon, the project and
 //! the branch of a running session (the computer's name only in its card since 2026-11-18, the
 //! decision in apps/desktop/src/app/native_chat/where_pill.rs), a hover card with everything else about where it runs, and a click
-//! that opens the same details with Copy branch and Open folder.
+//! that opens the same details, where a click on a value copies it and the Folder row opens it.
 //!
 //! gxserver on the session's machine reads the facts (`/api/readSessionWhere`,
 //! server/src/session_where.rs); the computer's name comes from the host
 //! ([`crate::Event::ComputerChanged`]), since that machine calls itself "This computer". This
 //! module reads once when the chat starts, again every [`POLL_MS`] while the chat is on screen,
 //! and words the pill, the card (the project and computer as its header, then a row per other
-//! fact) and its actions into the `wherePill` document key. A draft has none: its worktree tray
+//! fact) and its copy and folder buttons into the `wherePill` document key. A draft has none: its worktree tray
 //! above the box says where it will run.
 //!
 //! CDXC:SessionChat 2026-11-17 DECISION:
 //! User, from the where pill mockups: Q3781 H, the two-part pill ("I love the popup you show on hover in A", so hovering it shows A's card); Q3782 the pill always shows the project, the machine and the branch; Q3783 the card and the details show the project, machine, Cloud Box, branch, worktree, pull request, counts, folder, agent and terminal; Q3784 a click opens the details with actions (Copy branch and Open folder, no Move to another computer); Q3785 it sits at the left end of the pill strip. The phone is not part of this yet.
+//! CDXC:SessionChat 2026-11-18 DECISION:
+//! User, of the details' Copy branch and Open folder buttons: "remove the buttons at the bottom,
+//! instead make clicking on different values there copy them also make folder have 2 buttons next to
+//! it for copy path and open folder". No bottom actions: a click on a row copies its `copy` (the
+//! branch, the changes, the whole folder path, the account as shown, the terminal), and the Folder
+//! row carries `buttons`, Copy path and Open folder.
 //! SEE-ALSO: server/src/session_where.rs (the read), apps/desktop/src/app/native_chat/where_pill.rs (the drawing).
 
 use serde_json::{json, Map, Value};
@@ -117,7 +123,8 @@ pub fn settle_rpc(
     Some(Vec::new())
 }
 
-/// The pill's clicks: `{type: "wherePill", do: "copyBranch" | "openFolder", groupId}`. Open folder
+/// The pill's clicks: `{type: "wherePill", do: "copy", row}` (a row's value), `{do: "copyPath"}`
+/// and `{do: "openFolder", groupId}` (the Folder row's two buttons). Open folder
 /// is the sidebar's own Open Folder on the session's project, whose sidebar group the renderer
 /// names (`groupId`), because only the host knows the session's machine.
 pub fn handle(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
@@ -125,14 +132,22 @@ pub fn handle(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
         return Vec::new();
     };
     match action.param("do").and_then(Value::as_str) {
-        Some("copyBranch") => match text(data, "/git/branch") {
-            Some(branch) => vec![
-                Effect::Copy { text: branch },
-                Effect::Toast {
-                    level: "info".to_string(),
-                    message: "Branch name copied".to_string(),
-                },
-            ],
+        // A row's value; the renderer says "Copied" beside it, so no toast.
+        Some("copy") => {
+            let id = action.param("row").and_then(Value::as_str).unwrap_or_default();
+            document(state)["card"]["rows"]
+                .as_array()
+                .and_then(|rows| rows.iter().find(|row| row["id"] == id))
+                .and_then(|row| row["copy"].as_str())
+                .map(|copy| {
+                    vec![Effect::Copy {
+                        text: copy.to_string(),
+                    }]
+                })
+                .unwrap_or_default()
+        }
+        Some("copyPath") => match text(data, "/folder") {
+            Some(folder) => vec![Effect::Copy { text: folder }],
             None => Vec::new(),
         },
         Some("openFolder") => {
@@ -172,8 +187,11 @@ fn count(n: u64, one: &str, many: &str) -> String {
 }
 
 /// One row of the card: an icon name, its label, its value and an optional muted detail.
+///
+/// A click on a row copies its `copy`, the value unless the caller sets another.
 fn row(id: &str, icon: &str, label: &str, value: String, detail: Option<String>) -> Value {
     let mut row = Map::new();
+    row.insert("copy".into(), json!(value));
     row.insert("id".into(), json!(id));
     row.insert("icon".into(), json!(icon));
     row.insert("label".into(), json!(label));
@@ -182,6 +200,14 @@ fn row(id: &str, icon: &str, label: &str, value: String, detail: Option<String>)
         row.insert("detail".into(), json!(detail));
     }
     Value::Object(row)
+}
+
+/// A row whose value is not worth copying ("Not a git repository").
+fn no_copy(mut row: Value) -> Value {
+    if let Some(row) = row.as_object_mut() {
+        row.remove("copy");
+    }
+    row
 }
 
 /// The computer the session runs on: `{kind, name, serverId}`. `kind` is `this`, `remote`,
@@ -235,13 +261,13 @@ pub fn document(state: &ChatState) -> Value {
     // The card's header names the project and the computer, so no row repeats them.
     let mut rows = Vec::new();
     if machine["kind"] == "cloudBox" {
-        rows.push(row(
+        rows.push(no_copy(row(
             "cloud",
             "cloud",
             "Runs in",
             "Cloud Box".to_string(),
             text(&machine, "/provider"),
-        ));
+        )));
     }
     if let Some(worktree) = worktree {
         rows.push(row(
@@ -260,13 +286,14 @@ pub fn document(state: &ChatState) -> Value {
                 }
                 _ => None,
             };
-            rows.push(row(
+            let line = row(
                 "branch",
                 "git-branch",
                 "Branch",
                 branch.clone().unwrap_or_else(|| "No branch".to_string()),
                 lines,
-            ));
+            );
+            rows.push(if branch.is_some() { line } else { no_copy(line) });
             let mut changes = Vec::new();
             if let Some(files) = number(git, "/changedFiles").filter(|files| *files > 0) {
                 changes.push(format!("{} not committed", count(files, "file", "files")));
@@ -310,16 +337,36 @@ pub fn document(state: &ChatState) -> Value {
                 }
             }
         }
-        None => rows.push(row(
+        None => rows.push(no_copy(row(
             "branch",
             "git-branch",
             "Branch",
             "Not a git repository".to_string(),
             None,
-        )),
+        ))),
     }
-    if let Some(folder) = text(data, "/folderLabel").or_else(|| text(data, "/folder")) {
-        rows.push(row("folder", "folder-open", "Folder", folder, None));
+    let path = text(data, "/folder");
+    if let Some(folder) = text(data, "/folderLabel").or_else(|| path.clone()) {
+        let mut line = row("folder", "folder-open", "Folder", folder, None);
+        // The whole path, not the `~/` label, is what a paste needs.
+        if let Some(path) = &path {
+            line["copy"] = json!(path);
+            line["buttons"] = json!([
+                {
+                    "id": "copyPath",
+                    "icon": "copy",
+                    "label": "Copy path",
+                    "action": {"type": "wherePill", "do": "copyPath"},
+                },
+                {
+                    "id": "openFolder",
+                    "icon": "folder-open",
+                    "label": "Open folder",
+                    "action": {"type": "wherePill", "do": "openFolder"},
+                },
+            ]);
+        }
+        rows.push(line);
     }
     let agent = crate::extras::welcome::welcome_agent_name(
         text(data, "/agent")
@@ -327,44 +374,24 @@ pub fn document(state: &ChatState) -> Value {
             .as_deref(),
     );
     if let Some(agent) = agent {
-        rows.push(row(
-            "agent",
-            "user",
-            "Agent",
-            agent,
-            // Hide account emails masks it here too, for a session on a computer whose own
-            // gxserver does not hide them (server/src/session_where.rs masks there).
-            text(data, "/accountEmail")
-                .or_else(|| text(data, "/account"))
-                .map(|account| {
-                    crate::menus::native_accounts::account_text(
-                        state.core.hide_account_emails,
-                        &account,
-                    )
-                }),
-        ));
+        // Hide account emails masks it here too, for a session on a computer whose own gxserver
+        // does not hide them (server/src/session_where.rs masks there).
+        let account = text(data, "/accountEmail")
+            .or_else(|| text(data, "/account"))
+            .map(|account| {
+                crate::menus::native_accounts::account_text(state.core.hide_account_emails, &account)
+            });
+        let mut line = row("agent", "user", "Agent", agent, account.clone());
+        // The account, as shown, is what a click copies; the agent's name without one.
+        if let Some(account) = account {
+            line["copy"] = json!(account);
+        }
+        rows.push(line);
     }
     if let Some(terminal) = text(data, "/terminal") {
         rows.push(row("terminal", "terminal-2", "Terminal", terminal, None));
     }
 
-    let mut actions = Vec::new();
-    if branch.is_some() {
-        actions.push(json!({
-            "id": "copyBranch",
-            "icon": "copy",
-            "label": "Copy branch",
-            "action": {"type": "wherePill", "do": "copyBranch"},
-        }));
-    }
-    if text(data, "/folder").is_some() {
-        actions.push(json!({
-            "id": "openFolder",
-            "icon": "folder-open",
-            "label": "Open folder",
-            "action": {"type": "wherePill", "do": "openFolder"},
-        }));
-    }
     let aria = match &branch {
         Some(branch) => format!("{project} on {machine_name}, branch {branch}"),
         None => format!("{project} on {machine_name}"),
@@ -384,6 +411,5 @@ pub fn document(state: &ChatState) -> Value {
             },
             "rows": rows,
         },
-        "actions": actions,
     })
 }

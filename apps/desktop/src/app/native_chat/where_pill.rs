@@ -1,7 +1,8 @@
 //! The where pill at the left end of the chat box's pill strip (pills_strip.rs): one pill split by
 //! a hairline, the computer's own icon with the project on the left, the branch on the right.
 //! Hovering it shows the card of where the session runs; a click opens the same details
-//! above the box with Copy branch and Open folder. gx-chat-core words all of it (`wherePill`,
+//! above the box, where a click on a value copies it and the Folder row has Copy path and Open
+//! folder. gx-chat-core words all of it (`wherePill`,
 //! packages/gx-chat-core/src/extras/where_pill.rs, where the user's decision lives).
 //!
 //! The pill counts in the strip's fit (`pills_strip.rs`, `plan_strip_with_where`): the panel pills
@@ -32,10 +33,9 @@ pub(super) const WHERE_TRIGGER: &str = "chat-pill-where";
 pub(super) const WHERE_MENU_WIDTH: f32 = 380.0;
 const CARD_WIDTH: f32 = 340.0;
 
-/// A detail row's height, the menu's padding around its rows and its actions row (unscaled).
+/// A detail row's height and the menu's padding around its rows (unscaled).
 const ROW_HEIGHT: f32 = 24.0;
 const ROWS_PAD_Y: f32 = 4.0;
-const ACTIONS_HEIGHT: f32 = 30.0;
 
 /// The pill's inner measures (unscaled): each half's side padding, an icon, the gap after it, and
 /// the hairline between the halves.
@@ -195,65 +195,89 @@ fn card_header(pill: &Value, ink: CardInk, s: f32) -> gpui::Div {
         )
 }
 
-/// The detail rows: an icon, the label, the value and its muted detail.
+/// One detail row's line: an icon, the label, the value and its muted detail, or "Copied" with a
+/// check in the detail's place for a moment after a click copied the value.
+fn row_line(row: &Value, ink: CardInk, s: f32, copied: bool) -> gpui::Div {
+    let icon = icon_path(row["icon"].as_str().unwrap_or("point"));
+    let detail = row["detail"].as_str().map(str::to_string);
+    let value = div()
+        .flex_1()
+        .min_w_0()
+        .flex()
+        .items_center()
+        .gap(px(6.0 * s))
+        .child(
+            div()
+                .min_w_0()
+                .truncate()
+                .text_color(ink.foreground)
+                .child(text(row, "value")),
+        );
+    let value = if copied {
+        value.child(
+            div()
+                .flex()
+                .items_center()
+                .flex_shrink_0()
+                .gap(px(3.0 * s))
+                .text_color(ink.secondary)
+                .child(
+                    svg()
+                        .path(icon_path("check"))
+                        .size(px(12.0 * s))
+                        .text_color(ink.secondary),
+                )
+                .child("Copied"),
+        )
+    } else {
+        value.when_some(detail, |line, detail| {
+            line.child(
+                div()
+                    .flex_shrink_0()
+                    .max_w(px(150.0 * s))
+                    .truncate()
+                    .text_color(ink.secondary)
+                    .child(detail),
+            )
+        })
+    };
+    div()
+        .h(px(ROW_HEIGHT * s))
+        .flex()
+        .items_center()
+        .gap(px(8.0 * s))
+        .px(px(2.0 * s))
+        .text_size(px(12.5 * s))
+        .child(
+            svg()
+                .path(icon)
+                .size(px(14.0 * s))
+                .flex_shrink_0()
+                .text_color(ink.secondary),
+        )
+        .child(
+            div()
+                .w(px(88.0 * s))
+                .flex_shrink_0()
+                .truncate()
+                .text_color(ink.secondary)
+                .child(text(row, "label")),
+        )
+        .child(value)
+}
+
+/// The hover card's rows, which only show.
 fn card_rows(pill: &Value, ink: CardInk, s: f32) -> gpui::Div {
     let rows = pill["card"]["rows"].as_array().cloned().unwrap_or_default();
     div()
         .flex()
         .flex_col()
         .py(px(ROWS_PAD_Y * s))
-        .children(rows.into_iter().map(|row| {
-            let icon = icon_path(row["icon"].as_str().unwrap_or("point"));
-            let detail = row["detail"].as_str().map(str::to_string);
-            div()
-                .h(px(ROW_HEIGHT * s))
-                .flex()
-                .items_center()
-                .gap(px(8.0 * s))
-                .px(px(2.0 * s))
-                .text_size(px(12.5 * s))
-                .child(
-                    svg()
-                        .path(icon)
-                        .size(px(14.0 * s))
-                        .flex_shrink_0()
-                        .text_color(ink.secondary),
-                )
-                .child(
-                    div()
-                        .w(px(88.0 * s))
-                        .flex_shrink_0()
-                        .truncate()
-                        .text_color(ink.secondary)
-                        .child(text(&row, "label")),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .items_center()
-                        .gap(px(6.0 * s))
-                        .child(
-                            div()
-                                .min_w_0()
-                                .truncate()
-                                .text_color(ink.foreground)
-                                .child(text(&row, "value")),
-                        )
-                        .when_some(detail, |line, detail| {
-                            line.child(
-                                div()
-                                    .flex_shrink_0()
-                                    .max_w(px(150.0 * s))
-                                    .truncate()
-                                    .text_color(ink.secondary)
-                                    .child(detail),
-                            )
-                        }),
-                )
-        }))
+        .children(rows.iter().map(|row| row_line(row, ink, s, false)))
 }
+
+/// How long "Copied" stays beside a value or on Copy path.
+const COPIED_FOR: std::time::Duration = std::time::Duration::from_millis(1_400);
 
 impl NativeChatView {
     /// The `wherePill` value, while the session has one.
@@ -418,24 +442,36 @@ impl NativeChatView {
     pub(super) fn where_menu_height(&self) -> Option<f32> {
         let pill = self.where_pill()?;
         let rows = pill["card"]["rows"].as_array().map_or(0, Vec::len) as f32;
-        let actions = pill["actions"]
-            .as_array()
-            .is_some_and(|actions| !actions.is_empty());
         Some(
             super::chat_pills::MENU_HEADER_HEIGHT
                 + super::chat_pills::MENU_SECTION_GAP
                 + rows * ROW_HEIGHT
-                + 2.0 * ROWS_PAD_Y
-                + if actions {
-                    super::chat_pills::MENU_SECTION_GAP + ACTIONS_HEIGHT
-                } else {
-                    0.0
-                },
+                + 2.0 * ROWS_PAD_Y,
         )
     }
 
-    /// The details: the card's header and rows in the chat's own colours, then Copy branch and
-    /// Open folder.
+    /// Shows "Copied" for `id` (a row's id, or `copyPath`) for a moment.
+    fn note_where_copied(&mut self, id: String, cx: &mut Context<Self>) {
+        self.where_copied = Some(id.clone());
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(COPIED_FOR).await;
+            let _ = this.update(cx, |this, cx| {
+                if this.where_copied.as_deref() == Some(id.as_str()) {
+                    this.where_copied = None;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// CDXC:SessionChat 2026-11-18 DECISION:
+    /// User: "remove the buttons at the bottom, instead make clicking on different values there copy
+    /// them also make folder have 2 buttons next to it for copy path and open folder". The details
+    /// are the card's header and rows in the chat's own colours; a row with something to copy
+    /// lights under the pointer and a click copies it, saying "Copied" in its detail's place, and
+    /// the Folder row ends in Copy path and Open folder icon buttons. The menu stays open.
     pub(super) fn where_menu_body(
         &mut self,
         p: &ChatAppearance,
@@ -456,7 +492,6 @@ impl NativeChatView {
             .px(px(4.0 * s))
             .child(card_header(&pill, ink, s).pb(px(6.0 * s)))
             .into_any_element();
-        let rows = card_rows(&pill, ink, s).px(px(2.0 * s)).into_any_element();
         let group_id = {
             let key = if self.config.machine_id == crate::app::gx_chat::LOCAL_MACHINE_ID {
                 ghostex_gx_core::ProjectKey::local(self.config.project_id.clone())
@@ -468,58 +503,101 @@ impl NativeChatView {
             };
             key.to_sidebar_group_id()
         };
-        let actions = pill["actions"].as_array().cloned().unwrap_or_default();
-        let footer = (!actions.is_empty()).then(|| {
-            div()
-                .h(px(ACTIONS_HEIGHT * s))
-                .flex()
-                .items_center()
-                .gap(px(6.0 * s))
-                .px(px(4.0 * s))
-                .children(actions.into_iter().map(|action| {
-                    let mut command = action["action"].clone();
-                    if command["do"] == "openFolder" {
-                        command["groupId"] = json!(group_id);
-                    }
-                    let id = text(&action, "id");
-                    div()
-                        .id(gpui::ElementId::Name(format!("where-pill-{id}").into()))
+        let copied = self.where_copied.clone();
+        let rows = pill["card"]["rows"].as_array().cloned().unwrap_or_default();
+        let rows = div()
+            .flex()
+            .flex_col()
+            .py(px(ROWS_PAD_Y * s))
+            .px(px(2.0 * s))
+            .children(rows.into_iter().map(|row| {
+                let id = text(&row, "id");
+                let buttons = row["buttons"].as_array().cloned().unwrap_or_default();
+                let line = row_line(&row, ink, s, copied.as_deref() == Some(id.as_str()));
+                let line = if row["copy"].as_str().is_some() {
+                    let row_id = id.clone();
+                    line.id(gpui::ElementId::Name(format!("where-pill-row-{id}").into()))
+                        .flex_1()
+                        .min_w_0()
+                        .rounded(px(6.0 * s))
                         .role(gpui::Role::Button)
-                        .aria_label(text(&action, "label"))
-                        .flex()
-                        .items_center()
-                        .flex_shrink_0()
-                        .gap(px(6.0 * s))
-                        .h(px(26.0 * s))
-                        .px(px(10.0 * s))
-                        .rounded(px(7.0 * s))
-                        .bg(p.foreground.opacity(0.06))
-                        .hover(|style| style.bg(p.foreground.opacity(0.1)))
-                        .text_size(px(12.5 * s))
-                        .text_color(p.foreground)
+                        .aria_label(format!("Copy {}", text(&row, "label").to_lowercase()))
                         .chat_cursor_pointer()
-                        .child(
-                            svg()
-                                .path(icon_path(action["icon"].as_str().unwrap_or("point")))
-                                .size(px(14.0 * s))
-                                .flex_shrink_0()
-                                .text_color(p.card_muted),
-                        )
-                        .child(text(&action, "label"))
+                        .hover(|style| style.bg(p.foreground.opacity(0.06)))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             cx.stop_propagation();
-                            this.close_pill_menu(cx);
-                            this.invoke(command.clone(), cx);
+                            this.invoke(
+                                json!({"type": "wherePill", "do": "copy", "row": row_id}),
+                                cx,
+                            );
+                            this.note_where_copied(row_id.clone(), cx);
                         }))
-                }))
-                .into_any_element()
-        });
+                        .into_any_element()
+                } else {
+                    line.flex_1().min_w_0().into_any_element()
+                };
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(2.0 * s))
+                    .child(line)
+                    .children(buttons.into_iter().map(|button| {
+                        let mut command = button["action"].clone();
+                        let button_id = text(&button, "id");
+                        let opens = command["do"] == "openFolder";
+                        if opens {
+                            command["groupId"] = json!(group_id);
+                        }
+                        let done = !opens && copied.as_deref() == Some(button_id.as_str());
+                        let label = text(&button, "label");
+                        let icon = if done {
+                            icon_path("check")
+                        } else {
+                            icon_path(button["icon"].as_str().unwrap_or("point"))
+                        };
+                        div()
+                            .id(gpui::ElementId::Name(
+                                format!("where-pill-{button_id}").into(),
+                            ))
+                            .role(gpui::Role::Button)
+                            .aria_label(if done { "Copied".to_string() } else { label.clone() })
+                            .size(px(ROW_HEIGHT * s))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .flex_shrink_0()
+                            .rounded(px(6.0 * s))
+                            .hover(|style| style.bg(p.foreground.opacity(0.08)))
+                            .chat_cursor_pointer()
+                            .child(
+                                svg()
+                                    .path(icon)
+                                    .size(px(14.0 * s))
+                                    .text_color(p.card_muted),
+                            )
+                            .tooltip(move |window, cx| {
+                                gpui_component::tooltip::Tooltip::new(label.clone())
+                                    .build(window, cx)
+                            })
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                cx.stop_propagation();
+                                if opens {
+                                    this.close_pill_menu(cx);
+                                    this.invoke(command.clone(), cx);
+                                } else {
+                                    this.invoke(command.clone(), cx);
+                                    this.note_where_copied(button_id.clone(), cx);
+                                }
+                            }))
+                    }))
+            }))
+            .into_any_element();
         Some(super::chat_pills::pill_menu_column(
             "chat-where-pill-menu",
             "Where this chat runs",
             header,
             Some(rows),
-            footer,
+            None,
             p,
         ))
     }

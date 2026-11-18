@@ -485,6 +485,9 @@ pub(crate) struct NativeChatView {
     /// The where pill is on screen in the chat box's strip and shows the project, not cut down to
     /// the computer's icon (`set_where_pill_shows_project`, read by the work area header).
     pub(crate) where_pill_shows_project: bool,
+    /// The where pill's details row (or `copyPath`) a click just copied, which says "Copied" for a
+    /// moment (where_pill.rs `note_where_copied`).
+    pub(super) where_copied: Option<String>,
 }
 
 impl EventEmitter<NativeChatEvent> for NativeChatView {}
@@ -777,6 +780,7 @@ impl NativeChatView {
             tool_clock_tick: std::cell::Cell::new(false),
             under_workarea_header: false,
             where_pill_shows_project: false,
+            where_copied: None,
         }
     }
 
