@@ -274,12 +274,14 @@ impl ExtensionsTab {
             LIST_TIMEOUT,
             |page, value| {
                 if value["extension"].is_object() {
-                    replace_installed(
-                        &mut page.browser.installed,
-                        InstalledExtension {
-                            raw: value["extension"].clone(),
-                        },
-                    );
+                    let extension = InstalledExtension {
+                        raw: value["extension"].clone(),
+                    };
+                    // Turning it on could not put its skill back: say why, as an install does.
+                    if let Some(reason) = extension.skill_left_out() {
+                        page.browser.error = Some(skill_left_out_message(reason));
+                    }
+                    replace_installed(&mut page.browser.installed, extension);
                 }
             },
             cx,

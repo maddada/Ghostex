@@ -74,12 +74,29 @@ impl ExtensionRegistry {
                 eprintln!("Could not retire the replaced Storybook extension: {error}");
             }
         }
-        // An extension turned off before skills followed the switch (or while this gxserver was
-        // not running) still had its skill in place: it goes now (`follow_skill`).
+        // The skills follow the switches as they stand at start (`follow_skill`): an extension
+        // turned off before skills followed the switch (or while this gxserver was not running)
+        // still had its skill in place, and one that is on may have lost its folder (removed by
+        // hand, or by an older settings sync on another computer).
         if let Ok(store) = read_store(&registry.store_file) {
-            for (id, state) in store.iter().filter(|(_, state)| !state.enabled) {
-                if let Some(name) = state.skill_installed.as_deref() {
+            for (id, state) in &store {
+                let Some(name) = state.skill_installed.as_deref() else {
+                    continue;
+                };
+                if !state.enabled {
                     super::skills::remove_skill(&registry.agent_home, id, name);
+                    continue;
+                }
+                let folder = registry
+                    .agent_home
+                    .join(crate::agent_skills::CANONICAL_AGENT_SKILLS_DIR)
+                    .join(name);
+                if !folder.exists() {
+                    if let Ok(manifest) =
+                        read_manifest(&registry.installed_dir().join(id), Some(id))
+                    {
+                        let _ = registry.follow_skill(id, &manifest, state);
+                    }
                 }
             }
         }

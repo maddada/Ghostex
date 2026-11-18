@@ -266,7 +266,14 @@ impl Engine<'_> {
                             self.edit(key, Some(value.clone()));
                         }
                     }
+                    // An extension's skill leaves this computer's values when the extension is
+                    // turned off or once it is known to be one (lists_bridge.rs): it goes from
+                    // the baseline without a deletion, so no other computer loses it.
+                    let extension_skills = super::lists_bridge::extension_skill_names(self.state);
                     for key in baseline.keys().filter(|key| !current.contains_key(*key)) {
+                        if super::lists_bridge::is_extension_skill_key(key, &extension_skills) {
+                            continue;
+                        }
                         self.edit(key, None);
                     }
                 }

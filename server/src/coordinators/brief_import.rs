@@ -62,8 +62,29 @@ fn is_coordinator_or_thread(db: &Connection, key: &SessionKey) -> bool {
         || read_thread(db, &key.0, &key.1).ok().flatten().is_some()
 }
 
-/// One brief's items, written for `key`. Returns how many.
-fn import_brief(db: &Connection, key: &SessionKey, brief: &Value) -> usize {
+/// A thread of a coordinator on another computer (`REMOTE_COORDINATOR_THREAD_KEY`).
+fn is_remote_thread(db: &Connection, key: &SessionKey) -> bool {
+    db.query_row(
+        "SELECT runtimeSettingsJson FROM sessions WHERE projectId = ?1 AND sessionId = ?2",
+        [&key.0, &key.1],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+    .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+    .is_some_and(|settings| {
+        settings[super::REMOTE_COORDINATOR_THREAD_KEY]
+            .as_str()
+            .is_some_and(|reference| !reference.trim().is_empty())
+    })
+}
+
+/// Where the last conversion's commit is noted, in the same transaction as its items: a start cut
+/// off between the commit and the file's rename finishes the rename instead of converting again.
+const CONVERTED_KEY: &str = "workItemsBriefsConverted";
+
+/// One brief's items, written for `key`. Returns how many; `Err` on any failed write, which rolls
+/// the whole conversion back.
+fn import_brief(db: &Connection, key: &SessionKey, brief: &Value) -> Result<usize, ()> {
     // Finished items are stamped now, so the ones the brief had done stay under Finished today
     // instead of falling out of the panel's few days and the 14-day cleanup at once.
     let converted_at = now_iso();
@@ -79,7 +100,7 @@ fn import_brief(db: &Connection, key: &SessionKey, brief: &Value) -> usize {
         .collect();
     if !objective.is_empty() && read_topic(db, key).is_null() {
         let by_user = brief["objectiveByUser"] == true;
-        let _ = write_topic(db, key, &objective, by_user);
+        write_topic(db, key, &objective, by_user).map_err(|_| ())?;
     }
     let list = |field: &str| -> Vec<Value> {
         brief[field]
@@ -91,44 +112,43 @@ fn import_brief(db: &Connection, key: &SessionKey, brief: &Value) -> usize {
             .collect()
     };
     let mut written = 0;
-    let mut add = |title: String, status: &str, reason: &str, wait: Option<String>| {
-        let Ok(number) = next_item_number(db, key) else {
-            return;
-        };
-        let finished = status == "finished";
-        let item = WorkItem {
-            number,
-            title: title.chars().take(200).collect(),
-            status: status.to_string(),
-            reason: reason.to_string(),
-            waits: wait
-                .map(|on| {
-                    vec![WorkWait {
-                        on,
-                        until: String::new(),
-                        since: at.clone(),
-                    }]
-                })
-                .unwrap_or_default(),
-            history: vec![WorkEvent {
-                at: at.clone(),
-                kind: "add".to_string(),
-                text: "From the session's brief".to_string(),
+    let mut add =
+        |title: String, status: &str, reason: &str, wait: Option<String>| -> Result<(), ()> {
+            let number = next_item_number(db, key).map_err(|_| ())?;
+            let finished = status == "finished";
+            let item = WorkItem {
+                number,
+                title: title.chars().take(200).collect(),
                 status: status.to_string(),
-            }],
-            created_at: at.clone(),
-            updated_at: if finished {
-                converted_at.clone()
-            } else {
-                at.clone()
-            },
-            finished_at: finished.then(|| converted_at.clone()),
-            ..WorkItem::default()
-        };
-        if write_work_item(db, key, &item).is_ok() {
+                reason: reason.to_string(),
+                waits: wait
+                    .map(|on| {
+                        vec![WorkWait {
+                            on,
+                            until: String::new(),
+                            since: at.clone(),
+                        }]
+                    })
+                    .unwrap_or_default(),
+                history: vec![WorkEvent {
+                    at: at.clone(),
+                    kind: "add".to_string(),
+                    text: "From the session's brief".to_string(),
+                    status: status.to_string(),
+                }],
+                created_at: at.clone(),
+                updated_at: if finished {
+                    converted_at.clone()
+                } else {
+                    at.clone()
+                },
+                finished_at: finished.then(|| converted_at.clone()),
+                ..WorkItem::default()
+            };
+            write_work_item(db, key, &item).map_err(|_| ())?;
             written += 1;
-        }
-    };
+            Ok(())
+        };
     for entry in list("blocked") {
         let on = item_text(&entry["waitingOn"]);
         let on = if on.is_empty() {
@@ -136,31 +156,45 @@ fn import_brief(db: &Connection, key: &SessionKey, brief: &Value) -> usize {
         } else {
             on
         };
-        add(item_text(&entry), "waiting", "", Some(on));
+        add(item_text(&entry), "waiting", "", Some(on))?;
     }
     for entry in list("next") {
-        add(item_text(&entry), "later", "next", None);
+        add(item_text(&entry), "later", "next", None)?;
     }
     for entry in list("parked") {
-        add(item_text(&entry), "later", "parked", None);
+        add(item_text(&entry), "later", "parked", None)?;
     }
     // Done is newest first in a brief; oldest first here, as the items were finished.
     for entry in list("done").into_iter().rev() {
-        add(item_text(&entry), "finished", "", None);
+        add(item_text(&entry), "finished", "", None)?;
     }
-    written
+    Ok(written)
+}
+
+/// Where a converted file is kept: `briefs.converted.json`, or a dated name when an earlier
+/// conversion's file is there.
+fn converted_name(data: &std::path::Path) -> std::path::PathBuf {
+    let kept = data.join("briefs.converted.json");
+    if !kept.exists() {
+        return kept;
+    }
+    data.join(format!(
+        "briefs.converted-{}.json",
+        chrono::Utc::now().format("%Y%m%d-%H%M%S")
+    ))
 }
 
 /// Converts the old briefs once, when the Work items version of the extension is installed and
 /// on. Called from the supervisor's tick (panel.rs).
 pub(super) fn import_briefs_once(db: &Connection) {
-    if LOOKED.load(Ordering::Relaxed) {
+    // Tests never reach the computer's real extensions folder.
+    if cfg!(test) || LOOKED.load(Ordering::Relaxed) {
+        return;
+    }
+    if !super::session_work::extension_on_cached() {
         return;
     }
     let paths = crate::paths::get_gxserver_paths(None);
-    if !super::session_work::work_items_extension_on(&paths) {
-        return;
-    }
     let extensions_dir = paths.extensions_dir.as_path();
     let installed = extensions_dir.join("installed").join(WORK_ITEMS_EXTENSION);
     let Ok(manifest) = crate::extensions::read_manifest(&installed, Some(WORK_ITEMS_EXTENSION))
@@ -186,6 +220,28 @@ pub(super) fn import_briefs_once(db: &Connection) {
     let put_back = || {
         let _ = std::fs::rename(&converting, &store);
     };
+    // An earlier start committed this file's items and stopped before renaming it.
+    let committed: Option<String> = db
+        .query_row(
+            "SELECT value FROM metadata WHERE key = ?1",
+            [CONVERTED_KEY],
+            |row| row.get(0),
+        )
+        .ok();
+    // The file's SHA-256 names the conversion its items came from.
+    let fingerprint = std::fs::read(&converting)
+        .map(|bytes| {
+            use sha2::Digest as _;
+            sha2::Sha256::digest(&bytes)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        })
+        .unwrap_or_default();
+    if committed.as_deref() == Some(fingerprint.as_str()) {
+        let _ = std::fs::rename(&converting, converted_name(&data));
+        return;
+    }
     let Some(briefs) = std::fs::read_to_string(&converting)
         .ok()
         .and_then(|text| serde_json::from_str::<Value>(&text).ok())
@@ -193,8 +249,11 @@ pub(super) fn import_briefs_once(db: &Connection) {
         put_back();
         return;
     };
-    // Every item and Topic in one transaction: all of them or none.
-    let Ok(transaction) = db.unchecked_transaction() else {
+    // Every item and Topic in one immediate transaction (it holds the write lock from the
+    // start): all of them or none.
+    let Ok(transaction) =
+        rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Immediate)
+    else {
         put_back();
         return;
     };
@@ -205,25 +264,32 @@ pub(super) fn import_briefs_once(db: &Connection) {
             continue;
         };
         let key = (project_id.to_string(), session_id.to_string());
-        if !session_exists(db, &key) || is_coordinator_or_thread(db, &key) {
+        if !session_exists(db, &key)
+            || is_coordinator_or_thread(db, &key)
+            || is_remote_thread(db, &key)
+        {
             continue;
         }
         sessions += 1;
-        items += import_brief(db, &key, brief);
+        match import_brief(db, &key, brief) {
+            Ok(written) => items += written,
+            Err(()) => {
+                let _ = transaction.rollback();
+                put_back();
+                return;
+            }
+        }
     }
-    if transaction.commit().is_err() {
+    let noted = db.execute(
+        "INSERT INTO metadata (key, value, updatedAt) VALUES (?1, ?2, ?3)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt",
+        rusqlite::params![CONVERTED_KEY, fingerprint, now_iso()],
+    );
+    if noted.is_err() || transaction.commit().is_err() {
         put_back();
         return;
     }
-    // An earlier conversion's file is kept: this one takes a name of its own.
-    let mut kept = data.join("briefs.converted.json");
-    if kept.exists() {
-        kept = data.join(format!(
-            "briefs.converted-{}.json",
-            chrono::Utc::now().format("%Y%m%d-%H%M%S")
-        ));
-    }
-    let _ = std::fs::rename(&converting, kept);
+    let _ = std::fs::rename(&converting, converted_name(&data));
     eprintln!(
         "[gxserver] Work items: converted {sessions} session briefs into {items} work items once."
     );

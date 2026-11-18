@@ -208,7 +208,12 @@ impl Engine<'_> {
     fn write_skills(&mut self, wanted: &[(String, Option<Value>, String)]) {
         let root = self.skills_root();
         let home = self.state.paths.agent_config_home_dir().to_path_buf();
+        let extension_skills = extension_skill_names(self.state);
         for (key, value, _) in wanted {
+            // An extension's skill follows that extension here, even while its folder is gone.
+            if is_extension_skill_key(key, &extension_skills) {
+                continue;
+            }
             if let Some(name) = key.strip_prefix(BUNDLED_SKILL_KEY_PREFIX) {
                 if !bundled_skill_syncs(name) {
                     continue;
@@ -239,6 +244,25 @@ impl Engine<'_> {
             }
         }
     }
+}
+
+/// The skill names extensions put in place on this computer (on or off), which settings sync
+/// never sends, replaces or deletes (`extensions::skills::is_extension_skill`).
+pub(super) fn extension_skill_names(state: &AppState) -> std::collections::HashSet<String> {
+    crate::extensions::read_store(&state.paths.extensions_store_file)
+        .map(|store| {
+            store
+                .values()
+                .filter_map(|entry| entry.skill_installed.clone())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Whether a sync key names one of those skills.
+pub(super) fn is_extension_skill_key(key: &str, names: &std::collections::HashSet<String>) -> bool {
+    key.strip_prefix(OWN_SKILL_KEY_PREFIX)
+        .is_some_and(|name| names.contains(name))
 }
 
 /// A bundled skill sync installs and removes: a listed one this system can run, other than the
