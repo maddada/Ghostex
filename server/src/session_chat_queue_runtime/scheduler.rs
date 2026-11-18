@@ -748,15 +748,13 @@ impl SessionChatQueueRuntime {
                 });
             }
             // A busy pick's longer wait (session_chat_model_selection.rs `busy_retry`) ends once a
-            // message waits behind it, so the message waits at most about 7.5 s for the next try,
-            // until the pick has been busy long enough to be paced slowly whatever waits.
+            // message waits behind it: the message waits at most about 7.5 s for the next try, or a
+            // minute once the pick has been busy for 30 minutes (`busy_wait_shortcut_ms`).
             let wait_ms = selection.retry_at - now.timestamp_millis();
             if wait_ms > 0
-                && !(wait_ms > crate::session_chat_model_selection::BUSY_WAIT_SHORTCUT_MS
-                    && crate::session_chat_model_selection::message_waits(&snapshot)
-                    && crate::session_chat_model_selection::busy_wait_ends_for_messages(
-                        &selection.id,
-                    ))
+                && !(crate::session_chat_model_selection::message_waits(&snapshot)
+                    && wait_ms
+                        > crate::session_chat_model_selection::busy_wait_shortcut_ms(&selection.id))
             {
                 return head.map_or(Assessment::Skip, |head| hold(head, WaitReason::ModelChange));
             }

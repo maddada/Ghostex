@@ -1127,16 +1127,18 @@ impl PickerDriver<'_> {
             .as_ref()
             .is_some_and(|model| model.value == plan.model)
         {
-            let effort = selection.effort.as_ref().ok_or_else(|| {
-                state_unreadable("Codex's current effort could not be read, so it was not changed.")
-            })?;
-            if effort.value == plan.effort {
-                return Ok(());
-            }
-            // A session pick always goes through the list's `s`: the reasoning shortcut is not
-            // known to leave the saved default alone.
-            if !plan.session_only && !matches!(plan.effort.as_str(), "max" | "ultra") {
-                return self.change_effort(plan, &effort.value).await;
+            // Codex with no `model_reasoning_effort` set (a fresh install) paints `<model> default`,
+            // which names no effort: the `/model` list below picks the model and effort rows
+            // explicitly instead of failing the pick as unreadable.
+            if let Some(effort) = selection.effort.as_ref() {
+                if effort.value == plan.effort {
+                    return Ok(());
+                }
+                // A session pick always goes through the list's `s`: the reasoning shortcut is not
+                // known to leave the saved default alone.
+                if !plan.session_only && !matches!(plan.effort.as_str(), "max" | "ultra") {
+                    return self.change_effort(plan, &effort.value).await;
+                }
             }
         }
 

@@ -406,7 +406,7 @@ fn enqueue_selection(
 const MAX_UNCONFIRMED_ATTEMPTS: u32 = 3;
 
 /// CDXC:SessionChat 2026-11-18 WHY:
-/// GitHub #666: `agentBusy` (a turn running, a dialog in front of the input box) was never counted, so a pick retried every 5 seconds for as long as the agent stayed busy, a day for one session, and each try cost screen captures, three database writes and two broadcasts that redraw every app window. A busy pick now waits twice as long after each busy answer, from 5 seconds up to a minute, and after 30 minutes of busy time tries only every 5 minutes. It never fails for being busy: a failed pick holds every later message until the user picks again (the 2026-09-27 decision in session_chat_model_selection_alert.rs), and a pick left behind a permission prompt while the user is away, or Ghostex's own plan-mode restore, would then hold their next message. Busy time counts only the waits the pick planned (plus one retry of slack), so a computer asleep or a stalled queue does not add to it; a session that sleeps answers `sessionNotRunning`, which ends the run. While a message waits behind the pick (a queued chat message, or a new coordinator's first message waiting for its box), the pick keeps the 5-second pace for its first 30 minutes of busy time, and the queue cuts a longer wait short as soon as one arrives (`BUSY_WAIT_SHORTCUT_MS`), so the message waits at most about 7.5 seconds for the next try instead of 5. After that it is paced like any other busy pick: a never-started coordinator's first message stays waiting behind a startup dialog for good, and kept the pick at 5 seconds for ever. A dialog or a running turn is the only busy answer; a state that waiting cannot change has its own codes and limit (`UNAPPLIABLE_LIMIT_MS`).
+/// GitHub #666: `agentBusy` (a turn running, a dialog in front of the input box) was never counted, so a pick retried every 5 seconds for as long as the agent stayed busy, a day for one session, and each try cost screen captures, three database writes and two broadcasts that redraw every app window. A busy pick now waits twice as long after each busy answer, from 5 seconds up to a minute, and after 30 minutes of busy time tries only every 5 minutes. It never fails for being busy: a failed pick holds every later message until the user picks again (the 2026-09-27 decision in session_chat_model_selection_alert.rs), and a pick left behind a permission prompt while the user is away, or Ghostex's own plan-mode restore, would then hold their next message. Busy time counts only the waits the pick planned (plus one retry of slack), so a computer asleep or a stalled queue does not add to it; a session that sleeps answers `sessionNotRunning`, which ends the run. While a message waits behind the pick (a queued chat message, or a new coordinator's first message waiting for its box), the pick keeps the 5-second pace for its first 30 minutes of busy time, and the queue cuts a longer wait short as soon as one arrives (`BUSY_WAIT_SHORTCUT_MS`), so the message waits at most about 7.5 seconds for the next try instead of 5. After that it is tried every minute while a message waits and every 5 minutes otherwise: a never-started coordinator's first message stays waiting behind a startup dialog for good, and kept the pick at 5 seconds for ever, while a minute bounds how long a message waits once the agent is free. A dialog or a running turn is the only busy answer; a state that waiting cannot change has its own codes and limit (`UNAPPLIABLE_LIMIT_MS`).
 /// The usual wait before a failed pick is tried again, and a busy pick's first wait.
 pub(crate) const RETRY_MS: i64 = 5_000;
 const BUSY_RETRY_MAX_MS: i64 = 60_000;
@@ -436,13 +436,20 @@ fn forget_busy_run(selection_id: &str) {
     }
 }
 
-/// Whether a message arriving behind this pick may end its busy wait early: not once the pick has
-/// been busy for `BUSY_SLOW_AFTER_MS`, when it is paced slowly whatever waits behind it.
-pub(crate) fn busy_wait_ends_for_messages(selection_id: &str) -> bool {
-    busy_runs().lock().map_or(true, |runs| {
+/// How long a busy pick's remaining wait may be before a message waiting behind it ends the wait
+/// early: `BUSY_WAIT_SHORTCUT_MS` at first; once the pick has been busy for `BUSY_SLOW_AFTER_MS`,
+/// `BUSY_RETRY_MAX_MS`, so a message arriving during a 5-minute wait ends it once and the pick is
+/// then tried every minute while the message waits (`busy_retry`).
+pub(crate) fn busy_wait_shortcut_ms(selection_id: &str) -> i64 {
+    let slow = busy_runs().lock().is_ok_and(|runs| {
         runs.get(selection_id)
-            .is_none_or(|run| run.busy_ms < BUSY_SLOW_AFTER_MS)
-    })
+            .is_some_and(|run| run.busy_ms >= BUSY_SLOW_AFTER_MS)
+    });
+    if slow {
+        BUSY_RETRY_MAX_MS
+    } else {
+        BUSY_WAIT_SHORTCUT_MS
+    }
 }
 
 /// Notes this failure and answers how long a busy pick waits before its next try (`None` when the
@@ -470,7 +477,12 @@ fn busy_retry(
     run.last_ms = now_ms;
     run.count += 1;
     let wait = if run.busy_ms >= BUSY_SLOW_AFTER_MS {
-        BUSY_RETRY_SLOW_MS
+        // A message behind a pick busy this long waits at most a minute once the agent is free.
+        if message_waiting {
+            BUSY_RETRY_MAX_MS
+        } else {
+            BUSY_RETRY_SLOW_MS
+        }
     } else if message_waiting {
         RETRY_MS
     } else {
@@ -510,10 +522,10 @@ const MISSING_INPUT_BOX_LIMIT_MS: i64 = 120_000;
 /// does: waiting does not change those states, and a pending pick holds every later message.
 const UNAPPLIABLE_LIMIT_MS: i64 = 120_000;
 
-/// When each pick first met an unreadable setting or an unreachable terminal, until it meets
-/// something else.
-fn unappliable_since() -> &'static Mutex<HashMap<String, i64>> {
-    static SINCE: OnceLock<Mutex<HashMap<String, i64>>> = OnceLock::new();
+/// Each pick's run of unreadable settings or unreachable terminals, until it meets something else:
+/// the time counted so far and the last try.
+fn unappliable_since() -> &'static Mutex<HashMap<String, (i64, i64)>> {
+    static SINCE: OnceLock<Mutex<HashMap<String, (i64, i64)>>> = OnceLock::new();
     SINCE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -530,8 +542,12 @@ fn unappliable_exhausted(selection_id: &str, error: &DomainStateError, now_ms: i
         since.remove(selection_id);
         return false;
     }
-    let first = *since.entry(selection_id.to_string()).or_insert(now_ms);
-    now_ms - first >= UNAPPLIABLE_LIMIT_MS
+    // As in `busy_retry`, each gap counts at most the planned retry plus as much slack, so a
+    // computer asleep between two tries cannot use up the limit (it takes at least 12 tries).
+    let (counted, last) = since.entry(selection_id.to_string()).or_insert((0, now_ms));
+    *counted += (now_ms - *last).clamp(0, 2 * RETRY_MS);
+    *last = now_ms;
+    *counted >= UNAPPLIABLE_LIMIT_MS
 }
 
 /// When each pick first found no input box, until it finds one.
@@ -730,7 +746,7 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                     ))
                 } else if unappliable_exhausted(&pending.id, &error, now_ms) {
                     crate::session_chat_codex_picker::unsupported_selection(format!(
-                        "For {} minutes Ghostex could not read the agent's current setting or reach its terminal, so it stopped trying to apply this change. {}",
+                        "For {} minutes Ghostex could not read the agent's current setting or reach its terminal, so it stopped trying to apply this change. {} Open the terminal to see what the agent shows, then pick the change again.",
                         UNAPPLIABLE_LIMIT_MS / 60_000,
                         error.message
                     ))
