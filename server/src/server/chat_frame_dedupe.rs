@@ -43,12 +43,15 @@ use crate::events::EventPayload;
 
 /// The side fields a state frame may leave out when unchanged: each is read with `if let Some` in
 /// `gx-chat-core`'s state frame apply (checked against 11.2.1's core too).
-const OMITTABLE_FIELDS: [&str; 5] = [
+/// `sessionWork` (an ordinary session's own work items) came after 11.2.1: an older core ignores
+/// it, and every core that reads it reads a missing one as unchanged.
+const OMITTABLE_FIELDS: [&str; 6] = [
     "coordinatorThreads",
     "resourceIndex",
     "draft",
     "queue",
     "agentMessageDeliveries",
+    "sessionWork",
 ];
 
 /// What one socket last sent of each omittable field, per chat.
@@ -123,7 +126,7 @@ fn diff(old: &Value, new: &Value, path: &mut Vec<Value>, ops: &mut Vec<Value>) {
 pub(crate) struct ChatFrameShare {
     chat: (String, String),
     full: bool,
-    digests: [Option<u64>; 5],
+    digests: [Option<u64>; 6],
     trimmed: Mutex<Vec<(u8, EventPayload)>>,
 }
 

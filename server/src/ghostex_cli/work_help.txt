@@ -46,8 +46,8 @@ plain title, the rest in --detail, one-click answers with --answers and
 the next free tag. wait says what it waits on: another item, a question, an
 event or words. done finishes it with the one line worth keeping; drop takes
 it off (restore brings it back for 7 days).
---thread attaches another session working on it: the item then shows that
-session's live state, and opens it in one click.
+--thread names another session working on it (one you lead with ghostex
+agents send); in an ordinary session's Work panel the item lists it by name.
 
 topic prints the line at the top of the Work panel, or sets it: what this
 session is about, in one line. A topic the user wrote stays theirs: setting

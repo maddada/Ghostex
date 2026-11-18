@@ -79,8 +79,9 @@ pub use restore::*;
 pub use role::*;
 pub(crate) use seen_threads::*;
 pub use session_work::{
-    insert_session_work, read_topic, session_work_summary, work_items_extension_on, write_topic,
-    WORK_ITEMS_EXTENSION, WORK_ITEMS_OFF,
+    carry_session_work, insert_session_work, read_topic, session_work_summary,
+    take_summary_changes, work_items_extension_on, write_topic, WORK_ITEMS_EXTENSION,
+    WORK_ITEMS_OFF,
 };
 pub use sleep_threads::*;
 pub use stale_report::*;

@@ -118,6 +118,17 @@ pub fn restore_previous_session(
         (project_id, session_id),
         (&restored_project, &restored_id),
     );
+    // Its own work items and Topic, and what `agents send --with-next` held for it, come along.
+    crate::coordinators::carry_session_work(
+        db,
+        &(project_id.to_string(), session_id.to_string()),
+        &(restored_project.clone(), restored_id.clone()),
+    );
+    crate::session_chat_send::move_held_with_next(
+        db,
+        (project_id, session_id),
+        (&restored_project, &restored_id),
+    );
     // A failure here leaves an extra history row and changes nothing else.
     let _ = call(
         "/api/removeSession",

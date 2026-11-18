@@ -9,16 +9,20 @@
 //! by each one. The user approved `--with-next` with the work items plan (Q4134, then Q4135 A).
 //! Ghostex already holds a coordinator's own informational notes this way (CDXC:Coordinators
 //! 2026-11-18 at `CoordinatorNotes::asks_action` in session_chat_queue_runtime/send.rs). The held
-//! messages live in the session's record (`runtimeSettings.heldWithNext`), so they outlive a
+//! messages live in `metadata` (`heldWithNext:<session>`), so they outlive a
 //! restart, and go as messages of their own, so the chat shows each as the agent message it is.
 //! SEE-ALSO: server/src/ghostex_cli/agents/delivery.rs (`hold_with_next`).
 
 use super::*;
 
-/// The key in `runtimeSettings`.
-const RUNTIME_KEY: &str = "heldWithNext";
+/// Where the held messages are kept (the `metadata` table), one row per session:
+/// `heldWithNext:<projectId>:<sessionId>` → `[{text, sendRequestId, at}]`. Not the session's
+/// `runtimeSettings`, which many paths write whole and could drop or bring back a note.
+const METADATA_PREFIX: &str = "heldWithNext:";
 /// Messages one session may hold; a sender with more to say is better off saying it in one.
-const MAX_HELD: usize = 20;
+const MAX_HELD: usize = 5;
+/// How much text one session may hold in all: the send that carries them types each one.
+const MAX_HELD_BYTES: usize = 64 * 1024;
 
 fn lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -27,18 +31,19 @@ fn lock() -> std::sync::MutexGuard<'static, ()> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+fn metadata_key(project_id: &str, session_id: &str) -> String {
+    format!("{METADATA_PREFIX}{project_id}:{session_id}")
+}
+
 fn read_held(db: &rusqlite::Connection, project_id: &str, session_id: &str) -> Vec<Value> {
-    DomainRepository::new(db, "")
-        .get_session(project_id, session_id)
-        .ok()
-        .flatten()
-        .and_then(|session| {
-            session
-                .pointer(&format!("/runtimeSettings/{RUNTIME_KEY}"))
-                .and_then(Value::as_array)
-                .cloned()
-        })
-        .unwrap_or_default()
+    db.query_row(
+        "SELECT value FROM metadata WHERE key = ?1",
+        rusqlite::params![metadata_key(project_id, session_id)],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+    .and_then(|text| serde_json::from_str::<Vec<Value>>(&text).ok())
+    .unwrap_or_default()
 }
 
 fn write_held(
@@ -47,14 +52,39 @@ fn write_held(
     session_id: &str,
     held: &[Value],
 ) -> Result<(), DomainStateError> {
-    db.execute(
-        &format!(
-            "UPDATE sessions SET runtimeSettingsJson = json_set(runtimeSettingsJson, '$.{RUNTIME_KEY}', json(?3)) WHERE projectId = ?1 AND sessionId = ?2"
-        ),
-        rusqlite::params![project_id, session_id, Value::from(held.to_vec()).to_string()],
-    )
-    .map(|_| ())
-    .map_err(|error| DomainStateError::corrupt_state(error.to_string()))
+    let key = metadata_key(project_id, session_id);
+    let result = if held.is_empty() {
+        db.execute(
+            "DELETE FROM metadata WHERE key = ?1",
+            rusqlite::params![key],
+        )
+    } else {
+        db.execute(
+            "INSERT INTO metadata (key, value, updatedAt) VALUES (?1, ?2, ?3)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt",
+            rusqlite::params![
+                key,
+                Value::from(held.to_vec()).to_string(),
+                crate::coordinators::now_iso()
+            ],
+        )
+    };
+    result
+        .map(|_| ())
+        .map_err(|error| DomainStateError::corrupt_state(error.to_string()))
+}
+
+/// A restored session is a new row: what was held for the closed one moves to it
+/// (previous_session_restore.rs).
+pub(crate) fn move_held_with_next(db: &rusqlite::Connection, from: (&str, &str), to: (&str, &str)) {
+    let _lock = lock();
+    let held = read_held(db, from.0, from.1);
+    if held.is_empty() {
+        return;
+    }
+    if write_held(db, to.0, to.1, &held).is_ok() {
+        let _ = write_held(db, from.0, from.1, &[]);
+    }
 }
 
 /// Holds `text` for the session. Returns how many it holds now. A repeated `sendRequestId` is the
@@ -79,9 +109,16 @@ fn hold(
             .any(|message| message["sendRequestId"].as_str() == Some(id))
     });
     if !repeated {
-        if held.len() >= MAX_HELD {
+        let bytes: usize = held
+            .iter()
+            .filter_map(|message| message["text"].as_str())
+            .map(str::len)
+            .sum();
+        if held.len() >= MAX_HELD || bytes + text.len() > MAX_HELD_BYTES {
             return Err(DomainStateError::bad_request(format!(
-                "This session already holds {MAX_HELD} messages for its next one. Send this one without --with-next, or say it in fewer messages."
+                "This session already holds {} messages for its next one ({} KB at most in all). Send this one without --with-next, or say it in fewer, shorter messages.",
+                MAX_HELD,
+                MAX_HELD_BYTES / 1024
             )));
         }
         held.push(json!({

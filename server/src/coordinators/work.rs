@@ -1524,12 +1524,26 @@ fn said_done(item: &WorkItem) -> bool {
     })
 }
 
+/// A coordinator's idle floor (turns.rs). An ordinary session's items have none: its turns are
+/// not followed, so its In progress items stay In progress, as its Work panel shows them
+/// (session_work.rs builds them without one).
+fn coordinator_idle_floor(
+    db: &Connection,
+    key: &SessionKey,
+    now: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
+    super::records::read_coordinator(db, &key.0, &key.1)
+        .ok()
+        .flatten()
+        .map(|_| super::turns::idle_floor_for(db, key, now))
+}
+
 /// What a request for an item answers: the item as clients and the CLI read it.
 fn answer(item: &WorkItem, threads: &[Value], db: &Connection, key: &SessionKey) -> Value {
     let items = list_work_items(db, key).unwrap_or_default();
-    let floor = super::turns::idle_floor_for(db, key, Utc::now());
+    let floor = coordinator_idle_floor(db, key, Utc::now());
     let context = WorkContext::new(threads, &items)
-        .with_idle_floor(Some(floor))
+        .with_idle_floor(floor)
         .with_coordinator(Some(key));
     item_value(item, &context, PANEL_HISTORY)
 }
@@ -1600,10 +1614,13 @@ pub fn handle_work_request(
         let items = list_work_items(db, key)?;
         let all = params.get("all").and_then(Value::as_bool) == Some(true);
         let now = Utc::now();
-        let floor = super::turns::idle_floor_for(db, key, now);
-        let mut work = work_value(threads, &items, all, now, Some(floor), Some(key));
-        if let Some(notice) = idle_notice(&work) {
-            work["idleNotice"] = json!(notice);
+        let floor = coordinator_idle_floor(db, key, now);
+        let mut work = work_value(threads, &items, all, now, floor, Some(key));
+        // The notice is worded for a coordinator; an ordinary session's agent is not told it.
+        if floor.is_some() {
+            if let Some(notice) = idle_notice(&work) {
+                work["idleNotice"] = json!(notice);
+            }
         }
         return Ok((work, false));
     }

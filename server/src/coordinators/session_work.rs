@@ -35,6 +35,9 @@ pub const WORK_ITEMS_EXTENSION: &str = "thread-brief";
 /// What an ordinary session hears when it keeps work items with the extension off.
 pub const WORK_ITEMS_OFF: &str = "Work items are off for this session. Turn on Work items in Settings > Extensions to keep work items in ordinary sessions.";
 
+/// What a coordinator's thread hears when it keeps work items: its coordinator keeps them.
+pub const THREAD_KEEPS_NONE: &str = "This session is a coordinator's thread: its coordinator keeps the work items. Put what you need from the user before them with `ghostex needs-you add \"<what to do>\"`, and report the rest to your coordinator.";
+
 /// Where every session's Topic is kept (the `metadata` table): `{"<projectId>:<sessionId>":
 /// {text, byUser, at}}`.
 const TOPICS_KEY: &str = "sessionWorkTopics";
@@ -139,8 +142,75 @@ struct SessionWorkCache {
     enabled: bool,
     /// Ordinary sessions with items or a Topic: their `sessionWork`.
     values: HashMap<SessionKey, Value>,
-    /// Coordinators and their threads: never an ordinary session's Work panel.
+    /// Coordinators and their threads (here or on another computer): never an ordinary
+    /// session's Work panel.
     excluded: HashSet<SessionKey>,
+    /// What each value was built from, and when: an unchanged one is kept, rebuilt at least every
+    /// minute for its clock-dependent parts (Finished today).
+    inputs: HashMap<SessionKey, (Vec<WorkItem>, Value, std::time::Instant)>,
+    /// The tick has filled it once: before that, nothing counts as changed for the extension.
+    primed: bool,
+}
+
+/// How long a session's work built from unchanged inputs is kept.
+const REBUILD_EVERY: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// The sessions whose work in short (`session_work_summary`) changed since the supervisor last
+/// asked: it tells the extension API's listeners their sessions changed (`sessionsChanged`).
+static SUMMARY_CHANGES: Mutex<Vec<SessionKey>> = Mutex::new(Vec::new());
+
+/// Takes the sessions whose work in short changed (server/coordinator_runtime.rs).
+pub fn take_summary_changes() -> Vec<SessionKey> {
+    SUMMARY_CHANGES
+        .lock()
+        .map(|mut changes| std::mem::take(&mut *changes))
+        .unwrap_or_default()
+}
+
+/// Whether the extension is on, read again only when its state file changed.
+fn extension_on_cached() -> bool {
+    static SEEN: Mutex<Option<(Option<std::time::SystemTime>, bool, bool)>> = Mutex::new(None);
+    let paths = crate::paths::get_gxserver_paths(None);
+    let modified = std::fs::metadata(&paths.extensions_store_file)
+        .and_then(|metadata| metadata.modified())
+        .ok();
+    let installed = paths
+        .extensions_dir
+        .join("installed")
+        .join(WORK_ITEMS_EXTENSION)
+        .is_dir();
+    let Ok(mut seen) = SEEN.lock() else {
+        return work_items_extension_on(&paths);
+    };
+    if let Some((at, was_installed, on)) = *seen {
+        if at == modified && was_installed == installed {
+            return on;
+        }
+    }
+    let on = work_items_extension_on(&paths);
+    *seen = Some((modified, installed, on));
+    on
+}
+
+/// This computer's sessions that are threads of a coordinator on another computer
+/// (`REMOTE_COORDINATOR_THREAD_KEY`): their coordinator keeps their work.
+fn remote_threads(db: &Connection) -> Vec<SessionKey> {
+    let pattern = format!("%{}%", super::REMOTE_COORDINATOR_THREAD_KEY);
+    let Ok(mut statement) = db.prepare_cached(
+        "SELECT projectId, sessionId FROM sessions WHERE runtimeSettingsJson LIKE ?1",
+    ) else {
+        return Vec::new();
+    };
+    statement
+        .query_map([pattern], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default()
+}
+
+fn session_row_exists(db: &Connection, key: &SessionKey) -> bool {
+    db.prepare_cached("SELECT 1 FROM sessions WHERE projectId = ?1 AND sessionId = ?2")
+        .and_then(|mut statement| statement.exists([&key.0, &key.1]))
+        .unwrap_or(false)
 }
 
 fn cache() -> &'static Mutex<SessionWorkCache> {
@@ -174,7 +244,8 @@ fn empty_work() -> Value {
 }
 
 /// An ordinary session's work in short, for the Work items extension's sidebar list (the
-/// extension API's sessions, extensions/ext_api.rs): `{topic, open, waiting, finishedToday}`, or
+/// extension API's sessions, extensions/ext_api.rs): `{topic, open, forYou, finishedToday}` (for
+/// you is Needs you plus Blocked), or
 /// `Value::Null` for a session with none (or while the extension is off).
 pub fn session_work_summary(project_id: &str, session_id: &str) -> Value {
     let Ok(cache) = cache().lock() else {
@@ -186,6 +257,11 @@ pub fn session_work_summary(project_id: &str, session_id: &str) -> Value {
     else {
         return Value::Null;
     };
+    summary_of(value)
+}
+
+/// [`session_work_summary`] of one `sessionWork` value.
+fn summary_of(value: &Value) -> Value {
     let counts = &value["work"]["counts"];
     let count = |status: &str| counts[status].as_u64().unwrap_or(0);
     let open: u64 = ["needs", "blocked", "moving", "idle", "waiting", "later"]
@@ -195,7 +271,7 @@ pub fn session_work_summary(project_id: &str, session_id: &str) -> Value {
     json!({
         "topic": value["topic"]["text"].as_str().unwrap_or_default(),
         "open": open,
-        "waiting": count("needs") + count("blocked"),
+        "forYou": count("needs") + count("blocked"),
         "finishedToday": count("finished"),
     })
 }
@@ -229,33 +305,53 @@ fn session_value(items: &[WorkItem], topic: Value, key: &SessionKey) -> Value {
 
 /// Rebuilds every ordinary session's `sessionWork` after the coordinators' panels. `items` are the
 /// work items no coordinator took (every ordinary session's), `excluded` the coordinators and
-/// their threads. Returns the sessions whose copy changed (their chats are republished), and
-/// every one that had a copy when the extension was turned on or off.
+/// their threads. Sessions with no row any more are left out; one whose items and Topic are
+/// unchanged keeps its value. Returns the sessions whose copy changed (their chats are
+/// republished), and every one that had a copy when the extension was turned on or off.
 pub(super) fn refresh_session_work(
+    db: &Connection,
     items: HashMap<SessionKey, Vec<WorkItem>>,
     topics: &Map<String, Value>,
-    excluded: HashSet<SessionKey>,
+    mut excluded: HashSet<SessionKey>,
 ) -> Vec<SessionKey> {
-    let enabled = work_items_extension_on(&crate::paths::get_gxserver_paths(None));
+    let enabled = extension_on_cached();
+    excluded.extend(remote_threads(db));
     let mut keys: HashSet<SessionKey> = items.keys().cloned().collect();
     for record in topics.keys() {
         if let Some((project_id, session_id)) = record.split_once(':') {
             keys.insert((project_id.to_string(), session_id.to_string()));
         }
     }
-    let mut values = HashMap::new();
-    if enabled {
-        for key in keys.into_iter().filter(|key| !excluded.contains(key)) {
-            let own = items.get(&key).map(Vec::as_slice).unwrap_or_default();
-            values.insert(
-                key.clone(),
-                session_value(own, topic_in(topics, &key), &key),
-            );
-        }
-    }
     let Ok(mut cache) = cache().lock() else {
         return Vec::new();
     };
+    let mut previous_inputs = std::mem::take(&mut cache.inputs);
+    let mut inputs = HashMap::new();
+    let mut values = HashMap::new();
+    if enabled {
+        for key in keys.into_iter().filter(|key| !excluded.contains(key)) {
+            let own = items.get(&key).cloned().unwrap_or_default();
+            let topic = topic_in(topics, &key);
+            let kept = previous_inputs.remove(&key).filter(|(was, was_topic, at)| {
+                *was == own && *was_topic == topic && at.elapsed() < REBUILD_EVERY
+            });
+            let kept_value = kept.as_ref().and_then(|_| cache.values.get(&key).cloned());
+            let (value, at) = match (kept, kept_value) {
+                (Some((_, _, at)), Some(value)) => (value, at),
+                _ => {
+                    if !session_row_exists(db, &key) {
+                        continue;
+                    }
+                    (
+                        session_value(&own, topic.clone(), &key),
+                        std::time::Instant::now(),
+                    )
+                }
+            };
+            values.insert(key.clone(), value);
+            inputs.insert(key, (own, topic, at));
+        }
+    }
     let mut changed: Vec<SessionKey> = if cache.enabled != enabled {
         // The Work button comes or goes: the chats with work republish now, the rest pick it up
         // with their next frame.
@@ -276,12 +372,55 @@ pub(super) fn refresh_session_work(
     };
     changed.sort();
     changed.dedup();
+    if cache.primed {
+        let summary =
+            |values: &HashMap<SessionKey, Value>, key: &SessionKey| values.get(key).map(summary_of);
+        let moved: Vec<SessionKey> = changed
+            .iter()
+            .filter(|key| summary(&cache.values, key) != summary(&values, key))
+            .cloned()
+            .collect();
+        if let Ok(mut pending) = SUMMARY_CHANGES.lock() {
+            pending.extend(moved);
+        }
+    }
     *cache = SessionWorkCache {
         enabled,
         values,
         excluded,
+        inputs,
+        primed: true,
     };
     changed
+}
+
+/// A restored session is a new row: its work items and Topic move to it, unless it already has
+/// some (previous_session_restore.rs).
+pub fn carry_session_work(db: &Connection, from: &SessionKey, to: &SessionKey) {
+    if from == to {
+        return;
+    }
+    let _ = db.execute(
+        r#"
+        UPDATE coordinator_work_items SET coordinatorProjectId = ?3, coordinatorSessionId = ?4
+        WHERE coordinatorProjectId = ?1 AND coordinatorSessionId = ?2
+          AND NOT EXISTS (
+            SELECT 1 FROM coordinator_work_items
+            WHERE coordinatorProjectId = ?3 AND coordinatorSessionId = ?4
+          )
+        "#,
+        params![from.0, from.1, to.0, to.1],
+    );
+    let mut topics = read_topics(db);
+    if !topics.contains_key(&topic_record_key(to)) {
+        if let Some(topic) = topics.remove(&topic_record_key(from)) {
+            topics.insert(topic_record_key(to), topic);
+            let _ = db.execute(
+                "UPDATE metadata SET value = ?2, updatedAt = ?3 WHERE key = ?1",
+                params![TOPICS_KEY, Value::Object(topics).to_string(), now_iso()],
+            );
+        }
+    }
 }
 
 /// Whether `key` may keep work items of its own: an existing ordinary session while the extension
@@ -290,8 +429,11 @@ pub(super) fn require_session_work(
     repository: &crate::domain::DomainRepository<'_>,
     key: &SessionKey,
 ) -> Result<(), DomainStateError> {
-    if repository.get_session(&key.0, &key.1)?.is_none() {
+    let Some(session) = repository.get_session(&key.0, &key.1)? else {
         return Err(DomainStateError::not_found("No such session."));
+    };
+    if super::remote_coordinator_of_session(&session).is_some() {
+        return Err(DomainStateError::bad_request(THREAD_KEEPS_NONE));
     }
     if !work_items_extension_on(&crate::paths::get_gxserver_paths(None)) {
         return Err(DomainStateError::bad_request(WORK_ITEMS_OFF));

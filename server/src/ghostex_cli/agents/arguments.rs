@@ -180,6 +180,13 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
             "--if-none goes with --main-coordinator.".into(),
         ));
     }
+    // --if-none starts a session with the message as its first request, which cannot wait for a
+    // next one.
+    if parsed.if_none.is_some() && parsed.delivery == Delivery::WithNext {
+        return Err(CliError::Other(
+            "--with-next can't go with --if-none: a session started for the message gets it as its first request. Send it without --with-next.".into(),
+        ));
+    }
     let main_send = parsed.command == "send" && parsed.main_coordinator;
     if main_send && (parsed.task.is_some() || parsed.allow_hidden || parsed.standalone) {
         return Err(CliError::Other(

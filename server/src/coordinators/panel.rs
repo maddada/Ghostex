@@ -1048,6 +1048,7 @@ pub fn refresh_coordinator_panels(
     drop(panels);
     // The items left are ordinary sessions' own (session_work.rs).
     changed.extend(super::session_work::refresh_session_work(
+        db,
         board_items,
         &topics,
         not_ordinary,

@@ -115,6 +115,14 @@ pub fn handle_coordinator_endpoint(
         // The work items: list them, or add, update, ask, wait on, finish or drop one (work.rs).
         "/api/coordinatorWork" => {
             let key = required_ids(params, "projectId", "sessionId")?;
+            // A coordinator's thread keeps none: an item it added would show nowhere.
+            if read_coordinator(db, &key.0, &key.1)?.is_none()
+                && read_thread(db, &key.0, &key.1)?.is_some()
+            {
+                return Err(DomainStateError::bad_request(
+                    super::session_work::THREAD_KEEPS_NONE,
+                ));
+            }
             // An ordinary session keeps its own while Work items is on (session_work.rs).
             let ordinary = match resolve_coordinator(db, &key) {
                 Ok(_) => false,
@@ -123,14 +131,14 @@ pub fn handle_coordinator_endpoint(
                     true
                 }
             };
-            // The line at the top of the Work panel, for every session.
+            // The line at the top of the Work panel, for every session. Here it is an agent's:
+            // the user's own rewrite comes through /api/coordinatorBoard, and stays theirs.
             if params.get("op").and_then(Value::as_str) == Some("topic") {
                 let words = params
                     .get("text")
                     .and_then(Value::as_str)
                     .unwrap_or_default();
-                let by_user = params.get("byUser").and_then(Value::as_bool) == Some(true);
-                let topic = super::session_work::write_topic(db, &key, words, by_user)?;
+                let topic = super::session_work::write_topic(db, &key, words, false)?;
                 return Ok(CoordinatorEndpointOutput {
                     result: json!({ "topic": topic }),
                     changed_sessions: Vec::new(),
