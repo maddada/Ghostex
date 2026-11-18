@@ -2056,14 +2056,16 @@ impl NativeChatView {
                     .child(right),
             );
         }
-        // A finished card in the dock goes away with its × (gx-chat-core `dock`).
+        // A finished card in the dock goes away with its × (gx-chat-core `dock`). It asks no
+        // question, so the × reads Mark as read, as the dock's finished row does (the rule since
+        // the Quiet Dismiss work: Mark as read when there's no question); it sends nothing.
         let dismiss = card["dismiss"].clone();
         if dismiss.is_object() {
             top = top.child(
                 div()
                     .id(gpui::SharedString::from(format!("work-dismiss:{key}")))
                     .role(gpui::Role::Button)
-                    .aria_label("Dismiss")
+                    .aria_label("Mark as read")
                     .flex_shrink_0()
                     .size(px(20.0 * s))
                     .flex()
@@ -2073,7 +2075,7 @@ impl NativeChatView {
                     .chat_cursor_pointer()
                     .hover(|style| style.bg(p.foreground.opacity(0.08)))
                     .tooltip(|window, cx| {
-                        gpui_component::tooltip::Tooltip::new("Dismiss").build(window, cx)
+                        gpui_component::tooltip::Tooltip::new("Mark as read").build(window, cx)
                     })
                     .child(
                         svg()
