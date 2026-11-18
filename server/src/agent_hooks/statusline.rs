@@ -558,6 +558,7 @@ pub fn read_statusline_payload_file(path: &Path) -> Option<ClaudeStatuslinePaylo
 }
 
 pub fn run_statusline_hook(args: Vec<String>) -> Result<(), DomainStateError> {
+    let started = helper_started();
     let hook_state_dir = expand_home_path(
         args.first()
             .map(String::as_str)
@@ -571,7 +572,7 @@ pub fn run_statusline_hook(args: Vec<String>) -> Result<(), DomainStateError> {
             .and_then(|index| args.get(index + 1))
             .map(String::as_str),
     );
-    let Some((input, late_since)) = read_statusline_input() else {
+    let Some((input, late_since)) = read_statusline_input(started) else {
         return Ok(());
     };
     store_and_render_statusline(&hook_state_dir, agent, render, &input, late_since)
@@ -581,9 +582,25 @@ pub fn run_statusline_hook(args: Vec<String>) -> Result<(), DomainStateError> {
 /// GitHub #666 (Windows, about 40 agents): a statusline helper read its stdin with no time limit, so one whose writer never closed the pipe waited for ever, and they piled up (about 7 an hour). Claude Code and Cursor write the whole payload at once, so after this long the helper uses what arrived when it is a whole JSON object (a writer that sent the payload but kept the pipe open), and otherwise gives up quietly: it stores and prints nothing, as an empty update would.
 const STATUSLINE_INPUT_LIMIT: Duration = Duration::from_secs(5);
 
+/// When this helper began: on Windows its process's creation time, elsewhere the moment the hook
+/// starts, so a helper slow to start is not taken for a later one by the late-payload guard
+/// (`store_and_render_statusline`).
+fn helper_started() -> SystemTime {
+    #[cfg(windows)]
+    if let Some(created) =
+        crate::platform::process::process_creation_filetime(i64::from(std::process::id()))
+    {
+        // FILETIME counts 100 ns ticks from 1601.
+        const UNIX_EPOCH_FILETIME: u64 = 116_444_736_000_000_000;
+        if let Some(since) = created.checked_sub(UNIX_EPOCH_FILETIME) {
+            return SystemTime::UNIX_EPOCH + Duration::from_nanos(since.saturating_mul(100));
+        }
+    }
+    SystemTime::now()
+}
+
 /// The payload on stdin, or `None` when it did not end within `STATUSLINE_INPUT_LIMIT` and what arrived is not a whole JSON object. A payload used at the limit comes with when this helper began reading (`store_and_render_statusline` then never stores it over a newer one). The reading thread is left blocked; returning ends the process with it.
-fn read_statusline_input() -> Option<(String, Option<SystemTime>)> {
-    let started = SystemTime::now();
+fn read_statusline_input(started: SystemTime) -> Option<(String, Option<SystemTime>)> {
     let received = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let (sender, receiver) = std::sync::mpsc::channel();
     let buffer = received.clone();
@@ -689,6 +706,7 @@ fn exit_when_parent_exits() {
 pub fn run_native_statusline_hook(args: Vec<String>) -> Result<(), DomainStateError> {
     use base64::Engine as _;
     use std::io::Write as _;
+    let started = helper_started();
     exit_when_parent_exits();
     let script = PathBuf::from(args.first().map(String::as_str).unwrap_or_default());
     let agent = if script
@@ -721,7 +739,7 @@ pub fn run_native_statusline_hook(args: Vec<String>) -> Result<(), DomainStateEr
         })
         .and_then(|bytes| String::from_utf8(bytes).ok())
         .filter(|wrapped| !wrapped.trim().is_empty());
-    let Some((input, late_since)) = read_statusline_input() else {
+    let Some((input, late_since)) = read_statusline_input(started) else {
         return Ok(());
     };
     let Some(wrapped) = wrapped else {
@@ -808,7 +826,10 @@ fn store_and_render_statusline(
     // later helper for the same session may already have stored a newer one (seen in review: the
     // file read NEW, then OLD 4 s later), which left the chat's pills and the shared 5h/7d limits
     // stale. Such a payload is stored only when the file has not changed since this helper began
-    // reading; its line is still printed.
+    // reading; its line is still printed. A late store dates the file to when its helper began
+    // reading, so two late helpers are ordered by that too (the one that began later wins, as
+    // the payload it read is the newer one); the change watch compares times with `!=`, so it
+    // still fires.
     let newer_stored = |path: &Path| {
         late_since.is_some_and(|started| {
             fs::metadata(path)
@@ -817,7 +838,7 @@ fn store_and_render_statusline(
         })
     };
     if let Some(path) = path.filter(|path| !newer_stored(path)) {
-        store_statusline_payload(&path, &payload)?;
+        store_statusline_payload(&path, &payload, late_since)?;
     }
     if render {
         let line = match agent {
@@ -829,9 +850,11 @@ fn store_and_render_statusline(
     Ok(())
 }
 
+/// `dated`: the modified time the stored file gets, instead of now.
 fn store_statusline_payload(
     path: &Path,
     payload: &Map<String, Value>,
+    dated: Option<SystemTime>,
 ) -> Result<(), DomainStateError> {
     let Some(parent) = path.parent() else {
         return Ok(());
@@ -848,6 +871,13 @@ fn store_statusline_payload(
     })?;
     let temp_path = temp_path_for(path);
     fs::write(&temp_path, text).map_err(io_error)?;
+    if let Some(dated) = dated {
+        fs::File::options()
+            .write(true)
+            .open(&temp_path)
+            .and_then(|file| file.set_modified(dated))
+            .map_err(io_error)?;
+    }
     fs::rename(&temp_path, path).map_err(io_error)?;
     if is_new_session {
         prune_stale_statusline_payloads(parent, path);
