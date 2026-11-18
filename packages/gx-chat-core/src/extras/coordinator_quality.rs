@@ -90,9 +90,30 @@ pub fn dismiss(state: &mut ChatState) -> Vec<Effect> {
 pub fn pill(state: &ChatState) -> Option<ChatPill> {
     if state.session.coordinator_threads.is_none()
         || state.extras.coordinator_quality.hidden != Some(false)
+        || degraded_choice(state).is_none()
     {
         return None;
     }
+    let text = COORDINATOR_DEGRADED_TEXT.to_string();
+    Some(ChatPill {
+        id: QUALITY_PILL.to_string(),
+        label: text.clone(),
+        aria_label: format!("{text}. {ADVICE}"),
+        meta: ADVICE.to_string(),
+        menu: vec![json!({
+            "label": HIDE_LABEL,
+            "iconPath": "titlebar/eye-off.svg",
+            "command": { "type": DISMISS_COMMAND },
+        })],
+        ..ChatPill::default()
+    })
+}
+
+/// The model and effort the chat's model pill reads (`model|effort`) when they may give a
+/// degraded experience ([`coordinator_model_may_degrade`]); `None` on any other choice, and while
+/// the model is not known yet. The pill and the first-message card's confirm line
+/// (composer/first_message.rs) both read it.
+pub fn degraded_choice(state: &ChatState) -> Option<String> {
     let catalog =
         session_option_catalog(&state.menus.model_catalog, state.session.agent.as_deref());
     let values = state.menus.options.state();
@@ -115,26 +136,19 @@ pub fn pill(state: &ChatState) -> Option<ChatPill> {
             option_value_label(&state.menus.model_catalog, &catalog.model, values)
         })
     });
-    if !coordinator_model_may_degrade(
+    let effort = known("effort").map(|entry| entry.value.as_str());
+    coordinator_model_may_degrade(
         model.map(|entry| entry.value.as_str()),
         label
             .as_deref()
             .or(model.and_then(|entry| entry.label.as_deref())),
-        known("effort").map(|entry| entry.value.as_str()),
-    ) {
-        return None;
-    }
-    let text = COORDINATOR_DEGRADED_TEXT.to_string();
-    Some(ChatPill {
-        id: QUALITY_PILL.to_string(),
-        label: text.clone(),
-        aria_label: format!("{text}. {ADVICE}"),
-        meta: ADVICE.to_string(),
-        menu: vec![json!({
-            "label": HIDE_LABEL,
-            "iconPath": "titlebar/eye-off.svg",
-            "command": { "type": DISMISS_COMMAND },
-        })],
-        ..ChatPill::default()
+        effort,
+    )
+    .then(|| {
+        format!(
+            "{}|{}",
+            model.map(|entry| entry.value.as_str()).unwrap_or_default(),
+            effort.unwrap_or_default()
+        )
     })
 }

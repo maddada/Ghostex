@@ -361,6 +361,7 @@ pub fn send_refused(state: &ChatState) -> Option<String> {
         notice_card_visible: notice_visible(state),
         ..SendGate::default()
     })
+    .or_else(|| crate::composer::first_message::start_blocked(state))
     .map(str::to_string)
 }
 

@@ -150,6 +150,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::FirstMessageStart
         | ActionKind::FirstMessageEdit
         | ActionKind::FirstMessageToggle
+        | ActionKind::FirstMessageConfirmModel
         | ActionKind::SendQueue
         | ActionKind::ReorderQueue
         | ActionKind::MoveQueue

@@ -32,6 +32,7 @@ impl NativeChatView {
         }
         let s = p.scale;
         let busy = card["busy"] == true;
+        let start_blocked = card["startBlocked"] == true;
         let expanded = card["expanded"] == true;
         let collapsed_lines = card["collapsedLines"].as_u64().unwrap_or(2) as usize;
         let message = text(&card, "text");
@@ -58,12 +59,13 @@ impl NativeChatView {
                 Some("titlebar/player-play.svg"),
                 ToneButton::Primary,
                 None,
-                busy,
+                busy || start_blocked,
                 p,
             )
             .on_click(cx.listener(|this, _, _, cx| {
                 this.invoke(json!({ "type": "firstMessageStart" }), cx);
             }));
+        let degraded = self.render_first_message_degraded(&card, busy, p, cx);
         let header = div()
             .flex()
             .items_center()
@@ -160,6 +162,66 @@ impl NativeChatView {
                 .child(header)
                 .child(body)
                 .children(toggle)
+                .children(degraded)
+                .into_any_element(),
+        )
+    }
+
+    /// The card's confirm line while the model and effort it would start on may give a degraded
+    /// experience (CDXC:Coordinators 2026-11-18 on gx-chat-core `first_message::DEGRADED_TEXT`):
+    /// the model warning's amber mark, its words, and Confirm, which Start waits on.
+    fn render_first_message_degraded(
+        &mut self,
+        card: &serde_json::Value,
+        busy: bool,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let words = card["degradedText"].as_str()?.to_string();
+        let s = p.scale;
+        let confirmed = card["degradedConfirmed"] == true;
+        let label = if confirmed {
+            text(card, "confirmedLabel")
+        } else {
+            text(card, "confirmLabel")
+        };
+        let confirm = self
+            .tone_button(
+                "first-message-confirm-model",
+                &label,
+                Some(if confirmed {
+                    "titlebar/check.svg"
+                } else {
+                    "titlebar/alert-triangle.svg"
+                }),
+                ToneButton::Secondary,
+                None,
+                busy,
+                p,
+            )
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.invoke(json!({ "type": "firstMessageConfirmModel" }), cx);
+            }));
+        Some(
+            div()
+                .id("first-message-degraded")
+                .flex()
+                .items_center()
+                .min_w_0()
+                .gap(px(6.0 * s))
+                .pt(px(4.0 * s))
+                .text_size(px(12.0 * s))
+                .line_height(px(18.0 * s))
+                .text_color(p.muted)
+                .child(
+                    gpui::svg()
+                        .path("titlebar/alert-triangle.svg")
+                        .flex_shrink_0()
+                        .size(px(12.0 * s))
+                        .text_color(gpui::rgb(super::chat_pills::ATTENTION_COLOR)),
+                )
+                .child(div().flex_1().min_w_0().text_ellipsis().child(words))
+                .child(confirm)
                 .into_any_element(),
         )
     }

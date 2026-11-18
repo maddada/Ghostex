@@ -180,6 +180,7 @@ action_kinds! {
     FirstMessageStart => "firstMessageStart",
     FirstMessageEdit => "firstMessageEdit",
     FirstMessageToggle => "firstMessageToggle",
+    FirstMessageConfirmModel => "firstMessageConfirmModel",
     SendQueue => "sendQueue",
     ReorderQueue => "reorderQueue",
     MoveQueue => "moveQueue",

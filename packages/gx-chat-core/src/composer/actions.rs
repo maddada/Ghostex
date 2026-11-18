@@ -186,7 +186,10 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         }
         ActionKind::FirstMessageStart
         | ActionKind::FirstMessageEdit
-        | ActionKind::FirstMessageToggle => crate::composer::first_message::act(state, action),
+        | ActionKind::FirstMessageToggle
+        | ActionKind::FirstMessageConfirmModel => {
+            crate::composer::first_message::act(state, action)
+        }
         ActionKind::SendQueue => queue_rpc(
             state,
             ChatRpcMethod::SendSessionChatQueuedPrompt,

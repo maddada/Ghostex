@@ -36,6 +36,17 @@ pub const NOTE_NOT_SENT: &str = "Not sent yet";
 pub const PLACEHOLDER: &str = "Change the model and effort below if you like, then Start.";
 /// The lines the card shows before Show all.
 pub const COLLAPSED_LINES: u64 = 2;
+/// The line the card shows while the model and effort it would start on may give a degraded
+/// experience, until the user confirms them.
+///
+/// CDXC:Coordinators 2026-11-18 DECISION:
+/// User (follow-up to GitHub #658): the first-message card shows "This model might give a degraded experience." with a confirm control while the chosen model is one the model picker flags as low-end (gx-protocol `coordinator_model_may_degrade`). Start stays disabled until the user confirms, and Enter with a request typed must not start it either; a model that is not flagged hides the line and enables Start. A confirm holds for the model and effort it was given on only, so switching to another flagged pick asks again.
+/// SEE-ALSO: apps/desktop/src/app/native_chat/first_message_card.rs and apps/mobile/app/src/chat/native/composer/FirstMessageCard.tsx (the line and its Confirm), packages/gx-chat-core/src/extras/coordinator_quality.rs (`degraded_choice`, the rule's reading of the chat's model and effort).
+pub const DEGRADED_TEXT: &str = "This model might give a degraded experience.";
+pub const CONFIRM_LABEL: &str = "Confirm";
+pub const CONFIRMED_LABEL: &str = "Confirmed";
+/// Why Start and Enter wait (the send gate's reason, shown when Enter is pressed).
+pub const CONFIRM_FIRST: &str = "Confirm the model on the First message card before you start.";
 
 /// The card's own state in the chat.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -44,6 +55,9 @@ pub struct FirstMessageUi {
     pub expanded: bool,
     /// Start or Edit in flight.
     pub pending: Option<Pending>,
+    /// The flagged model and effort (`model|effort`, coordinator_quality `degraded_choice`) the
+    /// user confirmed starting on.
+    pub confirmed: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -85,6 +99,19 @@ pub fn waiting(state: &ChatState) -> bool {
     message(state).is_some()
 }
 
+/// The flagged model and effort the card would start on, while the user has not confirmed them.
+fn unconfirmed_degraded(state: &ChatState) -> Option<String> {
+    let choice = crate::extras::coordinator_quality::degraded_choice(state)?;
+    (state.composer.first_message.confirmed.as_deref() != Some(choice.as_str())).then_some(choice)
+}
+
+/// Why the coordinator may not start yet: a waiting first message on a flagged model the user has
+/// not confirmed. The chat box's send gate (`send_refused`) reads it, so Enter with a request
+/// typed waits as Start does.
+pub fn start_blocked(state: &ChatState) -> Option<&'static str> {
+    (waiting(state) && unconfirmed_degraded(state).is_some()).then_some(CONFIRM_FIRST)
+}
+
 /// The card, or `None` while no first message waits (or once Start has gone out).
 pub fn card(state: &ChatState) -> Option<Value> {
     let message = message(state)?;
@@ -112,6 +139,8 @@ pub fn card(state: &ChatState) -> Option<Value> {
         .collect::<Vec<_>>()
         .join("\n");
     let lines = preview.lines().count() as u64;
+    let degraded = crate::extras::coordinator_quality::degraded_choice(state);
+    let confirmed = degraded.is_some() && ui.confirmed == degraded;
     Some(json!({
         "title": TITLE,
         "note": if in_box { NOTE_IN_BOX } else { NOTE_NOT_SENT },
@@ -127,10 +156,15 @@ pub fn card(state: &ChatState) -> Option<Value> {
         "showAllLabel": SHOW_ALL_LABEL,
         "showLessLabel": SHOW_LESS_LABEL,
         "placeholder": PLACEHOLDER,
+        "degradedText": degraded.is_some().then_some(DEGRADED_TEXT),
+        "degradedConfirmed": confirmed,
+        "confirmLabel": CONFIRM_LABEL,
+        "confirmedLabel": CONFIRMED_LABEL,
+        "startBlocked": degraded.is_some() && !confirmed,
     }))
 }
 
-/// `firstMessageStart`, `firstMessageEdit` and `firstMessageToggle`.
+/// `firstMessageStart`, `firstMessageEdit`, `firstMessageToggle` and `firstMessageConfirmModel`.
 pub fn act(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     if !waiting(state) {
         return Vec::new();
@@ -141,6 +175,13 @@ pub fn act(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
             state.core.request_publish();
             return Vec::new();
         }
+        ActionKind::FirstMessageConfirmModel => {
+            // A second press takes the confirm back.
+            state.composer.first_message.confirmed = unconfirmed_degraded(state);
+            state.core.request_publish();
+            return Vec::new();
+        }
+        ActionKind::FirstMessageStart if start_blocked(state).is_some() => return Vec::new(),
         ActionKind::FirstMessageStart => {
             (ChatRpcMethod::StartSessionChatFirstMessage, Step::Starting)
         }
