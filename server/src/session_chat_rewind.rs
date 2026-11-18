@@ -83,8 +83,24 @@ const CLAUDE_REWIND_SUBMIT: &str = "\r";
 /// differently still reads the same.
 const CLAUDE_REWIND_TITLE: &str = "Rewind";
 const CLAUDE_REWIND_LIST_SUBTITLE: &str = "Restore the code and/or conversation";
-const CLAUDE_REWIND_CONFIRM_SUBTITLE: &str =
-    "Confirm you want to restore to the point before you sent this message";
+/// CDXC:SessionChat 2026-11-18 WHY:
+/// Claude Code 2.1.322 titled the confirmation stage "Confirm you want to restore [the conversation ]to the point before you sent this message:"; 2.1.326 shortened it to "Restore [the conversation ]to the point before you sent this message:". Matching only the old opening timed out every Claude rewind at the confirmation step ("did not answer the rewind confirmation step in time"). The stage is told apart by its tail, which both wordings share and the list stage's "…to the point before…" subtitle never carries, behind either opening.
+const CLAUDE_REWIND_CONFIRM_SUBTITLE_TAIL: &str = "to the point before you sent this message";
+const CLAUDE_REWIND_CONFIRM_SUBTITLE_OPENINGS: [&str; 2] =
+    ["Restore ", "Confirm you want to restore "];
+
+/// Whether `line` is the prompt list stage's subtitle.
+fn is_list_subtitle(line: &str) -> bool {
+    line.starts_with(CLAUDE_REWIND_LIST_SUBTITLE)
+}
+
+/// Whether `line` is the confirmation stage's subtitle, in either wording.
+fn is_confirm_subtitle(line: &str) -> bool {
+    CLAUDE_REWIND_CONFIRM_SUBTITLE_OPENINGS
+        .iter()
+        .any(|opening| line.starts_with(opening))
+        && line.contains(CLAUDE_REWIND_CONFIRM_SUBTITLE_TAIL)
+}
 
 /// The option this driver is allowed to choose, matched EXACTLY. Claude offers
 /// `Restore code and conversation` right above it whenever the turn touched
@@ -227,13 +243,10 @@ fn rewind_dialog_region(lines: &[String]) -> Option<&[String]> {
     Some(&lines[title..])
 }
 
-/// The dialog region, but only when it is the stage `subtitle` names.
-fn rewind_stage_region<'a>(lines: &'a [String], subtitle: &str) -> Option<&'a [String]> {
+/// The dialog region, but only when it is the stage whose subtitle `stage` recognises.
+fn rewind_stage_region<'a>(lines: &'a [String], stage: fn(&str) -> bool) -> Option<&'a [String]> {
     let region = rewind_dialog_region(lines)?;
-    region
-        .iter()
-        .any(|line| line.starts_with(subtitle))
-        .then_some(region)
+    region.iter().any(|line| stage(line)).then_some(region)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -828,7 +841,7 @@ impl RewindDriver<'_> {
     async fn wait_for_move<T: PartialEq>(
         &self,
         step: &str,
-        subtitle: &str,
+        stage: fn(&str) -> bool,
         previous: &T,
         read: impl Fn(&[String]) -> Option<T>,
     ) -> std::result::Result<(T, bool), DomainStateError> {
@@ -849,7 +862,7 @@ impl RewindDriver<'_> {
             }
             if let Some(screen) = self.capture().await {
                 let lines = screen_lines(&screen);
-                if let Some(value) = rewind_stage_region(&lines, subtitle).and_then(&read) {
+                if let Some(value) = rewind_stage_region(&lines, stage).and_then(&read) {
                     if value != *previous {
                         if moved.as_ref() == Some(&value) {
                             return Ok((value, true));
@@ -1008,7 +1021,7 @@ impl RewindDriver<'_> {
         tokio::time::sleep(Duration::from_millis(REWIND_COMMAND_SETTLE_MS)).await;
         self.write(CLAUDE_REWIND_SUBMIT).await?;
         self.wait_for("open", |screen| {
-            rewind_stage_region(&screen_lines(screen), CLAUDE_REWIND_LIST_SUBTITLE).map(|_| ())
+            rewind_stage_region(&screen_lines(screen), is_list_subtitle).map(|_| ())
         })
         .await?;
 
@@ -1065,7 +1078,7 @@ impl RewindDriver<'_> {
     async fn select_prompt(&self, plan: &RewindPlan) -> std::result::Result<(), DomainStateError> {
         let mut last_row = self
             .wait_for("list", |screen| {
-                rewind_stage_region(&screen_lines(screen), CLAUDE_REWIND_LIST_SUBTITLE)
+                rewind_stage_region(&screen_lines(screen), is_list_subtitle)
                     .and_then(highlighted_row)
             })
             .await?;
@@ -1078,12 +1091,7 @@ impl RewindDriver<'_> {
         for _ in 0..plan.presses {
             self.write(CLAUDE_REWIND_LIST_UP).await?;
             let (row, moved) = self
-                .wait_for_move(
-                    "list",
-                    CLAUDE_REWIND_LIST_SUBTITLE,
-                    &last_row,
-                    highlighted_row,
-                )
+                .wait_for_move("list", is_list_subtitle, &last_row, highlighted_row)
                 .await?;
             last_row = row;
             if !moved {
@@ -1112,7 +1120,7 @@ impl RewindDriver<'_> {
         let quoted = self
             .wait_for("confirmation", |screen| {
                 let lines = screen_lines(screen);
-                let region = rewind_stage_region(&lines, CLAUDE_REWIND_CONFIRM_SUBTITLE)?;
+                let region = rewind_stage_region(&lines, is_confirm_subtitle)?;
                 confirm_quoted_lines(region)
             })
             .await?;
@@ -1133,7 +1141,7 @@ impl RewindDriver<'_> {
             let options = self
                 .wait_for("confirmation", |screen| {
                     let lines = screen_lines(screen);
-                    let region = rewind_stage_region(&lines, CLAUDE_REWIND_CONFIRM_SUBTITLE)?;
+                    let region = rewind_stage_region(&lines, is_confirm_subtitle)?;
                     let options = parse_menu_options(region);
                     options
                         .iter()
@@ -1175,7 +1183,7 @@ impl RewindDriver<'_> {
             let (_, moved) = self
                 .wait_for_move(
                     "confirmation",
-                    CLAUDE_REWIND_CONFIRM_SUBTITLE,
+                    is_confirm_subtitle,
                     &selected_number,
                     |region| {
                         parse_menu_options(region)
