@@ -544,11 +544,15 @@ impl NativeChatView {
     }
 
     /// The buttons a board row shows in place of its links while its thread's card waits: the
-    /// thread card's own, small; each tooltip names what it answers.
+    /// thread card's own, small; each tooltip names what it answers. `wrap` (a Needs you card,
+    /// coordinator_board.rs `board_dock_card`) lets them wrap onto more lines and cuts a label
+    /// longer than the card ("Yes, and don't ask again for rm commands") at its end; the tooltip
+    /// keeps it whole.
     pub(super) fn board_relay_buttons(
         &self,
         card: &Value,
         chip_size: f32,
+        wrap: bool,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
@@ -570,7 +574,12 @@ impl NativeChatView {
                 preview
             }
         };
-        let mut row = div().flex().items_center().gap(px(4.0 * s)).min_w_0();
+        let mut row = div()
+            .flex()
+            .items_center()
+            .gap(px(4.0 * s))
+            .min_w_0()
+            .when(wrap, |row| row.w_full().flex_wrap());
         for (index, choice) in card["choices"].as_array().into_iter().flatten().enumerate() {
             let label = text(choice, "label");
             let deny = text(choice, "tone") == "deny";
@@ -596,7 +605,8 @@ impl NativeChatView {
                     )))
                     .role(gpui::Role::Button)
                     .aria_label(format!("{label}: {question}"))
-                    .flex_shrink_0()
+                    .when(!wrap, |chip| chip.flex_shrink_0())
+                    .when(wrap, |chip| chip.min_w_0().max_w_full())
                     .h(px(22.0 * s))
                     .px(px(8.0 * s))
                     .flex()
@@ -619,7 +629,7 @@ impl NativeChatView {
                     .tooltip(move |window, cx| {
                         gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
                     })
-                    .child(label)
+                    .child(div().min_w_0().truncate().child(label))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         cx.stop_propagation();
                         if !busy {

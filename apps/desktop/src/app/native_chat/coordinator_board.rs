@@ -252,17 +252,38 @@ fn expanded_card_height(row: &Value) -> f32 {
     20.0 + lines(&text(row, "title")) * 20.0 + detail + body + 28.0 + 32.0
 }
 
+/// A card's Snooze choices: its opened card's (`actions.snooze`), else its dock row's (a Needs you
+/// card's menu, gx-chat-core `card_menu`).
+fn board_snooze_choices(row: &Value) -> Vec<Value> {
+    row["actions"]["snooze"]
+        .as_array()
+        .filter(|choices| !choices.is_empty())
+        .or_else(|| row["dock"]["snooze"].as_array())
+        .cloned()
+        .unwrap_or_default()
+}
+
 /// A Needs you card's height (unscaled), drawn as its dock row (`board_dock_card`): its title's
 /// lines at the list's width, and the answers' line under it when it has any.
 fn dock_card_height(dock: &Value) -> f32 {
+    use super::chat_text_look::PROSE_LINE_HEIGHT;
     let room = (BOARD_WIDTH - 2.0 * 10.0 - BADGE_ROOM - 2.0 * 8.0 - 23.0 - 34.0) / 7.0;
-    let lines = (text(dock, "title").chars().count() as f32 / room)
-        .ceil()
-        .max(1.0);
+    // A page's name runs on into its "(N questions)".
+    let words = format!("{} {}", text(dock, "title"), text(dock, "count"));
+    let lines = (words.trim().chars().count() as f32 / room).ceil().max(1.0);
     let answers = dock["buttons"].as_array().is_some_and(|b| !b.is_empty())
         || dock["open"].is_object()
         || dock["reply"].is_object();
-    4.0 + 12.0 + lines * 20.0 + if answers { 34.0 } else { 0.0 }
+    // A Needs you to-do's command chip under it (work_cards.rs `dock_command_chip`): its 3px
+    // sides, a line of the chat's monospace and the 6px under it.
+    let command = if text(dock, "command").trim().is_empty() {
+        0.0
+    } else {
+        6.0 + 19.0 + 6.0
+    };
+    // The card's 2px inset and border, the row's 6px sides, the title's lines, the answers' line
+    // (6px over a 28px button), the command chip.
+    2.0 * 3.0 + 12.0 + lines * PROSE_LINE_HEIGHT + if answers { 34.0 } else { 0.0 } + command
 }
 
 /// The board's content height (unscaled): its header, each group's line, an open group's rows
@@ -1292,7 +1313,7 @@ impl NativeChatView {
         // card shows its line of work below the title instead).
         let note = text(row, "note");
         if let Some(relayed) = &relayed {
-            chips = chips.child(self.board_relay_buttons(relayed, CHIP_SIZE, p, cx));
+            chips = chips.child(self.board_relay_buttons(relayed, CHIP_SIZE, false, p, cx));
         } else if !answers.is_empty() && !expanded {
             // A Work panel ask names the work it belongs to before its answers (gx-chat-core
             // work_panel.rs). Opened, its answers are the dock's buttons below (work_actions.rs).
@@ -1682,6 +1703,13 @@ impl NativeChatView {
             .filter(|session| !session.is_empty())
             .and_then(|session| self.relayed_card_for_thread(&session));
         let go = Some(row["go"].clone()).filter(Value::is_object);
+        // A page's "(N questions)" follows its draft while the card is drawn, as the dock's row's
+        // does (work_cards.rs `dock_row`).
+        if row["dock"]["page"] == true {
+            if let Some(page_id) = row["dock"]["pageId"].as_str() {
+                self.refresh_page_counts(page_id, cx);
+            }
+        }
         let look = super::work_cards::DockRowLook {
             // The card's width less its border.
             width: Some(inner_width + 2.0 * CARD_PAD),
@@ -1694,7 +1722,8 @@ impl NativeChatView {
             click: go,
             buttons: relayed
                 .as_ref()
-                .map(|relayed| self.board_relay_buttons(relayed, CHIP_SIZE, p, cx)),
+                .map(|relayed| self.board_relay_buttons(relayed, CHIP_SIZE, true, p, cx)),
+            reference: text(row, "reference"),
         };
         let move_to = row["moveTo"].clone();
         let menu_key = key.clone();
@@ -2035,7 +2064,7 @@ impl NativeChatView {
         let row = self.board_menu_row(&menu.key)?;
         let s = ChatAppearance::current(&self.snapshot).scale;
         let rows = if menu.snooze {
-            row["actions"]["snooze"].as_array().map_or(0, Vec::len) as f32 * SIDEBAR_MENU_ROW_HEIGHT
+            board_snooze_choices(&row).len() as f32 * SIDEBAR_MENU_ROW_HEIGHT
         } else if menu.tags {
             let options = self
                 .board_value()
@@ -2266,13 +2295,7 @@ impl NativeChatView {
             .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_mouse_down(gpui::MouseButton::Right, |_, _, cx| cx.stop_propagation());
         if menu.snooze {
-            for (index, choice) in row["actions"]["snooze"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default()
-                .into_iter()
-                .enumerate()
-            {
+            for (index, choice) in board_snooze_choices(&row).into_iter().enumerate() {
                 let command = choice["command"].clone();
                 let view = view.clone();
                 panel = panel.child(
@@ -2376,6 +2399,8 @@ impl NativeChatView {
                     icon => format!("titlebar/{icon}.svg"),
                 };
                 let tags = text(&entry, "submenu") == "tags";
+                // A Needs you card's Snooze opens its choices (`board_snooze_choices`).
+                let snooze = text(&entry, "submenu") == "snooze";
                 let command = entry["command"].clone();
                 let mut row_element = item(
                     format!("chat-board-card-menu:{label}"),
@@ -2383,7 +2408,7 @@ impl NativeChatView {
                     Some((icon, foreground)),
                     false,
                 );
-                if tags {
+                if tags || snooze {
                     row_element = row_element.child(
                         svg()
                             .path("titlebar/chevron-right.svg")
@@ -2399,6 +2424,14 @@ impl NativeChatView {
                     view.update(cx, |this, cx| {
                         if tags {
                             this.show_board_card_menu_tags(true, cx);
+                            return;
+                        }
+                        if snooze {
+                            if let Some(menu) = this.board.menu.as_mut() {
+                                menu.snooze = true;
+                            }
+                            this.sync_board_card_menu_host(cx);
+                            cx.notify();
                             return;
                         }
                         this.close_board_card_menu(cx);

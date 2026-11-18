@@ -305,6 +305,8 @@ pub(super) struct DockRowLook {
     pub click: Option<Value>,
     /// What shows in the answers' place (a thread's relayed approval buttons).
     pub buttons: Option<AnyElement>,
+    /// What an ⌥-click puts in the chat box (a Work panel card's `reference`), "" for none.
+    pub reference: String,
 }
 
 /// How wide `label` is in the chat's font at `size` (both unscaled).
@@ -1296,6 +1298,7 @@ impl NativeChatView {
         if wrap && !buttons.is_empty() {
             under = Some(
                 div()
+                    .min_w_0()
                     .pl(px(DOCK_LEAD * s))
                     .pt(px(6.0 * s))
                     .flex()
@@ -1351,14 +1354,25 @@ impl NativeChatView {
                     }),
                 )
             });
-        // A Work panel card opens what it points to (`BoardRow::go`).
+        // A Work panel card opens what it points to (`BoardRow::go`); ⌥-click mentions it, as
+        // every board card does. A drag of the card, or a drag that selects, opens nothing.
         if let Some(go) = look.click {
+            let reference = look.reference.clone();
             return div()
                 .w_full()
-                .child(press.on_click(cx.listener(move |this, _, window, cx| {
-                    this.close_board_card_menu(cx);
-                    this.open_work_target(go.clone(), window, cx);
-                })))
+                .child(press.on_click(cx.listener(
+                    move |this, event: &gpui::ClickEvent, window, cx| {
+                        if !super::row_click::acts_on_row(event, window, cx) {
+                            return;
+                        }
+                        this.close_board_card_menu(cx);
+                        if event.modifiers().alt && !reference.is_empty() {
+                            this.insert_board_reference(&reference, cx);
+                        } else {
+                            this.open_work_target(go.clone(), window, cx);
+                        }
+                    },
+                )))
                 .children(self.dock_command_chip(&key, &text(row, "command"), p, cx))
                 .into_any_element();
         }
