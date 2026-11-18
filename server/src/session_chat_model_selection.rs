@@ -406,7 +406,7 @@ fn enqueue_selection(
 const MAX_UNCONFIRMED_ATTEMPTS: u32 = 3;
 
 /// CDXC:SessionChat 2026-11-18 WHY:
-/// GitHub #666: `agentBusy` (a turn running, a dialog in front of the input box) was never counted, so a pick retried every 5 seconds for as long as the agent stayed busy, a day for one session, and each try cost screen captures, three database writes and two broadcasts that redraw every app window. A busy pick now waits twice as long after each busy answer, from 5 seconds up to a minute, and after 30 minutes of busy time tries only every 5 minutes. It never fails for being busy: a failed pick holds every later message until the user picks again (the 2026-09-27 decision in session_chat_model_selection_alert.rs), and a pick left behind a permission prompt while the user is away, or Ghostex's own plan-mode restore, would then hold their next message. Busy time counts only the waits the pick planned (plus one retry of slack), so a computer asleep or a stalled queue does not add to it; a session that sleeps answers `sessionNotRunning`, which ends the run. While a message waits behind the pick (a queued chat message, or a new coordinator's first message waiting for its box), the pick keeps the 5-second pace for its first 30 minutes of busy time, and the queue cuts a longer wait short as soon as one arrives (`BUSY_WAIT_SHORTCUT_MS`), so the message waits at most about 7.5 seconds for the next try instead of 5. After that it is tried every minute while a message waits and every 5 minutes otherwise: a never-started coordinator's first message stays waiting behind a startup dialog for good, and kept the pick at 5 seconds for ever, while a minute bounds how long a message waits once the agent is free. A dialog or a running turn is the only busy answer; a state that waiting cannot change has its own codes and limit (`UNAPPLIABLE_LIMIT_MS`).
+/// GitHub #666: `agentBusy` (a turn running, a dialog in front of the input box) was never counted, so a pick retried every 5 seconds for as long as the agent stayed busy, a day for one session, and each try cost screen captures, three database writes and two broadcasts that redraw every app window. A busy pick now waits twice as long after each busy answer, from 5 seconds up to a minute, and after 30 minutes of busy time tries only every 5 minutes. It never fails for being busy: a failed pick holds every later message until the user picks again (the 2026-09-27 decision in session_chat_model_selection_alert.rs), and a pick left behind a permission prompt while the user is away, or Ghostex's own plan-mode restore, would then hold their next message. Busy time counts only the waits the pick planned (plus one retry of slack), so a computer asleep or a stalled queue does not add to it; a session that sleeps answers `sessionNotRunning`, which ends the run. While a message waits behind the pick (a queued chat message, or a new coordinator's first message waiting for its box), the pick keeps the 5-second pace for its first 30 minutes of busy time, and the queue cuts a longer wait short as soon as one arrives (`BUSY_WAIT_SHORTCUT_MS`), so the message waits at most about 7.5 seconds for the next try instead of 5. After that it is tried every minute while a queued chat message waits, which bounds how long that message waits once the agent is free, and every 5 minutes otherwise, including when only a coordinator's unstarted first message waits: that one can stay waiting behind a startup dialog for good, and kept the pick at 5 seconds for ever. A dialog or a running turn is the only busy answer; a state that waiting cannot change has its own codes and limit (`UNAPPLIABLE_LIMIT_MS`).
 /// The usual wait before a failed pick is tried again, and a busy pick's first wait.
 pub(crate) const RETRY_MS: i64 = 5_000;
 const BUSY_RETRY_MAX_MS: i64 = 60_000;
@@ -436,29 +436,40 @@ fn forget_busy_run(selection_id: &str) {
     }
 }
 
-/// How long a busy pick's remaining wait may be before a message waiting behind it ends the wait
-/// early: `BUSY_WAIT_SHORTCUT_MS` at first; once the pick has been busy for `BUSY_SLOW_AFTER_MS`,
-/// `BUSY_RETRY_MAX_MS`, so a message arriving during a 5-minute wait ends it once and the pick is
-/// then tried every minute while the message waits (`busy_retry`).
-pub(crate) fn busy_wait_shortcut_ms(selection_id: &str) -> i64 {
+/// Once a pick has been busy for `BUSY_SLOW_AFTER_MS`, a wait longer than this ends early for a
+/// queued chat message: above the minute such a pick waits while one is queued, as
+/// `BUSY_WAIT_SHORTCUT_MS` is above the 5-second retry, so a queue pass never retries at once.
+const BUSY_SLOW_SHORTCUT_MS: i64 = BUSY_RETRY_MAX_MS * 3 / 2;
+
+/// Whether a message behind this busy pick ends its remaining wait (`wait_ms`) early. At first any
+/// message does, past `BUSY_WAIT_SHORTCUT_MS`. Once the pick has been busy for `BUSY_SLOW_AFTER_MS`
+/// only a queued chat message does, past `BUSY_SLOW_SHORTCUT_MS`: one arriving during a 5-minute
+/// wait ends it once, and the pick is then tried every minute while it waits (`busy_retry`). A
+/// coordinator's unstarted first message keeps the 5-minute pace.
+pub(crate) fn busy_wait_ends_early(
+    selection_id: &str,
+    snapshot: &crate::session_chat_queue::SessionChatQueueSnapshot,
+    wait_ms: i64,
+) -> bool {
     let slow = busy_runs().lock().is_ok_and(|runs| {
         runs.get(selection_id)
             .is_some_and(|run| run.busy_ms >= BUSY_SLOW_AFTER_MS)
     });
+    let waiting = waiting_behind(snapshot);
     if slow {
-        BUSY_RETRY_MAX_MS
+        waiting.chat_message && wait_ms > BUSY_SLOW_SHORTCUT_MS
     } else {
-        BUSY_WAIT_SHORTCUT_MS
+        (waiting.chat_message || waiting.first_message) && wait_ms > BUSY_WAIT_SHORTCUT_MS
     }
 }
 
 /// Notes this failure and answers how long a busy pick waits before its next try (`None` when the
-/// failure is not a busy one). `message_waiting`: a message waits behind the pick.
+/// failure is not a busy one). `waiting`: what waits behind the pick.
 fn busy_retry(
     selection_id: &str,
     error: &DomainStateError,
     now_ms: i64,
-    message_waiting: bool,
+    waiting: Waiting,
 ) -> Option<i64> {
     let Ok(mut runs) = busy_runs().lock() else {
         return None;
@@ -477,13 +488,15 @@ fn busy_retry(
     run.last_ms = now_ms;
     run.count += 1;
     let wait = if run.busy_ms >= BUSY_SLOW_AFTER_MS {
-        // A message behind a pick busy this long waits at most a minute once the agent is free.
-        if message_waiting {
+        // A chat message behind a pick busy this long waits at most a minute once the agent is
+        // free; an unstarted coordinator's first message can wait behind a startup dialog for
+        // good, so it does not speed the pick up.
+        if waiting.chat_message {
             BUSY_RETRY_MAX_MS
         } else {
             BUSY_RETRY_SLOW_MS
         }
-    } else if message_waiting {
+    } else if waiting.chat_message || waiting.first_message {
         RETRY_MS
     } else {
         (RETRY_MS << (run.count - 1).min(8)).min(BUSY_RETRY_MAX_MS)
@@ -492,23 +505,23 @@ fn busy_retry(
     Some(wait)
 }
 
-/// Whether a message waits behind the session's pending pick: a queued chat message, or a new
-/// coordinator's first message waiting for its box (session_chat_first_message.rs holds it while a
-/// pick is pending).
-pub(crate) fn message_waits(
-    snapshot: &crate::session_chat_queue::SessionChatQueueSnapshot,
-) -> bool {
-    snapshot.deliverable_head().is_some()
-        || snapshot
-            .first_message
-            .as_ref()
-            .is_some_and(|message| message.state == crate::session_chat_first_message::WAITING)
+/// What waits behind the session's pending pick: a queued chat message, and a new coordinator's
+/// first message waiting for its box (session_chat_first_message.rs holds it while a pick is
+/// pending).
+#[derive(Clone, Copy, Debug, Default)]
+struct Waiting {
+    chat_message: bool,
+    first_message: bool,
 }
 
-fn message_waits_behind(db: &Connection, project: &str, session: &str) -> bool {
-    message_waits(
-        &crate::session_chat_queue::read_session_chat_queue_snapshot_with(db, project, session),
-    )
+fn waiting_behind(snapshot: &crate::session_chat_queue::SessionChatQueueSnapshot) -> Waiting {
+    Waiting {
+        chat_message: snapshot.deliverable_head().is_some(),
+        first_message: snapshot
+            .first_message
+            .as_ref()
+            .is_some_and(|message| message.state == crate::session_chat_first_message::WAITING),
+    }
 }
 
 /// CDXC:SessionChat 2026-10-24 WHY:
@@ -725,7 +738,7 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
             }
             let busy_wait = result.as_ref().err().and_then(|error| {
                 if error.code != "agentBusy" {
-                    return busy_retry(&pending.id, error, now_ms, false);
+                    return busy_retry(&pending.id, error, now_ms, Waiting::default());
                 }
                 let db = open_gxserver_database(&state.paths).ok()?;
                 // A pick replaced or discarded while this try ran keeps no busy run.
@@ -735,8 +748,12 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                     forget_busy_run(&pending.id);
                     return None;
                 }
-                let message_waiting = message_waits_behind(&db, &project, &session);
-                busy_retry(&pending.id, error, now_ms, message_waiting)
+                let waiting = waiting_behind(
+                    &crate::session_chat_queue::read_session_chat_queue_snapshot_with(
+                        &db, &project, &session,
+                    ),
+                );
+                busy_retry(&pending.id, error, now_ms, waiting)
             });
             let result = result.map_err(|error| {
                 if unconfirmed_attempts_exhausted(&pending.id, &error) {

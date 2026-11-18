@@ -391,18 +391,26 @@ fn row_key(row: &PickerRow, step: &str) -> Result<String, DomainStateError> {
 /// `• Model changed to gpt-6-luna low`, or with ` for this conversation` after a session pick,
 /// which is the only proof that `s` applied it without saving the default.
 fn changed_line_present(screen: &str, model: &str, effort: &str, session_only: bool) -> bool {
+    changed_line_count(screen, model, effort, session_only) > 0
+}
+
+/// How many of Codex's change lines for this pick the screen shows.
+fn changed_line_count(screen: &str, model: &str, effort: &str, session_only: bool) -> usize {
     let expected = format!("{CODEX_MODEL_CHANGED_PREFIX}{model} {effort}");
-    screen_lines(screen).iter().any(|line| {
-        let rest = line
-            .strip_prefix(CODEX_CURSOR)
-            .map(str::trim_start)
-            .unwrap_or(line);
-        rest.trim_start_matches(['•', ' '])
-            .strip_prefix(&expected)
-            .is_some_and(|tail| {
-                !session_only || CODEX_SESSION_CHANGED_SUFFIXES.contains(&tail.trim())
-            })
-    })
+    screen_lines(screen)
+        .iter()
+        .filter(|line| {
+            let rest = line
+                .strip_prefix(CODEX_CURSOR)
+                .map(str::trim_start)
+                .unwrap_or(line);
+            rest.trim_start_matches(['•', ' '])
+                .strip_prefix(&expected)
+                .is_some_and(|tail| {
+                    !session_only || CODEX_SESSION_CHANGED_SUFFIXES.contains(&tail.trim())
+                })
+        })
+        .count()
 }
 
 // ---------------------------------------------------------------------------
@@ -1122,6 +1130,12 @@ impl PickerDriver<'_> {
                     "Codex's current model could not be read, so its settings were not changed.",
                 )
             })?;
+        // A footer that names no effort (`<model> default`, or a /statusline with the model name
+        // only) cannot confirm the effort afterwards either: the pick is then confirmed by a change
+        // line that was not on the screen before it.
+        let footer_names_effort = selection.effort.is_some();
+        let changed_before =
+            changed_line_count(&screen, &plan.model, &plan.effort, plan.session_only);
         if selection
             .model
             .as_ref()
@@ -1236,10 +1250,14 @@ impl PickerDriver<'_> {
         self.wait_for("confirm", |screen| {
             let selection = detect_session_chat_selection(SessionChatOptionAgent::Codex, screen)?;
             // Earlier visits can leave the same confirmation line in scrollback.
-            (changed_line_present(screen, &plan.model, &plan.effort, plan.session_only)
-                && !any_picker_open(screen)
-                && selection.model.as_ref()?.value == plan.model
-                && selection.effort.as_ref()?.value == plan.effort)
+            let changed = if footer_names_effort {
+                changed_line_present(screen, &plan.model, &plan.effort, plan.session_only)
+                    && selection.effort.as_ref()?.value == plan.effort
+            } else {
+                changed_line_count(screen, &plan.model, &plan.effort, plan.session_only)
+                    > changed_before
+            };
+            (changed && !any_picker_open(screen) && selection.model.as_ref()?.value == plan.model)
                 .then_some(())
         })
         .await
