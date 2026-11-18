@@ -140,12 +140,13 @@ pub fn run() -> i32 {
 /// request` with no session, though 11.10.0 had taught `agents whoami` and `agents send` to find it
 /// from the process tree (#655). Every command that resolves its own session reads
 /// `GHOSTEX_GLOBAL_SESSION_REF` first, so the lookup runs once here, before any command, whenever
-/// the session's token is missing: with no session variable set, the `zmx run` pane above the Codex
-/// or Empryo process that ran this command names the session; with one set (a Codex that drops only
-/// `*TOKEN*` variables), the pane must be that same session. Either way that agent process's own
-/// environment gives the session's `gxs_` token, so every command from such a Codex speaks as its
-/// session, as one from an ordinary pane does (agent_hooks/ancestor_session.rs). A plain terminal
-/// has no such pane above it and is left alone, on the token file.
+/// the session variables or the session's token are missing. With no session variable set, the
+/// `zmx run` pane above the Codex or Empryo process that ran this command names the session (also
+/// when the command kept its token). With one set but no token (a Codex that drops only `*TOKEN*`
+/// variables), the pane must be that same session. When the token is missing, that agent process's
+/// own environment gives the session's `gxs_` token, so every command from such a Codex speaks as
+/// its session, as one from an ordinary pane does (agent_hooks/ancestor_session.rs). A plain
+/// terminal has no such pane above it and is left alone, on the token file.
 /// SEE-ALSO: server/src/ghostex_cli/rpc.rs `caller_session_from_env`, `read_local_gxserver_auth_token`.
 fn adopt_caller_session_from_process_tree() {
     crate::agent_hooks::adopt_ancestor_session_for_cli();

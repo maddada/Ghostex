@@ -30,7 +30,7 @@ const SESSION_VARIABLES: [&str; 4] = [
 /// - a session variable but no token (a Codex that drops only `*TOKEN*` variables): that token, only
 ///   when this tree's pane is the session the variable names. The variable's routing stays.
 pub(crate) fn adopt_ancestor_session_for_cli() {
-    let has_token = env::var_os(crate::security::SESSION_TOKEN_ENV).is_some();
+    let has_token = has_session_token();
     let named = SESSION_VARIABLES.into_iter().find_map(|key| {
         env::var(key)
             .ok()
@@ -51,6 +51,17 @@ pub(crate) fn adopt_ancestor_session_for_cli() {
     if same_session && !has_token {
         adopt_agent_session_token(agent, &zmx_name);
     }
+}
+
+/// Whether this process already holds a session token the CLI would use: the same test as
+/// ghostex_cli/rpc.rs `read_local_gxserver_auth_token` (trimmed, starts with `gxs_`), so an empty
+/// or malformed `GHOSTEX_SESSION_TOKEN` counts as none.
+fn has_session_token() -> bool {
+    env::var(crate::security::SESSION_TOKEN_ENV).is_ok_and(|token| {
+        token
+            .trim()
+            .starts_with(crate::security::SESSION_TOKEN_PREFIX)
+    })
 }
 
 /// Whether the zmx pane `zmx_name` (`S90-P3lv0-G4sp7`) is the session `value` of variable `key`
@@ -94,7 +105,7 @@ process of the same user could already read it there (`ps eww`); the lookup only
 token of the session whose agent ran the command.
 */
 fn adopt_agent_session_token(agent: u32, zmx_name: &str) {
-    if env::var_os(crate::security::SESSION_TOKEN_ENV).is_some() {
+    if has_session_token() {
         return;
     }
     let Some(launch) = crate::accounts::process_launch(i64::from(agent)) else {

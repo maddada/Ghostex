@@ -27,7 +27,9 @@ pub(crate) mod login_expired;
 pub(crate) mod model;
 pub(crate) mod model_fallback;
 mod process_login;
-pub(crate) use process_login::{process_arguments, process_launch};
+#[cfg(unix)]
+pub(crate) use process_login::process_arguments;
+pub(crate) use process_login::process_launch;
 pub(crate) mod recovery;
 mod recovery_conversation;
 mod reset_claim;

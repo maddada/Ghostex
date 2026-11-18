@@ -153,7 +153,7 @@ pub(crate) fn process_arguments(process_id: i64) -> Option<Vec<String>> {
 }
 
 /// The argv of `process_id` (macOS reads it with the environment in one `KERN_PROCARGS2` call).
-#[cfg(not(target_os = "linux"))]
+#[cfg(all(unix, not(target_os = "linux")))]
 pub(crate) fn process_arguments(process_id: i64) -> Option<Vec<String>> {
     process_arguments_and_environment(process_id).map(|(arguments, _)| arguments)
 }
