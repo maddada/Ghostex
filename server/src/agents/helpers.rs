@@ -250,6 +250,8 @@ pub(crate) fn quote_shell_arg(value: &str) -> String {
 
 /// CDXC:AgentProviders 2026-09-22 WHY:
 /// Interrupting a restored CLI during an account switch is an intentional exit, not a failed resume. POSIX signal exit statuses must not launch the old account's fallback command while the switch is returning to the shell.
+/// CDXC:PlatformSupport 2026-11-18 WHY:
+/// GitHub #666: on Windows this runs while PowerShell 7's own module folder is out of `PSModulePath` (`agent_without_powershell7_modules` in zmx/scripts_windows.rs), and `Write-Host` was the first Microsoft.PowerShell.Utility cmdlet the shell met, so PowerShell 7 loaded Windows PowerShell 5.1's copy through a compatibility process that lived as long as the terminal (about 55 MB per restored agent). The two lines are written through the shell's own host, which needs no module.
 pub(crate) fn wrap_restored_terminal_resume_command(
     command: &str,
     display_command: &str,
@@ -258,7 +260,7 @@ pub(crate) fn wrap_restored_terminal_resume_command(
     #[cfg(windows)]
     {
         let mut script = format!(
-            "Write-Host 'Restoring session...'; Write-Host {}; & {{ {} }}",
+            "$Host.UI.WriteLine('Restoring session...'); $Host.UI.WriteLine({}); & {{ {} }}",
             crate::platform::shell::powershell_single_quote(display_command),
             command
         );
