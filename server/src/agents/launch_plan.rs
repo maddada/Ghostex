@@ -882,12 +882,14 @@ pub(crate) fn check_requested_agent_model(
     let global_agents_project = project_with_global_agent_list(db, project);
     let project = global_agents_project.as_ref().unwrap_or(project);
     let agent_config = resolve_project_agent_config(project, agent_id, None);
+    let family = resume_agent_family_id(Some(agent_id.to_string()), &agent_config, &Map::new());
     // Empryo's launch seeds a session folder, so only its model's shape is checked here.
-    if resume_agent_family_id(Some(agent_id.to_string()), &agent_config, &Map::new()).as_deref()
-        == Some("empryo")
-    {
+    if family.as_deref() == Some("empryo") {
         return crate::session_chat_empryo_launch_selection::empryo_launch_model(model.as_deref())
             .map(|_| ());
+    }
+    if let (Some(model), Some(family)) = (model.as_deref(), family.as_deref()) {
+        refuse_model_outside_picker(family, model)?;
     }
     let command = read_text_from_map(&agent_config, "command");
     apply_requested_agent_model(
@@ -900,6 +902,47 @@ pub(crate) fn check_requested_agent_model(
         &mut Map::new(),
     )
     .map(|_| ())
+}
+
+/// CDXC:Automations 2026-11-18 WHY:
+/// GitHub #669: `ghostex automation-save` stored a model the agent does not have, so the automation
+/// failed first when it ran unattended. A saved model must be one the chat's model picker offers
+/// for the agent (the effective catalog: the published lineup, or the one the agent's CLI printed);
+/// a Claude alias whose 1M row the picker lists (`opus` for `opus[1m]`) is its 200K twin and passes.
+/// An agent the catalog lists no models for (Pi, OMP, Copilot, Hermes) keeps its CLI's own check.
+fn refuse_model_outside_picker(family: &str, model: &str) -> Result<(), DomainStateError> {
+    let Some(agent) = crate::agent_model_catalog::catalog_agent(family) else {
+        return Ok(());
+    };
+    let rows = agent
+        .get("models")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let value = |row: &Value| row.get("value").and_then(Value::as_str).map(str::to_string);
+    let values: Vec<String> = rows.iter().filter_map(value).collect();
+    if values.is_empty()
+        || values
+            .iter()
+            .any(|value| value == model || (family == "claude" && *value == format!("{model}[1m]")))
+    {
+        return Ok(());
+    }
+    let name = agent.get("name").and_then(Value::as_str).unwrap_or(family);
+    let offered = rows
+        .iter()
+        .filter_map(|row| {
+            let value = value(row)?;
+            Some(match row.get("label").and_then(Value::as_str) {
+                Some(label) if label != value => format!("{value} ({label})"),
+                _ => value,
+            })
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    Err(DomainStateError::bad_request(format!(
+        "{name} has no model \"{model}\", so nothing was saved. It takes: {offered}."
+    )))
 }
 
 /// Why a family whose CLI takes a launch model but has no effort flag refuses a launch effort.
