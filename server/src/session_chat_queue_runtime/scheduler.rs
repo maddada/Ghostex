@@ -756,14 +756,21 @@ impl SessionChatQueueRuntime {
             // the message behind it into the running turn. While the session's activity says Codex
             // is in a turn, its pick is held without a try; the screen's working row stays the
             // backstop when the activity is wrong (`codex_turn_running` in
-            // session_chat_codex_picker.rs).
+            // session_chat_codex_picker.rs). An agent confirmed gone is not held: the pick's own
+            // try meets its missing input box, as the message gate below lets such a row through.
             let agent_working =
                 crate::session_chat_model_selection::agent_turn_running(&session, generated_at);
             if agent_working
                 && crate::session_chat_composer::session_chat_composer_agent_id(&session).as_deref()
                     == Some("codex")
+                && !crate::session_chat_start_failure::agent_gone_confirmed(project_id, session_id)
             {
                 crate::session_chat_model_selection::saw_agent_working(&selection.id);
+                crate::session_chat_model_selection_alert::forget_first_failure(
+                    project_id,
+                    session_id,
+                    &selection.id,
+                );
                 return head.map_or(Assessment::Skip, |head| hold(head, WaitReason::ModelChange));
             }
             // A busy pick's longer wait (session_chat_model_selection.rs `busy_retry`) ends once a

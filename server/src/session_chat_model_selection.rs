@@ -492,11 +492,26 @@ pub(crate) fn saw_agent_working(selection_id: &str) {
     }
 }
 
-/// Whether the session's activity says its agent is in a turn: working, and not only through
-/// background work left running after its turn ended (`working_only_in_background`).
+/// Whether the session's own agent is in a turn: its stored activity is working, and not only
+/// through background work left running after its turn ended (`is_background_only_working`), or
+/// it is compacting. Not `presentation_activity`, which also says working while subagents outlive
+/// the lead's turn: the lead takes a pick then.
 pub(crate) fn agent_turn_running(session: &Value, generated_at: &str) -> bool {
-    crate::presentation::presentation_activity(session, generated_at) == "working"
-        && !crate::presentation::working_only_in_background(session, generated_at)
+    if crate::presentation::effective_lifecycle_state(session) != "running" {
+        return false;
+    }
+    if crate::session_chat_compacting::session_chat_compacting_detected_at(session).is_some() {
+        return true;
+    }
+    let generated_at_ms = crate::session_status::parse_iso_ms(generated_at)
+        .unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
+    let activity = crate::session_status::effective_agent_activity_value(
+        session.pointer("/runtimeSettings/agentActivity"),
+        "idle",
+        generated_at_ms,
+    );
+    activity.get("activity").and_then(Value::as_str) == Some("working")
+        && !crate::session_status::is_background_only_working(Some(&activity))
 }
 
 /// A dialog in front of the input box or a running turn (`agentBusy`), or Codex's running turn

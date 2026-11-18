@@ -126,6 +126,18 @@ pub(crate) async fn note_model_selection_failure(
 }
 
 /// Clears the mark once the change applied or the user picked again.
+/// A pick held while its agent's turn runs is not failing: its 30 seconds start again after the
+/// turn (the queue's Codex hold in session_chat_queue_runtime/scheduler.rs).
+pub(crate) fn forget_first_failure(project_id: &str, session_id: &str, selection_id: &str) {
+    if let Ok(mut failures) = first_failures().lock() {
+        failures.remove(&(
+            project_id.to_string(),
+            session_id.to_string(),
+            selection_id.to_string(),
+        ));
+    }
+}
+
 pub(crate) fn clear_model_selection_failure(state: &AppState, project_id: &str, session_id: &str) {
     if let Ok(mut failures) = first_failures().lock() {
         failures.retain(|(project, session, _), _| project != project_id || session != session_id);
