@@ -770,6 +770,8 @@ pub fn refresh_coordinator_panels(
     db: &Connection,
     repository: &DomainRepository<'_>,
 ) -> Vec<SessionKey> {
+    // Thread brief's briefs become work items once (brief_import.rs).
+    super::brief_import::import_briefs_once(db);
     let Ok(coordinators) = list_coordinators(db) else {
         return Vec::new();
     };

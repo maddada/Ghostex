@@ -1,6 +1,7 @@
 //! The agent skill an extension ships (`skill` in its manifest): checked when the payload is read,
 //! installed when the user says yes on the install card (`approval.skill`), refreshed by an update
-//! only when the user installed it, and removed with the extension.
+//! only when the user installed it, taken out while the extension is off and put back when it is
+//! turned on (registry.rs `follow_skill`), and removed with the extension.
 //!
 //! It goes where Ghostex's own skills go (agent_skills.rs `install_skill_folder`: one copy in
 //! `~/.agents/skills`, linked into the agents that don't read that folder), with a marker file in

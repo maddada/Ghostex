@@ -334,7 +334,11 @@ impl ExtensionRegistry {
                 "Extension {id:?} wasn't installed through Ghostex. Install it in Settings > Extensions."
             ))
         })?;
+        let was_enabled = state.enabled;
         apply_state_patch(&manifest, state, patch)?;
+        if state.enabled != was_enabled {
+            self.follow_skill(id, &manifest, state);
+        }
         if !state.enabled {
             self.runtime.stop(id)?;
             self.runtime.forget_page_token(id);
@@ -349,6 +353,33 @@ impl ExtensionRegistry {
         };
         write_store(&self.store_file, &store)?;
         Ok(installed)
+    }
+
+    /// The skill the user installed with the extension is in place exactly while the extension
+    /// is on: turning it on puts it back, turning it off takes it out. `skill_installed` keeps
+    /// the user's yes either way, and an uninstall removes it for good.
+    ///
+    /// CDXC:Extensions 2026-11-18 DECISION:
+    /// User, of Work items (the Thread brief extension): "extension still needs to be enabled so
+    /// the skill gets loaded automatically when it's on only". Before, a skill stayed installed
+    /// until the extension was uninstalled, so agents kept reading it while it was off.
+    fn follow_skill(
+        &self,
+        id: &str,
+        manifest: &super::ExtensionManifest,
+        state: &ExtensionStoreEntry,
+    ) {
+        let Some(name) = state.skill_installed.as_deref() else {
+            return;
+        };
+        if !state.enabled {
+            super::skills::remove_skill(&self.agent_home, id, name);
+            return;
+        }
+        if let Some(skill) = manifest.skill.as_ref().filter(|skill| skill.name == name) {
+            let payload_dir = self.installed_dir().join(id);
+            let _ = super::skills::install_skill(&self.agent_home, id, &payload_dir, skill);
+        }
     }
 
     /// The skill side of an install: a first install puts the skill in when the user asked for
@@ -424,6 +455,10 @@ impl ExtensionRegistry {
         let mut state = store_entry_for_install(&manifest, store.get(&id), approval);
         activate_staged_payload(&self.installed_dir(), &id, staged_payload)?;
         let skill_install = self.settle_install_skill(&id, &manifest, &mut state, approval);
+        // An update while the extension is off leaves its skill out until it is turned on.
+        if !state.enabled {
+            self.follow_skill(&id, &manifest, &state);
+        }
         store.insert(id.clone(), state.clone());
         write_store(&self.store_file, &store)?;
         Ok(InstalledExtension {

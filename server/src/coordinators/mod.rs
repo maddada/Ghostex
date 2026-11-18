@@ -4,6 +4,7 @@
 mod auto_sleep;
 mod board;
 mod brief;
+mod brief_import;
 mod close;
 mod create;
 mod delivery;
