@@ -93,6 +93,20 @@ after-release commit (see "Keeping the list").
      with `move_cursor` (scope desktop) and `spaceo_session_resume`.
    - `read-session-chat --json` is huge; read replies with
      `ghostex read-session-chat $ref --all --last 3 --format text`.
+   - Popovers and menus (where pill, model list, session menu, page window)
+     are their own windows; `spaceo_screenshot` of such a window returns a
+     scaled copy of the whole display. Read them with `spaceo_read_screen`
+     on that window id and picture them with `spaceo_screenshot full=true`.
+     A SpaceO pixel right-click on a sidebar row does nothing (unconfirmed);
+     cua-driver `right_click` with x,y from a `get_window_state` screenshot
+     opens the session menu.
+   - If SpaceO reports `input: PAUSED (operator has Control)`, a person took
+     the session: stop driving it. If Ghostex then shows a new pid, tell a
+     quit from a crash with `log show --predicate 'process == "Ghostex"'`
+     around that time ("Handling Quit AppleEvent" and launchd's
+     `termination reported by launchd (0, 0, 0)` mean a clean quit) plus the
+     crash baseline, and finish the remaining GUI steps on the main display
+     with background accessibility presses, checking `HIDIdleTime` first.
 7. **A crash at any time** (the app disappears from `list_apps`, a new file in
    `crashes/`, a new panic line, a new DiagnosticReport, or `ghostex sessions`
    hangs more than 15 seconds) is a **Stop**, whichever step was running. Log it
@@ -137,7 +151,10 @@ from the create result.
 2. Restart the app: quit and `launch_app`, as in 1.1.
 3. Within 15 seconds of the window appearing: `ghostex sessions --json` returns,
    and a click on the sidebar row and on the chat's transcript still works
-   (`click`, then `verify_state`).
+   (`click`, then `verify_state`). A coordinator that hasn't started yet (see
+   3.1) shows only the welcome screen, which has no element to press; press
+   its card's Edit/Start area or, once it has replied, a transcript button
+   such as `Worked for … · N tool calls` (`spaceo_find "Worked for"`).
 4. **Pass:** all three answer. **Stop** if any hangs (the freeze).
 
 **1.3 A chat with no saved Reply draft.** Fixes `dbcb1b304`, `52100362b` (v11.8.0).
@@ -171,6 +188,11 @@ and `smoke-ok-2.2`.
 ### 3. Coordinators
 
 **3.1 With Claude.** `ghostex coordinator create --project-id $P --agent claude --title smoke-3.1-runN --task 'Reply with exactly: smoke-ok-3.1'`.
+From 11.10.0 a new coordinator does not start by itself: its first message
+(the skill line plus `--task`) waits as a "First message" card in its chat box
+with Edit and Start. Open its chat (`ghostex focus $ref`) and press the card's
+Start (`spaceo_find "Start"` role Button; not the sidebar's "Start your last
+agent" one), or send it any message. Time the 120 seconds from Start.
 **Pass:** it shows in the sidebar (`ghostex coordinator list --project-id $P --json`
 lists it) and `read-session-chat` has the reply within 120 seconds. **Warn**
 otherwise.
@@ -201,7 +223,9 @@ otherwise.
    there; say which box you typed in.
 3. **Pass:** every letter shows in the box (screenshot) and a results page loads
    with links (read its title or text). **Stop** if keys don't land; **Warn** if
-   the page doesn't load (network).
+   the page doesn't load (network). The native window title stays "Ghostex",
+   so `spaceo_wait_for window_title_contains` never fires; read the results
+   from a screenshot (the tab title and address bar change).
 
 ### 5. Typing in fields (all Stop)
 
@@ -210,8 +234,9 @@ Use `type_text` through cua-driver, then read the value back with
 read from the accessibility tree, compare a zoomed screenshot (`zoom`).
 
 **5.1 A Settings field.** Open Settings (`spaceo_menu ["Ghostex","Settings…"]`;
-Ghostex takes activation then and SpaceO pauses, so `spaceo_session_resume` and
-open it again). There is no General name box. The field that takes background
+if Ghostex takes activation and SpaceO pauses, `spaceo_session_resume` and open
+it again; on the 11.10.0 run it opened as window `[focused]` with no pause, so
+check `spaceo_list_windows` first). There is no General name box. The field that takes background
 focus is Settings' own search box (others, like Accounts > Name, need a real
 click). Type `smoke-field-5.1`.
 **Pass:** the same text reads back (`spaceo_find` TextField shows its value).
@@ -219,7 +244,10 @@ Press Escape and check the old value is back.
 
 **5.2 A search box.** Type `term` into the sidebar search and `font` into
 Settings' search. **Pass:** each shows every letter and the list narrows. Clear
-both.
+both. The sidebar has no filter box of its own: its search is the Search
+palette, the sidebar's `Search (⌘P)` button (`spaceo_find "search"`), which
+opens on its Sessions tab with the box focused (a TextField labelled
+`Search sessions...`); Escape closes it.
 
 **5.3 An inline HTML page with inputs.**
 1. Write a throwaway page to `$W/smoke-page.html` from the `ghostex-visuals`
@@ -290,7 +318,9 @@ empty (no `/model` text left), and one message afterwards gets an answer
 **Stop** if stray text sits in the input box; **Warn** if the model doesn't
 change or the next message gets no answer.
 
-**6.2 Codex.** The same on the 2.2 chat, `smoke-ok-6.2`.
+**6.2 Codex.** The same on the 2.2 chat, `smoke-ok-6.2`. Codex writes no
+"Set model" line into the transcript; check the picker label and the next
+reply's `"model"` in `read-session-chat $ref --limit 4 --json`.
 
 The picker is a button `Model: <name>` (`spaceo_find "Model:"`); its list is a
 separate window with the models as MenuItems. Picking a model also changes the
