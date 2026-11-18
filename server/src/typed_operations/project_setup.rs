@@ -197,6 +197,11 @@ pub(crate) fn count_project_file_lines(
                 "filePath must stay inside the project.",
             ));
         }
+        // A folder, or a link to one, has no lines; reading it failed the whole count
+        // ("Is a directory").
+        if absolute.is_dir() {
+            continue;
+        }
         let mut file = fs::File::open(&absolute)
             .map_err(|error| TypedOperationError::not_found(error.to_string()))?;
         let mut bytes = Vec::new();
