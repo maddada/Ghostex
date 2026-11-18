@@ -396,8 +396,65 @@ fn enqueue_selection(
 }
 
 /// CDXC:SessionChat 2026-10-17 WHY:
-/// A pick whose command was typed but never confirmed on screen (a timeout) is retried only this many times before it counts as failed. One footer the reader could not parse (omp 18.11's compact model segment) retyped `/switch` every ~12s for over 13 minutes; only closing the session ended it. A busy agent (a dialog in front of its input box) is not counted and keeps retrying.
+/// A pick whose command was typed but never confirmed on screen (a timeout) is retried only this many times before it counts as failed. One footer the reader could not parse (omp 18.11's compact model segment) retyped `/switch` every ~12s for over 13 minutes; only closing the session ended it. A busy agent (a dialog in front of its input box) is not counted here; it has its own limit (`BUSY_LIMIT_MS`).
 const MAX_UNCONFIRMED_ATTEMPTS: u32 = 3;
+
+/// CDXC:SessionChat 2026-11-18 WHY:
+/// GitHub #666: `agentBusy` (a turn running, a dialog in front of the input box) was never counted, so a pick retried every 5 seconds for as long as the agent stayed busy, a day for one session, and each try cost screen captures, three database writes and two broadcasts that redraw every app window. A busy pick now waits twice as long after each busy answer, from 5 seconds up to a minute, and fails with its reason after 30 minutes of busy answers in a row (the chat and the sidebar's red dot show it; picking again starts over). While a chat message waits behind the pick, the pick keeps the 5-second pace and never gives up, as before: a failed pick holds the messages behind it until the user picks again, and a slower pace would hold them longer once the agent is free. Any other answer, or a message waiting, ends the busy run.
+const BUSY_RETRY_FIRST_MS: i64 = 5_000;
+const BUSY_RETRY_MAX_MS: i64 = 60_000;
+const BUSY_LIMIT_MS: i64 = 30 * 60_000;
+
+/// When each pick's current run of busy answers began, and how many it has had.
+fn busy_since() -> &'static Mutex<HashMap<String, (i64, u32)>> {
+    static SINCE: OnceLock<Mutex<HashMap<String, (i64, u32)>>> = OnceLock::new();
+    SINCE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum BusyRetry {
+    /// Not a busy answer: the usual 5-second retry.
+    NotBusy,
+    /// Busy: try again after this many milliseconds.
+    After(i64),
+    /// Busy for `BUSY_LIMIT_MS`: stop.
+    Exhausted,
+}
+
+/// Notes this failure and answers when a busy pick tries again, or that it has been busy too long.
+/// `message_waiting`: a chat message waits behind the pick.
+fn busy_retry(
+    selection_id: &str,
+    error: &DomainStateError,
+    now_ms: i64,
+    message_waiting: bool,
+) -> BusyRetry {
+    let Ok(mut since) = busy_since().lock() else {
+        return BusyRetry::NotBusy;
+    };
+    if error.code != "agentBusy" {
+        since.remove(selection_id);
+        return BusyRetry::NotBusy;
+    }
+    if message_waiting {
+        since.remove(selection_id);
+        return BusyRetry::After(BUSY_RETRY_FIRST_MS);
+    }
+    let (first, count) = since.entry(selection_id.to_string()).or_insert((now_ms, 0));
+    *count += 1;
+    if now_ms - *first >= BUSY_LIMIT_MS {
+        return BusyRetry::Exhausted;
+    }
+    let doublings = (*count - 1).min(8);
+    BusyRetry::After((BUSY_RETRY_FIRST_MS << doublings).min(BUSY_RETRY_MAX_MS))
+}
+
+/// Whether a chat message waits behind this session's pending pick.
+fn message_waits_behind(db: &Connection, project: &str, session: &str) -> bool {
+    crate::session_chat_queue::read_session_chat_queue_snapshot_with(db, project, session)
+        .deliverable_head()
+        .is_some()
+}
 
 /// CDXC:SessionChat 2026-10-24 WHY:
 /// A pick that keeps finding no input box at all (a blank screen, a CLI that never came up, a shell prompt) types nothing, but it retried every ~6 seconds for minutes with nothing in the chat to say why (GitHub #290, a Codex that never drew its input box). After this long without the agent's input box it fails with the reason, which the chat and the sidebar's red dot show; picking the model again retries it. A dialog standing in front of the input box is not counted: answering it lets the pick through.
@@ -576,8 +633,20 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                     tried.remove(&pending.id);
                 }
             }
+            let busy = result.as_ref().err().map(|error| {
+                let message_waiting = error.code == "agentBusy"
+                    && open_gxserver_database(&state.paths)
+                        .is_ok_and(|db| message_waits_behind(&db, &project, &session));
+                busy_retry(&pending.id, error, now_ms, message_waiting)
+            });
             let result = result.map_err(|error| {
-                if unconfirmed_attempts_exhausted(&pending.id, &error) {
+                if busy == Some(BusyRetry::Exhausted) {
+                    crate::session_chat_codex_picker::unsupported_selection(format!(
+                        "The agent stayed busy for {} minutes, so Ghostex stopped trying to apply this change. Pick it again when the agent is free. {}",
+                        BUSY_LIMIT_MS / 60_000,
+                        error.message
+                    ))
+                } else if unconfirmed_attempts_exhausted(&pending.id, &error) {
                     crate::session_chat_codex_picker::unsupported_selection(format!(
                         "The agent never confirmed this change after {MAX_UNCONFIRMED_ATTEMPTS} tries, so Ghostex stopped retrying it. {}",
                         error.message
@@ -599,6 +668,9 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                     attempts.remove(&pending.id);
                 }
                 if let Ok(mut since) = missing_input_box_since().lock() {
+                    since.remove(&pending.id);
+                }
+                if let Ok(mut since) = busy_since().lock() {
                     since.remove(&pending.id);
                 }
             }
@@ -623,7 +695,11 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                         let _ = db.execute("UPDATE session_chat_model_selections SET state = 'failed', errorMessage = ?4, retryAt = 0 WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3", params![project, session, pending.id, error.message]);
                     }
                     Err(error) => {
-                        let _ = db.execute("UPDATE session_chat_model_selections SET state = 'queued', errorMessage = ?4, retryAt = ?5 WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3", params![project, session, pending.id, error.message, chrono::Utc::now().timestamp_millis() + 5_000]);
+                        let delay = match busy {
+                            Some(BusyRetry::After(delay)) => delay,
+                            _ => 5_000,
+                        };
+                        let _ = db.execute("UPDATE session_chat_model_selections SET state = 'queued', errorMessage = ?4, retryAt = ?5 WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3", params![project, session, pending.id, error.message, chrono::Utc::now().timestamp_millis() + delay]);
                     }
                 }
             }

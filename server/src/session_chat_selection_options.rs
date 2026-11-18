@@ -81,7 +81,62 @@ fn claude_fast_unavailable(screen: &str) -> Option<String> {
         .map(|line| line.trim().replace(" · ", ". Run ").to_string())
 }
 
+/// The requested options a busy agent already shows in effect (`options_in_effect_while_busy`).
+#[derive(Default)]
+struct OptionsInEffect {
+    fast: bool,
+    mode: bool,
+}
+
 impl PickerDriver<'_> {
+    /// CDXC:SessionChat 2026-11-18 WHY:
+    /// GitHub #666: a Plan or Fast mode change that met a busy agent was retried for as long as it worked (a day for one session), even when the agent already showed the asked-for setting, because the current value was only read once the input box was ready. While the input box is not ready, a requested mode or Fast mode the agent already shows counts as done; the rest wait for the input box as before. Only a value the agent names counts: Claude's mode badge, Codex's plan marker, Codex's `fast` word, or the Fast mode in Claude's status line payload. Codex's default mode and Fast off are read from what is missing, which a busy screen cannot prove, and Codex permissions are left to the ready path.
+    async fn options_in_effect_while_busy(
+        &self,
+        plan: &CodexPickerPlan,
+        agent: SessionChatOptionAgent,
+    ) -> OptionsInEffect {
+        if plan.options.mode.is_none() && plan.options.fast_mode.is_none()
+            || !matches!(
+                agent,
+                SessionChatOptionAgent::Claude | SessionChatOptionAgent::Codex
+            )
+        {
+            return OptionsInEffect::default();
+        }
+        let Some(screen) = self.capture().await else {
+            return OptionsInEffect::default();
+        };
+        // A ready screen, or Claude's Fast mode panel left open, goes through the usual steps.
+        if ready(&screen, agent) || claude_fast_panel_open(&screen) {
+            return OptionsInEffect::default();
+        }
+        let selection = detect_session_chat_selection(agent, &screen);
+        let fast = plan.options.fast_mode.as_deref().is_some_and(|target| {
+            let target = target == "on";
+            let shown = if agent == SessionChatOptionAgent::Claude {
+                plan.claude_statusline
+                    .as_ref()
+                    .and_then(|(directory, session_id)| {
+                        crate::agent_hooks::statusline::read_claude_statusline_payload(
+                            directory, session_id,
+                        )
+                    })
+                    .and_then(|stored| stored.payload.get("fast_mode").and_then(Value::as_bool))
+            } else {
+                selection.as_ref().and_then(|selection| selection.fast)
+            };
+            shown == Some(target)
+        });
+        let mode = plan.options.mode.as_deref().is_some_and(|target| {
+            selection
+                .as_ref()
+                .and_then(|selection| selection.mode.as_ref())
+                .is_some_and(|mode| mode.value == target)
+        });
+        OptionsInEffect { fast, mode }
+    }
+
     pub(super) async fn option_screen(
         &self,
         agent: SessionChatOptionAgent,
@@ -159,8 +214,14 @@ impl PickerDriver<'_> {
         CDXC:SessionChat 2026-09-29 WHY:
         On an account without usage credits Claude Code 2.1.284 answers `/fast` with a panel ("Fast mode requires usage credits · /usage-credits to turn them on", "Esc to cancel") instead of toggling. The panel stayed open, so every retry found no input box and waited forever, holding every model change and message behind it. A panel left open is closed first, the credits answer ends the change with Claude's reason, and a failed toggle never leaves the panel open.
         */
+        let in_effect = self.options_in_effect_while_busy(plan, agent).await;
         let fast_result: Result<(), DomainStateError> = async {
-            if let Some(target) = plan.options.fast_mode.as_deref() {
+            if let Some(target) = plan
+                .options
+                .fast_mode
+                .as_deref()
+                .filter(|_| !in_effect.fast)
+            {
                 let target = target == "on";
                 if agent == SessionChatOptionAgent::Claude
                     && self
@@ -209,7 +270,11 @@ impl PickerDriver<'_> {
             Ok(())
         }
         .await;
-        let mode_result = self.drive_mode_option(plan, agent).await;
+        let mode_result = if in_effect.mode {
+            Ok(())
+        } else {
+            self.drive_mode_option(plan, agent).await
+        };
         let permissions_result = self.drive_permissions_option(plan, agent).await;
         fast_result.and(mode_result).and(permissions_result)
     }
