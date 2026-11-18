@@ -288,6 +288,25 @@ const AGE_SLOT_MIN: f32 = 26.0;
 /// The rows' width before the dock has painted once (the chat box's own width).
 const DOCK_ROW_WIDTH_GUESS: f32 = 736.0;
 
+/// How a dock row is drawn (`dock_row_look`): the dock's own (the default), or a Work panel Needs
+/// you card's (coordinator_board.rs `board_dock_card`).
+#[derive(Default)]
+pub(super) struct DockRowLook {
+    /// The row's width (unscaled) with its sides; `None` for the dock's.
+    pub width: Option<f32>,
+    /// The title wraps over as many lines as it needs, with the answers on the line under it.
+    pub wrap: bool,
+    /// Leads the row's ids, so the same row drawn in the dock and in the panel stays apart.
+    pub scope: &'static str,
+    /// What takes the age's place (the panel card's age and ⋯); `None` for the dock's age and
+    /// ⋯ with its right-click menu.
+    pub age: Option<AnyElement>,
+    /// What a click on the row opens in place of the dock's (its modal, or the page).
+    pub click: Option<Value>,
+    /// What shows in the answers' place (a thread's relayed approval buttons).
+    pub buttons: Option<AnyElement>,
+}
+
 /// How wide `label` is in the chat's font at `size` (both unscaled).
 pub(super) fn dock_text_width(label: &str, size: f32, p: &ChatAppearance, cx: &gpui::App) -> f32 {
     super::fonts::label_width(label, &p.font, gpui::FontWeight::NORMAL, size * p.scale, cx)
@@ -1063,8 +1082,22 @@ impl NativeChatView {
     /// row card (2026-11-11 and 2026-11-12 decisions, now on the modal in dock_ask_modal.rs) and
     /// its scrolling into view past the dock's height cap.
     fn dock_row(&self, row: &Value, p: &ChatAppearance, cx: &mut Context<Self>) -> AnyElement {
+        self.dock_row_look(row, DockRowLook::default(), p, cx)
+    }
+
+    /// A dock row drawn as `look` says: in the dock (one line), or as a Work panel Needs you card
+    /// (coordinator_board.rs `board_dock_card`): the same mark, title, answers and Open, with the
+    /// title wrapping over as many lines as it needs and the answers on the line under it.
+    pub(super) fn dock_row_look(
+        &self,
+        row: &Value,
+        look: DockRowLook,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let s = p.scale;
         let key = text(row, "key");
+        let wrap = look.wrap;
         // A Ghostex page's row never opens to a second line: a click opens the page, and its other
         // actions are the ⋯ menu that takes the age's place under the pointer (`page_row_menu`).
         //
@@ -1074,6 +1107,18 @@ impl NativeChatView {
         // on click since it's useless when it expands".
         let page_row = row["page"] == true && row["open"].is_object();
         let (icon, color) = row_mark(row, p);
+        // A thread (only a Work panel card, `BoardRow::dock`) is marked by its agent's logo, as
+        // the panel's agent button and the Moving list's Who are.
+        let agent = text(row, "agentIcon");
+        let (icon, color): (gpui::SharedString, gpui::Hsla) =
+            if text(row, "kind") == "thread" && !agent.is_empty() {
+                (
+                    format!("agent-icons/{agent}.svg").into(),
+                    super::new_session_welcome::brand_logo_color(&agent, p),
+                )
+            } else {
+                (icon.into(), color)
+            };
         let body = p.strengthened(p.prose);
         let busy = row["busy"] == true;
         let title = text(row, "title");
@@ -1096,15 +1141,24 @@ impl NativeChatView {
             && row["reply"].is_object())
         .then(|| Self::reply_answer(&row["reply"], &text(row, "replied"), busy));
         // What fits: the answers may take the first line while the question keeps half the row.
-        let row_width = match self.board.dock_width.get() {
-            width if width > 0.0 => width,
-            _ => DOCK_ROW_WIDTH_GUESS,
-        } - 2.0 * DOCK_LIST_PAD
-            - 2.0 * DOCK_ROW_PAD_X;
+        let row_width = match look.width {
+            Some(width) => width,
+            None => {
+                (match self.board.dock_width.get() {
+                    width if width > 0.0 => width,
+                    _ => DOCK_ROW_WIDTH_GUESS,
+                }) - 2.0 * DOCK_LIST_PAD
+            }
+        } - 2.0 * DOCK_ROW_PAD_X;
         // The age's slot, which the ⋯ takes under the pointer (`row_age_menu`): never narrower
         // than the ⋯, so the two swap without anything moving.
         let age_width = dock_text_width(&age, PROSE_SIZE, p, cx).max(AGE_SLOT_MIN) + DOCK_GAP;
-        let beside_room = row_width - DOCK_LEAD - age_width - row_width / 2.0;
+        // Wrapped, the answers have their own line under the title.
+        let beside_room = if wrap {
+            row_width - DOCK_LEAD
+        } else {
+            row_width - DOCK_LEAD - age_width - row_width / 2.0
+        };
         let widths: Vec<f32> = match &action {
             Some(label) => vec![dock_button_width(label, true, false, p, cx)],
             None => answers
@@ -1142,6 +1196,7 @@ impl NativeChatView {
             && buttons_width(&widths) > choose_width
             && all_width > beside_room;
         let mut buttons: Vec<AnyElement> = match &action {
+            _ if look.buttons.is_some() => look.buttons.into_iter().collect(),
             Some(_) => self.work_row_action(&key, row, p, cx).into_iter().collect(),
             None if fold => vec![self.answers_dropdown(&key, &answers, busy, p, cx)],
             None => self.work_answer_buttons(&key, &answers, busy, p, cx),
@@ -1156,7 +1211,26 @@ impl NativeChatView {
             ));
         }
         let count = text(row, "count");
-        let question = if page_row && !count.is_empty() {
+        let question = if page_row && !count.is_empty() && wrap {
+            // Wrapped, the name and its count are one run of words, the count quieter.
+            let words = format!("{title} {count}");
+            let muted = gpui::HighlightStyle {
+                color: Some(p.card_muted),
+                ..Default::default()
+            };
+            div()
+                .flex_1()
+                .min_w_0()
+                .whitespace_normal()
+                .text_size(px(PROSE_SIZE * s))
+                .line_height(px(PROSE_LINE_HEIGHT * s))
+                .text_color(body)
+                .child(
+                    gpui::StyledText::new(words.clone())
+                        .with_highlights(vec![(title.len() + 1..words.len(), muted)]),
+                )
+                .into_any_element()
+        } else if page_row && !count.is_empty() {
             // The page's name, then how much it still asks; the name gives way first.
             div()
                 .flex_1()
@@ -1186,7 +1260,7 @@ impl NativeChatView {
                     &key,
                     &title,
                     &row["titleRuns"],
-                    true,
+                    !wrap,
                     body,
                     PROSE_SIZE,
                     PROSE_LINE_HEIGHT,
@@ -1205,7 +1279,8 @@ impl NativeChatView {
             .w_full()
             .min_w_0()
             .flex()
-            .items_center()
+            .when(wrap, |head| head.items_start())
+            .when(!wrap, |head| head.items_center())
             .gap(px(DOCK_GAP * s))
             .child(
                 div()
@@ -1216,7 +1291,19 @@ impl NativeChatView {
                     .child(svg().path(icon).size(px(13.0 * s)).text_color(color)),
             )
             .child(question);
-        if !buttons.is_empty() {
+        // Wrapped, the answers and Open take the line under the title, after the mark's room.
+        let mut under = None;
+        if wrap && !buttons.is_empty() {
+            under = Some(
+                div()
+                    .pl(px(DOCK_LEAD * s))
+                    .pt(px(6.0 * s))
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0 * s))
+                    .children(buttons),
+            );
+        } else if !buttons.is_empty() {
             head = head.child(
                 div()
                     .flex_shrink_0()
@@ -1233,19 +1320,48 @@ impl NativeChatView {
         // User, of the ⋯ at the right end of an opened row's answers: "please move this button to
         // be over the time in the card but only when i hover over the card (whether collapsed or
         // expanded)". The answers and Reply get its room.
-        let hover = gpui::SharedString::from(format!("dock-row-hover:{key}"));
-        let age_menu = self.row_age_menu(&key, &age, &hover, row, p, cx);
+        let hover = gpui::SharedString::from(format!("{}dock-row-hover:{key}", look.scope));
+        // A Work panel card keeps its own age, ⋯ and right-click menu (`look.age`).
+        let in_dock = look.age.is_none();
+        let age_menu = match look.age {
+            Some(age) => age,
+            None => self.row_age_menu(&key, &age, &hover, row, p, cx),
+        };
         let right_row = row.clone();
-        let press = Self::dock_row_press(&key, head.child(age_menu), p)
+        let line = head.child(age_menu);
+        let line = match under {
+            Some(under) => div()
+                .w_full()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .child(line)
+                .child(under),
+            None => line,
+        };
+        let press = Self::dock_row_press(&format!("{}{key}", look.scope), line, p)
             .group(hover.clone())
-            .on_mouse_down(
-                gpui::MouseButton::Right,
-                cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
-                    cx.stop_propagation();
-                    let rows = this.row_menu(&right_row, cx);
-                    this.show_dock_row_menu(rows, event.position, window, cx);
-                }),
-            );
+            .when(in_dock, |press| {
+                press.on_mouse_down(
+                    gpui::MouseButton::Right,
+                    cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
+                        cx.stop_propagation();
+                        let rows = this.row_menu(&right_row, cx);
+                        this.show_dock_row_menu(rows, event.position, window, cx);
+                    }),
+                )
+            });
+        // A Work panel card opens what it points to (`BoardRow::go`).
+        if let Some(go) = look.click {
+            return div()
+                .w_full()
+                .child(press.on_click(cx.listener(move |this, _, window, cx| {
+                    this.close_board_card_menu(cx);
+                    this.open_work_target(go.clone(), window, cx);
+                })))
+                .children(self.dock_command_chip(&key, &text(row, "command"), p, cx))
+                .into_any_element();
+        }
         if page_row {
             let page = row["open"].clone();
             if let Some(page_id) = row["pageId"].as_str() {

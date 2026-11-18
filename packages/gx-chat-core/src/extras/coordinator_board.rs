@@ -226,6 +226,17 @@ pub struct BoardRow {
     /// (`work_cards::panel_actions`): `{reply, open, showInChat, dismiss, snooze}`, `null` for none.
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub actions: Value,
+    /// A Needs you card's row as the dock above the chat box shows it (`work_cards::dock_with`'s
+    /// row with the same key, or for a thread, which the dock never lists, a row in that shape:
+    /// its agent, title, age and Open), which the renderer draws with the dock row's own code,
+    /// wrapped over as many lines as it needs; `null` in every other group.
+    ///
+    /// CDXC:Coordinators 2026-11-19 DECISION:
+    /// User, of three ways to mark a card's type (Q4174): "more similar to the ones in the dock pls
+    /// but multi line, what ur showing is too different". A Needs you card is the dock's row for
+    /// it: the same mark, title line, answers and Open, wrapping instead of cut to one line.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub dock: Value,
 }
 
 /// One answer on a card that asks the user something.
@@ -668,6 +679,7 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
             "group": format!("{CARD_KEY_PREFIX}{}", text(row, "key")),
         }),
         go: open_command.clone(),
+        dock: Value::Null,
         open: open_command,
         open_label,
         done: if here && !matches!(group, "done" | "removed") {
@@ -948,6 +960,7 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
                             "group": format!("{CARD_KEY_PREFIX}question:{}", asker.id),
                         }),
                         go: crate::extras::work_cards::open_resource(state, &asker),
+                        dock: Value::Null,
                         open: json!({"type": "jumpToQuestion", "id": asker.id}),
                         open_label: "Go to question".to_string(),
                         done: Value::Null,
@@ -962,6 +975,43 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
             .collect();
     rows.sort_by(|left, right| right.0.cmp(&left.0));
     rows.into_iter().map(|(_, row)| row).collect()
+}
+
+/// A Needs you card's dock row (`BoardRow::dock`): the dock's row with its key (a work item ask,
+/// a form or page as `dock-questions:<id>`), a line of work's Done row by its item, or for a thread
+/// (which the dock never lists) a row in the dock's shape that opens it.
+fn dock_row_of(row: &BoardRow, raw: &Value, dock_rows: &[Value]) -> Value {
+    let key = match row.key.strip_prefix("question:") {
+        Some(id) => format!("dock-questions:{id}"),
+        None => row.key.clone(),
+    };
+    let item = (text(raw, "kind") == "item" && raw["askRow"] != true).then(|| text(raw, "ref"));
+    let found = dock_rows.iter().find(|dock| {
+        text(dock, "key") == key
+            || item.is_some_and(|reference| {
+                !reference.is_empty()
+                    && text(dock, "kind") == "item"
+                    && text(&dock["reply"], "item") == reference
+            })
+    });
+    if let Some(found) = found {
+        return found.clone();
+    }
+    if !row.open_thread.is_object() {
+        return Value::Null;
+    }
+    json!({
+        "key": row.key,
+        "kind": "thread",
+        "status": "needs",
+        "title": row.title,
+        "age": row.age,
+        "agentIcon": row.agent_icon,
+        "open": row.open_thread,
+        "showInChat": row.actions["showInChat"],
+        "buttons": [],
+        "needs": true,
+    })
 }
 
 /// The board, or `None` on a chat that is not a coordinator or whose gxserver sends no board.
@@ -1054,6 +1104,25 @@ pub fn coordinator_board_with(
             .and_then(|group| group.get("total"))
             .and_then(Value::as_u64)
             .map_or(rows.len(), |total| total as usize);
+        // The dock row each Needs you card is drawn as (`BoardRow::dock`), matched by the raw row's
+        // item before the question rows join.
+        let dock_rows = (id == "needs").then(|| {
+            crate::extras::work_cards::dock_with(state, context, turns)["rows"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+        });
+        if let Some(dock_rows) = &dock_rows {
+            let raw: Vec<&Value> = sent
+                .and_then(|group| group.get("rows"))
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .collect();
+            for (row, raw) in rows.iter_mut().zip(raw) {
+                row.dock = dock_row_of(row, raw, dock_rows);
+            }
+        }
         if id == "needs" {
             let mut questions = question_rows(state, now_ms);
             // Each with the dock's actions for its form or page (Reply, Open, Dismiss, Snooze).
@@ -1061,6 +1130,11 @@ pub fn coordinator_board_with(
                 if let Some(id) = question.key.strip_prefix("question:") {
                     question.actions =
                         crate::extras::work_cards::question_actions(state, context, id);
+                }
+            }
+            if let Some(dock_rows) = &dock_rows {
+                for question in &mut questions {
+                    question.dock = dock_row_of(question, &Value::Null, dock_rows);
                 }
             }
             asked = questions.len();

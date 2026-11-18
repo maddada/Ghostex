@@ -252,6 +252,19 @@ fn expanded_card_height(row: &Value) -> f32 {
     20.0 + lines(&text(row, "title")) * 20.0 + detail + body + 28.0 + 32.0
 }
 
+/// A Needs you card's height (unscaled), drawn as its dock row (`board_dock_card`): its title's
+/// lines at the list's width, and the answers' line under it when it has any.
+fn dock_card_height(dock: &Value) -> f32 {
+    let room = (BOARD_WIDTH - 2.0 * 10.0 - BADGE_ROOM - 2.0 * 8.0 - 23.0 - 34.0) / 7.0;
+    let lines = (text(dock, "title").chars().count() as f32 / room)
+        .ceil()
+        .max(1.0);
+    let answers = dock["buttons"].as_array().is_some_and(|b| !b.is_empty())
+        || dock["open"].is_object()
+        || dock["reply"].is_object();
+    4.0 + 12.0 + lines * 20.0 + if answers { 34.0 } else { 0.0 }
+}
+
 /// The board's content height (unscaled): its header, each group's line, an open group's rows
 /// and its "N more" line.
 pub(super) fn board_height(board: &Value) -> f32 {
@@ -262,7 +275,9 @@ pub(super) fn board_height(board: &Value) -> f32 {
         height += GROUP_HEIGHT;
         for row in group["rows"].as_array().into_iter().flatten() {
             height += CARD_GAP
-                + if row["expanded"] == true {
+                + if row["dock"].is_object() {
+                    dock_card_height(&row["dock"])
+                } else if row["expanded"] == true {
                     expanded_card_height(row).max(CARD_HEIGHT)
                 } else {
                     CARD_HEIGHT
@@ -1194,6 +1209,9 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        if row["dock"].is_object() {
+            return self.board_dock_card(row, inner_width, scroll, group, p, cx);
+        }
         let s = p.scale;
         let key = text(row, "key");
         let focus = self.board.focus.as_ref().filter(|focus| focus.key == key);
@@ -1360,34 +1378,7 @@ impl NativeChatView {
                 }))
                 .into_any_element()
         });
-        // The age, and over it while the card is hovered, the ⋯ that opens the card's menu.
-        let age_slot = div()
-            .relative()
-            .flex_shrink_0()
-            .min_w(px(24.0 * s))
-            .h(px(22.0 * s))
-            .flex()
-            .items_center()
-            .justify_end()
-            .child(
-                div()
-                    .text_size(px(CHIP_SIZE * s))
-                    .text_color(p.muted)
-                    .when(has_menu, |age| {
-                        age.group_hover(hover_group.clone(), |style| style.opacity(0.0))
-                    })
-                    .child(age),
-            )
-            .when(has_menu, |slot| {
-                slot.child(
-                    self.board_menu_button(&key, p, cx)
-                        .absolute()
-                        .top_0()
-                        .right(px(-2.0 * s))
-                        .opacity(0.0)
-                        .group_hover(hover_group.clone(), |style| style.opacity(1.0)),
-                )
-            });
+        let age_slot = self.board_age_slot(row, &hover_group, p, cx);
         let mut card = div()
             .id(gpui::SharedString::from(format!("chat-board-card:{key}")))
             .group(hover_group.clone())
@@ -1597,6 +1588,137 @@ impl NativeChatView {
                     }
                 }))
             })
+            .when(has_menu, |this| {
+                this.on_mouse_down(
+                    gpui::MouseButton::Right,
+                    cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
+                        cx.stop_propagation();
+                        this.open_board_card_menu(&menu_key, event.position, window, cx);
+                    }),
+                )
+            })
+            .when(move_to.is_object(), |this| {
+                let drag = BoardCardDrag {
+                    title: title.clone(),
+                    move_to,
+                    from: group.to_string(),
+                    scale: s,
+                };
+                this.on_drag(drag, |drag, _, _, cx| {
+                    gpui::AppContext::new(cx, |_| drag.clone())
+                })
+            })
+            .into_any_element()
+    }
+
+    /// A card's age, and over it while the card (`hover_group`) is hovered, the ⋯ that opens the
+    /// card's menu.
+    fn board_age_slot(
+        &self,
+        row: &Value,
+        hover_group: &gpui::SharedString,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> gpui::Div {
+        let s = p.scale;
+        let key = text(row, "key");
+        let has_menu = row["menu"].as_array().is_some_and(|menu| !menu.is_empty());
+        div()
+            .relative()
+            .flex_shrink_0()
+            .min_w(px(24.0 * s))
+            .h(px(22.0 * s))
+            .flex()
+            .items_center()
+            .justify_end()
+            .child(
+                div()
+                    .text_size(px(CHIP_SIZE * s))
+                    .text_color(p.muted)
+                    .when(has_menu, |age| {
+                        age.group_hover(hover_group.clone(), |style| style.opacity(0.0))
+                    })
+                    .child(text(row, "age")),
+            )
+            .when(has_menu, |slot| {
+                slot.child(
+                    self.board_menu_button(&key, p, cx)
+                        .absolute()
+                        .top_0()
+                        .right(px(-2.0 * s))
+                        .opacity(0.0)
+                        .group_hover(hover_group.clone(), |style| style.opacity(1.0)),
+                )
+            })
+    }
+
+    /// A Needs you card: its dock row (`BoardRow::dock`, gx-chat-core), drawn by the dock row's
+    /// own code wrapped over as many lines as it needs (work_cards.rs `dock_row_look`), in the
+    /// card's glass. A click opens what it points to (`go`); the card keeps its age with the ⋯
+    /// menu, its right-click menu, its drag and its × badge. A thread waiting on a relayed
+    /// approval shows that approval's buttons in the answers' place.
+    ///
+    /// CDXC:Coordinators 2026-11-19 DECISION:
+    /// User, of three ways to mark a Needs you card's type (Q4174): "more similar to the ones in
+    /// the dock pls but multi line, what ur showing is too different". Supersedes, for Needs you,
+    /// the two-line card that opened in place (2026-11-06) and its opened body's click
+    /// (2026-11-18): the dock's rows open their target on a click too.
+    fn board_dock_card(
+        &self,
+        row: &Value,
+        inner_width: f32,
+        scroll: &ScrollHandle,
+        group: &str,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let key = text(row, "key");
+        let title = text(row, "title");
+        let focus = self.board.focus.as_ref().filter(|focus| focus.key == key);
+        let has_menu = row["menu"].as_array().is_some_and(|menu| !menu.is_empty());
+        let hover_group = gpui::SharedString::from(format!("chat-board-card-hover:{key}"));
+        let relayed = Some(text(&row["openThread"], "sessionId"))
+            .filter(|session| !session.is_empty())
+            .and_then(|session| self.relayed_card_for_thread(&session));
+        let go = Some(row["go"].clone()).filter(Value::is_object);
+        let look = super::work_cards::DockRowLook {
+            // The card's width less its border.
+            width: Some(inner_width + 2.0 * CARD_PAD),
+            wrap: true,
+            scope: "board:",
+            age: Some(
+                self.board_age_slot(row, &hover_group, p, cx)
+                    .into_any_element(),
+            ),
+            click: go,
+            buttons: relayed
+                .as_ref()
+                .map(|relayed| self.board_relay_buttons(relayed, CHIP_SIZE, p, cx)),
+        };
+        let move_to = row["moveTo"].clone();
+        let menu_key = key.clone();
+        div()
+            .id(gpui::SharedString::from(format!("chat-board-card:{key}")))
+            .group(hover_group.clone())
+            .relative()
+            .role(gpui::Role::Group)
+            .aria_label(title.clone())
+            .w_full()
+            .flex_shrink_0()
+            .p(px(2.0 * s))
+            .rounded(px(10.0 * s))
+            .border(px(s))
+            .border_color(p.foreground.opacity(0.08))
+            .bg(p.foreground.opacity(0.035))
+            .when_some(focus, |this, focus| {
+                this.border_color(p.accent)
+                    .bg(p.accent.opacity(0.08))
+                    .child(scroll_into_view(scroll.clone(), focus.tries.clone(), s))
+            })
+            .child(self.dock_row_look(&row["dock"], look, p, cx))
+            .children(self.board_remove_badge(row, &hover_group, p, cx))
+            .children(self.board_card_menu(row, p, cx))
             .when(has_menu, |this| {
                 this.on_mouse_down(
                     gpui::MouseButton::Right,
@@ -1871,7 +1993,7 @@ impl NativeChatView {
     }
 
     /// Closes the card's menu and its frosted window.
-    fn close_board_card_menu(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn close_board_card_menu(&mut self, cx: &mut Context<Self>) {
         if self.board.menu.take().is_some() {
             crate::app::window::frosted_host::hide_frosted_host(
                 crate::app::window::frosted_host::FrostedHostKind::BoardCardMenu,
