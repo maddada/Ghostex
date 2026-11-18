@@ -32,8 +32,9 @@ redo     Applies the newest undone change (or <change-id>) again.
 history  The last 20 changes: when, who made them and what they changed.
 
 Theme colours:
-  border, divider, text, mutedText, accent, surface, control, menu, selection,
-  hover, focusRing, userMessage, chatBox, success, warning, danger. Name one
+  border, divider, text, mutedText, accent, link, surface, control, menu,
+  selection, hover, focusRing, userMessage, chatBox, codeBlock, success,
+  warning, danger. Name one
   as dark.<colour> or light.<colour>; a bare name sets both, or the
   appearance --dark or --light picks. A value is an opacity of the text
   colour over what is under it (4%: see-through, right on glass and off it),

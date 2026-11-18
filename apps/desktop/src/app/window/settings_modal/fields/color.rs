@@ -194,6 +194,21 @@ pub(crate) struct ColorFieldState {
     shown: String,
     /// `colorText`: what the row's hex box holds while typing.
     color_text: String,
+    /// Saves the colour its own way instead of writing `key` (see [`set_color_saver`]).
+    saver: Option<ColorSaver>,
+}
+
+/// A colour field's own save: the `#rrggbb` picked, and whether it is committed (the dialog
+/// closed, the box left) or still moving.
+pub(crate) type ColorSaver =
+    Rc<dyn Fn(&gpui::Entity<super::super::store::SettingsStore>, &str, bool, &mut App)>;
+
+/// Makes the colour field `key` save through `saver` (the Interface page's theme colours, which
+/// live inside one setting, `themeRoles`) rather than write `key` as a setting.
+pub(crate) fn set_color_saver<V: SettingsPage>(page: &mut V, key: &str, saver: ColorSaver) {
+    if let Some(state) = page.field_states().colors.get_mut(key) {
+        state.saver = Some(saver);
+    }
 }
 
 /// What a colour field saves while the picker moves and when it closes.
@@ -214,6 +229,15 @@ fn save_color<V: SettingsPage>(
     cx: &mut Context<V>,
 ) {
     let store = page.settings_store().clone();
+    if let Some(saver) = page
+        .field_states()
+        .colors
+        .get(key)
+        .and_then(|state| state.saver.clone())
+    {
+        saver(&store, value, commit, cx);
+        return;
+    }
     let value = json!(value);
     store.update(cx, |store, cx| {
         // A picker or text event can arrive after the shader switch changed.
@@ -353,6 +377,7 @@ impl FieldStates {
                     },
                     shown: value.to_string(),
                     color_text: value.to_string(),
+                    saver: None,
                 },
             );
         }

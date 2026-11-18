@@ -5,6 +5,7 @@
 //! CDXC:Theming 2026-10-16 DECISION:
 //! User: "doesn't look so good … can we please make this look nicer? … don't copy everything", then picked direction A (Calm rows) of the mockups in docs/2026-10-16/theme-page. Supersedes the 2026-09-25 layout. The Theme page's rows carry an icon tile (this page only; other pages keep their rows). Appearance is three preview cards (System, Light, Dark). Each group is one card whose rare rows fold under a More row: Colours (Dark mode colour and Light mode colour as two rows of squares, Colourfulness; More: the sidebar and work area set apart, the active pane outline), Transparency (one Off / Dark only / Always control replacing Enable transparency and Use transparency, Strength, Blur, Behind the glass with its pictures or Live gallery; More: picture position, Live speed and brightness, play only when plugged in, the four tints, menu blur) and Chat and terminal (the two themes; More: the terminal palettes), then Related on General. The three-way choices keep the existing row control ("same as what we have now dont change this") and Blur stays as it was ("dont change this"). Custom colour is a "+" square after the squares that opens the Pick Color dialog right at it; no rows open under the colour row (2026-10-17, User: "very bad to have the same colors twice here why??? pls fix no need for these 2 rows that appear when i click on the + option in the colors pls"). The custom colour's depth has no control of its own: Colourfulness sets it (2026-10-17, the user's pick: "Remove it: Colourfulness alone sets how deep the custom colour is"). The squares are "smaller and simpler": 20px, one flat colour, today's ring drawn thinner. A search hit inside a group's More opens it.
 mod art;
+mod chat_colours;
 mod chat_preview;
 mod colours;
 mod controls;
@@ -226,6 +227,10 @@ impl ThemeTab {
             prompt_gallery: prompt_gallery::PromptGallery::default(),
             row_width: Rc::new(Cell::new(f32::INFINITY)),
         };
+        // More theme colours opens by itself while one of its colours is set (roles.rs).
+        if roles::more_roles_set(&page.store.read(cx).values().value("themeRoles")) > 0 {
+            page.more_open[MoreGroup::ThemeColours.index()] = true;
+        }
         page.apply_preview_state(window, cx);
         page
     }
@@ -245,6 +250,15 @@ impl ThemeTab {
             || state == "theme-colours"
         {
             self.more_open = [true; 4];
+        }
+        // The preview binary's `theme-role-picker` opens Your messages' Pick Color dialog.
+        if state == "theme-role-picker" {
+            let roles = self.store.read(cx).values().value("themeRoles");
+            let hex = roles["dark"]["userMessage"]
+                .as_str()
+                .map_or("#808080", |raw| raw.get(..7).unwrap_or(raw))
+                .to_string();
+            self.open_role_picker("userMessage", false, &hex, window, cx);
         }
         if state == "theme-light-scheme" {
             self.scheme_dark = false;
@@ -1167,8 +1181,10 @@ impl Render for ThemeTab {
         let chat_terminal = self.chat_terminal_section(&t, window, cx);
         let window_frame = self.window_frame_section(&t, cx);
         let theme_colours = self.theme_colours_section(&t, window, cx);
+        let chat_colours = self.chat_colours_section(&t, window, cx);
         let anything = window_frame.is_some()
             || theme_colours.is_some()
+            || chat_colours.is_some()
             || colours.is_some()
             || font.is_some()
             || interface_scale.is_some()
@@ -1191,6 +1207,8 @@ impl Render for ThemeTab {
                     .map(|section| PageBlock::section("themeByPrompt", section)),
             );
         }
+        // Chat colours sits right under it (chat_colours.rs).
+        blocks.extend(chat_colours.map(|section| PageBlock::section("chatColours", section)));
         // CDXC:Settings 2026-10-31: User, of the Text section: "move this section to the top of the
         // interface page in settings".
         blocks.extend(font.map(|section| PageBlock::section("font", section)));

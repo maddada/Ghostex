@@ -8516,7 +8516,7 @@
     {
       "key": "themeRoles",
       "title": "Theme colours",
-      "subtitle": "Borders, dividers, text, grey text, the accent, cards, controls, menus, selected and hovered rows, your messages, the chat box and the status colours, each set apart for dark and light mode as an opacity (4%) or a colour (#7dd3fc). Empty keeps the theme's own; Reset puts it back. Agents change them with `ghostex theme set`.",
+      "subtitle": "Borders, dividers, text, grey text, the accent, links, cards, controls, menus, selected and hovered rows, the focus ring, your messages, the chat box, code blocks and the status colours, each set apart for dark and light mode as an opacity (4%) or a colour (#7dd3fc), with a colour picker and an opacity slider. Your messages, the chat box, cards and the accent are in Chat colours. Empty keeps the theme's own; Reset puts it back. Agents change them with `ghostex theme set`.",
       "tab": "theme",
       "tabTitle": "Interface",
       "group": "appearance",

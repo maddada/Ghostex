@@ -28,6 +28,10 @@ const fn role(id: &'static str, title: &'static str, about: &'static str) -> The
 }
 
 /// Every role, in the order `ghostex theme read` and Settings list them.
+///
+/// CDXC:Theming 2026-11-18 DECISION:
+/// User: "i think we're missing some sliders in interface to be able to adjust things manually? Ex i see chat bubble is this color but i can't change it in ui at all", then on the theme-colour controls page: Q3980 "all" (a Chat colours group led by Your messages with a See-through slider and a live preview, and every Theme colours row a colour editor: swatch, picker, opacity slider, Reset, the text box kept), Q3981 "both" (More theme colours opens itself while one of its roles is set, and the example themes name the one applied and how many colours it set) and Q3982 "links, dots and code fill". Links take the Links role, else the Accent role, else Ghostex's blue; the chat's pill dots take Warning (working), Accent (questions) and Danger (approvals) while those are set; code blocks take the new Code blocks role over the Controls fill.
+/// SEE-ALSO: apps/desktop/src/app/window/settings_modal/tabs/theme/roles.rs and chat_colours.rs (the Settings controls), apps/desktop/src/app/native_chat/markdown_links.rs, chat_pills.rs and markdown_style.rs (the chat).
 pub const THEME_ROLES: &[ThemeRole] = &[
     role(
         "border",
@@ -53,6 +57,11 @@ pub const THEME_ROLES: &[ThemeRole] = &[
         "accent",
         "Accent",
         "Links, switches and sliders that are on, and other marks of the theme colour.",
+    ),
+    role(
+        "link",
+        "Links",
+        "Links in chat. Empty follows the Accent, or Ghostex's own blue when the Accent is not set.",
     ),
     role("surface", "Cards", "The fill of cards and panels."),
     role(
@@ -82,6 +91,11 @@ pub const THEME_ROLES: &[ThemeRole] = &[
         "The fill of your messages in chat.",
     ),
     role("chatBox", "Chat box", "The fill of the box you type in."),
+    role(
+        "codeBlock",
+        "Code blocks",
+        "The fill behind code blocks in chat. Empty keeps the Controls fill.",
+    ),
     role(
         "success",
         "Success",

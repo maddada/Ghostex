@@ -85,8 +85,10 @@ they ask for one.
      that text sits on the desktop, an outline that barely shows), the change
      is saved anyway: tell the user, and offer to change it back.
    - Theme colours: `border`, `divider`, `text`, `mutedText` (grey text),
-     `accent`, `surface` (cards), `control`, `menu`, `selection`, `hover`,
-     `focusRing`, `userMessage`, `chatBox`, `success`, `warning`, `danger`.
+     `accent`, `link` (chat links; empty follows `accent`), `surface` (cards),
+     `control`, `menu`, `selection`, `hover`, `focusRing`, `userMessage`,
+     `chatBox`, `codeBlock` (the fill behind chat code blocks), `success`,
+     `warning`, `danger`.
      Name one as `dark.border` or `light.border`; a bare name sets both, or add
      `--dark` or `--light`. A value is an opacity of the text colour over what
      is under it (`4%`: stays see-through on glass), or a colour (`#7dd3fc`,

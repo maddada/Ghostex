@@ -125,7 +125,122 @@ fn changes_for_this_computer(
         .collect()
 }
 
+/// The example theme whose colours are the ones set now: every theme colour it sets still has
+/// the value it gave, with how many it sets and whether Your messages is one.
+fn applied_theme<'a>(
+    themes: &'a [GalleryTheme],
+    roles: &Value,
+) -> Option<(&'a GalleryTheme, usize, bool)> {
+    use ghostex_settings_catalog::theme_roles::{format_role_value, parse_role_value};
+    let same = |a: &str, b: &str| match (parse_role_value(a), parse_role_value(b)) {
+        (Ok(a), Ok(b)) => format_role_value(a) == format_role_value(b),
+        _ => false,
+    };
+    themes.iter().find_map(|theme| {
+        let colours: Vec<(&str, &str, &str)> = theme
+            .changes
+            .iter()
+            .filter_map(|(key, value)| {
+                let (appearance, role) = key.split_once('.')?;
+                matches!(appearance, "dark" | "light").then_some((
+                    appearance,
+                    role,
+                    value.as_str()?,
+                ))
+            })
+            .collect();
+        let all_kept = !colours.is_empty()
+            && colours.iter().all(|(appearance, role, value)| {
+                roles
+                    .get(*appearance)
+                    .and_then(|roles| roles.get(*role))
+                    .and_then(Value::as_str)
+                    .is_some_and(|saved| same(saved, value))
+            });
+        all_kept.then(|| {
+            let mine = colours.iter().any(|(_, role, _)| *role == "userMessage");
+            (theme, colours.len(), mine)
+        })
+    })
+}
+
+/// "Orchid Dusk is applied. It set 16 colours, your messages included." and Change them, which
+/// opens the colours it set (CDXC:Theming 2026-11-18 in packages/settings-catalog/src/theme_roles.rs,
+/// Q3981 "both").
+fn applied_line(
+    p: &SettingsPalette,
+    themes: &[GalleryTheme],
+    roles: &Value,
+    cx: &mut Context<ThemeTab>,
+) -> Option<AnyElement> {
+    let (theme, count, mine) = applied_theme(themes, roles)?;
+    let colours = if count == 1 {
+        "1 colour".to_string()
+    } else {
+        format!("{count} colours")
+    };
+    let detail = if mine {
+        format!("It set {colours}, your messages included.")
+    } else {
+        format!("It set {colours}.")
+    };
+    Some(
+        h_flex()
+            .w_full()
+            .gap(px(16.0))
+            .px(px(16.0))
+            .py(px(12.0))
+            .child(
+                v_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .gap(px(2.0))
+                    .child(
+                        div()
+                            .text_size(px(13.0))
+                            .line_height(px(19.0))
+                            .text_color(hsla(p.foreground))
+                            .child(format!("{} is applied", theme.name)),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(13.0))
+                            .line_height(px(18.57))
+                            .text_color(hsla(p.muted))
+                            .child(detail),
+                    ),
+            )
+            .child(settings_sized_button(
+                p,
+                "theme-prompt-change-colours",
+                "Change them",
+                None,
+                None,
+                SizedButtonVariant::Secondary,
+                SizedButtonSize::Sm,
+                false,
+                None,
+                |page: &mut ThemeTab, _window, cx| page.show_theme_colours(cx),
+                cx,
+            ))
+            .into_any_element(),
+    )
+}
+
 impl ThemeTab {
+    /// Change them: Chat colours in view, and More theme colours open under it.
+    fn show_theme_colours(&mut self, cx: &mut Context<Self>) {
+        self.set_more_open(super::MoreGroup::ThemeColours, true, cx);
+        let store = self.store.clone();
+        store.update(cx, |store, cx| {
+            store.scroll_to_section(
+                super::super::super::model::SettingsTabId::Theme,
+                "chatColours",
+                cx,
+            )
+        });
+    }
+
     /// Asks an agent: a Help chat opens with the starter prompt as its draft, and Settings closes
     /// so the chat shows. The window is removed here, as the shell's own close does
     /// (settings_modal/shell.rs): the store's close only tells the app the modal is gone.
@@ -315,10 +430,19 @@ impl ThemeTab {
             )
             .children(grid_rows)
             .into_any_element();
+        let applied = applied_line(
+            p,
+            &themes,
+            &self.store.read(cx).values().value("themeRoles"),
+            cx,
+        );
         let rows = if themes.is_empty() {
             vec![starter]
         } else {
-            vec![starter, gallery]
+            [Some(starter), applied, Some(gallery)]
+                .into_iter()
+                .flatten()
+                .collect()
         };
         settings_section(
             p,

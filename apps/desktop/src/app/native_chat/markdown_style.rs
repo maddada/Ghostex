@@ -99,10 +99,15 @@ pub(crate) fn text_style(p: &ChatAppearance) -> TextViewStyle {
             base * VISUAL.heading_font_sizes[(level.clamp(1, 6) - 1) as usize] / 14.0
         });
     // The card a fenced block sits in, and its header's rule, exactly as the
-    // React transcript drew them.
+    // React transcript drew them; the Code blocks theme role fills it when set
+    // (CDXC:Theming 2026-11-18 in packages/settings-catalog/src/theme_roles.rs).
     style.code_block = StyleRefinement::default()
         .text_color(p.code_text)
-        .bg(p.input)
+        .bg(crate::app::helpers::theme_role_or(
+            "codeBlock",
+            p.light,
+            p.input,
+        ))
         .border_1()
         .border_color(p.border)
         .rounded(px(12.0 * p.scale));

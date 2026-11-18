@@ -153,6 +153,7 @@ fn role_warnings(settings: &Map<String, Value>, light: bool, mode: &str, found: 
     // Marks drawn on the chat.
     for (id, name) in [
         ("accent", "The accent"),
+        ("link", "Links"),
         ("focusRing", "The focus ring"),
         ("success", "Success"),
         ("warning", "Warning"),
@@ -193,6 +194,7 @@ fn role_warnings(settings: &Map<String, Value>, light: bool, mode: &str, found: 
         ("hover", "a hovered row"),
         ("userMessage", "your messages"),
         ("chatBox", "the chat box"),
+        ("codeBlock", "code blocks"),
     ] {
         let Some(value) = role(settings, light, id).filter(|_| !text_fails) else {
             continue;

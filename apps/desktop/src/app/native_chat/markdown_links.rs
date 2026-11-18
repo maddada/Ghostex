@@ -55,9 +55,17 @@ fn hex_color(hex: &str) -> Option<Hsla> {
     Some(rgb(u32::from_str_radix(hex.trim_start_matches('#'), 16).ok()?).into())
 }
 
-/// A plain markdown link's color: the transcript's web-reference tone for this chat's own light or
-/// dark mode, not the app theme's, which a chat drawn in the other mode paints near-invisible.
+/// A plain markdown link's color: the Links theme role, else the Accent role, else the
+/// transcript's web-reference tone for this chat's own light or dark mode, not the app theme's,
+/// which a chat drawn in the other mode paints near-invisible (CDXC:Theming 2026-11-18 in
+/// packages/settings-catalog/src/theme_roles.rs).
 pub(super) fn transcript_link_color(appearance: &ChatAppearance) -> Option<Hsla> {
+    use crate::app::helpers::theme_role_rgba;
+    if let Some(role) = theme_role_rgba("link", appearance.light)
+        .or_else(|| theme_role_rgba("accent", appearance.light))
+    {
+        return Some(role.into());
+    }
     let palette = if appearance.light {
         &VISUAL.transcript.light
     } else {

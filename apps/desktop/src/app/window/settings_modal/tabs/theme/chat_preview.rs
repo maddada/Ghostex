@@ -183,6 +183,131 @@ pub(super) fn chat_preview(
         .into_any_element()
 }
 
+/// Lifts `background` toward white in dark mode or black in light mode by `amount`, as the chat
+/// lifts its fills off the transcript (`ChatAppearance::derive`).
+fn lifted(background: Rgb, light: bool, amount: f64) -> Hsla {
+    let target = if light { 0.0 } else { 255.0 };
+    hsla_of(Rgb(background
+        .0
+        .map(|channel| channel + (target - channel) * amount)))
+}
+
+/// The Chat colours group's live preview (chat_colours.rs): your message, a reply with a link and
+/// a code block on a card, and the box you type in, in the colours the page's theme roles set and
+/// the chat's own otherwise, so a pick or a slider shows at once.
+pub(super) fn chat_colours_preview(p: &SettingsPalette, values: &SettingsValues) -> AnyElement {
+    let light = chat_is_light(p, values);
+    let role = |id: &str| preview_role(values, id, light);
+    let roles = ChatTextRoles::read(role);
+    let colors = ChatTextColors::for_variant(light).with_roles(roles);
+    let (_, background, _) = preview_colours(values, !light);
+    let control = role("control").unwrap_or_else(|| {
+        lifted(
+            background,
+            light,
+            f64::from(if light {
+                chat_text_look::INPUT_STEP_LIGHT
+            } else {
+                chat_text_look::INPUT_STEP_DARK
+            }),
+        )
+    });
+    // Links: the Links role, else the Accent, else the chat's own blue (reference-visual.json
+    // `transcript.<mode>.url`, which markdown_links.rs reads).
+    let link = role("link").or_else(|| role("accent")).unwrap_or_else(|| {
+        hsla_of(if light {
+            Rgb([0x14 as f64, 0x47 as f64, 0xe6 as f64])
+        } else {
+            Rgb([0x6c as f64, 0xb4 as f64, 0xff as f64])
+        })
+    });
+    let border = role("border")
+        .unwrap_or_else(|| lifted(background, light, if light { 0.095 } else { 0.062 }));
+    let card = role("surface").unwrap_or_else(|| {
+        if light {
+            lifted(background, false, 0.6)
+        } else {
+            lifted(background, false, 0.035)
+        }
+    });
+    let chat_box = role("chatBox").unwrap_or_else(|| {
+        if light {
+            lifted(background, false, 0.3)
+        } else {
+            lifted(background, false, 0.03)
+        }
+    });
+    let code_fill = role("codeBlock").unwrap_or(control);
+    let line = |color: Hsla| {
+        div()
+            .min_w_0()
+            .text_size(px(PROSE_SIZE))
+            .line_height(px(PROSE_LINE_HEIGHT))
+            .text_color(color)
+    };
+    let user = h_flex().w_full().justify_end().child(
+        div()
+            .max_w(relative(0.8))
+            .rounded(px(USER_BUBBLE_RADIUS))
+            .p(px(USER_BUBBLE_PADDING))
+            .bg(roles
+                .user_message
+                .unwrap_or_else(|| bubble_fill(background, light)))
+            .child(line(colors.user_prose(0)).child("Where do I change the bubble colour?")),
+    );
+    let reply = h_flex()
+        .flex_wrap()
+        .gap(px(4.0))
+        .child(line(colors.reply_prose(0)).child("Under"))
+        .child(line(link).child("Settings \u{203a} Interface"))
+        .child(line(colors.reply_prose(0)).child("in Chat colours:"));
+    let code = div()
+        .w_full()
+        .rounded(px(12.0))
+        .border_1()
+        .border_color(border)
+        .bg(code_fill)
+        .px(px(12.0))
+        .py(px(8.0))
+        .font_family(preview_mono_family(None))
+        .text_size(px(13.0))
+        .text_color(colors.reply_base())
+        .child("ghostex theme set userMessage=#33283a");
+    let reply_card = v_flex()
+        .gap(px(8.0))
+        .p(px(10.0))
+        .rounded(px(10.0))
+        .border_1()
+        .border_color(border)
+        .bg(card)
+        .child(reply)
+        .child(code);
+    let composer = div()
+        .w_full()
+        .rounded(px(16.0))
+        .border_1()
+        .border_color(border)
+        .bg(chat_box)
+        .px(px(14.0))
+        .py(px(10.0))
+        .text_size(px(14.0))
+        .text_color(colors.muted)
+        .child("Message the agent\u{2026}");
+    v_flex()
+        .w_full()
+        .p(px(14.0))
+        .gap(px(12.0))
+        .rounded(px(8.0))
+        .border_1()
+        .border_color(hsla(p.hairline))
+        .bg(hsla_of(background))
+        .font_family(CHAT_BODY_FONT)
+        .child(user)
+        .child(reply_card)
+        .child(composer)
+        .into_any_element()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

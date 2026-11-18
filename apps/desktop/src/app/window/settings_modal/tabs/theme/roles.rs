@@ -1,35 +1,88 @@
 //! The Theme colours section of the Interface page: the theme roles (`themeRoles`,
-//! packages/settings-catalog/src/theme_roles.rs) one row each, with a field per appearance the app
-//! shows and a Reset. Borders, Dividers, Text, Grey text and Accent show at once; the rest fold under
-//! More theme colours.
+//! packages/settings-catalog/src/theme_roles.rs) one row each, a colour editor per appearance the
+//! app shows (a swatch that opens the Pick Color dialog, the text box, an opacity slider) and a
+//! Reset. The roles the Chat colours group shows (chat_colours.rs) are not repeated here. Borders,
+//! Dividers, Text and Grey text show at once; the rest fold under More theme colours, which opens
+//! by itself while one of them is set.
 //!
 //! CDXC:Theming 2026-11-14 DECISION:
 //! User (Q3195, agent theming stage B): "if the user should see the roles, a compact Theme colours section on the Interface page (dependent rows hidden per the AGENTS.md rule), with a Reset to default per role". A role's field for an appearance the app does not show is hidden: Dark mode only shows the dark field, Light mode only the light one, System both. A field takes an opacity (4%) or a colour (#7dd3fc, #7dd3fc80); it saves once what is typed reads as one, and an empty field puts the theme's own colour back.
+//!
+//! CDXC:Theming 2026-11-18 DECISION:
+//! User (Q3980 "all", Q3981 "both"): every Theme colours row is a colour editor, a swatch opening the Pick Color dialog, an opacity slider and Reset, with the text box kept for exact values; More theme colours opens itself while one of its colours is set and says how many are. The slider keeps a role's kind: an opacity stays an opacity, a colour keeps its colour and changes its alpha. Picking a colour keeps the opacity the role had. A role not set shows an empty dashed swatch and no slider until a colour is picked or typed.
 
-use super::super::super::fields::{FieldStates, PageAction, RowSpec, setting_row};
+use super::super::super::super::native_modal_kit::hsla;
+use super::super::super::fields::{
+    CONTROL_LANE_WIDTH, ColorSaver, FieldStates, PageAction, RowSpec, SliderBinding, SliderSaver,
+    open_tint_picker, set_color_saver, setting_row, step_slider, tooltip_text, trigger_tint_picker,
+};
+use super::super::super::palette::SettingsPalette;
 use super::controls::more_options_button;
 use super::{MoreGroup, ThemeCx, ThemeTab};
 use ghostex_settings_catalog::theme_roles::{
-    THEME_ROLES, THEME_ROLES_SETTING, appearance_key, format_role_value, parse_role_value,
+    RoleValue, THEME_ROLES, THEME_ROLES_SETTING, ThemeRole, appearance_key, format_role_value,
+    parse_role_value,
 };
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, IntoElement, ParentElement as _, SharedString, Styled as _, Window, div,
-    px,
+    AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _,
+    SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
-use gpui_component::h_flex;
+use gpui_component::{h_flex, v_flex};
 use serde_json::{Map, Value};
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
-/// The roles shown without opening More theme colours.
-const FIRST_ROLES: usize = 5;
+/// The roles the Chat colours group shows (chat_colours.rs), so Theme colours leaves them out.
+pub(super) const CHAT_COLOUR_ROLES: [&str; 4] = ["userMessage", "chatBox", "surface", "accent"];
+
+/// How many of Theme colours' own roles show without opening More theme colours.
+const FIRST_ROLES: usize = 4;
+
+/// The swatch's side, and the slider track's width beside the text box.
+const SWATCH: f32 = 24.0;
+const TEXT_BOX: f32 = 108.0;
+const READOUT: f32 = 36.0;
+
+/// The colour the Pick Color dialog starts on for a role not set.
+const UNSET_PICK: &str = "#808080";
 
 /// The appearances the app shows with this Appearance setting: `(light, label)`.
-fn shown_appearances(appearance: &str) -> Vec<(bool, &'static str)> {
+pub(super) fn shown_appearances(appearance: &str) -> Vec<(bool, &'static str)> {
     match appearance {
         "plain-light" => vec![(true, "Light")],
         "system" => vec![(false, "Dark"), (true, "Light")],
         _ => vec![(false, "Dark")],
     }
+}
+
+/// Theme colours' own roles: every role but the Chat colours group's.
+fn own_roles() -> impl Iterator<Item = &'static ThemeRole> {
+    THEME_ROLES
+        .iter()
+        .filter(|role| !CHAT_COLOUR_ROLES.contains(&role.id))
+}
+
+/// How many roles under More theme colours `saved` sets, in either appearance.
+pub(super) fn more_roles_set(saved: &Value) -> usize {
+    own_roles()
+        .skip(FIRST_ROLES)
+        .filter(|role| {
+            [false, true]
+                .into_iter()
+                .any(|light| saved_role(saved, light, role.id).is_some())
+        })
+        .count()
+}
+
+/// Role `id` of one appearance as saved, when it reads as a role value.
+fn saved_role(saved: &Value, light: bool, id: &str) -> Option<RoleValue> {
+    saved
+        .get(appearance_key(light))?
+        .get(id)?
+        .as_str()
+        .and_then(|raw| parse_role_value(raw).ok())
 }
 
 /// `themeRoles` with `role` of one appearance set to `value`, or taken off for `None`.
@@ -55,6 +108,70 @@ fn with_role(current: &Value, light: bool, role: &str, value: Option<String>) ->
     Value::Object(roles)
 }
 
+/// Saves role `role` of one appearance as `next(current)`, through the store `store`: now when
+/// `commit`, else after the debounce (a slider or the picker still moving).
+fn save_role_in(
+    store: &gpui::Entity<super::super::super::store::SettingsStore>,
+    light: bool,
+    role: &'static str,
+    commit: bool,
+    next: impl FnOnce(Option<RoleValue>) -> Option<RoleValue>,
+    cx: &mut gpui::App,
+) {
+    store.update(cx, |store, cx| {
+        let current = store.values().value(THEME_ROLES_SETTING);
+        let Some(value) = next(saved_role(&current, light, role)) else {
+            return;
+        };
+        let updated = with_role(&current, light, role, Some(format_role_value(value)));
+        if updated == current {
+            return;
+        }
+        if commit {
+            store.update_setting(THEME_ROLES_SETTING, updated, cx);
+        } else {
+            store.update_setting_debounced(THEME_ROLES_SETTING, updated, cx);
+        }
+    });
+}
+
+/// A field key that lives for the app's run: the Pick Color dialog and slider states are keyed by
+/// `&'static str`, and there are at most two per role and appearance.
+fn field_key(kind: &str, role: &str, light: bool) -> &'static str {
+    thread_local! {
+        static KEYS: RefCell<HashMap<String, &'static str>> = RefCell::new(HashMap::new());
+    }
+    let key = format!("theme-role-{kind}-{role}-{}", appearance_key(light));
+    KEYS.with(|keys| {
+        *keys
+            .borrow_mut()
+            .entry(key.clone())
+            .or_insert_with(|| Box::leak(key.into_boxed_str()))
+    })
+}
+
+/// A role's opacity, 0 to 1.
+fn alpha_of(value: RoleValue) -> f32 {
+    match value {
+        RoleValue::Ink(alpha) | RoleValue::Colour { alpha, .. } => alpha,
+    }
+}
+
+/// `#rrggbb` of what a role paints in one appearance.
+fn hex_of(value: RoleValue, light: bool) -> String {
+    let [r, g, b, _] = value.rgba(light);
+    let byte = |channel: f32| (channel * 255.0).round() as u8;
+    format!("#{:02x}{:02x}{:02x}", byte(r), byte(g), byte(b))
+}
+
+/// How a role editor's slider reads: the role's opacity, or how see-through it is (Your messages
+/// in the Chat colours group).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum SliderReads {
+    Opacity,
+    SeeThrough,
+}
+
 impl ThemeTab {
     fn save_role(
         &mut self,
@@ -73,6 +190,251 @@ impl ThemeTab {
         });
     }
 
+    /// The Pick Color dialog of role `role` in one appearance, opened on its colour; its picks keep
+    /// the role's opacity.
+    pub(super) fn open_role_picker(
+        &mut self,
+        role: &'static str,
+        light: bool,
+        hex: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let key = field_key("colour", role, light);
+        open_tint_picker(self, key, hex, window, cx);
+        let saver: ColorSaver = Rc::new(move |store, hex, commit, cx| {
+            let Ok(RoleValue::Colour { rgb, .. }) = parse_role_value(hex) else {
+                return;
+            };
+            save_role_in(
+                store,
+                light,
+                role,
+                commit,
+                |current| {
+                    Some(RoleValue::Colour {
+                        rgb,
+                        alpha: current.map_or(1.0, alpha_of),
+                    })
+                },
+                cx,
+            );
+        });
+        set_color_saver(self, key, saver);
+    }
+
+    /// One appearance's editor of role `role`: the swatch (with its Pick Color dialog while open),
+    /// the text box and, while the role is set, its opacity slider and readout.
+    #[allow(clippy::too_many_arguments)]
+    fn role_editor_line(
+        &mut self,
+        p: &SettingsPalette,
+        saved: &Value,
+        role: &'static str,
+        light: bool,
+        label: Option<&'static str>,
+        reads: SliderReads,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let raw = saved
+            .get(appearance_key(light))
+            .and_then(|roles| roles.get(role))
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let value = parse_role_value(&raw).ok();
+        let hex = value.map_or_else(|| UNSET_PICK.to_string(), |value| hex_of(value, light));
+        // The swatch, and its dialog while it is open.
+        let colour_key = field_key("colour", role, light);
+        let picker_open = self
+            .fields
+            .colors
+            .get(colour_key)
+            .is_some_and(|state| state.picker.open);
+        let picker = if picker_open {
+            trigger_tint_picker(self, p, colour_key, &hex, window, cx)
+        } else {
+            None
+        };
+        let rim = hsla(p.hairline);
+        let dashed = hsla(p.foreground_alpha(0.4));
+        let fill = value.map(|value| {
+            let [r, g, b, a] = value.rgba(light);
+            gpui::Hsla::from(gpui::Rgba { r, g, b, a })
+        });
+        let pick_hex = hex.clone();
+        let swatch = div()
+            .id(SharedString::from(format!("{colour_key}-swatch")))
+            .relative()
+            .flex_shrink_0()
+            .size(px(SWATCH))
+            .rounded(px(6.0))
+            .border_1()
+            .cursor_pointer()
+            .tooltip(tooltip_text("Pick a colour"))
+            .map(|swatch| match fill {
+                // The surface under the colour, so a see-through one reads as see-through.
+                Some(fill) => swatch
+                    .border_color(rim)
+                    .bg(hsla(p.surface))
+                    .child(div().size_full().rounded(px(5.0)).bg(fill)),
+                None => swatch.border_dashed().border_color(dashed),
+            })
+            .on_click(cx.listener(move |page, _: &ClickEvent, window, cx| {
+                page.open_role_picker(role, light, &pick_hex, window, cx)
+            }))
+            .children(picker);
+        // The text box: any opacity or colour, saved once it reads as one; empty resets.
+        let id = SharedString::from(format!("theme-role-{role}-{}", appearance_key(light)));
+        let input = FieldStates::text_state(
+            self,
+            &id,
+            &raw,
+            Some("default"),
+            move |page: &mut Self, text, _window, cx| {
+                let text = text.trim();
+                if text.is_empty() {
+                    page.save_role(light, role, None, cx);
+                } else if let Ok(value) = parse_role_value(text) {
+                    page.save_role(light, role, Some(format_role_value(value)), cx);
+                }
+            },
+            window,
+            cx,
+        );
+        let text_box = super::super::super::fields::settings_text_input(
+            p,
+            &input,
+            Some(TEXT_BOX),
+            true,
+            window,
+            cx,
+        );
+        // The opacity slider, only for a role that is set.
+        let slider = value.map(|value| {
+            let alpha = alpha_of(value);
+            let shown = match reads {
+                SliderReads::Opacity => alpha,
+                SliderReads::SeeThrough => 1.0 - alpha,
+            };
+            let percent = (shown * 100.0).round();
+            let binding = SliderBinding {
+                key: field_key("alpha", role, light),
+                min: 0.0,
+                max: 100.0,
+                step: 1.0,
+            };
+            let saver: SliderSaver = Rc::new(move |store, percent, commit, cx| {
+                let shown = (percent / 100.0).clamp(0.0, 1.0) as f32;
+                let alpha = match reads {
+                    SliderReads::Opacity => shown,
+                    SliderReads::SeeThrough => 1.0 - shown,
+                };
+                save_role_in(
+                    store,
+                    light,
+                    role,
+                    commit,
+                    |current| {
+                        current.map(|current| match current {
+                            RoleValue::Ink(_) => RoleValue::Ink(alpha),
+                            RoleValue::Colour { rgb, .. } => RoleValue::Colour { rgb, alpha },
+                        })
+                    },
+                    cx,
+                );
+            });
+            let track = step_slider(self, p, binding, f64::from(percent), saver, window, cx);
+            // An opacity (8%) already reads in the text box; a colour's opacity does not.
+            let readout = matches!(value, RoleValue::Colour { .. }).then(|| {
+                div()
+                    .flex_shrink_0()
+                    .w(px(READOUT))
+                    .text_right()
+                    .text_size(px(13.0))
+                    .text_color(hsla(p.muted))
+                    .child(format!("{percent}%"))
+            });
+            h_flex()
+                .flex_1()
+                .min_w_0()
+                .gap(px(8.0))
+                .items_center()
+                .child(div().flex_1().min_w_0().child(track))
+                .children(readout)
+        });
+        h_flex()
+            .w(px(CONTROL_LANE_WIDTH))
+            .max_w_full()
+            .gap(px(8.0))
+            .items_center()
+            .when_some(label, |line, label| {
+                line.child(
+                    div()
+                        .flex_shrink_0()
+                        .w(px(34.0))
+                        .text_size(px(12.0))
+                        .text_color(hsla(p.muted))
+                        .child(label),
+                )
+            })
+            .child(swatch)
+            .child(text_box)
+            .when_some(slider, |line, slider| line.child(slider))
+            .into_any_element()
+    }
+
+    /// Role `role`'s editor for every appearance the app shows, one line each, and the Reset that
+    /// takes it off in all of them (`None` while it is set in none).
+    pub(super) fn role_editor(
+        &mut self,
+        t: &ThemeCx,
+        role: &'static str,
+        reads: SliderReads,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> (AnyElement, Option<PageAction<Self>>) {
+        let p = t.p;
+        let saved = t.values.value(THEME_ROLES_SETTING);
+        let appearances = shown_appearances(&t.values.string("sidebarTheme"));
+        let both = appearances.len() > 1;
+        let mut lines = Vec::new();
+        let mut set_here = Vec::new();
+        for &(light, label) in &appearances {
+            if saved
+                .get(appearance_key(light))
+                .and_then(|roles| roles.get(role))
+                .is_some()
+            {
+                set_here.push(light);
+            }
+            lines.push(self.role_editor_line(
+                &p,
+                &saved,
+                role,
+                light,
+                both.then_some(label),
+                reads,
+                window,
+                cx,
+            ));
+        }
+        let reset: Option<PageAction<Self>> = (!set_here.is_empty()).then(|| {
+            Rc::new(
+                move |page: &mut Self, _window: &mut Window, cx: &mut Context<Self>| {
+                    for light in set_here.clone() {
+                        page.save_role(light, role, None, cx);
+                    }
+                },
+            ) as PageAction<Self>
+        });
+        (
+            v_flex().gap(px(8.0)).children(lines).into_any_element(),
+            reset,
+        )
+    }
+
     pub(super) fn theme_colours_section(
         &mut self,
         t: &ThemeCx,
@@ -84,18 +446,26 @@ impl ThemeTab {
         }
         let p = t.p;
         let saved = t.values.value(THEME_ROLES_SETTING);
-        let appearances = shown_appearances(&t.values.string("sidebarTheme"));
-        let both = appearances.len() > 1;
         let open = self.more_shown(MoreGroup::ThemeColours, t.searching, &|key| t.visible(key));
+        let set_under_more = more_roles_set(&saved);
         let mut rows = Vec::new();
-        for (index, role) in THEME_ROLES.iter().enumerate() {
+        for (index, role) in own_roles().enumerate() {
             if index == FIRST_ROLES && !t.searching {
                 let more_open = self.more_open[MoreGroup::ThemeColours.index()];
+                let summary = if set_under_more == 0 {
+                    SharedString::from(
+                        "Links, controls, menus, rows, the focus ring, code blocks, status colours",
+                    )
+                } else if set_under_more == 1 {
+                    SharedString::from("1 of these is set")
+                } else {
+                    SharedString::from(format!("{set_under_more} of these are set"))
+                };
                 rows.push(more_options_button(
                     &p,
                     "theme-more-theme-colours",
                     "More theme colours",
-                    "Cards, controls, menus, rows, your messages, the chat box, status colours",
+                    summary,
                     open,
                     move |page, _window, cx| {
                         page.set_more_open(MoreGroup::ThemeColours, !more_open, cx)
@@ -106,74 +476,16 @@ impl ThemeTab {
             if index >= FIRST_ROLES && !open {
                 continue;
             }
-            let mut fields = Vec::new();
-            let mut set_here = Vec::new();
-            for &(light, label) in &appearances {
-                let saved_value = saved
-                    .get(appearance_key(light))
-                    .and_then(|roles| roles.get(role.id))
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string();
-                if !saved_value.is_empty() {
-                    set_here.push(light);
-                }
-                let id =
-                    SharedString::from(format!("theme-role-{}-{}", role.id, appearance_key(light)));
-                let role_id = role.id;
-                let input = FieldStates::text_state(
-                    self,
-                    &id,
-                    &saved_value,
-                    Some("default"),
-                    move |page: &mut Self, text, _window, cx| {
-                        let text = text.trim();
-                        if text.is_empty() {
-                            page.save_role(light, role_id, None, cx);
-                        } else if let Ok(value) = parse_role_value(text) {
-                            page.save_role(light, role_id, Some(format_role_value(value)), cx);
-                        }
-                    },
-                    window,
-                    cx,
-                );
-                fields.push(
-                    h_flex()
-                        .gap(px(6.0))
-                        .items_center()
-                        .when_label(both, label, &p)
-                        .child(super::super::super::fields::settings_text_input(
-                            &p,
-                            &input,
-                            Some(96.0),
-                            true,
-                            window,
-                            cx,
-                        ))
-                        .into_any_element(),
-                );
-            }
-            let modified = !set_here.is_empty();
-            let reset: Option<PageAction<Self>> = modified.then(|| {
-                let role_id = role.id;
-                Rc::new(
-                    move |page: &mut Self, _window: &mut Window, cx: &mut Context<Self>| {
-                        for light in set_here.clone() {
-                            page.save_role(light, role_id, None, cx);
-                        }
-                    },
-                ) as PageAction<Self>
-            });
-            let control = h_flex().gap(px(10.0)).items_center().children(fields);
+            let (control, reset) = self.role_editor(t, role.id, SliderReads::Opacity, window, cx);
             rows.push(setting_row(
                 &p,
                 format!("theme-role-{}", role.id),
                 RowSpec::new(role.title)
                     .description(role.about)
-                    .modified(modified)
+                    .modified(reset.is_some())
                     .marker_after_label(),
                 reset,
-                control.into_any_element(),
+                control,
                 cx,
             ));
         }
@@ -181,40 +493,11 @@ impl ThemeTab {
             &p,
             "Theme colours",
             Some(SharedString::from(
-                "Each one an opacity of the text colour over what is under it (4%), which stays see-through on glass, or a colour (#7dd3fc). Empty keeps the theme's own.",
+                "Pick a colour, or drag its opacity so the glass shows through. A value can also be an opacity of the text colour (4%) or a colour (#7dd3fc). Empty keeps the theme's own; your messages, the chat box, cards and the accent are in Chat colours.",
             )),
             None,
             rows,
         )
         .map(IntoElement::into_any_element)
-    }
-}
-
-/// The small Dark or Light label before a field, shown only when both appearances are.
-trait WhenLabel {
-    fn when_label(
-        self,
-        show: bool,
-        label: &'static str,
-        p: &super::super::super::palette::SettingsPalette,
-    ) -> Self;
-}
-
-impl WhenLabel for gpui::Div {
-    fn when_label(
-        self,
-        show: bool,
-        label: &'static str,
-        p: &super::super::super::palette::SettingsPalette,
-    ) -> Self {
-        if !show {
-            return self;
-        }
-        self.child(
-            div()
-                .text_size(px(12.0))
-                .text_color(super::super::super::super::native_modal_kit::hsla(p.muted))
-                .child(label),
-        )
     }
 }

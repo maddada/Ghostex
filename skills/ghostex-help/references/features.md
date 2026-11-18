@@ -7810,22 +7810,29 @@ reads **Undo** (`ghostex theme undo` works too). The examples are dark mode look
 while the app shows light mode switches Appearance to Dark, and a font the theme names that this
 computer doesn't have is left as it is.
 Theme colours go further than the colour squares: borders, dividers, text, grey text, the
-accent, cards, controls, menus, the selected and hovered rows, your messages, the chat box and
-the success, warning and danger colours, each set apart for dark and light mode. A colour is an
-opacity of the text colour over what is under it (4%), which stays see-through on window glass,
-or a colour (#7dd3fc, or #7dd3fc80 with its opacity); one not set keeps the theme's own. Agents
-set them with `ghostex theme set` ("the borders are too bright" becomes
-`ghostex theme set --dark border=4%`), and you can in Settings > Interface > Theme colours:
-Borders, Dividers, Text, Grey text and Accent show there, the rest under More theme colours, with
-a field for each appearance the app shows and Reset on each row. They change the computer's own
-window and the web app; the phone keeps its own look. When a colour makes text hard to read
-(under 4.5:1 for text, 3:1 for grey text, the accent and status colours, the text on a fill) or a
-border or divider all but vanish, the change is saved and the card says so.
+accent, links, cards, controls, menus, the selected and hovered rows, the focus ring, your
+messages, the chat box, code blocks and the success, warning and danger colours, each set apart
+for dark and light mode. A colour is an opacity of the text colour over what is under it (4%),
+which stays see-through on window glass, or a colour (#7dd3fc, or #7dd3fc80 with its opacity);
+one not set keeps the theme's own. Links follow the accent while Links is empty, and the chat's
+pill dots take the accent (questions), warning (working) and danger (approvals) once those are
+set. Agents set them with `ghostex theme set` ("the borders are too bright" becomes
+`ghostex theme set --dark border=4%`), and you can in Settings > Interface. **Chat colours**, right
+under Theme it in your words, has a live chat preview and Your messages, Chat box, Cards and
+Accent; Your messages' slider says how see-through your bubble is, so the glass shows through it.
+**Theme colours**, further down, has the rest: Borders, Dividers, Text and Grey text show at once,
+the others under More theme colours, which opens by itself while one of them is set. Every colour
+has a swatch that opens the colour picker, a box for an exact value, an opacity slider once it is
+set and Reset, with one line per appearance the app shows. After an example theme is applied, the
+gallery says which one and how many colours it set, and Change them opens them. They change the
+computer's own window and the web app; the phone keeps its own look. When a colour makes text hard
+to read (under 4.5:1 for text, 3:1 for grey text, the accent, links and status colours, the text
+on a fill) or a border or divider all but vanish, the change is saved and the card says so.
 Commands: `ghostex theme read`, `ghostex theme set <key>=<value> ...`, `ghostex theme undo`, `ghostex theme redo`, `ghostex theme history`. Settings: `themeRoles`.
 
 Theme colours, colourfulness, the work area frame, window glass, and active pane outline live on the
 Interface page in Settings, right below General (`ghostex settings open --tab theme`).
-It has Theme it in your words, Text, UI Scale, Presets, Colours and Transparency sections, with Advanced controls and links
+It has Theme it in your words, Chat colours, Text, UI Scale, Presets, Colours, Transparency and Theme colours sections, with Advanced controls and links
 to related settings on General; a search for a row inside More opens it.
 Text: App font lists the fonts installed on this computer, with a search field and
 each name drawn in its own font; monospaced fonts sit at the end of the list. The

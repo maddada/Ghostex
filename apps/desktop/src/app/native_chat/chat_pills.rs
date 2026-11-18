@@ -85,14 +85,17 @@ impl ChatPillBounds {
 }
 
 /// A status dot's colour (gx-chat-core `PillDot::tone`): the sidebar's question pink, its approval
-/// red (also Blocked), and its working amber.
-pub(super) fn pill_dot_color(tone: &str) -> gpui::Hsla {
-    rgb(match tone {
-        "question" => crate::app::native_sidebar::status::QUESTION_COLOR,
-        "approval" | "blocked" => crate::app::native_sidebar::status::APPROVAL_COLOR,
-        _ => crate::app::native_sidebar::status::WORKING_COLOR,
-    })
-    .into()
+/// red (also Blocked), and its working amber, unless the theme sets the Accent, Danger or Warning
+/// role for this chat's appearance (CDXC:Theming 2026-11-18 in
+/// packages/settings-catalog/src/theme_roles.rs).
+pub(super) fn pill_dot_color(tone: &str, p: &ChatAppearance) -> gpui::Hsla {
+    use crate::app::native_sidebar::status::{APPROVAL_COLOR, QUESTION_COLOR, WORKING_COLOR};
+    let (role, fallback) = match tone {
+        "question" => ("accent", QUESTION_COLOR),
+        "approval" | "blocked" => ("danger", APPROVAL_COLOR),
+        _ => ("warning", WORKING_COLOR),
+    };
+    crate::app::helpers::theme_role_or(role, p.light, rgb(fallback).into())
 }
 
 /// A pill's status, inside it after its label: each tone's dot followed by its count, in tabular
@@ -395,7 +398,7 @@ impl NativeChatView {
                 )
                 .when(count > 0, |pill| {
                     pill.child(inline_dots(
-                        &[(pill_dot_color("question"), count.to_string())],
+                        &[(pill_dot_color("question", p), count.to_string())],
                         p,
                     ))
                 })
@@ -518,7 +521,7 @@ impl NativeChatView {
             .as_array()
             .into_iter()
             .flatten()
-            .map(|dot| (pill_dot_color(&text(dot, "tone")), text(dot, "count")))
+            .map(|dot| (pill_dot_color(&text(dot, "tone"), p), text(dot, "count")))
             .collect();
         let count = if dots.is_empty() {
             text(pill, "count")

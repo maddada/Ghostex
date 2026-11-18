@@ -51,7 +51,7 @@ pub(super) fn more_options_button(
     p: &SettingsPalette,
     id: &'static str,
     label: &'static str,
-    summary: &'static str,
+    summary: impl Into<SharedString>,
     open: bool,
     on_toggle: impl Fn(&mut ThemeTab, &mut Window, &mut Context<ThemeTab>) + 'static,
     cx: &mut Context<ThemeTab>,
@@ -89,7 +89,7 @@ pub(super) fn more_options_button(
                         .text_size(px(13.0))
                         .line_height(px(18.57))
                         .text_color(hsla(p.muted))
-                        .child(summary),
+                        .child(summary.into()),
                 ),
         )
         .child(

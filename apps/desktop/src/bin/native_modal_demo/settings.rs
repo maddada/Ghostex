@@ -75,6 +75,28 @@ fn story_settings(state: &str) -> serde_json::Map<String, Value> {
             json!({ "dark": { "border": "4%", "divider": "3%" }, "light": { "mutedText": "#6b7280" } }),
         );
     }
+    // Orchid Dusk's colours (THEME_GALLERY), Your messages see-through for the slider.
+    if matches!(
+        state,
+        "theme-chat-colours" | "theme-role-picker" | "theme-orchid" | "theme-colours-orchid"
+    ) {
+        settings.insert("sidebarTheme".into(), json!("dark-2"));
+        let user_message = if state == "theme-orchid" {
+            "#33283a"
+        } else {
+            "#33283a9e"
+        };
+        settings.insert(
+            "themeRoles".into(),
+            json!({ "dark": {
+                "accent": "#d69bb5", "focusRing": "#d69bb5", "border": "8%", "divider": "6%",
+                "text": "#ebe3e8", "mutedText": "#9e939c", "userMessage": user_message,
+                "chatBox": "#1d181fcc", "surface": "#211b24cc", "control": "#28202bcc",
+                "menu": "#1b161df2", "selection": "9%", "hover": "5%", "success": "#9cc49a",
+                "warning": "#e0bd84", "danger": "#e2727a"
+            } }),
+        );
+    }
     if state == "pick-color" {
         settings.insert("terminalBackgroundMode".into(), json!("custom"));
         settings.insert("workspaceBackgroundColor".into(), json!("#1d3b53"));
@@ -345,6 +367,15 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         "about-reset-confirm" => json!({ "initialTab": "about" }),
         // Settings > Interface scrolled to Theme colours, with a few colours set and More open.
         "theme-colours" => json!({ "initialTab": "theme", "initialSection": "themeColours" }),
+        // Settings > Interface with Orchid Dusk's colours: Chat colours (and its Pick Color
+        // dialog), the gallery's applied line at the top, Theme colours with More open by itself.
+        "theme-chat-colours" | "theme-role-picker" => {
+            json!({ "initialTab": "theme", "initialSection": "chatColours" })
+        }
+        "theme-orchid" => json!({ "initialTab": "theme" }),
+        "theme-colours-orchid" => {
+            json!({ "initialTab": "theme", "initialSection": "themeColours" })
+        }
         // `page-<id>`: that rail page (`page-connectors`, `page-tools`), for pages with no state of their own.
         state if state.starts_with("page-") => json!({ "initialTab": &state["page-".len()..] }),
         "tags" => {

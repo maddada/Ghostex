@@ -137,7 +137,7 @@ impl NativeChatView {
                 .as_array()
                 .into_iter()
                 .flatten()
-                .map(|dot| (pill_dot_color(&text(dot, "tone")), text(dot, "count")))
+                .map(|dot| (pill_dot_color(&text(dot, "tone"), p), text(dot, "count")))
                 .collect();
             let count = if dots.is_empty() {
                 text(pill, "count")
