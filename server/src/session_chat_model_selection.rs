@@ -523,11 +523,21 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                 &state, &project, &session,
             );
             let params = json!({ "projectId": project, "sessionId": session, "model": pending.model, "effort": pending.effort, "options": pending.options, "scope": pending.scope });
+            // A new coordinator's first message waiting in the agent's box is taken out while the
+            // agent's picker runs and typed back after it (Q3951, session_chat_first_message.rs).
+            let first_message = crate::session_chat_first_message::lift_for_model_change(
+                &state, &project, &session,
+            )
+            .await;
             let result = crate::session_chat_codex_picker::select_session_chat_model(
                 &state,
                 params.as_object().unwrap(),
             )
             .await;
+            if let Some(guard) = first_message {
+                crate::session_chat_first_message::put_back(&state, &project, &session, guard)
+                    .await;
+            }
             let now_ms = chrono::Utc::now().timestamp_millis();
             // Claude refused the name: its other form once, then a final failure (never the same
             // name again).

@@ -191,6 +191,7 @@ pub mod session_chat_empryo_question;
 pub mod session_chat_empryo_tabs;
 pub mod session_chat_file_patch;
 pub mod session_chat_files;
+mod session_chat_first_message;
 pub(crate) mod session_chat_fleet_process;
 pub(crate) mod session_chat_fleet_progress;
 pub(crate) mod session_chat_fleet_status;

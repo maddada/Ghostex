@@ -51,7 +51,7 @@ mod grok_draft;
 #[path = "../session_chat_input_replace.rs"]
 mod input_replace;
 pub use input_replace::clear_session_chat_composer;
-pub(crate) use input_replace::handle_replace_session_chat_draft_http;
+pub(crate) use input_replace::{handle_replace_session_chat_draft_http, place_terminal_text};
 
 #[path = "../session_chat_composer_repaint.rs"]
 mod composer_repaint;

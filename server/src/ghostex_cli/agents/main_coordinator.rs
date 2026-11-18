@@ -142,7 +142,8 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
                 Some(caller) => identity::message(caller, &body),
                 None => body.clone(),
             };
-            let mut argv = vec!["--task".to_string(), task];
+            // The message is its first request, so it is sent at once rather than left for Start.
+            let mut argv = vec!["--task".to_string(), task, "--start".to_string()];
             match &project_id {
                 Some(project_id) => argv.extend(["--project-id".to_string(), project_id.clone()]),
                 None => argv.extend([

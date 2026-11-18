@@ -44,6 +44,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         .map(|take_back| take_back.message_id.clone());
     into.queue_take_back_hotkey =
         crate::composer::queue_take_back::TAKE_BACK_HOTKEY_LABEL.to_string();
+    into.first_message_card = crate::composer::first_message::card(state);
     into.attaching_messages = crate::composer::attaching::attaching_messages(state, context);
     into.draft = Draft {
         can_sync: into.queue.capabilities.can_sync_draft,
@@ -137,6 +138,8 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         .session
         .cloud_box_asleep
         .then_some(crate::session::cloud_box::ASLEEP_PLACEHOLDER))
+    .or(crate::composer::first_message::waiting(state)
+        .then_some(crate::composer::first_message::PLACEHOLDER))
     .unwrap_or(
         if state
             .session

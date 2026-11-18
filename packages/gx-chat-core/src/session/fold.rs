@@ -9,7 +9,7 @@
 //!   `draft`, `retiredAsyncQuestionIds`, and `screenProbed`, which is sticky and resets only on an
 //!   agent change.
 //! - `selectedOptions` merges by evidence priority and then by `detectedAt`.
-//! - `accountSwitch`, `pendingModelSelection` and `asyncQuestionsSince` are three-state: absent,
+//! - `accountSwitch`, `pendingModelSelection`, `firstMessage` and `asyncQuestionsSince` are three-state: absent,
 //!   `null` and a value all mean different things.
 
 use ghostex_gx_protocol::shared::Shared;
@@ -336,6 +336,12 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
     folded.result.state.pending_model_selection = match &side.pending_model_selection {
         Tri::Absent => previous_side
             .map(|state| state.pending_model_selection.clone())
+            .unwrap_or(Tri::Absent),
+        present => present.clone(),
+    };
+    folded.result.state.first_message = match &side.first_message {
+        Tri::Absent => previous_side
+            .map(|state| state.first_message.clone())
             .unwrap_or(Tri::Absent),
         present => present.clone(),
     };

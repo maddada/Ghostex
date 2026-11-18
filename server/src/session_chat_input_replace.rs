@@ -322,6 +322,36 @@ async fn place_session_chat_draft(
     Ok(serde_json::json!({ "replaced": true }))
 }
 
+/// Types `content` into the agent's input box without sending it, the way a chat draft moves to
+/// the terminal: Pi and OMP through their chat channel (pi_chat_actions.rs), every other agent
+/// pasted once its box is up, after what the box held is saved through the agent's editor.
+async fn place_terminal_text_value(
+    state: &crate::server::AppState,
+    target: &super::SessionChatSendTarget,
+    content: &str,
+) -> Result<serde_json::Value, crate::domain::DomainStateError> {
+    let placed = match crate::pi_chat_actions::is_pi_family(&target.session) {
+        true => crate::pi_chat_actions::place_editor_draft(state, target, content).await,
+        false => None,
+    };
+    match placed {
+        Some(placed) => placed,
+        None => place_session_chat_draft(target, content, &state.paths.app_state_dir).await,
+    }
+}
+
+/// [`place_terminal_text_value`] for a caller that needs only whether it worked (a new
+/// coordinator's first message, session_chat_first_message.rs).
+pub(crate) async fn place_terminal_text(
+    state: &crate::server::AppState,
+    target: &super::SessionChatSendTarget,
+    content: &str,
+) -> Result<(), crate::domain::DomainStateError> {
+    place_terminal_text_value(state, target, content)
+        .await
+        .map(|_| ())
+}
+
 pub(crate) async fn handle_replace_session_chat_draft_http(
     state: &crate::server::AppState,
     endpoint_path: String,
@@ -429,15 +459,7 @@ pub(crate) async fn handle_replace_session_chat_draft_http(
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
         Ok(None) => {}
     }
-    // Pi and OMP take the draft into their input box through the chat channel (pi_chat_actions.rs).
-    let placed = match crate::pi_chat_actions::is_pi_family(&target.session) {
-        true => crate::pi_chat_actions::place_editor_draft(state, &target, content).await,
-        false => None,
-    };
-    let placed = match placed {
-        Some(placed) => placed,
-        None => place_session_chat_draft(&target, content, &state.paths.app_state_dir).await,
-    };
+    let placed = place_terminal_text_value(state, &target, content).await;
     match placed.and_then(|result| {
         crate::session_chat_draft_handoffs::placed(&db, &id)?;
         Ok(result)

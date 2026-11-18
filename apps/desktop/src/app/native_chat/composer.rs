@@ -407,6 +407,12 @@ impl NativeChatView {
         } else {
             self.render_attachment_previews(p, cx)
         };
+        // A new coordinator's first message, waiting for Start (first_message_card.rs).
+        let first_message_card = if collapsed {
+            None
+        } else {
+            self.render_first_message_card(p, cx)
+        };
         let stack_top = super::suggestions::StackTop::default();
         let mut footer = div()
             .w_full()
@@ -654,6 +660,7 @@ impl NativeChatView {
                     .items_center()
                     .gap(px(metrics.collapsed_row_gap_px * s))
             })
+            .children(first_message_card)
             .children(attachment_previews)
             .children(self.render_queue(p, cx))
             .child(

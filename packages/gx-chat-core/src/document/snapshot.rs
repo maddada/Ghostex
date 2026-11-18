@@ -289,6 +289,10 @@ pub struct Document {
     /// diagnostic for the renderer's Details disclosure. Family e.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_hold_card: Option<std::sync::Arc<Value>>,
+    /// A new coordinator's first message card inside the chat box, absent otherwise
+    /// (`composer/first_message.rs`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_message_card: Option<Value>,
 
     // ---- context ----------------------------------------------------------
     /// The context meter under the composer. Family e.

@@ -97,6 +97,20 @@ pub(super) async fn send_session_chat_message_attempt(
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
+    // A new coordinator's first message waiting for Start goes first (session_chat_first_message.rs).
+    if params.get("key").is_none() {
+        crate::session_chat_first_message::before_send(
+            state,
+            &target.project_id,
+            &target.session_id,
+            &text,
+            params
+                .get("imagePaths")
+                .and_then(Value::as_array)
+                .is_some_and(|paths| !paths.is_empty()),
+        )
+        .await;
+    }
     /*
     Raw-key mode: `key` carries a keystroke that has no text form (Claude
     Code's Shift+Tab permission-mode cycle or Codex's shifted effort arrows).

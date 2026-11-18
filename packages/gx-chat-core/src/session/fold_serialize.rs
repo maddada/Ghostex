@@ -317,6 +317,11 @@ pub(crate) mod tests {
                 Tri::Value(json!(tag))
             },
             pending_model_selection: Tri::Value(json!(tag)),
+            first_message: if flag {
+                Tri::Null
+            } else {
+                Tri::Value(json!({ "text": tag }))
+            },
             async_questions_since: Tri::Value(number),
             forked_at: if flag { Tri::Value(number) } else { Tri::Null },
             retired_async_question_ids: Some(vec![format!("retired {tag}")]),

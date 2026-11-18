@@ -109,6 +109,8 @@ pub struct ComposerState {
     pub queue_edit: Option<crate::composer::queue_edit::QueueEdit>,
     /// Back to composer on a message the agent queued, until its text lands in the composer.
     pub queue_take_back: Option<crate::composer::queue_take_back::QueueTakeBack>,
+    /// A new coordinator's first message card: Show all, and Start or Edit in flight.
+    pub first_message: crate::composer::first_message::FirstMessageUi,
     /// The boot read has answered, so the two catalog reads may go out.
     pub boot_read: bool,
     /// The returned prompt whose claim is in flight: its id and the text to restore.

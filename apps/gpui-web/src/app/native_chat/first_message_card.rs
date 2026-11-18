@@ -1,0 +1,1 @@
+../../../../desktop/src/app/native_chat/first_message_card.rs

@@ -141,6 +141,8 @@ fn rpc_method_name(wire: &str) -> &'static str {
         ChatRpcMethod::DeleteSideChat => "deleteSideChat",
         ChatRpcMethod::AnswerSecretRequest => "answerSecretRequest",
         ChatRpcMethod::TakeBackSessionChatQueuedMessage => "takeBackSessionChatQueuedMessage",
+        ChatRpcMethod::StartSessionChatFirstMessage => "startSessionChatFirstMessage",
+        ChatRpcMethod::EditSessionChatFirstMessage => "editSessionChatFirstMessage",
         ChatRpcMethod::CatchUpSession => "catchUpSession",
         ChatRpcMethod::ReadSessionFilesLinks => "readSessionFilesLinks",
         ChatRpcMethod::ReadSessionDetails => "readSessionDetails",

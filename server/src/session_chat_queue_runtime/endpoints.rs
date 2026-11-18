@@ -48,6 +48,30 @@ pub(crate) async fn handle_session_chat_queue_http(
             };
         }
     }
+    // A message queued to a new coordinator whose first message waits for Start starts it, so the
+    // queued message goes behind it (session_chat_first_message.rs).
+    if endpoint_path == "/api/queueSessionChatPrompt" {
+        if let Some((project_id, session_id)) = params
+            .get("projectId")
+            .and_then(Value::as_str)
+            .zip(params.get("sessionId").and_then(Value::as_str))
+        {
+            crate::session_chat_first_message::before_send(
+                state,
+                project_id,
+                session_id,
+                params
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default(),
+                params
+                    .get("imagePaths")
+                    .and_then(Value::as_array)
+                    .is_some_and(|paths| !paths.is_empty()),
+            )
+            .await;
+        }
+    }
     if endpoint_path == "/api/sendSessionChatQueuedPrompt" {
         return handle_send_session_chat_queued_prompt_http(
             state,

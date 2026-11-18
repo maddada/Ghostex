@@ -480,6 +480,8 @@ pub async fn run_gxserver_foreground(
     explicit reason and waits for the user. Never silently re-sent.
     */
     let _ = crate::session_chat_queue::recover_session_chat_queue_after_restart(&paths);
+    // New coordinators whose first message waits for Start (session_chat_first_message.rs).
+    crate::session_chat_first_message::resume_all(&state);
     crate::collab_shim::migrate_at_start(&paths);
     crate::accounts::recovery::start(state.clone());
     crate::accounts::reset_watch::start(state.clone());

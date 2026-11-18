@@ -176,6 +176,10 @@ action_kinds! {
     RetryQueue => "retryQueue",
     RemoveQueue => "removeQueue",
     TakeBackQueued => "takeBackQueued",
+    // A new coordinator's first message card (composer/first_message.rs).
+    FirstMessageStart => "firstMessageStart",
+    FirstMessageEdit => "firstMessageEdit",
+    FirstMessageToggle => "firstMessageToggle",
     SendQueue => "sendQueue",
     ReorderQueue => "reorderQueue",
     MoveQueue => "moveQueue",

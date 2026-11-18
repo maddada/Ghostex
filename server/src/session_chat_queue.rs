@@ -166,6 +166,8 @@ pub struct SessionChatQueueSnapshot {
     /// when any index changes.
     pub resource_epoch: u64,
     pub pending_model_selection: Option<crate::session_chat_model_selection::PendingModelSelection>,
+    /// A new coordinator's first message, waiting for Start (session_chat_first_message.rs).
+    pub first_message: Option<crate::session_chat_first_message::FirstMessage>,
 }
 
 impl SessionChatQueueSnapshot {
@@ -217,6 +219,10 @@ impl SessionChatQueueSnapshot {
             serde_json::to_value(&self.pending_model_selection).unwrap_or(Value::Null),
         );
         target.insert(
+            "firstMessage".to_string(),
+            serde_json::to_value(&self.first_message).unwrap_or(Value::Null),
+        );
+        target.insert(
             "queue".to_string(),
             serde_json::to_value(&self.queue).unwrap_or_else(|_| Value::Array(Vec::new())),
         );
@@ -239,6 +245,7 @@ impl SessionChatQueueSnapshot {
     */
     pub fn revision(&self) -> String {
         let mut revision = serde_json::to_string(&self.pending_model_selection).unwrap_or_default();
+        revision.push_str(&serde_json::to_string(&self.first_message).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.account_switch).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.api_retry).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.async_questions_since).unwrap_or_default());
@@ -1205,6 +1212,7 @@ fn read_snapshot(
             pending_model_selection: crate::session_chat_model_selection::read_pending(
                 db, project_id, session_id,
             ),
+            first_message: crate::session_chat_first_message::read(db, project_id, session_id),
         })
     })
 }

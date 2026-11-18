@@ -1970,7 +1970,8 @@ pub(crate) fn prepare_coordinator_create_params(
 
 /// Hands a just-created orchestrator its role: installs the `ghostex-coordinator` skill for its
 /// agent and queues its first message (the skill line, then the create's first request) as a
-/// startup send. A ZCode or OpenCode orchestrator's chosen model goes first as a `/model` line
+/// startup send, or, when the create asked to hold it (`coordinator.holdFirstMessage`), keeps it
+/// typed in the agent's box until the user starts it (session_chat_first_message.rs). A ZCode or OpenCode orchestrator's chosen model goes first as a `/model` line
 /// (OpenCode's with the chosen variant after it), because neither has a launch model flag and the
 /// first message must run on the model the user picked.
 pub(crate) fn start_orchestrator_role(
@@ -1987,13 +1988,18 @@ pub(crate) fn start_orchestrator_role(
     let first_request = coordinators::coordinator_create_request(params)?
         .map(|request| request.first_request)
         .unwrap_or_default();
-    queue_session_chat_prompt(
-        state,
-        project_id,
-        session_id,
-        &coordinators::orchestrator_first_message(family, &first_request),
-        true,
-    )
+    let first_message = coordinators::orchestrator_first_message(family, &first_request);
+    // New Coordinator and `ghostex coordinator create` keep it unsent until the user starts it
+    // (CDXC:Coordinators 2026-11-18 in session_chat_first_message.rs).
+    if crate::session_chat_first_message::create_holds_first_message(params) {
+        return crate::session_chat_first_message::hold(
+            state,
+            project_id,
+            session_id,
+            &first_message,
+        );
+    }
+    queue_session_chat_prompt(state, project_id, session_id, &first_message, true)
 }
 
 /// The `/model` line a new ZCode or OpenCode orchestrator's chosen model goes in ahead of its first

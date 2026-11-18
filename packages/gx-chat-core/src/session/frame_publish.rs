@@ -134,4 +134,5 @@ pub fn side_state_moves(
             &side.pending_model_selection,
             &session.pending_model_selection,
         )
+        || nullable(&side.first_message, &session.first_message)
 }

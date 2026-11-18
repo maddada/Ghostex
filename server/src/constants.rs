@@ -200,4 +200,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0079_unpark_done_coordinator_threads",
     "0080_session_chat_queue_version",
     "0081_automation_model_effort",
+    "0082_session_chat_first_messages",
 ];

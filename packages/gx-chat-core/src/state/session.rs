@@ -158,6 +158,9 @@ pub struct SessionState {
     pub api_retry: Tri<Value>,
     /// A model selection waiting on the agent. Three-state on the wire.
     pub pending_model_selection: Tri<Value>,
+    /// A new coordinator's first message waiting for Start (`composer/first_message.rs`).
+    /// Three-state on the wire.
+    pub first_message: Tri<Value>,
     /// Ghostex's own prompt queue. `None` means no frame has carried a `queue` field yet, which is
     /// the "daemon does not support it" state and hides every queue control; an empty list means
     /// supported and empty.
@@ -239,6 +242,7 @@ impl Default for SessionState {
             account_switch: Tri::Absent,
             api_retry: Tri::Absent,
             pending_model_selection: Tri::Absent,
+            first_message: Tri::Absent,
             queue_prompts: Default::default(),
             server_queue_prompts: None,
             server_queue_version: None,

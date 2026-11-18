@@ -693,6 +693,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/handoffSessionChatDraft"
         | "/api/replaceSessionChatDraft"
         | "/api/takeBackSessionChatQueuedMessage"
+        // A new coordinator's waiting first message is the session's own, like its queue below.
+        | "/api/startSessionChatFirstMessage"
+        | "/api/editSessionChatFirstMessage"
         | "/api/claimSessionChatLaunchDraft"
         /*
         CDXC:SessionChat 2026-08-21:

@@ -407,6 +407,12 @@ pub struct ChatSideState {
     pub api_retry: Tri<Value>,
     #[serde(default, skip_serializing_if = "Tri::is_absent")]
     pub pending_model_selection: Tri<Value>,
+    /// A new coordinator's first message, typed into its agent's input box and waiting for Start
+    /// (`{ text, state, createdAt }`, `state` one of `waiting`, `typed`, `lifted` and `left`;
+    /// server/src/session_chat_first_message.rs), or `null` when none waits. Absent means
+    /// unchanged (an older gxserver never sends it).
+    #[serde(default, skip_serializing_if = "Tri::is_absent")]
+    pub first_message: Tri<Value>,
     #[serde(default, skip_serializing_if = "Tri::is_absent")]
     pub async_questions_since: Tri<i64>,
     /// When this session was forked from another, in epoch ms, or `null` when it is no fork: the

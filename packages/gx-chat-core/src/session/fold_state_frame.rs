@@ -58,6 +58,7 @@ pub fn fold_state_frame(mut folded: FoldedSnapshot, frame: &ChatStateFrame) -> F
         account_switch: _,
         api_retry: _,
         pending_model_selection: _,
+        first_message: _,
         // Merged.
         selected_options: _,
         screen_probed: _,
@@ -152,6 +153,7 @@ pub fn fold_state_frame(mut folded: FoldedSnapshot, frame: &ChatStateFrame) -> F
         account_switch,
         api_retry,
         pending_model_selection,
+        first_message,
     );
 
     state.selected_options = merge_options(

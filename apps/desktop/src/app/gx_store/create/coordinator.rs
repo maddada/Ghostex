@@ -210,8 +210,9 @@ impl GhostexGpuiApp {
     }
 
     /// Creates the coordinator in the project a group id names (this computer or a remote one) on
-    /// the agent and account the agent picker gave, and opens it in chat. gxserver queues its
-    /// first message (the skill line) before it answers. Its model and effort are the agent's
+    /// the agent and account the agent picker gave, and opens it in chat. gxserver keeps its
+    /// first message (the skill line) before it answers, typed into the agent's box to wait for
+    /// Start (`holdFirstMessage`, set in gx_store/git/prompt_agent.rs). Its model and effort are the agent's
     /// coordinator start (`coordinator_start_options`). `done` hears whether it was created
     /// (before it opens) or why not; a remote computer's `agent_id` is that computer's own
     /// launcher (the picker lists its agents), sent as it is.

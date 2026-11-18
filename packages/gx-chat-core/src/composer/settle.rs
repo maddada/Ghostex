@@ -228,9 +228,9 @@ fn settle_history_read(
         return Vec::new();
     }
     let draft = std::mem::take(&mut state.composer.history.draft);
-    let transcript = crate::composer::history::transcript_user_messages(
-        crate::state::messages_of(&state.messages.list),
-    );
+    let transcript = crate::composer::history::transcript_user_messages(crate::state::messages_of(
+        &state.messages.list,
+    ));
     state
         .composer
         .history
@@ -298,6 +298,11 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
                 outcome,
             ));
             effects.extend(crate::composer::queue_take_back::advance(
+                state,
+                *request_id,
+                outcome,
+            ));
+            effects.extend(crate::composer::first_message::advance(
                 state,
                 *request_id,
                 outcome,

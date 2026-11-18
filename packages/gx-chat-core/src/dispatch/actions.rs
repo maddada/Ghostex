@@ -147,6 +147,9 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::RetryQueue
         | ActionKind::RemoveQueue
         | ActionKind::TakeBackQueued
+        | ActionKind::FirstMessageStart
+        | ActionKind::FirstMessageEdit
+        | ActionKind::FirstMessageToggle
         | ActionKind::SendQueue
         | ActionKind::ReorderQueue
         | ActionKind::MoveQueue

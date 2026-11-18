@@ -5,7 +5,7 @@ the same commands, so older briefs and running sessions keep working.
 USAGE
   ghostex coordinator create [--project-id <id> | --path <folder>] [--agent <agent-id> [--allow-hidden]] [--title <name>]
                               [--model <m>] [--effort <e>] [--goal <text>]
-                              [--task <first message>] [--json]
+                              [--task <first message>] [--start] [--json]
   ghostex coordinator promote [<session-ref>] [--goal <text>] [--computer <name>] [--json]
   ghostex coordinator make-main <session-ref> [--computer <name>] [--json]
   ghostex coordinator options [--json]
@@ -118,6 +118,10 @@ CREATE
   is provider/model (such as openai/gpt-6.1-terra) and its --effort one of that model's variants,
   set before its first message, and the other agents keep their own unless you pass one. --goal is one line the
   coordinator works toward. --task follows the skill line in its first message.
+  The first message waits, typed into the agent's input box but not sent, so the
+  user can change the model and effort first: Start on the card in its chat, Enter
+  in its terminal, or any message sent to it starts it. --start sends it at once
+  instead (use it when nobody is there to press Start).
   options lists the agents a coordinator can run on, with each one's models,
   the model it starts on, the efforts it offers (Low, Medium, High and XHigh, or the agent's
   levels from Low up to its highest below Max), and the skill line its first message starts with.

@@ -5,7 +5,7 @@
 //! User: "we should just include a line that can't be removed saying: "Read and adhere to this skill: /ghostex-orchestrator" ... also remove this [First request] and this [Goal]". The dialog shows the skill line as a locked first message and has no Goal or First request field; the goal stays settable with `ghostex orchestrator set-goal` and Goal & Instructions…. Supersedes the 2026-09-30 WHY that mirrored Claude's New project dialog with an optional goal and first request.
 //!
 //! CDXC:Coordinators 2026-11-13 DECISION:
-//! User (Q2980 "Build it: auto-send + remind on drift"): the form drops its Agent, Model and Effort fields (the 2026-10-17 Agent dropdown); Next opens the normal New Thread picker titled "Pick the coordinator's agent" (any agent, any account on Tab), and the pick creates the coordinator and sends its first message. Its model is the agent's own start model (Opus 5.5 at High on Claude, High effort where the launch takes one), changed afterwards in its chat like any session's. The first message line is shown without an agent's spelling, since the agent is picked next.
+//! User (Q2980 "Build it: auto-send + remind on drift"): the form drops its Agent, Model and Effort fields (the 2026-10-17 Agent dropdown); Next opens the normal New Thread picker titled "Pick the coordinator's agent" (any agent, any account on Tab), and the pick creates the coordinator and sends its first message. Its model is the agent's own start model (Opus 5.5 at High on Claude, High effort where the launch takes one), changed afterwards in its chat like any session's. Since 2026-11-18 the first message is typed into the agent's box and waits for Start instead of being sent (CDXC:Coordinators 2026-11-18 in server/src/session_chat_first_message.rs). The first message line is shown without an agent's spelling, since the agent is picked next.
 //! SEE-ALSO: apps/desktop/src/app/new_coordinator_modal_lifecycle.rs (open, create), apps/desktop/src/app/gx_store/create/coordinator.rs (the gxserver calls), server/src/coordinators/role.rs (the skill and the first message), apps/mobile/app/src/screens/sessions-screen/NewCoordinatorSheet.tsx (the phone's same form).
 //!
 //! The Playbook overrides row shows the user's overrides (what every coordinator reads after
@@ -41,7 +41,7 @@ const NAME_PLACEHOLDER: &str = "e.g. Checkout redesign";
 const NAME_HINT: &str =
     "Shown in the sidebar so you can find this coordinator later. It keeps this name.";
 const FIELD_FIRST_MESSAGE: &str = "First message";
-const FIRST_MESSAGE_HINT: &str = "Every coordinator starts with this line, which loads its playbook, written the way its agent runs a skill. Write your first request in its chat.";
+const FIRST_MESSAGE_HINT: &str = "Every coordinator starts with this line, which loads its playbook, written the way its agent runs a skill. It waits in the agent's input box until you press Start, so you can change the model and effort first. Write your first request in its chat.";
 const LOCK_ICON: &str = "titlebar/lock.svg";
 /// CDXC:Coordinators 2026-10-01 DECISION:
 /// User: a coordinator on a Claude launcher starts on Opus 5.5 ("my preferences should be the preferences for this feature for customers using the same setup, since that's what I tested"). `opus[1m]` is Opus 5.5's row in the Claude lineup; a Codex lineup has no such row and keeps its own default model. Its effort is High since 2026-10-29 (Low is offered too since 2026-10-31) (`orchestrator_efforts` in gx-chat-core; XHigh from 2026-10-17 until then).

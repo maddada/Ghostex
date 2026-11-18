@@ -231,7 +231,7 @@ impl GhostexGpuiApp {
         // CDXC:Drafts 2026-09-23 WHY: an initial prompt is still unsent until the durable startup
         // queue delivers it, so the new session is a draft while its input box starts.
         // A coordinator is never a draft (gx_store/create/coordinator.rs): `/ghostex-coordinator`
-        // is queued on create, and a draft could switch agents before its first prompt.
+        // is kept on create (waiting for Start), and a draft could switch agents before its first prompt.
         if !is_coordinator && (has_prompt || launch.first_user_input_draft.is_some()) {
             params.insert("draft".into(), json!(true));
         }
@@ -254,6 +254,9 @@ impl GhostexGpuiApp {
             if let Some(first_request) = &coordinator.first_request {
                 fields["firstRequest"] = json!(first_request);
             }
+            // Its first message waits in the agent's box for Start, so the model and effort can
+            // be changed first (CDXC:Coordinators 2026-11-18 in server/src/session_chat_first_message.rs).
+            fields["holdFirstMessage"] = json!(true);
             params.insert("coordinator".into(), fields);
             if launch.title.is_none() {
                 params.insert("title".into(), json!("Coordinator"));

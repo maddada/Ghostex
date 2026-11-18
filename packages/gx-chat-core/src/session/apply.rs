@@ -169,6 +169,7 @@ pub fn apply_state_frame(
         frame.state.queue_version,
         frame.state.draft.as_deref(),
     );
+    crate::composer::first_message::apply(state, &frame.state.first_message);
 }
 
 /// CDXC:AgentProviders 2026-09-14 WHY:
@@ -729,6 +730,7 @@ pub fn apply_authoritative(
         result.state.queue_version,
         result.state.draft.as_deref(),
     );
+    crate::composer::first_message::apply(state, &result.state.first_message);
     state.session.error = if matches!(result.status, ChatStatus::Error) {
         Some(
             result

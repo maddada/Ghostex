@@ -146,6 +146,9 @@ fn create(parsed: &ParsedArgs) -> CliResult<()> {
             "Created coordinator \"{}\" ({reference}).",
             agents::text(&result, "title")
         );
+        if agents::text(&result, "firstMessage") == "waiting" {
+            println!("Its first message waits in its agent's input box: change the model and effort there if you like, then press Start on the card in its chat (or Enter in its terminal). A message you send it starts it too.");
+        }
         println!("Talk to it in Ghostex, or send it work with: ghostex agents send {reference} \"<request>\"");
     }
     Ok(())
@@ -233,6 +236,11 @@ pub(crate) fn create_coordinator(parsed: &ParsedArgs) -> CliResult<Value> {
     if let Some(folder) = &folder {
         create["projectPath"] = json!(folder);
     }
+    // Its first message waits in the agent's box for Start unless `--start` sends it at once
+    // (CDXC:Coordinators 2026-11-18 in server/src/session_chat_first_message.rs). An older gxserver
+    // ignores the field and sends it at once.
+    let hold = !parsed.flags.truthy("start");
+    create["coordinator"]["holdFirstMessage"] = json!(hold);
     let created = call_gxserver_rpc("/api/createAgentSession", &create, &flags)?;
     let session = created
         .get("session")
@@ -256,9 +264,11 @@ pub(crate) fn create_coordinator(parsed: &ParsedArgs) -> CliResult<Value> {
         "title": title,
         "session": agents::summary(&session),
     });
-    // gxserver queued the first message (the skill line, then the task) before it answered.
+    // gxserver queued the first message (the skill line, then the task) before it answered, or
+    // typed it into the agent's box to wait for Start.
+    result["firstMessage"] = json!(if hold { "waiting" } else { "queued" });
     if !task.is_empty() {
-        result["taskStatus"] = json!("queued");
+        result["taskStatus"] = json!(if hold { "waiting" } else { "queued" });
     }
     let role_error = agents::text(&created, "coordinatorRoleError").to_string();
     if !role_error.is_empty() {

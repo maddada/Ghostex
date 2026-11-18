@@ -91,6 +91,9 @@ pub enum ChatRpcMethod {
     AnswerSecretRequest,
     /// Takes a message the agent CLI queued back out of its queue, for the composer.
     TakeBackSessionChatQueuedMessage,
+    /// Start and Edit on a new coordinator's first message card (`composer/first_message.rs`).
+    StartSessionChatFirstMessage,
+    EditSessionChatFirstMessage,
     /// A short summary of where the session stands (`composer/catch_up.rs`).
     CatchUpSession,
     /// Every attachment, file and link the session and its threads mentioned
@@ -166,6 +169,8 @@ impl ChatRpcMethod {
             Self::DeleteSideChat => "deleteSideChat",
             Self::AnswerSecretRequest => "answerSecretRequest",
             Self::TakeBackSessionChatQueuedMessage => "takeBackSessionChatQueuedMessage",
+            Self::StartSessionChatFirstMessage => "startSessionChatFirstMessage",
+            Self::EditSessionChatFirstMessage => "editSessionChatFirstMessage",
             Self::CatchUpSession => "catchUpSession",
             Self::ReadSessionFilesLinks => "readSessionFilesLinks",
             Self::ReadSessionDetails => "readSessionDetails",
@@ -230,6 +235,8 @@ impl ChatRpcMethod {
             "deleteSideChat" => Self::DeleteSideChat,
             "answerSecretRequest" => Self::AnswerSecretRequest,
             "takeBackSessionChatQueuedMessage" => Self::TakeBackSessionChatQueuedMessage,
+            "startSessionChatFirstMessage" => Self::StartSessionChatFirstMessage,
+            "editSessionChatFirstMessage" => Self::EditSessionChatFirstMessage,
             "catchUpSession" => Self::CatchUpSession,
             "readSessionFilesLinks" => Self::ReadSessionFilesLinks,
             "readSessionDetails" => Self::ReadSessionDetails,
