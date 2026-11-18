@@ -5,8 +5,9 @@
 use super::super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::super::fields::{
     ButtonVariant, PageAction, RowSpec, SELECT_WIDTH, SettingsDialogSpec, dialog_footer,
-    home_secret_folders_field, select_field, setting_row, settings_button, settings_dialog,
-    settings_section, settings_segmented, settings_select, static_note, text_field, toggle_field,
+    home_secret_folders_field, reset_key, select_field, setting_row, settings_button,
+    settings_dialog, settings_section, settings_segmented, settings_select, static_note,
+    text_field, toggle_field, toggle_field_with,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::search::{TabSearch, should_show_setting};
@@ -29,6 +30,12 @@ const READ_AGENT_LIVE_STATUS: &str = "readAgentLiveStatus";
 /// change (hookless_activity/hook_free_fallback.rs), and the Agents page reads the hooks again
 /// when it opens.
 const USE_AGENT_HOOKS: &str = "useAgentHooks";
+/// When the hooks are read again after the switch flips: past gxserver's 5-second upkeep pass,
+/// and once more for an install that took longer.
+const HOOKS_SETTLE_READS: [std::time::Duration; 2] = [
+    std::time::Duration::from_secs(6),
+    std::time::Duration::from_secs(9),
+];
 use gpui::{AnyElement, Context, Div, IntoElement, Window};
 use serde_json::{Value, json};
 use std::rc::Rc;
@@ -472,8 +479,7 @@ impl AgentsTab {
             ));
         }
         if should_show_setting(&section, USE_AGENT_HOOKS, None) {
-            rows.push(toggle_field(
-                self,
+            rows.push(toggle_field_with(
                 p,
                 USE_AGENT_HOOKS,
                 RowSpec::new("Use agent hooks")
@@ -482,6 +488,11 @@ impl AgentsTab {
                     )
                     .keyed(&values, USE_AGENT_HOOKS),
                 values.bool(USE_AGENT_HOOKS),
+                Some(reset_key::<Self>(USE_AGENT_HOOKS)),
+                |page: &mut Self, next, _window, cx| {
+                    page.save(USE_AGENT_HOOKS, json!(next), cx);
+                    page.refresh_hooks_after_switch(cx);
+                },
                 cx,
             ));
         }
@@ -489,6 +500,31 @@ impl AgentsTab {
             return None;
         }
         settings_section(p, "Agent configs", None, None, rows)
+    }
+
+    /// Reads this computer's hooks again after Use agent hooks flips, so the Session resume hooks
+    /// card and the agent rows don't keep their old state until Refresh. gxserver installs or
+    /// removes the three agents' hooks on its next upkeep pass, a few seconds after the change
+    /// (hookless_activity/hook_free_fallback.rs), so the read goes out now and twice after that.
+    fn refresh_hooks_after_switch(&mut self, cx: &mut Context<Self>) {
+        if self.shown_machine.is_some() {
+            // The switch is this computer's; the picked machine's hooks don't follow it.
+            return;
+        }
+        self.request_hook_status(cx);
+        cx.spawn(async move |this, cx| {
+            for wait in HOOKS_SETTLE_READS {
+                cx.background_executor().timer(wait).await;
+                let Ok(()) = this.update(cx, |page, cx| {
+                    if page.active && page.shown_machine.is_none() {
+                        page.request_hook_status(cx);
+                    }
+                }) else {
+                    return;
+                };
+            }
+        })
+        .detach();
     }
 
     /// The Skip permissions? confirmation (`w-[25rem] gap-4 p-5`, nested).
