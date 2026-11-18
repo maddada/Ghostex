@@ -160,6 +160,94 @@ where
         &str,
     ) -> std::result::Result<R, DomainStateError>,
 {
+    blocking_section(|| domain_http_as(state, endpoint_path, request_id, body, handler))
+}
+
+/// Runs `work`, which blocks (SQLite, a file read), without holding up the other tasks on this
+/// async worker: on gxserver's multi-thread runtime the worker hands its queue to another thread
+/// first (`tokio::task::block_in_place`) and `work` stays on this thread, so thread-locals and the
+/// request's task-locals read as before. Inside, a write that finds the database locked waits its
+/// turn (`storage::fair_busy`). At most `MAX_BLOCKED_SECTIONS` run so at once, each holding one of
+/// tokio's blocking threads (shared with git reads and every `spawn_blocking`); past that, and on
+/// a current-thread runtime (tests), `work` runs where it is, with SQLite's own busy wait.
+///
+/// CDXC:ServerApi 2026-11-18 WHY:
+/// GitHub #666 (Windows, about 40 agents): gxserver's runtime heartbeat went quiet for up to 131 s
+/// and requests sat unanswered, with "database is locked" in the log: the domain routes
+/// (`listSessions`, `findSessions` and some 80 more) ran SQLite on the async workers, each waiting
+/// up to 5 s on a locked database, so a burst filled every worker. Taking them off the workers
+/// alone (76a9d9f13) sent a whole burst into SQLite's busy wait at once, where writes that used to
+/// queue failed; a permit around whole handlers (799beeae8) held it across loopback calls and
+/// queued reads behind writes. Both were reverted; the turn is now taken only inside SQLite's busy
+/// wait (storage/fair_busy.rs).
+pub(crate) fn blocking_section<R>(work: impl FnOnce() -> R) -> R {
+    let multi_thread = tokio::runtime::Handle::try_current().is_ok_and(|runtime| {
+        runtime.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread
+    });
+    match multi_thread.then(BlockedSection::enter).flatten() {
+        Some(_section) => tokio::task::block_in_place(|| {
+            let _off = OffWorker::mark();
+            work()
+        }),
+        None => work(),
+    }
+}
+
+const MAX_BLOCKED_SECTIONS: usize = 128;
+
+static BLOCKED_SECTIONS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// One section running off its worker; `None` once `MAX_BLOCKED_SECTIONS` are.
+struct BlockedSection;
+
+impl BlockedSection {
+    fn enter() -> Option<Self> {
+        use std::sync::atomic::Ordering;
+        if BLOCKED_SECTIONS.fetch_add(1, Ordering::AcqRel) >= MAX_BLOCKED_SECTIONS {
+            BLOCKED_SECTIONS.fetch_sub(1, Ordering::AcqRel);
+            return None;
+        }
+        Some(BlockedSection)
+    }
+}
+
+impl Drop for BlockedSection {
+    fn drop(&mut self) {
+        BLOCKED_SECTIONS.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+    }
+}
+
+/// Marks this thread as off its worker for the section, so its busy waits queue; put back after.
+struct OffWorker(bool);
+
+impl OffWorker {
+    fn mark() -> Self {
+        OffWorker(crate::storage::set_off_worker(true))
+    }
+}
+
+impl Drop for OffWorker {
+    fn drop(&mut self) {
+        crate::storage::set_off_worker(self.0);
+    }
+}
+
+fn domain_http_as<R, F>(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+    handler: F,
+) -> RoutedResponse
+where
+    R: serde::Serialize,
+    F: FnOnce(
+        &DomainRepository<'_>,
+        &rusqlite::Connection,
+        &Map<String, Value>,
+        &str,
+    ) -> std::result::Result<R, DomainStateError>,
+{
     let params = match read_domain_rpc_params(body) {
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),

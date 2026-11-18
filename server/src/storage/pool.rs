@@ -10,8 +10,8 @@ use rusqlite::Connection;
 
 use super::apply_wal_durability;
 
-/// The busy timeout rusqlite gives every connection it opens. A pooled connection is reset to it on each borrow, because a caller may have changed it for its own statements.
-const DEFAULT_BUSY_TIMEOUT: Duration = Duration::from_millis(5_000);
+/// The busy wait every borrow gets unless it asks for its own: spent in turn (`fair_busy`). A pooled connection is reset to it on each borrow, because a caller may have changed it for its own statements.
+pub(super) const DEFAULT_BUSY_TIMEOUT: Duration = Duration::from_millis(5_000);
 
 /// Open connections kept for reuse. Further concurrent borrowers open their own connection, which is closed when they drop it.
 const POOLED_CONNECTIONS_MAX_IDLE: usize = 6;
@@ -56,6 +56,8 @@ impl DerefMut for GxserverDatabase {
 
 impl Drop for GxserverDatabase {
     fn drop(&mut self) {
+        // A turn in the busy queue this thread still holds ends with its connection.
+        super::fair_busy::release_current_thread();
         let Some(connection) = self.connection.take() else {
             return;
         };
@@ -92,16 +94,24 @@ pub(super) fn borrow_gxserver_database(
             .and_then(|pool| pool.idle.pop())
     };
     let connection = match pooled {
-        Some(connection) => {
-            connection.busy_timeout(busy_timeout.unwrap_or(DEFAULT_BUSY_TIMEOUT))?;
-            connection
-        }
+        Some(connection) => connection,
         None => {
             let connection = open_unpooled_gxserver_database(path, busy_timeout)?;
             connection.set_prepared_statement_cache_capacity(POOLED_STATEMENT_CACHE_CAPACITY);
+            // A write that commits or rolls back ends its thread's turn in the busy queue.
+            connection.commit_hook(Some(|| {
+                super::fair_busy::release_current_thread();
+                false
+            }))?;
+            connection.rollback_hook(Some(super::fair_busy::release_current_thread))?;
             connection
         }
     };
+    // The default wait is taken in turn (`fair_busy`); a caller's own timeout keeps SQLite's.
+    match busy_timeout {
+        Some(busy_timeout) => connection.busy_timeout(busy_timeout)?,
+        None => connection.busy_handler(Some(super::fair_busy::busy))?,
+    }
     Ok(GxserverDatabase {
         connection: Some(connection),
         path: path.to_path_buf(),
