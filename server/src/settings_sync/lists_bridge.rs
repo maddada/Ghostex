@@ -224,9 +224,11 @@ impl Engine<'_> {
                     continue;
                 }
                 let destination = root.join(name);
-                // A linked skill folder is the user's own pin.
+                // A linked skill folder is the user's own pin; an extension's skill follows that
+                // extension on this computer.
                 if fs::symlink_metadata(&destination)
                     .is_ok_and(|metadata| metadata.file_type().is_symlink())
+                    || crate::extensions::skills::is_extension_skill(&destination)
                 {
                     continue;
                 }
@@ -270,8 +272,11 @@ fn skill_values(root: &Path) -> BTreeMap<String, Value> {
             values.insert(format!("{BUNDLED_SKILL_KEY_PREFIX}{name}"), json!(true));
             continue;
         }
+        // An extension's skill is in place while that extension is on, on each computer
+        // (extensions/skills.rs): never sent, so turning it off here removes it nowhere else.
         if GHOSTEX_AGENT_SKILL_NAMES.contains(&name.as_str())
             || fs::symlink_metadata(&folder).is_ok_and(|meta| meta.file_type().is_symlink())
+            || crate::extensions::skills::is_extension_skill(&folder)
         {
             continue;
         }

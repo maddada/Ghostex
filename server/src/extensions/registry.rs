@@ -74,6 +74,15 @@ impl ExtensionRegistry {
                 eprintln!("Could not retire the replaced Storybook extension: {error}");
             }
         }
+        // An extension turned off before skills followed the switch (or while this gxserver was
+        // not running) still had its skill in place: it goes now (`follow_skill`).
+        if let Ok(store) = read_store(&registry.store_file) {
+            for (id, state) in store.iter().filter(|(_, state)| !state.enabled) {
+                if let Some(name) = state.skill_installed.as_deref() {
+                    super::skills::remove_skill(&registry.agent_home, id, name);
+                }
+            }
+        }
         registry
     }
 
@@ -336,9 +345,11 @@ impl ExtensionRegistry {
         })?;
         let was_enabled = state.enabled;
         apply_state_patch(&manifest, state, patch)?;
-        if state.enabled != was_enabled {
-            self.follow_skill(id, &manifest, state);
-        }
+        let skill_install = if state.enabled != was_enabled {
+            self.follow_skill(id, &manifest, state)
+        } else {
+            None
+        };
         if !state.enabled {
             self.runtime.stop(id)?;
             self.runtime.forget_page_token(id);
@@ -349,7 +360,7 @@ impl ExtensionRegistry {
             id: id.to_string(),
             manifest,
             state: state.clone(),
-            skill_install: None,
+            skill_install,
         };
         write_store(&self.store_file, &store)?;
         Ok(installed)
@@ -363,23 +374,26 @@ impl ExtensionRegistry {
     /// User, of Work items (the Thread brief extension): "extension still needs to be enabled so
     /// the skill gets loaded automatically when it's on only". Before, a skill stayed installed
     /// until the extension was uninstalled, so agents kept reading it while it was off.
+    /// Returns what turning it on did with the skill, for the extension's answer
+    /// (`skillInstall`, which Settings > Extensions shows), when it could not go in.
     fn follow_skill(
         &self,
         id: &str,
         manifest: &super::ExtensionManifest,
         state: &ExtensionStoreEntry,
-    ) {
-        let Some(name) = state.skill_installed.as_deref() else {
-            return;
-        };
+    ) -> Option<serde_json::Value> {
+        let name = state.skill_installed.as_deref()?;
         if !state.enabled {
             super::skills::remove_skill(&self.agent_home, id, name);
-            return;
+            return None;
         }
-        if let Some(skill) = manifest.skill.as_ref().filter(|skill| skill.name == name) {
-            let payload_dir = self.installed_dir().join(id);
-            let _ = super::skills::install_skill(&self.agent_home, id, &payload_dir, skill);
+        let skill = manifest.skill.as_ref().filter(|skill| skill.name == name)?;
+        let payload_dir = self.installed_dir().join(id);
+        let outcome = super::skills::install_skill(&self.agent_home, id, &payload_dir, skill);
+        if let Err(reason) = &outcome {
+            eprintln!("[gxserver] Extension {id}: its skill {name} was not put back: {reason}");
         }
+        Some(super::skills::skill_report(name, &outcome.map(|()| true)))
     }
 
     /// The skill side of an install: a first install puts the skill in when the user asked for
@@ -457,7 +471,7 @@ impl ExtensionRegistry {
         let skill_install = self.settle_install_skill(&id, &manifest, &mut state, approval);
         // An update while the extension is off leaves its skill out until it is turned on.
         if !state.enabled {
-            self.follow_skill(&id, &manifest, &state);
+            let _ = self.follow_skill(&id, &manifest, &state);
         }
         store.insert(id.clone(), state.clone());
         write_store(&self.store_file, &store)?;

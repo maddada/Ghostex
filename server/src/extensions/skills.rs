@@ -64,6 +64,11 @@ pub(crate) fn validate_skill_payload(
     }
 }
 
+/// A skill folder an extension put there (it holds the extension's marker), whichever extension.
+pub(crate) fn is_extension_skill(skill_dir: &Path) -> bool {
+    skill_dir.join(OWNER_MARKER).is_file()
+}
+
 fn owned_by(skill_dir: &Path, extension_id: &str) -> bool {
     let is_real_dir = fs::symlink_metadata(skill_dir)
         .is_ok_and(|metadata| metadata.is_dir() && !metadata.file_type().is_symlink());

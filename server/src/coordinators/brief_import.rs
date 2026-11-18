@@ -17,8 +17,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use rusqlite::Connection;
 use serde_json::Value;
 
-use super::records::{now_iso, SessionKey};
-use super::session_work::{read_topic, write_topic, WORK_ITEMS_EXTENSION};
+use super::records::{now_iso, read_coordinator, read_thread, SessionKey};
+use super::session_work::{read_topic, write_topic, TOPIC_MAX_CHARS, WORK_ITEMS_EXTENSION};
 use super::work::{next_item_number, write_work_item, WorkEvent, WorkItem, WorkWait};
 
 /// Set once this gxserver has looked: the conversion runs at most once per start.
@@ -52,14 +52,31 @@ fn session_exists(db: &Connection, key: &SessionKey) -> bool {
     .is_ok()
 }
 
+/// A coordinator or a coordinator's thread keeps no items of its own: a session promoted to
+/// coordinator since its brief, or a thread, is left out.
+fn is_coordinator_or_thread(db: &Connection, key: &SessionKey) -> bool {
+    read_coordinator(db, &key.0, &key.1)
+        .ok()
+        .flatten()
+        .is_some()
+        || read_thread(db, &key.0, &key.1).ok().flatten().is_some()
+}
+
 /// One brief's items, written for `key`. Returns how many.
 fn import_brief(db: &Connection, key: &SessionKey, brief: &Value) -> usize {
+    // Finished items are stamped now, so the ones the brief had done stay under Finished today
+    // instead of falling out of the panel's few days and the 14-day cleanup at once.
+    let converted_at = now_iso();
     let at = brief["updatedAt"]
         .as_str()
         .filter(|at| chrono::DateTime::parse_from_rfc3339(at).is_ok())
         .map(str::to_string)
         .unwrap_or_else(now_iso);
-    let objective = item_text(&brief["objective"]);
+    // A Topic is one line of at most 200 characters; a longer objective is cut to fit.
+    let objective: String = item_text(&brief["objective"])
+        .chars()
+        .take(TOPIC_MAX_CHARS)
+        .collect();
     if !objective.is_empty() && read_topic(db, key).is_null() {
         let by_user = brief["objectiveByUser"] == true;
         let _ = write_topic(db, key, &objective, by_user);
@@ -100,8 +117,12 @@ fn import_brief(db: &Connection, key: &SessionKey, brief: &Value) -> usize {
                 status: status.to_string(),
             }],
             created_at: at.clone(),
-            updated_at: at.clone(),
-            finished_at: finished.then(|| at.clone()),
+            updated_at: if finished {
+                converted_at.clone()
+            } else {
+                at.clone()
+            },
+            finished_at: finished.then(|| converted_at.clone()),
             ..WorkItem::default()
         };
         if write_work_item(db, key, &item).is_ok() {
@@ -149,13 +170,32 @@ pub(super) fn import_briefs_once(db: &Connection) {
     if !keeps_work_items(&manifest.version) {
         return;
     }
-    LOOKED.store(true, Ordering::Relaxed);
+    // One caller converts: the supervisor's tick and a request may both get here.
+    if LOOKED.swap(true, Ordering::Relaxed) {
+        return;
+    }
     let data = extensions_dir.join("data").join(WORK_ITEMS_EXTENSION);
     let store = data.join("briefs.json");
-    let Some(briefs) = std::fs::read_to_string(&store)
+    // Moved aside first, so a folder where the file cannot be renamed converts nothing (and a
+    // later start converts nothing twice); put back if the conversion does not commit.
+    let converting = data.join("briefs.converting.json");
+    // A start cut off mid-way left it moved aside with nothing committed: it converts from there.
+    if !converting.is_file() && std::fs::rename(&store, &converting).is_err() {
+        return;
+    }
+    let put_back = || {
+        let _ = std::fs::rename(&converting, &store);
+    };
+    let Some(briefs) = std::fs::read_to_string(&converting)
         .ok()
         .and_then(|text| serde_json::from_str::<Value>(&text).ok())
     else {
+        put_back();
+        return;
+    };
+    // Every item and Topic in one transaction: all of them or none.
+    let Ok(transaction) = db.unchecked_transaction() else {
+        put_back();
         return;
     };
     let mut sessions = 0;
@@ -165,13 +205,17 @@ pub(super) fn import_briefs_once(db: &Connection) {
             continue;
         };
         let key = (project_id.to_string(), session_id.to_string());
-        if !session_exists(db, &key) {
+        if !session_exists(db, &key) || is_coordinator_or_thread(db, &key) {
             continue;
         }
         sessions += 1;
         items += import_brief(db, &key, brief);
     }
-    let _ = std::fs::rename(&store, data.join("briefs.converted.json"));
+    if transaction.commit().is_err() {
+        put_back();
+        return;
+    }
+    let _ = std::fs::rename(&converting, data.join("briefs.converted.json"));
     eprintln!(
         "[gxserver] Work items: converted {sessions} session briefs into {items} work items once."
     );
