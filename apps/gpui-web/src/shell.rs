@@ -224,7 +224,7 @@ impl GhostexGpuiApp {
                     let Some((_, view)) = app.native_chats.get(&session).cloned() else {
                         return;
                     };
-                    let details_put_away = !view.read(cx).work_panel_shown()
+                    let details_put_away = !view.read(cx).work_panel_shown_or_closing()
                         && app.session_details_choices.is_open(&key);
                     if details_put_away {
                         app.session_details_choices.set(&key, false);

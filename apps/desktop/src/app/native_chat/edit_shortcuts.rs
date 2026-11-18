@@ -613,6 +613,20 @@ impl NativeChatView {
     }
 }
 
+impl NativeChatView {
+    /// A chat text field other than the chat box and the picker's own search field holds the
+    /// keyboard (the Topic, the find bar, a note, a form box, a dialog field).
+    pub(super) fn other_chat_text_field_focused(&self, window: &Window, cx: &gpui::App) -> bool {
+        let own = self
+            .input
+            .iter()
+            .map(|input| input.focus_handle(cx))
+            .chain(self.terminal_picker_focus_handle(cx))
+            .any(|focus| focus.is_focused(window));
+        !own && self.chat_text_field_focused(window, cx)
+    }
+}
+
 /// What the chat answers in the app's Edit menu this frame (`NativeChatView::edit_menu`).
 #[derive(Clone, Copy)]
 #[cfg_attr(ghostex_web, allow(dead_code))] // the web page has no app menu

@@ -177,8 +177,12 @@ impl NativeChatView {
             window.prevent_default();
             return;
         }
-        // An open `/resume` picker or pass-through screen takes the arrows, Enter and Escape.
-        if self.terminal_picker_key_down(event, window, cx) {
+        // An open `/resume` picker or pass-through screen takes the arrows, Enter and Escape, but
+        // never from another of the chat's text fields (the Topic, the find bar, a note): what is
+        // typed there stays there.
+        if !self.other_chat_text_field_focused(window, cx)
+            && self.terminal_picker_key_down(event, window, cx)
+        {
             cx.stop_propagation();
             window.prevent_default();
             return;

@@ -221,6 +221,18 @@ impl NativeChatView {
         }
     }
 
+    /// The Work panel is shown, or its floating card or columns were dismissed by the press now
+    /// landing on the header's Work button: that press closes it, so Session details stays.
+    pub(crate) fn work_panel_shown_or_closing(&self) -> bool {
+        self.work_panel_shown()
+            || self
+                .menu_toggle
+                .just_dismissed(super::coordinator_board::BOARD_TRIGGER)
+            || self
+                .menu_toggle
+                .just_dismissed(super::coordinator_board::BOARD_COLUMNS_TRIGGER)
+    }
+
     /// The Work panel is on screen: docked, floating, or as columns.
     pub(crate) fn work_panel_shown(&self) -> bool {
         self.coordinator_board_docked()

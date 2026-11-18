@@ -158,7 +158,10 @@ impl GhostexGpuiApp {
         };
         let (opening, details_shown) = {
             let chat = chat.read(cx);
-            (!chat.work_panel_shown(), chat.session_details_wanted())
+            (
+                !chat.work_panel_shown_or_closing(),
+                chat.session_details_wanted(),
+            )
         };
         let key = self.session_details_chat_key(session_id);
         // Only a panel on screen for this chat makes way: a saved choice for a chat the header

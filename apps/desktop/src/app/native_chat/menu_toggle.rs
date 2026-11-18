@@ -37,6 +37,12 @@ impl ChatMenuToggle {
         self.open = None;
     }
 
+    /// The press now landing on `trigger` dismissed its own menu (without consuming that).
+    pub(in crate::app::native_chat) fn just_dismissed(&self, trigger: &'static str) -> bool {
+        self.dismissed
+            .is_some_and(|(owner, at)| owner == trigger && at.elapsed() < SAME_PRESS)
+    }
+
     /// The menu about to go up belongs to `trigger`, opened by something other than a press on
     /// it (a count opening the Work panel's card under the header's button).
     pub(in crate::app::native_chat) fn arm(&mut self, trigger: &'static str) {
