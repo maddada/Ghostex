@@ -1,32 +1,11 @@
 //! Saving a crash as it happens, and gathering the crashes to offer at the next open.
 
-use std::sync::atomic::{AtomicBool, Ordering};
-
 use serde_json::Value;
 
 use super::context;
 use super::native;
 use super::record::{self, CrashKind, CrashRecord, STACK_MAX_FRAMES, SentCrash};
 use super::system;
-
-/// Whether this process already saved a main-thread panic.
-static RECORDED_MAIN_THREAD_PANIC: AtomicBool = AtomicBool::new(false);
-
-/// CDXC:CrashReports 2026-11-19 WHY:
-/// A panic that unwinds into a frame that cannot unwind (a Windows window procedure, an
-/// `extern "C"` callback) raises a second panic, "panic in a function that cannot unwind", and the
-/// process aborts. Both reach the panic hook, and the second one's record replaced the first (same
-/// millisecond, same file name; or newer, so it was the one offered), so the report named
-/// `panicking.rs` instead of the real panic (GitHub #675). The first panic's record is kept.
-fn is_follow_up_panic(message: &str) -> bool {
-    const FOLLOW_UP_MESSAGES: [&str; 2] = [
-        "panic in a function that cannot unwind",
-        "panic in a destructor during cleanup",
-    ];
-    FOLLOW_UP_MESSAGES
-        .iter()
-        .any(|follow_up| message.starts_with(follow_up))
-}
 
 /// Called by the panic hook with the details it already cleaned (`panic_crash_details` in
 /// support_logs.rs: paths in the message become `[path]`, dependency paths keep only the file
@@ -43,10 +22,6 @@ pub(crate) fn record_panic(details: &Value) {
             .unwrap_or_default()
             .to_string()
     };
-    let already_recorded = RECORDED_MAIN_THREAD_PANIC.swap(true, Ordering::SeqCst);
-    if already_recorded && is_follow_up_panic(&text("message")) {
-        return;
-    }
     let backtrace: Vec<String> = details
         .get("backtrace")
         .and_then(Value::as_array)
@@ -239,19 +214,4 @@ fn pick_up_native_crashes() {
     }
     state.native_crashes_read_until_ms = Some(newest);
     record::save_reader_state(&state);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::is_follow_up_panic;
-
-    #[test]
-    fn the_abort_after_a_panic_is_a_follow_up() {
-        assert!(is_follow_up_panic("panic in a function that cannot unwind"));
-        assert!(is_follow_up_panic("panic in a destructor during cleanup"));
-        assert!(!is_follow_up_panic(
-            "called `Option::unwrap()` on a `None` value"
-        ));
-        assert!(!is_follow_up_panic(""));
-    }
 }
