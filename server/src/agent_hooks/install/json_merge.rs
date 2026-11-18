@@ -8,7 +8,9 @@ use crate::agent_hooks::config::{
     all_hook_events, command_agent, hook_format, nested_event_timeout, nested_timeout,
     HookDefinition, HookFormat, HookPaths,
 };
-use crate::agent_hooks::probing::{path_string, read_config_text};
+use crate::agent_hooks::probing::{
+    io_error, json_error, path_string, read_config_text, write_config_file,
+};
 use crate::agent_hooks::resolution::is_ghostex_owned_hook_command;
 
 use super::*;
@@ -36,16 +38,21 @@ pub(super) fn merge_json_hook(
             ))
         })?
         .unwrap_or_default();
-    ensure_json_config_is_rewritable(definition.agent_id, config_path, &current_text)?;
+    // CDXC:AgentHooks 2026-11-18 WHY: review of 02b968dac: Copilot CLI opens its own
+    // `config.json` with two `//` comment lines, so the stricter read refused every Copilot
+    // install. The comment lines that open a file are kept and written back above the JSON, as
+    // agent_folder_trust/files.rs does.
+    let (header, current_text) = split_comment_header(&current_text);
+    ensure_json_config_is_rewritable(definition.agent_id, config_path, current_text)?;
     if !current_text.trim().is_empty()
-        && !serde_json::from_str::<Value>(&current_text).is_ok_and(|value| value.is_object())
+        && !serde_json::from_str::<Value>(current_text).is_ok_and(|value| value.is_object())
     {
         return Err(DomainStateError::corrupt_state(format!(
             "{} is not a JSON object Ghostex can add its hook to, so it left it alone. Fix the file and run Install Hooks again.",
             path_string(config_path)
         )));
     }
-    let mut data = read_json_object(&current_text);
+    let mut data = read_json_object(current_text);
     let before = data.clone();
     let events = all_hook_events(definition.agent_id);
     let format = hook_format(definition.agent_id);
@@ -171,7 +178,11 @@ pub(super) fn merge_json_hook(
     if definition.agent_id == "claude" {
         super::claude_retention::ensure_claude_transcript_retention(&mut data);
     }
-    write_json_file(config_path, &data)?;
+    let text = format!(
+        "{header}{}\n",
+        serde_json::to_string_pretty(&data).map_err(json_error)?
+    );
+    write_config_file(config_path, text.as_bytes()).map_err(io_error)?;
     Ok(before)
 }
 

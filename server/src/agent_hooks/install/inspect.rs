@@ -359,6 +359,7 @@ fn json_contains_ghostex_owned_hook_command(value: &Value, command: &str) -> boo
 }
 
 pub(crate) fn read_json_object(text: &str) -> Value {
+    let (_, text) = split_comment_header(text);
     if text.trim().is_empty() {
         return json!({});
     }
@@ -399,4 +400,16 @@ pub(crate) fn claude_all_hooks_disabled(text: &str) -> bool {
         .get("disableAllHooks")
         .and_then(Value::as_bool)
         == Some(true)
+}
+
+/// The `//` comment lines that open a JSON config (Copilot CLI heads its `config.json` with two),
+/// and the JSON after them. A leading UTF-8 byte order mark is not part of either.
+pub(crate) fn split_comment_header(text: &str) -> (&str, &str) {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    let body_start = text
+        .split_inclusive('\n')
+        .take_while(|line| line.trim_start().starts_with("//"))
+        .map(str::len)
+        .sum::<usize>();
+    text.split_at(body_start)
 }

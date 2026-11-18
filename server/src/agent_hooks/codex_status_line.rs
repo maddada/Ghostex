@@ -28,6 +28,22 @@ fn array_names_model(array: &Array) -> bool {
         .any(|item| item.as_str() == Some(CODEX_MODEL_STATUS_LINE_ITEM))
 }
 
+/// Whether an explicit `tui.status_line` already lists `model-with-reasoning`.
+pub(crate) fn codex_status_line_lists_model(config_path: &Path) -> bool {
+    let Ok(Some(text)) = read_config_text(config_path) else {
+        return false;
+    };
+    text.parse::<DocumentMut>().ok().is_some_and(|document| {
+        document
+            .as_table()
+            .get("tui")
+            .and_then(Item::as_table_like)
+            .and_then(|tui| tui.get("status_line"))
+            .and_then(Item::as_array)
+            .is_some_and(array_names_model)
+    })
+}
+
 /// Appends `model-with-reasoning` to an explicit `tui.status_line` that lacks
 /// it. Returns whether `config.toml` changed.
 pub(crate) fn ensure_codex_status_line_names_model(

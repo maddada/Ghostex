@@ -84,6 +84,7 @@ pub fn install_agent_hooks(
     let hook_paths = HookPaths::from_paths(paths);
     let agent_ids = normalize_agent_ids(params.get("agentIds"));
     let mut installed_paths = Vec::new();
+    let mut refused_agents = Vec::new();
     install_notify_hook(&hook_paths)?;
     installed_paths.push(path_string(&hook_paths.notify_hook_path));
     install_statusline_hook(&hook_paths)?;
@@ -124,7 +125,16 @@ pub fn install_agent_hooks(
         ) {
             continue;
         }
-        installed_paths.extend(install_agent_hook(definition, &hook_paths)?);
+        // CDXC:AgentHooks 2026-11-18 WHY: review of 02b968dac: one agent whose config Ghostex
+        // refuses to rewrite (not readable, not a JSON object) stopped the whole loop, so every
+        // agent after it got no hook. It is reported in `refusedAgents` and the rest go on.
+        match install_agent_hook(definition, &hook_paths) {
+            Ok(paths) => installed_paths.extend(paths),
+            Err(error) => refused_agents.push(json!({
+                "agentId": definition.agent_id,
+                "error": error.message,
+            })),
+        }
     }
     /*
     CDXC:AgentHooks 2026-09-02:
@@ -140,6 +150,9 @@ pub fn install_agent_hooks(
         .cloned()
         .unwrap_or_default();
     status.insert("installedPaths".to_string(), json!(installed_paths));
+    if !refused_agents.is_empty() {
+        status.insert("refusedAgents".to_string(), json!(refused_agents));
+    }
     Ok(Value::Object(status))
 }
 
@@ -292,9 +305,20 @@ pub fn repair_installed_agent_hook_paths(
             path_string(&hook_paths.notify_hook_path),
         );
     }
+    // CDXC:AgentHooks 2026-11-18 WHY: review of 02b968dac: an agent config the repair refuses (an
+    // Antigravity hooks.json that no longer parses but still names Ghostex) stopped gxserver's
+    // startup and failed every hook status read. It is logged and skipped; never stop for one.
     for (definition, provider_paths) in stale_targets {
-        for repaired_path in repair_agent_hook_paths(definition, &hook_paths, provider_paths)? {
-            push_unique_path(&mut repaired_paths, repaired_path);
+        match repair_agent_hook_paths(definition, &hook_paths, provider_paths) {
+            Ok(paths) => {
+                for repaired_path in paths {
+                    push_unique_path(&mut repaired_paths, repaired_path);
+                }
+            }
+            Err(error) => eprintln!(
+                "[gxserver] left {}'s hook config alone during repair: {}",
+                definition.agent_id, error.message
+            ),
         }
     }
     Ok(repaired_paths)

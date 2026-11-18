@@ -448,8 +448,15 @@ pub(crate) fn read_file_text(path: &Path) -> String {
 /// missing file reads as empty, as in packages/paths/src/settings_file.rs.
 pub(crate) fn read_config_text(path: &Path) -> std::io::Result<Option<String>> {
     match fs::read(path) {
+        // A leading UTF-8 byte order mark (some Windows editors add one) is not part of the text.
         Ok(bytes) => String::from_utf8(bytes)
-            .map(Some)
+            .map(|text| {
+                Some(
+                    text.strip_prefix('\u{feff}')
+                        .map(str::to_string)
+                        .unwrap_or(text),
+                )
+            })
             .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error),
@@ -510,12 +517,27 @@ pub(crate) fn write_config_file(path: &Path, bytes: &[u8]) -> std::io::Result<()
     }
 }
 
-/// Why [`replace_through_temp`] failed: a temp file or rename the folder refused (an in-place
-/// write may still work), or writing the bytes themselves (it would fail in place too, after
-/// truncating the config).
+/// Why [`replace_through_temp`] failed: a temp file or rename the system refused for a reason an
+/// in-place write gets past, or anything else (no space, a quota, a failed write), which would
+/// fail in place too, after truncating the config.
 enum Refused {
     TempOrRename,
     Write(std::io::Error),
+}
+
+/// A temp-file or rename failure an in-place write gets past: permission denied (a folder that
+/// refuses new files), a busy file, or a rename across devices (a bind-mounted file).
+fn in_place_gets_past(error: std::io::Error) -> Refused {
+    const EXDEV: i32 = 18;
+    let fallback = matches!(
+        error.kind(),
+        std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ResourceBusy
+    ) || (cfg!(unix) && error.raw_os_error() == Some(EXDEV));
+    if fallback {
+        Refused::TempOrRename
+    } else {
+        Refused::Write(error)
+    }
 }
 
 fn replace_through_temp(
@@ -533,7 +555,7 @@ fn replace_through_temp(
         options.mode(permissions.as_ref().map_or(0o644, |p| p.mode() & 0o7777));
     }
     // Only a temp file this call created is ever removed.
-    let mut file = options.open(&temp).map_err(|_| Refused::TempOrRename)?;
+    let mut file = options.open(&temp).map_err(in_place_gets_past)?;
     let written = (|| {
         file.write_all(bytes)?;
         file.sync_all()
@@ -548,7 +570,7 @@ fn replace_through_temp(
             .and_then(|()| {
                 ghostex_paths::durable_file::retry_while_busy(|| fs::rename(&temp, target))
             })
-            .map_err(|_| Refused::TempOrRename),
+            .map_err(in_place_gets_past),
     };
     if result.is_err() {
         let _ = fs::remove_file(&temp);
