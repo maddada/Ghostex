@@ -35,11 +35,21 @@ impl GhostexGpuiApp {
                 }
                 true
             }
+            // CDXC:WorkMode 2026-11-18 WHY:
+            // User: "clicking on keep doesn't do anything here". The card was another machine's
+            // session (m7-arch, drawn in the merged sidebar), and the answer was sent only for this
+            // computer's sessions, so both chips were dropped without a word and the offer stayed.
+            // It goes to the machine that owns the session, like its links (`session_links_machine`);
+            // that gxserver allows `/api/answerWorkCleanup` from a remote client (server/src/protocol.rs).
             Some("answerWorkCleanup") => {
                 let answer = command.get("answer").and_then(Value::as_str);
-                if let (Some(session), Some(answer @ ("cleanUp" | "keep"))) =
-                    (local_session(command.get("sessionId")), answer)
-                {
+                if let (Some(session), Some(answer @ ("cleanUp" | "keep"))) = (
+                    command
+                        .get("sessionId")
+                        .and_then(Value::as_str)
+                        .and_then(SessionKey::parse_sidebar_session_id),
+                    answer,
+                ) {
                     self.gx_store_answer_work_cleanup(session, answer, cx);
                 }
                 true
@@ -88,8 +98,21 @@ impl GhostexGpuiApp {
             "answer": answer,
         });
         let clean_up = answer == "cleanUp";
+        let Some(remote) = self.session_links_machine(&session) else {
+            self.dispatch_gpui_workspace_action_toast(
+                "error",
+                if clean_up {
+                    "Couldn't clean up the session"
+                } else {
+                    "Couldn't save your answer"
+                },
+                "This session's machine is not connected.",
+                cx,
+            );
+            return;
+        };
         cx.spawn(async move |this, cx| {
-            let result = gx_rpc(None, "/api/answerWorkCleanup", params).await;
+            let result = gx_rpc(remote, "/api/answerWorkCleanup", params).await;
             let _ = this.update(cx, |this, cx| match result {
                 Ok(answer) if clean_up => {
                     if answer.get("keptDirtyWorktree").and_then(Value::as_bool) == Some(true) {
