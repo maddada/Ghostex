@@ -175,7 +175,8 @@ pub(super) fn tone_color(tone: &str) -> Option<u32> {
 /// (`jumpToQuestion`, or the question link a card's chip carries).
 fn board_action_jumps(action: &Value) -> bool {
     match action["type"].as_str() {
-        Some("jumpToQuestion" | "openCoordinatorThread") => true,
+        // `openResource`: a card's form or page (gx-chat-core `go`, its Open).
+        Some("jumpToQuestion" | "openCoordinatorThread" | "openResource") => true,
         Some("openMarkdownLink") => action["href"].as_str().is_some_and(|href| {
             href.starts_with(ghostex_gx_chat_core::transcript::open_questions::QUESTION_LINK_PREFIX)
         }),
@@ -1503,8 +1504,25 @@ impl NativeChatView {
         if expanded {
             // Opened, only the title line opens and shuts the card (and drags it): a press under
             // it stops here, so the text takes it, a drag selects and Cmd+C copies (work_cards.rs
-            // `dock_row`, CDXC:Coordinators 2026-11-12).
+            // `dock_row`, CDXC:Coordinators 2026-11-12). A plain click there opens what the card
+            // points to (gx-chat-core `go`, CDXC:Coordinators 2026-11-18); its buttons, links and
+            // answers stop their own clicks.
+            let go = row["go"].clone();
             let mut inner = div()
+                .id(gpui::SharedString::from(format!(
+                    "chat-board-card-body:{key}"
+                )))
+                .when(go.is_object(), |inner| {
+                    inner.chat_cursor_pointer().on_click(cx.listener(
+                        move |this, event: &gpui::ClickEvent, window, cx| {
+                            if !super::row_click::acts_on_row(event, window, cx) {
+                                return;
+                            }
+                            this.close_board_card_menu(cx);
+                            this.open_work_target(go.clone(), window, cx);
+                        },
+                    ))
+                })
                 .w_full()
                 .min_w_0()
                 .flex()
@@ -2277,6 +2295,35 @@ impl NativeChatView {
         Some(panel.into_any_element())
     }
 
+    /// Opens what a card or row points to (gx-chat-core `go`, or its `open`): a page at once from
+    /// the view, as the chat's page card's Open does (`open_page_card`), a work item ask's own
+    /// panel (`openWorkAsk`), anything else through the core.
+    pub(super) fn open_work_target(
+        &mut self,
+        command: Value,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let page = &command["page"];
+        if let Some(url) = page["url"].as_str().filter(|url| !url.is_empty()) {
+            // A page is a jump like any other: the board closes first (`invoke_board_jump`).
+            self.close_board_for_jump(cx);
+            self.open_page_card(
+                url.to_string(),
+                text(page, "title"),
+                None,
+                page["pageId"].as_str().map(str::to_string),
+                cx,
+            );
+            return;
+        }
+        if command["type"] == "openWorkAsk" {
+            self.open_dock_ask_modal(&text(&command, "key"), window, cx);
+            return;
+        }
+        self.invoke_board_jump(command, cx);
+    }
+
     /// Runs a board click. One that jumps into a chat (a question or page chip, a card's question
     /// or page, a thread row that opens its chat) closes the board first, whichever way it is
     /// showing (docked, the floating card, the columns), so the chat is visible at the target.
@@ -2286,11 +2333,15 @@ impl NativeChatView {
     /// User: "when i click in the board to jump to a question please close the board".
     fn invoke_board_jump(&mut self, action: Value, cx: &mut Context<Self>) {
         if board_action_jumps(&action) {
-            self.board.open = false;
-            self.close_pill_menu(cx);
-            cx.notify();
+            self.close_board_for_jump(cx);
         }
         self.invoke(action, cx);
+    }
+
+    fn close_board_for_jump(&mut self, cx: &mut Context<Self>) {
+        self.board.open = false;
+        self.close_pill_menu(cx);
+        cx.notify();
     }
 
     /// A card dropped on group `group`: it moves there (onto Done it is marked done, onto Removed

@@ -1253,8 +1253,9 @@ impl NativeChatView {
             }
             return div()
                 .w_full()
-                .child(press.on_click(cx.listener(move |this, _, _, cx| {
-                    this.invoke(page.clone(), cx);
+                .child(press.on_click(cx.listener(move |this, _, window, cx| {
+                    // Straight to the page (`open_work_target`, CDXC:Coordinators 2026-11-18).
+                    this.open_work_target(page.clone(), window, cx);
                 })))
                 .into_any_element();
         }

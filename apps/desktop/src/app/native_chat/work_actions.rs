@@ -294,7 +294,7 @@ impl NativeChatView {
                 cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
                     cx.stop_propagation();
                     if open.is_object() {
-                        this.invoke(open.clone(), cx);
+                        this.open_work_target(open.clone(), window, cx);
                         return;
                     }
                     let at = event.position();
@@ -586,9 +586,10 @@ impl NativeChatView {
                 any = true;
                 row = row.child(
                     self.work_icon_button(format!("work-{field}:{key}"), icon, label, false, p)
-                        .on_click(cx.listener(move |this, _, _, cx| {
+                        .on_click(cx.listener(move |this, _, window, cx| {
                             cx.stop_propagation();
-                            this.invoke(command.clone(), cx);
+                            // A page's Open goes straight to the page (`open_work_target`).
+                            this.open_work_target(command.clone(), window, cx);
                         })),
                 );
             }

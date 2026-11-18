@@ -192,6 +192,19 @@ pub struct BoardRow {
     pub open: Value,
     #[serde(default)]
     pub open_label: String,
+    /// What a click on the opened card's body (not its title line, which shuts it, nor a button)
+    /// opens: a page (`openResource` with its `page`, opened at once by the renderer), a form's
+    /// popup, the thread, a work item ask's own panel (`openWorkAsk`, which the renderer opens:
+    /// the desktop's dock_ask_modal.rs), the item's first link, else the turn that last changed
+    /// it (`showInChat`); `null` for nothing.
+    ///
+    /// CDXC:Coordinators 2026-11-18 DECISION:
+    /// User, of an opened page card in the Work panel whose body did nothing on a click: "make
+    /// this one open when i click on it". A plain click on a closed card still opens it in place
+    /// (2026-11-06); the opened card's body now opens what it points to, and its buttons, chips
+    /// and answers keep their own actions.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub go: Value,
     /// What Mark done sends, `null` for a card that is done already (or a question).
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub done: Value,
@@ -654,6 +667,7 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
             "type": "toggleCoordinatorBoardGroup",
             "group": format!("{CARD_KEY_PREFIX}{}", text(row, "key")),
         }),
+        go: open_command.clone(),
         open: open_command,
         open_label,
         done: if here && !matches!(group, "done" | "removed") {
@@ -933,6 +947,7 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
                             "type": "toggleCoordinatorBoardGroup",
                             "group": format!("{CARD_KEY_PREFIX}question:{}", asker.id),
                         }),
+                        go: crate::extras::work_cards::open_resource(state, &asker),
                         open: json!({"type": "jumpToQuestion", "id": asker.id}),
                         open_label: "Go to question".to_string(),
                         done: Value::Null,
@@ -1013,6 +1028,14 @@ pub fn coordinator_board_with(
                 }
                 // A work item's ask is answered or done, never dropped, moved or tagged by itself:
                 // those act on its item (work_panel.rs).
+                // A work item ask opens its own panel, as its dock row does.
+                if row["askRow"] == true {
+                    out.go = json!({"type": "openWorkAsk", "key": out.key});
+                }
+                // Nothing else to open: the turn that last changed it.
+                if out.go.is_null() {
+                    out.go = out.actions["showInChat"].clone();
+                }
                 if row["askRow"] == true {
                     out.lead = text(row, "detail").to_string();
                     // The lead says it; an opened card does not repeat it as its line.

@@ -1213,7 +1213,7 @@ fn question_rows_of(
                     format!("{open} {noun} open \u{b7} {}", if form { "Form" } else { "Page" })
                 };
                 row["detail"] = json!([detail]);
-                row["open"] = json!({ "type": "openResource", "id": asker.id });
+                row["open"] = open_resource(state, asker);
                 // Reply beside Open: the reader's own words on the whole form or page, sent to the
                 // agent after its name and the questions it still asks as one range ("Triage (Q12
                 // to Q14): words", `questionsReply`), as a work item ask's Reply goes as "W7 Q12:
@@ -1253,6 +1253,35 @@ fn question_rows_of(
             (at, row)
         })
         .collect()
+}
+
+/// What opens a form or page: `openResource`, a page's with its address and name (`page`) so a
+/// renderer opens it at once, as the chat's page card's Open does, instead of waiting for the
+/// core's Open effect behind a busy action queue (native_chat/page_card.rs `open_page_card`). A
+/// form, or a page whose address is not known here, goes to the core as before.
+///
+/// CDXC:Coordinators 2026-11-18 WHY:
+/// User, of a page card in the Work panel's Needs you: "make this one open when i click on it".
+/// The card's click and its Open go straight to the page, as a page's Q-tag pill does since
+/// 0b7724240 (whose commit message has the measured queue delay).
+pub(crate) fn open_resource(
+    state: &ChatState,
+    asker: &crate::transcript::open_questions::Asker,
+) -> Value {
+    let page = matches!(
+        asker.kind,
+        crate::transcript::open_questions::AskerKind::Page
+    )
+    .then(|| crate::questions::open_questions::page_url(state, &asker.id))
+    .flatten();
+    match page {
+        Some(url) => json!({
+            "type": "openResource",
+            "id": asker.id,
+            "page": { "url": url, "title": asker.title, "pageId": asker.id },
+        }),
+        None => json!({ "type": "openResource", "id": asker.id }),
+    }
 }
 
 /// What a form's or page's Mention puts in the chat box: its name, a page's as a link to the
