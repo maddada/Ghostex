@@ -48,7 +48,7 @@ pub(crate) async fn handle_read_project_git_state_http(
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
-    let projects = match crate::server::blocking_section(|| requested_project(state, &params)) {
+    let projects = match requested_project(state, &params) {
         Ok(projects) => projects,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };

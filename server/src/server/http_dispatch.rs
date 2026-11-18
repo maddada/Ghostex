@@ -160,48 +160,6 @@ where
         &str,
     ) -> std::result::Result<R, DomainStateError>,
 {
-    blocking_section(|| domain_http_as(state, endpoint_path, request_id, body, handler))
-}
-
-/// Runs `work`, which blocks (SQLite, a file read), without holding up the other tasks on this
-/// async worker: on gxserver's multi-thread runtime the worker hands its queue to another thread
-/// first (`tokio::task::block_in_place`), and `work` stays on this thread, so thread-locals and the
-/// request's task-locals still read as before. Anywhere else (a test's current-thread runtime, a
-/// plain or blocking-pool thread) `work` simply runs.
-///
-/// CDXC:ServerApi 2026-11-18 WHY:
-/// GitHub #666 (Windows, about 40 agents): gxserver's runtime heartbeat went quiet for up to 131 s
-/// and every request, git reads included, sat unanswered, with "database is locked" in the log.
-/// The domain routes (`listSessions`, `findSessions` and some 80 more) ran SQLite straight on the
-/// async workers, each waiting up to 5 s on a busy database, so a burst of them could fill every
-/// worker while the finished git processes and the heartbeat waited behind them.
-pub(crate) fn blocking_section<R>(work: impl FnOnce() -> R) -> R {
-    let multi_thread = tokio::runtime::Handle::try_current().is_ok_and(|runtime| {
-        runtime.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread
-    });
-    if multi_thread {
-        tokio::task::block_in_place(work)
-    } else {
-        work()
-    }
-}
-
-fn domain_http_as<R, F>(
-    state: &AppState,
-    endpoint_path: String,
-    request_id: String,
-    body: &Value,
-    handler: F,
-) -> RoutedResponse
-where
-    R: serde::Serialize,
-    F: FnOnce(
-        &DomainRepository<'_>,
-        &rusqlite::Connection,
-        &Map<String, Value>,
-        &str,
-    ) -> std::result::Result<R, DomainStateError>,
-{
     let params = match read_domain_rpc_params(body) {
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
