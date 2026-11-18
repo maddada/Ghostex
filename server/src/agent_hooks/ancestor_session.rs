@@ -9,23 +9,80 @@ pub(crate) fn adopt_ancestor_session_routing() {
     if env::var_os("GHOSTEX_GLOBAL_SESSION_REF").is_some() {
         return;
     }
-    let Some(zmx_name) = ancestor_zmx_session_name() else {
+    if let Some((zmx_name, _)) = ancestor_zmx_session() {
+        adopt_ancestor_routing(&zmx_name);
+    }
+}
+
+/// The `ghostex` CLI's lookup (ghostex_cli/mod.rs): the session's routing, as for a hook, and the
+/// session's own `gxs_` token, read from the agent process that owns this process tree.
+pub(crate) fn adopt_ancestor_session_for_cli() {
+    if env::var_os("GHOSTEX_GLOBAL_SESSION_REF").is_some() {
+        return;
+    }
+    let Some((zmx_name, agent)) = ancestor_zmx_session() else {
         return;
     };
+    if adopt_ancestor_routing(&zmx_name) {
+        adopt_agent_session_token(agent, &zmx_name);
+    }
+}
+
+/*
+CDXC:Secrets 2026-11-18 DECISION:
+User (GitHub #669, 18 Nov): `ghostex secret request` must work from a Codex whose sandbox hides
+Ghostex's variables (`shell_environment_policy.inherit = "core"`), so the CLI there reads its
+session's own `gxs_` token from the pane's environment. The 8 Nov rule stands: only the asking
+session makes and waits for its request (secret_requests/api.rs `require_own_session`). The token is
+taken only from the `codex` or `empryo` process this command runs under, the agent of the pane the
+walk above found, and only when that process's own `ZMX_SESSION` names that same pane; never from
+the token file, another pane or any process outside this tree. WHY it adds no reach: Codex itself
+was started with the token in its environment and only drops it from its tool's shells, and any
+process of the same user could already read it there (`ps eww`); the lookup only ever finds the
+token of the session whose agent ran the command.
+*/
+fn adopt_agent_session_token(agent: u32, zmx_name: &str) {
+    if env::var_os(crate::security::SESSION_TOKEN_ENV).is_some() {
+        return;
+    }
+    let Some(launch) = crate::accounts::process_launch(i64::from(agent)) else {
+        return;
+    };
+    let value = |key: &str| {
+        launch
+            .environment
+            .iter()
+            .find(|(name, _)| name == key)
+            .map(|(_, value)| value.trim())
+    };
+    if value("ZMX_SESSION") != Some(zmx_name) {
+        return;
+    }
+    if let Some(token) = value(crate::security::SESSION_TOKEN_ENV)
+        .filter(|token| token.starts_with(crate::security::SESSION_TOKEN_PREFIX))
+    {
+        env::set_var(crate::security::SESSION_TOKEN_ENV, token);
+    }
+}
+
+/// Points this process at the Ghostex session `zmx_name` names, with the local gxserver address.
+/// False when the name is not a Ghostex session name.
+fn adopt_ancestor_routing(zmx_name: &str) -> bool {
     let mut parts = zmx_name.split('-');
     let (Some(server), Some(project), Some(session), None) =
         (parts.next(), parts.next(), parts.next(), parts.next())
     else {
-        return;
+        return false;
     };
     if !(server.starts_with('S') && project.starts_with('P') && session.starts_with('G')) {
-        return;
+        return false;
     }
     env::set_var(
         "GHOSTEX_GLOBAL_SESSION_REF",
         crate::ids::create_global_session_ref(server, project, session),
     );
     adopt_local_gxserver_address();
+    true
 }
 
 /// Fills in the machine-wide local gxserver address and token file the `ghostex` CLI uses, where
@@ -62,15 +119,16 @@ const ANCESTOR_AGENTS: &[&str] = &["empryo", "em", "codex"];
 /// The session name of the closest `zmx run <name>` above this process, when that pane runs
 /// Empryo or Codex itself: above the agent's process only shells may stand before the daemon. An
 /// agent another agent started from its tool (Claude's Bash tool, say) belongs to that agent's
-/// pane, not to a session of its own, so its hooks report nothing.
+/// pane, not to a session of its own, so its hooks report nothing. With it, the pid of the agent
+/// process closest to this one (the native `codex`, below any `node` that started it).
 #[cfg(unix)]
-fn ancestor_zmx_session_name() -> Option<String> {
+fn ancestor_zmx_session() -> Option<(String, u32)> {
     const SHELLS: &[&str] = &[
         "sh", "bash", "zsh", "fish", "dash", "ksh", "tcsh", "csh", "nu", "env", "login",
     ];
     let table = super::nested_agent::ProcessTable::read();
     let mut current = std::process::id();
-    let mut above_agent = false;
+    let mut agent = None;
     let mut right_above_codex = false;
     for _ in 0..64 {
         let parent = table.parent(current)?;
@@ -79,13 +137,13 @@ fn ancestor_zmx_session_name() -> Option<String> {
             .trim_start_matches('-')
             .to_ascii_lowercase();
         if stem == "zmx" {
-            return above_agent.then(|| zmx_run_session_name(parent)).flatten();
+            return zmx_run_session_name(parent).zip(agent);
         }
         let launcher_of_codex = right_above_codex && stem == "node";
         right_above_codex = stem == "codex";
         if ANCESTOR_AGENTS.contains(&stem.as_str()) {
-            above_agent = true;
-        } else if above_agent && !launcher_of_codex && !SHELLS.contains(&stem.as_str()) {
+            agent = agent.or(Some(parent));
+        } else if agent.is_some() && !launcher_of_codex && !SHELLS.contains(&stem.as_str()) {
             return None;
         }
         current = parent;
@@ -94,7 +152,7 @@ fn ancestor_zmx_session_name() -> Option<String> {
 }
 
 #[cfg(not(unix))]
-fn ancestor_zmx_session_name() -> Option<String> {
+fn ancestor_zmx_session() -> Option<(String, u32)> {
     None
 }
 

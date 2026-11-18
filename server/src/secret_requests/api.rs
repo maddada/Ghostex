@@ -59,6 +59,9 @@ fn forbidden(message: &str) -> DomainStateError {
 /*
 CDXC:Secrets 2026-11-08 DECISION:
 Only the session that asks for a secret makes its card and waits for the answer: the caller must be that session's own `gxs_` token (`Principal::Session` with the same project and session). Anyone else (another session, the token file, the owner's devices, connected computers) is refused, so no one can put a card in another session's chat or collect the file its answer was saved to.
+
+CDXC:Secrets 2026-11-18 DECISION:
+User (GitHub #669, 18 Nov): a Codex whose sandbox hides Ghostex's variables (`inherit = "core"`) must be able to ask too. Its `ghostex` CLI now reads the session's `gxs_` token from the `codex` process it runs under, in the pane that owns that exact process tree, never from the token file or another session's pane (agent_hooks/ancestor_session.rs `adopt_agent_session_token`). This rule is unchanged: the request still needs that session's own token.
 */
 /// Refuses a caller that is not session `project_id`/`session_id` itself.
 fn require_own_session(

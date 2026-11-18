@@ -35,7 +35,7 @@ pub(crate) mod windows;
 pub(crate) mod wmx_pane;
 mod zcode;
 
-pub(crate) use ancestor_session::adopt_ancestor_session_routing;
+pub(crate) use ancestor_session::adopt_ancestor_session_for_cli;
 pub(crate) use ancestor_session::zmx_session_owning_agent;
 pub(crate) use api::install_agent_hooks_for_running_agent;
 pub use api::{
