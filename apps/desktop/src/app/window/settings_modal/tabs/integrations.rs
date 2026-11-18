@@ -1325,7 +1325,9 @@ impl IntegrationsTab {
 }
 
 impl IntegrationsTab {
-    /// Floating Capture: the floating button, its hotkeys and its screenshot tools.
+    /// Floating Capture: its hotkeys and its one setting. The button's own on/off is the
+    /// Floating Capture built-in extension (Settings > Extensions > Experimental), and this
+    /// section shows only while it is on.
     ///
     /// CDXC:GhostexCapture 2026-09-30 DECISION:
     /// User: call it "Floating Capture", put it at the very top of Integrations with text under it that explains what it does, and do not repeat the same name as both the section title and the toggle.
@@ -1334,7 +1336,6 @@ impl IntegrationsTab {
         p: &SettingsPalette,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        let enabled = self.store.read(cx).values().bool("ghostexCaptureEnabled");
         let switch_to_session = self
             .store
             .read(cx)
@@ -1345,44 +1346,6 @@ impl IntegrationsTab {
         } else {
             "Alt+Ctrl+Shift+S"
         };
-        let enabled_switch = switch_control(
-            p,
-            "ghostex-capture-enabled",
-            "Show the floating button",
-            enabled,
-            false,
-            None,
-            |page: &mut Self, checked, _window, cx| {
-                save(page, "ghostexCaptureEnabled", json!(checked), cx)
-            },
-            cx,
-        );
-        let enabled_press = enabled_switch.press();
-        let mut rows = vec![toggle_from_row(
-            p,
-            "ghostex-capture-row",
-            integration_row(
-                p,
-                "ghostex-capture",
-                Some(if enabled {
-                    ListItemStatus::Success
-                } else {
-                    ListItemStatus::Neutral
-                }),
-                Some(ICON_DEVICE_DESKTOP),
-                RowTitle {
-                    link: None,
-                    label: "Show the floating button".to_string(),
-                    description: format!(
-                        "{hotkey} opens the button's panel. With the same keys, A captures an area, Space the current app, F the full screen, and T writes a prompt, straight away."
-                    ),
-                    badge: Some("Beta"),
-                    pill: None,
-                },
-                vec![enabled_switch.into_any_element()],
-            ),
-            enabled_press,
-        )];
         let session_switch = switch_control(
             p,
             "ghostex-capture-switch-to-session",
@@ -1396,7 +1359,7 @@ impl IntegrationsTab {
             cx,
         );
         let session_press = session_switch.press();
-        rows.push(toggle_from_row(
+        let rows = vec![toggle_from_row(
             p,
             "ghostex-capture-switch-to-session-row",
             integration_row(
@@ -1418,13 +1381,15 @@ impl IntegrationsTab {
             vec![session_switch.into_any_element()],
         ),
             session_press,
-        ));
+        )];
         settings_section(
             p,
             "Floating Capture",
             Some(
-                "A button over every app: screenshot, mark up and send a prompt to any session without switching to Ghostex."
-                    .into(),
+                format!(
+                    "A button over every app: screenshot, mark up and send a prompt to any session without switching to Ghostex. {hotkey} opens the button's panel. With the same keys, A captures an area, Space the current app, F the full screen, and T writes a prompt, straight away. Turn it off in Settings > Extensions > Experimental."
+                )
+                .into(),
             ),
             None,
             rows,
@@ -1512,7 +1477,12 @@ impl Render for IntegrationsTab {
                     .map(|element| PageBlock::section("managedTools", element)),
             );
         } else if search.section(section).has_visible() {
-            if search.row_visible(section, "ghostexCapture") {
+            // Floating Capture's section shows only while its built-in extension is on
+            // (CDXC:GhostexCapture 2026-11-18 in official_extensions.rs).
+            let capture_on = self.store.read(cx).built_in_extension_on(
+                ghostex_settings_catalog::built_in_extensions::FLOATING_CAPTURE,
+            );
+            if capture_on && search.row_visible(section, "ghostexCapture") {
                 blocks.extend(
                     self.ghostex_capture_section(&p, cx)
                         .map(|element| PageBlock::section("ghostexCapture", element)),

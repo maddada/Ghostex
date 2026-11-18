@@ -172,6 +172,7 @@ pub(crate) fn official_icon(id: &str) -> &'static str {
         "github-actions" | "kanban" | "quickActions" => icon::PLAYER_PLAY,
         "cloudBoxes" => "modals/settings/box.svg",
         "cliProxyApi" => "modals/settings/server.svg",
+        "floatingCapture" => "modals/settings/photo.svg",
         "workspaces" => "modals/settings/briefcase.svg",
         "posthog" => "modals/settings/chart-bar.svg",
         "automate" => "modals/settings/bolt.svg",

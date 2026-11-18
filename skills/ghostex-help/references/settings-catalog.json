@@ -10829,18 +10829,6 @@
       "agentWritable": false
     },
     {
-      "key": "ghostexCaptureEnabled",
-      "title": "Show the floating button",
-      "subtitle": "Show the Floating Capture button over every app: agent counts, screenshots of an area, an app or the whole screen, and quick prompts without switching to Ghostex.",
-      "tab": "integrations",
-      "tabTitle": "Integrations",
-      "section": "ghostexCapture",
-      "sectionTitle": "Floating Capture",
-      "type": "boolean",
-      "default": false,
-      "agentWritable": true
-    },
-    {
       "key": "ghostexCaptureSwitchToSession",
       "title": "Switch to the session after sending",
       "subtitle": "After a prompt is sent from Floating Capture, the Ghostex window shows the session it went to, without coming in front of the app you are in.",
@@ -12064,6 +12052,18 @@
       "sectionTitle": "Built-in",
       "type": "boolean",
       "default": true,
+      "agentWritable": true
+    },
+    {
+      "key": "ghostexCaptureEnabled",
+      "title": "Floating Capture",
+      "subtitle": "Turn Floating Capture on or off: the button over every app with agent counts, screenshots of an area, an app or the whole screen, and quick prompts without switching to Ghostex, its capture hotkeys and its section on Settings > Integrations. Experimental, off by default.",
+      "tab": "extensions",
+      "tabTitle": "Extensions",
+      "section": "official",
+      "sectionTitle": "Experimental",
+      "type": "boolean",
+      "default": false,
       "agentWritable": true
     },
     {

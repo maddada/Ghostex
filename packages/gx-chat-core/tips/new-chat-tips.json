@@ -344,7 +344,7 @@
       "id": "floating-capture",
       "icon": "camera",
       "title": "Prompt from any app",
-      "body": "Settings > Integrations > Floating Capture puts a small button over every app to send a prompt."
+      "body": "Turn on Floating Capture in Settings > Extensions > Experimental for a small button over every app that sends a prompt."
     }
   ]
 }

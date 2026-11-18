@@ -74,6 +74,9 @@ pub const DEBUGGING: &str = "debugging";
 /// the hub launch choice). Off by default; gxserver answers no hubs and refuses hub launches while
 /// it is off (server/src/accounts/hub/).
 pub const CLI_PROXY_API: &str = "cliProxyApi";
+/// Floating Capture (the floating button over every app, its capture hotkeys, the Floating Capture
+/// section of Settings > Integrations). Experimental; its switch is `ghostexCaptureEnabled`.
+pub const FLOATING_CAPTURE: &str = "floatingCapture";
 
 fn entry(id: &str) -> Option<&'static J> {
     GHOSTEX_OFFICIAL_EXTENSIONS

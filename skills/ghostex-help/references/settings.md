@@ -483,7 +483,6 @@ How to use this file:
 - **Chromium runtime (CEF)** `webRuntime` (Settings UI row without a settings key; use `ghostex settings open`): Install, reinstall or uninstall the optional web runtime used by the Browser, the VS Code view, website and extension views, and HTML files in Files. It also installs from the first view that needs it.
 ### Floating Capture
 
-- **Show the floating button** `ghostexCaptureEnabled` (boolean, default false): Show the Floating Capture button over every app: agent counts, screenshots of an area, an app or the whole screen, and quick prompts without switching to Ghostex.
 - **Switch to the session after sending** `ghostexCaptureSwitchToSession` (boolean, default true): After a prompt is sent from Floating Capture, the Ghostex window shows the session it went to, without coming in front of the app you are in.
 ## Cloud Boxes (tab `cloudBoxes`)
 
@@ -610,6 +609,7 @@ How to use this file:
 - **CLIProxyAPI** `cliProxyApiEnabled` (boolean, default false) [not agent-writable]: Turn CLIProxyAPI on or off: hubs in Settings > Accounts, the usage of the accounts each hub pools, and On the hub when a Claude or Codex session starts. Ghostex only points at a hub you run yourself. Off by default; saved hubs are kept while it is off.
 - **Turn off Connectors** `connectorsHidden` (boolean, default true): Turn off Connectors everywhere: the Connectors page in Settings, the apps your agents get and the ghostex connectors commands. Experimental, off by default; your sign-ins and connected apps are kept.
 - **Turn off OS Integration** `osIntegrationHidden` (boolean, default true): Leave the OS Integration page out of Settings. Experimental, off by default.
+- **Floating Capture** `ghostexCaptureEnabled` (boolean, default false): Turn Floating Capture on or off: the button over every app with agent counts, screenshots of an area, an app or the whole screen, and quick prompts without switching to Ghostex, its capture hotkeys and its section on Settings > Integrations. Experimental, off by default.
 - **Keep Awake** `keepAwakeEnabled` (boolean, default false): Turn Keep Awake on or off: Keep Awake in the sidebar's menu, its button at the top of the window and the Power settings. macOS only. Experimental, off by default. Only on macOS.
 - **All Automations** `allAutomationsEnabled` (boolean, default false): Turn All Automations on or off: automations that belong to no project, in Automate's All Automations board, which shows that it is coming soon while this is off. Experimental, off by default.
 - **Faster rendering** `fasterRendering` (boolean, default false): Redraw only the parts of a window that changed, so Ghostex uses less CPU while agents stream and you scroll; it applies at once. Turn it off if part of a window stops updating. Experimental, off by default.

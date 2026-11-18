@@ -6610,9 +6610,12 @@ Related settings: `completionSound`, `actionCompletionSound`, `copySound`,
 ### Floating Capture (floating button, screenshots, quick prompts)
 
 Floating Capture puts a small Ghostex button over every app, so you can check
-on your agents and send them a prompt without switching to Ghostex. Turn it on
-at the top of Settings > Integrations > Floating Capture, or during setup
-(off by default). Beside the icon, a narrow dark column shows how many
+on your agents and send them a prompt without switching to Ghostex. It is an
+experimental built-in extension, off by default: turn it on in Settings >
+Extensions > Experimental > Floating Capture. While it is off there is no
+button, no capture hotkeys and no Floating Capture section in Settings; while
+it is on, its settings are under Settings > Integrations > Floating Capture.
+Beside the icon, a narrow dark column shows how many
 sessions are waiting for you (blue), asking a question (pink) and working
 (amber), stacked in that order, across this computer and your remote
 machines; only non-zero numbers are shown. Drag the button anywhere; drop it
@@ -6632,8 +6635,8 @@ projects and running agents; a machine that is not connected shows one row sayin
 so, with a Connect button. Drag the empty part of the
 Running Agents heading to move the panel; it opens there from then on. Use the same
 modifiers with A, Space, F or T instead of S to run an action straight away,
-from any app. "Hide button" keeps it hidden until you turn the setting on
-again or press the S hotkey.
+from any app. "Hide button" keeps it hidden until you press the S hotkey, or turn
+the extension off and on again.
 
 Screenshots hide the Floating Capture windows first. An area capture dims every
 screen and starts with a resizable box where your last area capture was; press

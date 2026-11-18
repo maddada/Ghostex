@@ -444,6 +444,25 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("platforms", J::Arr(&[J::Str("macos")])),
         ("settingKeys", J::Arr(&[J::Str("hideKeepAwakeTitlebarControl"), J::Str("keepAwakeDefaultDurationMinutes"), J::Str("keepAwakeActivation"), J::Str("keepAwakeDeactivation"), J::Str("keepAwakeAllowDisplaySleep"), J::Str("keepAwakePreventLidSleep"), J::Str("keepAwakeActivateOnLaunch"), J::Str("keepAwakeActivateOnExternalDisplay"), J::Str("keepAwakeWhileWorkingSessions"), J::Str("keepAwakeBatteryThresholdPercent"), J::Str("keepAwakeDeactivateOnLowPowerMode")])),
     ]),
+    // CDXC:GhostexCapture 2026-11-18 DECISION: User, on Settings > Integrations > Floating
+    // Capture: "move this to experimental extension". A whole-feature entry in the Experimental
+    // tab whose switch is the setting the floating button always had (`ghostexCaptureEnabled`,
+    // off by default), so whoever has the button on today has the extension on and nothing
+    // disappears for them, with no migration. Off: no button, no capture hotkeys, nothing of it
+    // running (app/ghostex_capture/lifecycle.rs), and no Floating Capture section on Settings >
+    // Integrations. On: that section shows with its remaining row. Wayland still has no button
+    // (ghostex_capture/platform.rs `supported`).
+    J::Obj(&[
+        ("description", J::Str("A button over every app: screenshot an area, an app or the whole screen, mark it up and send a prompt to any session without switching to Ghostex. Its settings are under Settings > Integrations > Floating Capture.")),
+        ("category", J::Str("experimental")),
+        ("id", J::Str("floatingCapture")),
+        ("placement", J::Str("feature")),
+        ("settingsKey", J::Str("ghostexCaptureEnabled")),
+        ("settingsKeyEnables", J::Bool(true)),
+        ("appWide", J::Bool(true)),
+        ("title", J::Str("Floating Capture")),
+        ("settingKeys", J::Arr(&[J::Str("ghostexCapture"), J::Str("ghostexCaptureSwitchToSession")])),
+    ]),
     J::Obj(&[
         ("description", J::Str("Automations that belong to no project, in Automate's All Automations board. While this is off the board shows that it is coming soon.")),
         ("category", J::Str("experimental")),
