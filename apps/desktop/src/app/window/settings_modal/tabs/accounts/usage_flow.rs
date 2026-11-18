@@ -700,29 +700,33 @@ impl AccountsTab {
             blocks.push(div().px(px(DETAIL_INSET)).child(flow).into_any_element());
         } else if account.status() == "loginRequired" {
             let (again_provider, again_id) = (provider.clone(), id.clone());
+            // The same neutral card as a signed-out account's (CDXC:Accounts 2026-11-18 in editor.rs).
             blocks.push(
-                v_flex()
+                h_flex()
                     .mx(px(DETAIL_INSET))
-                    .gap(px(10.0))
+                    .gap(px(12.0))
                     .p(px(12.0))
+                    .items_center()
                     .rounded(px(MODAL_RADIUS_CONTROL))
                     .border_1()
-                    .border_color(hsla(modal_rgba(0xfbbf24, 0.3)))
-                    .bg(hsla(modal_rgba(0xfbbf24, 0.05)))
+                    .border_color(hsla(p.hairline))
+                    .bg(hsla(p.foreground_alpha(0.025)))
                     .child(
                         div()
+                            .flex_1()
+                            .min_w_0()
                             .text_size(px(12.5))
                             .line_height(px(17.0))
                             .text_color(hsla(p.muted))
                             .child("Its sign-in stopped working, so Ghostex can't read its usage."),
                     )
-                    .child(h_flex().child(settings_sized_button(
+                    .child(h_flex().flex_shrink_0().child(settings_sized_button(
                         p,
                         SharedString::from(format!("account-{id}-usage-reconnect")),
                         "Sign in again",
                         None,
                         None,
-                        SizedButtonVariant::Primary,
+                        SizedButtonVariant::Default,
                         SizedButtonSize::Default,
                         false,
                         None,

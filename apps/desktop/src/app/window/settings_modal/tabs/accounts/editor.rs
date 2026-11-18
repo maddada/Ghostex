@@ -236,37 +236,44 @@ impl AccountsTab {
                 Some(from) => format!(
                     "Added from {from}. Logins stay on each computer, so sign in on this one once to use it here."
                 ),
-                None => format!(
-                    "Its saved login stopped working, so Ghostex can't read its usage or switch to it.{}",
-                    sessions_sentence(account.session_count())
-                ),
+                None => {
+                    "Its login stopped working. Reconnect to see its usage and use it again."
+                        .to_string()
+                }
             };
             let reason = match &helper_missing {
                 Some(missing) => format!("{reason} {missing}"),
                 None => reason,
             };
+            // CDXC:Accounts 2026-11-18 DECISION:
+            // User, of the amber box with amber text and the accent Reconnect button that repeated
+            // the header's session count: "i dont like this alert here". They picked a neutral card
+            // where the usage goes (Q3990 C): the usage card's hairline and wash, one muted sentence
+            // ("Its login stopped working. Reconnect to see its usage and use it again.", Q3991) and
+            // the neutral Settings button on its right. The list row keeps its amber dot and "Sign in
+            // needed" (Q3992). Supersedes the amber box (finding 12 in list.rs kept it as the pane's
+            // one Reconnect).
             blocks.push(
-                v_flex()
+                h_flex()
                     .mx(px(DETAIL_INSET))
-                    .gap(px(10.0))
+                    .gap(px(12.0))
                     .p(px(12.0))
+                    .items_center()
                     .rounded(px(MODAL_RADIUS_CONTROL))
                     .border_1()
-                    .border_color(hsla(modal_rgba(0xfbbf24, 0.3)))
-                    .bg(hsla(modal_rgba(0xfbbf24, 0.05)))
+                    .border_color(hsla(p.hairline))
+                    .bg(hsla(p.foreground_alpha(0.025)))
                     .child(
                         div()
+                            .flex_1()
+                            .min_w_0()
                             .text_size(px(12.5))
                             .line_height(px(17.0))
-                            .text_color(hsla(if p.light {
-                                gpui::rgb(0xb45309)
-                            } else {
-                                gpui::rgb(0xfcd34d)
-                            }))
+                            .text_color(hsla(p.muted))
                             .child(reason),
                     )
                     .when(helper_missing.is_none(), |this| {
-                        this.child(h_flex().child(settings_sized_button(
+                        this.child(h_flex().flex_shrink_0().child(settings_sized_button(
                             p,
                             SharedString::from(format!("account-{id}-reconnect")),
                             if account.synced_from().is_some() {
@@ -276,7 +283,7 @@ impl AccountsTab {
                             },
                             None,
                             None,
-                            SizedButtonVariant::Primary,
+                            SizedButtonVariant::Default,
                             SizedButtonSize::Default,
                             false,
                             None,
@@ -381,7 +388,7 @@ impl AccountsTab {
         } else if connected && !account.needs_sign_in() {
             status_tag(p, "Connected", TagTone::Success)
         } else if account.needs_sign_in() {
-            // Neutral: the amber box under the header already asks for the sign-in (finding 12).
+            // Neutral: the card under the header already asks for the sign-in (finding 12).
             status_tag(p, "Signed out", TagTone::Off)
         } else if draft.eligible {
             status_tag(p, "Auto-switch on", TagTone::On)
@@ -1174,14 +1181,6 @@ fn claude_ai_signin(account_id: &str) -> Option<Option<String>> {
                 .map(str::to_string)
         })
     })
-}
-
-fn sessions_sentence(count: u64) -> String {
-    match count {
-        0 => String::new(),
-        1 => " 1 session uses it.".into(),
-        count => format!(" {count} sessions use it."),
-    }
 }
 
 /// A select with no value shows its placeholder ("Swap with…") in the muted tone; the label sits
