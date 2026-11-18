@@ -560,7 +560,11 @@ impl NativeChatView {
                                 format!("where-pill-{button_id}").into(),
                             ))
                             .role(gpui::Role::Button)
-                            .aria_label(if done { "Copied".to_string() } else { label.clone() })
+                            .aria_label(if done {
+                                "Copied".to_string()
+                            } else {
+                                label.clone()
+                            })
                             .size(px(ROW_HEIGHT * s))
                             .flex()
                             .items_center()
@@ -569,12 +573,7 @@ impl NativeChatView {
                             .rounded(px(6.0 * s))
                             .hover(|style| style.bg(p.foreground.opacity(0.08)))
                             .chat_cursor_pointer()
-                            .child(
-                                svg()
-                                    .path(icon)
-                                    .size(px(14.0 * s))
-                                    .text_color(p.card_muted),
-                            )
+                            .child(svg().path(icon).size(px(14.0 * s)).text_color(p.card_muted))
                             .tooltip(move |window, cx| {
                                 gpui_component::tooltip::Tooltip::new(label.clone())
                                     .build(window, cx)

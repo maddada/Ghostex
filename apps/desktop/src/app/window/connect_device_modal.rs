@@ -132,7 +132,9 @@ pub(crate) enum ConnectDeviceCommand {
     /// Turn SSH access on (the window's Turn on SSH button, after it said what that does); the
     /// host answers `ssh_turned_on`. `install`: the Install button on Linux, which installs a
     /// missing OpenSSH server first (`/api/enableSshAccess`'s `install`).
-    EnableSsh { install: bool },
+    EnableSsh {
+        install: bool,
+    },
     /// Install the Easy Connect helper (the window's Install button); the host reports each step
     /// with `helper_install_progress` and answers with `helper_installed` or `needs_helper`.
     InstallHelper,
@@ -998,7 +1000,9 @@ impl GpuiConnectDeviceWindow {
     /// the command below, or with no known package manager, the short list.
     fn ssh_missing_how(&self, done_screen: bool) -> &'static str {
         match (self.ssh_server.install_command.is_some(), done_screen) {
-            (true, true) => "Install SSH sets it up after your password, or run this in a terminal:",
+            (true, true) => {
+                "Install SSH sets it up after your password, or run this in a terminal:"
+            }
             (true, false) => {
                 "Install sets it up after your password, or run this in a terminal and then click Turn on SSH:"
             }
@@ -1042,23 +1046,25 @@ impl GpuiConnectDeviceWindow {
                         .text_color(hsla(p.foreground))
                         .child(command.clone()),
                 )
-                .child(div().flex_shrink_0().child(modal_action_button(
-                    &p,
-                    "connect-device-copy-ssh-install",
-                    if self.copied { "Copied" } else { "Copy" },
-                    Some(
-                        modal_icon(
-                            if self.copied { ICON_CHECK } else { ICON_COPY },
-                            14.0,
-                            p.foreground,
-                        )
-                        .into_any_element(),
-                    ),
-                    ModalButtonTone::Neutral,
-                    false,
-                    move |this: &mut Self, _window, cx| this.copy_text(command.clone(), cx),
-                    cx,
-                )))
+                .child(
+                    div().flex_shrink_0().child(modal_action_button(
+                        &p,
+                        "connect-device-copy-ssh-install",
+                        if self.copied { "Copied" } else { "Copy" },
+                        Some(
+                            modal_icon(
+                                if self.copied { ICON_CHECK } else { ICON_COPY },
+                                14.0,
+                                p.foreground,
+                            )
+                            .into_any_element(),
+                        ),
+                        ModalButtonTone::Neutral,
+                        false,
+                        move |this: &mut Self, _window, cx| this.copy_text(command.clone(), cx),
+                        cx,
+                    )),
+                )
                 .into_any_element(),
         )
     }
