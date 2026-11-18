@@ -3608,12 +3608,23 @@ impl EditorState {
             }
             return;
         }
+        // Local change (Ghostex Docs, #671): a table row is laid out as cells, not its raw
+        // `| … |` text, so the link and footnote checks below map the click through the cell
+        // mapping first. Inside a cell only a Cmd/Option-click follows a link or footnote: a
+        // plain click edits the cell.
+        let secondary = event.modifiers.secondary(cx) || event.modifiers.alt;
+        let (click_offset, in_table_cell) = match self.table_offset_at(event.position, window) {
+            Some(offset) => (offset, true),
+            None => (self.index_for_mouse_position(event.position), false),
+        };
+        let follow_in_cell = !in_table_cell || secondary;
         // Local change (Ghostex Docs): a click on a rendered footnote number jumps between the
         // reference and its definition, like the Docs page (`meo/liveMode.ts` 593-692).
         if self.markdown_style.is_some()
             && event.click_count == 1
             && !event.modifiers.shift
-            && let Some(target) = self.footnote_jump_at(event.position)
+            && follow_in_cell
+            && let Some(target) = self.footnote_jump_at(click_offset)
         {
             self.move_to(target, cx);
             return;
@@ -3764,12 +3775,12 @@ impl EditorState {
         // with `revealed_links_need_modifier` a plain click on the link the caret is in (its raw
         // `[text](url)` showing for editing) places the caret instead (`caret_link_at`).
         // Option-click (Alt-click) opens it too: the app opens that file in its default app.
-        let secondary = event.modifiers.secondary(cx) || event.modifiers.alt;
         let link_click = self.markdown_style.is_some()
             && !event.modifiers.shift
+            && follow_in_cell
             && (secondary || !event.modifiers.control);
         if event.click_count == 1 && link_click {
-            let offset = self.index_for_mouse_position(event.position);
+            let offset = click_offset;
             let (row, _) = self.row_col(offset);
             let start = self.line_starts()[row];
             let line = &self.content[start..self.line_end(row)];
@@ -4713,15 +4724,14 @@ impl EditorState {
             })
     }
 
-    /// Local change (Ghostex Docs): where a click on a rendered footnote number at `position`
+    /// Local change (Ghostex Docs): where a click on a rendered footnote number at byte `offset`
     /// jumps: from a reference to its definition's text, from a definition's number to the first
     /// reference. `None` when the click is not on one (or the caret is in it, showing its source).
-    fn footnote_jump_at(&self, position: Point<Pixels>) -> Option<usize> {
+    fn footnote_jump_at(&self, offset: usize) -> Option<usize> {
         let scan = self.scan_data();
         if scan.footnotes.is_empty() {
             return None;
         }
-        let offset = self.index_for_mouse_position(position);
         let (row, _) = self.row_col(offset);
         let (caret_row, caret_col) = self.row_col(self.cursor_offset());
         let starts = self.line_starts();
