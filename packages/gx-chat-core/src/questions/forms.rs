@@ -558,11 +558,7 @@ pub(crate) fn dispatch_answers_text(
 }
 
 /// Clears delivery state and restores user picks when a combined take-back resend fails.
-fn reopen_failed_combined_form(
-    state: &mut ChatState,
-    id: &str,
-    answers_override: Option<Value>,
-) {
+fn reopen_failed_combined_form(state: &mut ChatState, id: &str, answers_override: Option<Value>) {
     let form_def = form(state, id).cloned();
     let Some(entry) = state.questions.forms.get_mut(id) else {
         return;
@@ -734,20 +730,23 @@ pub fn rpc_settled(
                     .sends
                     .retain(|entry| entry.id != answers_echo_id);
                 reopen_failed_combined_form(state, &id, Some(sent.answers));
-                for sibling_id in
-                    crate::transcript::page_answers::answers_page_ids(&combined.text)
+                for sibling_id in crate::transcript::page_answers::answers_page_ids(&combined.text)
                 {
                     if sibling_id == id {
                         continue;
                     }
-                    let should_reopen = state.questions.forms.get(&sibling_id).is_some_and(|entry| {
-                        !entry.confirmed && entry.send.is_none() && entry.sent.is_some()
-                    }) && !state.questions.form_answer_index.holds(&sibling_id)
-                        && !answered_by_index(state, &sibling_id)
-                        && !queued_in_queue(state, &sibling_id)
-                        && crate::questions::recorded_answers::answers(state, &sibling_id)
-                            .is_none()
-                        && crate::questions::resource_modal::fetched_answers(state, &sibling_id)
+                    let should_reopen =
+                        state.questions.forms.get(&sibling_id).is_some_and(|entry| {
+                            !entry.confirmed && entry.send.is_none() && entry.sent.is_some()
+                        }) && !state.questions.form_answer_index.holds(&sibling_id)
+                            && !answered_by_index(state, &sibling_id)
+                            && !queued_in_queue(state, &sibling_id)
+                            && crate::questions::recorded_answers::answers(state, &sibling_id)
+                                .is_none()
+                            && crate::questions::resource_modal::fetched_answers(
+                                state,
+                                &sibling_id,
+                            )
                             .is_none();
                     if should_reopen {
                         let sibling_queued_id = state
@@ -1010,6 +1009,9 @@ impl QuestionsInputs {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CardTags {
     threads: u64,
+    /// The stamp of the session's own work (`extras::work_source`), which an ordinary session's
+    /// asks come from.
+    own_work: u64,
     tags: std::collections::BTreeSet<String>,
 }
 
@@ -1017,6 +1019,7 @@ impl CardTags {
     pub(crate) fn of(state: &ChatState) -> Self {
         Self {
             threads: state.session.coordinator_threads.stamp(),
+            own_work: state.session.session_work.stamp(),
             tags: crate::extras::work_cards::card_tags(state),
         }
     }
@@ -1025,15 +1028,21 @@ impl CardTags {
         // CDXC:SessionChat 2026-11-11 WHY: every input is named (no `..`), so one added to this
         // struct fails the build here until it is compared below too: a kept part checked on fewer
         // inputs than it was built from would serve a stale value.
-        let Self { threads, tags } = self;
+        let Self {
+            threads,
+            own_work,
+            tags,
+        } = self;
         let now = state.session.coordinator_threads.stamp();
-        if *threads == now {
+        let own_now = state.session.session_work.stamp();
+        if *threads == now && *own_work == own_now {
             return true;
         }
         if *tags != crate::extras::work_cards::card_tags(state) {
             return false;
         }
         *threads = now;
+        *own_work = own_now;
         true
     }
 

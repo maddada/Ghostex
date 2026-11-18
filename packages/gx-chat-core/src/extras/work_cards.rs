@@ -1872,7 +1872,7 @@ pub struct WorkInputs {
     threads: u64,
     held_threads: Option<crate::document::SharedValue>,
     /// An ordinary session's own work (`work_source::own_work`), compared by value.
-    own_work: Option<Value>,
+    own_work: crate::state::Stamped<Option<Value>>,
     messages: usize,
     last_id: String,
     last_has_words: bool,
@@ -1944,7 +1944,7 @@ impl WorkInputs {
                     .map_or("", |message| message.id.as_str())
             || *had_words != last_has_words(state)
             || *was_worked != worked(state)
-            || *own_work != state.session.session_work
+            || !own_work.same_as(&state.session.session_work)
         {
             return false;
         }

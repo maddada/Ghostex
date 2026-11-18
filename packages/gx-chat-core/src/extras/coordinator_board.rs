@@ -1206,7 +1206,7 @@ pub fn coordinator_board_with(
 pub struct BoardInputs {
     threads: Stamped<Option<crate::document::SharedValue>>,
     /// An ordinary session's own work (`work_source::own_work`), compared by value.
-    own_work: Option<Value>,
+    own_work: Stamped<Option<Value>>,
     panels: Stamped<crate::state::PanelsState>,
     askers: Stamped<Vec<crate::transcript::open_questions::Asker>>,
     questions: crate::questions::forms::QuestionsInputs,
@@ -1250,7 +1250,7 @@ impl BoardInputs {
         } = self;
         *mark == crate::extras::work_cards::turns_mark(turns)
             && threads.same_as(&state.session.coordinator_threads)
-            && *own_work == state.session.session_work
+            && own_work.same_as(&state.session.session_work)
             && panels.same_as(&state.extras.panels)
             && askers.same_as(&state.transcript_view.askers)
             && questions.matches(&state.questions)

@@ -145,7 +145,7 @@ pub fn apply_state_frame(
         state.session.needs_you = Some(needs_you);
     }
     if let Some(work) = frame.state.session_work.clone() {
-        state.session.session_work = Some(work);
+        state.session.session_work.set_if_changed(Some(work));
     }
     if let Some(answers) = frame.state.relayed_answers.clone() {
         state.session.relayed_answers = Some(answers);
@@ -709,7 +709,7 @@ pub fn apply_authoritative(
         state.session.needs_you = Some(needs_you);
     }
     if let Some(work) = result.state.session_work.clone() {
-        state.session.session_work = Some(work);
+        state.session.session_work.set_if_changed(Some(work));
     }
     if let Some(answers) = result.state.relayed_answers.clone() {
         state.session.relayed_answers = Some(answers);
