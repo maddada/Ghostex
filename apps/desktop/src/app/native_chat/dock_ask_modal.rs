@@ -960,7 +960,9 @@ impl NativeChatView {
 fn title_markdown(title: &str, runs: &Value) -> String {
     fn escape(words: &str, out: &mut String) {
         for c in words.chars() {
-            if c.is_ascii_punctuation() && c != '#' && c != '/' && c != ':' {
+            // `:` too, so words the core left plain never become an address the view links
+            // itself with the escapes kept in it.
+            if c.is_ascii_punctuation() && c != '#' && c != '/' {
                 out.push('\\');
             }
             if c == '\n' {
@@ -971,6 +973,15 @@ fn title_markdown(title: &str, runs: &Value) -> String {
         }
     }
     let mut out = String::new();
+    // A row with no runs of its own (a to-do, a blocked or finished row, a form or page) gets
+    // them from the core here, so a bare `http://…` in it is a link as an ask title's is.
+    let found;
+    let runs = if runs.is_array() {
+        runs
+    } else {
+        found = ghostex_gx_chat_core::questions::form_links::word_runs(title).unwrap_or_default();
+        &found
+    };
     match runs.as_array() {
         None => escape(title, &mut out),
         Some(runs) => {
@@ -1030,6 +1041,12 @@ mod tests {
         );
         assert_eq!(title_markdown("# not a heading", &Value::Null), r"\# not a heading");
         assert_eq!(title_markdown("#562 stays an issue", &Value::Null), "#562 stays an issue");
+        // A bare address in a row with no runs is a link, its address whole.
+        assert_eq!(
+            title_markdown("Open http://192.168.1.177:8080/admin now", &Value::Null),
+            r"Open [http\://192\.168\.1\.177\:8080/admin](<http://192.168.1.177:8080/admin>) now"
+        );
+        assert_eq!(title_markdown("note: done", &Value::Null), r"note\: done");
         let runs = json!([
             { "text": "see " },
             { "text": "the [docs]", "href": "https://example.com/a>b" },
