@@ -25,13 +25,13 @@ fn enable_antigravity_ghostex_hook(
     if !antigravity_ghostex_hook_disabled(&current_text) {
         return Ok(false);
     }
-    ensure_json_config_is_rewritable(definition.agent_id, config_path, &current_text)?;
-    let mut data = read_json_object(&current_text);
+    let config = read_json_config(definition.agent_id, config_path)?;
+    let mut data = config.data;
     let Some(hook) = data.get_mut("ghostex").and_then(Value::as_object_mut) else {
         return Ok(false);
     };
     hook.remove("enabled");
-    write_json_file(config_path, &data)?;
+    write_json_config(config_path, &config.header, &data)?;
     Ok(true)
 }
 
@@ -89,10 +89,11 @@ pub(crate) fn install_agent_hook(
                 let codex_before = merge_json_hook(&config_path, definition, hook_paths, &command)?;
                 installed_paths.push(path_string(&config_path));
                 if definition.agent_id == "zcode" {
-                    let mut data = read_json_object(&read_file_text(&config_path));
+                    let config = read_json_config(definition.agent_id, &config_path)?;
+                    let mut data = config.data;
                     ensure_object_property(ensure_json_object(&mut data), "hooks")
                         .insert("enabled".into(), json!(true));
-                    write_json_file(&config_path, &data)?;
+                    write_json_config(&config_path, &config.header, &data)?;
                 }
                 // CDXC:AgentHooks 2026-09-03: the same explicit click
                 // lifts an `"enabled": false` the user put on the Ghostex

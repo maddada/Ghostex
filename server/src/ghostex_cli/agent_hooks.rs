@@ -105,11 +105,39 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         json!({ "agentIds": requested })
     };
     let result = call_gxserver_rpc(endpoint, &params, flags)?;
+    let any_refused = result["refusedAgents"]
+        .as_array()
+        .is_some_and(|refused| !refused.is_empty());
     if json_output {
         print_json(&result);
+        if command == "install" && any_refused {
+            return Err(CliError::Other(
+                "Some hooks were not installed: see refusedAgents.".to_string(),
+            ));
+        }
         return Ok(());
     }
     let shown: Vec<String> = if all { Vec::new() } else { requested.clone() };
+    // An agent whose config Ghostex refused to rewrite failed, with --all too.
+    let refused: Vec<(String, String)> = result["refusedAgents"]
+        .as_array()
+        .map(|refused| {
+            refused
+                .iter()
+                .map(|entry| {
+                    (
+                        entry["agentId"].as_str().unwrap_or_default().to_string(),
+                        entry["error"].as_str().unwrap_or_default().to_string(),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if command == "install" && !refused.is_empty() {
+        for (agent, error) in &refused {
+            eprintln!("{agent}: {error}");
+        }
+    }
     if command == "install" {
         let installed = agents_with(&result, &shown, |status| status == "installed");
         let not_installed = agents_with(&result, &shown, |status| status != "installed");
@@ -124,6 +152,11 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         };
         if !failed.is_empty() {
             print_rows_of(&result, &failed);
+            return Err(CliError::Other(format!(
+                "Some hooks were not installed on {computer}."
+            )));
+        }
+        if !refused.is_empty() {
             return Err(CliError::Other(format!(
                 "Some hooks were not installed on {computer}."
             )));

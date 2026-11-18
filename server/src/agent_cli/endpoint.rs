@@ -553,7 +553,14 @@ async fn install_chat_hooks(
         }
         let mut params = Map::new();
         params.insert("agentIds".into(), json!([agent_id]));
-        crate::agent_hooks::install_agent_hooks(&paths, &params).map(|_| true)
+        let result = crate::agent_hooks::install_agent_hooks(&paths, &params)?;
+        // A config Ghostex refused to rewrite is a failure, with its reason.
+        match result["refusedAgents"][0]["error"].as_str() {
+            Some(error) => Err(crate::domain::DomainStateError::corrupt_state(
+                error.to_string(),
+            )),
+            None => Ok(true),
+        }
     })
     .await;
     match outcome {

@@ -151,6 +151,17 @@ pub fn install_agent_hooks(
         .unwrap_or_default();
     status.insert("installedPaths".to_string(), json!(installed_paths));
     if !refused_agents.is_empty() {
+        // Every client shows a row's detail, so the reason goes there too (review of 86df410e5).
+        if let Some(rows) = status.get_mut("agents").and_then(Value::as_array_mut) {
+            for refused in &refused_agents {
+                if let Some(row) = rows
+                    .iter_mut()
+                    .find(|row| row["agentId"] == refused["agentId"])
+                {
+                    row["detail"] = refused["error"].clone();
+                }
+            }
+        }
         status.insert("refusedAgents".to_string(), json!(refused_agents));
     }
     Ok(Value::Object(status))
@@ -308,20 +319,49 @@ pub fn repair_installed_agent_hook_paths(
     // CDXC:AgentHooks 2026-11-18 WHY: review of 02b968dac: an agent config the repair refuses (an
     // Antigravity hooks.json that no longer parses but still names Ghostex) stopped gxserver's
     // startup and failed every hook status read. It is logged and skipped; never stop for one.
+    // A config refused once is not tried (or logged) again in this gxserver run until it changes.
     for (definition, provider_paths) in stale_targets {
+        let key = refusal_key(definition.agent_id, &provider_paths);
+        if refused_repairs().contains(&key) {
+            continue;
+        }
         match repair_agent_hook_paths(definition, &hook_paths, provider_paths) {
             Ok(paths) => {
                 for repaired_path in paths {
                     push_unique_path(&mut repaired_paths, repaired_path);
                 }
             }
-            Err(error) => eprintln!(
-                "[gxserver] left {}'s hook config alone during repair: {}",
-                definition.agent_id, error.message
-            ),
+            Err(error) => {
+                eprintln!(
+                    "[gxserver] left {}'s hook config alone during repair: {}",
+                    definition.agent_id, error.message
+                );
+                refused_repairs().insert(key);
+            }
         }
     }
     Ok(repaired_paths)
+}
+
+/// The repairs refused in this gxserver run, by agent and the size and time of its config files.
+fn refused_repairs() -> std::sync::MutexGuard<'static, std::collections::HashSet<String>> {
+    static REFUSED: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+        std::sync::LazyLock::new(Default::default);
+    REFUSED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// An agent's config files as they are now: a file the user fixed is a new key.
+fn refusal_key(agent_id: &str, provider_paths: &[std::path::PathBuf]) -> String {
+    let mut key = agent_id.to_string();
+    for path in provider_paths {
+        let stamp = fs::metadata(path)
+            .map(|meta| format!("{}:{:?}", meta.len(), meta.modified().ok()))
+            .unwrap_or_default();
+        key.push_str(&format!("|{}={stamp}", path_string(path)));
+    }
+    key
 }
 
 pub fn uninstall_agent_hooks(

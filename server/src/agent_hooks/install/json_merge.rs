@@ -27,32 +27,8 @@ pub(super) fn merge_json_hook(
     if definition.agent_id == "zcode" {
         super::zcode::ensure_zcode_config(config_path, hook_paths)?;
     }
-    // CDXC:AgentHooks 2026-11-18 WHY: review of 67902fb2b: a config that can't be read (not
-    // UTF-8, a refused read) or holds something other than a JSON object read as `{}`, and the
-    // install wrote that over it. Only a missing or empty file starts from `{}` now.
-    let current_text = read_config_text(config_path)
-        .map_err(|error| {
-            DomainStateError::corrupt_state(format!(
-                "Ghostex could not read {}, so it left it alone: {error}",
-                path_string(config_path)
-            ))
-        })?
-        .unwrap_or_default();
-    // CDXC:AgentHooks 2026-11-18 WHY: review of 02b968dac: Copilot CLI opens its own
-    // `config.json` with two `//` comment lines, so the stricter read refused every Copilot
-    // install. The comment lines that open a file are kept and written back above the JSON, as
-    // agent_folder_trust/files.rs does.
-    let (header, current_text) = split_comment_header(&current_text);
-    ensure_json_config_is_rewritable(definition.agent_id, config_path, current_text)?;
-    if !current_text.trim().is_empty()
-        && !serde_json::from_str::<Value>(current_text).is_ok_and(|value| value.is_object())
-    {
-        return Err(DomainStateError::corrupt_state(format!(
-            "{} is not a JSON object Ghostex can add its hook to, so it left it alone. Fix the file and run Install Hooks again.",
-            path_string(config_path)
-        )));
-    }
-    let mut data = read_json_object(current_text);
+    let config = read_json_config(definition.agent_id, config_path)?;
+    let mut data = config.data.clone();
     let before = data.clone();
     let events = all_hook_events(definition.agent_id);
     let format = hook_format(definition.agent_id);
@@ -178,12 +154,86 @@ pub(super) fn merge_json_hook(
     if definition.agent_id == "claude" {
         super::claude_retention::ensure_claude_transcript_retention(&mut data);
     }
-    let text = format!(
-        "{header}{}\n",
-        serde_json::to_string_pretty(&data).map_err(json_error)?
-    );
-    write_config_file(config_path, text.as_bytes()).map_err(io_error)?;
+    write_json_config(config_path, &config.header, &data)?;
     Ok(before)
+}
+
+/// The agents whose JSON config may open with `//` comment lines: Copilot CLI heads its own
+/// `config.json` with two, and Devin reads JSONC.
+const COMMENTED_JSON_AGENTS: &[&str] = &["copilot", "devin"];
+
+/// A JSON hook config read for editing: the `//` comment lines that open it, kept to be written
+/// back, and its object (`{}` for a missing or empty file).
+pub(crate) struct JsonConfig {
+    pub(crate) header: String,
+    pub(crate) data: Value,
+    pub(crate) empty: bool,
+}
+
+/*
+CDXC:AgentHooks 2026-11-18 WHY:
+Reviews of 67902fb2b, 02b968dac and 86df410e5: a config that can't be read (not UTF-8, a refused
+read) or holds something other than a JSON object was read as `{}` and written over, and the
+`//` lines Copilot opens its `config.json` with were dropped by every rewrite but the install.
+Every JSON hook config edit (install, uninstall, the Antigravity and Z Code switches, OpenCode's
+retired plugin) reads through here and writes back with `write_json_config`, so the header
+survives, an unreadable or non-object file is left alone with the reason, and a header on an
+agent whose config allows no comments is refused rather than kept in a file that agent can't
+parse.
+*/
+pub(crate) fn read_json_config(
+    agent_id: &str,
+    config_path: &Path,
+) -> Result<JsonConfig, DomainStateError> {
+    let text = read_config_text(config_path)
+        .map_err(|error| {
+            DomainStateError::corrupt_state(format!(
+                "Ghostex could not read {}, so it left it alone: {error}",
+                path_string(config_path)
+            ))
+        })?
+        .unwrap_or_default();
+    let (header, body) = split_comment_header(&text);
+    if !header.is_empty() && !COMMENTED_JSON_AGENTS.contains(&agent_id) {
+        return Err(DomainStateError::corrupt_state(format!(
+            "{} starts with // comment lines, which this agent's config does not allow, so Ghostex left it alone. Remove them and try again.",
+            path_string(config_path)
+        )));
+    }
+    ensure_json_config_is_rewritable(agent_id, config_path, body)?;
+    if body.trim().is_empty() {
+        return Ok(JsonConfig {
+            header: header.to_string(),
+            data: json!({}),
+            empty: true,
+        });
+    }
+    match serde_json::from_str::<Value>(body) {
+        Ok(data) if data.is_object() => Ok(JsonConfig {
+            header: header.to_string(),
+            data,
+            empty: false,
+        }),
+        _ => Err(DomainStateError::corrupt_state(format!(
+            "{} is not a JSON object Ghostex can edit, so it left it alone. Fix the file and try again.",
+            path_string(config_path)
+        ))),
+    }
+}
+
+/// Writes `data` back under the comment lines it was read with, the header ending in a newline.
+pub(crate) fn write_json_config(
+    config_path: &Path,
+    header: &str,
+    data: &Value,
+) -> Result<(), DomainStateError> {
+    let mut text = header.to_string();
+    if !text.is_empty() && !text.ends_with('\n') {
+        text.push('\n');
+    }
+    text.push_str(&serde_json::to_string_pretty(data).map_err(json_error)?);
+    text.push('\n');
+    write_config_file(config_path, text.as_bytes()).map_err(io_error)
 }
 
 /// The `matcher` a nested-JSON provider expects on one event group, if any.

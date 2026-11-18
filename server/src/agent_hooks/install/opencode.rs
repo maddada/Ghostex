@@ -86,14 +86,14 @@ pub(crate) fn remove_retired_opencode_plugin(
 ) -> Result<Vec<String>, DomainStateError> {
     let mut removed = Vec::new();
     let config_path = config_dir.join("opencode.json");
-    let config_text = read_file_text(&config_path);
-    if !config_text.trim().is_empty() {
-        let mut data = read_json_object(&config_text);
+    // A config Ghostex can't edit safely (read_json_config) keeps its old registration.
+    if let Ok(config) = read_json_config("opencode", &config_path) {
+        let mut data = config.data;
         if let Some(plugins) = data.get_mut("plugin").and_then(Value::as_array_mut) {
             let before = plugins.len();
             plugins.retain(|plugin| !is_retired_plugin_registration(plugin));
             if plugins.len() != before {
-                write_json_file(&config_path, &data)?;
+                write_json_config(&config_path, &config.header, &data)?;
                 push_unique_path(&mut removed, path_string(&config_path));
             }
         }

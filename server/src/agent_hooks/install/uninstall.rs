@@ -150,19 +150,17 @@ fn remove_json_hook_with(
     definition: &HookDefinition,
     command: &str,
 ) -> Result<Option<Value>, DomainStateError> {
-    let current_text = read_file_text(config_path);
-    if current_text.trim().is_empty() {
+    let config = read_json_config(definition.agent_id, config_path)?;
+    if config.empty {
         return Ok(None);
     }
-    ensure_json_config_is_rewritable(definition.agent_id, config_path, &current_text)?;
-    let mut data = read_json_object(&current_text);
-    let before = data.clone();
+    let mut data = config.data.clone();
     let changed = remove_owned_json_hooks(&mut data, hook_format(definition.agent_id), command);
     if !changed {
         return Ok(None);
     }
-    write_json_file(config_path, &data)?;
-    Ok(Some(before))
+    write_json_config(config_path, &config.header, &data)?;
+    Ok(Some(config.data))
 }
 
 pub(super) fn remove_owned_json_hooks(data: &mut Value, format: HookFormat, command: &str) -> bool {
