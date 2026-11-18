@@ -84,7 +84,8 @@ struct Measured {
     branch: Option<f32>,
 }
 
-/// The texts' widths at `tier`: each measured width (a pixel over, so it never cuts) under its cap.
+/// The texts' widths at `tier` for the strip's fit: each measured width (a pixel over) under its
+/// cap. The drawn labels take their text's own width under the same cap (`where_pill_element`).
 fn text_widths(measured: &Measured, tier: WhereTier) -> (f32, Option<f32>) {
     let (project, branch) = tier.caps();
     let fit = |width: f32, cap: f32| {
@@ -299,22 +300,21 @@ impl NativeChatView {
     ) -> Option<AnyElement> {
         let pill = self.where_pill()?.clone();
         let s = p.scale;
-        let width = |label: &str| {
-            super::fonts::label_width(label, &p.font, FontWeight::NORMAL, 13.0 * s, cx) / s
-        };
         let project = text(&pill, "project");
         let branch = pill["branch"].as_str().map(str::to_string);
-        let measured = Measured {
-            project: width(&project),
-            branch: branch.as_deref().map(width),
-        };
-        let (project_w, branch_w) = text_widths(&measured, tier);
+        // CDXC:SessionChat 2026-11-18 WHY:
+        // User, of "ghost… | ma…" for "ghostex | main": "why the pill is truncated now?". Each
+        // label was exactly as wide as its measured text, so any measure short of the drawn text (a
+        // picked app font measured as the chat font, fonts.rs `label_width`) cut even a short
+        // name. A label takes its text's own width and only its tier's cap cuts it.
+        let (project_w, branch_w) = tier.caps();
+        let branch_w = branch.as_ref().map(|_| branch_w);
         let open = self.chat_menu_is_open(WHERE_TRIGGER);
         let bounds = self.pill_bounds.cell(WHERE_MENU);
         let measured_bounds = bounds.clone();
-        let label = |content: String, w: f32, color: Hsla| {
+        let label = |content: String, cap: f32, color: Hsla| {
             div()
-                .w(px(w * s))
+                .max_w(px(cap * s))
                 .flex_shrink_0()
                 .truncate()
                 .text_color(color)

@@ -42,8 +42,9 @@ pub(crate) fn register(cx: &App) {
 }
 
 thread_local! {
-    /// Label widths by font, weight and size (in pixels; both as bits) and text.
-    static LABEL_WIDTHS: std::cell::RefCell<std::collections::HashMap<(String, u32, u32, String), f32>> =
+    /// Label widths by the text system's font generation, font, weight and size (in pixels; both
+    /// as bits) and text.
+    static LABEL_WIDTHS: std::cell::RefCell<std::collections::HashMap<(usize, String, u32, u32, String), f32>> =
         std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
@@ -53,7 +54,15 @@ const LABEL_WIDTHS_KEPT: usize = 4096;
 /// How wide `label` is, in pixels, in `font` at `weight` and `size` pixels on one line.
 ///
 /// CDXC:SessionChat 2026-11-10 WHY:
-/// Measured on the user's running app: 3.5% of the main thread's busy time was the work-summary pills and the chat box's pills measuring their labels, each time with a fresh text system, so every label was shaped again on every frame. A label's width depends only on its text, its font, its weight and its size, which are the key here, so a theme, font or zoom change measures anew. The coordinator dock and its work item rows (work_cards.rs `dock_text_width`, merged from main 2026-11-11) measure through here too.
+/// Measured on the user's running app: 3.5% of the main thread's busy time was the work-summary pills and the chat box's pills measuring their labels, each time with a fresh text system, so every label was shaped again on every frame. A label's width depends only on its text, its font, its weight and its size, which are the key here, so a theme, font or zoom change measures anew.
+///
+/// CDXC:SessionChat 2026-11-18 WHY:
+/// User, of the where pill reading "ghost… | ma…" for "ghostex | main": "why the pill is truncated
+/// now?". The app font they picked (Euclid Circular A) reaches "DM Sans" through gpui's family
+/// substitution (ui_fonts.rs `apply_fonts`), which keeps the name, so widths measured before it
+/// applied stayed under the same key: DM Sans widths for wider text, and the where pill sizes its
+/// labels to them. The text system's font generation, which moves with every added font and
+/// substitution, is in the key now. The coordinator dock and its work item rows (work_cards.rs `dock_text_width`, merged from main 2026-11-11) measure through here too.
 pub(crate) fn label_width(
     label: &str,
     font: &str,
@@ -65,6 +74,7 @@ pub(crate) fn label_width(
         return 0.0;
     }
     let key = (
+        cx.text_system().font_generation(),
         font.to_owned(),
         weight.0.to_bits(),
         size.to_bits(),
