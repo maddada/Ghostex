@@ -1,4 +1,4 @@
-//! The Theme colours section of the Interface page: the theme roles (`themeRoles`,
+//! The Fine-tune colours section of the Themes page (Theme colours until 2026-11-18): the theme roles (`themeRoles`,
 //! packages/settings-catalog/src/theme_roles.rs) one row each, a colour editor per appearance the
 //! app shows (a swatch that opens the Pick Color dialog, the text box, an opacity slider) and a
 //! Reset. The roles the Chat colours group shows (chat_colours.rs) are not repeated here. Borders,

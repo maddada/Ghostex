@@ -1,4 +1,4 @@
-//! The Chat colours group near the top of the Interface page: a live chat preview, then Your
+//! The Chat colours group of the Themes page: Chat theme, a live chat preview, then Your
 //! messages (its colour and how see-through it is), Chat box, Cards and Accent, each the theme
 //! role's editor (roles.rs) with its Reset. Theme colours leaves these four out.
 //!

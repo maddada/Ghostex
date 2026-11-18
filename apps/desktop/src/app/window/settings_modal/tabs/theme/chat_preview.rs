@@ -1,4 +1,4 @@
-//! The preview in the Interface page's Text section: a few lines of chat at the fonts picked and
+//! The preview in the Text & Fonts page's Text group: a few lines of chat at the fonts picked and
 //! the Text strength set.
 //!
 //! CDXC:SessionChat 2026-10-31 DECISION:
@@ -259,7 +259,7 @@ pub(super) fn chat_colours_preview(p: &SettingsPalette, values: &SettingsValues)
         .flex_wrap()
         .gap(px(4.0))
         .child(line(colors.reply_prose(0)).child("Under"))
-        .child(line(link).child("Settings \u{203a} Interface"))
+        .child(line(link).child("Settings \u{203a} Themes"))
         .child(line(colors.reply_prose(0)).child("in Chat colours:"));
     let code = div()
         .w_full()

@@ -1,4 +1,4 @@
-//! The "Theme it in your words" card at the top of the Interface page: it teaches that an agent can
+//! The "Theme it in your words" card in the Themes page's Themes group: it teaches that an agent can
 //! restyle Ghostex from a plain description, with Ask an agent (a Help chat with a starter prompt
 //! as its draft), and a gallery of example themes (`THEME_GALLERY` in
 //! packages/settings-catalog/src/data/theme_gallery.rs), each with Apply and Copy prompt.

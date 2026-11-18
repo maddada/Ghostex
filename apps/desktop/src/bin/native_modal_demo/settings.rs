@@ -377,7 +377,16 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             json!({ "initialTab": "theme", "initialSection": "themeColours" })
         }
         // `page-<id>`: that rail page (`page-connectors`, `page-tools`), for pages with no state of their own.
-        state if state.starts_with("page-") => json!({ "initialTab": &state["page-".len()..] }),
+        // The state arrives lowercased (`env`), so `page-textfonts` finds `textFonts`.
+        state if state.starts_with("page-") => {
+            let wanted = &state["page-".len()..];
+            let id = crate::settings_modal::model::SettingsTabId::RAIL_ORDER
+                .iter()
+                .map(|tab| tab.id())
+                .find(|id| id.eq_ignore_ascii_case(wanted))
+                .unwrap_or(wanted);
+            json!({ "initialTab": id })
+        }
         "tags" => {
             json!({ "initialSection": "sidebarTags", "initialSidebarTagsAction": "createTag" })
         }
