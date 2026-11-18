@@ -32,8 +32,21 @@ pub async fn run_from_env() -> Result<()> {
 
 /// CDXC:AgentHooks 2026-10-09 WHY:
 /// Hook processes run on every tool event and Codex caps Interrupt at 3 seconds. They need neither the daemon runtime nor storage migration and build identity discovery before they can report an event or return outside Ghostex.
+/// CDXC:AgentHooks 2026-11-18 WHY: the statusline helpers run on every status line refresh (about 1.2 a second across 40 Claude sessions in GitHub #666), and each one built the multi-thread runtime, migrated storage and read the build identity before storing one payload. They are dispatched here too.
 pub fn run_hook_command(args: &[String]) -> Option<Result<()>> {
     match args.first().map(String::as_str) {
+        Some("agent-statusline") => {
+            Some(run_statusline_hook(args[1..].to_vec()).map_err(anyhow::Error::from))
+        }
+        // The wrapped user command inherits PATH, which the full start extended with Ghostex's tool folders.
+        #[cfg(windows)]
+        Some("agent-statusline-native") => {
+            crate::prepare_process_environment();
+            Some(
+                crate::agent_hooks::statusline::run_native_statusline_hook(args[1..].to_vec())
+                    .map_err(anyhow::Error::from),
+            )
+        }
         #[cfg(windows)]
         Some("agent-hook-notify-native") => {
             Some(crate::agent_hooks::windows::notify(args[1..].to_vec()))
@@ -165,15 +178,6 @@ pub async fn run(args: Vec<String>) -> Result<()> {
         }
         Some("agent-skills") => {
             run_agent_skills_command(args.iter().skip(1).cloned().collect()).await?;
-        }
-        #[cfg(windows)]
-        Some("agent-statusline-native") => {
-            crate::agent_hooks::statusline::run_native_statusline_hook(
-                args.iter().skip(1).cloned().collect(),
-            )?;
-        }
-        Some("agent-statusline") => {
-            run_statusline_hook(args.iter().skip(1).cloned().collect())?;
         }
         Some("resume-lookup") => {
             crate::resume_lookup::run_resume_lookup(args.iter().skip(1).cloned().collect())?;

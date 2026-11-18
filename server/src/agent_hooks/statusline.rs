@@ -571,9 +571,70 @@ pub fn run_statusline_hook(args: Vec<String>) -> Result<(), DomainStateError> {
             .and_then(|index| args.get(index + 1))
             .map(String::as_str),
     );
-    let mut input = String::new();
-    let _ = std::io::stdin().read_to_string(&mut input);
+    let Some(input) = read_statusline_input() else {
+        return Ok(());
+    };
     store_and_render_statusline(&hook_state_dir, agent, render, &input)
+}
+
+/// CDXC:AgentHooks 2026-11-18 WHY:
+/// GitHub #666 (Windows, about 40 agents): a statusline helper read its stdin with no time limit, so one whose writer never closed the pipe waited for ever, and they piled up (about 7 an hour). Claude Code and Cursor write the whole payload at once, so a helper that has nothing after this long gives up quietly: it stores and prints nothing, as an empty update would.
+const STATUSLINE_INPUT_LIMIT: Duration = Duration::from_secs(5);
+
+/// The payload on stdin, or `None` when it did not end within `STATUSLINE_INPUT_LIMIT`. The reading thread is left blocked; returning ends the process with it.
+fn read_statusline_input() -> Option<String> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut input = String::new();
+        let _ = std::io::stdin().read_to_string(&mut input);
+        let _ = sender.send(input);
+    });
+    receiver.recv_timeout(STATUSLINE_INPUT_LIMIT).ok()
+}
+
+/// CDXC:AgentHooks 2026-11-18 WHY:
+/// GitHub #666: on Windows, killing the shell that ran the statusline command leaves gxserver running, and one waiting on a wrapped user command whose parent was killed waited for ever. This watches the process that started it and exits when that one does; the kill-on-close job (`kill_children_with_this_process`) then takes the wrapped command down too. Best effort: a parent that cannot be opened is not watched. A parent pid that now names a process started after this one was reused, so the real parent is already gone.
+#[cfg(windows)]
+fn exit_when_parent_exits() {
+    use windows_sys::Win32::{
+        Foundation::{CloseHandle, FILETIME},
+        System::Threading::{
+            GetProcessTimes, OpenProcess, WaitForSingleObject, INFINITE,
+            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+        },
+    };
+    let parent = super::install::parent_process_id();
+    if parent == 0 {
+        return;
+    }
+    let own_created =
+        crate::platform::process::process_creation_filetime(i64::from(std::process::id()));
+    unsafe {
+        let process = OpenProcess(
+            PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+            0,
+            parent,
+        );
+        if process.is_null() {
+            return;
+        }
+        let mut times: [FILETIME; 4] = std::mem::zeroed();
+        let [creation, exit, kernel, user] = &mut times;
+        let parent_created = (GetProcessTimes(process, creation, exit, kernel, user) != 0)
+            .then(|| ((creation.dwHighDateTime as u64) << 32) | creation.dwLowDateTime as u64);
+        if let (Some(own), Some(parent)) = (own_created, parent_created) {
+            if parent > own {
+                CloseHandle(process);
+                std::process::exit(0);
+            }
+        }
+        // A raw handle is not `Send`; the thread owns it until the process ends.
+        let process = process as usize;
+        std::thread::spawn(move || {
+            WaitForSingleObject(process as _, INFINITE);
+            std::process::exit(0);
+        });
+    }
 }
 
 /// Runtime of the Windows statusLine command: `gxserver agent-statusline-native <script> [<base64 user command>]`. It does what the bash script does on the other platforms: store the payload, then print Ghostex's line or run the wrapped user command with the same payload on its stdin.
@@ -581,6 +642,7 @@ pub fn run_statusline_hook(args: Vec<String>) -> Result<(), DomainStateError> {
 pub fn run_native_statusline_hook(args: Vec<String>) -> Result<(), DomainStateError> {
     use base64::Engine as _;
     use std::io::Write as _;
+    exit_when_parent_exits();
     let script = PathBuf::from(args.first().map(String::as_str).unwrap_or_default());
     let agent = if script
         .file_name()
@@ -612,8 +674,9 @@ pub fn run_native_statusline_hook(args: Vec<String>) -> Result<(), DomainStateEr
         })
         .and_then(|bytes| String::from_utf8(bytes).ok())
         .filter(|wrapped| !wrapped.trim().is_empty());
-    let mut input = String::new();
-    let _ = std::io::stdin().read_to_string(&mut input);
+    let Some(input) = read_statusline_input() else {
+        return Ok(());
+    };
     let Some(wrapped) = wrapped else {
         return store_and_render_statusline(&hook_state_dir, agent, true, &input);
     };
