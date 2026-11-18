@@ -16,6 +16,11 @@ fn gpui_cua_driver_skill_pack_path() -> PathBuf {
         .join("cua-driver")
 }
 
+/// Whether `cua-driver skills install` has fetched the pack on this computer.
+pub(crate) fn gpui_cua_driver_skill_pack_installed() -> bool {
+    gpui_is_file(&gpui_cua_driver_skill_pack_path().join("SKILL.md"))
+}
+
 fn gpui_run_cua_driver_skills(args: &[&str]) -> Result<(), String> {
     let Some(cua_driver_path) = gpui_cua_driver_executable_path() else {
         return Err(
@@ -39,7 +44,7 @@ fn gpui_run_cua_driver_skills(args: &[&str]) -> Result<(), String> {
 /// CDXC:AgentSkills 2026-10-05 WHY:
 /// `cua-driver skills install` never replaces a pack it already fetched, so a pack left from an older driver is refreshed with `skills update`, which re-fetches it for the installed driver version and relinks every agent.
 pub(crate) fn gpui_install_cua_driver_skill() -> Result<String, String> {
-    let refresh = gpui_is_file(&gpui_cua_driver_skill_pack_path().join("SKILL.md"));
+    let refresh = gpui_cua_driver_skill_pack_installed();
     gpui_run_cua_driver_skills(&["skills", if refresh { "update" } else { "install" }])?;
     if gpui_cua_driver_skill_path().is_none() {
         return Err(

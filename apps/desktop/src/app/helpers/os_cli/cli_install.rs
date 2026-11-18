@@ -54,9 +54,15 @@ pub(crate) fn gpui_finish_desktop_control_setup(
     }
 
     // The cua-driver skill follows the driver it describes; a failure here only adds a note.
-    let skill_note = match gpui_install_cua_driver_skill() {
-        Ok(_) => "",
-        Err(_) => " The Cua Driver skill could not be installed; install it from Settings.",
+    // An update refreshes an installed pack but never adds one (CDXC:AgentSkills 2026-11-19 in
+    // server/src/managed_tools/desktop_control.rs).
+    let skill_note = if was_update && !gpui_cua_driver_skill_pack_installed() {
+        ""
+    } else {
+        match gpui_install_cua_driver_skill() {
+            Ok(_) => "",
+            Err(_) => " The Cua Driver skill could not be installed; install it from Settings.",
+        }
     };
     match gpui_install_bundled_ghostex_skill(
         &["computer-use", "install-skill"],

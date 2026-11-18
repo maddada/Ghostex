@@ -355,13 +355,14 @@ pub(crate) fn run_operation(
         log,
         JOB_TIMEOUT,
     )?;
-    if tool == ToolId::Trycua && operation != "uninstall" {
+    if tool == ToolId::Trycua {
         // Trycua's own skill pack follows the driver it describes; a failure only adds a line.
-        if let Some(executable) = trycua_executable(home) {
-            let refresh = home
-                .join(".cua-driver/skills/cua-driver/SKILL.md")
-                .is_file();
-            let verb = if refresh { "update" } else { "install" };
+        let pack = home
+            .join(".cua-driver/skills/cua-driver/SKILL.md")
+            .is_file();
+        if let (Some(verb), Some(executable)) =
+            (trycua_skills_verb(operation, pack), trycua_executable(home))
+        {
             if run::run(
                 &executable,
                 &["skills", verb],
@@ -372,11 +373,25 @@ pub(crate) fn run_operation(
             )
             .is_err()
             {
-                log.line("The cua-driver skill could not be installed; install it again later.");
+                log.line(&format!(
+                    "The cua-driver skill could not be {}; use Install skill on the Fast Computer & Browser Use row later.",
+                    if verb == "update" { "updated" } else { "installed" }
+                ));
             }
         }
     }
     Ok(())
+}
+
+/// CDXC:AgentSkills 2026-11-19 DECISION:
+/// Every successful driver update (Settings, the Updates page, Update all, automatic updates) refreshes an installed cua-driver skill pack with `skills update`, so agents never read a skill written for an older driver. Only an Install adds a pack: an update never installs one the user didn't have.
+fn trycua_skills_verb(operation: &str, pack_installed: bool) -> Option<&'static str> {
+    match operation {
+        "uninstall" => None,
+        _ if pack_installed => Some("update"),
+        "install" => Some("install"),
+        _ => None,
+    }
 }
 
 /// The Ghostex skill an install adds after the tool itself.
@@ -392,6 +407,15 @@ pub(crate) fn ghostex_skill(tool: ToolId) -> &'static str {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_driver_update_refreshes_only_a_skill_pack_already_installed() {
+        assert_eq!(trycua_skills_verb("update", true), Some("update"));
+        assert_eq!(trycua_skills_verb("update", false), None);
+        assert_eq!(trycua_skills_verb("install", true), Some("update"));
+        assert_eq!(trycua_skills_verb("install", false), Some("install"));
+        assert_eq!(trycua_skills_verb("uninstall", true), None);
+    }
 
     #[test]
     fn an_installed_tool_without_its_grants_says_who_can_allow_them() {

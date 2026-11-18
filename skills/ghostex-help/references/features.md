@@ -7379,6 +7379,9 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   installs Trycua's cua-driver skill (`cua-driver skills install`), which
   teaches agents the driver's own commands and which both Ghostex skills read
   first; if that skill is missing, the row shows an Install skill button.
+  Every update of the driver (this row, the Updates page, Update all or an
+  automatic update) also refreshes an installed cua-driver skill to match
+  the new driver; an update never adds the skill if you removed it.
   If cua.ai does not answer on your network (Mac, Linux or Windows), the installer (and the update and
   uninstaller) is fetched from Trycua's GitHub repository instead, with no
   action needed; the driver itself always downloads from GitHub releases.
