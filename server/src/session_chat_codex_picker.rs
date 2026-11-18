@@ -135,8 +135,9 @@ fn agent_busy(message: impl Into<String>) -> DomainStateError {
 /// dialog or a running turn.
 pub(crate) const STATE_UNREADABLE_CODE: &str = "agentStateUnreadable";
 pub(crate) const TERMINAL_UNREACHABLE_CODE: &str = "terminalUnreachable";
-/// A Codex pick that met a running turn (`codex_turn_running`): paced like `agentBusy`, retried as
-/// soon as the session stops working, and never raised as a failed change.
+/// A Codex pick that met a running turn (`codex_turn_running`) while the session's activity said
+/// Codex was in one: paced like `agentBusy`, tried once more when the session stops working, and
+/// never raised as a failed change.
 pub(crate) const TURN_RUNNING_CODE: &str = "agentTurnRunning";
 
 pub(crate) fn state_unreadable(message: impl Into<String>) -> DomainStateError {
@@ -494,6 +495,9 @@ struct CodexPickerPlan {
     hermes_provider: Option<String>,
     /// Empryo only: the session's `session.jsonl`, whose `meta.json` names the tab's model.
     empryo_session_log: Option<std::path::PathBuf>,
+    /// The session's activity said its agent was in a turn when the pick was taken
+    /// (`agent_turn_running` in session_chat_model_selection.rs).
+    agent_working: bool,
 }
 
 struct CodexPickerJob {
@@ -892,15 +896,26 @@ impl PickerDriver<'_> {
     }
 
     /// A Codex pick is refused while Codex's turn runs (`codex_turn_running`). A screen that
-    /// cannot be read is left to the drive's own capture, which says so.
-    async fn wait_for_codex_turn_end(&self) -> Result<(), DomainStateError> {
+    /// cannot be read is left to the drive's own capture, which says so. A working row while the
+    /// session's activity says Codex is not in a turn (a question waiting on the user, a look-alike
+    /// row in Codex's own output, an activity that is wrong) answers `agentBusy`, which the
+    /// failed-change alert raises after 30 seconds, instead of waiting silently.
+    async fn wait_for_codex_turn_end(
+        &self,
+        plan: &CodexPickerPlan,
+    ) -> Result<(), DomainStateError> {
         match self.capture().await {
-            Some(screen) if codex_turn_running(&screen) => Err(DomainStateError {
-                code: TURN_RUNNING_CODE,
-                message:
-                    "Codex is working on a turn, so its settings were not changed while it runs."
-                        .to_string(),
-            }),
+            Some(screen) if codex_turn_running(&screen) && plan.agent_working => {
+                Err(DomainStateError {
+                    code: TURN_RUNNING_CODE,
+                    message:
+                        "Codex is working on a turn, so its settings were not changed while it runs."
+                            .to_string(),
+                })
+            }
+            Some(screen) if codex_turn_running(&screen) => Err(agent_busy(
+                "Codex's screen shows a running turn, so its settings were not changed.",
+            )),
             _ => Ok(()),
         }
     }
@@ -1363,7 +1378,7 @@ pub(crate) async fn run_codex_model_picker_job(
         cancelled,
     };
     let outcome = async {
-        driver.wait_for_codex_turn_end().await?;
+        driver.wait_for_codex_turn_end(&plan).await?;
         if !plan.model.is_empty() {
             driver.run(&plan).await?;
         }
@@ -1732,6 +1747,10 @@ pub(crate) async fn select_session_chat_model(
             state,
             agent.as_deref(),
             &target.session,
+        ),
+        agent_working: crate::session_chat_model_selection::agent_turn_running(
+            &target.session,
+            &chrono::Utc::now().to_rfc3339(),
         ),
     });
     let send = execute_session_chat_send(

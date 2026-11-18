@@ -424,6 +424,9 @@ struct BusyRun {
     count: u32,
     /// The last busy answer was Codex's running turn (`TURN_RUNNING_CODE`).
     turn_running: bool,
+    /// The queue already ended a wait early since it last saw the session working
+    /// (`busy_wait_ends_early`).
+    woke_early: bool,
 }
 
 fn busy_runs() -> &'static Mutex<HashMap<String, BusyRun>> {
@@ -449,22 +452,24 @@ const BUSY_SLOW_SHORTCUT_MS: i64 = BUSY_RETRY_MAX_MS * 3 / 2;
 /// wait ends it once, and the pick is then tried every minute while it waits (`busy_retry`). A
 /// coordinator's unstarted first message keeps the 5-minute pace.
 ///
-/// A pick that met Codex's running turn is tried again once the session no longer works
-/// (`agent_working`), at most every `RETRY_MS`, so the message behind it is not held for the rest
-/// of a long wait after the turn ends; the screen's own check still decides.
+/// A pick that met Codex's running turn is tried again once when the session stops working
+/// (`agent_working`, `agent_turn_running`), so the message behind it is not held for the rest of a
+/// long wait after the turn ends; the screen's own check still decides, and a pick that meets the
+/// row again keeps its usual back-off until the session has been seen working again.
 pub(crate) fn busy_wait_ends_early(
     selection_id: &str,
     snapshot: &crate::session_chat_queue::SessionChatQueueSnapshot,
     wait_ms: i64,
     agent_working: bool,
-    now_ms: i64,
 ) -> bool {
-    let (slow, turn_ended) = busy_runs().lock().map_or((false, false), |runs| {
-        runs.get(selection_id).map_or((false, false), |run| {
-            (
-                run.busy_ms >= BUSY_SLOW_AFTER_MS,
-                run.turn_running && !agent_working && now_ms - run.last_ms >= RETRY_MS,
-            )
+    if agent_working {
+        saw_agent_working(selection_id);
+    }
+    let (slow, turn_ended) = busy_runs().lock().map_or((false, false), |mut runs| {
+        runs.get_mut(selection_id).map_or((false, false), |run| {
+            let turn_ended = run.turn_running && !agent_working && !run.woke_early;
+            run.woke_early |= turn_ended;
+            (run.busy_ms >= BUSY_SLOW_AFTER_MS, turn_ended)
         })
     });
     if turn_ended {
@@ -476,6 +481,22 @@ pub(crate) fn busy_wait_ends_early(
     } else {
         (waiting.chat_message || waiting.first_message) && wait_ms > BUSY_WAIT_SHORTCUT_MS
     }
+}
+
+/// The queue saw the session working: the next stop may end this pick's wait early again.
+pub(crate) fn saw_agent_working(selection_id: &str) {
+    if let Ok(mut runs) = busy_runs().lock() {
+        if let Some(run) = runs.get_mut(selection_id) {
+            run.woke_early = false;
+        }
+    }
+}
+
+/// Whether the session's activity says its agent is in a turn: working, and not only through
+/// background work left running after its turn ended (`working_only_in_background`).
+pub(crate) fn agent_turn_running(session: &Value, generated_at: &str) -> bool {
+    crate::presentation::presentation_activity(session, generated_at) == "working"
+        && !crate::presentation::working_only_in_background(session, generated_at)
 }
 
 /// A dialog in front of the input box or a running turn (`agentBusy`), or Codex's running turn
@@ -505,6 +526,7 @@ fn busy_retry(
         last_wait_ms: 0,
         count: 0,
         turn_running: false,
+        woke_early: false,
     });
     run.turn_running = error.code == crate::session_chat_codex_picker::TURN_RUNNING_CODE;
     run.busy_ms += (now_ms - run.last_ms).clamp(0, run.last_wait_ms + RETRY_MS);

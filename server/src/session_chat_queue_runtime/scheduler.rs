@@ -751,10 +751,25 @@ impl SessionChatQueueRuntime {
                     hold(head, WaitReason::ModelChangeFailed)
                 });
             }
+            // CDXC:SessionChat 2026-11-18 WHY: GitHub #666 review of 0c9d9f2c9: Codex hides its
+            // working row while its answer streams, so a pick retried then went in mid-turn and
+            // the message behind it into the running turn. While the session's activity says Codex
+            // is in a turn, its pick is held without a try; the screen's working row stays the
+            // backstop when the activity is wrong (`codex_turn_running` in
+            // session_chat_codex_picker.rs).
+            let agent_working =
+                crate::session_chat_model_selection::agent_turn_running(&session, generated_at);
+            if agent_working
+                && crate::session_chat_composer::session_chat_composer_agent_id(&session).as_deref()
+                    == Some("codex")
+            {
+                crate::session_chat_model_selection::saw_agent_working(&selection.id);
+                return head.map_or(Assessment::Skip, |head| hold(head, WaitReason::ModelChange));
+            }
             // A busy pick's longer wait (session_chat_model_selection.rs `busy_retry`) ends once a
             // message waits behind it: the message waits at most about 7.5 s for the next try, or
             // about 90 s for a queued chat message once the pick has been busy for 30 minutes, and a
-            // pick that met Codex's running turn is tried again once the session stops working
+            // pick that met Codex's running turn is tried once more when the session stops working
             // (`busy_wait_ends_early`).
             let wait_ms = selection.retry_at - now.timestamp_millis();
             if wait_ms > 0
@@ -762,8 +777,7 @@ impl SessionChatQueueRuntime {
                     &selection.id,
                     &snapshot,
                     wait_ms,
-                    presentation_activity(&session, generated_at) == "working",
-                    now.timestamp_millis(),
+                    agent_working,
                 )
             {
                 return head.map_or(Assessment::Skip, |head| hold(head, WaitReason::ModelChange));
