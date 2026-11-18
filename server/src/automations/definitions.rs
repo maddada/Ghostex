@@ -131,7 +131,11 @@ fn refuse_unknown_definition_fields(object: &Map<String, Value>) -> Result<(), D
         .map(|key| format!("\"{key}\""))
         .collect::<Vec<_>>()
         .join(", ");
-    let noun = if unknown.len() == 1 { "field" } else { "fields" };
+    let noun = if unknown.len() == 1 {
+        "field"
+    } else {
+        "fields"
+    };
     Err(DomainStateError::bad_request(format!(
         "Automation definition has unknown {noun} {named}, so nothing was saved. A definition takes: name, agentId, prompt, enabled, schedule, executionMode, model, effort, id, projectIds, createdAt, updatedAt and nextRunAt."
     )))

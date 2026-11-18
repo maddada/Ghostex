@@ -81,7 +81,10 @@ impl BrowserPageContextMenu {
                         || *command_id == PAGE_MENU_FORWARD_COMMAND_ID
             )
         });
-        while matches!(self.entries.first(), Some(BrowserPageContextMenuEntry::Separator)) {
+        while matches!(
+            self.entries.first(),
+            Some(BrowserPageContextMenuEntry::Separator)
+        ) {
             self.entries.remove(0);
         }
         self

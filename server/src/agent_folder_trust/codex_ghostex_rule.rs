@@ -107,4 +107,3 @@ pub(crate) fn allow_ghostex_in_codex_before_launch(session: &serde_json::Value) 
         }
     }
 }
-

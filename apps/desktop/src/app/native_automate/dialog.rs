@@ -464,7 +464,10 @@ impl AutomationDialog {
                     // Keep the effort only when the new model offers it.
                     let effort = self.draft.effort.trim().to_string();
                     if !effort.is_empty()
-                        && !self.effort_values().iter().any(|(value, _)| *value == effort)
+                        && !self
+                            .effort_values()
+                            .iter()
+                            .any(|(value, _)| *value == effort)
                     {
                         self.draft.effort.clear();
                     }

@@ -291,7 +291,12 @@ impl AutomationRuntime {
                 &prompt.text,
                 prompt.startup_send,
             )
-            .map_err(|error| format!("The automation's prompt could not be queued: {}", error.message))?
+            .map_err(|error| {
+                format!(
+                    "The automation's prompt could not be queued: {}",
+                    error.message
+                )
+            })?
             .id
         };
         self.publish_chat_queue(session_project_id, session_id);
