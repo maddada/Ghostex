@@ -625,13 +625,13 @@ impl GpuiTitlebarReadingPanel {
 }
 
 impl Render for GpuiTitlebarReadingPanel {
-    fn render(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let content = match self.state {
             GpuiTitlebarReadingPanelState::Resources { .. } => {
                 self.render_resources(cx).into_any_element()
             }
             GpuiTitlebarReadingPanelState::Notifications { .. } => {
-                self.render_notifications(cx).into_any_element()
+                self.render_notifications(window, cx).into_any_element()
             }
         };
         super::popup_frame::popup_open_frame(

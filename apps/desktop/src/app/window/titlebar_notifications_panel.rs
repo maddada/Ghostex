@@ -10,11 +10,13 @@
 //! User, of the panel's header and its All / This computer / Remote bar: "need these to be smaller width", "Mark all read <- needs to be shorter pls", "i dont like this bar here, i think let's remove it and just add a icon next to the title instead of the pc (like we have in app's sidebar)". On the options page they picked one "..." button whose click opens a menu with Mark all read and Clear all (Q2734 C), the computer's own icon right after the title as in a sidebar row, in place of the name chip (Q2735 B), and this computer's rows wearing its icon too, the sidebar's rule (Q2741 B). The tabs are gone, so both actions cover every row. The phone's list does the same (apps/mobile/app AttentionList.tsx).
 use super::resources_style::*;
 use crate::app::helpers::*;
+use crate::app::native_sidebar::SIDEBAR_MENU_ROW_HEIGHT;
 use crate::notification_feed::{
     GpuiNotificationFeedItem, GpuiNotificationFeedState, notification_feed_relative_time,
 };
 use crate::*;
 use ghostex_gx_core::{MachineId, NotificationFeedTab, SessionKey};
+use std::rc::Rc;
 
 const NOTIFICATION_PANEL_BELL_ICON: &str = "titlebar/bell.svg";
 const NOTIFICATION_PANEL_CHECK_ICON: &str = "titlebar/check.svg";
@@ -26,12 +28,28 @@ const NOTIFICATION_MORE_ICON: &str = "titlebar/dots.svg";
 /// The sidebar row's computer icon size (native_sidebar/computer_mark.rs).
 const NOTIFICATION_COMPUTER_ICON_SIZE: f32 = 12.0;
 const NOTIFICATION_ACTIONS_MENU_WIDTH: f32 = 168.0;
+/// The ⋯ menu's inset around its rows: the coordinator board card menu's, the sidebar menu's look.
+const NOTIFICATION_ACTIONS_MENU_PADDING: f32 = 6.0;
+/// Between the header's bottom edge and the menu, and between the menu and the panel's right edge.
+const NOTIFICATION_ACTIONS_MENU_TOP_GAP: f32 = 4.0;
+const NOTIFICATION_ACTIONS_MENU_RIGHT_INSET: f32 = 6.0;
+/// The ⋯ menu's rows, Mark all read and Clear all.
+const NOTIFICATION_ACTIONS_MENU_ROWS: f32 = 2.0;
 
 impl GpuiTitlebarReadingPanel {
     pub(crate) fn notifications(
         main_app: gpui::WeakEntity<GhostexGpuiApp>,
         feed: GpuiNotificationFeedState,
+        cx: &mut gpui::Context<Self>,
     ) -> Self {
+        // The ⋯ menu's frosted window goes when the dropdown does, wherever it closes from.
+        cx.on_release(|_, cx| {
+            crate::app::window::frosted_host::hide_frosted_host(
+                crate::app::window::frosted_host::FrostedHostKind::NotificationsMenu,
+                cx,
+            );
+        })
+        .detach();
         Self {
             main_app,
             scroll_handle: ScrollHandle::new(),
@@ -270,7 +288,11 @@ impl GpuiTitlebarReadingPanel {
         }
     }
 
-    pub(super) fn render_notifications(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
+    pub(super) fn render_notifications(
+        &self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
         let GpuiTitlebarReadingPanelState::Notifications {
             feed,
             hovered_id,
@@ -298,6 +320,7 @@ impl GpuiTitlebarReadingPanel {
         let read_rows = render_group(true);
         let has_unread = !unread_rows.is_empty();
         let has_read = !read_rows.is_empty();
+        let actions_menu_frame = self.sync_notifications_actions_menu_host(window, cx);
         let offline_notice = feed
             .offline_notice
             .as_deref()
@@ -363,7 +386,7 @@ impl GpuiTitlebarReadingPanel {
                     ),
             )
             .when(*actions_menu_open, |this| {
-                this.child(self.render_notifications_actions_menu(feed, cx))
+                this.child(self.render_notifications_actions_menu(actions_menu_frame, cx))
             })
             .into_any_element()
     }
@@ -462,18 +485,90 @@ impl GpuiTitlebarReadingPanel {
             .into_any_element()
     }
 
-    /// The "..." menu: Mark all read and Clear all, under the button at the header's right end.
-    /// A click outside it (on the list or the header) closes it, as the sidebar's menus do.
+    /// Where the ⋯ menu sits in the dropdown's window: under the header, against its right end.
+    fn notifications_actions_menu_frame(window: &Window) -> Bounds<Pixels> {
+        let width = px(NOTIFICATION_ACTIONS_MENU_WIDTH);
+        let height = px(NOTIFICATION_ACTIONS_MENU_ROWS * SIDEBAR_MENU_ROW_HEIGHT
+            + 2.0 * NOTIFICATION_ACTIONS_MENU_PADDING
+            + 2.0);
+        let left =
+            (window.viewport_size().width - width - px(NOTIFICATION_ACTIONS_MENU_RIGHT_INSET))
+                .max(px(0.0));
+        Bounds::new(
+            point(
+                left,
+                px(TITLEBAR_POPUP_READING_HEADER_HEIGHT + NOTIFICATION_ACTIONS_MENU_TOP_GAP),
+            ),
+            size(width, height),
+        )
+    }
+
+    /// Under window glass the ⋯ menu draws in a frosted window of its own over the dropdown, as the
+    /// sessions sidebar's right-click menu does, so what is behind it is truly blurred; otherwise
+    /// it draws in place. Returns the menu's frame while it is open.
+    ///
+    /// CDXC:Notifications 2026-11-18 DECISION:
+    /// User, of the ⋯ menu (Mark all read, Clear all) once it took the frosted menu fill: "frost the bg here more pls", then "make it like the one in the context in sessions". Drawn inside the dropdown's window the menu could only lay its 60% tint over the cards, with no blur, so a card's border and its time read through it. It now opens in a frosted host window of its own (`FrostedHostKind::NotificationsMenu`), with the sidebar menu's surface (`popup_menu_surface` over that window's blur), outline, 34px rows, 16px icons and hover, like the coordinator board's card menu. Glass off, and on Linux where menus stay in the window with their solid fill, it draws in place with the same rows. Supersedes the same day's in-window frosted fill.
+    fn sync_notifications_actions_menu_host(
+        &self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Bounds<Pixels> {
+        use crate::app::window::frosted_host::{
+            FrostedHostKind, frosted_hosting_active, hide_frosted_host_over, show_frosted_host,
+        };
+        let frame = Self::notifications_actions_menu_frame(window);
+        let open = matches!(
+            self.state,
+            GpuiTitlebarReadingPanelState::Notifications {
+                actions_menu_open: true,
+                ..
+            }
+        );
+        let parent = gpui::Window::window_handle(window);
+        if open && frosted_hosting_active() {
+            let view = cx.entity().downgrade();
+            show_frosted_host(
+                FrostedHostKind::NotificationsMenu,
+                parent,
+                frame,
+                None,
+                Rc::new(move |_, cx| {
+                    view.upgrade()
+                        .map(|panel| {
+                            panel
+                                .read(cx)
+                                .render_notifications_actions_panel(true, view.clone())
+                        })
+                        .unwrap_or_else(|| div().into_any_element())
+                }),
+                None,
+                cx,
+            );
+        } else {
+            hide_frosted_host_over(FrostedHostKind::NotificationsMenu, parent, cx);
+        }
+        frame
+    }
+
+    /// The ⋯ menu's place in the dropdown: a backdrop that closes it on a click anywhere else in
+    /// the dropdown, as the sidebar's menus do, holding the panel itself, or under window glass an
+    /// invisible stand-in that keeps the cards under the frosted window from reacting.
     fn render_notifications_actions_menu(
         &self,
-        feed: &GpuiNotificationFeedState,
+        frame: Bounds<Pixels>,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        let has_unread = feed
-            .items
-            .iter()
-            .any(|item| !item.read && !item.awaiting_approval);
-        let has_rows = feed.items.iter().any(|item| !item.awaiting_approval);
+        let hosted = crate::app::window::frosted_host::frosted_hosting_active();
+        let content = if hosted {
+            div()
+                .size_full()
+                .occlude()
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .into_any_element()
+        } else {
+            self.render_notifications_actions_panel(false, cx.entity().downgrade())
+        };
         div()
             .id("ghostex-gpui-titlebar-notifications-actions-backdrop")
             .absolute()
@@ -489,48 +584,73 @@ impl GpuiTitlebarReadingPanel {
                 }),
             )
             .child(
-                v_flex()
-                    .id("ghostex-gpui-titlebar-notifications-actions-menu")
-                    .role(gpui::Role::Menu)
-                    .aria_label("Notification actions")
+                div()
                     .absolute()
-                    .top(px(TITLEBAR_POPUP_READING_HEADER_HEIGHT + 4.0))
-                    .right(px(6.0))
-                    .w(px(NOTIFICATION_ACTIONS_MENU_WIDTH))
-                    .p(px(4.0))
-                    .rounded(px(POPUP_MENU_RADIUS))
-                    .border_1()
-                    .border_color(titlebar_popup_menu_border_color())
-                    // CDXC:Notifications 2026-11-18 DECISION:
-                    // User: "this menu not transparent fix". The "..." menu took the opaque menu colour (`titlebar_popup_menu_background`), a near-black slab on window glass. It takes the sidebar menus' surface (`popup_menu_surface`), frosted under glass and solid otherwise, in light and dark.
-                    .bg(popup_menu_surface())
-                    .shadow_lg()
-                    .occlude()
-                    .child(Self::render_notifications_menu_item(
-                        "ghostex-gpui-titlebar-notifications-mark-all-read",
-                        "Mark all read",
-                        NOTIFICATION_PANEL_CHECK_ICON,
-                        has_unread,
-                        cx.listener(|this, _: &MouseDownEvent, window, cx| {
-                            window.prevent_default();
-                            cx.stop_propagation();
-                            this.set_notifications_actions_menu_open(false, cx);
-                            this.mark_all_notifications_read(cx);
-                        }),
-                    ))
-                    .child(Self::render_notifications_menu_item(
-                        "ghostex-gpui-titlebar-notifications-clear-all",
-                        "Clear all",
-                        "titlebar/xmark.svg",
-                        has_rows,
-                        cx.listener(|this, _: &MouseDownEvent, window, cx| {
-                            window.prevent_default();
-                            cx.stop_propagation();
-                            this.set_notifications_actions_menu_open(false, cx);
-                            this.clear_all_notifications(cx);
-                        }),
-                    )),
+                    .left(frame.origin.x)
+                    .top(frame.origin.y)
+                    .w(frame.size.width)
+                    .h(frame.size.height)
+                    .child(content),
             )
+            .into_any_element()
+    }
+
+    /// The ⋯ menu's panel, Mark all read and Clear all, built as the sessions sidebar's right-click
+    /// menu is (`native_sidebar/menus.rs`, and the board card menu after it): the shared popup
+    /// menu surface, outline, ink and hover, 34px rows, 6px inset, 8px corners and 16px icons.
+    /// `frosted` draws it filling its frosted host window, over that window's blur.
+    fn render_notifications_actions_panel(
+        &self,
+        frosted: bool,
+        view: gpui::WeakEntity<Self>,
+    ) -> AnyElement {
+        let (has_unread, has_rows) = match &self.state {
+            GpuiTitlebarReadingPanelState::Notifications { feed, .. } => (
+                feed.items
+                    .iter()
+                    .any(|item| !item.read && !item.awaiting_approval),
+                feed.items.iter().any(|item| !item.awaiting_approval),
+            ),
+            _ => (false, false),
+        };
+        let action = |run: fn(&mut Self, &mut gpui::Context<Self>)| {
+            let view = view.clone();
+            move |_: &MouseDownEvent, window: &mut Window, cx: &mut gpui::App| {
+                window.prevent_default();
+                cx.stop_propagation();
+                let _ = view.update(cx, |this, cx| {
+                    this.set_notifications_actions_menu_open(false, cx);
+                    run(this, cx);
+                });
+            }
+        };
+        v_flex()
+            .id("ghostex-gpui-titlebar-notifications-actions-menu")
+            .role(gpui::Role::Menu)
+            .aria_label("Notification actions")
+            .size_full()
+            .p(px(NOTIFICATION_ACTIONS_MENU_PADDING))
+            .rounded(px(POPUP_MENU_RADIUS))
+            .border_1()
+            .border_color(titlebar_popup_menu_border_color())
+            .bg(popup_menu_surface())
+            .when(!frosted, |this| this.shadow_lg())
+            .occlude()
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .child(Self::render_notifications_menu_item(
+                "ghostex-gpui-titlebar-notifications-mark-all-read",
+                "Mark all read",
+                NOTIFICATION_PANEL_CHECK_ICON,
+                has_unread,
+                action(Self::mark_all_notifications_read),
+            ))
+            .child(Self::render_notifications_menu_item(
+                "ghostex-gpui-titlebar-notifications-clear-all",
+                "Clear all",
+                "titlebar/xmark.svg",
+                has_rows,
+                action(Self::clear_all_notifications),
+            ))
             .into_any_element()
     }
 
@@ -542,17 +662,20 @@ impl GpuiTitlebarReadingPanel {
         listener: impl Fn(&MouseDownEvent, &mut Window, &mut gpui::App) + 'static,
     ) -> AnyElement {
         let foreground = titlebar_popup_menu_foreground();
-        let opacity = if enabled { 0.92 } else { 0.38 };
+        let opacity = if enabled { 1.0 } else { 0.38 };
         h_flex()
             .id(id)
             .role(gpui::Role::MenuItem)
             .aria_label(label)
             .w_full()
-            .h(px(28.0))
-            .px(px(8.0))
+            .h(px(SIDEBAR_MENU_ROW_HEIGHT))
+            .flex_shrink_0()
+            .px(px(10.0))
             .gap(px(8.0))
             .items_center()
-            .rounded(px(5.0))
+            .rounded(px(6.0))
+            .font_family(crate::ui_fonts::UI_FONT)
+            .font_weight(FontWeight::NORMAL)
             .text_size(px(13.0))
             .text_color(foreground.opacity(opacity))
             .when(enabled, |this| {
@@ -560,11 +683,7 @@ impl GpuiTitlebarReadingPanel {
                     .hover(|this| this.bg(titlebar_popup_menu_hover_color()))
                     .on_mouse_down(MouseButton::Left, listener)
             })
-            .child(titlebar_svg_icon(
-                icon,
-                14.0,
-                foreground.opacity(if enabled { 0.72 } else { 0.30 }),
-            ))
+            .child(titlebar_svg_icon(icon, 16.0, foreground.opacity(opacity)))
             .child(label)
             .into_any_element()
     }

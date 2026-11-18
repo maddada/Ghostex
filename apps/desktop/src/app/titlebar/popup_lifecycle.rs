@@ -525,7 +525,7 @@ impl GhostexGpuiApp {
             GpuiTitlebarPopupKind::Notifications => {
                 let feed = self.notification_feed_for_panel(self.notification_feed_state.clone());
                 GpuiTitlebarPopupContent::Reading(
-                    cx.new(|_| GpuiTitlebarReadingPanel::notifications(main_app, feed)),
+                    cx.new(|cx| GpuiTitlebarReadingPanel::notifications(main_app, feed, cx)),
                 )
             }
             GpuiTitlebarPopupKind::Extensions => {

@@ -51,6 +51,9 @@ pub(crate) enum FrostedHostKind {
     PageWindowMenu,
     /// That menu's Snooze lengths, beside it.
     PageWindowSubmenu,
+    /// The Notifications dropdown's ⋯ menu (`window/titlebar_notifications_panel.rs`), the
+    /// sidebar menu's look, over the dropdown's own window.
+    NotificationsMenu,
 }
 
 /// How many stacked sidebar menu panels get a window of their own; deeper ones share none.
@@ -130,6 +133,7 @@ thread_local! {
     static BOARD_CARD_MENU_HOST: RefCell<HostSlot> = RefCell::default();
     static PAGE_WINDOW_MENU_HOST: RefCell<HostSlot> = RefCell::default();
     static PAGE_WINDOW_SUBMENU_HOST: RefCell<HostSlot> = RefCell::default();
+    static NOTIFICATIONS_MENU_HOST: RefCell<HostSlot> = RefCell::default();
     static SIDEBAR_MENU_HOSTS: RefCell<Vec<HostSlot>> = RefCell::default();
 }
 
@@ -161,6 +165,9 @@ fn with_slot<R>(kind: FrostedHostKind, f: impl FnOnce(&mut HostSlot) -> R) -> R 
         }
         FrostedHostKind::PageWindowSubmenu => {
             PAGE_WINDOW_SUBMENU_HOST.with(|slot| f(&mut slot.borrow_mut()))
+        }
+        FrostedHostKind::NotificationsMenu => {
+            NOTIFICATIONS_MENU_HOST.with(|slot| f(&mut slot.borrow_mut()))
         }
         FrostedHostKind::SidebarMenu(level) => SIDEBAR_MENU_HOSTS.with(|slots| {
             let mut slots = slots.borrow_mut();
@@ -248,6 +255,7 @@ pub(crate) fn hide_frosted_hosts_over(parent: AnyWindowHandle, cx: &mut App) {
         FrostedHostKind::BoardCardMenu,
         FrostedHostKind::PageWindowMenu,
         FrostedHostKind::PageWindowSubmenu,
+        FrostedHostKind::NotificationsMenu,
     ]
     .into_iter()
     .chain(
@@ -381,7 +389,8 @@ fn open_host(
                 FrostedHostKind::SidebarMenu(_)
                 | FrostedHostKind::BoardCardMenu
                 | FrostedHostKind::PageWindowMenu
-                | FrostedHostKind::PageWindowSubmenu => {
+                | FrostedHostKind::PageWindowSubmenu
+                | FrostedHostKind::NotificationsMenu => {
                     window.set_background_corner_radius(gpui::px(SIDEBAR_MENU_HOST_RADIUS))
                 }
                 FrostedHostKind::DocsSelectionToolbar => {
