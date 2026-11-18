@@ -173,6 +173,33 @@ fn empty_work() -> Value {
     json!({ "items": [], "asks": [], "counts": {}, "topic": null })
 }
 
+/// An ordinary session's work in short, for the Work items extension's sidebar list (the
+/// extension API's sessions, extensions/ext_api.rs): `{topic, open, waiting, finishedToday}`, or
+/// `Value::Null` for a session with none (or while the extension is off).
+pub fn session_work_summary(project_id: &str, session_id: &str) -> Value {
+    let Ok(cache) = cache().lock() else {
+        return Value::Null;
+    };
+    let Some(value) = cache
+        .values
+        .get(&(project_id.to_string(), session_id.to_string()))
+    else {
+        return Value::Null;
+    };
+    let counts = &value["work"]["counts"];
+    let count = |status: &str| counts[status].as_u64().unwrap_or(0);
+    let open: u64 = ["needs", "blocked", "moving", "idle", "waiting", "later"]
+        .iter()
+        .map(|status| count(status))
+        .sum();
+    json!({
+        "topic": value["topic"]["text"].as_str().unwrap_or_default(),
+        "open": open,
+        "waiting": count("needs") + count("blocked"),
+        "finishedToday": count("finished"),
+    })
+}
+
 /// One ordinary session's `sessionWork`.
 fn session_value(items: &[WorkItem], topic: Value, key: &SessionKey) -> Value {
     let mut work = work_value(&[], items, false, Utc::now(), None, Some(key));

@@ -873,6 +873,9 @@ fn sessions(
                         "lifecycleState": text(session, "lifecycleState"),
                         "awaitingAnswer": session.get("awaitingAnswer").and_then(Value::as_bool).unwrap_or(false),
                         "lastActiveAt": text(session, "lastActiveAt"),
+                        // Its own work items while Work items is on (coordinators/session_work.rs),
+                        // for that extension's sidebar list; null for none.
+                        "work": crate::coordinators::session_work_summary(project_id, session_id),
                     })
                 })
                 .collect()
