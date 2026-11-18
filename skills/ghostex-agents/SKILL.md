@@ -73,6 +73,31 @@ of its threads. When the user wants a separate session they chat to directly, ad
 `ghostex coordinator unlink <thread-ref>` to turn an existing thread into one
 (both need 10.24.0 or later).
 
+## Other computers
+
+When the user has connected another computer, you can start, message and read
+sessions there, and its agents can do the same here. `ghostex computers` lists
+the connected computers. It needs the computer connected in Settings > Remote >
+Remote machines (on either side) with its Agent access switch on, and Ghostex
+10.44 or later on both computers. A computer with Agent access off refuses with
+a plain error: tell the user, who turns it on in that computer's Edit dialog.
+
+```bash
+ghostex computers                                   # which computers are connected
+ghostex sessions --computer <name>                  # its projects (ids) and session refs
+ghostex agents create <agent> --computer <name> --project-id <id> --task "..."
+ghostex agents send <session-ref> "..."             # a ref from that computer goes there by itself
+ghostex agents send --main-coordinator --path <folder> --computer <name> "..."
+ghostex read-session-chat <session-ref> --last 2 --format text   # read its reply
+```
+
+`--computer` takes the computer's name, the start of it, or its server id. Send,
+close, read-session-chat, read-text and the other session verbs take a ref from
+that computer unchanged, and its replies reach you through your own ref the same
+way, so do not poll: end your turn. Agents there can start, message, read,
+sleep, wake and close sessions, nothing else (no settings, projects or git).
+The OTHER COMPUTERS section of `ghostex agents --help` has the full list.
+
 ## Check what another session is doing
 
 Read its conversation, not its screen:

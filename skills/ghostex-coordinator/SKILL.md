@@ -29,3 +29,7 @@ so it always matches the Ghostex you run on.
   and after a compaction or clear.
 - If `ghostex coordinator guide` fails, tell the user you could not load your playbook and what the
   command answered. Do not work from memory of an earlier playbook.
+- A thread can run on another computer: `ghostex coordinator start-thread --computer <name>`
+  (`ghostex computers` lists them). It reports back like a local thread and needs that computer
+  connected in Settings > Remote > Remote machines with Agent access on, and Ghostex 10.44 or later
+  on both computers. Your guide's "Briefing a thread" says when to use it.
