@@ -13,7 +13,7 @@ use crate::ghostex_cli::{
     rpc::{call_gxserver_rpc, CliError, CliResult},
 };
 
-const USAGE: &str = "Usage: ghostex coordinator item [add|now|step|ask|wait|done|drop|list] … (see ghostex coordinator --help, WORK ITEMS)";
+const USAGE: &str = "Usage: ghostex work item [add|now|step|ask|wait|done|drop|list] … (see ghostex work --help; ghostex coordinator item is the same command)";
 
 /// The statuses in the order `list` prints them, with their headings.
 const HEADINGS: [(&str, &str); 7] = [
@@ -346,7 +346,7 @@ pub(super) fn item(args: &[String], parsed: &ParsedArgs) -> CliResult<()> {
         }
         "settle" => println!("{name}: ask settled. {}", one_line(&item)),
         "drop" => {
-            println!("{name} dropped. ghostex coordinator item restore {name} brings it back.")
+            println!("{name} dropped. ghostex work item restore {name} brings it back.")
         }
         _ => println!("{name} {}", one_line(&item)),
     }
@@ -647,7 +647,7 @@ fn print_list(work: &Value, all: bool) {
         }
     }
     if empty {
-        println!("No work items yet: ghostex coordinator item add \"<line of work>\" starts one.");
+        println!("No work items yet: ghostex work item add \"<line of work>\" starts one.");
     }
     let notice = agents::text(work, "idleNotice");
     if !notice.is_empty() {

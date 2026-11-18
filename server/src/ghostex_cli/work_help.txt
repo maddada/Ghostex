@@ -1,0 +1,58 @@
+Usage:
+  ghostex work list [<W7>] [--all] [--json] [--session <ref>]
+  ghostex work item add "<line of work>" [--now "<line>"] [--later next|held|parked|backlog]
+                        [--thread <session-ref>]... [--link <url|path>] [--release <name>] [--json]
+  ghostex work item now <W7> "<where it stands>" [--thread <session-ref>]... [--json]
+  ghostex work item step <W7> "<step>" [--done] [--chore] [--json]
+  ghostex work item ask <W7> "<title>" [--detail "<the rest>"]
+                        [--answers "A,B" | --answer "A" --answer "B"] [--recommended B]
+                        [--holds] [--steps <file|url>] [--tag Q12] [--json]
+  ghostex work item ask <W7> (--done <Q12> | --withdraw <Q12>) [--json]
+  ghostex work item wait <W7> --on <W8|Q12|release|ota|rebuild|"words">... [--until <when>] ["<line>"] [--json]
+  ghostex work item done <W7> ["<the one line worth keeping>"] [--json]
+  ghostex work item drop <W7> [--json]
+  ghostex work item restore <W7> [--json]
+  ghostex work item edit <W7> [--title "<name>"] [--status <status>] [--link <url|path>]
+                        [--thread <session-ref>]... [--detach <session-ref>]... [--json]
+  ghostex work item delivered <release|ota|rebuild> [<name>] [--json]
+  ghostex work topic ["<one line>"] [--clear] [--json] [--session <ref>]
+  ghostex work next-tag [--json] [--session <ref>]
+
+Work items: one item per line of work, named the way the user would name it,
+as W<number>. The Work panel (the Work button in the window's header) lists
+them by who has the ball: Needs you, Blocked, In progress, Waiting, Later and
+Finished today, under the session's Topic. What an item asks of the user (item
+ask) sits as a row above their chat box with its answers, Reply and Dismiss;
+their answer arrives as "W7 Q12: <answer>".
+
+Who has them:
+  A coordinator keeps its items with these commands (ghostex coordinator item
+  is the same command; ghostex coordinator --help, WORK ITEMS, has the full
+  rules). An ordinary session keeps its own while the Work items extension is
+  on (Settings > Extensions); with it off these commands refuse in an ordinary
+  session and nothing changes. A coordinator's thread keeps none: its
+  coordinator's Work panel tracks it, and ghostex needs-you puts what it needs
+  from the user before them.
+
+The commands act on the session you run them in; --session <ref> names
+another one (from your own terminal, for example).
+
+add starts an item: Later until something moves it, In progress with --now.
+now says where it stands, in one line that replaces the last: never append.
+step records a step (--done when it is; --chore keeps a test run out of sight).
+ask puts a question or a task before the user with a question tag: a short
+plain title, the rest in --detail, one-click answers with --answers and
+--recommended, --holds when the work stops until they answer. next-tag prints
+the next free tag. wait says what it waits on: another item, a question, an
+event or words. done finishes it with the one line worth keeping; drop takes
+it off (restore brings it back for 7 days).
+--thread attaches another session working on it: the item then shows that
+session's live state, and opens it in one click.
+
+topic prints the line at the top of the Work panel, or sets it: what this
+session is about, in one line. A topic the user wrote stays theirs: setting
+another is refused, so ask them instead.
+
+Leading another session: send it work with ghostex agents send, attach it to
+the item with --thread, and use agents send --with-next for a note that should
+wait for that session's next message instead of starting a turn by itself.

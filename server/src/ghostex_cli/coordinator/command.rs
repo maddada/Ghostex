@@ -98,16 +98,18 @@ pub(super) fn resolve_thread_session(reference: &str, flags: &Flags) -> CliResul
 
 /// The coordinator a command acts on: `--coordinator <ref>` (or the alias `--orchestrator <ref>`),
 /// else the calling session.
-pub(super) fn target_coordinator(parsed: &ParsedArgs) -> CliResult<(Value, Flags)> {
+pub(crate) fn target_coordinator(parsed: &ParsedArgs) -> CliResult<(Value, Flags)> {
     let base = server_flags(&parsed.flags);
+    // `--session` is `ghostex work`'s name for it: work items are any session's (work.rs).
     match flag_text(&parsed.flags, "coordinator")
         .or_else(|| flag_text(&parsed.flags, "orchestrator"))
+        .or_else(|| flag_text(&parsed.flags, "session"))
     {
         Some(reference) => resolve_session(&reference, &base),
         None => {
             let caller = agents::caller().map_err(|error| {
                 CliError::Other(format!(
-                    "{error} Outside a coordinator session, pass --coordinator <ref>."
+                    "{error} Outside an agent session, pass --session <ref> (or --coordinator <ref>)."
                 ))
             })?;
             let flags = agents::inventory_flags(&base, agents::text(&caller, "globalRef"))?;

@@ -7,4 +7,4 @@ mod playbook;
 mod sleep_threads;
 mod threads;
 
-pub(super) use command::{create_coordinator, run};
+pub(super) use command::{create_coordinator, run, target_coordinator as target_session};

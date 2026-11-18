@@ -270,6 +270,10 @@ pub fn usage() -> String {
             "Put a step only the user can do (a sudo command, a tap on their phone, a sign-in, a check by eye) above this session's chat box as a to-do with a Done button; it stays until they press Done or you clear it, and their answer arrives as \"Q61: Done\". Add one without being asked whenever such a step blocks your work",
         ),
         format_help_command(
+            "work item add|now|step|ask|wait|done|drop|list … | work topic [\"one line\"] | work next-tag",
+            "Keep this session's work items and its Topic in the Work panel (ghostex coordinator item is the same command); an ordinary session keeps its own while the Work items extension is on. ghostex work --help has the rules",
+        ),
+        format_help_command(
             "secret providers [list|add --name text --account text|remove <id>|check --provider id --reference op://…]",
             "List, add, remove or test the 1Password accounts Ghostex reads saved keys from (Settings > Secrets); check says only whether a reference can be read, never its value",
         ),

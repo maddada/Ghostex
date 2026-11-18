@@ -92,6 +92,7 @@ mod visual_page_check;
 mod voice;
 pub mod wait;
 pub mod web;
+mod work;
 mod work_mode;
 mod work_source;
 mod workspace;
@@ -193,6 +194,7 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "manage-beads",
     "notify",
     "needs-you",
+    "work",
     "secret",
     "secrets",
     "visual",
@@ -504,6 +506,7 @@ fn is_known_command(name: &str) -> bool {
         "feedback",
         "notify",
         "needs-you",
+        "work",
         "secret",
         "secrets",
         "show",
@@ -1060,6 +1063,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "notify" => notify::notify_command(args),
         "secret" | "secrets" => secret::secret_command(args),
         "needs-you" => needs_you::needs_you_command(args),
+        "work" => work::work_command(args),
         "feedback" => feedback::feedback_command(args),
         "show" => show::show_command(args),
         "page" => page::page_command(args),
