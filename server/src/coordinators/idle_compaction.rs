@@ -58,6 +58,15 @@ pub fn idle_compacted_after_turn_end(session: &Value) -> bool {
     answer
 }
 
+/// BLOCKING (a tail read). The same answer for a transcript file, uncached: the hook-free
+/// observer reads it once per busy stint it holds back (hookless_activity/claude.rs).
+pub(crate) fn transcript_ends_with_idle_compaction(path: &Path) -> bool {
+    std::fs::metadata(path)
+        .ok()
+        .and_then(|metadata| read_tail(path, metadata.len()))
+        .is_some_and(|tail| ends_with_idle_compaction(&tail))
+}
+
 fn read_tail(path: &Path, length: u64) -> Option<String> {
     let mut file = std::fs::File::open(path).ok()?;
     file.seek(SeekFrom::Start(length.saturating_sub(TAIL_BYTES)))

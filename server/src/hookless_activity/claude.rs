@@ -78,6 +78,24 @@ pub(super) struct ClaudeObserver {
     /// Where each followed pane's transcript was last read, for the turns the record skips
     /// (claude_turns.rs).
     cursors: HashMap<(String, String), TurnCursor>,
+    /// Busy stints not reported yet because they may be Claude's idle compaction, with the
+    /// transcript's length when the stint began (`may_be_idle_compaction`).
+    held_busy: HashMap<(String, String), (PathBuf, u64)>,
+}
+
+/// Claude compacts an idle conversation by itself about 54 minutes after its last request (90% of
+/// the one-hour prompt cache), never sooner, so a busy record whose transcript has been quiet less
+/// than this is a turn.
+const IDLE_COMPACTION_QUIET: Duration = Duration::from_secs(30 * 60);
+
+/// CDXC:Coordinators 2026-11-18 WHY:
+/// Claude Code 2.1.326 compacts an idle conversation on its own (about 55 minutes after the turn ended, "Compacted while idle, before the prompt cache expired") and its session record says `busy` for the whole minute it takes, while its transcript gains nothing until the compaction is written at the end and no hook but `SessionStart:compact` fires. The observer read that `busy` as a new prompt (UserPromptSubmit), so finished sessions went working at the compaction's start, and the compaction's end settled as an automatic PostCompact, which leaves activity alone because an automatic compaction usually sits inside a running turn. Finished coordinator threads therefore stayed working for good (no `coordinator resolve`, stall nudges, and a second "finished its turn" report with no final message to read; G734e and G1ur9 on 2026-11-18). A busy record whose transcript has been quiet for half an hour is therefore held back: a real prompt writes its row at once and is reported on the next pass, and a stint that ends with only an idle compaction after a finished turn reports nothing, so the session keeps the state its finished turn left.
+/// SEE-ALSO: server/src/coordinators/idle_compaction.rs (the transcript shape).
+fn may_be_idle_compaction(transcript: Option<PathBuf>) -> Option<(PathBuf, u64)> {
+    let path = transcript?;
+    let metadata = std::fs::metadata(&path).ok()?;
+    let quiet = metadata.modified().ok()?.elapsed().ok()?;
+    (quiet >= IDLE_COMPACTION_QUIET).then(|| (path, metadata.len()))
 }
 
 pub(super) fn session_dirs(home: &Path) -> Vec<PathBuf> {
@@ -428,9 +446,30 @@ impl ClaudeObserver {
                     ));
                 }
                 self.reminders.remove(&pane);
+                self.held_busy.remove(&pane);
                 events.push(start(same_process));
                 events.extend(started_turn());
                 continue;
+            }
+            // A held busy stint (`may_be_idle_compaction`): reported once its transcript shows a
+            // turn, never when all it wrote is an idle compaction.
+            if let Some((path, held_length)) = self.held_busy.get(&pane).cloned() {
+                let turn_written = std::fs::metadata(&path)
+                    .is_ok_and(|metadata| metadata.len() != held_length)
+                    && !crate::coordinators::transcript_ends_with_idle_compaction(&path);
+                if next.status == "busy" {
+                    if turn_written {
+                        self.held_busy.remove(&pane);
+                        events.push(make("UserPromptSubmit"));
+                    }
+                    continue;
+                }
+                self.held_busy.remove(&pane);
+                if turn_written {
+                    events.push(make("UserPromptSubmit"));
+                } else if next.status == "idle" {
+                    continue;
+                }
             }
             if previous.status == next.status && previous.waiting_for == next.waiting_for {
                 continue;
@@ -451,7 +490,12 @@ impl ClaudeObserver {
                 {
                     events.push(make("SessionBusy").activity_only())
                 }
-                "busy" => events.push(make("UserPromptSubmit")),
+                "busy" => match may_be_idle_compaction(transcript()) {
+                    Some(held) => {
+                        self.held_busy.insert(pane.clone(), held);
+                    }
+                    None => events.push(make("UserPromptSubmit")),
+                },
                 "waiting" => {
                     if let Some(name) = waiting_event(next.waiting_for.as_deref()) {
                         events.push(make(name).with("waitingFor", json!(next.waiting_for)));
@@ -542,6 +586,7 @@ impl ClaudeObserver {
         }
         self.owners.retain(|pid, _| live_pids.contains(pid));
         self.cursors.retain(|pane, _| live_panes.contains(pane));
+        self.held_busy.retain(|pane, _| live_panes.contains(pane));
         events
     }
 
