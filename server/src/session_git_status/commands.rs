@@ -307,12 +307,52 @@ pub(super) fn run_command_bounded(
 }
 
 fn run_command_bounded_keeping_output(
-    mut command: Command,
+    command: Command,
     timeout: Duration,
     reader_grace: Duration,
     abandoned_readers: &'static AtomicUsize,
     keep_failed_output: bool,
 ) -> Option<String> {
+    let (status, output) = run_command_bounded_with_status(
+        command,
+        timeout,
+        reader_grace,
+        abandoned_readers,
+        keep_failed_output,
+    )?;
+    (status.success() || keep_failed_output).then_some(output)
+}
+
+/// A read-only git probe (`run_git_probe_command`'s hardening) that also says how git exited:
+/// `Some((code, stdout))` when it finished (its stdout kept whatever the code), `None` when it
+/// could not run, timed out or its output was abandoned. For a probe whose non-zero exit is an
+/// answer (`git check-ignore` exits 1 when nothing is ignored, 128 when it failed).
+pub fn run_git_probe_command_with_status(cwd: &str, args: &[&str]) -> Option<(i32, String)> {
+    let mut command = Command::new(crate::platform::git_program::git_for_reads());
+    command
+        .args(args)
+        .current_dir(cwd)
+        .env("GIT_OPTIONAL_LOCKS", "0")
+        .env("GIT_TERMINAL_PROMPT", "0");
+    let (status, output) = run_command_bounded_with_status(
+        command,
+        GIT_COMMAND_TIMEOUT,
+        COMMAND_READER_GRACE,
+        &ABANDONED_COMMAND_READERS,
+        true,
+    )?;
+    Some((status.code().unwrap_or(-1), output))
+}
+
+/// The bounded run itself: the exit status and, when it succeeded or `keep_failed_output`, its
+/// stdout (empty otherwise, without waiting for the reader).
+fn run_command_bounded_with_status(
+    mut command: Command,
+    timeout: Duration,
+    reader_grace: Duration,
+    abandoned_readers: &'static AtomicUsize,
+    keep_failed_output: bool,
+) -> Option<(std::process::ExitStatus, String)> {
     command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -348,14 +388,15 @@ fn run_command_bounded_keeping_output(
     receiver is dropped here: the draining thread ends with the pipe the tree
     kill just closed, and nothing blocks in the meantime.
     */
-    if !status?.success() && !keep_failed_output {
-        return None;
+    let status = status?;
+    if !status.success() && !keep_failed_output {
+        return Some((status, String::new()));
     }
     let Ok(output) = output_rx.recv_timeout(reader_grace) else {
         abandoned_readers.fetch_add(1, Ordering::Relaxed);
         return None;
     };
-    Some(String::from_utf8_lossy(&output).trim().to_string())
+    Some((status, String::from_utf8_lossy(&output).trim().to_string()))
 }
 
 /// Drains the abandoned-reader count so the refresh pass can log it. Zero on a

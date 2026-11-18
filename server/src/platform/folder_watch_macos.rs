@@ -9,7 +9,7 @@ use std::{
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc, OnceLock, RwLock,
+        Arc, Mutex, OnceLock, RwLock,
     },
 };
 
@@ -131,26 +131,41 @@ const K_FS_EVENT_STREAM_EVENT_FLAGS_LOST: u32 = 0x01 | 0x02 | 0x04 | 0x20 | 0x40
 /// (`folder_watch::start_skip_probe`), and installed here; until then, and whenever the list may
 /// be out of date (an ignore rule or a watched Git folder's index written, a `git add -f` or a
 /// checkout among them, or events lost), every change counts, as before, and git is asked again.
-/// `generation` moves each time the list goes out of date, so a probe that began before cannot
-/// mark it current.
+/// `generation` moves each time the list goes out of date, and the list counts only while the
+/// generation its probe began with (`installed`) is the current one, so a probe that began before
+/// cannot make it current. Rules from outside the watched folders (a global excludes file, a
+/// parent repository's `.gitignore`) are picked up by asking again every `REASK_AFTER`.
 struct Signal {
     changed: AtomicBool,
     /// Each skipped folder's real path with a trailing `/`.
     ignored: RwLock<Vec<Vec<u8>>>,
-    /// The skip list is not known to be current: nothing is skipped.
-    stale: AtomicBool,
     generation: AtomicU64,
+    /// The generation the installed list's probe began with.
+    installed: AtomicU64,
     probing: AtomicBool,
+    /// When the list was last installed, or a probe git did not answer gave up.
+    asked_at: Mutex<Option<std::time::Instant>>,
+    /// The last probe got no answer from git: wait `RETRY_AFTER` before the next.
+    unanswered: AtomicBool,
     /// The real paths of the watched Git folders' index files.
     index_files: Vec<Vec<u8>>,
     /// Whether this watch skips anything at all (a repository's watch).
     skips: bool,
 }
 
+/// How long after git did not answer a probe before asking again.
+const RETRY_AFTER: std::time::Duration = std::time::Duration::from_secs(30);
+/// How long an installed list is trusted before git is asked again.
+const REASK_AFTER: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+
 impl Signal {
     fn mark_stale(&self) {
-        self.stale.store(true, Ordering::Release);
         self.generation.fetch_add(1, Ordering::AcqRel);
+    }
+
+    /// Whether the installed list is current.
+    fn current(&self) -> bool {
+        self.installed.load(Ordering::Acquire) == self.generation.load(Ordering::Acquire)
     }
 
     /// Whether one event can change a Git answer.
@@ -162,7 +177,7 @@ impl Signal {
             self.mark_stale();
             return true;
         }
-        if !self.stale.load(Ordering::Acquire)
+        if self.current()
             && self
                 .ignored
                 .read()
@@ -196,6 +211,10 @@ impl SkipProbe {
     /// Installs `ignored` (real paths) as the skipped folders; the list counts as current only when
     /// nothing made it stale since the probe began.
     pub(super) fn install(self, ignored: Vec<PathBuf>) {
+        self.signal.unanswered.store(false, Ordering::Release);
+        if let Ok(mut asked_at) = self.signal.asked_at.lock() {
+            *asked_at = Some(std::time::Instant::now());
+        }
         if let Ok(mut list) = self.signal.ignored.write() {
             *list = ignored
                 .iter()
@@ -206,8 +225,16 @@ impl SkipProbe {
                 })
                 .collect();
         }
-        if self.signal.generation.load(Ordering::Acquire) == self.generation {
-            self.signal.stale.store(false, Ordering::Release);
+        self.signal
+            .installed
+            .store(self.generation, Ordering::Release);
+    }
+
+    /// Git did not answer: the list stays as it was, and the next probe waits `RETRY_AFTER`.
+    pub(super) fn unanswered(self) {
+        self.signal.unanswered.store(true, Ordering::Release);
+        if let Ok(mut asked_at) = self.signal.asked_at.lock() {
+            *asked_at = Some(std::time::Instant::now());
         }
     }
 }
@@ -289,9 +316,12 @@ impl FolderWatch {
         let signal = Arc::new(Signal {
             changed: AtomicBool::new(false),
             ignored: RwLock::new(Vec::new()),
-            stale: AtomicBool::new(true),
-            generation: AtomicU64::new(0),
+            // Nothing installed yet: not current until the first probe answers.
+            generation: AtomicU64::new(1),
+            installed: AtomicU64::new(0),
             probing: AtomicBool::new(false),
+            asked_at: Mutex::new(None),
+            unanswered: AtomicBool::new(false),
             index_files: git_folders
                 .iter()
                 .map(|folder| folder.join("index").as_os_str().as_bytes().to_vec())
@@ -378,7 +408,17 @@ impl FolderWatch {
 
     /// The right to ask git for the skip list, when it is not current and no probe runs.
     pub(super) fn skip_probe(&self) -> Option<SkipProbe> {
-        if !self.signal.skips || !self.signal.stale.load(Ordering::Acquire) {
+        if !self.signal.skips {
+            return None;
+        }
+        let asked_at = self.signal.asked_at.lock().ok().and_then(|at| *at);
+        let since_asked = asked_at.map(|at| at.elapsed());
+        let due = if self.signal.unanswered.load(Ordering::Acquire) {
+            since_asked.is_none_or(|since| since >= RETRY_AFTER)
+        } else {
+            !self.signal.current() || since_asked.is_none_or(|since| since >= REASK_AFTER)
+        };
+        if !due {
             return None;
         }
         // Read before the probe starts: a change after this makes its answer stale again.

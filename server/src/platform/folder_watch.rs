@@ -116,9 +116,12 @@ impl<V: Clone> ChangeGatedCache<V> {
         if watch.take_changed() {
             entry.answer = None;
         }
+        // The first probe waits until the stream has settled, like a kept answer (`WATCH_SETTLE`).
         #[cfg(target_os = "macos")]
-        if let Some(probe) = watch.skip_probe() {
-            start_skip_probe(probe, project, git);
+        if now.duration_since(entry.watched_at) >= WATCH_SETTLE {
+            if let Some(probe) = watch.skip_probe() {
+                start_skip_probe(probe, project, git);
+            }
         }
         #[cfg(target_os = "macos")]
         if entry.outside_repository
@@ -280,7 +283,10 @@ fn start_skip_probe(probe: super::folder_watch_macos::SkipProbe, project: &Path,
         .name("git-skip-probe".to_string())
         .spawn(move || {
             let folders = watched_folders(&project, git);
-            probe.install(git_ignored_folders(&project, &folders));
+            match git_ignored_folders(&project, &folders) {
+                Some(ignored) => probe.install(ignored),
+                None => probe.unanswered(),
+            }
         });
     // No thread: nothing is skipped, and the next look tries again.
     drop(spawned);
@@ -288,13 +294,11 @@ fn start_skip_probe(probe: super::folder_watch_macos::SkipProbe, project: &Path,
 
 /// The real paths of `project`'s top-level folders (and `BUILD_FOLDERS`) that git ignores, that
 /// hold no tracked file and that hold none of `watched` (its Git folders): nothing written in them
-/// changes a Git answer. Empty when git cannot say, so every change counts, as before.
+/// changes a Git answer. `None` when git did not answer (the probe is retried after a pause).
 #[cfg(target_os = "macos")]
-fn git_ignored_folders(project: &Path, watched: &[PathBuf]) -> Vec<PathBuf> {
-    use crate::session_git_status::run_git_probe_command;
-    let Some(cwd) = project.to_str() else {
-        return Vec::new();
-    };
+fn git_ignored_folders(project: &Path, watched: &[PathBuf]) -> Option<Vec<PathBuf>> {
+    use crate::session_git_status::{run_git_probe_command, run_git_probe_command_with_status};
+    let cwd = project.to_str()?;
     let mut names: std::collections::BTreeSet<String> =
         BUILD_FOLDERS.iter().map(|name| name.to_string()).collect();
     if let Ok(entries) = std::fs::read_dir(project) {
@@ -307,13 +311,22 @@ fn git_ignored_folders(project: &Path, watched: &[PathBuf]) -> Vec<PathBuf> {
             }
         }
     }
+    // A folder that is a link is left out: git refuses a path through a link (exit 128), which
+    // would cost the whole answer, and FSEvents reports writes there under the link's target,
+    // outside this watch.
+    names.retain(|name| {
+        !std::fs::symlink_metadata(project.join(name))
+            .is_ok_and(|meta| meta.file_type().is_symlink())
+    });
     // One name per line (`-z` needs `--stdin`); a name git quotes simply never matches an event.
     let mut args = vec!["check-ignore".to_string(), "--".to_string()];
     args.extend(names.iter().map(|name| format!("{name}/")));
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
-    // Exits 1 when nothing is ignored: no answer, nothing skipped.
-    let Some(ignored) = run_git_probe_command(cwd, &args) else {
-        return Vec::new();
+    // Exits 1 when nothing is ignored (an answer: skip nothing), 128 when it failed (no answer).
+    let ignored = match run_git_probe_command_with_status(cwd, &args)? {
+        (0, ignored) => ignored,
+        (1, _) => return Some(Vec::new()),
+        _ => return None,
     };
     let ignored: Vec<&str> = ignored
         .lines()
@@ -321,14 +334,12 @@ fn git_ignored_folders(project: &Path, watched: &[PathBuf]) -> Vec<PathBuf> {
         .filter(|name| !name.is_empty() && !name.contains('/'))
         .collect();
     if ignored.is_empty() {
-        return Vec::new();
+        return Some(Vec::new());
     }
     // A folder holding a tracked file (added with `git add -f`) shows its changes in git.
     let mut args = vec!["ls-files", "-z", "--"];
     args.extend(ignored.iter().copied());
-    let Some(tracked) = run_git_probe_command(cwd, &args) else {
-        return Vec::new();
-    };
+    let tracked = run_git_probe_command(cwd, &args)?;
     // macOS folders ignore case, so `Target` holding a tracked file keeps `target` too.
     let tracked: std::collections::HashSet<String> = tracked
         .split('\0')
@@ -336,24 +347,24 @@ fn git_ignored_folders(project: &Path, watched: &[PathBuf]) -> Vec<PathBuf> {
         .filter(|name| !name.is_empty())
         .map(str::to_ascii_lowercase)
         .collect();
-    let Ok(root) = std::fs::canonicalize(project) else {
-        return Vec::new();
-    };
+    let root = std::fs::canonicalize(project).ok()?;
     let watched: Vec<PathBuf> = watched
         .iter()
         .filter_map(|folder| std::fs::canonicalize(folder).ok())
         .collect();
-    ignored
-        .into_iter()
-        .filter(|name| !tracked.contains(&name.to_ascii_lowercase()))
-        .map(|name| root.join(name))
-        // A linked worktree's Git folder can sit inside an ignored folder; its writes count.
-        .filter(|folder| {
-            !watched
-                .iter()
-                .any(|git| git != &root && git.starts_with(folder))
-        })
-        .collect()
+    Some(
+        ignored
+            .into_iter()
+            .filter(|name| !tracked.contains(&name.to_ascii_lowercase()))
+            .map(|name| root.join(name))
+            // A linked worktree's Git folder can sit inside an ignored folder; its writes count.
+            .filter(|folder| {
+                !watched
+                    .iter()
+                    .any(|git| git != &root && git.starts_with(folder))
+            })
+            .collect(),
+    )
 }
 
 /// The folder a one-line Git pointer file names after `prefix`, resolved against `base` when relative.
