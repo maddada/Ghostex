@@ -444,6 +444,10 @@ pub(crate) mod message {
         json!({ "type": "closeGroup", "groupId": group_id })
     }
 
+    pub(crate) fn ungroup_group(group_id: &str) -> Value {
+        json!({ "type": "ungroupGroup", "groupId": group_id })
+    }
+
     pub(crate) fn copy_project_path(group_id: &str) -> Value {
         json!({ "type": "copyWorkspaceProjectPathForGroup", "groupId": group_id })
     }

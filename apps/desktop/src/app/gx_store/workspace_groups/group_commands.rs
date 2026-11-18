@@ -1,4 +1,4 @@
-//! New Group, Rename and Close Group, performed on the one writer of the workspace session groups
+//! New Group, Rename, Ungroup and Close Group, performed on the one writer of the workspace session groups
 //! document instead of in the old runtime's copy of it.
 //!
 //! The planner is gx-core's (`workspace_groups/group_commands.rs`); this file performs it: the
@@ -21,7 +21,7 @@ use super::super::sidebar_drop_queue::DropQueueNeed;
 use crate::GhostexGpuiApp;
 
 impl GhostexGpuiApp {
-    /// A wrapped `createGroup`, `renameGroup` (with a title) or `closeGroup`. Returns whether it was
+    /// A wrapped `createGroup`, `renameGroup` (with a title), `ungroupGroup` or `closeGroup`. Returns whether it was
     /// answered here.
     pub(crate) fn gx_store_run_group_command(
         &mut self,
@@ -121,31 +121,50 @@ impl GhostexGpuiApp {
                 self.gx_store.session_close_confirmed = confirmed;
                 self.gx_store_edit_workspace_groups(document, cx);
                 if let Some(project) = activate_project_group {
-                    match project.machine {
-                        // `focusGroup` with the project's own group is the runtime's
-                        // `activeGroupId = project group` plus the publish.
-                        MachineId::Local => self.dispatch_native_sidebar_command(
-                            json!({ "type": "focusGroup", "groupId": project.to_sidebar_group_id() }),
-                            cx,
-                        ),
-                        // A remote project's `focusGroup` attaches a session, which closing a
-                        // group never did; the store's own active group moves instead.
-                        MachineId::Remote(_) => {
-                            let output = self.gx_store.core.handle(
-                                ghostex_gx_core::Event::Intent(ghostex_gx_core::Intent::FocusProject {
-                                    project,
-                                }),
-                                super::super::host::now_ms(),
-                            );
-                            if !output.changes.is_empty() {
-                                self.gx_store.sidebar_list.note_changes(&output.changes);
-                                self.gx_store_update_sidebar_list(cx);
-                            }
-                        }
-                    }
+                    self.gx_store_activate_project_group(project, cx);
+                }
+            }
+            GroupCommandPlan::Ungroup {
+                document,
+                activate_project_group,
+            } => {
+                self.gx_store_edit_workspace_groups(document, cx);
+                if let Some(project) = activate_project_group {
+                    self.gx_store_activate_project_group(project, cx);
                 }
             }
         }
         true
+    }
+
+    /// The project's own group becomes active, after the active user-made group went (Close Group
+    /// and Ungroup).
+    fn gx_store_activate_project_group(
+        &mut self,
+        project: ghostex_gx_core::ProjectKey,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        match project.machine {
+            // `focusGroup` with the project's own group is the runtime's
+            // `activeGroupId = project group` plus the publish.
+            MachineId::Local => self.dispatch_native_sidebar_command(
+                json!({ "type": "focusGroup", "groupId": project.to_sidebar_group_id() }),
+                cx,
+            ),
+            // A remote project's `focusGroup` attaches a session, which closing a
+            // group never did; the store's own active group moves instead.
+            MachineId::Remote(_) => {
+                let output = self.gx_store.core.handle(
+                    ghostex_gx_core::Event::Intent(ghostex_gx_core::Intent::FocusProject {
+                        project,
+                    }),
+                    super::super::host::now_ms(),
+                );
+                if !output.changes.is_empty() {
+                    self.gx_store.sidebar_list.note_changes(&output.changes);
+                    self.gx_store_update_sidebar_list(cx);
+                }
+            }
+        }
     }
 }

@@ -1,5 +1,5 @@
-//! A user-made group's own commands: New Group (a project's menu), Rename (the inline editor) and
-//! Close Group (a group's menu, after the native confirm).
+//! A user-made group's own commands: New Group (a project's menu), Rename (the inline editor),
+//! Ungroup and Close Group (a group's menu; Close Group after the confirm).
 //!
 //! CDXC:Sessions 2026-09-25 WHY:
 //! These three were the last edits of the workspace session groups document the old runtime made
@@ -26,7 +26,8 @@ use super::document::WorkspaceGroupsDocument;
 use super::edits::WORKSPACE_SESSION_GROUP_MAX_COUNT;
 
 /// The command types this file answers.
-const GROUP_COMMAND_MESSAGE_TYPES: &[&str] = &["createGroup", "renameGroup", "closeGroup"];
+const GROUP_COMMAND_MESSAGE_TYPES: &[&str] =
+    &["createGroup", "renameGroup", "closeGroup", "ungroupGroup"];
 
 /// What the host does for one group command, in order.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -45,6 +46,13 @@ pub enum GroupCommandPlan {
     /// project's own group active.
     Close {
         member_session_ids: Vec<String>,
+        document: WorkspaceGroupsDocument,
+        activate_project_group: Option<ProjectKey>,
+    },
+    /// Ungroup: write the document without the group, its sessions left open (they fall back to
+    /// the project's own rows), then, when it was the active group, make the project's own group
+    /// active, as Close Group does.
+    Ungroup {
         document: WorkspaceGroupsDocument,
         activate_project_group: Option<ProjectKey>,
     },
@@ -76,6 +84,7 @@ pub fn plan_group_command(
             plan_rename(document, group_id, title)
         }
         "closeGroup" => plan_close(document, active_group, group_id),
+        "ungroupGroup" => plan_ungroup(document, active_group, group_id),
         _ => return None,
     })
 }
@@ -128,6 +137,30 @@ fn plan_rename(
     match document.rename_subgroup(&project.to_workspace_project_id(), &subgroup, title) {
         Some(document) => GroupCommandPlan::Rename { document },
         None => GroupCommandPlan::Nothing,
+    }
+}
+
+/// Ungroup: the group goes and its sessions stay open, back among the project's own rows. Nothing
+/// is written for a group that is already gone.
+fn plan_ungroup(
+    document: &WorkspaceGroupsDocument,
+    active_group: Option<&ActiveGroup>,
+    group_id: Option<&str>,
+) -> GroupCommandPlan {
+    let Some((project, subgroup)) = group_id.and_then(parse_workspace_subgroup_id) else {
+        return GroupCommandPlan::Nothing;
+    };
+    let Some(next) = document.remove_subgroup(&project.to_workspace_project_id(), &subgroup) else {
+        return GroupCommandPlan::Nothing;
+    };
+    let was_active = matches!(
+        active_group,
+        Some(ActiveGroup::Subgroup { project: active_project, group_id: active_group_id })
+            if *active_project == project && *active_group_id == subgroup
+    );
+    GroupCommandPlan::Ungroup {
+        document: next,
+        activate_project_group: was_active.then_some(project),
     }
 }
 

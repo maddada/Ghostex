@@ -74,6 +74,15 @@ pub fn project_menu(input: &ProjectMenuInput<'_>) -> Vec<MenuItem> {
             .with_disabled(if wake { !sleeping } else { !running }),
         );
         menu.push(MenuItem::separator());
+        // CDXC:ContextMenus 2026-11-18 DECISION:
+        // User: "allow me to close the group without closing the ones inside (call it ungroup)".
+        // Ungroup, above Close, removes the group without asking; its sessions stay open and go
+        // back to the project's own rows (gx-core workspace_groups/group_commands.rs `plan_ungroup`).
+        menu.push(MenuItem::row(
+            "Ungroup",
+            "folder-open",
+            MenuCommand::command(message::ungroup_group(group_id)),
+        ));
         menu.push(MenuItem {
             label: Some("Close".to_string()),
             icon: Some("x".to_string()),
