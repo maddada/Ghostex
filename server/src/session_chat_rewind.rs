@@ -1117,11 +1117,21 @@ impl RewindDriver<'_> {
     /// Verify the confirmation dialog is quoting the target prompt, then move
     /// the menu cursor onto the option labelled exactly `Restore conversation`.
     async fn confirm(&self, plan: &RewindPlan) -> std::result::Result<(), DomainStateError> {
+        /*
+        CDXC:SessionChat 2026-11-18 WHY:
+        A capture can land while Claude is still painting the confirmation stage, so its quote line can be cut mid-word ("…its own Bash call: sle") with no ellipsis. Judging that frame refused a rewind to the right prompt as a dialog mismatch (seen on a rewind right after an interrupt). Like a list move, the quote and the option menu count only once two consecutive captures agree on them.
+        */
+        let mut previous_quote: Option<Vec<String>> = None;
         let quoted = self
             .wait_for("confirmation", |screen| {
                 let lines = screen_lines(screen);
                 let region = rewind_stage_region(&lines, is_confirm_subtitle)?;
-                confirm_quoted_lines(region)
+                let quoted = confirm_quoted_lines(region)?;
+                if previous_quote.as_ref() == Some(&quoted) {
+                    return Some(quoted);
+                }
+                previous_quote = Some(quoted);
+                None
             })
             .await?;
         let confirm_cap = plan
@@ -1138,15 +1148,20 @@ impl RewindDriver<'_> {
             ));
         }
         for _ in 0..REWIND_MENU_MAX_PRESSES {
+            let mut previous_options: Option<Vec<RewindMenuOption>> = None;
             let options = self
                 .wait_for("confirmation", |screen| {
                     let lines = screen_lines(screen);
                     let region = rewind_stage_region(&lines, is_confirm_subtitle)?;
                     let options = parse_menu_options(region);
-                    options
-                        .iter()
-                        .any(|option| option.selected)
-                        .then_some(options)
+                    if !options.iter().any(|option| option.selected) {
+                        return None;
+                    }
+                    if previous_options.as_ref() == Some(&options) {
+                        return Some(options);
+                    }
+                    previous_options = Some(options);
+                    None
                 })
                 .await?;
             let selected = options
