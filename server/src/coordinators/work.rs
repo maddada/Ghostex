@@ -158,6 +158,14 @@ fn project_deliveries(project_id: &str) -> ProjectDeliveries {
         .unwrap_or_default()
 }
 
+/// The delivery events of a project as one text, for a cache that rebuilds when one happens
+/// (session_work.rs).
+pub(super) fn deliveries_stamp(project_id: &str) -> String {
+    let sorted: std::collections::BTreeMap<String, Delivery> =
+        project_deliveries(project_id).into_iter().collect();
+    serde_json::to_string(&sorted).unwrap_or_default()
+}
+
 /// Records that an event happened now for the coordinator's project (`item delivered`).
 fn record_delivery(
     db: &Connection,

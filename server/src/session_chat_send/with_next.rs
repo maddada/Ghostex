@@ -114,10 +114,14 @@ fn hold(
             .filter_map(|message| message["text"].as_str())
             .map(str::len)
             .sum();
-        if held.len() >= MAX_HELD || bytes + text.len() > MAX_HELD_BYTES {
+        if held.len() >= MAX_HELD {
             return Err(DomainStateError::bad_request(format!(
-                "This session already holds {} messages for its next one ({} KB at most in all). Send this one without --with-next, or say it in fewer, shorter messages.",
-                MAX_HELD,
+                "This session already holds {MAX_HELD} messages for its next one, the most it holds. Send this one without --with-next, or say it in fewer messages."
+            )));
+        }
+        if bytes + text.len() > MAX_HELD_BYTES {
+            return Err(DomainStateError::bad_request(format!(
+                "This message would take what this session holds for its next one past {} KB. Send it without --with-next, or make it shorter.",
                 MAX_HELD_BYTES / 1024
             )));
         }

@@ -147,9 +147,33 @@ struct SessionWorkCache {
     excluded: HashSet<SessionKey>,
     /// What each value was built from, and when: an unchanged one is kept, rebuilt at least every
     /// minute for its clock-dependent parts (Finished today).
-    inputs: HashMap<SessionKey, (Vec<WorkItem>, Value, std::time::Instant)>,
-    /// The tick has filled it once: before that, nothing counts as changed for the extension.
+    inputs: HashMap<SessionKey, BuiltFrom>,
+    /// Keys with items or a Topic whose session row is gone, and when that was last seen: not
+    /// looked up again for a minute.
+    missing: HashMap<SessionKey, std::time::Instant>,
+    /// The tick has filled it once.
     primed: bool,
+}
+
+/// What one session's `sessionWork` was built from: its items and Topic, the question tags its
+/// chat asked (a wait on one clears when it is answered) and its project's delivery events (a
+/// wait on a release clears when one happens), and when.
+#[derive(Clone)]
+struct BuiltFrom {
+    items: Vec<WorkItem>,
+    topic: Value,
+    asked: Vec<(String, bool)>,
+    deliveries: String,
+    at: std::time::Instant,
+}
+
+impl BuiltFrom {
+    fn same_inputs(&self, other: &BuiltFrom) -> bool {
+        self.items == other.items
+            && self.topic == other.topic
+            && self.asked == other.asked
+            && self.deliveries == other.deliveries
+    }
 }
 
 /// How long a session's work built from unchanged inputs is kept.
@@ -168,7 +192,7 @@ pub fn take_summary_changes() -> Vec<SessionKey> {
 }
 
 /// Whether the extension is on, read again only when its state file changed.
-fn extension_on_cached() -> bool {
+pub(super) fn extension_on_cached() -> bool {
     static SEEN: Mutex<Option<(Option<std::time::SystemTime>, bool, bool)>> = Mutex::new(None);
     let paths = crate::paths::get_gxserver_paths(None);
     let modified = std::fs::metadata(&paths.extensions_store_file)
@@ -193,8 +217,24 @@ fn extension_on_cached() -> bool {
 }
 
 /// This computer's sessions that are threads of a coordinator on another computer
-/// (`REMOTE_COORDINATOR_THREAD_KEY`): their coordinator keeps their work.
+/// (`REMOTE_COORDINATOR_THREAD_KEY`): their coordinator keeps their work. Read again once a minute,
+/// not every tick (a thread linked since is refused by `require_session_work` meanwhile).
 fn remote_threads(db: &Connection) -> Vec<SessionKey> {
+    static READ: Mutex<Option<(std::time::Instant, Vec<SessionKey>)>> = Mutex::new(None);
+    let Ok(mut read) = READ.lock() else {
+        return read_remote_threads(db);
+    };
+    if let Some((at, keys)) = read.as_ref() {
+        if at.elapsed() < REBUILD_EVERY {
+            return keys.clone();
+        }
+    }
+    let keys = read_remote_threads(db);
+    *read = Some((std::time::Instant::now(), keys.clone()));
+    keys
+}
+
+fn read_remote_threads(db: &Connection) -> Vec<SessionKey> {
     let pattern = format!("%{}%", super::REMOTE_COORDINATOR_THREAD_KEY);
     let Ok(mut statement) = db.prepare_cached(
         "SELECT projectId, sessionId FROM sessions WHERE runtimeSettingsJson LIKE ?1",
@@ -322,36 +362,57 @@ pub(super) fn refresh_session_work(
             keys.insert((project_id.to_string(), session_id.to_string()));
         }
     }
-    let Ok(mut cache) = cache().lock() else {
-        return Vec::new();
+    // What the last build left, taken under the lock; the build itself runs without it, so the
+    // frame builders never wait on it.
+    let (mut previous_inputs, previous_values, mut missing) = match cache().lock() {
+        Ok(mut cache) => (
+            std::mem::take(&mut cache.inputs),
+            cache.values.clone(),
+            std::mem::take(&mut cache.missing),
+        ),
+        Err(_) => return Vec::new(),
     };
-    let mut previous_inputs = std::mem::take(&mut cache.inputs);
+    missing.retain(|_, at| at.elapsed() < REBUILD_EVERY);
     let mut inputs = HashMap::new();
     let mut values = HashMap::new();
     if enabled {
         for key in keys.into_iter().filter(|key| !excluded.contains(key)) {
-            let own = items.get(&key).cloned().unwrap_or_default();
-            let topic = topic_in(topics, &key);
-            let kept = previous_inputs.remove(&key).filter(|(was, was_topic, at)| {
-                *was == own && *was_topic == topic && at.elapsed() < REBUILD_EVERY
-            });
-            let kept_value = kept.as_ref().and_then(|_| cache.values.get(&key).cloned());
-            let (value, at) = match (kept, kept_value) {
-                (Some((_, _, at)), Some(value)) => (value, at),
-                _ => {
+            if missing.contains_key(&key) {
+                continue;
+            }
+            let mut asked: Vec<(String, bool)> =
+                crate::session_chat_open_questions::asked_question_tags(&key.0, &key.1)
+                    .into_iter()
+                    .collect();
+            asked.sort();
+            let now = BuiltFrom {
+                items: items.get(&key).cloned().unwrap_or_default(),
+                topic: topic_in(topics, &key),
+                asked,
+                deliveries: super::work::deliveries_stamp(&key.0),
+                at: std::time::Instant::now(),
+            };
+            let kept = previous_inputs
+                .remove(&key)
+                .filter(|was| was.same_inputs(&now) && was.at.elapsed() < REBUILD_EVERY)
+                .and_then(|was| Some((previous_values.get(&key)?.clone(), was)));
+            let (value, built) = match kept {
+                Some(kept) => kept,
+                None => {
                     if !session_row_exists(db, &key) {
+                        missing.insert(key, std::time::Instant::now());
                         continue;
                     }
-                    (
-                        session_value(&own, topic.clone(), &key),
-                        std::time::Instant::now(),
-                    )
+                    (session_value(&now.items, now.topic.clone(), &key), now)
                 }
             };
             values.insert(key.clone(), value);
-            inputs.insert(key, (own, topic, at));
+            inputs.insert(key, built);
         }
     }
+    let Ok(mut cache) = cache().lock() else {
+        return Vec::new();
+    };
     let mut changed: Vec<SessionKey> = if cache.enabled != enabled {
         // The Work button comes or goes: the chats with work republish now, the rest pick it up
         // with their next frame.
@@ -372,23 +433,28 @@ pub(super) fn refresh_session_work(
     };
     changed.sort();
     changed.dedup();
-    if cache.primed {
+    // The extension's list hears of every session whose work in short changed, and of every one
+    // with work on the first fill (it may have drawn before this gxserver started).
+    let moved: Vec<SessionKey> = if cache.primed {
         let summary =
             |values: &HashMap<SessionKey, Value>, key: &SessionKey| values.get(key).map(summary_of);
-        let moved: Vec<SessionKey> = changed
+        changed
             .iter()
             .filter(|key| summary(&cache.values, key) != summary(&values, key))
             .cloned()
-            .collect();
-        if let Ok(mut pending) = SUMMARY_CHANGES.lock() {
-            pending.extend(moved);
-        }
+            .collect()
+    } else {
+        values.keys().cloned().collect()
+    };
+    if let Ok(mut pending) = SUMMARY_CHANGES.lock() {
+        pending.extend(moved);
     }
     *cache = SessionWorkCache {
         enabled,
         values,
         excluded,
         inputs,
+        missing,
         primed: true,
     };
     changed
