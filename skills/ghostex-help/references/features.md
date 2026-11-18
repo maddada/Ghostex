@@ -947,10 +947,15 @@ Click a project header (or the chevron beside it) or a group header to expand
 or collapse it; rename a group from its right-click menu.
 Sessions groups gather some of a project's sessions under a header of their
 own, with a folder icon. To make one, right-click a session and choose
-Advanced > Move to New Group. Once the project has a sessions group, the
+Advanced > Move to New Group (or New Sessions Group on the Move to Group
+page): the new group's name opens for renaming with the default name
+selected, so type a name and press Enter, or press Escape to keep it. Once
+the project has a sessions group, the
 session menu's Advanced > Move to Group page lists the project's groups: pick
 one to move the session there, or Remove from Group to put it back in the
-project's own list. Dragging a session onto another of its project's groups,
+project's own list. A group's right-click menu has Ungroup, which removes the
+group and keeps its sessions open in the project's own list, and Close, which
+asks first and closes the group's sessions too. Dragging a session onto another of its project's groups,
 or onto the project's list, does the same (its header, its rows, or a heading
 such as the project's Sessions heading, even while that heading is collapsed;
 a pinned session stays pinned), and dropping it in the empty space
