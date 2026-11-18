@@ -4261,8 +4261,8 @@ version of the Projects features in Cursor and Claude Code.
 - **The Work panel**: on the computer, the **Work** button in the window's header
   opens it, with a count of what waits on you; it sits beside Session details,
   and the two share the spot beside the chat, one at a time (opening one puts
-  the other away). The button in the header above the chat box opens it too
-  (that header carries the counts); on the phone the **Work** pill does, reading
+  the other away). The counts in the bar above the chat box open it at their
+  group; on the phone the **Work** pill opens it, reading
   "Work · 2 need you · 4 in progress" while the row has room. At the top of the
   panel, the **Topic** says in one line what the session is about: click it to
   rewrite it (Enter or a click away saves, Escape cancels); a Topic you wrote

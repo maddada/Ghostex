@@ -992,9 +992,10 @@ impl NativeChatView {
             .when(status_card.is_none(), |head| {
                 head.child(div().flex_1().min_w(px(8.0 * s)))
             });
-        if board.is_object() {
-            head = head.child(self.work_dock_list_button(p, cx));
-        }
+        // CDXC:Coordinators 2026-11-18 DECISION:
+        // User, after the header's Work button came (layout B): remove the Work items button this
+        // bar had, so the Work panel has one opener (render/workarea_header/work_button.rs). The
+        // bar's counts still open the panel at their group.
         if collapsible {
             head = head
                 .role(gpui::Role::Button)
@@ -1028,62 +1029,6 @@ impl NativeChatView {
                 }));
         }
         head.into_any_element()
-    }
-
-    /// The header's icon button that opens the work items list, the way the Work pill did: the
-    /// docked list or its floating card, or the columns. Its name is its tooltip.
-    fn work_dock_list_button(&self, p: &ChatAppearance, cx: &mut Context<Self>) -> AnyElement {
-        let s = p.scale;
-        let trigger = super::coordinator_board::BOARD_TRIGGER;
-        let shown = self.chat_menu_is_open(trigger)
-            || self.coordinator_board_docked()
-            || self.chat_menu_is_open(super::coordinator_board::BOARD_COLUMNS_TRIGGER);
-        let fills = p.neutral_button_fills();
-        let bounds = self.pill_bounds.cell(super::coordinator_board::BOARD_MENU);
-        let measured = bounds.clone();
-        div()
-            .id(trigger)
-            .relative()
-            .role(gpui::Role::Button)
-            .aria_label("Work items")
-            .aria_expanded(shown)
-            .w(px(26.0 * s))
-            .h(px(24.0 * s))
-            .flex()
-            .items_center()
-            .justify_center()
-            .flex_shrink_0()
-            .rounded(px(7.0 * s))
-            .chat_cursor_pointer()
-            // A plain button, as the chevron beside it: no fill at rest, the usual fills on hover
-            // and press, and pressed while the list it opens is shown.
-            //
-            // CDXC:Coordinators 2026-11-11 DECISION:
-            // User: "make the button on the right Work items not have bg behind it when not
-            // hovered so it's plain button".
-            .hover(move |style| style.bg(fills.hover))
-            .active(move |style| style.bg(fills.pressed))
-            .when(shown, |button| button.bg(fills.pressed))
-            .tooltip(|window, cx| {
-                gpui_component::tooltip::Tooltip::new("Work items").build(window, cx)
-            })
-            .child(
-                svg()
-                    .path("titlebar/layout-board-split.svg")
-                    .size(px(13.0 * s))
-                    .flex_shrink_0()
-                    .text_color(p.card_muted),
-            )
-            .on_click(cx.listener(move |this, _, window, cx| {
-                cx.stop_propagation();
-                this.toggle_coordinator_board(bounds.get(), window, cx);
-            }))
-            .child(
-                gpui::canvas(move |bounds, _, _| measured.set(bounds), |_, _, _, _| {})
-                    .absolute()
-                    .inset_0(),
-            )
-            .into_any_element()
     }
 
     /// One dock row: its mark, its question on one line, its answers and Reply beside it (folded

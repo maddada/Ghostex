@@ -248,7 +248,7 @@ WORK ITEMS
   thread, a rebuild, a release step or a question is never an item: attach it
   to one (--thread, item step, item ask). The Work panel lists every item by
   who has the ball; what needs the user sits as rows above their chat box,
-  under a header with the counts and the button that opens the panel, where
+  under a header with the counts (the header's Work button opens the panel), where
   they answer, Reply in their own words, Dismiss or Snooze; under the reply
   one line says what the turn changed. An answer or Reply arrives as "W7 Q12: <answer>" and is
   already recorded; a Dismiss withdraws the ask for good. A Needs you item
