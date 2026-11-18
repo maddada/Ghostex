@@ -75,7 +75,7 @@ pub(crate) fn space_membership_menu(
 ///
 /// CDXC:ContextMenus 2026-11-05 DECISION:
 /// User (Q1311): Add to Group's first row is "New Group" (it was New Project Group); a group of a
-/// project's sessions is a sessions group (Move to New Sessions Group on a session).
+/// project's sessions is a sessions group (Move to New Group on a session).
 pub(crate) fn project_membership_menu(
     group_id: &str,
     project_id: Option<&str>,

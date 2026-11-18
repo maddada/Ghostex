@@ -1156,7 +1156,7 @@ The folder is made in Settings > Projects > Global settings > Default projects f
 Project suggests the folder that holds the selected project's folder (else
 `~/dev`), lets you pick any other, and saves the folder your first new project
 is made in as the setting. Local folder and a clone's destination on this
-computer start in that folder too. A sessions group (Move to New Sessions
+computer start in that folder too. A sessions group (Move to New
 Group) only sorts sessions inside a project and never makes a folder; use New
 project folder when the work needs its own folder, and Project Group > New Group
 to group projects together.

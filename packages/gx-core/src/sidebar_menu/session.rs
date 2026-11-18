@@ -435,12 +435,12 @@ fn set_session_tag_value(message: &serde_json::Value) -> Option<Option<String>> 
     )
 }
 
-/// Move to New Sessions Group, or the Move to Group page once the project has a group to move to or
+/// Move to New Group, or the Move to Group page once the project has a group to move to or
 /// the row is in one.
 ///
 /// CDXC:ContextMenus 2026-11-05 DECISION:
 /// User (Q1311): a group of a project's sessions is a "sessions group": its rows read Move to New
-/// Sessions Group and New Sessions Group, and "New Group" names a group of projects (Add to Group).
+/// Group (renamed from Move to New Sessions Group, 2026-11-18: too long) and New Sessions Group, and "New Group" names a group of projects (Add to Group).
 /// A sessions group never makes a folder; a new folder is Add Project's New project folder.
 ///
 /// CDXC:ContextMenus 2026-10-23 WHY:
@@ -457,7 +457,7 @@ fn move_to_group_item(id: &str, moves: Option<&SessionGroupMoves>, stale: bool) 
         )
     };
     let Some(moves) = moves.filter(|moves| !stale && !moves.groups.is_empty()) else {
-        return new_group("Move to New Sessions Group");
+        return new_group("Move to New Group");
     };
     let mut children = vec![new_group("New Sessions Group")];
     for group in &moves.groups {
