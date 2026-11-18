@@ -135,6 +135,12 @@ fn read_where(
         }
         Some(git)
     });
+    // CDXC:SessionChat 2026-11-18 DECISION:
+    // User: "i have email hidden but ur showing it here pls fix" (the where pill's Agent row showed
+    // the account's email under Settings > Accounts > Hide account emails). With it on, the account
+    // and its email leave this machine masked the way every other account surface masks them, so
+    // the raw email never reaches the desktop card or the phone, which has no such setting.
+    let hide_emails = crate::session_chat_notice::account_emails_hidden();
     Ok(json!({
         // A worktree shows under its parent's name; its own folder is the worktree's name.
         "project": parent_name.clone().or(project_name),
@@ -150,10 +156,18 @@ fn read_where(
         })),
         "git": git,
         "agent": agent,
-        "account": environment["account"],
-        "accountEmail": environment["accountEmail"],
+        "account": account_text(&environment["account"], hide_emails),
+        "accountEmail": account_text(&environment["accountEmail"], hide_emails),
         "terminal": terminal_backend(&session),
     }))
+}
+
+/// An account text field, masked by `mask_account_text` when Hide account emails is on.
+fn account_text(value: &Value, hide_emails: bool) -> Value {
+    match value.as_str() {
+        Some(text) if hide_emails => json!(ghostex_gx_core::mask_account_text(text)),
+        _ => value.clone(),
+    }
 }
 
 /// `{kind, label}`: `cloudBox` with its provider for a session on a Cloud Box's own gxserver,

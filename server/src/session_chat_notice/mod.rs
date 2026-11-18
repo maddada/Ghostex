@@ -53,7 +53,7 @@ mod classify;
 mod rules;
 mod screen;
 mod start_failure;
-pub(crate) use start_failure::claude_slot_email;
+pub(crate) use start_failure::{account_emails_hidden, claude_slot_email};
 mod types;
 mod watchdog_store;
 

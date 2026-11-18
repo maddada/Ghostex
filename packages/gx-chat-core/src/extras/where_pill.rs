@@ -332,7 +332,16 @@ pub fn document(state: &ChatState) -> Value {
             "user",
             "Agent",
             agent,
-            text(data, "/accountEmail").or_else(|| text(data, "/account")),
+            // Hide account emails masks it here too, for a session on a computer whose own
+            // gxserver does not hide them (server/src/session_where.rs masks there).
+            text(data, "/accountEmail")
+                .or_else(|| text(data, "/account"))
+                .map(|account| {
+                    crate::menus::native_accounts::account_text(
+                        state.core.hide_account_emails,
+                        &account,
+                    )
+                }),
         ));
     }
     if let Some(terminal) = text(data, "/terminal") {

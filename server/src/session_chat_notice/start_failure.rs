@@ -118,7 +118,7 @@ pub(crate) fn claude_slot_card_name(slot: &str) -> String {
 }
 
 /// Settings > Accounts > Hide account emails, read fresh from the shared settings file.
-fn account_emails_hidden() -> bool {
+pub(crate) fn account_emails_hidden() -> bool {
     crate::shared_settings_file::read_shared_settings(&crate::paths::get_gxserver_paths(None))
         .and_then(|settings| settings.get("hideAccountEmails").and_then(Value::as_bool))
         .unwrap_or(false)
