@@ -19,9 +19,6 @@
 
 [![Ghostex with a coordinator, its threads and side panels open](media/readme/gx-hero-1.webp)](media/readme/gx-hero-1.webp)
 
-<details>
-<summary>More screenshots</summary>
-
 **As minimal as you want it.**
 
 ![A minimal Ghostex workspace](media/readme/gx-hero-2.jpeg)
@@ -39,8 +36,6 @@
 ![The built-in editor](media/readme/gx-hero-6.jpeg)
 
 <sub>Want an animated wallpaper behind Ghostex like these? Try [Wallspace](https://wallspace.app/) on macOS (free, recommended), [Lively Wallpaper](https://github.com/rocksdanister/lively) on Windows (free, open source) or [Hidamari](https://github.com/jeffshee/hidamari) on Linux (free, open source; it has no gallery, so add your own videos, for example looping clips from [Pexels Videos](https://www.pexels.com/search/videos/abstract%20loop/), or paste a YouTube link: search for "4K live wallpaper loop"). Move Ghostex to its own desktop or workspace so only the wallpaper sits behind it.</sub>
-
-</details>
 
 ## What it does
 
