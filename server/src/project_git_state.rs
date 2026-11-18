@@ -119,6 +119,17 @@ pub(crate) async fn git(
     .await
 }
 
+/// `result`, unless its git ran out of time: that answers nothing, so it is an error and never
+/// kept (diff_stats_cache.rs) as "not a repository" or as numbers (review of 23fa0ff90).
+fn answered(result: Value) -> Result<Value, TypedOperationError> {
+    if result.pointer("/error/code").and_then(Value::as_str) == Some("timeout") {
+        return Err(TypedOperationError::dependency_unavailable(
+            "Git did not answer in time.",
+        ));
+    }
+    Ok(result)
+}
+
 pub(crate) fn exit_code(result: &Value) -> i64 {
     result.get("exitCode").and_then(Value::as_i64).unwrap_or(1)
 }
@@ -212,7 +223,7 @@ pub(crate) async fn read_git_state(
     projects: &[Value],
     project_id: &str,
 ) -> Result<Option<Value>, TypedOperationError> {
-    let repo = git(projects, project_id, "isInsideWorkTree").await?;
+    let repo = answered(git(projects, project_id, "isInsideWorkTree").await?)?;
     if exit_code(&repo) != 0 || stdout(&repo).trim() != "true" {
         return Ok(None);
     }
@@ -225,6 +236,11 @@ pub(crate) async fn read_git_state(
         git(projects, project_id, "listRemotes"),
         git(projects, project_id, "getOriginRemoteUrl"),
     )?;
+    let [branch, status, diff, untracked, upstream, remotes, origin] =
+        [branch, status, diff, untracked, upstream, remotes, origin].map(answered);
+    let (branch, status, diff, untracked, upstream, remotes, origin) = (
+        branch?, status?, diff?, untracked?, upstream?, remotes?, origin?,
+    );
     let mut files = parse_numstat_files(stdout(&diff));
     files.extend(parse_status_porcelain_files(stdout(&status)));
     files.extend(
@@ -328,9 +344,9 @@ async fn read_diff_stats(
     project_id: &str,
     count_untracked_when_clean: bool,
 ) -> Result<Value, TypedOperationError> {
-    let diff = git(projects, project_id, "diffNumstat").await?;
+    let diff = answered(git(projects, project_id, "diffNumstat").await?)?;
     if exit_code(&diff) != 0 {
-        let repo = git(projects, project_id, "isInsideWorkTree").await?;
+        let repo = answered(git(projects, project_id, "isInsideWorkTree").await?)?;
         if exit_code(&repo) != 0 || stdout(&repo).trim() != "true" {
             return Ok(not_a_repo_diff_stats());
         }

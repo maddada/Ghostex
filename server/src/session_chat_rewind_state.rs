@@ -98,9 +98,10 @@ fn store_key(transcript_path: &Path) -> String {
 pub fn set_session_chat_pending_rewind(transcript_path: &Path, pending: SessionChatPendingRewind) {
     if let Ok(mut entries) = store().lock() {
         entries.insert(store_key(transcript_path), pending);
+        // Under the store's lock, before the save: a read that sees the rewind sees the new number.
+        PENDING_REWIND_GENERATION.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
         save(&entries);
     }
-    PENDING_REWIND_GENERATION.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
 }
 
 /// Moves each time a pending rewind is recorded or cleared: tail reads skip the rewound rows
@@ -123,8 +124,8 @@ pub fn session_chat_pending_rewind(transcript_path: &Path) -> Option<SessionChat
 pub fn clear_session_chat_pending_rewind(transcript_path: &Path) {
     if let Ok(mut entries) = store().lock() {
         if entries.remove(&store_key(transcript_path)).is_some() {
-            save(&entries);
             PENDING_REWIND_GENERATION.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+            save(&entries);
         }
     }
 }

@@ -29,6 +29,8 @@ use crate::session_chat_tail::SessionChatTailPage;
 
 /// The bytes of transcript the kept answers may span together; the oldest go first past it.
 const KEPT_BYTES: u64 = 48 * 1024 * 1024;
+/// The largest single page kept, a quarter of `KEPT_BYTES`.
+const KEPT_PAGE_BYTES: u64 = KEPT_BYTES / 4;
 /// The answers kept at most, whatever their size (`KEPT_BYTES` bounds the memory).
 const KEPT_ANSWERS: usize = 256;
 /// Asks for one transcript within `HOT_WINDOW` past which its callers are logged.
@@ -50,7 +52,8 @@ struct Kept {
     /// `session_chat_pending_rewind_generation` when it was read: a rewind recorded or cleared
     /// since changes the page without touching the file.
     rewinds: u64,
-    page: SessionChatTailPage,
+    /// Shared, so a hit copies the rows after letting the cache's lock go.
+    page: std::sync::Arc<SessionChatTailPage>,
     /// The bytes the page was read from, for `KEPT_BYTES`.
     bytes: u64,
     used: Instant,
@@ -92,7 +95,7 @@ pub(crate) fn tail_page(
             let page = entry.page.clone();
             drop(kept);
             note_read(path, caller, false, tail);
-            return Ok(page);
+            return Ok((*page).clone());
         }
     }
     note_read(path, caller, true, tail);
@@ -115,18 +118,22 @@ pub(crate) fn tail_page(
                 .saturating_sub(*from),
             SessionChatTailPage::NotFound => 0,
         };
-        if let Ok(mut kept) = kept().lock() {
-            kept.insert(
-                key,
-                Kept {
-                    version,
-                    rewinds,
-                    page: page.clone(),
-                    bytes,
-                    used: Instant::now(),
-                },
-            );
-            trim(&mut kept);
+        // A page spanning more than `KEPT_PAGE_BYTES` is not kept: it would push every other one out.
+        if bytes <= KEPT_PAGE_BYTES {
+            let shared = std::sync::Arc::new(page.clone());
+            if let Ok(mut kept) = kept().lock() {
+                kept.insert(
+                    key,
+                    Kept {
+                        version,
+                        rewinds,
+                        page: shared,
+                        bytes,
+                        used: Instant::now(),
+                    },
+                );
+                trim(&mut kept);
+            }
         }
     }
     Ok(page)

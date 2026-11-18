@@ -118,10 +118,11 @@ where
 /// reads, and two misses for one project both ran git, so once reads took longer than the poll's
 /// cycle they stacked up (eight git processes for each full read). A read of the same project
 /// already running now answers the others (`in_flight_lock`), and at most `MAX_GIT_READS` reads
-/// run at once; the rest wait their turn, but never longer than `MAX_GIT_READ_WAIT`, so a few
-/// projects whose git hangs cannot hold up a healthy one, and the Git state the titlebar reads
-/// after a commit (which comes through here too) is never more than that late. Git actions
-/// themselves (commit, push, checkout) do not come through here.
+/// run at once; the rest wait for a slot at most `MAX_GIT_READ_WAIT`, and a read gives its slot
+/// back once it has run `MAX_GIT_READ_WAIT` too, so a few projects whose git hangs cannot hold up
+/// a healthy one. (A read can still wait behind its own project's running read, which answers it,
+/// for as long as that read takes.) The Git state the titlebar reads after a commit comes through
+/// here too; Git actions themselves (commit, push, checkout) do not.
 const MAX_GIT_READS: usize = 4;
 const MAX_GIT_READ_WAIT: std::time::Duration = std::time::Duration::from_secs(8);
 
@@ -132,8 +133,19 @@ where
 {
     static GIT_READS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(MAX_GIT_READS);
     // The semaphore is never closed, so acquiring only waits; past the wait the read runs anyway.
-    let _turn = tokio::time::timeout(MAX_GIT_READ_WAIT, GIT_READS.acquire()).await;
-    read().await
+    let turn = tokio::time::timeout(MAX_GIT_READ_WAIT, GIT_READS.acquire())
+        .await
+        .ok()
+        .and_then(Result::ok);
+    let read = read();
+    tokio::pin!(read);
+    if let Some(turn) = turn {
+        tokio::select! {
+            result = &mut read => return result,
+            _ = tokio::time::sleep(MAX_GIT_READ_WAIT) => drop(turn),
+        }
+    }
+    read.await
 }
 
 /// One lock per kept answer, held while its read runs.
