@@ -13,6 +13,14 @@
 //! mode; that is an approval card for the user, which a coordinator never answers
 //! (`relayedFrom`, session_chat_send/answer_http.rs). The session's own mode pill can change it
 //! later; that is the user's choice.
+//!
+//! CDXC:Coordinators 2026-11-18 WHY:
+//! Claude's Plan mode is not read-only for shell commands: Claude Code blocks its file edits while
+//! it plans but still runs a shell command that its auto-mode check or the user's allow rules
+//! approve (Noah Willink on Discord: `touch` ran in Plan mode with no prompt). The user chose to
+//! keep Plan mode and say so plainly ("reply and reword"), not to build a stricter mode: the
+//! `start-thread --read-only` help and features.md say a command can still change files, and the
+//! "asks before it edits or runs anything" above no longer holds for commands.
 //! SEE-ALSO: server/src/side_chats/launch.rs (`without_auto_approve`, the same stripping a side
 //! chat's ask-before-edits uses), server/src/agents/launch_plan.rs (first launch),
 //! server/src/agents/resume_plan.rs (every later one).
