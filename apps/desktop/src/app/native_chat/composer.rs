@@ -139,7 +139,7 @@ impl NativeChatView {
             input.update(cx, |input, cx| input.set_value("", window, cx));
         }
         cx.emit(super::state::NativeChatEvent::DraftState(true));
-        self.end_answer_hold_for_send();
+        self.follow_tail_for_send(mode);
         self.invoke(submission.clone(), cx);
         // The sidebar's star request counts sent prompts (native_sidebar/github_star.rs).
         crate::app::native_sidebar::github_star::note_prompt_sent();
