@@ -26,7 +26,7 @@ const TOPIC_HEIGHT: f32 = 28.0;
 
 /// How much the Topic adds to the panel: only the Work panel has one.
 pub(super) fn topic_height(board: &Value) -> f32 {
-    if board["title"] == "Work" {
+    if board["topicEditable"] == true {
         TOPIC_HEIGHT
     } else {
         0.0
@@ -42,7 +42,8 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        if board["title"] != "Work" {
+        // Only where gxserver keeps a Topic (the core's `topicEditable`).
+        if board["topicEditable"] != true {
             return None;
         }
         let s = p.scale;

@@ -285,6 +285,10 @@ pub struct CoordinatorBoard {
     /// coordinator's.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub own: bool,
+    /// gxserver keeps a Topic for this panel (its work value carries `topic`, set or null), so
+    /// the renderers offer it; a gxserver from before Topics sends none and gets no Topic line.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub topic_editable: bool,
 }
 
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -1160,6 +1164,9 @@ pub fn coordinator_board_with(
         } else {
             Value::Null
         },
+        topic_editable: work_mode
+            && crate::extras::work_source::work_of(state)
+                .is_some_and(|work| work.get("topic").is_some()),
         own: state.session.coordinator_threads.is_none()
             && crate::extras::work_source::own_work(state).is_some(),
         title: if work_mode { "Work" } else { "Board" }.to_string(),
