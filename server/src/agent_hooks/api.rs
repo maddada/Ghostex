@@ -416,7 +416,8 @@ pub fn uninstall_agent_hooks(
         inspect_agent_hook_installation(definition, &hook_paths, &provider_paths)
             .ghostex_hook_present
     });
-    if !has_remaining_provider_hook {
+    // A config Ghostex refused to edit may still run the notify script, so it stays.
+    if !has_remaining_provider_hook && refused_agents.is_empty() {
         // The statusline scripts stay: Claude's and Cursor's statusLine may still run them
         // (statusline_setting.rs).
         for shared_path in [&hook_paths.notify_hook_path] {

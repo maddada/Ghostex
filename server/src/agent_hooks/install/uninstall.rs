@@ -222,6 +222,16 @@ pub(super) fn remove_owned_json_hooks(data: &mut Value, format: HookFormat, comm
     for event_name in emptied_events {
         event_groups.remove(&event_name);
     }
+    // CDXC:AgentHooks 2026-11-18 WHY: review of 953801db9: an Antigravity uninstall left
+    // `"ghostex": {}`, which reads as a Ghostex hook needing an update, so the next status read
+    // installed it again. The emptied object goes too.
+    let ghostex_emptied = format == HookFormat::Antigravity && event_groups.is_empty();
+    if ghostex_emptied {
+        if let Some(object) = data.as_object_mut() {
+            object.remove("ghostex");
+        }
+        changed = true;
+    }
     changed
 }
 

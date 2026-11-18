@@ -176,9 +176,15 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             println!("No agent CLI with a Ghostex hook was found on {computer}.");
         }
     } else {
-        let left = agents_with(&result, &shown, |status| {
+        let mut left = agents_with(&result, &shown, |status| {
             status == "installed" || status == "updateRequired"
         });
+        // A refused agent keeps its hook whatever its row reads.
+        for (agent, _) in &refused {
+            if !left.contains(agent) {
+                left.push(agent.clone());
+            }
+        }
         if left.is_empty() {
             println!("Ghostex hooks removed on {computer}.");
         } else {
