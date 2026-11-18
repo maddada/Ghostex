@@ -18,7 +18,7 @@ use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
 use super::super::palette::SettingsPalette;
 use super::super::rail::{rail_pages, render_no_matches};
-use super::super::store::{SettingsStore, store_gxserver_rpc};
+use super::super::store::{SettingsStore, post_store_message, store_gxserver_rpc};
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Context, Div, Entity, IntoElement,
     ParentElement as _, Render, Styled as _, Task, Window, div, px,
@@ -375,8 +375,8 @@ impl AutopilotTab {
             p,
             "autopilotApprovals",
             RowSpec::new("When it asks permission").description(match permission {
-                "safe" => "Permission prompts, Connectors cards and folder trust. After a minute without your answer, it approves reads, builds, tests, edits and local commits inside the project; anything else waits for you, and hard limits are declined. A read-only thread's cards always wait for you.",
-                "all" => "Permission prompts, Connectors cards and folder trust. After a minute without your answer, it approves anything that is not a hard limit below and declines the rest. A read-only thread's cards always wait for you.",
+                "safe" => "Permission prompts, Connectors cards and folder trust. After a minute without your answer, it approves reads, builds, tests, edits and local commits inside the project; anything else waits for you, and hard limits are declined. A read-only thread stays in plan mode: its reads are approved, the rest declined.",
+                "all" => "Permission prompts, Connectors cards and folder trust. After a minute without your answer, it approves anything that is not a hard limit below and declines the rest. A read-only thread stays in plan mode: its reads are approved, the rest declined.",
                 _ => "Permission prompts, Connectors cards and folder trust wait for you.",
             }),
             None,
@@ -390,6 +390,23 @@ impl AutopilotTab {
             |page: &mut Self, value, _, cx| page.set(permission_patch(&value), cx),
             cx,
         ));
+        // Hidden while permission prompts wait for the user (CDXC:Autopilot 2026-11-18 in
+        // server/src/autopilot/config.rs, `read_only_leave_plan`).
+        if permission != "wait" {
+            rows.push(toggle_field_with(
+                p,
+                "autopilotReadOnlyLeavePlan",
+                RowSpec::new("Let read-only threads leave plan mode")
+                    .description("Autopilot approves a read-only helper's request to stop planning and start changing files, instead of keeping it in plan mode. Its edits and commands are then judged like any other session's.")
+                    .dependent(),
+                config["readOnlyLeavePlan"].as_bool() == Some(true),
+                None,
+                |page: &mut Self, checked, _, cx| {
+                    page.set(json!({ "readOnlyLeavePlan": checked }), cx)
+                },
+                cx,
+            ));
+        }
         settings_section(p, "What it does", None, None, rows)
     }
 
@@ -454,6 +471,32 @@ impl AutopilotTab {
             window,
             cx,
         )];
+        // CDXC:Autopilot 2026-11-18 SEE-ALSO: server/src/autopilot/config.rs (`checkup_minutes`, the user's words).
+        let checkup = config["checkupMinutes"].as_u64().unwrap_or(10).to_string();
+        rows.push(select_field(
+            self,
+            p,
+            "autopilotCheckup",
+            RowSpec::new("Supervisor check-up").description(
+                "Ghostex looks for sessions that seem stuck in ways its rules don't settle, and wakes the supervisor only when it finds one.",
+            ),
+            None,
+            &[
+                option("Off", "0"),
+                option("Every 10 minutes", "10"),
+                option("Every 20 minutes", "20"),
+                option("Every 30 minutes", "30"),
+                option("Every hour", "60"),
+            ],
+            checkup.as_str(),
+            Some(240.0),
+            |page: &mut Self, value, _, cx| {
+                let minutes = value.parse::<u64>().unwrap_or(10);
+                page.set(json!({ "checkupMinutes": minutes }), cx)
+            },
+            window,
+            cx,
+        ));
         let minutes = (config["sweepSeconds"].as_f64().unwrap_or(120.0) / 60.0).round();
         let page = cx.weak_entity();
         let saver: SliderSaver = std::rc::Rc::new(move |_store, value, commit, cx| {
@@ -492,7 +535,7 @@ impl AutopilotTab {
             // User, on the old "It hasn't been needed yet" line: "why has this never been
             // needed??" It wakes only for what the rules can't settle, so the line says which.
             None => format!(
-                "Not started yet. It wakes only for what Autopilot's rules can't settle: a session still frozen after an interrupt and a reload, or (with Answer questions on) a question with no recommended choice (when it answers questions). Until then the rules handle everything. It starts in an Autopilot project in your sidebar.{}",
+                "Not started yet. It wakes only for what Autopilot's rules can't settle: a session still frozen after an interrupt and a reload, or (with Answer questions on) a question with no recommended choice (when it answers questions). Until then the rules handle everything. It starts in an Autopilot project, hidden in your sidebar (Show hidden lists it).{}",
                 if question_choice(&config) == "wait" {
                     " Questions wait for you, so they stay with you."
                 } else {
@@ -519,7 +562,46 @@ impl AutopilotTab {
                 )
             }
         };
-        rows.push(padded_text(p, &[(status.as_str(), false)]));
+        let status = padded_text(p, &[(status.as_str(), false)]);
+        // "Open supervisor" once it has a session: its project starts hidden (CDXC:Autopilot
+        // 2026-11-18 in server/src/autopilot/supervisor.rs). Before that the line above says it
+        // hasn't been needed yet.
+        let session = supervisor["projectId"]
+            .as_str()
+            .zip(supervisor["sessionId"].as_str())
+            .map(|(project_id, session_id)| {
+                ghostex_gx_core::SessionKey::local(project_id, session_id).to_sidebar_session_id()
+            });
+        rows.push(match session {
+            Some(session) => {
+                let open = settings_button(
+                    p,
+                    "autopilot-open-supervisor",
+                    "Open supervisor",
+                    Some("modals/settings/arrow-up-right.svg"),
+                    ButtonVariant::Outline,
+                    false,
+                    None,
+                    move |page: &mut Self, _window, cx| {
+                        post_store_message(
+                            &page.store,
+                            json!({ "type": "focusSession", "sessionId": session }),
+                            cx,
+                        );
+                    },
+                    cx,
+                );
+                h_flex()
+                    .w_full()
+                    .gap(px(12.0))
+                    .items_center()
+                    .pr(px(ROW_PADDING_X))
+                    .child(div().flex_1().min_w_0().child(status))
+                    .child(open)
+                    .into_any_element()
+            }
+            None => status,
+        });
         let notes = supervisor["notesDir"]
             .as_str()
             .map(home_relative)

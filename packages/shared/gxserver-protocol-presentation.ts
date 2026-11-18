@@ -179,6 +179,8 @@ export interface GxserverPresentationProject {
   };
   /** The project is a GBot's folder (published whether GBots are on or off); clients never list it as a project. */
   gbotsProject?: true;
+  /** The project is Autopilot's own "Autopilot" project (its supervisor's folder, server/src/autopilot/supervisor.rs); each sidebar hides it once, as if the user had hidden it. Present only when true. */
+  autopilotSupervisorProject?: true;
   /** Issues Workflow (formerly Work mode) is on for this project: a Linear key applies, `gh` is signed in, or its workspace has a ticket command (server/src/work_mode/project.rs); present only when true. */
   workMode?: true;
   /** Issues Workflow is on and a Linear key applies to this project; present only when true. */

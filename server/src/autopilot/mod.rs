@@ -5,6 +5,7 @@
 mod config;
 mod log;
 mod notes;
+mod supervisor;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, OnceLock, PoisonError};
@@ -13,10 +14,15 @@ use serde_json::{json, Map, Value};
 
 pub use config::{
     apply_patch, read_config, update_config, AutopilotConfig, HardLimits, Membership, Scope,
-    SupervisorModel, Tier,
+    SupervisorModel, Tier, CHECKUP_MINUTES,
 };
 pub use log::{append as append_log, read_recent as read_log, summary, LogEntry, Outcome};
 pub use notes::{ensure_notes, next_wake_number, notes_dir, write_wake};
+pub use supervisor::{
+    is_supervisor_project, keeps_ghostex_title, read_record as read_supervisor_record,
+    supervisor_session, write_record as write_supervisor_record, SupervisorRecord,
+    SUPERVISOR_TITLE,
+};
 
 /// The choices as last read or written; the paths of this gxserver once the runtime started.
 #[cfg(not(test))]
@@ -100,6 +106,17 @@ pub fn insert_chat_autopilot(frame: &mut Map<String, Value>, project_id: &str, s
             "offline": crate::network_status::is_offline(),
         }),
     );
+    // The pill's "Open supervisor" row, once there is a supervisor and this chat is not it.
+    if let Some((supervisor_project, supervisor_session)) = supervisor_session() {
+        if (supervisor_project.as_str(), supervisor_session.as_str()) != (project_id, session_id) {
+            if let Some(Value::Object(autopilot)) = frame.get_mut("autopilot") {
+                autopilot.insert(
+                    "supervisor".to_string(),
+                    json!({ "projectId": supervisor_project, "sessionId": supervisor_session }),
+                );
+            }
+        }
+    }
 }
 
 /// How long a session the user stopped by hand is left alone.
@@ -202,44 +219,15 @@ pub fn heals_stuck(project_id: &str, session_id: &str) -> bool {
         )
 }
 
-fn read_only_marks() -> &'static Mutex<HashSet<(String, String)>> {
-    static READ_ONLY: OnceLock<Mutex<HashSet<(String, String)>>> = OnceLock::new();
-    READ_ONLY.get_or_init(|| Mutex::new(HashSet::new()))
-}
-
-/// Remembers whether a session is a read-only thread (its runtime settings say so), for readers
-/// that hold only its ids: Autopilot never approves such a thread's cards, so they alert.
-pub fn note_read_only_thread(project_id: &str, session_id: &str, session: &Value) {
-    let read_only = crate::coordinators::is_read_only_thread(
-        session.get("runtimeSettings").and_then(Value::as_object),
-    );
-    let key = (project_id.to_string(), session_id.to_string());
-    let mut marks = read_only_marks()
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
-    if read_only {
-        marks.insert(key);
-    } else {
-        marks.remove(&key);
-    }
-}
-
-fn is_read_only_thread(project_id: &str, session_id: &str) -> bool {
-    read_only_marks()
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .contains(&(project_id.to_string(), session_id.to_string()))
-}
-
 /// Whether Autopilot answers this session's approval cards itself: it covers the session, may
 /// answer approvals, and on All but limits settles every one (approves it, or declines a hard
-/// limit), where Safe steps leaves some for the user. Not while the user took the session back, and
-/// never for a read-only thread, whose cards wait for the user (server/src/server/autopilot_answers.rs).
+/// limit), where Safe steps leaves some for the user. A read-only thread's cards are settled too:
+/// approved, kept in plan mode or declined (server/src/server/autopilot_answers.rs). Not while the
+/// user took the session back.
 pub fn answers_approvals(project_id: &str, session_id: &str) -> bool {
     let config = current();
     config.answer_approvals
         && config.tier == Tier::Everything
-        && !is_read_only_thread(project_id, session_id)
         && config.covers(
             project_id,
             remembered_main_project(project_id).as_deref(),

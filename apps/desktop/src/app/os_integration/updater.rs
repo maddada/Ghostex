@@ -749,10 +749,13 @@ impl GhostexGpuiApp {
         let Some(update) = self.linux_update.as_ref() else {
             return;
         };
-        // The AppImage downloads and installs like Windows; packages only point to the release.
-        let state = if self.linux_appimage_install.is_none() {
-            "notify"
-        } else if self.linux_ready_appimage.is_some() {
+        // The AppImage downloads and installs like Windows; packages show the command that updates
+        // them (linux_update_command.rs).
+        if self.linux_appimage_install.is_none() {
+            self.open_linux_package_update_modal(cx);
+            return;
+        }
+        let state = if self.linux_ready_appimage.is_some() {
             "ready"
         } else {
             "available"
@@ -878,7 +881,7 @@ impl GhostexGpuiApp {
         );
     }
 
-    /// The Linux dialog's only action: the release page lists the deb, rpm, tarball, AppImage and AUR downloads.
+    /// The Linux dialog's Release page (or, with no update command, its only button): the release page lists the deb, rpm, tarball, AppImage and AUR downloads.
     #[cfg(target_os = "linux")]
     pub(crate) fn open_linux_update_download_page(&mut self, cx: &mut gpui::Context<Self>) {
         if let Some(update) = self.linux_update.as_ref() {

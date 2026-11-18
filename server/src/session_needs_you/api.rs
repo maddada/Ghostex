@@ -355,6 +355,20 @@ pub(crate) fn route_board_answer(
     }
     store::write(db, &project_id, &session_id, &record)?;
     changed(state, db, repository, &project_id, &session_id, &record);
+    // Mark as read (the to-do's Dismiss) sends the agent nothing now: its next message says so
+    // (session_chat_dismissed.rs, where the user's decision lives).
+    if outcome == "dismissed" {
+        let title: String = record
+            .settled_of(&tag)
+            .map(|settled| settled.title.replace('"', "'").chars().take(80).collect())
+            .unwrap_or_default();
+        let name = if title.trim().is_empty() {
+            format!("{tag} (marked read)")
+        } else {
+            format!("{tag} \"{}\" (marked read)", title.trim())
+        };
+        crate::session_chat_dismissed::record(db, &project_id, &session_id, &name);
+    }
     Ok(Some(
         json!({ "item": tag, "answered": words, "settled": true }),
     ))

@@ -346,6 +346,7 @@ async fn follower_adopts_a_successor_and_delivers_its_tail() {
         bound_agent_session_ids: Arc::new(Vec::new),
         pending_fork_child_since_ms: Arc::new(|_| None),
         unbound_agent_chat: Arc::new(|| None),
+        probe_live_identity: Arc::new(|| {}),
         adopt_identity: {
             let registry = registry.clone();
             Arc::new(move |adoption| {

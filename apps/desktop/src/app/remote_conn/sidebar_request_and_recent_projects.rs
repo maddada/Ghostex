@@ -75,6 +75,7 @@ impl GhostexGpuiApp {
             keep_view: false,
             target_id: None,
         };
+        let failure_title = message.action.failure_toast_title();
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
             let result = background
@@ -85,12 +86,9 @@ impl GhostexGpuiApp {
                     gpui_copy_to_clipboard(ClipboardItem::new_string(path), cx);
                 }
                 Ok(GpuiSidebarNativeProjectPathActionResult::Opened) => {}
-                Err(message) => this.dispatch_gpui_app_modal_toast(
-                    "warning",
-                    "Native action unavailable",
-                    &message,
-                    cx,
-                ),
+                Err(message) => {
+                    this.dispatch_gpui_app_modal_toast("warning", failure_title, &message, cx)
+                }
             });
         })
         .detach();

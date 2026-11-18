@@ -48,6 +48,23 @@ impl GhostexGpuiApp {
         workspace.active_session_in_pane(pane_id)
     }
 
+    /// Whether the chat the breadcrumb names shows its where pill with the project in its pane, so
+    /// the breadcrumb leaves "<project> /" out (`set_where_pill_shows_project` in
+    /// native_chat/where_pill.rs, where the user's decision lives). Each pane's chat answers for
+    /// itself; the header names the focused pane's, so a split pane in terminal view keeps the
+    /// project once it takes focus. A chat popped out to its own window is not in the pane.
+    pub(crate) fn workarea_header_where_pill_shows_project(&self, cx: &gpui::App) -> bool {
+        let Some(session_id) = self.workarea_header_session_id() else {
+            return false;
+        };
+        self.agents_chat_mode_sessions.contains(&session_id)
+            && !self.session_popup_shows(session_id)
+            && self
+                .native_chat_views
+                .get(&session_id)
+                .is_some_and(|chat| chat.read(cx).where_pill_shows_project)
+    }
+
     /// CDXC:Titlebar 2026-09-10 WHY:
     /// The centered header gives the left region a zero flex basis; auto-sized descendants can retain their minimum measured width and collapse the project label even with space available.
     /// Both the breadcrumb and its label must grow into the width allocated by their parent.
@@ -62,9 +79,11 @@ impl GhostexGpuiApp {
             .and_then(|snapshot| snapshot.project_icon_data_url.as_deref())
             .and_then(gpui_project_icon_image_from_data_url);
         let session_title = self.workarea_header_session_title();
-        // Narrow drops the project half of the breadcrumb, but never leaves the header nameless:
-        // with no focused session the project name is all there is to show.
-        let show_project_name = !compact || session_title.is_none();
+        // Narrow drops the project half of the breadcrumb, and so does the chat's where pill naming
+        // the project, but never leaves the header nameless: with no focused session the project
+        // name is all there is to show.
+        let show_project_name = (!compact && !self.workarea_header_where_pill_shows_project(cx))
+            || session_title.is_none();
         let show_separator = show_project_name && session_title.is_some();
         /*
         CDXC:Titlebar 2026-09-20 WHY:

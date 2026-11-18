@@ -49,6 +49,7 @@ pub fn held_while_hidden(key: &str) -> bool {
         "extras.fleetClock"
             | "extras.activityClock"
             | "extras.sessionDetails"
+            | "extras.wherePill"
             | "menus.contextMeter"
             | "menus.switchClock"
             | "menus.accountsPoll"

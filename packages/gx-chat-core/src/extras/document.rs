@@ -160,6 +160,7 @@ pub fn document_with_board(
     };
     into.session_details =
         crate::extras::session_details::document::document(state, context, meter);
+    into.where_pill = crate::extras::where_pill::document(state);
 
     // The copy comes from the view, not the agent status, as React picked it.
     let view_kind = into.view.kind.as_str();

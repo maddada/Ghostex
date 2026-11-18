@@ -175,16 +175,20 @@ pub fn hidden_items_from_storage(raw: Option<&str>) -> SidebarHiddenItems {
     SidebarHiddenItems {
         group_ids: list("groupIds"),
         collection_keys: list("collectionKeys"),
+        auto_hidden_group_ids: list("autoHiddenGroupIds"),
     }
 }
 
 /// `writeSidebarHiddenItems`: the two lists, in the order the sidebar holds them.
 pub fn hidden_items_into_storage(items: &SidebarHiddenItems) -> String {
-    json!({
+    let mut stored = json!({
         "collectionKeys": items.collection_keys,
         "groupIds": items.group_ids,
-    })
-    .to_string()
+    });
+    if !items.auto_hidden_group_ids.is_empty() {
+        stored["autoHiddenGroupIds"] = json!(items.auto_hidden_group_ids);
+    }
+    stored.to_string()
 }
 
 /// The version a stored envelope names, when it names a number.

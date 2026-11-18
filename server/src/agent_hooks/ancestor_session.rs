@@ -49,10 +49,20 @@ pub(crate) fn adopt_local_gxserver_address() {
     }
 }
 
+/// CDXC:AgentSandbox 2026-11-18 WHY:
+/// GitHub #655: a Codex whose own config says `[shell_environment_policy] inherit = "core"` runs
+/// its shell commands without any GHOSTEX_* variable, so `ghostex agents whoami` and `ghostex agents
+/// send` answered "Cannot identify the caller". A `ghostex` command run from Codex's shell tool
+/// finds its pane the way one from Empryo's does, from the `zmx run` daemon above the `codex`
+/// process. Codex installed from npm starts its native `codex` from `node`, so a `node` right
+/// above `codex` is let through too; anywhere else a `node` is another agent (an npm Claude, say)
+/// and the walk gives up, as for any other program.
+const ANCESTOR_AGENTS: &[&str] = &["empryo", "em", "codex"];
+
 /// The session name of the closest `zmx run <name>` above this process, when that pane runs
-/// Empryo itself: above the `empryo` process only shells may stand before the daemon. An Empryo
-/// another agent started from its tool (Claude's Bash tool, say) belongs to that agent's pane, not
-/// to an Empryo session, so its hooks report nothing.
+/// Empryo or Codex itself: above the agent's process only shells may stand before the daemon. An
+/// agent another agent started from its tool (Claude's Bash tool, say) belongs to that agent's
+/// pane, not to a session of its own, so its hooks report nothing.
 #[cfg(unix)]
 fn ancestor_zmx_session_name() -> Option<String> {
     const SHELLS: &[&str] = &[
@@ -60,7 +70,8 @@ fn ancestor_zmx_session_name() -> Option<String> {
     ];
     let table = super::nested_agent::ProcessTable::read();
     let mut current = std::process::id();
-    let mut above_empryo = false;
+    let mut above_agent = false;
+    let mut right_above_codex = false;
     for _ in 0..64 {
         let parent = table.parent(current)?;
         let stem = table
@@ -68,11 +79,13 @@ fn ancestor_zmx_session_name() -> Option<String> {
             .trim_start_matches('-')
             .to_ascii_lowercase();
         if stem == "zmx" {
-            return above_empryo.then(|| zmx_run_session_name(parent)).flatten();
+            return above_agent.then(|| zmx_run_session_name(parent)).flatten();
         }
-        if stem == "empryo" || stem == "em" {
-            above_empryo = true;
-        } else if above_empryo && !SHELLS.contains(&stem.as_str()) {
+        let launcher_of_codex = right_above_codex && stem == "node";
+        right_above_codex = stem == "codex";
+        if ANCESTOR_AGENTS.contains(&stem.as_str()) {
+            above_agent = true;
+        } else if above_agent && !launcher_of_codex && !SHELLS.contains(&stem.as_str()) {
             return None;
         }
         current = parent;

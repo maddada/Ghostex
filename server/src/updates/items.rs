@@ -1006,6 +1006,11 @@ async fn app_item(state: &AppState) -> Value {
         None
     };
     item.insert("note".into(), json!(note));
+    // Linux: how this computer updates Ghostex (app_update/linux_install.rs); the desktop card
+    // shows its command with Copy command, and its release page link.
+    if status["linuxUpdate"].is_object() {
+        item.insert("linuxUpdate".into(), status["linuxUpdate"].clone());
+    }
     item.insert("state".into(), json!(state));
     item.insert(
         "canUpdate".into(),

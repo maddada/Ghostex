@@ -55,7 +55,7 @@ pub(crate) fn remote_machines() -> Section {
         "remoteMachines",
         "Computers this machine connects to",
         vec![
-            row("addMachine", "Add a computer", "Opens Connect a Computer to add a computer with its code, or with SSH details; saved computers appear as sidebar sections."),
+            row("addMachine", "Add a computer", "Opens Connect a Computer to add a computer with its code, or with SSH details; a saved computer's projects and sessions join your sidebar, and a project on both computers is one entry with the sessions of each (Separate by machine gives each computer its own tab instead)."),
             row("showInSidebar", "Show in sidebar", "Hide a saved remote machine from the sidebar without deleting it."),
             row("machineIcon", "Computer icons", "Each saved computer's icon in the sidebar, picked in its settings while it is connected; it is kept on that computer."),
             row("sshHost", "SSH host", "Remote machine SSH host."),

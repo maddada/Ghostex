@@ -8,8 +8,11 @@
 //! `updates-computers-box` (the Linux box picked), `updates-computers-air` (MacBook Air picked
 //! while it is offline), `updates-computers-run` (an Update all machines running: this computer
 //! updating, the Linux box's Claude Code failed, the others skipped), `updates-computers-open`
-//! (the machine picker open). The `updates-computers*` states save the three machines, so the
-//! picker shows.
+//! (the machine picker open), `updates-linux` (this computer's Ghostex from the AUR with its
+//! update command), `updates-linux-tarball` (this computer's Ghostex from the tarball: the release
+//! page only), `updates-computers-box-linux` (the Linux box picked, its Ghostex a .deb with an
+//! update: its command with Copy only). The `updates-computers*` states save the three
+//! machines, so the picker shows.
 use serde_json::{Map, Value, json};
 
 /// The saved machines the picker lists (the Linux box connected, the others not).
@@ -33,7 +36,7 @@ pub(super) fn owns(state: &str) -> bool {
 
 pub(super) fn open_message(state: &str) -> Option<Value> {
     let machine = match state {
-        "updates-computers-box" => Some("remote-linux-box"),
+        "updates-computers-box" | "updates-computers-box-linux" => Some("remote-linux-box"),
         "updates-computers-air" => Some("remote-air"),
         _ => None,
     };
@@ -198,6 +201,28 @@ fn items(state: &str) -> Vec<Value> {
             Some("2.1.318"),
             "upToDate",
             json!({"auto": true}),
+        ));
+        return items;
+    }
+    if matches!(state, "updates-linux" | "updates-linux-tarball") {
+        let plan = if state == "updates-linux" {
+            json!({ "kind": "pacman", "command": "yay -S ghostex-bin", "releaseUrl": "https://github.com/maddada/Ghostex/releases/tag/v11.9.0" })
+        } else {
+            json!({ "kind": "manual", "command": null, "releaseUrl": "https://github.com/maddada/Ghostex/releases/tag/v11.9.0" })
+        };
+        items.push(item(
+            "app",
+            "app",
+            "ghostex",
+            "Ghostex",
+            "ghostex",
+            "This computer",
+            Some("11.8.2"),
+            Some("11.9.0"),
+            "available",
+            json!({
+                "canUpdate": false, "canAuto": false, "linuxUpdate": plan,
+            }),
         ));
         return items;
     }
@@ -536,6 +561,17 @@ pub(super) fn answers(state: &str, message: &Value) -> Vec<Value> {
     } else {
         items(state)
     };
+    if state == "updates-computers-box-linux" {
+        for item in &mut items {
+            if item["id"] == "machine:remote-linux-box" {
+                item["state"] = json!("available");
+                item["latest"] = json!("10.48.0");
+                item["canAuto"] = json!(false);
+                item["canUpdate"] = json!(false);
+                item["linuxUpdate"] = json!({ "kind": "deb", "command": "cd \"$(mktemp -d)\" && curl -fLO https://github.com/maddada/Ghostex/releases/download/v10.48.0/ghostex_10.48.0_amd64.deb && sudo apt install ./ghostex_10.48.0_amd64.deb", "releaseUrl": "https://github.com/maddada/Ghostex/releases/tag/v10.48.0" });
+            }
+        }
+    }
     if state == "updates-computers-box" {
         // An install running from the Linux box's Node.js pill.
         for item in &mut items {

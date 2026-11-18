@@ -735,7 +735,11 @@ fn signature_matches(signature: ComposerSignature, lines: &[String]) -> bool {
         // and spans the pane) and only the top rule is allowed to be the
         // titled kind.
         ComposerSignature::RuleSandwich { markers } => {
-            input::rule_input_region(lines, markers).is_some()
+            if markers == input::CLAUDE_COMPOSER_MARKERS {
+                input::claude_input_region(lines).is_some()
+            } else {
+                input::rule_input_region(lines, markers).is_some()
+            }
         }
         ComposerSignature::ProfiledRuleSandwich { marker } => {
             (0..lines.len().saturating_sub(2)).rev().any(|index| {

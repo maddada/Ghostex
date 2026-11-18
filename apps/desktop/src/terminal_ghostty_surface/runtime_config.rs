@@ -47,6 +47,8 @@ impl GhosttyConfigOwner {
     pub(crate) fn load_ghostex_terminal_config_finalized_with_functions(
         functions: GhosttyKitFunctionTable,
     ) -> Result<Self, GhosttySurfaceRuntimeError> {
+        // GitHub #653 crashed inside this load; a crash report names it from here on.
+        crate::crash_report::note_event("terminal.config.load");
         let path = crate::shared_settings::ghostex_terminal_config_path();
         let path = CString::new(path.to_string_lossy().into_owned())
             .map_err(|_| GhosttySurfaceRuntimeError::ConfigPathContainsInteriorNul)?;

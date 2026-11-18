@@ -723,8 +723,11 @@ fn supervise(
                 &session,
             );
             let answered = reading.answered_stall_nudge;
+            let open = reading.open;
             memory.turns.insert(key.clone(), reading);
-            if answered {
+            // A turn that ended and then only Claude's idle compaction is finished too
+            // (CDXC:Coordinators 2026-11-18 in coordinators/idle_compaction.rs).
+            if answered || (!open && coordinators::idle_compacted_after_turn_end(&session)) {
                 ThreadState::Finished
             } else {
                 hook_state

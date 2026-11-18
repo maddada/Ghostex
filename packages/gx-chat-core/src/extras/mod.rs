@@ -40,6 +40,7 @@ pub mod terminal_tail_format;
 pub mod time;
 pub mod transcript_search;
 pub mod welcome;
+pub mod where_pill;
 pub mod work_cards;
 pub mod work_panel;
 pub mod working_card;

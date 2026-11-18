@@ -1934,6 +1934,7 @@ pub fn handle_work_request(
         }
         "snooze" | "cancel" | "unsnooze" => {
             let tag = param_text(params, "ask").and_then(|tag| question_tag(&tag));
+            let reference = item.reference();
             let ask = item
                 .asks
                 .iter_mut()
@@ -1943,6 +1944,13 @@ pub fn handle_work_request(
             if op == "cancel" {
                 ask.settled_at = Some(now.clone());
                 ask.withdrawn = true;
+                // Dismiss sends the coordinator nothing now: its next message says so
+                // (session_chat_dismissed.rs, where the user's decision lives).
+                let title: String = ask.text.split_whitespace().collect::<Vec<_>>().join(" ");
+                let title: String = title.replace('"', "'").chars().take(80).collect();
+                let name = format!("{reference} {}", ask.tag);
+                let name = if title.is_empty() { name } else { format!("{name} \"{title}\"") };
+                crate::session_chat_dismissed::record(db, &key.0, &key.1, name.trim());
                 let words = format!("{} dismissed by the user", ask.tag);
                 item.record("settle", words.trim().to_string(), &now);
                 finish_if_only_asking(&mut item, &now);

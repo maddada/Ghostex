@@ -362,6 +362,10 @@ pub struct Document {
     /// The Session details panel (`extras/session_details/document.rs`), or `null` while it does
     /// not apply to this chat. Family f.
     pub session_details: Value,
+    /// The where pill at the left of the pill strip (`extras/where_pill.rs`), or `null` while there
+    /// is none (a draft, no answer yet, an older gxserver). Family f.
+    #[serde(default)]
+    pub where_pill: Value,
     /// The card of the failed API call nothing has answered yet, with gxserver's retry, or
     /// `null` (`transcript/api_errors.rs`). Family b.
     pub api_error_card: Value,

@@ -33,7 +33,7 @@ fn codex_slot_email(slot: &str) -> Option<String> {
 /// `{location: {kind, label}, project, folder, folderLabel, worktree, account, accountEmail,
 /// accountName}`. `account` is the "account 5 (ST)" label; a Claude or Codex session's account
 /// also carries the email Ghostex knows for that slot, which the panel shows instead.
-pub(super) fn read_environment(
+pub(crate) fn read_environment(
     session: &Value,
     project: Option<&Value>,
     folder: Option<&str>,

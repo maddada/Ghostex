@@ -570,10 +570,16 @@ impl NativeChatView {
                 )),
             );
         }
+        // Dismiss reads Mark as read on one that asks no question (gx-chat-core's `dismissLabel`).
+        let dismiss_label: &'static str = if actions["dismissLabel"] == "Mark as read" {
+            "Mark as read"
+        } else {
+            "Dismiss"
+        };
         for (field, icon, label) in [
             ("open", "titlebar/arrow-up-right.svg", "Open"),
             ("showInChat", "titlebar/focus-2.svg", "Show in chat"),
-            ("dismiss", "titlebar/x.svg", "Dismiss"),
+            ("dismiss", "titlebar/x.svg", dismiss_label),
         ] {
             let command = actions[field].clone();
             if command.is_object() {

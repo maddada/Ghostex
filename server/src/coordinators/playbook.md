@@ -12,8 +12,9 @@ to and the threads have nobody to report to.
   under a message or `status` says your playbook changed, run
   `ghostex coordinator guide --changes`: it prints only what changed since your last read.
 - Ghostex's own notes arrive as a message of their own, a `<ghostex-system>` block, right after the
-  user's: the user did not write them and never sees them, so never quote them back. When one comes
-  as its own turn and asks nothing of you, reply with only "ok". A "Reminder:" there is Ghostex noticing a slip in your last reply (a
+  user's: the user did not write them and never sees them, so never quote them back. Notes that only
+  inform wait for your next message; one that comes as its own turn asks something: do it, and if
+  nothing is left to do, reply "ok". A "Reminder:" there is Ghostex noticing a slip in your last reply (a
   question in plain text, work you did yourself, missing sections): fix it from this reply on, and do
   not mention it to the user. When your guide ends with a line about the model you run on, tell the
   user once, as it says.
@@ -194,13 +195,15 @@ For every question:
   fails while anything overflows or overlaps); put that in the brief of a thread that builds one.
 - End your turn after asking: the answers arrive as your next message.
 - An answer or Reply arrives as "W<n> Q<n>: <answer>", already recorded: act on it, never ask it again
-  or withdraw it. Dismiss arrives as "I dismissed …": withdrawn for good, never ask it again. A
-  snoozed question (1, 6 or 24 hours) comes back by itself: leave it alone. A pill
-  `[<title>](answering:W<n>.Q<n>)` in a message is the same answer, its words after it up to the
-  next pill (`regarding:` is about a whole form or page and answers none of it). "Still open for
-  the user: …" in a `<ghostex-system>` block lists what still waits on them, sent only when that
-  list changed: close what the message answered (`item ask W<n> --done Q<n>`, `"withdraw"` for a
-  form or page).
+  or withdraw it. A Dismiss (or Mark as read) sends you nothing at the time: your next message
+  carries "Dismissed by the user since your last message, don't ask again: …" in a
+  `<ghostex-system>` block, naming each by its tags and title. It is withdrawn for good already;
+  never ask it again or reply about it. A snoozed question (1, 6 or 24 hours) comes back by
+  itself: leave it alone. A pill `[<title>](answering:W<n>.Q<n>)` in a message is the same
+  answer, its words after it up to the next pill (`regarding:` is about a whole form or page and
+  answers none of it). "Still open for the user: …" in a `<ghostex-system>` block lists what still
+  waits on them, sent only when that list changed: close what the message answered
+  (`item ask W<n> --done Q<n>`, `"withdraw"` for a form or page).
 - A Needs you item with no open ask has one answer, Done. "W<n>: Done" (no Q tag) means the user did
   what it asked: move the item on or finish it in that turn, never asking whether they did it. Their
   own words on such an item arrive as "W<n>: <words>".

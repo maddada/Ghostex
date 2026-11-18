@@ -5,7 +5,10 @@
 //! itself, never by an agent, only while "When it asks permission" is Safe steps or All but limits,
 //! after the user's minute, and never across a hard limit (which counts only on All but limits);
 //! one that would cross it, or that only a human can do (sign in, 2FA, identity, payment), is
-//! declined and the agent is told to carry on without it.
+//! declined and the agent is told to carry on without it. A read-only thread is never left waiting
+//! and, unless "Let read-only threads leave plan mode" is on, never taken out of read-only: what
+//! only reads is approved, a plan exit gets "No, keep planning" and a note, and anything that would
+//! change something is declined.
 //!
 //! SEE-ALSO: server/src/coordinators/relay.rs (CDXC:Autopilot 2026-11-07 DECISION on the approval
 //! rule), server/src/session_chat_send/answer_http.rs (the answer path), server/src/server/autopilot_runtime.rs.
@@ -28,11 +31,13 @@ pub(super) enum PromptAct {
     Wait,
     /// Send this answer (`/api/answerSessionChatPrompt` params, without the session's ids).
     Answer { params: Value, did: String },
-    /// Decline it with this answer, then tell the agent `message`; logged as left for the user.
+    /// Decline it with this answer, then tell the agent `message`; logged as left for the user,
+    /// or as `did` when nothing is left for them (a read-only thread's step).
     Decline {
         params: Value,
         message: String,
         note: String,
+        did: Option<String>,
     },
     /// Leave it for the user, logged once with this note.
     Leave { note: String },
@@ -355,10 +360,74 @@ fn deletes_outside(text: &str, project_path: Option<&str>) -> bool {
     })
 }
 
+/// What changes nothing, so a read-only thread may do it and stay read-only: a read, a search, a
+/// fetch, its own to-do list, or a shell command whose every piped part only reads (no redirect,
+/// no chained command, no `find -delete` or `-exec`). Connector cards are never reads: a read-only
+/// connector call runs without one (connectors/agent/calls.rs).
+fn reads_only(tool: &str, text: &str) -> bool {
+    let tool = tool.to_ascii_lowercase();
+    if [
+        "read",
+        "glob",
+        "grep",
+        "ls",
+        "notebookread",
+        "webfetch",
+        "websearch",
+        "todowrite",
+    ]
+    .contains(&tool.as_str())
+    {
+        return true;
+    }
+    if !(tool.is_empty() || tool == "bash" || tool == "shell" || tool == "exec") {
+        return false;
+    }
+    let command = text.trim().to_ascii_lowercase();
+    if command.is_empty()
+        || contains_any(
+            &command,
+            &[
+                ">", ";", "&", "`", "$(", "<(", "\n", " -exec", " -ok", " -delete", " -fprint",
+                " -fls", "--output", "--pre",
+            ],
+        )
+    {
+        return false;
+    }
+    let reads = [
+        "ls",
+        "cat",
+        "head",
+        "tail",
+        "rg",
+        "grep",
+        "find",
+        "wc",
+        "pwd",
+        "stat",
+        "file",
+        "tree",
+        "which",
+        "git status",
+        "git diff",
+        "git log",
+        "git show",
+        "git blame",
+    ];
+    command.split('|').all(|part| {
+        let part = part.trim();
+        reads
+            .iter()
+            .any(|read| part == *read || part.starts_with(&format!("{read} ")))
+    })
+}
+
 enum Verdict {
     Approve,
-    /// The note for the user, and why, in the agent's terms.
-    Decline(String, String),
+    /// The note for the user, why in the agent's terms, and what the log says when nothing is
+    /// left for the user.
+    Decline(String, String, Option<String>),
     Leave(String),
     Wait,
     /// What it would do, held for the user's minute: look again in this many milliseconds.
@@ -381,12 +450,12 @@ fn after_users_minute(verdict: Verdict, waited: i64) -> Verdict {
     }
 }
 
-/// What the user's choices make of one approval. `read_only` is a read-only thread's card (not
-/// its folder trust): Autopilot may decline it, never approve it.
+/// What the user's choices make of one approval. `read_only` is a card of a read-only thread that
+/// stays read-only (not its folder trust), and `reads` says the card only reads.
 ///
-/// CDXC:Autopilot 2026-11-13 DECISION:
-/// The coordinator, for the user, when "Answer approval cards" became on by default: "Autopilot must never approve leaving read-only/Plan mode for a read-only thread" (`start-thread --read-only`, CDXC:Coordinators 2026-11-13 in coordinators/read_only.rs). Every approval such a thread asks for is a step out of its mode (Claude's "Ready to code?" plan exit, an edit or command in Plan mode, a Codex sandbox escalation), and its plan text would sort as an ordinary prompt that Everything approves, so the whole card waits for the user and Autopilot's log says why.
-fn verdict(config: &AutopilotConfig, class: Class, read_only: bool) -> Verdict {
+/// CDXC:Autopilot 2026-11-18 DECISION:
+/// User, when a read-only thread sat for minutes on a Read and its plan exit: "agent is getting stuck on this which i dont want to happen please fix!!", "we need to fix this". Supersedes the 2026-11-13 rule that left every card of a read-only thread for the user: Autopilot still never takes a read-only thread out of read-only, but it never leaves one waiting either. What only reads is approved, a plan exit gets "No, keep planning" and a note to finish with the plan as its report (`plan_exit`), and an edit, a command that changes something or a Codex sandbox escalation is declined with the usual "carry on without it"; a sign-in and a hard limit keep their own decline. The user's "Let read-only threads leave plan mode" switch (off by default, `AutopilotConfig::read_only_leave_plan`) judges such a thread like any other instead.
+fn verdict(config: &AutopilotConfig, class: Class, read_only: bool, reads: bool) -> Verdict {
     if !config.answer_approvals || config.tier == Tier::Heal {
         return Verdict::Wait;
     }
@@ -394,6 +463,7 @@ fn verdict(config: &AutopilotConfig, class: Class, read_only: bool) -> Verdict {
         Class::Never(what) => Verdict::Decline(
             format!("It asked for {what}, which only you can do."),
             format!("it asks for {what}, which only the user can do"),
+            None,
         ),
         // CDXC:Autopilot 2026-11-14 DECISION: user (Q3033, "only full"): the hard-limit switches show and count only on "All but limits"; on "Safe steps" every hard limit is declined.
         Class::Limit(limit)
@@ -405,15 +475,90 @@ fn verdict(config: &AutopilotConfig, class: Class, read_only: bool) -> Verdict {
                     limit.words()
                 ),
                 format!("{} is a hard limit the user hasn't allowed", limit.words()),
+                None,
             )
         }
-        _ if read_only => Verdict::Leave(READ_ONLY_NOTE.to_string()),
+        _ if read_only && reads => Verdict::Approve,
+        _ if read_only => Verdict::Decline(
+            READ_ONLY_DID.to_string(),
+            "this is a read-only thread, so it can't change files or run commands that change things"
+                .to_string(),
+            Some(READ_ONLY_DID.to_string()),
+        ),
         Class::Limit(_) | Class::Safe => Verdict::Approve,
         Class::Plain if config.tier == Tier::Everything => Verdict::Approve,
         Class::Plain => Verdict::Leave(
             "It isn't one of the safe steps Autopilot may approve, so it waits for you."
                 .to_string(),
         ),
+    }
+}
+
+/// A plan exit: Claude's "Ready to code?" (`dialog`, when the screen shows it) or the ExitPlanMode
+/// card its hooks stored. A read-only thread that stays read-only gets "No, keep planning" as the
+/// card's Deny sends it, Escape (the dialog's last row, "No, keep planning" or "Tell Claude what to
+/// change" by Claude's version, opens a text field instead of answering), then a note; one the user's switch lets out gets the
+/// Yes that fits the tier: auto-accept edits on All but limits when Claude offers it, else (and on
+/// Safe steps) manually approve edits, so each edit still comes to Autopilot as a card of its own.
+fn plan_exit(
+    config: &AutopilotConfig,
+    read_only: bool,
+    dialog: Option<&crate::session_chat_terminal_dialog::TerminalDialog>,
+    waited: i64,
+) -> PromptAct {
+    if !config.answer_approvals || config.tier == Tier::Heal {
+        return PromptAct::Wait;
+    }
+    let wait = crate::coordinators::test_scaled(APPROVAL_WAIT_MS);
+    if waited < wait {
+        return PromptAct::Hold {
+            after_ms: wait - waited,
+        };
+    }
+    let row = |wanted: &dyn Fn(&str) -> bool| {
+        dialog.and_then(|dialog| {
+            dialog.rows.iter().enumerate().find_map(|(index, row)| {
+                let label = row.label.to_ascii_lowercase();
+                wanted(&label).then(|| {
+                    (
+                        json!({ "kind": "terminalDialog", "choiceIndex": index, "dialogId": dialog.id }),
+                        row.label.clone(),
+                    )
+                })
+            })
+        })
+    };
+    if read_only {
+        return PromptAct::Decline {
+            params: json!({ "kind": "approval", "approvalSend": "" }),
+            message: KEEP_PLANNING_MESSAGE.to_string(),
+            note: KEEP_PLANNING_DID.to_string(),
+            did: Some(KEEP_PLANNING_DID.to_string()),
+        };
+    }
+    // Never "use auto mode" or "bypass permissions": they would let the agent past Autopilot's
+    // hard limits. Claude offers "auto-accept edits" only in some setups; without it, every edit
+    // comes as a card that All but limits approves.
+    let yes = |wanted: &'static str| {
+        move |label: &str| label.starts_with("yes") && label.contains(wanted)
+    };
+    let picked = if config.tier == Tier::Everything {
+        row(&yes("auto-accept")).or_else(|| row(&yes("manually approve")))
+    } else {
+        row(&yes("manually approve"))
+    };
+    match picked {
+        Some((params, label)) => PromptAct::Answer {
+            params,
+            did: format!(
+                "Approved its plan ({label}): it leaves plan mode, because \"Let read-only threads leave plan mode\" is on."
+            ),
+        },
+        None => PromptAct::Leave {
+            note: format!(
+                "Autopilot couldn't find the plan's \"Yes, manually approve edits\" choice on screen, so it waits for you."
+            ),
+        },
     }
 }
 
@@ -448,8 +593,13 @@ fn recommended_index(
         })
 }
 
-const READ_ONLY_NOTE: &str =
-    "It's a read-only thread, so its approvals wait for you: approving one would take it out of read-only.";
+/// The log line for a read-only thread's step that would change something.
+const READ_ONLY_DID: &str = "Declined it: it's a read-only thread, so it can't change files or run commands that change things. Told it to carry on without it.";
+
+/// The log line for a read-only thread's plan exit.
+const KEEP_PLANNING_DID: &str = "Kept it in plan mode: it's a read-only thread, so Autopilot answered \"No, keep planning\" and told it to finish with its plan as its report.";
+
+const KEEP_PLANNING_MESSAGE: &str = "Ghostex: [Autopilot] This is a read-only thread, so it stays in plan mode. Don't exit plan mode: finish by writing your plan as your final report (or the page or file your brief asks for, if it's allowed in read-only), then stop.";
 
 const DECLINE_MESSAGE: &str = "Ghostex: [Autopilot] I declined that request: {why}. It's noted for them in Autopilot's log. Carry on with the rest of your task without it, and say at the end what's left for them.";
 
@@ -465,15 +615,26 @@ pub(super) fn decide_prompt(
     now: i64,
 ) -> Option<PromptDecision> {
     let stored = crate::agents::session_chat_prompt_setting(session);
-    let read_only = crate::coordinators::is_read_only_thread(
+    let read_only_thread = crate::coordinators::is_read_only_thread(
         session.get("runtimeSettings").and_then(Value::as_object),
     );
-    let notice =
-        crate::session_chat_options::cached_session_chat_terminal_notice(state, &key.0, &key.1)
-            .filter(|notice| {
-                matches!(notice.kind.as_str(), "permissionPrompt" | "trustPrompt")
-                    && !notice.auto_trust
-            });
+    // Stays read-only unless the user's switch lets Autopilot judge it like any thread.
+    let read_only = read_only_thread && !config.read_only_leave_plan;
+    let cached =
+        crate::session_chat_options::cached_session_chat_terminal_notice(state, &key.0, &key.1);
+    // Claude's "Ready to code?": answered here only for a read-only thread.
+    let plan_notice = cached.clone().filter(|notice| {
+        notice
+            .dialog
+            .as_ref()
+            .is_some_and(|dialog| dialog.title == crate::session_chat_claude_plan::READY_TO_CODE)
+    });
+    let plan_dialog = plan_notice
+        .as_ref()
+        .and_then(|notice| notice.dialog.as_ref());
+    let notice = cached.filter(|notice| {
+        matches!(notice.kind.as_str(), "permissionPrompt" | "trustPrompt") && !notice.auto_trust
+    });
     let open_forms = session
         .pointer("/runtimeSettings/sessionChatOpenQuestions/count")
         .and_then(Value::as_u64)
@@ -481,6 +642,13 @@ pub(super) fn decide_prompt(
     let fingerprint = match (&stored, &notice) {
         (Some(stored), _) => fingerprint(stored),
         (None, Some(notice)) => fingerprint(&format!("{}{}", notice.kind, notice.detected_at)),
+        (None, None) if read_only_thread && plan_notice.is_some() => fingerprint(&format!(
+            "plan{}",
+            plan_notice
+                .as_ref()
+                .map(|notice| notice.detected_at.as_str())
+                .unwrap_or_default()
+        )),
         (None, None) if open_forms > 0 => {
             fingerprint(&format!("forms:{open_forms}:{}", session["lastActiveAt"]))
         }
@@ -554,6 +722,7 @@ pub(super) fn decide_prompt(
                             config,
                             classify("connector", &text, project_path),
                             read_only,
+                            false,
                         ),
                         waited,
                     ) {
@@ -567,13 +736,14 @@ pub(super) fn decide_prompt(
                                 did: "Approved it (Approve).".to_string(),
                             },
                         ),
-                        Verdict::Decline(note, why) => decision(
+                        Verdict::Decline(note, why, did) => decision(
                             "hard-limit",
                             saw,
                             PromptAct::Decline {
                                 params: body(2),
                                 message: DECLINE_MESSAGE.replace("{why}", &why),
                                 note,
+                                did,
                             },
                         ),
                         Verdict::Leave(note) => {
@@ -657,8 +827,22 @@ pub(super) fn decide_prompt(
             } => {
                 let text = summary.clone().unwrap_or_default();
                 let saw = format!("It asked to run {tool}: {}", short(&text, 160));
+                let plan = tool == "ExitPlanMode";
+                if plan && read_only_thread {
+                    return match plan_exit(config, read_only, plan_dialog, waited) {
+                        PromptAct::Wait => wait(),
+                        PromptAct::Hold { after_ms } => hold(after_ms),
+                        act => decision("approval", saw, act),
+                    };
+                }
+                // A plan's text is no command: words in it ("sign in", "git push") ask nothing.
+                let class = if plan {
+                    Class::Plain
+                } else {
+                    classify(&tool, &text, project_path)
+                };
                 return match after_users_minute(
-                    verdict(config, classify(&tool, &text, project_path), read_only),
+                    verdict(config, class, read_only, reads_only(&tool, &text)),
                     waited,
                 ) {
                     Verdict::Wait => wait(),
@@ -677,13 +861,14 @@ pub(super) fn decide_prompt(
                             did: "Approved it.".to_string(),
                         },
                     ),
-                    Verdict::Decline(note, why) => decision(
+                    Verdict::Decline(note, why, did) => decision(
                         "hard-limit",
                         saw,
                         PromptAct::Decline {
                             params: json!({ "kind": "approval", "approvalSend": "" }),
                             message: DECLINE_MESSAGE.replace("{why}", &why),
                             note,
+                            did,
                         },
                     ),
                     Verdict::Leave(note) => decision("approval", saw, PromptAct::Leave { note }),
@@ -733,46 +918,19 @@ pub(super) fn decide_prompt(
         } else {
             classify(&tool, &text, project_path)
         };
-        let labels: Vec<(usize, String)> = match &notice.dialog {
-            Some(dialog) => dialog
-                .rows
-                .iter()
-                .enumerate()
-                .map(|(index, row)| (index, row.label.to_ascii_lowercase()))
-                .collect(),
-            None => notice
-                .choices
-                .iter()
-                .map(|choice| (choice.index, choice.label.to_ascii_lowercase()))
-                .collect(),
-        };
-        let yes = labels
-            .iter()
-            .find(|(_, label)| {
-                (label.starts_with("yes")
-                    || label.starts_with("trust")
-                    || label.starts_with("allow")
-                    || label.starts_with("approve"))
-                    && !contains_any(label, &["don't ask", "dont ask", "always", "remember"])
-            })
-            .or_else(|| labels.iter().find(|(_, label)| label.starts_with("yes")))
-            .map(|(index, _)| *index);
+        let labels = notice_rows(&notice);
+        let yes = approving_row(&labels);
         let no = labels
             .iter()
             .find(|(_, label)| {
                 label.starts_with("no") || label.starts_with("deny") || label.starts_with("reject")
             })
             .map(|(index, _)| *index);
-        let body = |index: usize| match &notice.dialog {
-            Some(dialog) => {
-                json!({ "kind": "terminalDialog", "choiceIndex": index, "dialogId": dialog.id })
-            }
-            None => {
-                json!({ "kind": "terminalChoice", "choiceIndex": index, "noticeDetectedAt": notice.detected_at })
-            }
-        };
+        let body = |index: usize| answer_body(&notice, index);
         // Trusting the project folder lets the agent start; it is not a step out of read-only.
-        return match after_users_minute(verdict(config, class, read_only && !trust), waited) {
+        let reads = !trust && reads_only(&tool, &text);
+        return match after_users_minute(verdict(config, class, read_only && !trust, reads), waited)
+        {
             Verdict::Wait => wait(),
             Verdict::Hold(after_ms) => hold(after_ms),
             Verdict::Approve => match yes {
@@ -792,7 +950,7 @@ pub(super) fn decide_prompt(
                     },
                 ),
             },
-            Verdict::Decline(note, why) => match no {
+            Verdict::Decline(note, why, did) => match no {
                 Some(index) => decision(
                     "hard-limit",
                     saw,
@@ -800,11 +958,22 @@ pub(super) fn decide_prompt(
                         params: body(index),
                         message: DECLINE_MESSAGE.replace("{why}", &why),
                         note,
+                        did,
                     },
                 ),
                 None => decision("hard-limit", saw, PromptAct::Leave { note }),
             },
             Verdict::Leave(note) => decision("approval", saw, PromptAct::Leave { note }),
+        };
+    }
+
+    // A read-only thread's "Ready to code?" with no card stored by the hooks.
+    if read_only_thread && plan_dialog.is_some() {
+        let saw = "It asked to leave plan mode and start on its plan (Ready to code?).".to_string();
+        return match plan_exit(config, read_only, plan_dialog, waited) {
+            PromptAct::Wait => wait(),
+            PromptAct::Hold { after_ms } => hold(after_ms),
+            act => decision("approval", saw, act),
         };
     }
 
@@ -836,4 +1005,65 @@ pub(super) fn current_fingerprint(memory: &PromptMemory) -> Option<String> {
         .seen
         .as_ref()
         .map(|(fingerprint, _)| fingerprint.clone())
+}
+
+/// A prompt's rows on screen, lowercased, with the index an answer names.
+fn notice_rows(
+    notice: &crate::session_chat_notice::SessionChatTerminalNotice,
+) -> Vec<(usize, String)> {
+    match &notice.dialog {
+        Some(dialog) => dialog
+            .rows
+            .iter()
+            .enumerate()
+            .map(|(index, row)| (index, row.label.to_ascii_lowercase()))
+            .collect(),
+        None => notice
+            .choices
+            .iter()
+            .map(|choice| (choice.index, choice.label.to_ascii_lowercase()))
+            .collect(),
+    }
+}
+
+/// The row that approves it once (Yes, Trust, Allow, Approve), never one that remembers it.
+fn approving_row(labels: &[(usize, String)]) -> Option<usize> {
+    labels
+        .iter()
+        .find(|(_, label)| {
+            (label.starts_with("yes")
+                || label.starts_with("trust")
+                || label.starts_with("allow")
+                || label.starts_with("approve"))
+                && !contains_any(label, &["don't ask", "dont ask", "always", "remember"])
+        })
+        .or_else(|| labels.iter().find(|(_, label)| label.starts_with("yes")))
+        .map(|(index, _)| *index)
+}
+
+/// `/api/answerSessionChatPrompt` params picking row `index` of the prompt the card showed.
+fn answer_body(
+    notice: &crate::session_chat_notice::SessionChatTerminalNotice,
+    index: usize,
+) -> Value {
+    match &notice.dialog {
+        Some(dialog) => {
+            json!({ "kind": "terminalDialog", "choiceIndex": index, "dialogId": dialog.id })
+        }
+        None => {
+            json!({ "kind": "terminalChoice", "choiceIndex": index, "noticeDetectedAt": notice.detected_at })
+        }
+    }
+}
+
+/// The answer that trusts the folder when the session shows its agent's "Trust this folder?"
+/// (Claude's and Codex's alike), for the supervisor's own notes folder (autopilot_judge.rs).
+pub(super) fn trust_folder_answer(
+    state: &super::AppState,
+    key: &crate::coordinators::SessionKey,
+) -> Option<Value> {
+    let notice =
+        crate::session_chat_options::cached_session_chat_terminal_notice(state, &key.0, &key.1)
+            .filter(|notice| notice.kind == "trustPrompt")?;
+    approving_row(&notice_rows(&notice)).map(|index| answer_body(&notice, index))
 }

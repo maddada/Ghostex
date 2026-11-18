@@ -168,6 +168,12 @@ pub(crate) struct AutomationDefinition {
     #[serde(default)]
     pub(crate) prompt: String,
     pub(crate) schedule: AutomationSchedule,
+    /// The model each run's new session starts on; `None` keeps the agent's own.
+    #[serde(default)]
+    pub(crate) model: Option<String>,
+    /// The effort each run's new session starts on; `None` keeps the agent's own.
+    #[serde(default)]
+    pub(crate) effort: Option<String>,
 }
 
 impl AutomationDefinition {

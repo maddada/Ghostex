@@ -27,7 +27,8 @@ fn allowed() -> Section {
         "What it does",
         vec![
             row("autopilotAnswerQuestions", "When it asks a question", "Wait for me, or after 5, 10 or 15 minutes without your answer pick each question's recommended choice (a question with none goes to the supervisor)."),
-            row("autopilotApprovals", "When it asks permission", "Permission prompts, Connectors cards and folder trust: Wait for me, Safe steps (after a minute, approve reads, builds, tests, edits and local commits inside the project; anything else waits for you) or All but limits (after a minute, approve anything that is not a hard limit). A read-only thread's cards always wait for you."),
+            row("autopilotApprovals", "When it asks permission", "Permission prompts, Connectors cards and folder trust: Wait for me, Safe steps (after a minute, approve reads, builds, tests, edits and local commits inside the project; anything else waits for you) or All but limits (after a minute, approve anything that is not a hard limit). A read-only thread stays in plan mode: its reads are approved, a request to stop planning gets \"No, keep planning\", and its edits and commands are declined."),
+            row("autopilotReadOnlyLeavePlan", "Let read-only threads leave plan mode", "Off by default. When on, Autopilot approves a read-only helper's request to stop planning and start changing files, instead of keeping it in plan mode, and then judges its edits and commands like any other session's. Shows while Autopilot answers permission prompts."),
             row("autopilotHardLimits", "Hard limits it may cross", "With All but limits only. Each off until you turn it on: push a branch, finish a release you asked for, push main, merge pull requests, delete outside the project, post publicly. Sign-ins, 2FA, identity checks and payments are never done."),
         ],
     )
@@ -46,6 +47,7 @@ fn supervisor() -> Section {
         "Advanced",
         vec![
             advanced(row("autopilotSupervisor", "Supervisor model", "The agent that wakes for judgment calls: Claude Opus 5.5 at medium, or Codex GPT 6.1 Sol at high. It starts on an account with room.")),
+            advanced(row("autopilotCheckup", "Supervisor check-up", "Off, or every 10 (the default), 20 or 30 minutes, or every hour: Ghostex looks for sessions that seem stuck in ways its rules don't settle (silent after a reload, told to carry on but doing nothing, failing again and again, saying the same thing in a loop, waiting on nothing) and wakes the supervisor only when it finds one, so a quiet check-up costs nothing. Also ghostex autopilot checkup.")),
             advanced(row("autopilotSweep", "Look at every session every", "How often Autopilot sweeps every session it covers, from 1 to 10 minutes (2 by default). A session whose turn ends is looked at right away.")),
         ],
     )

@@ -32,6 +32,10 @@ fn is_skill_only_start(session: &Value) -> bool {
 /// CDXC:Coordinators 2026-10-05 DECISION:
 /// User chose to have threads keep the title the coordinator gives them with `--title`, like coordinators keep theirs: Claude's or Codex's own auto-title must not replace it. This supersedes the 2026-10-03 rule that threads keep naming themselves. A short brief let Claude name thread G9c61 after its coordinator (the only name in its first message, observed 2026-10-05), and a title that follows the agent also changed whenever a thread's identity briefly pointed at another conversation. The user's own rename of a thread still applies, and a thread started without a title (a placeholder) is named once by its agent and then kept.
 pub fn keeps_its_given_title(db: &Connection, session: &Value) -> bool {
+    // Autopilot's supervisor keeps "Autopilot supervisor" (server/src/autopilot/supervisor.rs).
+    if crate::autopilot::keeps_ghostex_title(session) {
+        return true;
+    }
     let title_source = session
         .pointer("/runtimeSettings/titleSource")
         .and_then(Value::as_str);

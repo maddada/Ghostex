@@ -122,6 +122,7 @@ pub mod agent_prompt_search_http;
 pub(crate) mod agentbox_http;
 mod app_state;
 mod autopilot_answers;
+mod autopilot_checkup;
 mod autopilot_http;
 mod autopilot_judge;
 mod autopilot_runtime;

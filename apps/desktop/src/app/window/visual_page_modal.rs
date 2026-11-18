@@ -90,6 +90,9 @@ pub(crate) enum VisualPageModalCommand {
         window: gpui::AnyWindowHandle,
         position: gpui::Point<gpui::Pixels>,
     },
+    /// Close the right-click menu `ContextMenu` opened over this window, if it is still open: a
+    /// press in the page or the window's band, Escape, the window losing focus or hiding.
+    DismissContextMenu { window: gpui::AnyWindowHandle },
     /// A notice for the app to show: how Import answers went (`more_menu.rs`).
     Notice {
         level: &'static str,
@@ -149,6 +152,10 @@ pub(crate) struct GpuiVisualPageModalWindow {
     page_starred: Option<bool>,
     /// The press in another window counted last, so the same press is never counted twice.
     counted_press: Option<Instant>,
+    /// The page's right-click menu, while it may still be open (`open_page_context_menu`).
+    page_context_menu: Option<PageContextMenu>,
+    /// This window, which the app's right-click menu names as the window it opened over.
+    window_handle: gpui::AnyWindowHandle,
     _source_watch: Option<Task<()>>,
     /// What the page was last handed of the app's glass and theme (`glass.rs`).
     glass: glass::PageGlass,
@@ -205,6 +212,7 @@ impl GpuiVisualPageModalWindow {
         let mut click_away =
             super::popup_dismissal::close_app_modal_on_click_in_ghostex(window, cx);
         click_away.push(observe_presses_elsewhere(window, cx));
+        click_away.extend(dismiss_page_context_menu_on_click_away(window, cx));
         // CDXC:SessionChat 2026-11-05 WHY: an app quit (`cargo xtask rebuild` relaunches the app)
         // shuts Chromium down with the page still open, so the page never sees `pagehide` and
         // what the reader typed since its last save was lost (issues-1027/page-draft-loss). The
@@ -249,6 +257,8 @@ impl GpuiVisualPageModalWindow {
             more_button: Rc::default(),
             refreshing: false,
             counted_press: None,
+            page_context_menu: None,
+            window_handle: gpui::Window::window_handle(window),
             _source_watch: None,
             glass: glass::PageGlass::new(palette.light),
             _glass_watch: None,
@@ -364,6 +374,7 @@ impl GpuiVisualPageModalWindow {
                                         origin.x + gpui::px(menu.x),
                                         origin.y + gpui::px(menu.y),
                                     );
+                                    let menu = this.open_page_context_menu(menu);
                                     (this.host)(
                                         VisualPageModalCommand::ContextMenu {
                                             menu,
@@ -511,6 +522,7 @@ impl GpuiVisualPageModalWindow {
             Ok(surface) => {
                 *shown_surface.borrow_mut() = Some(surface.downgrade());
                 surface.read(cx).add_page_script(page::PAGE_SCRIPT);
+                report_page_presses(&surface, window, cx);
                 // Dictate starts only while this window is shown and the active one.
                 let shown: crate::app::page_dictation::PageShown = {
                     let modal = cx.weak_entity();
@@ -639,6 +651,7 @@ impl GpuiVisualPageModalWindow {
         self.hidden = hidden;
         if hidden {
             self.close_more_menu(cx);
+            self.dismiss_page_context_menu(cx);
             if let Some(dictation) = &self.dictation {
                 dictation.cancel(cx);
             }
@@ -653,9 +666,12 @@ impl GpuiVisualPageModalWindow {
         if event.keystroke.key == "escape" {
             window.prevent_default();
             cx.stop_propagation();
-            // Escape closes the ⋯ menu first, then the window.
+            // Escape closes the ⋯ menu or the page's right-click menu first, then the window.
             if self.more_menu.is_some() {
                 self.close_more_menu(cx);
+                return;
+            }
+            if self.dismiss_page_context_menu(cx) {
                 return;
             }
             (self.host)(VisualPageModalCommand::Close, cx);
@@ -844,6 +860,10 @@ impl Render for GpuiVisualPageModalWindow {
             .overflow_hidden()
             .bg(gpui::rgb(page_top))
             .on_key_down(cx.listener(Self::on_key_down))
+            // A press anywhere in the window's own band closes the page's right-click menu.
+            .capture_any_mouse_down(cx.listener(|this, _: &gpui::MouseDownEvent, _, cx| {
+                this.dismiss_page_context_menu(cx);
+            }))
             .when_some(self.glass.backdrop.as_ref(), |this, backdrop| {
                 this.child(
                     div()
@@ -904,6 +924,107 @@ fn observe_presses_elsewhere(
             this.click_away(cx);
         },
     )
+}
+
+/// The page's right-click menu the app was asked to open over this window.
+///
+/// CDXC:ContextMenus 2026-11-18 WHY:
+/// User: "when i right click in inline html i can't click outside that context menu to hide that context menu pls fix". The menu is the app's own (CDXC:ContextMenus 2026-11-16 in cef/shell/browser_handlers.rs), drawn in a non-activating popup window, so it closes on the presses GPUI sees and those the main window's pages report. A press in this window's page reached neither: the page is a native CEF view, and only the main window reports its page presses on macOS. The window now closes the menu itself, like every other menu: on a press in its page (`report_page_presses`) or its band, on Escape (which closed the whole window instead), and when the window loses focus or hides. Back and Forward are left out: a page in this window never navigates (its links open elsewhere), so they only ever showed disabled.
+struct PageContextMenu {
+    /// Held by the menu's rows: gone once the menu has closed, however it closed.
+    run: std::rc::Weak<dyn Fn(i32)>,
+    opened_at: Instant,
+}
+
+impl GpuiVisualPageModalWindow {
+    /// Remembers `menu` as open from now, and returns it as the window shows it.
+    fn open_page_context_menu(
+        &mut self,
+        menu: cef::BrowserPageContextMenu,
+    ) -> cef::BrowserPageContextMenu {
+        let menu = menu.without_history();
+        self.page_context_menu = Some(PageContextMenu {
+            run: Rc::downgrade(&menu.run),
+            opened_at: Instant::now(),
+        });
+        menu
+    }
+
+    /// Asks the app to close the page's right-click menu if it may still be open; returns whether
+    /// it was. Forgets it either way, so a menu that already went away costs at most one Escape.
+    fn dismiss_page_context_menu(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some(menu) = self.page_context_menu.take() else {
+            return false;
+        };
+        if menu.run.strong_count() == 0 {
+            return false;
+        }
+        (self.host)(
+            VisualPageModalCommand::DismissContextMenu {
+                window: self.window_handle,
+            },
+            cx,
+        );
+        true
+    }
+}
+
+/// A press in the page is one GPUI never sees. Linux reports it from Chromium's X11 child and
+/// Windows from the page taking focus (popup_dismissal::PagePointerPress); macOS reports it from
+/// AppKit's mouse-down on the page, here recorded the same way for this window only.
+fn report_page_presses(
+    surface: &Entity<CefSurface>,
+    window: &mut Window,
+    cx: &mut Context<GpuiVisualPageModalWindow>,
+) {
+    let own_window = gpui::Window::window_handle(window).window_id();
+    let async_cx = cx.to_async();
+    let foreground = cx.foreground_executor().clone();
+    surface.read(cx).on_page_pointer_down(Rc::new(move || {
+        let async_cx = async_cx.clone();
+        // Inside AppKit's event: record it once the app is free.
+        foreground
+            .spawn(async move {
+                async_cx.update(|cx| {
+                    super::popup_dismissal::note_page_focus(own_window, cx);
+                });
+            })
+            .detach();
+    }));
+}
+
+/// Closes the page's right-click menu on a press in this window's page made after it opened, and
+/// when the window loses focus to another window or app (on Linux, once focus left the app: the
+/// menu's own popup takes focus there).
+fn dismiss_page_context_menu_on_click_away(
+    window: &mut Window,
+    cx: &mut Context<GpuiVisualPageModalWindow>,
+) -> [Subscription; 2] {
+    let own_window = gpui::Window::window_handle(window).window_id();
+    [
+        cx.observe_global_in::<super::popup_dismissal::PagePointerPress>(
+            window,
+            move |this, _, cx| {
+                let press = *cx.global::<super::popup_dismissal::PagePointerPress>();
+                if super::popup_dismissal::page_press_closes_popups_in(own_window, press)
+                    && this
+                        .page_context_menu
+                        .as_ref()
+                        .is_some_and(|menu| press.at > menu.opened_at)
+                {
+                    this.dismiss_page_context_menu(cx);
+                }
+            },
+        ),
+        cx.observe_window_activation(window, |this, window, cx| {
+            if window.is_window_active() || this.page_context_menu.is_none() {
+                return;
+            }
+            super::popup_dismissal::dismiss_on_focus_loss(this, window, cx, |this, _, cx| {
+                this.dismiss_page_context_menu(cx);
+            });
+        }),
+    ]
 }
 
 impl ModalCornerClose for GpuiVisualPageModalWindow {

@@ -33,7 +33,7 @@ ghosttykit)
 		cd "$GHOSTTY_ROOT"
 		env DEVELOPER_DIR="$DEVELOPER_DIR" SDKROOT="$SDKROOT" \
 			GHOSTTY_METAL_DEVELOPER_DIR="$DEVELOPER_DIR" \
-			"$GHOSTTY_ZIG" build -Demit-xcframework -Dxcframework-target=universal -Demit-macos-app=false
+			"$GHOSTTY_ZIG" build -Demit-xcframework -Dxcframework-target=universal -Demit-macos-app=false -Doptimize=ReleaseSafe
 	)
 	SLICE=".dependencies/ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64"
 	[[ -f "$REPO_ROOT/$SLICE/ghostty-internal.a" && -f "$REPO_ROOT/$SLICE/Headers/ghostty.h" ]] || {

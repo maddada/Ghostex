@@ -222,8 +222,18 @@ impl GhostexGpuiApp {
             return;
         }
         let Some(path) = self.native_docs_link_file_path(doc_path, target) else {
+            self.dispatch_gpui_workspace_action_toast(
+                "error",
+                "Couldn't open that link",
+                &format!("Files can't tell which file {target} points to."),
+                cx,
+            );
             return;
         };
+        if window.modifiers().alt {
+            self.native_docs_open_link_in_default_app(&path, cx);
+            return;
+        }
         let before = self.native_docs.documents.len();
         let shown = self.native_docs.active.as_deref().and_then(|active| {
             self.native_docs
@@ -244,6 +254,35 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// Opens a linked file (or folder) in this computer's default app for it, as Option-click
+    /// (Alt-click off macOS) on a file link does.
+    ///
+    /// CDXC:Docs 2026-11-18 DECISION:
+    /// User picked "Add Option-click (Alt-click) on a file link to open it in the default app": in Files, Option-click (Alt-click on Windows and Linux) on a link to a file, inside or outside the project, opens it in the system's default app instead of a Files tab; a plain or Cmd-click still opens it in Files (Q3888, Q3889).
+    fn native_docs_open_link_in_default_app(&mut self, path: &Path, cx: &mut Context<Self>) {
+        let remote = self.native_docs.project.as_ref().is_some_and(|project| {
+            crate::app::helpers::gpui_remote_project_reference_from_project_id(&project.project_id)
+                .is_some()
+        });
+        let error = if remote {
+            Some("This file is on another computer, so it can't open in this computer's apps. A plain click opens it in Files.".to_string())
+        } else if !path.exists() {
+            Some(format!("Nothing exists at {}.", path.display()))
+        } else {
+            crate::app::helpers::gpui_spawn_os_open(path.as_os_str())
+                .err()
+                .map(|_| format!("Your computer couldn't open {}.", path.display()))
+        };
+        if let Some(error) = error {
+            self.dispatch_gpui_workspace_action_toast(
+                "error",
+                "Couldn't open in the default app",
+                &error,
+                cx,
+            );
+        }
+    }
+
     /// The file a link names, as an absolute path: `file://` and `~/` expanded, a relative link
     /// joined to the clicked document's folder, and a `#heading` or `:line` dropped when the path
     /// without it is the one that exists (on a remote project, which this computer cannot check,
@@ -257,7 +296,20 @@ impl GhostexGpuiApp {
             if let Some(path) = super::open_file::typed_absolute_path(link) {
                 return Some(path);
             }
-            let resolved = super::blocks::resolve_image_path(doc_path, link)?;
+            let Some(resolved) = super::blocks::resolve_image_path(doc_path, link) else {
+                // A relative link that climbs above the project folder (#645): resolved from the
+                // document's real folder, so it opens like a file outside the project does.
+                if link.contains("://") || link.starts_with('/') {
+                    return None;
+                }
+                let document = Path::new(doc_path);
+                let document = if document.is_absolute() {
+                    document.to_path_buf()
+                } else {
+                    project.project_path.join(document)
+                };
+                return Some(join_relative_link(document.parent()?, link));
+            };
             let resolved = Path::new(&resolved);
             Some(if resolved.is_absolute() {
                 resolved.to_path_buf()
@@ -394,6 +446,22 @@ impl GhostexGpuiApp {
             this.native_docs_notify(cx);
         });
     }
+}
+
+/// `link` (relative, `/`-separated) joined to `folder`, with its `.` and `..` folded in by name, as
+/// the link reads: a `..` above the top of the computer stays at the top.
+fn join_relative_link(folder: &Path, link: &str) -> PathBuf {
+    let mut path = folder.to_path_buf();
+    for segment in link.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                path.pop();
+            }
+            other => path.push(other),
+        }
+    }
+    path
 }
 
 /// `link` without a trailing `:line` or `:line:column`.

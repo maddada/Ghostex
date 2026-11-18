@@ -5,6 +5,7 @@
 //! SEE-ALSO: apps/desktop/src/app/os_integration/app_update_remote_control.rs (the app's answer), apps/desktop/src/app/remote_conn/app_update.rs (the remote Update button), packages/gx-core/src/renderer_commands/verbs.rs (`appUpdate`).
 mod auto;
 mod http;
+mod linux_install;
 mod record;
 mod status;
 

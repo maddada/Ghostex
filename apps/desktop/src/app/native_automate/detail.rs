@@ -181,6 +181,18 @@ impl NativeAutomateView {
                 .unwrap_or_else(|| automation.agent_id.clone()),
         ));
         rows.push(detail_row(p, "Agent", agent_value));
+        let launch_choice = [automation.model.as_deref(), automation.effort.as_deref()]
+            .into_iter()
+            .flatten()
+            .filter(|value| !value.trim().is_empty())
+            .collect::<Vec<_>>();
+        if !launch_choice.is_empty() {
+            rows.push(detail_row(
+                p,
+                "Model",
+                vec![text(launch_choice.join(" \u{b7} "))],
+            ));
+        }
         rows.push(detail_row(
             p,
             "Mode",

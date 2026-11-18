@@ -242,7 +242,17 @@ pub(crate) fn sync_session_chat_follower_for_session(
         let context_server_id = state.metadata.server_id.clone();
         let context_project_id = project_id.clone();
         let context_session_id = session_id.clone();
+        let probe_state = state.clone();
+        let probe_project_id = project_id.clone();
+        let probe_session_id = session_id.clone();
         crate::session_chat::SessionChatSuccessorHooks {
+            probe_live_identity: Arc::new(move || {
+                let _ = crate::server::sync_title_signaled_zmx_process_identity(
+                    &probe_state,
+                    &probe_project_id,
+                    &probe_session_id,
+                );
+            }),
             unbound_agent_chat: Arc::new(move || {
                 let db = open_gxserver_database(&context_paths).ok()?;
                 let repository = DomainRepository::new(&db, context_server_id.as_str());

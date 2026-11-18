@@ -63,6 +63,10 @@ fn settle_with_ids(
                 &mut next_request_id,
             ) {
                 effects.extend(more);
+            } else if let Some(more) =
+                crate::extras::where_pill::settle_rpc(state, *request_id, outcome.as_ref(), context)
+            {
+                effects.extend(more);
             } else if let Some(more) = subagent::settle_rpc(
                 &mut state.extras.subagent,
                 *request_id,
@@ -150,6 +154,10 @@ fn settle_with_ids(
                 state,
                 &mut next_request_id,
             ));
+            effects.extend(crate::extras::where_pill::settle_tick(
+                state,
+                &mut next_request_id,
+            ));
             advance_loading_stage(state, context);
             // A red Terminal View verdict looks at the screen again by itself.
             if terminal_tail::recheck_due(&mut state.extras.terminal_tail, context.now_ms) {
@@ -217,6 +225,10 @@ fn settle_with_ids(
         _ => {}
     }
     crate::extras::session_details::settle::prune_stopping(state);
+    effects.extend(crate::extras::where_pill::read_if_due(
+        state,
+        &mut next_request_id,
+    ));
     effects.extend(crate::extras::coordinator_quality::read_hidden(state));
     // The open "N more" list follows the threads: a new revision on a frame reads it again.
     effects.extend(coordinator_threads::read_all_threads(

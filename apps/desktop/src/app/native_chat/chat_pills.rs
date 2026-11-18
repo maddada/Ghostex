@@ -61,6 +61,8 @@ pub(super) struct ChatPillBounds {
     approvals: Rc<Cell<Bounds<Pixels>>>,
     /// The coordinator tips' pill (coordinator_intro.rs).
     intro: Rc<Cell<Bounds<Pixels>>>,
+    /// The where pill at the strip's left (where_pill.rs).
+    where_pill: Rc<Cell<Bounds<Pixels>>>,
 }
 
 impl ChatPillBounds {
@@ -76,6 +78,7 @@ impl ChatPillBounds {
             super::saved_draft_pill::SAVED_DRAFT_MENU => self.saved_draft.clone(),
             super::relayed_approval::APPROVALS_MENU => self.approvals.clone(),
             super::coordinator_intro::INTRO_MENU => self.intro.clone(),
+            super::where_pill::WHERE_MENU => self.where_pill.clone(),
             _ => self.subagents.clone(),
         }
     }
@@ -163,6 +166,7 @@ fn trigger_id(id: &str) -> &'static str {
         super::saved_draft_pill::SAVED_DRAFT_MENU => super::saved_draft_pill::SAVED_DRAFT_TRIGGER,
         super::relayed_approval::APPROVALS_MENU => super::relayed_approval::APPROVALS_TRIGGER,
         super::coordinator_intro::INTRO_MENU => super::coordinator_intro::INTRO_TRIGGER,
+        super::where_pill::WHERE_MENU => super::where_pill::WHERE_TRIGGER,
         ghostex_gx_chat_core::extras::autopilot::AUTOPILOT_PILL => AUTOPILOT_TRIGGER,
         _ => "chat-pill-subagents",
     }
@@ -204,6 +208,7 @@ fn menu_width(id: &str) -> f32 {
         }
         super::relayed_approval::APPROVALS_MENU => super::relayed_approval::APPROVALS_MENU_WIDTH,
         super::coordinator_intro::INTRO_MENU => super::coordinator_intro::INTRO_MENU_WIDTH,
+        super::where_pill::WHERE_MENU => super::where_pill::WHERE_MENU_WIDTH,
         _ => 520.0,
     }
 }
@@ -656,13 +661,22 @@ impl NativeChatView {
         if self.chat_menu_toggled_shut(trigger, cx) {
             return;
         }
-        let rows = self.snapshot["chatPills"]
+        let pill = self.snapshot["chatPills"]
             .as_array()
             .into_iter()
             .flatten()
-            .find(|pill| pill["id"] == id)
+            .find(|pill| pill["id"] == id);
+        let mut rows = pill
             .and_then(|pill| pill["menu"].as_array().cloned())
             .unwrap_or_default();
+        // "Open supervisor" after the toggle, once Autopilot has one (gx-chat-core
+        // `extras/autopilot.rs`, CDXC:Autopilot 2026-11-18).
+        if let Some(row) = pill
+            .map(|pill| &pill["supervisorRow"])
+            .filter(|row| row.is_object())
+        {
+            rows.insert(rows.len().min(1), row.clone());
+        }
         match at {
             Some(at) => self.show_chat_menu_at(rows, at, AUTOPILOT_MENU_WIDTH, window, cx),
             None => {
@@ -744,6 +758,9 @@ impl NativeChatView {
         if id == super::coordinator_intro::INTRO_MENU {
             return self.coordinator_intro_menu_height();
         }
+        if id == super::where_pill::WHERE_MENU {
+            return self.where_menu_height();
+        }
         if id == "filesLinks" {
             let scale = ChatAppearance::current(&self.snapshot).scale;
             let pane = f32::from(self.bounds.get().size.height) / scale;
@@ -777,6 +794,7 @@ impl NativeChatView {
             super::saved_draft_pill::SAVED_DRAFT_MENU => self.saved_draft_menu_body(p, cx),
             super::relayed_approval::APPROVALS_MENU => self.approvals_menu_body(p, cx),
             super::coordinator_intro::INTRO_MENU => self.coordinator_intro_menu_body(p, cx),
+            super::where_pill::WHERE_MENU => self.where_menu_body(p, cx),
             super::coordinator_board::BOARD_MENU => self.coordinator_board_menu_body(p, cx),
             super::coordinator_board::BOARD_COLUMNS_MENU => self.board_columns_body(p, cx),
             super::session_details::SESSION_DETAILS_MENU => {

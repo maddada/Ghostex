@@ -313,6 +313,7 @@ pub(crate) fn start_session_provider_with_observed_state(
             &probed_session,
             &cwd,
         );
+        crate::agent_folder_trust::allow_ghostex_in_codex_before_launch(&probed_session);
         let startup_text = startup_text.unwrap_or_default();
         // OpenCode's TUI opens its conversation only when it exists already (GitHub #538).
         crate::session_chat_opencode::create_before_terminal_launch(

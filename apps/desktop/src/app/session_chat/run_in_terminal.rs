@@ -142,21 +142,21 @@ impl GhostexGpuiApp {
                     group_id,
                     session_id,
                 };
-                let mounted = self.gpui_command_action_mounted_reuse_surface_available(slot)
-                    && self
-                        .command_gpui_engine_terminals
-                        .get(&session_id)
-                        .map(|record| record.view.clone())
-                        .map(|view| {
-                            view.update(cx, |view, cx| {
-                                view.send_text_input(&format!("{CLEAR_PROMPT_LINE}{command}"), cx)
-                            })
-                        })
-                        .is_some();
-                if mounted {
-                    if submit {
-                        self.send_return_key_to_mounted_command_terminal_surface(slot, cx);
-                    }
+                /*
+                CDXC:SessionChat 2026-11-18 WHY:
+                User (Discord, Leech): "I cannot send code to the terminal.. it opens the terminal and nothing is pasted"; a second click worked. With the Commands panel closed, the tab's terminal is not on screen, so the command used to go out as the attach input of a fresh attach. The tab's terminal view is usually still alive behind the closed panel, and a tab that already has a view never takes an attach input, so the panel opened on that terminal with nothing typed. Any live view of this exact tab is typed into directly, shown or not; only a tab with no view takes the attach path.
+                */
+                let live_view = self
+                    .command_gpui_engine_terminals
+                    .get(&session_id)
+                    .map(|record| record.view.clone());
+                if let Some(view) = live_view {
+                    view.update(cx, |view, cx| {
+                        view.send_text_input(&format!("{CLEAR_PROMPT_LINE}{command}"), cx);
+                        if submit {
+                            view.send_return_key(cx);
+                        }
+                    });
                 } else {
                     let title = self
                         .command_pane

@@ -20,6 +20,7 @@ mod helper_tools;
 pub(crate) mod helpers;
 mod history;
 mod history_parser;
+pub(crate) mod hub;
 pub(crate) mod launch;
 pub(crate) mod limit_wait;
 pub(crate) mod login_expired;

@@ -16,6 +16,10 @@
 //! After the view chips, on a Codex chat idle for over a day, the "Option + Enter to compact then
 //! send" hint (`compact_hint_chip`).
 //!
+//! First of all, at the strip's left end, the where pill of a running session (where_pill.rs),
+//! which alone is enough to show the strip once the chat has rows. It counts in the fit
+//! (`plan_strip_with_where`).
+//!
 //! CDXC:SessionChat 2026-10-29 SEE-ALSO:
 //! The user's words (option E) are on packages/gx-chat-core/src/extras/chat_pills.rs. The phone draws the same strip in apps/mobile/app/src/chat/native/cards/PillsStrip.tsx.
 
@@ -92,6 +96,8 @@ pub(super) struct PillsStripCells {
     end_room: Rc<Cell<f32>>,
     /// Which pills drop their label and how many of the last ones wait in the "+N" pill.
     plan: Rc<RefCell<StripPlan>>,
+    /// The where pill's width at each of its tiers (unscaled), known before it is drawn.
+    where_widths: Rc<Cell<Option<[f32; 3]>>>,
     /// The "+N" pill's width at its last paint (unscaled).
     overflow_width: Rc<Cell<Option<f32>>>,
     /// The pills in the "+N" pill's list, as the core described them.
@@ -127,6 +133,8 @@ pub(super) struct StripPlan {
     collapsed: HashSet<String>,
     tiny: HashSet<String>,
     hidden: usize,
+    /// How much of the where pill shows (where_pill.rs).
+    where_tier: super::where_pill::WhereTier,
 }
 
 /// The gap between two pills (unscaled), and the "+N" pill's width before it has been drawn once.
@@ -205,6 +213,71 @@ pub(super) fn plan_strip_tiers(
         }
     }
     (n, 0, 0)
+}
+
+/// The gap between the strip band's parts (unscaled): the where pill, the chips and the pills.
+const BAND_GAP: f32 = 8.0;
+
+/// How wide the row is for a plan from `plan_strip_tiers`.
+fn plan_total(
+    fixed: &[f32],
+    pills: &[(f32, f32, f32)],
+    (hidden, collapsed, tiny): (usize, usize, usize),
+    overflow: f32,
+    gap: f32,
+) -> f32 {
+    let visible = pills.len() - hidden.min(pills.len());
+    let mut total: f32 = fixed.iter().sum();
+    let mut count = fixed.len();
+    for (index, (full, icon, least)) in pills[..visible].iter().enumerate() {
+        total += if index + tiny >= visible {
+            *least
+        } else if index + collapsed >= visible {
+            *icon
+        } else {
+            *full
+        };
+        count += 1;
+    }
+    if hidden > 0 {
+        total += overflow;
+        count += 1;
+    }
+    total + gap * count.saturating_sub(1) as f32
+}
+
+/// `plan_strip_tiers` with the where pill at the strip's left counted in: `room` is what the where
+/// pill and the pills share (the where pill's `BAND_GAP` included). The panel pills drop their
+/// labels first, then the where pill shrinks a tier at a time (`where_widths`, widest first), and
+/// only at its narrowest do pills go into the "+N" pill.
+///
+/// CDXC:SessionChat 2026-11-17 DECISION:
+/// The user asked for the where pill (Q3785, the left end of the strip) with the strip's label dropping kept working "with the pill counted in it". In the picked mockup the pills dropped their labels while the where pill stayed whole, so labels go first.
+pub(super) fn plan_strip_with_where(
+    room: f32,
+    where_widths: Option<[f32; 3]>,
+    fixed: &[f32],
+    pills: &[(f32, f32, f32)],
+    overflow: f32,
+    gap: f32,
+) -> (super::where_pill::WhereTier, (usize, usize, usize)) {
+    use super::where_pill::WhereTier;
+    let Some(widths) = where_widths else {
+        return (
+            WhereTier::Full,
+            plan_strip_tiers(room, fixed, pills, overflow, gap),
+        );
+    };
+    let mut last = (WhereTier::Icon, (pills.len(), 0, 0));
+    for tier in WhereTier::ALL {
+        let avail = room - widths[tier.index()] - BAND_GAP;
+        let plan = plan_strip_tiers(avail, fixed, pills, overflow, gap);
+        last = (tier, plan);
+        if plan.0 == 0 && plan_total(fixed, pills, plan, overflow, gap) <= avail + 0.5 {
+            return last;
+        }
+    }
+    last
 }
 
 impl PillsStripCells {
@@ -495,10 +568,23 @@ impl NativeChatView {
             || self.snapshot["compactHint"].is_object();
         self.list.item_count() > 0
             && (armed
+                || self.where_pill().is_some()
                 || chips
                 || self.links_pill.is_some()
                 || !self.strip_pill_ids().is_empty()
                 || self.open_question_pill_text().is_some())
+    }
+
+    /// Whether the strip is up with the where pill naming the project: a tier that keeps the
+    /// project (`WhereTier::Icon` drops it) and a project to name.
+    pub(super) fn where_pill_project_in_strip(&self) -> bool {
+        self.pills_strip_shown()
+            && self.pills_strip.plan.borrow().where_tier != super::where_pill::WhereTier::Icon
+            && self.where_pill().is_some_and(|pill| {
+                pill["project"]
+                    .as_str()
+                    .is_some_and(|project| !project.trim().is_empty())
+            })
     }
 
     /// The strip for the top of the chat box, or `None` once it has shrunk away.
@@ -542,14 +628,22 @@ impl NativeChatView {
             return None;
         }
         let left_bottom = super::scroll_bottom::transcript_left_bottom(&self.list, p.scale);
-        let (chips, pills) = if shown {
+        let (where_pill, chips, pills) = if shown {
             let mut chips: Vec<AnyElement> =
                 self.saved_draft_pill_element(p, cx).into_iter().collect();
             chips.extend(self.view_chips(p, cx));
             chips.extend(self.compact_hint_chip(p));
-            (chips, self.strip_pills(p, cx))
+            self.pills_strip
+                .where_widths
+                .set(self.where_pill_widths(p, cx));
+            let tier = self.pills_strip.plan.borrow().where_tier;
+            (
+                self.where_pill_element(tier, p, cx),
+                chips,
+                self.strip_pills(p, cx),
+            )
         } else {
-            (Vec::new(), Vec::new())
+            (None, Vec::new(), Vec::new())
         };
         // The ↓ at the left of the pills, so it appearing moves none of them.
         let scrolling: Vec<(StripItem, AnyElement)> = (shown && left_bottom)
@@ -599,9 +693,10 @@ impl NativeChatView {
                     .px(px(10.0 * s))
                     .flex()
                     .items_center()
-                    .gap(px(8.0 * s))
-                    // The Saved draft pill and the chips stay pinned left; the pills fit in what is
-                    // left beside them.
+                    .gap(px(BAND_GAP * s))
+                    // The where pill, the Saved draft pill and the chips stay pinned left; the
+                    // pills fit in what is left beside them.
+                    .children(where_pill)
                     .when(!chips.is_empty(), |band| {
                         band.child(
                             div()
@@ -730,6 +825,7 @@ impl NativeChatView {
         let overflow_width = cells.overflow_width.clone();
         let presets = cells.presets.clone();
         let end_room = cells.end_room.clone();
+        let where_widths = cells.where_widths.clone();
         let chat = cx.entity_id();
         div()
             .relative()
@@ -745,6 +841,13 @@ impl NativeChatView {
                 canvas(
                     move |view, _, cx| {
                         let avail = f32::from(view.size.width) / s - end_room.get();
+                        // The where pill sits outside this area, at its current tier; the room
+                        // the two share is this area plus that pill and its gap.
+                        let where_widths = where_widths.get();
+                        let current_tier = plan.borrow().where_tier;
+                        let room = avail
+                            + where_widths
+                                .map_or(0.0, |widths| widths[current_tier.index()] + BAND_GAP);
                         let fixed: Vec<f32> = items
                             .borrow()
                             .iter()
@@ -768,8 +871,9 @@ impl NativeChatView {
                             .collect();
                         let next = match measured {
                             Some(pills) => {
-                                let (hidden, collapsed, tiny) = plan_strip_tiers(
-                                    avail,
+                                let (where_tier, (hidden, collapsed, tiny)) = plan_strip_with_where(
+                                    room,
+                                    where_widths,
                                     &fixed,
                                     &pills,
                                     overflow_width.get().unwrap_or(OVERFLOW_ESTIMATE),
@@ -786,6 +890,7 @@ impl NativeChatView {
                                     collapsed: ids(collapsed),
                                     tiny: ids(tiny),
                                     hidden,
+                                    where_tier,
                                 }
                             }
                             // A pill never drawn has no width yet: show them all once to measure it.

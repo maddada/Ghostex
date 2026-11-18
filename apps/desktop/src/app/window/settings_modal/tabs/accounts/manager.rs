@@ -56,6 +56,15 @@ impl AccountsTab {
             Pane::Add(provider) => self.render_add_pane(p, provider, &data, window, cx),
             Pane::AddPick => self.render_add_pick(p, &data, cx),
             Pane::AddUsage(provider) => self.render_add_usage_pane(p, provider, window, cx),
+            Pane::AddHub => self.render_add_hub_pane(p, window, cx),
+            Pane::Hub(id) => match data.hub(id) {
+                Some(hub) => self.render_hub_pane(p, &hub, window, cx),
+                None => div().into_any_element(),
+            },
+            Pane::HubAccount(id) => match data.hub_account(id) {
+                Some((hub, account)) => self.render_hub_account_pane(p, &hub, &account, window, cx),
+                None => div().into_any_element(),
+            },
         };
         // Only a running Claude Swap or Codex Swap action and the Uninstall confirmation.
         let footer: Vec<AnyElement> = super::data::PROVIDERS
@@ -351,6 +360,34 @@ impl AccountsTab {
                 .hover(|this| this.bg(hsla(p.raised_hover)))
                 .on_click(cx.listener(move |page, _: &gpui::ClickEvent, _window, cx| {
                     page.pick_provider(provider, &pick_data, cx)
+                }))
+                .into_any_element(),
+            );
+        }
+        // CLIProxyAPI hubs, only while that extension is on (gxserver sends `cliproxyHubs` then).
+        if data.hubs().is_some() {
+            body.push(
+                row(
+                    SharedString::from("accounts-pick-hub"),
+                    super::super::super::fields::settings_icon(
+                        "modals/settings/server.svg",
+                        18.0,
+                        p.muted,
+                    )
+                    .into_any_element(),
+                    "CLIProxyAPI hub".to_string(),
+                    Some("A hub you run".to_string()),
+                    super::super::super::fields::settings_icon(
+                        "modals/settings/chevron-right.svg",
+                        14.0,
+                        p.muted,
+                    )
+                    .into_any_element(),
+                )
+                .cursor_pointer()
+                .hover(|this| this.bg(hsla(p.raised_hover)))
+                .on_click(cx.listener(|page, _: &gpui::ClickEvent, _window, cx| {
+                    page.select_pane(Pane::AddHub, cx)
                 }))
                 .into_any_element(),
             );

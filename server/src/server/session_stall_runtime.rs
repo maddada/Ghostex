@@ -50,6 +50,9 @@ fn tick(state: &AppState, watches: &Mutex<HashMap<SessionKey, StallWatch>>) {
             text_field(session, "projectId"),
             text_field(session, "sessionId"),
         );
+        if effective_lifecycle_state(session) == "running" {
+            crate::session_chat_compacting::refresh_compacting_marker_from_screen(state, session);
+        }
         if !watched(session, &key, &now_iso) {
             continue;
         }
@@ -92,6 +95,9 @@ fn watched(session: &Value, key: &SessionKey, now_iso: &str) -> bool {
         // the turn (CDXC:Coordinators 2026-11-13 in session_status/model.rs).
         || crate::presentation::working_only_in_background(session, now_iso)
         || waits_on_the_user(session, now_iso)
+        // Claude's idle compaction after a finished turn is no turn running
+        // (CDXC:Coordinators 2026-11-18 in coordinators/idle_compaction.rs).
+        || coordinators::idle_compacted_after_turn_end(session)
     {
         return false;
     }

@@ -70,6 +70,10 @@ pub const OS_INTEGRATION: &str = "osIntegration";
 pub const BEADS: &str = "kanban";
 /// Debugging (Settings > Debugging). Listed while its switch is on; never gated.
 pub const DEBUGGING: &str = "debugging";
+/// CLIProxyAPI (a hub the user runs: its Settings > Accounts section, its accounts' usage, the On
+/// the hub launch choice). Off by default; gxserver answers no hubs and refuses hub launches while
+/// it is off (server/src/accounts/hub/).
+pub const CLI_PROXY_API: &str = "cliProxyApi";
 
 fn entry(id: &str) -> Option<&'static J> {
     GHOSTEX_OFFICIAL_EXTENSIONS

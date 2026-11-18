@@ -62,16 +62,21 @@ fn session_chat_agent_command_is_user_hop(session: &Value) -> bool {
 /// With the agent gone and its terminal back at a shell prompt (a start command that failed, an agent that quit), nothing answers the prompt-editor handshake: the capture typed its editor key into the user's shell, waited out its 16 seconds and answered HTTP 500 on every switch to Chat (a customer's Windows log, 2026-10-16). A shell holds no agent draft, so the switch transfers nothing.
 /// CDXC:Drafts 2026-10-24 WHY:
 /// A bare prompt was not enough: a Codex whose start command sat unrun at the prompt, and one that never drew anything, got the editor key typed into the shell (`^G^G` after `codex`) and failed after 16 seconds the same way (GitHub #290). An agent whose input box Ghostex can recognise must be showing it, or there is no draft to move.
+/// CDXC:Drafts 2026-11-18 WHY:
+/// GitHub #661: while Claude's question picker was open, every switch to Chat pressed Ctrl+G into the picker, which never opens the prompt editor, and failed after 16 seconds with "The terminal did not finish preserving its current draft" (twice on one user's computer). The picker has replaced the input box until the question is answered, so there is no draft to move and nothing is typed.
 async fn terminal_holds_no_agent_draft(zmx_name: &str, agent: Option<&str>) -> bool {
     let Some(screen) = capture_session_terminal_text(zmx_name).await else {
         return false;
     };
-    crate::session_chat_notice::session_chat_screen_ends_with_shell_prompt(&screen)
-        || (crate::session_chat_composer::has_session_chat_composer_signature(agent)
-            && crate::session_chat_composer::detect_session_chat_composer_readiness(
-                agent, &screen, None,
-            )
-            .input_box_missing())
+    if crate::session_chat_notice::session_chat_screen_ends_with_shell_prompt(&screen) {
+        return true;
+    }
+    if !crate::session_chat_composer::has_session_chat_composer_signature(agent) {
+        return false;
+    }
+    let readiness =
+        crate::session_chat_composer::detect_session_chat_composer_readiness(agent, &screen, None);
+    readiness.input_box_missing() || readiness.waits_on_question()
 }
 
 fn claim_pending_first_user_input_draft_for_chat(

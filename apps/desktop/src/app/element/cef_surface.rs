@@ -266,6 +266,11 @@ impl CefSurface {
     }
 
     /// The top-left corner of the page's view in the window, once a paint has placed it.
+    /// Runs `handler` on every real press in the page, which GPUI never sees (macOS only).
+    pub(crate) fn on_page_pointer_down(&self, handler: Rc<dyn Fn()>) {
+        self.browser.on_native_page_pointer_down(handler);
+    }
+
     pub(crate) fn view_origin(&self) -> Option<Point<Pixels>> {
         self.browser.view_origin()
     }

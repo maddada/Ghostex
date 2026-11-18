@@ -2,6 +2,7 @@
 
 use serde_json::Value;
 
+use super::context;
 use super::native;
 use super::record::{self, CrashKind, CrashRecord, STACK_MAX_FRAMES, SentCrash};
 use super::system;
@@ -32,6 +33,7 @@ pub(crate) fn record_panic(details: &Value) {
                 .collect()
         })
         .unwrap_or_default();
+    let (screen, recent_events) = context::snapshot();
     record::save_pending(&CrashRecord {
         kind: CrashKind::Panic,
         version: system::APP_VERSION.to_string(),
@@ -42,6 +44,10 @@ pub(crate) fn record_panic(details: &Value) {
         message: text("message"),
         stack: compact_rust_backtrace(&backtrace),
         log_tail: record::log_tail(),
+        thread: Some("main".to_string()),
+        screen,
+        recent_events,
+        build_id: None,
     });
 }
 
@@ -49,6 +55,7 @@ pub(crate) fn record_panic(details: &Value) {
 /// and call stack, right before the process ends.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub(crate) fn record_uncaught_exception(name: &str, reason: &str, call_stack: &[String]) {
+    let (screen, recent_events) = context::snapshot();
     record::save_pending(&CrashRecord {
         kind: CrashKind::UncaughtException,
         version: system::APP_VERSION.to_string(),
@@ -67,6 +74,17 @@ pub(crate) fn record_uncaught_exception(name: &str, reason: &str, call_stack: &[
             .map(|frame| frame.split_whitespace().collect::<Vec<_>>().join(" "))
             .collect(),
         log_tail: record::log_tail(),
+        thread: Some(
+            if std::thread::current().name() == Some("main") {
+                "main"
+            } else {
+                "another thread"
+            }
+            .to_string(),
+        ),
+        screen,
+        recent_events,
+        build_id: None,
     });
 }
 

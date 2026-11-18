@@ -195,6 +195,12 @@ pub fn star(state: &mut ChatState, id: &str, starred: bool) -> Vec<Effect> {
 
 /// `questionRemove {id}`: removes a form or page without answering it.
 pub fn remove(state: &mut ChatState, id: &str) -> Vec<Effect> {
+    remove_naming(state, id, None)
+}
+
+/// [`remove`], naming the question for the agent when it is the user's Dismiss (`dismissed`, as
+/// the agent knows it): gxserver tells the agent with the next message it gets anyway.
+fn remove_naming(state: &mut ChatState, id: &str, dismissed: Option<String>) -> Vec<Effect> {
     let id = id.trim();
     if id.is_empty() || removed_ids(state).contains(id) {
         return Vec::new();
@@ -206,15 +212,19 @@ pub fn remove(state: &mut ChatState, id: &str) -> Vec<Effect> {
         .removing
         .insert(id.to_string(), request_id);
     state.core.request_publish();
+    let mut params = json!({
+        "kind": "questionRemove",
+        "questionId": id,
+        "projectId": state.identity.project_id,
+        "sessionId": state.identity.session_id,
+    });
+    if let Some(name) = dismissed.filter(|name| !name.trim().is_empty()) {
+        params["dismissed"] = json!(name);
+    }
     vec![Effect::SendRpc {
         request_id,
         method: ChatRpcMethod::AnswerSessionChatPrompt,
-        params: Box::new(json!({
-            "kind": "questionRemove",
-            "questionId": id,
-            "projectId": state.identity.project_id,
-            "sessionId": state.identity.session_id,
-        })),
+        params: Box::new(params),
     }]
 }
 
@@ -251,7 +261,7 @@ pub fn set(state: &mut ChatState, id: &str, later: bool) -> Vec<Effect> {
 /// CDXC:SessionChat 2026-11-10 DECISION:
 /// User: "for any ask i should be able to click 'Snooze' and snooze it for 1h 6h 24h or cancel it".
 /// Snooze is For later with an end, not a second kind of putting off; Cancel is the removal
-/// (`remove`) that also tells the agent (`cancel`).
+/// (`remove`) that also tells the agent (`cancel`; since 2026-11-17 only with its next message).
 pub fn snooze(state: &mut ChatState, id: &str, hours: u64) -> Vec<Effect> {
     let id = id.trim();
     if id.is_empty() {
@@ -278,39 +288,47 @@ pub fn snooze(state: &mut ChatState, id: &str, hours: u64) -> Vec<Effect> {
     }]
 }
 
-/// `cancelQuestion {id}`: removes a form or page for good (`remove`) and tells the agent which
-/// questions the user cancelled, as an answer is sent back.
+/// `cancelQuestion {id}`: the dock's Dismiss (Mark as read on a page that only waits to be seen).
+/// Removes a form or page for good (`remove`) and sends the agent nothing: gxserver keeps its name
+/// ("\"Release plan\" (Q12 to Q14)") and tells the agent with the next message it gets anyway, in
+/// that message's hidden `<ghostex-system>` note, never as a bubble of the user's.
+///
+/// CDXC:SessionChat 2026-11-17 DECISION:
+/// User, of "I dismissed your questions there: no need to ask them again." drawn as their own
+/// bubble, twice for two dismissals: Dismiss is silent (Q3800 A, Q3801), on the phone too (Q3802),
+/// and a row with no questions reads Mark as read. Supersedes the 2026-11-10 rule above that
+/// Cancel also tells the agent. The full decision is in server/src/session_chat_dismissed.rs.
 pub fn cancel(state: &mut ChatState, id: &str) -> Vec<Effect> {
-    let tags: Vec<String> = state
+    let asker = state
         .transcript_view
         .askers
         .iter()
-        .find(|asker| asker.id == id)
-        .map(|asker| asker.tags.clone())
+        .find(|asker| asker.id == id);
+    let (tags, title, seen_only) = asker
+        .map(|asker| (asker.waiting_tags(), asker.title.clone(), asker.seen_only))
         .unwrap_or_default();
-    let mut effects = remove(state, id);
-    if effects.is_empty() {
-        return effects;
-    }
-    let text = if tags.is_empty() {
-        "I dismissed your questions there: no need to ask them again.".to_string()
+    let title = title
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace('"', "'");
+    let tags = if tags.is_empty() {
+        String::new()
     } else {
-        format!(
-            "I dismissed {}: no need to ask {} again.",
-            crate::transcript::open_questions::tag_range(&tags),
-            if tags.len() == 1 { "it" } else { "them" }
-        )
+        crate::transcript::open_questions::tag_range(&tags)
     };
-    let request_id = state.core.allocate_request_id();
-    effects.push(Effect::SendRpc {
-        request_id,
-        method: ChatRpcMethod::SendSessionChatMessage,
-        params: Box::new(json!({
-            "text": text,
-            "sendRequestId": format!("question-cancel-{}-{id}", state.identity.session_id),
-        })),
-    });
-    effects
+    let name = match (title.is_empty(), tags.is_empty()) {
+        (false, false) => format!("\"{title}\" ({tags})"),
+        (false, true) => format!("\"{title}\""),
+        (true, false) => tags,
+        (true, true) => "an untitled form or page".to_string(),
+    };
+    let name = if seen_only {
+        format!("{name} (marked read)")
+    } else {
+        name
+    };
+    remove_naming(state, id, Some(name))
 }
 
 /// `markQuestionAnswered {id}`: a dock row's ⋯ Mark answered on a form, page or one-click question

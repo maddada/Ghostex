@@ -357,6 +357,19 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("appWide", J::Bool(true)),
         ("title", J::Str("Claude")),
     ]),
+    // CDXC:AgentProviders 2026-11-18 DECISION:
+    // User picked option B on the CLIProxyAPI page (a hub the user runs, as a launch target in Accounts plus its accounts' usage, read only): "pls make the ui for it not show unless user picks to enable cliproxyapi in extensions (build in extension)". A whole-feature entry, off by default under a key that enables (`cliProxyApiEnabled`), that only the user can switch. Off, nothing about it shows: no hub in Settings > Accounts, no On the hub choice when a session starts, no hub on the phone; gxserver answers no hubs and refuses hub launches and edits. Saved hubs and their keys are kept.
+    // SEE-ALSO: server/src/accounts/hub/ (the hubs, their usage, launches and limit waits), apps/desktop/src/app/window/settings_modal/tabs/accounts/hubs.rs.
+    J::Obj(&[
+        ("description", J::Str("Start Claude and Codex sessions on a CLIProxyAPI hub you run yourself, and see the usage of the accounts it pools in Settings > Accounts.")),
+        ("category", J::Str("features")),
+        ("id", J::Str("cliProxyApi")),
+        ("placement", J::Str("feature")),
+        ("settingsKey", J::Str("cliProxyApiEnabled")),
+        ("settingsKeyEnables", J::Bool(true)),
+        ("appWide", J::Bool(true)),
+        ("title", J::Str("CLIProxyAPI")),
+    ]),
     // CDXC:Extensions 2026-11-09 DECISION:
     // User: "let's please add an extension to the app like the claude one that opens different claude accounts but this one is to open different grok bot logins". Built like Claude: its own sidebar button beside Claude's, the page in the sessions column's place with the same takeover (apps/desktop/src/app/claude_web/takeover.rs), and a bar above the page to switch logins. Ghostex has no saved Grok accounts, so the logins are its own (`grokWebLogins`), each a named browser profile with its own cookies; the bar adds one, Settings > Files & Links > Browser renames and removes them. The start page is one setting for every login (`grokWebStartPage`, grok.com by default; the coordinator, for the user: "that url is mine but it should open grok.com usually"), as Claude has no per-account settings. A whole-feature entry with a new key (`grokWebHidden`, default on = hidden, so it starts off like Claude). Off removes the button, the page and the two rows; every login's sign-in is kept.
     // SEE-ALSO: apps/desktop/src/app/claude_web/grok.rs (the logins and the bar), apps/desktop/src/app/claude_web/place.rs (Claude or Grok).

@@ -186,6 +186,51 @@ pub(crate) fn compact_card_tooltip(
     )
 }
 
+/// The colours a card drawn by [`frosted_element_tooltip`] uses on its bubble.
+#[derive(Clone, Copy)]
+pub(crate) struct CardInk {
+    pub(crate) foreground: Hsla,
+    pub(crate) secondary: Hsla,
+    pub(crate) hairline: Hsla,
+}
+
+/// The session tooltip's frosted bubble around any content, `width` wide (its padding included,
+/// kept inside the window): for a card with rows of its own, such as the chat's where pill
+/// (native_chat/where_pill.rs). `content` draws with the bubble's own colours.
+pub(crate) fn frosted_element_tooltip<E: IntoElement>(
+    content: impl Fn(CardInk, &mut Window, &mut App) -> E + 'static,
+    width: f32,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyView {
+    let menu = titlebar_popup_menu_background();
+    let frosted = crate::app::window::frosted_host::frosted_hosting_active()
+        && window.tooltip_presenter_active();
+    let in_window = in_window_bubble(window_glass_active_in(window));
+    let background = if frosted {
+        crate::app::helpers::frosted_tooltip_fill(menu)
+    } else {
+        in_window.fill
+    };
+    let ink = CardInk {
+        foreground: titlebar_popup_menu_foreground(),
+        secondary: in_window.secondary,
+        hairline: in_window.border,
+    };
+    let room = (f32::from(window.viewport_size().width) - 2.0 * 4.0).max(0.0);
+    Tooltip::element(move |window, cx| content(ink, window, cx))
+        .w(px(width.min(room)))
+        .mx_0()
+        .mt(px(2.0))
+        .mb_0()
+        .py(px(9.0))
+        .px(px(10.0))
+        .rounded(px(gpui_component::tooltip::TOOLTIP_RADIUS))
+        .bg(background)
+        .border_color(in_window.border)
+        .build(window, cx)
+}
+
 /// The card's padding (9px a side) and border, around its text.
 const CARD_CHROME: f32 = 2.0 * 9.0 + 2.0;
 

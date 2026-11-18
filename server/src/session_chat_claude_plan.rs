@@ -10,7 +10,7 @@ use crate::session_chat_notice::SessionChatTerminalNotice;
 use crate::session_chat_options::{normalize_spaces, strip_ansi_sgr};
 
 /// The title Claude gives its plan approval dialog.
-const READY_TO_CODE: &str = "Ready to code?";
+pub(crate) const READY_TO_CODE: &str = "Ready to code?";
 /// A plan larger than this is cut; nobody approves a plan this long from a card.
 const PLAN_MAX_BYTES: u64 = 256 * 1024;
 /// How far back from the transcript's end the plan file's path is looked for.

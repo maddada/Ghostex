@@ -451,8 +451,13 @@ pub(crate) fn gpui_launch_open_target(
     Open In launch is bounded native process behavior: Finder/Open Folder uses the fixed OS opener, command targets use `/usr/bin/env` argv without shell splitting, macOS app-name launches use `/usr/bin/open -a`, child stdio is suppressed, and user paths/commands/errors are not copied into notifications or logs.
     */
     match &target.launch {
-        GpuiOpenTargetLaunch::Finder => gpui_open_path(project_path)
-            .map_err(|_| "Could not open the active project folder.".to_string()),
+        GpuiOpenTargetLaunch::Finder => {
+            if let Some(missing) = gpui_missing_project_folder_message(project_path) {
+                return Err(missing);
+            }
+            gpui_open_path(project_path)
+                .map_err(|_| "Could not open the active project folder.".to_string())
+        }
         GpuiOpenTargetLaunch::BuiltIn {
             default_command,
             base_args,

@@ -90,6 +90,9 @@ pub(crate) enum NativeChatEvent {
     /// context percentage moved. The app draws the header and does not redraw for the chat's own
     /// changes, so without this the ring showed whatever the last unrelated redraw caught.
     SessionDetailsRing,
+    /// The where pill started or stopped showing the project (`where_pill_shows_project`). The app
+    /// draws the header, which leaves the project out of its breadcrumb meanwhile.
+    WherePillProject,
 }
 
 pub(crate) struct NativeChatView {
@@ -479,6 +482,9 @@ pub(crate) struct NativeChatView {
     /// The transcript starts at the window's top edge under the floating work area header, so its
     /// first row reserves the header's height (`set_under_workarea_header`).
     pub(crate) under_workarea_header: bool,
+    /// The where pill is on screen in the chat box's strip and shows the project, not cut down to
+    /// the computer's icon (`set_where_pill_shows_project`, read by the work area header).
+    pub(crate) where_pill_shows_project: bool,
 }
 
 impl EventEmitter<NativeChatEvent> for NativeChatView {}
@@ -770,6 +776,7 @@ impl NativeChatView {
             api_error_tick: std::cell::Cell::new(false),
             tool_clock_tick: std::cell::Cell::new(false),
             under_workarea_header: false,
+            where_pill_shows_project: false,
         }
     }
 
@@ -786,9 +793,13 @@ impl NativeChatView {
             });
             self.input = Some(input);
         }
-        let placeholder = self.snapshot["composerPlaceholder"]
-            .as_str()
-            .unwrap_or_default();
+        let placeholder = if self.secret_request_open() {
+            "Type the secret in the private card above"
+        } else {
+            self.snapshot["composerPlaceholder"]
+                .as_str()
+                .unwrap_or_default()
+        };
         if self.input_placeholder != placeholder {
             self.input_placeholder = placeholder.to_owned();
             self.input.as_ref().unwrap().update(cx, |input, cx| {
@@ -903,7 +914,11 @@ impl NativeChatView {
             if let Some(input) = &self.input {
                 let composer = input.read(cx).focus_handle(cx);
                 if composer.is_focused(window) || !self.chat_text_field_focused(window, cx) {
-                    composer.focus(window, cx);
+                    // An open secret request card takes the chat box's keyboard (#648).
+                    match self.open_secret_field() {
+                        Some(secret) => secret.update(cx, |secret, cx| secret.focus(window, cx)),
+                        None => composer.focus(window, cx),
+                    }
                 }
             }
         }
@@ -915,6 +930,11 @@ impl NativeChatView {
             return;
         }
         super::focus::reclaim_keyboard_focus(window);
+        // While a secret request card is open the chat box takes no typing: a click, hotkey or
+        // handoff that focused it moves on to the card at the next draw (#648).
+        if self.secret_request_open() {
+            self.focus_requested = true;
+        }
         self.composer_focused = true;
         self.sync_suggestion_window(cx);
         self.expand_composer(true, cx);

@@ -45,6 +45,8 @@ const MAX_RELOADS_PER_HOUR: usize = 3;
 const MAX_SWITCHES_PER_HOUR: usize = 2;
 /// Questions answered and approvals given per session per hour.
 const MAX_ANSWERS_PER_HOUR: usize = 30;
+/// Times one session is handed to the supervisor by a check-up per hour.
+const MAX_CHECKUPS_PER_HOUR: usize = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Kind {
@@ -53,6 +55,8 @@ enum Kind {
     Reload,
     Switch,
     Answer,
+    /// Handed to the supervisor by a check-up (autopilot_checkup.rs).
+    Checkup,
 }
 
 impl Kind {
@@ -62,6 +66,19 @@ impl Kind {
             Self::Reload => MAX_RELOADS_PER_HOUR,
             Self::Switch => MAX_SWITCHES_PER_HOUR,
             Self::Answer => MAX_ANSWERS_PER_HOUR,
+            Self::Checkup => MAX_CHECKUPS_PER_HOUR,
+        }
+    }
+
+    /// The rule's words in a check-up's reason.
+    fn words(self) -> &'static str {
+        match self {
+            Self::CarryOn => "carrying it on",
+            Self::Interrupt => "interrupting it",
+            Self::Reload => "reloading it",
+            Self::Switch => "switching its account",
+            Self::Answer => "answering its prompts",
+            Self::Checkup => "check-ups",
         }
     }
 }
@@ -75,6 +92,8 @@ struct Pilot {
     acted: Vec<(Kind, i64)>,
     /// The idle stretch (its last turn's end) already carried on.
     carried_on: Option<i64>,
+    /// When Autopilot last told it to carry on, for the check-up.
+    carried_on_at: Option<i64>,
     /// The quiet stretch acted on, what was done and when.
     quiet: Option<(i64, Kind, i64)>,
     /// The quiet stretch already left for the user.
@@ -106,6 +125,8 @@ impl Pilot {
 struct Memory {
     pilots: HashMap<SessionKey, Pilot>,
     last_sweep_ms: i64,
+    /// The last supervisor check-up (autopilot_checkup.rs).
+    last_checkup_ms: i64,
     /// The outage Autopilot is waiting through (since when this computer is offline).
     offline_since: Option<i64>,
 }
@@ -209,11 +230,13 @@ enum Act {
         params: Value,
         did: String,
     },
-    /// Decline its prompt, then tell the agent to carry on without it.
+    /// Decline its prompt, then tell the agent to carry on without it. `did` is logged instead of
+    /// "left for you" when nothing is left for the user (a read-only thread's step).
     Decline {
         params: Value,
         message: String,
         note: String,
+        did: Option<String>,
     },
     /// Leave its prompt for the user with a note.
     Leave {
@@ -266,6 +289,7 @@ fn now_ms() -> i64 {
 
 pub(crate) fn start_autopilot_runtime(state: Arc<AppState>) {
     let _ = autopilot::read_config(&state.paths);
+    super::autopilot_judge::restore_title_at_start(&state);
     let memory = Arc::new(Mutex::new(Memory::default()));
     let mut shutdown = state.shutdown_tx.subscribe();
     tokio::spawn(async move {
@@ -284,6 +308,7 @@ pub(crate) fn start_autopilot_runtime(state: Arc<AppState>) {
                 tokio::spawn(execute(state.clone(), memory.clone(), plan));
             }
             tokio::spawn(super::autopilot_judge::maybe_wake(state.clone()));
+            tokio::spawn(super::autopilot_judge::maybe_compact(state.clone()));
         }
     });
 }
@@ -347,7 +372,6 @@ fn tick(state: &AppState, memory: &Mutex<Memory>) -> Vec<Plan> {
             text_field(session, "projectId"),
             text_field(session, "sessionId"),
         );
-        autopilot::note_read_only_thread(&key.0, &key.1, session);
         let Some(project) = projects.get(&key.0) else {
             continue;
         };
@@ -430,6 +454,21 @@ fn tick(state: &AppState, memory: &Mutex<Memory>) -> Vec<Plan> {
     if sweep {
         memory.last_sweep_ms = now;
     }
+    // The supervisor check-up, on a sweep once its period has passed.
+    let checkup_ms = coordinators::test_scaled(config.checkup_minutes as i64 * 60_000);
+    if sweep && config.checkup_minutes > 0 && now - memory.last_checkup_ms >= checkup_ms {
+        memory.last_checkup_ms = now;
+        checkup(
+            state,
+            &mut memory,
+            &sessions,
+            &projects,
+            supervisor.as_ref(),
+            checkup_ms,
+            now,
+            &now_iso,
+        );
+    }
     // A session whose turn ended too recently to judge is looked at again after its settle.
     for (key, pilot) in memory.pilots.iter_mut() {
         if std::mem::take(&mut pilot.recheck) {
@@ -442,6 +481,65 @@ fn tick(state: &AppState, memory: &Mutex<Memory>) -> Vec<Plan> {
         covered: covered.len(),
     };
     plans
+}
+
+/// BLOCKING. The supervisor check-up: hands the covered sessions that look stuck in ways the rules
+/// don't settle to the supervisor, each at most twice an hour; none found wakes nothing.
+#[allow(clippy::too_many_arguments)]
+fn checkup(
+    state: &AppState,
+    memory: &mut Memory,
+    sessions: &[Value],
+    projects: &HashMap<String, Value>,
+    supervisor: Option<&SessionKey>,
+    period_ms: i64,
+    now: i64,
+    now_iso: &str,
+) {
+    let history = super::autopilot_checkup::recent_history(state, now);
+    for session in sessions {
+        let key = (
+            text_field(session, "projectId"),
+            text_field(session, "sessionId"),
+        );
+        if supervisor == Some(&key) || autopilot::user_has_it(&key.0, &key.1, now) {
+            continue;
+        }
+        let Some(pilot) = memory.pilots.get_mut(&key) else {
+            continue;
+        };
+        if pilot.busy || pilot.count(Kind::Checkup, now) >= Kind::Checkup.cap() {
+            continue;
+        }
+        let found = super::autopilot_checkup::look(
+            super::autopilot_checkup::Look {
+                session,
+                gate: &mut pilot.gate,
+                idle_path: &mut pilot.idle_path,
+                parked_quiet: pilot.quiet_parked.is_some(),
+                capped: pilot.capped.map(Kind::words),
+                carried_on_at: pilot.carried_on_at,
+            },
+            history.get(&key).copied().unwrap_or_default(),
+            period_ms,
+            now,
+            now_iso,
+        );
+        let Some((why, detail)) = found else {
+            continue;
+        };
+        pilot.acted.push((Kind::Checkup, now));
+        super::autopilot_judge::queue_judgment(super::autopilot_judge::JudgmentItem {
+            title: text_field(session, "title"),
+            project: projects
+                .get(&key.0)
+                .map(|project| text_field(project, "name"))
+                .unwrap_or_default(),
+            key,
+            why,
+            detail,
+        });
+    }
 }
 
 /// Signals a session again once its turn's settle has passed, so a turn end is acted on within
@@ -614,10 +712,12 @@ fn decide(
                 params,
                 message,
                 note,
+                did,
             } => Act::Decline {
                 params,
                 message,
                 note,
+                did,
             },
             PromptAct::Leave { note } => Act::Leave { note },
             PromptAct::Forms => Act::Forms,
@@ -795,6 +895,7 @@ fn decide(
         }
     }
     pilot.carried_on = Some(ended_at);
+    pilot.carried_on_at = Some(now);
     let (rule, saw, text) = match reason {
         IdleWaitReason::Queued(count) => (
             "parked-job-finished",
@@ -906,21 +1007,23 @@ async fn execute(state: Arc<AppState>, memory: Arc<Mutex<Memory>>, plan: Plan) {
             params,
             message,
             note,
+            did,
         } => {
             let declined = match answer(&state, &key, params).await {
-                Ok(()) => send(&state, &key, message, false)
-                    .await
-                    .map_err(|error| error_text(&error)),
+                Ok(()) => send_after_prompt_closes(&state, &key, message).await,
                 Err(error) => Err(error),
             };
             match declined {
                 Ok(()) => {
-                    log(
-                        &state,
-                        &plan,
-                        &format!("Declined it and told the agent to carry on without it. Left for you: {note}"),
-                        Outcome::Parked,
-                    );
+                    match did {
+                        Some(did) => log(&state, &plan, did, Outcome::Done),
+                        None => log(
+                            &state,
+                            &plan,
+                            &format!("Declined it and told the agent to carry on without it. Left for you: {note}"),
+                            Outcome::Parked,
+                        ),
+                    }
                     mark_prompt_done(&memory, &key);
                 }
                 Err(error) => log(
@@ -985,7 +1088,12 @@ async fn execute(state: Arc<AppState>, memory: Arc<Mutex<Memory>>, plan: Plan) {
                     finish(&memory, &key, None, now, |_| {});
                     return;
                 }
-                Err(error) => Err(error),
+                // Logged once: the same forms are not tried again until the session moves on
+                // (232 identical failures in a night, every sweep, before this).
+                Err(error) => {
+                    mark_prompt_done(&memory, &key);
+                    Err(error)
+                }
             }
         }
     };
@@ -1114,7 +1222,7 @@ pub(super) async fn answer_with_picks(
 }
 
 /// Answers the session's prompt through the chat's own answer path.
-async fn answer(
+pub(super) async fn answer(
     state: &AppState,
     key: &SessionKey,
     params: &Value,
@@ -1252,6 +1360,30 @@ async fn send(
     Err(String::from_utf8_lossy(&bytes).to_string())
 }
 
+/// Sends the note that follows a decline. The agent redraws a moment after the Escape or the row
+/// that declined, and a send that still sees the prompt on screen is refused ("Ready to code?.
+/// Answer it in chat before sending."), so it is tried again for a few seconds while the screen
+/// catches up.
+pub(super) async fn send_after_prompt_closes(
+    state: &AppState,
+    key: &SessionKey,
+    text: &str,
+) -> std::result::Result<(), String> {
+    let mut tries = 0;
+    loop {
+        match send(state, key, text, false)
+            .await
+            .map_err(|error| error_text(&error))
+        {
+            Err(error) if tries < 8 && error.ends_with("Answer it in chat before sending.") => {
+                tries += 1;
+                tokio::time::sleep(std::time::Duration::from_millis(750)).await;
+            }
+            result => return result,
+        }
+    }
+}
+
 /// Types `text` into the session's terminal as it is (`/api/sendSessionText`).
 async fn type_keys(
     state: &AppState,
@@ -1276,7 +1408,10 @@ async fn type_keys(
 }
 
 /// `ghostex agents reload`, then "carry on" once the agent is back.
-async fn reload(state: &AppState, key: &SessionKey) -> std::result::Result<String, String> {
+pub(super) async fn reload(
+    state: &AppState,
+    key: &SessionKey,
+) -> std::result::Result<String, String> {
     let mut params = Map::new();
     params.insert("projectId".to_string(), json!(key.0));
     params.insert("sessionId".to_string(), json!(key.1));

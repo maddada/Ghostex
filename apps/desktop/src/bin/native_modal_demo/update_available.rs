@@ -1,5 +1,6 @@
 //! Preview of the native Ghostex Update dialog. States: `ready`, `portable`,
-//! `nonotes`; the default shows an available update with real release notes
+//! `nonotes`, `notify` (a Linux tarball: the download page only), `notify-command` (a Linux
+//! package: its update command with Copy command, and Release page); the default shows an available update with real release notes
 //! read from the repository CHANGELOG.
 use super::update_available_modal::*;
 use gpui::{App, AppContext as _};
@@ -21,7 +22,7 @@ fn demo_release_notes() -> String {
 pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     let state = match demo.state.as_str() {
         "ready" | "portable" => UpdateAvailableState::Ready,
-        "notify" => UpdateAvailableState::Notify,
+        "notify" | "notify-command" => UpdateAvailableState::Notify,
         _ => UpdateAvailableState::Available,
     };
     let host: UpdateAvailableModalHost = Rc::new(|command, cx: &mut App| {
@@ -42,6 +43,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             demo_release_notes()
         },
         portable: demo.state == "portable",
+        linux_command: (demo.state == "notify-command").then(|| "yay -S ghostex-bin".to_string()),
         palette: demo.palette,
     };
     super::open_modal_window(

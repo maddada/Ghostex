@@ -26,7 +26,8 @@ struct PrepareNeeds {
     install: bool,
     installing: bool,
     install_error: Option<String>,
-    ssh: bool,
+    /// SSH access is off here: the window asks before turning it on (`EnableSsh`).
+    ssh_off: bool,
     turn_on: bool,
 }
 
@@ -59,7 +60,7 @@ fn prepare_needs() -> Result<PrepareNeeds, String> {
         install: status.get("binaryFound").and_then(Value::as_bool) != Some(true),
         installing: status.get("installing").and_then(Value::as_bool) == Some(true),
         install_error: status_error(&status, "installError"),
-        ssh: access.pointer("/ssh/enabled").and_then(Value::as_bool) == Some(false),
+        ssh_off: access.pointer("/ssh/enabled").and_then(Value::as_bool) == Some(false),
         turn_on: status.get("enabled").and_then(Value::as_bool) != Some(true),
     })
 }
@@ -94,8 +95,9 @@ fn install_step(status: &Value) -> InstallStep {
     )
 }
 
-/// One admin prompt; a cancelled prompt is not an error (Remote Setup's Connect did the same).
-fn enable_ssh() -> Result<(), String> {
+/// One admin prompt, only after the window's Turn on SSH click; a cancelled prompt is not an
+/// error (Remote Setup's Connect did the same). `Ok(on)`: whether SSH access is on now.
+fn enable_ssh() -> Result<bool, String> {
     let enabled = rpc("/api/enableSshAccess", json!({}), ENABLE_SSH_TIMEOUT)?;
     if enabled.get("outcome").and_then(Value::as_str) == Some("failed") {
         return Err(enabled
@@ -105,7 +107,7 @@ fn enable_ssh() -> Result<(), String> {
             .unwrap_or("SSH access could not be turned on.")
             .to_string());
     }
-    Ok(())
+    Ok(enabled.pointer("/ssh/enabled").and_then(Value::as_bool) != Some(false))
 }
 
 fn turn_on() -> Result<(), String> {
@@ -280,6 +282,17 @@ impl GhostexGpuiApp {
         match command {
             ConnectDeviceCommand::Prepare => self.prepare_connect_device(cx),
             ConnectDeviceCommand::InstallHelper => self.install_connect_device_helper(true, cx),
+            ConnectDeviceCommand::EnableSsh => {
+                cx.spawn(async move |this, cx| {
+                    let result = cx.background_executor().spawn(async { enable_ssh() }).await;
+                    let _ = this.update(cx, |app, cx| {
+                        app.update_connect_device_window(cx, |modal, cx| {
+                            modal.ssh_turned_on(result, cx)
+                        });
+                    });
+                })
+                .detach();
+            }
             ConnectDeviceCommand::Poll => {
                 cx.spawn(async move |this, cx| {
                     let answer = cx.background_executor().spawn(async move { poll() }).await;
@@ -433,8 +446,10 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    /// Offer the helper's install if it is missing (follow it if one runs), turn SSH access on if
-    /// it is off, turn Easy Connect on; the window shows each step and then asks for the code.
+    /// Offer the helper's install if it is missing (follow it if one runs) and turn Easy Connect
+    /// on; the window shows each step and then asks for the code. SSH access is only read here:
+    /// when it is off the window asks before turning it on, and pasting another computer's code
+    /// never waits for it (CDXC:RemotePairing 2026-11-18 DECISION in connect_device_modal.rs).
     fn prepare_connect_device(&mut self, cx: &mut gpui::Context<Self>) {
         cx.spawn(async move |this, cx| {
             let background = cx.background_executor().clone();
@@ -469,15 +484,8 @@ impl GhostexGpuiApp {
                 });
                 return;
             }
+            let ssh_on = !needs.ssh_off;
             let result: Result<(), String> = async {
-                if needs.ssh {
-                    progress(
-                        &this,
-                        cx,
-                        "Turning on SSH access. Your computer may ask for your password.",
-                    );
-                    background.spawn(async { enable_ssh() }).await?;
-                }
                 if needs.turn_on {
                     progress(&this, cx, "Turning on Easy Connect…");
                     background.spawn(async { turn_on() }).await?;
@@ -486,7 +494,10 @@ impl GhostexGpuiApp {
             }
             .await;
             let _ = this.update(cx, |app, cx| {
-                app.update_connect_device_window(cx, |modal, cx| modal.prepared(result, cx));
+                app.update_connect_device_window(cx, |modal, cx| {
+                    modal.ssh_checked(ssh_on, cx);
+                    modal.prepared(result, cx)
+                });
             });
         })
         .detach();

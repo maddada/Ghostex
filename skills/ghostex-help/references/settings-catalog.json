@@ -867,6 +867,32 @@
       "agentWritable": true
     },
     {
+      "key": "unifiedSessionOrder",
+      "title": "Session order",
+      "subtitle": "Order the Unified sidebar's sessions by recent activity (a session moves to the top when you send it a message and when it finishes or needs you), alphabetically by title, or by when each was created, newest first. Alphabetical and Created never move a session when it works or finishes; turn off the Moving section too for a list that never moves. Pinned sessions follow Pinned order. Applies to the phone too. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected.",
+      "tab": "sidebar",
+      "tabTitle": "Sidebar & Sessions",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "enum",
+      "default": "recent",
+      "options": [
+        {
+          "label": "Recent activity",
+          "value": "recent"
+        },
+        {
+          "label": "Alphabetical",
+          "value": "alphabetical"
+        },
+        {
+          "label": "Created (newest first)",
+          "value": "created"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
       "key": "sidebarVisibilityMemory",
       "title": "Remember sidebar per view",
       "subtitle": "Off: hiding the sidebar hides it everywhere. On: Agents and the wide views (Browser, Code, Files, Beads, Automate) each keep their own open or hidden sidebar; the Commands pane follows the same split.",
@@ -9897,7 +9923,18 @@
     {
       "key": "autopilotApprovals",
       "title": "When it asks permission",
-      "subtitle": "Permission prompts, Connectors cards and folder trust: Wait for me, Safe steps (after a minute, approve reads, builds, tests, edits and local commits inside the project; anything else waits for you) or All but limits (after a minute, approve anything that is not a hard limit). A read-only thread's cards always wait for you.",
+      "subtitle": "Permission prompts, Connectors cards and folder trust: Wait for me, Safe steps (after a minute, approve reads, builds, tests, edits and local commits inside the project; anything else waits for you) or All but limits (after a minute, approve anything that is not a hard limit). A read-only thread stays in plan mode: its reads are approved, a request to stop planning gets \"No, keep planning\", and its edits and commands are declined.",
+      "tab": "autopilot",
+      "tabTitle": "Autopilot",
+      "section": "allowed",
+      "sectionTitle": "What it does",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "autopilotReadOnlyLeavePlan",
+      "title": "Let read-only threads leave plan mode",
+      "subtitle": "Off by default. When on, Autopilot approves a read-only helper's request to stop planning and start changing files, instead of keeping it in plan mode, and then judges its edits and commands like any other session's. Shows while Autopilot answers permission prompts.",
       "tab": "autopilot",
       "tabTitle": "Autopilot",
       "section": "allowed",
@@ -9920,6 +9957,18 @@
       "key": "autopilotSupervisor",
       "title": "Supervisor model",
       "subtitle": "The agent that wakes for judgment calls: Claude Opus 5.5 at medium, or Codex GPT 6.1 Sol at high. It starts on an account with room.",
+      "tab": "autopilot",
+      "tabTitle": "Autopilot",
+      "section": "supervisor",
+      "sectionTitle": "Advanced",
+      "type": "ui",
+      "advanced": true,
+      "agentWritable": false
+    },
+    {
+      "key": "autopilotCheckup",
+      "title": "Supervisor check-up",
+      "subtitle": "Off, or every 10 (the default), 20 or 30 minutes, or every hour: Ghostex looks for sessions that seem stuck in ways its rules don't settle (silent after a reload, told to carry on but doing nothing, failing again and again, saying the same thing in a loop, waiting on nothing) and wakes the supervisor only when it finds one, so a quiet check-up costs nothing. Also ghostex autopilot checkup.",
       "tab": "autopilot",
       "tabTitle": "Autopilot",
       "section": "supervisor",
@@ -12028,6 +12077,18 @@
       "agentWritable": true
     },
     {
+      "key": "cliProxyApiEnabled",
+      "title": "CLIProxyAPI",
+      "subtitle": "Turn CLIProxyAPI on or off: hubs in Settings > Accounts, the usage of the accounts each hub pools, and On the hub when a Claude or Codex session starts. Ghostex only points at a hub you run yourself. Off by default; saved hubs are kept while it is off.",
+      "tab": "extensions",
+      "tabTitle": "Extensions",
+      "section": "official",
+      "sectionTitle": "Built-in",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": false
+    },
+    {
       "key": "connectorsHidden",
       "title": "Turn off Connectors",
       "subtitle": "Turn off Connectors everywhere: the Connectors page in Settings, the apps your agents get and the ghostex connectors commands. Experimental, off by default; your sign-ins and connected apps are kept.",
@@ -12838,7 +12899,7 @@
     {
       "key": "addMachine",
       "title": "Add a computer",
-      "subtitle": "Opens Connect a Computer to add a computer with its code, or with SSH details; saved computers appear as sidebar sections.",
+      "subtitle": "Opens Connect a Computer to add a computer with its code, or with SSH details; a saved computer's projects and sessions join your sidebar, and a project on both computers is one entry with the sessions of each (Separate by machine gives each computer its own tab instead).",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",

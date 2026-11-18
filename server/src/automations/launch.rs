@@ -22,11 +22,7 @@ pub(super) fn queue_automation_run(
     automation: &AutomationDefinitionRecord,
 ) -> Result<AutomationRunRecord, DomainStateError> {
     if has_active_run(db, &automation.id)? {
-        let skipped = create_run_record(
-            automation,
-            "skipped",
-            Some("Skipped because another run for this automation is still active."),
-        );
+        let skipped = skipped_run_record(db, automation)?;
         upsert_run(db, &skipped)?;
         return Ok(skipped);
     }
@@ -131,7 +127,7 @@ fn launch_local_automation(
         runtime, repository, db, &project, automation, prompt, None,
     )?;
     Ok(AutomationLaunch {
-        pending_prompt: Some(prompt.to_string()),
+        pending_prompt: Some(startup_prompt(prompt)),
         session_id: required_value_text(&session, "sessionId")?,
         session_project_id: project.project_id,
         worktree: None,
@@ -180,7 +176,7 @@ fn launch_worktree_automation(
         None,
     )?;
     Ok(AutomationLaunch {
-        pending_prompt: Some(prompt.to_string()),
+        pending_prompt: Some(startup_prompt(prompt)),
         session_id: required_value_text(&session, "sessionId")?,
         session_project_id: worktree_project.project_id,
         worktree: Some(json!({
@@ -236,9 +232,8 @@ fn launch_thread_automation(
             &automation.agent_id,
             agent_session_id,
         )? {
-            send_automation_prompt(repository, &session_project_id, &session_id, prompt)?;
             return Ok(AutomationLaunch {
-                pending_prompt: None,
+                pending_prompt: Some(thread_prompt(prompt)),
                 session_id,
                 session_project_id,
                 worktree: Some(json!({ "sourceRunId": run.id })),
@@ -256,7 +251,7 @@ fn launch_thread_automation(
             Some(agent_session_id),
         )?;
         return Ok(AutomationLaunch {
-            pending_prompt: Some(prompt.to_string()),
+            pending_prompt: Some(startup_prompt(prompt)),
             session_id: required_value_text(&session, "sessionId")?,
             session_project_id: project.project_id,
             worktree: Some(json!({ "sourceRunId": run.id })),
@@ -268,18 +263,29 @@ fn launch_thread_automation(
     })?;
     let (session_project_id, session_id) =
         resolve_thread_session(repository, &automation.project_id, session_id_hint)?;
-    /*
-    Thread automations reuse a session whose agent is already running, so the
-    prompt goes in immediately and needs no readiness wait. Report it as already
-    delivered so the run watcher does not submit it a second time.
-    */
-    send_automation_prompt(repository, &session_project_id, &session_id, prompt)?;
     Ok(AutomationLaunch {
-        pending_prompt: None,
+        pending_prompt: Some(thread_prompt(prompt)),
         session_id,
         session_project_id,
         worktree: Some(json!({ "sourceRunId": run.id })),
     })
+}
+
+/// A new session's first prompt, held by the chat queue until the agent's input box is up.
+fn startup_prompt(prompt: &str) -> PendingPrompt {
+    PendingPrompt {
+        text: prompt.to_string(),
+        startup_send: true,
+    }
+}
+
+/// A thread run's prompt into a session that already exists: it waits in the session's chat
+/// queue until the agent is free, like a chat message sent while the agent works.
+fn thread_prompt(prompt: &str) -> PendingPrompt {
+    PendingPrompt {
+        text: prompt.to_string(),
+        startup_send: false,
+    }
 }
 
 fn create_and_start_agent_session(
@@ -314,6 +320,17 @@ fn create_and_start_agent_session(
     }
     params.insert("runtimeSettings".to_string(), runtime_settings);
     params.insert("requireLaunchCommand".to_string(), Value::Bool(true));
+    // CDXC:Automations 2026-11-18 WHY: GitHub #662: a run's session starts on the automation's
+    // model and effort through the same create parameters `ghostex create-agent --model/--effort`
+    // sends, so they are launch flags for this session only and never change the agent's default.
+    for (key, value) in [
+        ("agentModel", &automation.model),
+        ("agentEffort", &automation.effort),
+    ] {
+        if let Some(value) = value {
+            params.insert(key.to_string(), Value::String(value.clone()));
+        }
+    }
     let project_value = repository
         .get_project(&project.project_id)?
         .ok_or_else(|| DomainStateError::not_found("Automation project not found."))?;

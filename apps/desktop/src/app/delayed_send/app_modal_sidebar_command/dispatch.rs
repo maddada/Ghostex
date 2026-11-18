@@ -95,6 +95,7 @@ impl GhostexGpuiApp {
             | "restartSpaceo"
             | "restartCuaDriver"
             | "runManagedToolTerminalCommand"
+            | "openLinuxAppImageUpdate"
             | "runAgentboxTerminalCommand"
             | "setUpAgentboxWithAgent"
             | "setUpCloudBox"

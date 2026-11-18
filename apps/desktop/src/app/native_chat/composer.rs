@@ -139,7 +139,7 @@ impl NativeChatView {
             input.update(cx, |input, cx| input.set_value("", window, cx));
         }
         cx.emit(super::state::NativeChatEvent::DraftState(true));
-        self.end_answer_hold_for_send();
+        self.follow_tail_for_send(mode);
         self.invoke(submission.clone(), cx);
         // The sidebar's star request counts sent prompts (native_sidebar/github_star.rs).
         crate::app::native_sidebar::github_star::note_prompt_sent();
@@ -778,9 +778,13 @@ impl NativeChatView {
         // The chat's pills ride in a strip along the box's top edge, inside its border
         // (pills_strip.rs); what the box holds under it is unchanged.
         let pills_strip = if maximized || self.collab_guest() {
+            self.set_where_pill_shows_project(false, cx);
             None
         } else {
-            self.render_pills_strip(p, cx)
+            let strip = self.render_pills_strip(p, cx);
+            let shows = self.where_pill_project_in_strip();
+            self.set_where_pill_shows_project(shows, cx);
+            strip
         };
         footer = footer.child(
             div()

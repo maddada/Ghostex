@@ -147,6 +147,20 @@ they ask for one.
    Remote > Remote machines with Agent access on (`ghostex computers` lists
    them) and Ghostex 10.44 or later on both computers.
 
+   For a question about using several computers together (one sidebar with
+   the same projects and sessions, continuing a conversation on another
+   computer, agents on different computers talking to each other), answer
+   from "Several computers as one workspace" at the top of the Remote
+   machines section of `ghostex guide features`. In short: all of it works
+   today. A coordinator's threads can run on another computer and report
+   back (`ghostex coordinator start-thread --computer <name>`); any agent can
+   message sessions on another computer (`ghostex agents send <ref>`, refs
+   from `ghostex sessions --computer <name>`); a conversation can be handed
+   over to another computer with Handoff / Export > Handoff to an agent >
+   Destination > Change… (a new session there with the conversation
+   attached, not the running one); and projects and sessions share one
+   sidebar unless Separate by machine (`sidebarSeparateByMachine`) is on.
+
 8. For anything beyond settings (start or steer agents, sessions, automations,
    the project board, prompt history, servers, diagnostics), route to the
    ghostex-cli skill and its `ghostex --help` catalog. Use ghostex-help to

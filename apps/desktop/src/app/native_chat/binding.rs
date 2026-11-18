@@ -126,6 +126,8 @@ impl GhostexGpuiApp {
                             cx.notify();
                         }
                     }
+                    // The header leaves the project out while the pill names it.
+                    NativeChatEvent::WherePillProject => cx.notify(),
                     NativeChatEvent::ComposerFocused => {
                         this.reclaim_gpui_root_for_chrome_input_focus();
                         if this.record_shell_focus_for_session_chat(session_id) == Some(true) {

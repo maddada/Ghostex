@@ -412,6 +412,12 @@ impl GhostexGpuiApp {
         // The page has no machine tabs: it streams only its own computer.
         crate::app::gx_chat::session_directory::publish(self.gx_store.core.presentation(), &[]);
         let now_ms = now_ms();
+        // Autopilot's project starts hidden, once (gx-core `SidebarUiStore::hide_once`).
+        let autopilot =
+            ghostex_gx_core::autopilot_project_group_ids(self.gx_store.core.presentation());
+        if !autopilot.is_empty() && self.gx_store.sidebar_ui.hide_once(&autopilot) {
+            self.gx_store_persist_sidebar_ui();
+        }
         let store = &mut self.gx_store;
         let ui = store.sidebar_ui.state().clone();
         let hud = store.runtime_facts.hud_value();

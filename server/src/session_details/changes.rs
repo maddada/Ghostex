@@ -43,7 +43,7 @@ fn pull_request_value(pull_request: &SessionPullRequest) -> Value {
 
 /// `{branch, defaultBranch, additions, deletions, pullRequest}` for `cwd`, or `None` outside a git
 /// checkout. Blocking.
-pub(super) fn read_changes(cwd: &str) -> Option<Value> {
+pub(crate) fn read_changes(cwd: &str) -> Option<Value> {
     let now = Instant::now();
     let previous = cache()
         .lock()

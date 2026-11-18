@@ -477,6 +477,10 @@ pub fn exports(module: &str, platform: Platform) -> Vec<(&'static str, Json)> {
                 PINNED_SESSION_ORDER_OPTIONS.to_json(),
             ),
             (
+                "UNIFIED_SESSION_ORDER_OPTIONS",
+                UNIFIED_SESSION_ORDER_OPTIONS.to_json(),
+            ),
+            (
                 "SIDEBAR_THEME_SETTING_OPTIONS",
                 SIDEBAR_THEME_SETTING_OPTIONS.to_json(),
             ),

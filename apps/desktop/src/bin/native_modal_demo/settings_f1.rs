@@ -119,6 +119,13 @@ pub(super) fn story_settings(state: &str, settings: &mut Map<String, Value>) {
             json!({ "activeTab": "accounts", "scrollTopByTab": { "accounts": 420 }, "version": 1 }),
         );
     }
+    // The hub section sits under every provider's accounts, at the bottom of the list.
+    if state == "accounts-hub-list" {
+        settings.insert(
+            "settingsModalNavigation".into(),
+            json!({ "activeTab": "accounts", "scrollTopByTab": { "accounts": 1400 }, "version": 1 }),
+        );
+    }
 }
 
 pub(super) fn extend_sidebar_state(message: &mut Value) {
@@ -320,6 +327,27 @@ fn accounts_rpc(state: &str, params: &Value) -> Answer {
                 window("3p-weekly", "Claude/GPT 7d", 604_800, Some("Claude/GPT")),
             ],
         }));
+    }
+    // A CLIProxyAPI hub (the extension on) with two Claude accounts and a Codex one cooling down.
+    if state.starts_with("accounts-hub") {
+        let window = |id: &str, label: &str, used: f64, seconds: i64, minutes: i64| {
+            let at = chrono::Utc::now() + chrono::Duration::minutes(minutes);
+            json!({ "id": id, "label": label, "usedPercent": used, "limitWindowSeconds": seconds, "resetsAt": at.to_rfc3339() })
+        };
+        data["cliproxyHubs"] = json!([{
+            "id": "hub-preview", "label": "Home hub", "customLabel": "Home hub",
+            "url": "http://127.0.0.1:8317", "host": "127.0.0.1:8317", "hasManagementKey": true,
+            "status": "ready", "error": null, "updatedAt": chrono::Utc::now().to_rfc3339(),
+            "accounts": [
+                { "id": "hub-preview:a1", "provider": "claude", "name": "sam@example.com", "plan": null, "status": "ready",
+                  "usage": [window("fiveHour", "5h", 90.0, 18_000, 70), window("sevenDay", "7d", 41.0, 604_800, 5_000)] },
+                { "id": "hub-preview:a2", "provider": "claude", "name": "alex@example.com", "plan": null, "status": "ready",
+                  "usage": [window("fiveHour", "5h", 12.0, 18_000, 200), window("sevenDay", "7d", 33.0, 604_800, 7_000)] },
+                { "id": "hub-preview:a3", "provider": "codex", "name": "kim@example.com", "plan": "plus", "status": "coolingDown",
+                  "statusMessage": "quota exhausted", "nextRetryAfter": (chrono::Utc::now() + chrono::Duration::minutes(70)).to_rfc3339(),
+                  "usage": [window("primary", "5h", 100.0, 18_000, 70)] }
+            ]
+        }]);
     }
     match params["operation"].as_str() {
         Some("setTitlebar") => {

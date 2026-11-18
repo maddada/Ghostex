@@ -325,6 +325,35 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// Closes the right-click menu open over the page window `page_window`, if one is
+    /// (CDXC:ContextMenus 2026-11-18 in window/visual_page_modal.rs).
+    fn dismiss_page_window_context_menu(
+        &mut self,
+        page_window: gpui::AnyWindowHandle,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let open_over_page = self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::ContextMenu)
+            && self
+                .context_menu
+                .as_ref()
+                .is_some_and(|menu| menu.source_window() == Some(page_window));
+        if !open_over_page {
+            return;
+        }
+        let app = cx.entity();
+        cx.defer(move |cx| {
+            let _ = page_window.update(cx, |_, window, cx| {
+                app.update(cx, |app, cx| {
+                    app.close_gpui_titlebar_popup(
+                        Some(GpuiTitlebarPopupKind::ContextMenu),
+                        window,
+                        cx,
+                    );
+                });
+            });
+        });
+    }
+
     /// `remote_project` is the machine whose session published the open page, `None` for this
     /// computer's.
     /// `key` is the page window that sent it (`GpuiVisualPageModalWindow::key`): a hidden page's
@@ -338,6 +367,14 @@ impl GhostexGpuiApp {
     ) {
         if matches!(command, VisualPageModalCommand::TabChanged) {
             self.notify_minimized_page_chats(cx);
+            return;
+        }
+        // Also from a page window being hidden, so before the shown-page check below.
+        if let VisualPageModalCommand::DismissContextMenu {
+            window: page_window,
+        } = command
+        {
+            self.dismiss_page_window_context_menu(page_window, cx);
             return;
         }
         if self.shown_visual_page_key(cx) != Some(key) {
@@ -363,6 +400,7 @@ impl GhostexGpuiApp {
                 self.export_visual_page_to_file(url, cx);
                 return;
             }
+            VisualPageModalCommand::DismissContextMenu { .. } => return,
             VisualPageModalCommand::ContextMenu {
                 menu,
                 window: page_window,

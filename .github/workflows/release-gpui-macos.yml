@@ -177,12 +177,14 @@ jobs:
       # it and rebuilt the kit from source on every release (about 4 minutes of
       # `macos.sh --phase prepare`, measured on 9.4.0 and 9.5.1). Same key as the
       # warm job; macos.sh skips the Zig build when the kit directory exists.
+      # The key names the optimize mode (2026-11-18, crash #653): releases through 11.9.0 built a
+      # Debug kit (no -Doptimize), and the old key would keep restoring it.
       - name: Restore GhosttyKit build cache
         uses: actions/cache@v6
         id: ghosttykit_cache
         with:
           path: .dependencies/ghostty/macos/GhosttyKit.xcframework
-          key: warm-ghosttykit-macos-arm64-zig0.17.1-${{ steps.cache_keys.outputs.zig }}
+          key: warm-ghosttykit-macos-arm64-zig0.17.1-releasesafe-${{ steps.cache_keys.outputs.zig }}
       - name: Install build tools
         run: tooling/release-gpui/retry.sh 3 5 -- brew install cmake ninja rsync xcodegen
       - name: Install pinned Zig toolchain
@@ -423,6 +425,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: tooling/release-gpui/macos.sh --phase sign-app "${{ inputs.version }}"
+      # CDXC:CrashReports 2026-11-18 WHY: crash #653 had to be mapped by hand from a stripped
+      # binary. The link map of the shipped ghostex-gpui (every function's address, GhosttyKit's
+      # included) is kept as a run artifact named by its Mach-O UUID, the "build id" a crash report
+      # prints, so a future crash address can be named directly. It is never in the app, the DMG or
+      # the GitHub release (the publish jobs skip `ghostex-symbols-*`, publish-provenance.mjs). The
+      # phase only warns when there is no matching map, and then nothing is uploaded.
+      - name: Keep the symbol map of this build
+        id: symbols
+        run: tooling/release-gpui/macos.sh --phase symbols "${{ inputs.version }}"
+      - uses: actions/upload-artifact@v7
+        if: ${{ steps.symbols.outputs.build_id != '' }}
+        with:
+          name: ghostex-symbols-${{ inputs.version }}-macos-arm64-${{ steps.symbols.outputs.build_id }}
+          path: build/release-symbols/macos-arm64/
+          if-no-files-found: error
+          # The longest a public repository may keep an artifact.
+          retention-days: 90
       - name: Publish the CEF and Source components
         env:
           GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}

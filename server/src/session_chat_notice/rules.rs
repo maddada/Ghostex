@@ -762,6 +762,25 @@ const CLAUDE_RULES: &[NoticeRule] = &[
         actions: &[OPEN_TERMINAL],
         quote_evidence: true,
     },
+    // CDXC:AgentProviders 2026-11-18 WHY: a Claude on a CLIProxyAPI hub (accounts/hub/) never sees Anthropic's "You've hit your limit": when every hub account is cooling down the hub answers 429 and Claude stops with "API Error: Request rejected (429) · All credentials for model … are cooling down (reset after 2h0m0s)". As no notice at all the session just stopped; as a usage limit it waits for the reset the line names (accounts/hub/cooldown.rs) and continues.
+    NoticeRule {
+        kind: SESSION_CHAT_NOTICE_USAGE_LIMIT,
+        severity: SessionChatTerminalNoticeSeverity::Warning,
+        title: "Usage limit reached",
+        detail: "Every account on the hub is out of room for now. Ghostex continues when one has room again; queued messages wait until then.",
+        blocks_input: false,
+        signatures: &[NoticeSignature {
+            scope: NoticeScope::Banner,
+            parts: &[
+                NoticePart::Text("All credentials for model"),
+                NoticePart::Gap(120),
+                NoticePart::Text("cooling down"),
+            ],
+            corroborators: &[],
+        }],
+        actions: &[OPEN_TERMINAL],
+        quote_evidence: true,
+    },
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_USAGE_LIMIT,
         severity: SessionChatTerminalNoticeSeverity::Warning,

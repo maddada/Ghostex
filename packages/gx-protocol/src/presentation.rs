@@ -284,6 +284,11 @@ pub struct PresentationProject {
     /// it as a project (with GBots off nothing of the bot shows).
     #[serde(default, skip_serializing_if = "is_false")]
     pub gbots_project: bool,
+    /// The project is Autopilot's own "Autopilot" project, the folder of its supervisor
+    /// (server/src/autopilot/supervisor.rs); absent for every other project and from an older
+    /// daemon. Each sidebar hides it once, as if the user had hidden it.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub autopilot_supervisor_project: bool,
     /// Issues Workflow (formerly Work mode) is on for this project: a Linear key applies to it, `gh`
     /// is signed in, or its workspace has a ticket command (server/src/work_mode/project.rs).
     /// Present only when true.

@@ -366,6 +366,9 @@ pub(crate) struct NewThreadPickerAccount {
     pub(crate) usage: Option<String>,
     pub(crate) ready: bool,
     pub(crate) is_default: bool,
+    /// On a CLIProxyAPI hub (`cliproxy:<hub id>`, accounts/hub/ in gxserver): offered after the
+    /// saved accounts, never to a Claude cloud session, and not counted as an account.
+    pub(crate) hub: bool,
 }
 
 pub(crate) struct NewThreadPickerConfig {
@@ -825,7 +828,25 @@ impl GpuiNewThreadPickerWindow {
                 accounts
                     .iter()
                     .enumerate()
-                    .filter(|(_, account)| account.provider == provider)
+                    .filter(|(_, account)| account.provider == provider && !account.hub)
+                    .map(|(index, _)| index)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// The CLIProxyAPI hubs a `provider` session can start on; none for a Claude cloud session.
+    fn provider_hubs(&self, provider: &str) -> Vec<usize> {
+        if self.cloud_scope() {
+            return Vec::new();
+        }
+        self.accounts
+            .as_ref()
+            .map(|accounts| {
+                accounts
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, account)| account.provider == provider && account.hub)
                     .map(|(index, _)| index)
                     .collect()
             })
@@ -889,11 +910,16 @@ impl GpuiNewThreadPickerWindow {
                     };
                 }
                 let accounts = self.provider_accounts(provider);
+                let hubs = self.provider_hubs(provider);
                 if accounts.is_empty() {
-                    return vec![PickerRow::CliLogin, PickerRow::AddAccount];
+                    let mut rows = vec![PickerRow::CliLogin];
+                    rows.extend(hubs.into_iter().map(PickerRow::Account));
+                    rows.push(PickerRow::AddAccount);
+                    return rows;
                 }
                 accounts
                     .into_iter()
+                    .chain(hubs)
                     .filter(|index| {
                         self.account(*index)
                             .is_some_and(|account| matches_query(&account.name, &query))

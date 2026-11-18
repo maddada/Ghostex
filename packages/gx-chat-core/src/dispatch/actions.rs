@@ -243,7 +243,8 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::SessionDetailsSection
         | ActionKind::SessionDetailsList
         | ActionKind::SessionDetailsStop
-        | ActionKind::SessionDetailsOpen => Family::Extras,
+        | ActionKind::SessionDetailsOpen
+        | ActionKind::WherePill => Family::Extras,
 
         ActionKind::ReadAloudMessage
         | ActionKind::ReadAloudLastReply

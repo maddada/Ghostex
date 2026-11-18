@@ -367,6 +367,16 @@ impl GhostexGpuiApp {
         let answered_icon = next.icon.clone();
         let answered_logo = next.logo.clone();
         store_facts(machine_id, next);
+        if machine_id == LOCAL_MACHINE_ID {
+            // The chat's where pill draws this computer's own icon (native_chat/where_pill.rs),
+            // even with no other computer, when the sidebar draws no marks.
+            let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
+            crate::app::gx_chat::session_directory::set_this_computer_icon(Self::computer_asset(
+                machine_id,
+                settings.object(),
+                &HashMap::new(),
+            ));
+        }
         if machine_id != LOCAL_MACHINE_ID {
             let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
             let saved = saved_computer_icon(settings.object(), machine_id);

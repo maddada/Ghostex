@@ -144,6 +144,7 @@ fn rpc_method_name(wire: &str) -> &'static str {
         ChatRpcMethod::CatchUpSession => "catchUpSession",
         ChatRpcMethod::ReadSessionFilesLinks => "readSessionFilesLinks",
         ChatRpcMethod::ReadSessionDetails => "readSessionDetails",
+        ChatRpcMethod::ReadSessionWhere => "readSessionWhere",
         ChatRpcMethod::StopSessionBackgroundTask => "stopSessionBackgroundTask",
         ChatRpcMethod::RestartSessionInMode => "restartSessionInMode",
         ChatRpcMethod::HoldSessionChatSend => "holdSessionChatSend",

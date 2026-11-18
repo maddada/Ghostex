@@ -1,233 +1,198 @@
-<div align="center">
+<p align="center">
+  <a href="https://ghostex.dev"><img src="media/ghostex-marketplace-icon.png" alt="Ghostex" width="72" /></a>
+</p>
 
-# <a href="https://ghostex.dev"><img src="media/ghostex-marketplace-icon.png" alt="Ghostex" width="72" valign="middle" /></a> Ghostex <br>The Best Native Agents Workspace
+<h1 align="center">Ghostex</h1>
 
-</div>
+<h3 align="center">The native workspace for your coding agents.</h3>
+
+<p align="center">Every agent in one sidebar, as chat or CLI.<br />Keep working from your computer or your phone.</p>
 
 <p align="center">
-<a href="https://discord.gg/df7b3G92CS"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/Discord-Join%20the%20community.svg?variant=branded&logo=discord&mode=dark" /><img src="https://shieldcn.dev/badge/Discord-Join%20the%20community.svg?variant=branded&logo=discord&mode=light" alt="Join the Discord" /></picture></a>
+  <a href="#install">Download</a> ·
+  <a href="https://youtu.be/QzjFB4J6-8E">3-minute tour</a> ·
+  <a href="https://ghostex.dev">Website</a> ·
+  <a href="https://discord.gg/df7b3G92CS">Discord</a>
 </p>
 
-<p align="center">
-  <a href="https://github.com/maddada/Ghostex/stargazers"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/github/stars/maddada/Ghostex.svg?variant=secondary&mode=dark" /><img src="https://shieldcn.dev/github/stars/maddada/Ghostex.svg?variant=secondary&mode=light" alt="GitHub stars" /></picture></a>
-  <a href="https://github.com/maddada/Ghostex/releases/latest"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/github/release/maddada/Ghostex.svg?variant=secondary&mode=dark" /><img src="https://shieldcn.dev/github/release/maddada/Ghostex.svg?variant=secondary&mode=light" alt="Latest release" /></picture></a>
-  <a href="LICENSE"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/github/license/maddada/Ghostex.svg?variant=secondary&mode=dark" /><img src="https://shieldcn.dev/github/license/maddada/Ghostex.svg?variant=secondary&mode=light" alt="License" /></picture></a>
-  <br />
-  <a href="#install"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/platforms-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux%20%C2%B7%20Android%20%C2%B7%20iOS.svg?variant=secondary&mode=dark" /><img src="https://shieldcn.dev/badge/platforms-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux%20%C2%B7%20Android%20%C2%B7%20iOS.svg?variant=secondary&mode=light" alt="Supported platforms: macOS, Windows, Linux, Android, iOS" /></picture></a>
-</p>
+<p align="center">macOS · Windows · Linux · iOS · Android<br />Free and open source · MIT</p>
 
-<h3 align="center"><a href="#install"><ins>Download Ghostex</ins></a> &nbsp;·&nbsp; <a href="https://ghostex.dev">Website</a> &nbsp;·&nbsp; <a href="https://youtu.be/QzjFB4J6-8E">Watch the 3-minute tour</a>  &nbsp;·&nbsp; <a href="https://www.youtube.com/watch?v=cJgogrS4mao">Watch the Demo</a></h3>
+[![Ghostex with a coordinator, its threads and side panels open](media/readme/gx-hero-1.webp)](media/readme/gx-hero-1.webp)
 
-<br />
+<details>
+<summary>More screenshots</summary>
 
-<h3 align="center">Customizable extensions & sidepanels</h3>
+**As minimal as you want it.**
 
-<p align="center">
-  <a href="media/readme/gx-hero-1.webp">
-    <picture>
-      <img width="960" src="media/readme/gx-hero-1.webp" />
-    </picture>
-  </a>
-</p>
+![A minimal Ghostex workspace](media/readme/gx-hero-2.jpeg)
 
-<h3 align="center">As minimal or feature-rich as you want it to be</h3>
-<p align="center">
-  <a href="media/readme/gx-hero-2.jpeg">
-    <picture>
-      <img width="960" src="media/readme/gx-hero-2.jpeg" />
-    </picture>
-  </a>
-</p>
+**Coordinators and pages, together.**
 
-<h3 align="center">First-class Coordinators with Visual Inline Pages</h3>
-<p align="center">
-  <a href="media/readme/gx-hero-9.webp">
-    <picture>
-      <img width="960" src="media/readme/gx-hero-9.webp" />
-    </picture>
-  </a>
-</p>
+![A coordinator with a visual page](media/readme/gx-hero-9.webp)
 
-<h3 align="center">Visually pick from different designs/options then send choices to agent</h3>
-<p align="center">
-  <a href="media/readme/gx-hero-10.webp">
-    <picture>
-      <img width="960" src="media/readme/gx-hero-10.webp" />
-    </picture>
-  </a>
-</p>
+**Pick a design and send your choices.**
 
-<h3 align="center">Fully-featured Editor Built in (with annotations)</h3>
+![Design options with feedback controls](media/readme/gx-hero-10.webp)
 
-<p align="center">
-  <a href="media/readme/gx-hero-6.jpeg">
-    <picture>
-      <img width="960" src="media/readme/gx-hero-6.jpeg" />
-    </picture>
-  </a>
-</p>
+**A full editor, with annotations.**
 
-<p align="center"><sub>Want an animated wallpaper behind Ghostex like these? Try <a href="https://wallspace.app/">Wallspace</a> on macOS (free, recommended), <a href="https://github.com/rocksdanister/lively">Lively Wallpaper</a> on Windows (free, open source) or <a href="https://github.com/jeffshee/hidamari">Hidamari</a> on Linux (free, open source; it has no gallery, so add your own videos, for example looping clips from <a href="https://www.pexels.com/search/videos/abstract%20loop/">Pexels Videos</a>, or paste a YouTube link: search for "4K live wallpaper loop"). Move Ghostex to its own desktop or workspace so only the wallpaper sits behind it.</sub></p>
+![The built-in editor](media/readme/gx-hero-6.jpeg)
 
-## Features
+<sub>Want an animated wallpaper behind Ghostex like these? Try [Wallspace](https://wallspace.app/) on macOS (free, recommended), [Lively Wallpaper](https://github.com/rocksdanister/lively) on Windows (free, open source) or [Hidamari](https://github.com/jeffshee/hidamari) on Linux (free, open source; it has no gallery, so add your own videos, for example looping clips from [Pexels Videos](https://www.pexels.com/search/videos/abstract%20loop/), or paste a YouTube link: search for "4K live wallpaper loop"). Move Ghostex to its own desktop or workspace so only the wallpaper sits behind it.</sub>
 
-<h3 align="center">📱 iOS and Android apps with Easy Connect&nbsp;or&nbsp;Tailscale</h3>
+</details>
 
-<p align="center">Your agents in your pocket. Easy Connect pairs your phone with a single scan, no extra accounts needed, or join through your Tailscale tailnet if you already have one. Read transcripts, send follow-ups, preview localhost pages, and get a push when an&nbsp;agent&nbsp;finishes.</p>
+## What it does
 
-<p align="center"><img src="media/readme/gx-phone.gif" alt="Pairing the phone app, then sessions and a chat on the phone" width="70%" /></p>
+### 📱 Your agents, in your pocket
 
-<br/>
+Pair the iOS or Android app with one scan. Read transcripts, send follow-ups, preview localhost pages, and get a push when an agent finishes.
 
-<h3 align="center">💬 Chat &amp;&nbsp;CLI&nbsp;views</h3>
+![Pairing the phone app, then sessions and a chat on the phone](media/readme/gx-phone.gif)
 
-<p align="center">Talk to Claude Code, Codex, or any other agent in a proper chat GUI: clickable images, readable diffs, queued prompts, sub-agents in view, and a full editor for long messages. If you ever need the raw CLI, it is one hotkey away.</p>
+### 💬 Chat or CLI, your call
 
-<p align="center"><img src="media/readme/gx-diff.png" alt="A chat showing the agent's code change as a diff" width="70%" /></p>
+A proper chat with images, readable diffs and sub-agents in view. The raw terminal is one hotkey away.
 
-<br/>
+<details>
+<summary>See chat and diffs</summary>
 
-<h3 align="center">🔀 Any agent, swap on&nbsp;the&nbsp;fly</h3>
+![A chat showing an agent's code change as a diff](media/readme/gx-diff.png)
 
-<p align="center">Claude Code, Codex, OpenCode, Pi, Antigravity, Grok, Cursor, and more. Pick the model and effort from the chat box, or hand a session from one agent to&nbsp;another&nbsp;mid‑task.</p>
+</details>
 
-<p align="center"><img src="media/readme/gx-agent-picker.png" alt="The model picker switching between agents" width="70%" /></p>
+### 🔀 Any agent, swap mid-task
 
-<br/>
+Claude Code, Codex, OpenCode, Pi, Cursor and more. Pick the model and effort from the chat box, or hand a task to another agent.
 
-<h3 align="center">📝 Annotate Markdown, HTML&nbsp;and&nbsp;diagrams</h3>
+<details>
+<summary>See the agent picker</summary>
 
-<p align="center">Open plans, HTML prototypes, and Excalidraw diagrams next to your agent, select anything, and leave a note or mark it Looks good, Clarify, or Needs tests. One click sends every note to the agent's prompt as numbered feedback with&nbsp;line&nbsp;numbers.</p>
+![The model picker switching between agents](media/readme/gx-agent-picker.png)
 
-<p align="center"><img src="media/readme/gx-annotate.png" alt="A Markdown plan in the Files view with a comment, a Clarify mark and a Needs tests mark in the Annotations list" width="70%" /></p>
+</details>
 
-<br/>
+### 🤖 Agents that run agents
 
-<h3 align="center">🤖 Agents that&nbsp;run&nbsp;agents</h3>
+The `ghostex` command lets an agent open sessions, prompt others and read their replies. Or let a coordinator keep track of the threads.
 
-<p align="center">Agents can open sessions, send prompts, and read replies from other agents through the <code>ghostex</code> command. Ask Claude Code to spin up Codex sub-agents and steer them, or hand the work to a coordinator that keeps track of them&nbsp;for&nbsp;you.</p>
+![A coordinator and its threads](media/readme/gx-threads.png)
 
-<p align="center"><img src="media/readme/gx-threads.png" alt="A coordinator with its threads in the sidebar and the Workers panel" width="70%" /></p>
+### 📝 Annotate, then send
 
-<br/>
+Mark up plans, HTML and diagrams next to your agent. One click sends every note as numbered feedback.
 
-<h3 align="center">📊 Charts and tables in&nbsp;the&nbsp;chat</h3>
+<details>
+<summary>See annotations</summary>
 
-<p align="center">Ask for <code>$ghostex-visuals</code> and agents answer with charts, tables, and stat tiles drawn right in the chat, or publish an HTML page that opens as a card. Same look on desktop, web,&nbsp;and&nbsp;phone.</p>
+![Annotations on a Markdown plan](media/readme/gx-annotate.png)
 
-<p align="center"><img src="media/readme/gx-visuals.png" alt="A chat reply with stat tiles, a bar chart and a table of failing tests" width="70%" /></p>
+</details>
 
-<br/>
+### 📊 Charts and pages in the chat
 
-<h3 align="center">⏭️ Queue your&nbsp;next&nbsp;prompts</h3>
+Agents answer with charts, tables and stat tiles, or publish a page that opens as a card. Same on desktop, web and phone.
 
-<p align="center">Keep typing while the agent works. Press <kbd>Tab</kbd> to queue a prompt and it waits above the input until the agent is free; drag to reorder, or press play on a message you already sent to interrupt and deliver it&nbsp;right&nbsp;away.</p>
+<details>
+<summary>See a visual reply</summary>
 
-<p align="center"><img src="media/readme/gx-queue.png" alt="An agent at work with two queued prompts waiting above the chat input" width="70%" /></p>
+![A chat reply with stat tiles, a chart and a table](media/readme/gx-visuals.png)
 
-<br/>
+</details>
 
-<h3 align="center">🔎 Find any&nbsp;past&nbsp;session</h3>
+### ⏭️ Queue the next prompt
 
-<p align="center">Fuzzy search every prompt you ever sent, across all your agents, and press <kbd>Enter</kbd> to resume the conversation. Star favourites and filter by agent or project. Also available as <code>gx f</code> for&nbsp;command‑line&nbsp;fans.</p>
+Keep typing while the agent works. Press Tab to queue a prompt; drag to reorder, or play one to interrupt.
 
-<p align="center"><img src="media/readme/gx-search.png" alt="Searching every past prompt" width="70%" /></p>
+<details>
+<summary>See queued prompts</summary>
 
-### Also in the box
+![Two queued prompts above the chat input](media/readme/gx-queue.png)
 
-- **Built-in IDE**: an optional VS Code editor that loads on demand and sleeps when you are not using it.
-- **Remote machines**: connect another computer with an Easy Connect code or SSH and it shows up in the sidebar.
-- **Usage and accounts**: Claude and Codex limits at a glance, with automatic account switching.
-- **Worktrees, splits, and spaces**: a worktree per task, split panes, Arc-style spaces.
-- **Automations**: scheduled prompts, plus menu bar and sound notifications.
-- **Optional plugins**: browser, Kanban, IDE, Docs, and more load only when you use them. Or write your own.
+</details>
 
----
+### 🔎 Find any past session
 
-## Supported agents
+Fuzzy search every prompt you ever sent, across all your agents. Press Enter to resume. Also available as `gx f` in a terminal.
 
-Works with **any coding agent**. Bring the one you already use.
+<details>
+<summary>See prompt search</summary>
 
-<p>
-  <a href="https://docs.anthropic.com/claude/docs/claude-code"><kbd><img src="https://www.google.com/s2/favicons?domain=anthropic.com&sz=64" alt="" width="16" valign="middle" /> Claude Code</kbd></a> &nbsp;
-  <a href="https://github.com/openai/codex"><kbd><img src="https://www.google.com/s2/favicons?domain=openai.com&sz=64" alt="" width="16" valign="middle" /> Codex</kbd></a> &nbsp;
-  <a href="https://opencode.ai"><kbd><img src="https://www.google.com/s2/favicons?domain=opencode.ai&sz=64" alt="" width="16" valign="middle" /> OpenCode</kbd></a> &nbsp;
-  <a href="https://pi.dev"><kbd><img src="https://pi.dev/favicon.svg" alt="" width="16" valign="middle" /> Pi</kbd></a> &nbsp;
-  <a href="https://omp.sh"><kbd><img src="https://omp.sh/favicon.svg" alt="" width="16" valign="middle" /> oh-my-pi</kbd></a> &nbsp;
-  <a href="https://x.ai/cli"><kbd><img src="https://www.google.com/s2/favicons?domain=x.ai&sz=64" alt="" width="16" valign="middle" /> Grok</kbd></a> &nbsp;
-  <a href="https://cursor.com/cli"><kbd><img src="https://www.google.com/s2/favicons?domain=cursor.com&sz=64" alt="" width="16" valign="middle" /> Cursor</kbd></a> &nbsp;
-  <a href="https://github.com/features/copilot/cli"><kbd><img src="https://www.google.com/s2/favicons?domain=github.com&sz=64" alt="" width="16" valign="middle" /> Copilot CLI</kbd></a> &nbsp;
-  <kbd>+ many more</kbd>
-</p>
+![Searching past prompts](media/readme/gx-search.png)
 
----
+</details>
+
+**Also in the box:** an on-demand VS Code editor · remote computers over Easy Connect or SSH · Claude and Codex usage with account switching · worktrees, splits and spaces · automations (scheduled prompts) with menu bar and sound notifications · optional plugins such as the Kanban board.
+
+## Works with your agent
+
+[Claude Code](https://docs.anthropic.com/claude/docs/claude-code) · [Codex](https://github.com/openai/codex) · [OpenCode](https://opencode.ai) · [Pi](https://pi.dev) · [oh-my-pi](https://omp.sh) · [Grok](https://x.ai/cli) · [Cursor](https://cursor.com/cli) · [Copilot CLI](https://github.com/features/copilot/cli) · and more.
 
 ## Install
 
-### macOS
+### On your computer
+
+**macOS:** [Apple Silicon DMG](https://maddada.com/download/macos-arm64)
+
+<details>
+<summary>Or install with Homebrew</summary>
 
 ```bash
 brew install ghostex
 ```
 
-Or download the app directly:
+</details>
 
-<p>
-  <a href="https://maddada.com/download/macos-arm64"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/macOS-Apple%20Silicon%20DMG.svg?variant=secondary&logo=apple&mode=dark" /><img src="https://shieldcn.dev/badge/macOS-Apple%20Silicon%20DMG.svg?variant=secondary&logo=apple&mode=light" alt="macOS Apple Silicon DMG" /></picture></a>
-</p>
+**Windows:** [x64 installer](https://maddada.com/download/windows-x64) · [ARM64 installer](https://maddada.com/download/windows-arm64)
 
-### Windows
-
-<p>
-  <a href="https://maddada.com/download/windows-x64"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/Windows-x64%20Setup.svg?variant=secondary&logo=windows&mode=dark" /><img src="https://shieldcn.dev/badge/Windows-x64%20Setup.svg?variant=secondary&logo=windows&mode=light" alt="Windows x64 installer" /></picture></a>
-  <a href="https://maddada.com/download/windows-arm64"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/Windows-ARM64%20Setup.svg?variant=secondary&logo=windows&mode=dark" /><img src="https://shieldcn.dev/badge/Windows-ARM64%20Setup.svg?variant=secondary&logo=windows&mode=light" alt="Windows ARM64 installer" /></picture></a>
-</p>
-
-Or install from PowerShell:
+<details>
+<summary>PowerShell install and Windows details</summary>
 
 ```powershell
 irm https://ghostex.dev/install.ps1 | iex
 ```
 
-The [script](tooling/install/install.ps1) downloads the installer for your PC from GitHub, checks it against the SHA-256 digest GitHub publishes, and runs it. It isn't a browser download, so Windows doesn't show the SmartScreen prompt, and it changes no security settings.
+The [script](tooling/install/install.ps1) downloads the installer for your PC from GitHub, checks it against GitHub's SHA-256 digest, and runs it.
 
-Agents run in native PowerShell by default. Prefer Linux? Switch to WSL in Settings > General > Terminal > Windows Environment. Updates arrive automatically.
+Agents run in native PowerShell by default. Prefer Linux? Switch to WSL in Settings → General → Terminal → Windows Environment. Updates arrive automatically.
 
-### Linux
+</details>
 
-<p>
-  <a href="https://maddada.com/download/linux-deb-x64"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/Linux-.deb.svg?variant=secondary&logo=debian&mode=dark" /><img src="https://shieldcn.dev/badge/Linux-.deb.svg?variant=secondary&logo=debian&mode=light" alt="Linux DEB package" /></picture></a>
-  <a href="https://maddada.com/download/linux-rpm-x64"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/Linux-.rpm.svg?variant=secondary&logo=redhat&mode=dark" /><img src="https://shieldcn.dev/badge/Linux-.rpm.svg?variant=secondary&logo=redhat&mode=light" alt="Linux RPM package" /></picture></a>
-  <a href="https://aur.archlinux.org/packages/ghostex-bin"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/AUR-ghostex--bin.svg?variant=secondary&logo=archlinux&mode=dark" /><img src="https://shieldcn.dev/badge/AUR-ghostex--bin.svg?variant=secondary&logo=archlinux&mode=light" alt="Arch Linux AUR package" /></picture></a>
-  <a href="https://maddada.com/download/linux-tar-x64"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/Linux-tar.zst.svg?variant=secondary&logo=linux&mode=dark" /><img src="https://shieldcn.dev/badge/Linux-tar.zst.svg?variant=secondary&logo=linux&mode=light" alt="Linux tarball" /></picture></a>
-  <a href="https://maddada.com/download/linux-appimage-x64"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/Linux-AppImage.svg?variant=secondary&logo=linux&mode=dark" /><img src="https://shieldcn.dev/badge/Linux-AppImage.svg?variant=secondary&logo=linux&mode=light" alt="Linux AppImage" /></picture></a>
-</p>
+**Linux:** [.deb](https://maddada.com/download/linux-deb-x64) · [.rpm](https://maddada.com/download/linux-rpm-x64) · [AppImage](https://maddada.com/download/linux-appimage-x64) · [AUR](https://aur.archlinux.org/packages/ghostex-bin) · [tar.zst](https://maddada.com/download/linux-tar-x64)
+
+<details>
+<summary>Arch Linux, ARM64 and other Linux details</summary>
 
 ```bash
 # Arch Linux
 yay -S ghostex-bin
 
-# Any other x64 distribution: the tarball is a prefix-preserving /opt/ghostex tree
+# Other x64 distributions: extract into /opt/ghostex
 sudo tar -xpf ghostex-*-linux-x64.tar.zst -C /
 
 # No package manager: the AppImage copies itself into ~/.local/share/ghostex/appimage on first start
-chmod +x ghostex-*-linux-x64.AppImage && ./ghostex-*-linux-x64.AppImage
+chmod +x ghostex-*-linux-x64.AppImage
+./ghostex-*-linux-x64.AppImage
 ```
 
-ARM64 packages and the ARM64 AppImage are on the [release page](https://github.com/maddada/Ghostex/releases/latest). To update an AppImage, download the new one and open it. Without FUSE the AppImage says "Cannot mount AppImage": install your distribution's `fuse3` package, or start it with `--appimage-extract-and-run`.
+ARM64 packages are on the [release page](https://github.com/maddada/Ghostex/releases/latest). To update an AppImage, download the new one and open it. Without FUSE the AppImage says "Cannot mount AppImage": install your distribution's `fuse3` package, or start it with `--appimage-extract-and-run`.
 
 Ghostex offers to install Chromium the first time you open the browser or code editor.
 
-### Mobile
+</details>
 
-<p>
-  <a href="https://github.com/maddada/Ghostex/releases/latest/download/ghostex-android.apk"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/Android-APK.svg?variant=secondary&logo=android&mode=dark" /><img src="https://shieldcn.dev/badge/Android-APK.svg?variant=secondary&logo=android&mode=light" alt="Android APK" /></picture></a>
-  <a href="https://apps.apple.com/app/id6771707394"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/iOS-App_Store.svg?variant=secondary&logo=apple&mode=dark" /><img src="https://shieldcn.dev/badge/iOS-App_Store.svg?variant=secondary&logo=apple&mode=light" alt="iOS App Store" /></picture></a>
-</p>
+### On your phone
 
-The iPhone app is on the [App Store](https://apps.apple.com/app/id6771707394).
+**iPhone:** [Get it on the App Store](https://apps.apple.com/app/id6771707394)
 
-## Comparison
+**Android:** [Download the APK](https://github.com/maddada/Ghostex/releases/latest/download/ghostex-android.apk)
+
+Pair the phone app with Ghostex on your computer using Easy Connect, or use your existing Tailscale tailnet.
+
+## How it compares
+
+<details>
+<summary>Open the feature comparison</summary>
 
 | Feature                   | Ghostex | ChatGPT app | cmux |
 | ------------------------- | ------- | ----------- | ---- |
@@ -248,34 +213,29 @@ The iPhone app is on the [App Store](https://apps.apple.com/app/id6771707394).
 | Android                   | Yes     | Yes         | Yes  |
 | Automations               | Yes     | Yes         | -    |
 
----
+</details>
 
 ## Community
 
-- **Discord:** [discord.gg/df7b3G92CS](https://discord.gg/df7b3G92CS) for help and feature talk.
-- **Issues:** [Report a bug or request a feature](https://github.com/maddada/Ghostex/issues).
-- **Contributing:** Ghostex moves fast and help is welcome on platform ports, agent integrations, docs, and polish. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
+[Discord](https://discord.gg/df7b3G92CS) for help and feature talk · [Issues](https://github.com/maddada/Ghostex/issues) for bugs and ideas · [Contributing](CONTRIBUTING.md) to help with ports, agents, docs and polish.
 
-<p align="center">
-  <a href="https://github.com/maddada/Ghostex/graphs/contributors"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/contributors/maddada/Ghostex.svg?bg=transparent&border=false&mode=dark" /><img src="https://shieldcn.dev/contributors/maddada/Ghostex.svg?bg=transparent&border=false&mode=light" alt="Ghostex contributors" /></picture></a>
-</p>
-
-## Credits
+<details>
+<summary>Credits: the open source Ghostex builds on</summary>
 
 Ghostex builds on open source work from these projects and communities:
 
-- [Ghostty](https://github.com/ghostty-org/ghostty) and [Zed / GPUI](https://github.com/zed-industries/zed) for the terminal and the native shell
+- [Ghostty](https://github.com/ghostty-org/ghostty) and [Zed / GPUI](https://github.com/zed-industries/zed) for the terminal and native shell
 - [CEF](https://github.com/chromiumembedded/cef) for embedded Chromium panes
 - [Trycua](https://github.com/trycua/cua) for built-in Computer Use
 - [VS Code](https://github.com/microsoft/vscode) and [code-server](https://github.com/coder/code-server) for the embedded IDE
 - [Beads](https://github.com/gastownhall/beads) by [Steve Yegge](https://github.com/steveyegge) and [Beads Viewer](https://github.com/Dicklesworthstone/beads_viewer) for the Kanban board
-- [OpenUsage](https://github.com/robinebers/openusage) for Claude and Codex usage stats
-- [Agentation](https://github.com/benjitaylor/agentation) for browser annotation tooling (Ghostex bundles [a fork](https://github.com/maddada/agentation/tree/ghostex) that adds screenshots)
+- [OpenUsage](https://github.com/robinebers/openusage) for usage stats
+- [Agentation](https://github.com/benjitaylor/agentation) for browser annotation tooling, including [Ghostex's fork](https://github.com/maddada/agentation/tree/ghostex)
 - [cmux](https://github.com/manaflow-ai/cmux) for agent hook and notification patterns
 - [zehn](https://github.com/al3rez/zehn) by [al3rez](https://github.com/al3rez) for prompt-history search
 - [vvterm](https://github.com/vivy-company/vvterm) and [Termux](https://github.com/termux/termux-app) for mobile terminal components
 - [Pierre](https://github.com/pierrecomputer/pierre) for diff and file rendering components
 
-## License
+</details>
 
-Ghostex is free and open source under the [MIT License](LICENSE).
+Free and open source under the [MIT License](LICENSE).

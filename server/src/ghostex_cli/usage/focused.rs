@@ -143,6 +143,9 @@ Recommended workflow:
 Repeating definition JSON:
   {{"name":"Daily review","agentId":"codex","prompt":"Review the project and report actionable findings.","enabled":false,"schedule":{{"kind":"daily","time":"09:00","timezone":"local"}},"executionMode":{{"kind":"local"}}}}
 
+Definition with a model and effort:
+  {{"name":"Weekly check","agentId":"claude","model":"sonnet","effort":"medium","prompt":"Check the open issues and report actionable findings.","enabled":false,"schedule":{{"kind":"weekly","days":[1],"time":"09:00","timezone":"local"}},"executionMode":{{"kind":"local"}}}}
+
 Timer definition JSON:
   {{"name":"Follow up","agentId":"codex","prompt":"Check whether the task finished.","enabled":true,"schedule":{{"kind":"timer","delayMs":1800000}},"executionMode":{{"kind":"local"}}}}
 
@@ -164,9 +167,21 @@ Execution modes:
   worktree  {{"kind":"worktree","setupCommand":"optional command"}}
   thread    {{"kind":"thread","agentSessionId":"durable-agent-conversation-id","sessionId":"optional-live-pane-hint"}}
 
+Model and effort:
+  model and effort are optional and take the same values as ghostex create-agent --model and
+  --effort. Each run's new session starts on them, for that session only; leave them out to keep
+  the agent's own. They are checked for the agent when saved. Thread mode runs in a session that
+  already exists, which keeps its own model and effort, so thread definitions refuse them.
+
+Definition fields:
+  name, agentId, prompt, enabled, schedule, executionMode, model, effort, plus id, projectIds,
+  createdAt, updatedAt and nextRunAt as automation-state returns them. Any other field is refused
+  with an error naming it, and nothing is saved.
+
 Thread execution:
-  Prefer agentSessionId for Codex and other resumable agents. Ghostex sends the prompt to the
-  existing pane when it still owns that conversation; if the pane has been closed, Ghostex
+  Prefer agentSessionId for Codex and other resumable agents. Ghostex queues the prompt in the
+  existing pane's chat, sent once the agent is free, when it still owns that conversation; if
+  the pane has been closed, Ghostex
   creates a new pane, resumes the exact agent conversation, and then sends the prompt.
   sessionId-only definitions remain supported but require that Ghostex pane to still exist.
 
@@ -179,6 +194,9 @@ Run results:
   Automation prompts require a final `AUTOMATION_RESULT: <status>` line.
   Replace <status> with exactly findings, no_findings, or needs_attention.
   gxserver records that marker in run history.
+  A run ends as failed when its prompt never reaches the agent (10 minutes for a new session,
+  30 for a thread's busy session), and as needs_attention when the agent finishes its turn
+  without the line, or after an hour. While a run is going, due runs are recorded as skipped.
 
 Safety:
   Inspect exact automation and run ids before destructive operations.

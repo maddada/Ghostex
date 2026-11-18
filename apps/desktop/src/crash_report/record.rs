@@ -53,6 +53,16 @@ pub(crate) struct CrashRecord {
     pub(crate) message: String,
     pub(crate) stack: Vec<String>,
     pub(crate) log_tail: Vec<String>,
+    /// The thread that crashed: `main`, or `another thread` (with the terminal library's own name
+    /// for it when it has one: `renderer`, `io`).
+    pub(crate) thread: Option<String>,
+    /// What was on screen: `Agents view, keyboard in an agent pane` (context.rs).
+    pub(crate) screen: Option<String>,
+    /// The last app event names before the crash, oldest first: `13:33:02 gpui.cefRuntime.ready`.
+    pub(crate) recent_events: Vec<String>,
+    /// The crashed executable's build id (its Mach-O UUID as 32 hex digits), which names the
+    /// exact binary to read the stack's offsets against.
+    pub(crate) build_id: Option<String>,
 }
 
 impl CrashRecord {
@@ -215,13 +225,34 @@ pub(crate) fn save_reader_state(state: &ReaderState) {
 /// The last [`LOG_TAIL_LINES`] lines of the app's own log (`gpui-host-lifecycle.log`, the
 /// warnings and errors it always keeps). Its writer already replaced paths and long values.
 pub(crate) fn log_tail() -> Vec<String> {
+    log_tail_until(None)
+}
+
+/// [`log_tail`] for a crash read back at a later open (a native crash): only the lines written up
+/// to `at_ms` (and a few seconds after, for the clock steps between the log and the crash file),
+/// so the lines of the launch that found the crash are left out.
+pub(crate) fn log_tail_before(at_ms: u64) -> Vec<String> {
+    log_tail_until(Some(at_ms.saturating_add(5_000)))
+}
+
+/// `[2026-11-17 13:33:02.473 +0000] {...}`: the time a log line was written, in ms since 1970.
+fn log_line_ms(line: &str) -> Option<u64> {
+    let stamp = line.strip_prefix('[')?.split_once(']')?.0;
+    chrono::DateTime::parse_from_str(stamp, "%Y-%m-%d %H:%M:%S%.3f %z")
+        .ok()
+        .and_then(|time| u64::try_from(time.timestamp_millis()).ok())
+}
+
+fn log_tail_until(until_ms: Option<u64>) -> Vec<String> {
     let path = super::logs_directory().join("gpui-host-lifecycle.log");
     let Ok(mut file) = fs::File::open(path) else {
         return Vec::new();
     };
-    // The tail of a 25 MB file: the last 64 KB holds far more than 40 lines.
+    // The tail of a 25 MB file: the last 64 KB holds far more than 40 lines. A crash read back at
+    // a later open reads further back, past what that launch has written since.
+    let window: u64 = if until_ms.is_some() { 512 } else { 64 };
     let length = file.metadata().map(|metadata| metadata.len()).unwrap_or(0);
-    let start = length.saturating_sub(64 * 1024);
+    let start = length.saturating_sub(window * 1024);
     if file.seek(SeekFrom::Start(start)).is_err() {
         return Vec::new();
     }
@@ -234,6 +265,15 @@ pub(crate) fn log_tail() -> Vec<String> {
     // The first line may start mid-way.
     if start > 0 && !lines.is_empty() {
         lines.remove(0);
+    }
+    if let Some(until_ms) = until_ms {
+        // Lines are written in time order: drop the ones after the crash from the end.
+        while lines
+            .last()
+            .is_some_and(|line| log_line_ms(line).is_none_or(|at| at > until_ms))
+        {
+            lines.pop();
+        }
     }
     let skip = lines.len().saturating_sub(LOG_TAIL_LINES);
     lines[skip..]

@@ -833,7 +833,17 @@ pub(crate) fn plan_session(
         return Ok(None);
     }
     // Q3227: nothing to switch to; a wait left from before this rule ends with it.
-    if notice.kind == "usageLimit" && stays_stopped_at_limit(&registry, provider, &policy) {
+    // A session on a CLIProxyAPI hub (accounts/hub/) waits for the hub whatever accounts are saved.
+    let hub_id = old
+        .pointer(&format!(
+            "/runtimeSettings/{}",
+            super::hub::launch::RUNTIME_KEY
+        ))
+        .and_then(Value::as_str);
+    if notice.kind == "usageLimit"
+        && hub_id.is_none()
+        && stays_stopped_at_limit(&registry, provider, &policy)
+    {
         if recovery["trigger"].as_str() == Some("usageLimit") {
             save(state, repo, &session, Value::Null)?;
         }
@@ -882,6 +892,17 @@ pub(crate) fn plan_session(
         super::api_errors::error_backoff(attempts)
     } else {
         backoff(attempts)
+    };
+    // CDXC:AgentProviders 2026-11-18 WHY: a hub refusing with every account cooling down names when
+    // one has room again ("reset after 1h10m0s", or `reset_seconds` in the body Codex shows), so the
+    // wait lasts until then instead of the usual 5 to 60 minutes; without it, the hub's pool says
+    // when its first account frees up (accounts/hub/cooldown.rs, `pool_free_at`).
+    let delay = match (notice.kind == "usageLimit")
+        .then(|| super::hub::cooldown::reset_after_notice(&notice, hub_id, provider, now))
+        .flatten()
+    {
+        Some(at) => (at - now).max(chrono::Duration::minutes(1)),
+        None => delay,
     };
     // CDXC:AgentProviders 2026-09-11 WHY:
     // Restored sessions can display a saved login through its configured home without a persisted accountId. Checking only that field delayed their first usage-limit switch by five minutes even when another account was ready.

@@ -101,6 +101,11 @@ pub struct ChatPill {
     /// `command`, `separator`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub menu: Vec<Value>,
+    /// Autopilot's "Open supervisor" row (`extras::autopilot`), in `menu`'s row shape, apart from
+    /// it: a renderer that can open another session puts it after the toggle; one that can't (the
+    /// phone, until it can) leaves it out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supervisor_row: Option<Value>,
 }
 
 /// One status dot inside a pill: its tone and the count after it.

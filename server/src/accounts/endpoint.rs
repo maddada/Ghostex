@@ -76,6 +76,11 @@ pub(crate) fn dispatch(
     if operation == "switchSession" {
         return super::cli::switch_session(state, params);
     }
+    if super::hub::handle(&state.paths, params)? {
+        let mut list = Map::new();
+        list.insert("operation".into(), json!("list"));
+        return dispatch(state, &list);
+    }
     match super::usage_only::handle(&state.paths, params)? {
         super::usage_only::Handled::Answer(answer) => return Ok(answer),
         super::usage_only::Handled::Changed => {
@@ -687,6 +692,12 @@ pub(crate) fn dispatch(
             operation == "titlebar",
             wait
         ));
+        // CLIProxyAPI hubs and the accounts each pools (accounts/hub/), only while its extension is
+        // on (the key is left out while it is off): Settings lists them and the New Thread picker
+        // offers On the hub from `list`.
+        if operation == "list" && super::hub::enabled(&state.paths) {
+            value["cliproxyHubs"] = json!(super::hub::rows(&state.paths, wait));
+        }
     }
     if usage_history.is_some() {
         value["usageHistory"] = state.accounts.history.snapshot();

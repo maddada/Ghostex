@@ -30,10 +30,10 @@ fn initializes_sqlite_with_current_migrations_and_schema_layout() {
     let journal_mode: String = db
         .query_row("PRAGMA journal_mode", [], |row| row.get(0))
         .expect("journal_mode");
-    assert_eq!(user_version, 80);
+    assert_eq!(user_version, 81);
     assert_eq!(foreign_keys, 1);
     assert_eq!(journal_mode, "wal");
-    assert_eq!(schema_migration_count(&db), 80);
+    assert_eq!(schema_migration_count(&db), 81);
     assert_eq!(
         explicit_index_names(&db),
         vec![
@@ -204,6 +204,8 @@ fn initializes_sqlite_with_current_migrations_and_schema_layout() {
             "deliver",
             "lastCheckFingerprint",
             "failureStreak",
+            "model",
+            "effort",
         ]
     );
     assert_eq!(

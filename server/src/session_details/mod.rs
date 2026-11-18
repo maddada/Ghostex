@@ -33,5 +33,7 @@ mod probe;
 mod scan;
 mod skills;
 
+pub(crate) use changes::read_changes;
+pub(crate) use environment::read_environment;
 pub(crate) use gate::{claude_task_tools_environment, session_details_enabled};
 pub(crate) use http::{handle_read_session_details_http, handle_stop_session_background_task_http};

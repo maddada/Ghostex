@@ -369,8 +369,9 @@ async fn answer_session_chat_prompt(
         };
     }
     // "For later" and removing a question form or page without answering it are the chat's own
-    // bookkeeping: nothing reaches the agent (session_chat_open_questions.rs, `set_later` and
-    // `set_removed`).
+    // bookkeeping: nothing reaches the agent now (session_chat_open_questions.rs, `set_later` and
+    // `set_removed`). A removal that is the user's Dismiss names the question (`dismissed`), which
+    // the next message the agent gets anyway tells it of (session_chat_dismissed.rs).
     if kind == "questionForLater" || kind == "questionRemove" {
         let Some(question_id) = params
             .get("questionId")
@@ -394,6 +395,12 @@ async fn answer_session_chat_prompt(
             .get("hours")
             .and_then(Value::as_u64)
             .filter(|hours| (1..=24 * 14).contains(hours));
+        let dismissed = params
+            .get("dismissed")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|name| remove && !name.is_empty())
+            .map(str::to_string);
         let worker_state = state.clone();
         let (project_id, session_id) = (target.project_id.clone(), target.session_id.clone());
         let result = tokio::task::spawn_blocking(move || {
@@ -403,7 +410,12 @@ async fn answer_session_chat_prompt(
                     &project_id,
                     &session_id,
                     &question_id,
-                )
+                )?;
+                if let Some(name) = dismissed {
+                    let db = crate::storage::open_gxserver_database(&worker_state.paths)?;
+                    crate::session_chat_dismissed::record(&db, &project_id, &session_id, &name);
+                }
+                Ok(())
             } else {
                 crate::session_chat_open_questions::set_later(
                     &worker_state,

@@ -46,6 +46,25 @@ pub(crate) fn set_computer_icons(icons: std::collections::HashMap<String, &'stat
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(icons);
 }
 
+/// This computer's icon drawing (picked for it, else its system's), once its gxserver answered
+/// (`note_computer_icon` in gx_store/computer_icons.rs). Kept apart from [`COMPUTER_ICONS`], which
+/// is empty while this is the only computer.
+static THIS_COMPUTER_ICON: Mutex<Option<&'static str>> = Mutex::new(None);
+
+#[cfg_attr(ghostex_web, allow(dead_code))]
+pub(crate) fn set_this_computer_icon(icon: &'static str) {
+    *THIS_COMPUTER_ICON
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(icon);
+}
+
+/// This computer's icon drawing, `None` until its gxserver answered.
+pub(crate) fn this_computer_icon() -> Option<&'static str> {
+    *THIS_COMPUTER_ICON
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 /// The icon of the computer whose gxserver is `server_id`: the one picked for it (the sidebar's
 /// mark), else the plain computer.
 ///

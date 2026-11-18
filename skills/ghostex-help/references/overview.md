@@ -33,8 +33,9 @@ hotkeys Every shortcut and its default binding
   Omarchy), the window's minimize, maximize and close buttons sit at the right
   end of that row. On Omarchy, minimize shows only while the window is on a
   floating workspace, and sends the window to the dock.
-- **Sidebar** (left by default): projects, their sessions, tags and filters,
-  remote machines, and the More Options menu under the three-lines button at
+- **Sidebar** (left by default): projects, their sessions, tags and filters
+  (every connected computer's projects in one list, a project on several
+  computers as one entry, unless Separate by machine is on), and the More Options menu under the three-lines button at
   the top right (Sort & Filter, Collapse All, Commands, Agents Hub, All Automations,
   Connect a Phone, Connect a Computer, Keep Awake, then Ask Ghostex AI, Join Discord and Send Bug / Feedback, then the Tools and Ghostex submenus and
   Settings; Ghostex holds New Window, Check for Updates, Restart Ghostex, Quit

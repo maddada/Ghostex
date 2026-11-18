@@ -55,6 +55,10 @@ pub enum BrowserPageContextMenuEntry {
     Separator,
 }
 
+/// CEF's Back and Forward command ids (`cef_menu_id_t`'s MENU_ID_BACK and MENU_ID_FORWARD).
+pub const PAGE_MENU_BACK_COMMAND_ID: i32 = 100;
+pub const PAGE_MENU_FORWARD_COMMAND_ID: i32 = 101;
+
 /// A right-click on a Browser page, for Ghostex's own menu to show: the rows to offer, where the
 /// click landed in the page's view (logical pixels from its top-left corner), and what runs the
 /// chosen row's command on that page.
@@ -63,4 +67,26 @@ pub struct BrowserPageContextMenu {
     pub y: f32,
     pub entries: Vec<BrowserPageContextMenuEntry>,
     pub run: Rc<dyn Fn(i32)>,
+}
+
+impl BrowserPageContextMenu {
+    /// The menu without Back and Forward, for a page that never navigates (the floating page
+    /// window opens its links elsewhere), where they would only ever show disabled.
+    pub fn without_history(mut self) -> Self {
+        self.entries.retain(|entry| {
+            !matches!(
+                entry,
+                BrowserPageContextMenuEntry::Item { command_id, .. }
+                    if *command_id == PAGE_MENU_BACK_COMMAND_ID
+                        || *command_id == PAGE_MENU_FORWARD_COMMAND_ID
+            )
+        });
+        while matches!(
+            self.entries.first(),
+            Some(BrowserPageContextMenuEntry::Separator)
+        ) {
+            self.entries.remove(0);
+        }
+        self
+    }
 }

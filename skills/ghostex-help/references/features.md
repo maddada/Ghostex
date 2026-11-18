@@ -70,8 +70,15 @@ you hover the window's left edge shows the window buttons in its top-left corner
 In full screen they sit at the left edge too, with no gap for the window buttons.
 The sidebar's top row also moves the window when you drag it. When an update is available, a download button
 appears just before the project name. On Linux the button opens the release
-notes with an **Open download page** button instead of installing the update;
-install the new package the same way you installed Ghostex. Linux downloads come
+notes with the command that updates Ghostex the way it was installed (for
+example `yay -S ghostex-bin` for the AUR package, or a download plus
+`sudo apt install` for the .deb or `sudo dnf install` for the .rpm), with
+**Release page** and **Copy command**: run the command in a terminal, type your
+password when it asks, then restart Ghostex. Settings > Updates shows the same
+command on Ghostex's card, with Copy command and a Release page link; another
+Linux computer's card shows its command the same way, to run on that computer.
+The tarball, or a copy no package manager installed, gets only the release page
+(**Open download page**). Linux downloads come
 for x64 and for ARM64 (aarch64) computers, each as a .deb, an .rpm, a portable
 .tar.zst and an AppImage on the release page; pick the one that matches your computer's processor
 (`uname -m` prints x86_64 or aarch64). The AppImage needs no install: make it
@@ -550,7 +557,9 @@ view from the strip.
   in your mail app, and a link to a file (a path, a path relative to the open
   file, or a `file://` link, with or without a `#heading` or `:line`) opens that
   file in a new Files tab beside the current one, or shows its tab if it is
-  already open; a path that is not there says so. A link that opens another app
+  already open, also when the file is outside the project; a path that is not
+  there says so. Option-click (Alt-click on Windows and Linux) a link to a file
+  to open it in your computer's default app for that file instead. A link that opens another app
   (such as `vscode://` or `ghostex://`) shows where it goes and asks "Open a
   link in another app?" first, with Cancel as the default.
   Hover a table to open it in a window or copy it as Markdown or CSV; a table
@@ -734,7 +743,18 @@ pull request and agent. Under a project header the project line is left out, so
 every card there is two lines. A project is named after its repository there, so the same
 repository on this computer and a remote one is one project. Sessions are
 ordered by when they last came back to you (started, sent a message, or a
-finished turn), never by output while an agent works; pinned sessions come
+finished turn), never by output while an agent works. For a list that stays
+put, pick Alphabetical (by title) or Created (newest first) in Session order
+(`unifiedSessionOrder`, in Settings under the Sidebar switch and in Sort &
+Filter; the phone follows it once its app is updated, and an older phone app
+keeps Recent activity): then a session keeps its place in its shelf when you
+send it a message or it finishes. Under Alphabetical a title change still moves
+it: your rename, or the title Ghostex gives a session after its first message
+or takes from its terminal. The Moving and Parked shelves and the cards inside each project group
+follow the same order. A session still changes shelf: with the Moving section
+on, a working session goes to Moving until it stops, and with Unpark after
+sending a message on, sending to a parked session takes it out of Parked; turn
+off the Moving section for a list where working sessions stay put. Pinned sessions come
 first, in the order you give them (drag a pinned card above or below another
 pinned card of the same list or project group; the Project sidebar's Pinned
 keeps the same order; see Pinned order below), and above them a Drafts section holds every session nobody has sent a
@@ -927,7 +947,7 @@ Click a project header (or the chevron beside it) or a group header to expand
 or collapse it; rename a group from its right-click menu.
 Sessions groups gather some of a project's sessions under a header of their
 own, with a folder icon. To make one, right-click a session and choose
-Advanced > Move to New Sessions Group. Once the project has a sessions group, the
+Advanced > Move to New Group. Once the project has a sessions group, the
 session menu's Advanced > Move to Group page lists the project's groups: pick
 one to move the session there, or Remove from Group to put it back in the
 project's own list. Dragging a session onto another of its project's groups,
@@ -1109,7 +1129,7 @@ Grouping never moves a project out of its Space: a group made with Project Group
 of a group (Remove from Group, Ungroup, or dragging it out) stays in that
 group's Space. Adding a project to an existing group in another Space moves it
 to that group's Space, and the sidebar switches there with the project focused.
-A sessions group made with a session's Move to New Sessions Group shows in the
+A sessions group made with a session's Move to New Group shows in the
 project's Space.
 In Add Project, select the computer whose folders you want to browse. Local
 folder starts in your home folder, and External drives and other folders shows
@@ -1136,7 +1156,7 @@ The folder is made in Settings > Projects > Global settings > Default projects f
 Project suggests the folder that holds the selected project's folder (else
 `~/dev`), lets you pick any other, and saves the folder your first new project
 is made in as the setting. Local folder and a clone's destination on this
-computer start in that folder too. A sessions group (Move to New Sessions
+computer start in that folder too. A sessions group (Move to New
 Group) only sorts sessions inside a project and never makes a folder; use New
 project folder when the work needs its own folder, and Project Group > New Group
 to group projects together.
@@ -2037,6 +2057,17 @@ Side chats work with every agent Ghostex can fork (Claude Code, Codex, Pi,
 Empryo, Copilot and Grok Build). From the CLI: `ghostex side-chat start
 "<question>" --session <session>`, `ghostex side-chat list`, `ghostex side-chat
 bring-back --session <side chat>` and `ghostex side-chat delete --session <side chat>`.
+On the desktop, the left end of that strip shows where a running chat's session
+runs: one pill with the computer's icon, the project and the computer (This
+computer, the other computer's name, or Cloud Box) on its left and the branch on
+its right (a fork icon in a worktree). Hover it for the details: the Cloud Box,
+the worktree, the branch with its lines changed, uncommitted files, commits ahead
+and behind, the pull request, the folder, the agent and its account, and the
+terminal backend (zmx, tmux or zellij). Click it for the same details with
+**Copy branch** and **Open folder**. When the strip is crowded, the other pills
+drop their labels first, then this pill drops the computer's name and then the
+project. A new chat shows its worktree tray instead, and the phone does not show
+this pill yet.
 Claude panels such as `/status` and `/usage` show as clickable tabs, tables and
 usage meters instead of terminal text.
 Claude Code's permission mode (Bypass permissions, Auto, Manual, Accept edits or
@@ -2880,7 +2911,9 @@ chats before the prompt cache expires (on by default), Only above (the smallest 
 100K to 500K, 200K by default; shown while the switch is on) and Use a 1-hour prompt cache (off by
 default). Idle compaction runs only on a 1-hour cache, which a Claude subscription gets; an API key,
 Bedrock, Vertex or Foundry gets 5 minutes unless Use a 1-hour prompt cache is on, and 1-hour cache
-writes cost more. They apply to Claude sessions started or resumed afterwards. On the phone they are
+writes cost more. Ghostex passes a value to Claude only once you have changed it in Ghostex (then it wins over your
+Claude settings files, even when it matches Claude's default); one you never touched leaves your own
+Claude settings in charge. They apply to Claude sessions started or resumed afterwards. On the phone they are
 in Settings › Chat › Claude Code, for the computer picked there (a computer needs this Ghostex
 version or later). The Session details
 Cache card shows the cache length, when the chat will be compacted if it stays idle, or that a
@@ -3198,6 +3231,21 @@ Ghostex shows what is used, agy's `/usage` what is left (74% used is agy's
 the sidebar, on the account's page, and under Other usage in a chat's Accounts &
 limits panel on the computer and the phone; clicking one in the sidebar opens
 Settings > Accounts. Their ⋯ menu holds Sign in again, Turn off and Remove….
+**CLIProxyAPI hubs** (the CLIProxyAPI built-in extension, off by default; turn
+it on in Settings > Extensions > Built-in; nothing about it shows while it is
+off): Add account > CLIProxyAPI hub adds a CLIProxyAPI you run yourself, with its
+address, one of its client keys (`api-keys` in its config) and, optionally, its
+management key and a name. Ghostex never installs or runs CLIProxyAPI, never
+copies your Claude Swap or Codex Swap logins into it, and never changes its
+accounts. Both keys stay sealed on the computer and are never synced. With the
+management key, the hub's accounts show under it with read-only usage bars
+(sign accounts in or out on the hub itself). New Claude and Codex sessions can
+start On the hub from the New Thread picker's account list: they run in a
+profile folder of their own (`~/.claude-profiles/ghostex-<hub>` or
+`~/.codex-profiles/ghostex-<hub>`), so they use their own login and are never
+switched to another account. When every hub account is out of room, the
+session waits for the reset the hub names ("cooling down … reset after 1h10m")
+and continues by itself. Setting: `cliProxyApiEnabled`.
 Each Codex login is its own account with its own name and settings, also when
 two people sign in to the same ChatGPT Business workspace or one person has
 several workspaces; this needs Codex Swap 0.3.2 or later (its Update is in the ⋯
@@ -4352,7 +4400,7 @@ file in place. From a terminal or another agent: `ghostex coordinator create --t
 promote <session> [--goal <text>] [--computer <name>]` (make an existing session a coordinator; in versions after 10.49.0 this works on a connected computer's session too, and so does the sidebar's Advanced > Make Coordinator on its rows: that computer installs the coordinator skill and keeps the coordinator), `ghostex coordinator status`,
 `ghostex coordinator options` (the agents, models and efforts a coordinator can use),
 `ghostex coordinator start-thread --title <title> --task <brief> [--worktree]
-[--agent <id>] [--model <m>] [--effort <e>] [--account <number|email>] [--read-only]` (`--read-only`, from 11.6.0, starts a thread that can read but not change anything: Claude in Plan mode, Codex in its read-only sandbox with approval on request, with accept-all taken off its command; it stays read-only whenever it is resumed, restarted, woken or started in a worktree, an agent without a read-only mode is refused before any session exists, and a thread on another computer whose Ghostex is too old to honour it is ended before its brief instead of running with full rights; `--path <folder>`, here and on `coordinator create` and `ghostex agents create`, adds that folder as a project, creating it if needed, and starts there; `--account`, in versions after 10.45.0, starts a Claude or Codex thread on that saved account instead of the Account for new sessions rule; one that needs signing in is refused), `ghostex coordinator resolve
+[--agent <id>] [--model <m>] [--effort <e>] [--account <number|email>] [--read-only]` (`--read-only`, from 11.6.0, starts a thread in its agent's read-only mode, with accept-all taken off its command: Codex in its read-only sandbox with approval on request, which refuses writes; Claude in Plan mode, which blocks its file edits but, as Claude Code designs Plan mode, can still run shell commands while it plans (ones Claude's auto-mode check or your own allow rules approve), so a command can still change files; it stays read-only whenever it is resumed, restarted, woken or started in a worktree, an agent without a read-only mode is refused before any session exists, and a thread on another computer whose Ghostex is too old to honour it is ended before its brief instead of running with full rights; `--path <folder>`, here and on `coordinator create` and `ghostex agents create`, adds that folder as a project, creating it if needed, and starts there; `--account`, in versions after 10.45.0, starts a Claude or Codex thread on that saved account instead of the Account for new sessions rule; one that needs signing in is refused), `ghostex coordinator resolve
 <thread> [--keep-open]` (mark done and close its session), `ghostex coordinator
 reopen <thread>` (resume a closed thread), `ghostex coordinator unlink <thread>` (take a
 thread out of the coordinator's tree: it stays running as an ordinary session of its
@@ -4457,8 +4505,17 @@ all of them every 2 minutes (1 to 10 minutes under **Advanced**). It then:
   commits inside the project; anything else waits for you and every hard limit
   is declined) or **All but limits** (the default; approves anything that
   crosses no hard limit). Each card waits a minute for you first, so at your
-  desk you answer it yourself. A read-only thread's cards (leaving Plan mode, or
-  a step out of Codex's read-only sandbox) always wait for you.
+  desk you answer it yourself. A read-only thread (a coordinator's helper
+  started with `--read-only`) never waits on Autopilot and stays read-only:
+  what only reads (opening a file, searching, fetching a page) is approved, a
+  request to stop planning ("Ready to code?") gets **No, keep planning** with a
+  note to finish with its plan as its report, and an edit, a command that
+  changes something or a step out of Codex's read-only sandbox is declined.
+  Turn on **Let read-only threads leave plan mode** (shown while Autopilot
+  answers permission prompts, off by default) and Autopilot instead approves
+  the plan with **Yes, manually approve edits** (or auto-accept edits on **All
+  but limits** when Claude offers it, never auto mode) and judges the thread's
+  edits and commands like any other session's.
 
 **Hard limits it may cross** show with **All but limits** only, each a switch
 off until you turn it on: push a branch, finish a release you asked for, push
@@ -4469,14 +4526,28 @@ log notes it for you.
 
 **The supervisor** is an agent that wakes only for judgment calls: a question
 with no recommended choice, or a session the rules could not keep moving. It
-starts the first time it is needed, in an **Autopilot** project in your
-sidebar, on the **Supervisor model** you pick under **Advanced** (Claude Opus 5.5 at medium or
+starts the first time it is needed, as **Autopilot supervisor** in an
+**Autopilot** project that starts hidden in your sidebar (**Show hidden** lists
+it, and you can unhide it like any project), on the **Supervisor model** you pick under **Advanced** (Claude Opus 5.5 at medium or
 Codex GPT 6.1 Sol at high; the other one when that agent has no account with
-room), and you can read its chat to see why it did each thing. It keeps notes
+room). To read its chat and see why it did each thing, use **Open supervisor**
+in Settings > Autopilot or in the Autopilot pill's menu (both show once it has
+started). It keeps notes
 (one running file, and one per session) that every wake reads first, so it
 never starts from scratch, and it acts only through Ghostex: it answers a
-question, tells a session how to carry on, or leaves it for you with a note. It
-never approves a prompt itself.
+question, tells a session how to carry on, reloads it, or leaves it for you
+with a note. It never approves a prompt itself.
+
+How often it wakes: only when something needs it. Besides the judgment calls
+above, **Supervisor check-up** under **Advanced** (every 10 minutes by default;
+20 or 30 minutes, every hour, or Off) has Ghostex look for sessions that seem
+stuck in ways its rules don't settle: still silent after an interrupt and a
+reload, told to carry on but doing nothing, failing again and again, saying the
+same thing in a loop, or waiting on something that isn't running. Only when it
+finds one does it wake the supervisor to nudge or heal them (each session at
+most twice an hour); a check-up that finds nothing wakes nothing and costs
+nothing. Between wakes, once the supervisor's conversation reaches 120K tokens,
+Ghostex compacts it (its notes keep what it knows), so it stays cheap to wake.
 
 Which sessions: **Every session** (coordinators and threads included; the
 projects and sessions you took out are listed under it, each with a switch to
@@ -4505,9 +4576,11 @@ did, and when (kept 30 days).
 
 CLI: `ghostex autopilot` (status and summary), `ghostex autopilot on|off`,
 `ghostex autopilot log [--last <n>]`, `ghostex autopilot project <project-id>
-on|off`, `ghostex autopilot session <project-id> <session-id> on|off`, and
+on|off`, `ghostex autopilot session <project-id> <session-id> on|off`,
+`ghostex autopilot read-only-plan on|off` (Let read-only threads leave plan
+mode), `ghostex autopilot checkup off|10|20|30|60` (Supervisor check-up), and
 `ghostex autopilot decide <project-id> <session-id> --answer <pick> | --message
-<text> | --leave <note>` (what the supervisor runs).
+<text> | --reload | --leave <note>` (what the supervisor runs).
 
 ## Beads view (was Kanban)
 
@@ -5167,6 +5240,78 @@ Settings: `voiceAgentHidden` (off by default, which keeps the voice agent on), `
 Ghostex is a client/server system: gxserver runs on each computer and owns its
 sessions, so any client can control agents on any machine.
 
+### Several computers as one workspace
+
+Answer "can my computers share projects, move a conversation to another
+computer, or let agents talk to each other?" from here. The short answer is
+yes to all three: a coordinator's threads can run on another computer and
+report back, any agent can message sessions on another computer, a
+conversation can be handed over to another computer, and every computer's
+projects share one sidebar. Add each computer in Settings > Remote on the
+computer whose sidebar should show it (From another computer below); for
+agents, a connection from either side is enough.
+
+- **Threads on another computer (yes)**: a coordinator can run its threads
+  on any connected computer, and they report back to it like threads on this
+  computer. Ask it in plain words ("run this in a thread on my Windows PC"),
+  or `ghostex coordinator start-thread --computer <name>`.
+- **Agents message each other across computers (yes)**: any agent can
+  message, start and read sessions on a connected computer, and that
+  computer's agents can do the same here, while the computers are connected.
+
+  ```bash
+  ghostex computers                                   # connected computers
+  ghostex sessions --computer <name>                  # its projects and sessions, with ids
+  ghostex agents create <agent> --computer <name> --project-id <id> --task "..."
+  ghostex agents send <session-ref> "..."             # a ref from that computer goes there
+  ghostex agents send --main-coordinator --path <folder> --computer <name> "..."
+  ghostex read-session-chat <session-ref> --last 2 --format text
+  ghostex coordinator start-thread --computer <name> --title "..." --task "..."
+  ```
+
+  It needs Ghostex 10.44 or later on both computers and **Agent access** on
+  (Settings > Remote, the machine's Edit dialog, Advanced; on by default).
+  Agents there can start, message, read, sleep, wake and close sessions,
+  nothing else.
+- **Hand a conversation over to another computer (yes)**: right-click the
+  session > Handoff / Export > Handoff to an agent, then Destination >
+  Change… and pick the computer and project (the project with
+  the same repository there is picked for you; Clone it there adds it when
+  it's missing). Pick the agent under Continue with. Ghostex starts a new
+  session there with the conversation attached as a file (the last 20 turns
+  at first; turn on Whole conversation under Include for all of it), and
+  carries over the pictures and files the conversation used outside the
+  project. Write the first message there yourself. Only the conversation
+  moves: the old session keeps running until you close it, and the code
+  changes don't travel, so commit and push them (or pull them on the other
+  computer) first. It works from this computer to a remote one, back, and
+  between two remote ones. Ghostex doesn't move a session by itself when a
+  computer runs low on memory or disk; the Memory guard only acts on that
+  computer's own sessions.
+- **One sidebar, shared projects (yes, the default)**: with Separate by
+  machine off (Settings > Sidebar & Sessions, `sidebarSeparateByMachine`, off
+  by default) every connected computer's projects and sessions are in one
+  Project sidebar, with no tab per computer. A project on several computers
+  (the same git remote, else the same folder name) is one entry with the
+  sessions of every copy; each session shows its computer's name, and the
+  project header shows the computers' icons (click one to hide that
+  computer's sessions in that project). Spaces and project groups are shared
+  by all of them. The Unified sidebar (`sidebarView` `unified`) is one list of
+  every computer's sessions too. If you see a tab per computer, Separate by
+  machine is on: turn it off. To put a project on a computer that doesn't
+  have it yet, right-click the project > Clone on… and pick the computer.
+  Computers that aren't connected stay in the list, faded, unless Hide
+  sessions and projects from computers that aren't connected is on
+  (`sidebarHideDisconnectedMachines`). Details: One list for every computer,
+  in the Sidebar section. A session runs on one computer: each computer runs
+  its own sessions with its own CPU, memory and files.
+- **Machines on demand**: Ghostex doesn't make new computers for you. Add
+  each computer you own in Settings > Remote. For a machine per task in the
+  cloud, use a Cloud Box (see Cloud Boxes below): its sessions sit in their
+  project in the same sidebar.
+
+### Connecting a phone, another computer, the web app
+
 - **From a phone**: sidebar More Options > Connect a Phone. One window,
   Connect a device, opens with three ways listed at its left (Phone, Computer,
   Tailscale) and turns Easy Connect on by itself (if SSH access is off, it asks
@@ -5640,8 +5785,12 @@ sessions, so any client can control agents on any machine.
   newest, so updating Ghostex on that machine is enough; an older one still
   running is replaced without closing its sessions. What you type in that dialog (except the password) stays
   there when Settings closes or the app restarts, until you add the machine or
-  press Cancel. The machine appears as a sidebar section with its own
-  projects and sessions; its terminals stream into the desktop app. Windows,
+  press Cancel. Its projects and sessions join your sidebar, a project it
+  shares with this computer as one entry with the sessions of both (see
+  Several computers as one workspace above for shared projects, handing a
+  conversation to another computer and agents across computers; Separate by
+  machine gives each computer its own tab instead); its terminals stream into
+  the desktop app. Windows,
   Linux, and macOS clients use the connected computer's folders and shell.
   Agents can use a connected machine too: any agent on this computer can
   start, message and read sessions there, and the machine's agents can do the
@@ -5774,7 +5923,7 @@ sessions, so any client can control agents on any machine.
   Merge copies of the same repository, Worktree sessions show in their
   project, the Spaces switch, Show Main Hub on all Spaces, Hide projects
   without sessions, Group working sessions, session parking, Pinned order, the
-  Unified sidebar's Moving section, Group by project and project order, and
+  Unified sidebar's Moving section, Session order, Group by project and project order, and
   your Session Tags (the tags you made and the tag list's order). A change
   shows on your other computers within a minute, without a restart. A project
   one computer doesn't have keeps its place and shows there once you add it.
@@ -7449,19 +7598,21 @@ the work area header, a split pane's bar menu, the Open in a Popup hotkey, or
 Option-click, Alt-click on Windows and Linux, on a session in the sidebar)
 moves a chat or terminal session into a small window of its own; its pane shows
 a card with **Show Window** and **Bring Back**. Popping out another session
-adds it as a tab to the popup you used last, and a tab bar shows at the top of
-the popup once it has two or more sessions: click a tab to show it, drag it
-along the bar to reorder, and click its **×** (or press Cmd+W, Ctrl+W on
+adds it as a tab to the popup you used last. The popup's tabs sit in its title
+bar, beside the window's own buttons (right of the traffic lights on macOS), and
+show even when it holds one session; drag the title bar's empty space to move
+the window. Click a tab to show it, drag it along the bar to reorder, and click its **×** (or press Cmd+W, Ctrl+W on
 Windows and Linux) to send that session back to its pane. Drag a tab out of the
 window to give it a popup of its own, or onto another popup to move it there;
 the tab's right-click menu does the same with **Move to New Popup** and **Move
 to Popup ›**, and has **Bring Back**. Drag a tab onto the left, right, top or bottom
 edge of the popup's content to split it, side by side or above and below, as in
 the main window (the middle shows it there instead); each split pane gets its
-own tab bar, led by the name of the project its session belongs to, and
-dragging a pane's tab onto another pane's tab bar joins them again. Drag the
+own tab bar, led by the name of the project its session belongs to (the title
+bar then shows the session on show), and dragging a pane's tab onto another
+pane's tab bar joins them again. Drag the
 line between two panes to resize them, or double-click it to make them equal.
-The popup's header has **Keep on Top** (pin,
+The popup's title bar has **Keep on Top** (pin,
 for the whole popup; not on Wayland), **Bring Back** for the session on show
 (in a split, the pane you clicked last) and **Expand** / **Shrink**. Closing the popup sends all its sessions back.
 With transparency on, popups show the same glass as the main window. Popups

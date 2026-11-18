@@ -39,6 +39,26 @@ pub const PINNED_ORDER_MANUAL_ACTION: &str = "pinnedOrderManual";
 /// `pinnedSessionOrder: recent`.
 pub const PINNED_ORDER_RECENT_ACTION: &str = "pinnedOrderRecent";
 
+/// `unifiedSessionOrder: recent` (CDXC:Sidebar 2026-11-17 in unified_sidebar/build.rs).
+pub const SESSION_ORDER_RECENT_ACTION: &str = "unifiedSessionOrderRecent";
+/// `unifiedSessionOrder: alphabetical`.
+pub const SESSION_ORDER_ALPHABETICAL_ACTION: &str = "unifiedSessionOrderAlphabetical";
+/// `unifiedSessionOrder: created`.
+pub const SESSION_ORDER_CREATED_ACTION: &str = "unifiedSessionOrderCreated";
+
+/// The Session order row's value, for one of its three rows.
+fn session_order_value(command: &Value) -> Option<&'static str> {
+    if text_field(command, "type") != Some("sidebarAction") {
+        return None;
+    }
+    match text_field(command, "action")? {
+        SESSION_ORDER_RECENT_ACTION => Some("recent"),
+        SESSION_ORDER_ALPHABETICAL_ACTION => Some("alphabetical"),
+        SESSION_ORDER_CREATED_ACTION => Some("created"),
+        _ => None,
+    }
+}
+
 /// The Pinned order row's value, for one of its two rows.
 fn pinned_order_value(command: &Value) -> Option<&'static str> {
     if text_field(command, "type") != Some("sidebarAction") {
@@ -93,6 +113,7 @@ pub fn owns_group_working_sessions_command(command: &Value) -> bool {
     setting_row(command).is_some()
         || is_switch_sidebar_view(command)
         || pinned_order_value(command).is_some()
+        || session_order_value(command).is_some()
 }
 
 /// The patch that flips the row's setting, given the settings as saved.
@@ -118,6 +139,16 @@ pub fn plan_group_working_sessions(
                 "type": "updateSettingsPatch",
                 "source": "sidebar:pinnedSessionOrder",
                 "patch": { crate::sidebar_view::PINNED_SESSION_ORDER_SETTING_KEY: value },
+            }),
+        }));
+    }
+    // So is the Unified sidebar's Session order, the one Settings > Sidebar picks.
+    if let Some(value) = session_order_value(command) {
+        return Some(SidebarActionPlan::one(ActionEffect::UpdateSettingsPatch {
+            message: json!({
+                "type": "updateSettingsPatch",
+                "source": "sidebar:unifiedSessionOrder",
+                "patch": { crate::sidebar_view::UNIFIED_SESSION_ORDER_SETTING_KEY: value },
             }),
         }));
     }

@@ -21,6 +21,7 @@
 //! app/window/feedback_modal/offline_issue.rs (`scrub_personal_data`).
 
 mod capture;
+mod context;
 mod native;
 mod record;
 mod report;
@@ -39,6 +40,7 @@ fn logs_directory() -> std::path::PathBuf {
 }
 
 pub(crate) use capture::{PendingCrash, collect_pending, record_panic, record_uncaught_exception};
+pub(crate) use context::{note_event, note_screen};
 pub(crate) use record::{CrashRecord, SentCrash};
 pub(crate) use report::{CrashReport, build_report, summary_line};
 pub(crate) use system::{SystemFacts, read_system_facts};

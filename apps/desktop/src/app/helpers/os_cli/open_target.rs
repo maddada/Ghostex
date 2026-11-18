@@ -151,6 +151,91 @@ pub(crate) fn gpui_open_with_application(
 
 pub(crate) const GPUI_FILE_MANAGER_NAME: &str = "the file manager";
 
+/// CDXC:Projects 2026-11-18 WHY:
+/// User: "clicking on open folder on this project on the mac i'm on just doesn't work". The
+/// project lived on an external drive that wasn't mounted, and `/usr/bin/open` on a missing path
+/// starts fine, exits 1 with "does not exist" on a stderr nobody read, so the click did nothing.
+/// A project folder that is gone now says why before anything is launched: the drive under
+/// `/Volumes` that isn't connected (matched case-insensitively, since some projects carry
+/// `/volumes/`, which a case-insensitive disk treats the same), or the folder itself.
+pub(crate) fn gpui_missing_project_folder_message(path: &Path) -> Option<String> {
+    if path.exists() {
+        return None;
+    }
+    let name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.display().to_string());
+    if let Some(volume) = gpui_volume_mount_point(path)
+        && !volume.exists()
+    {
+        return Some(format!(
+            "Can't open {name}: {} isn't connected. Connect the drive and try again.",
+            volume.display()
+        ));
+    }
+    Some(format!(
+        "Can't open {name}: the folder {} doesn't exist anymore.",
+        path.display()
+    ))
+}
+
+/// `/Volumes/<name>` for a path on a mounted volume, whatever the case of `Volumes` in the path.
+fn gpui_volume_mount_point(path: &Path) -> Option<std::path::PathBuf> {
+    use std::path::Component;
+    let mut components = path.components();
+    if components.next() != Some(Component::RootDir) {
+        return None;
+    }
+    match (components.next(), components.next()) {
+        (Some(Component::Normal(volumes)), Some(Component::Normal(name)))
+            if volumes.eq_ignore_ascii_case("Volumes") =>
+        {
+            Some(Path::new("/Volumes").join(name))
+        }
+        _ => None,
+    }
+}
+
+/// Opens a project folder in the file manager and waits for the opener's answer, so a failure
+/// (its stderr, or a missing folder) reaches the caller instead of vanishing. Blocks briefly: call
+/// it off the UI thread.
+#[cfg(target_os = "macos")]
+pub(crate) fn gpui_open_project_folder(path: &Path) -> Result<(), String> {
+    if let Some(message) = gpui_missing_project_folder_message(path) {
+        return Err(message);
+    }
+    let output = std::process::Command::new("/usr/bin/open")
+        .arg(path)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .map_err(|error| format!("Couldn't start Finder's opener: {error}."))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stderr = stderr.trim();
+    Err(if stderr.is_empty() {
+        format!(
+            "Finder couldn't open {} ({}).",
+            path.display(),
+            output.status
+        )
+    } else {
+        format!("Finder couldn't open {}: {stderr}", path.display())
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn gpui_open_project_folder(path: &Path) -> Result<(), String> {
+    if let Some(message) = gpui_missing_project_folder_message(path) {
+        return Err(message);
+    }
+    gpui_spawn_os_open(path.as_os_str())
+}
+
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_reveal_path_in_finder(path: &Path) -> Result<(), String> {
     if !path.exists() {

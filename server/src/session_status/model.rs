@@ -195,6 +195,19 @@ pub fn compute_activity_update(
                 .filter(|_| previous.activity == "working")
                 .or_else(|| Some(iso_from_ms(now_ms_value)));
         }
+        if let Some(since) = previous
+            .background_only_since
+            .as_deref()
+            .filter(|_| previous.activity == "working")
+            .filter(|_| next.activity == "working" && next.background_only_since.is_none())
+        {
+            super::background_only_log::log_background_only_ended(
+                session,
+                params,
+                since,
+                next.working_source.as_deref(),
+            );
+        }
         /*
         Sessions that predate the meaningful-activity clock seed it from their
         durable lastActiveAt so recency sorting stays stable across the migration,

@@ -3763,7 +3763,8 @@ impl EditorState {
         // Local change (Ghostex Docs): Cmd-click (Ctrl-click off macOS) always opens a link, and
         // with `revealed_links_need_modifier` a plain click on the link the caret is in (its raw
         // `[text](url)` showing for editing) places the caret instead (`caret_link_at`).
-        let secondary = event.modifiers.secondary(cx);
+        // Option-click (Alt-click) opens it too: the app opens that file in its default app.
+        let secondary = event.modifiers.secondary(cx) || event.modifiers.alt;
         let link_click = self.markdown_style.is_some()
             && !event.modifiers.shift
             && (secondary || !event.modifiers.control);

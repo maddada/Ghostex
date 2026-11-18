@@ -1372,4 +1372,8 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         id: "0080_session_chat_queue_version",
         sql: include_str!("migrations/0080_session_chat_queue_version.sql"),
     },
+    Migration {
+        id: "0081_automation_model_effort",
+        sql: include_str!("migrations/0081_automation_model_effort.sql"),
+    },
 ];

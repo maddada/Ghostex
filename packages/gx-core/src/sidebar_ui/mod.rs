@@ -4,11 +4,13 @@
 //! rather than the daemon. `intents` is the one way it changes, `persist` is the exact shape the
 //! client storage holds, and `store` keeps the two together with the pending writes.
 
+mod autopilot;
 mod diff;
 mod intents;
 mod persist;
 mod store;
 
+pub use autopilot::autopilot_project_group_ids;
 pub use diff::SidebarCollapseDiff;
 pub use intents::{SidebarUiIntent, SidebarUiOutcome, ToggleAllProjectsInput};
 pub use persist::{

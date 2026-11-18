@@ -370,7 +370,7 @@ pub(crate) fn with_agent_model_options(
         offset = word.1;
         words.push(word);
     }
-    let codex_effort = |value: &str| is_codex_effort_override(value);
+    let codex_effort = is_codex_effort_override;
     let mut removed = Vec::new();
     let mut index = 0;
     while index < words.len() {
@@ -483,6 +483,18 @@ pub(crate) fn with_agent_model_options(
         }
     }
     Ok(result)
+}
+
+/// A Codex `-c` override that sets the effort: `model_reasoning_effort=…`, with or without spaces
+/// around the `=` (Codex trims the key and the value).
+/// CDXC:AgentProviders 2026-11-18 WHY: ported from GitHub PR #658 (sebastianarena) after the user
+/// declined the PR but picked "We add it ourselves" (Q3942) for this fix: a custom Codex command
+/// with `-c 'model_reasoning_effort = "medium"'` was not seen as an effort, so a coordinator's or
+/// thread's chosen effort was added as a second override instead of replacing it.
+fn is_codex_effort_override(value: &str) -> bool {
+    value
+        .split_once('=')
+        .is_some_and(|(key, _)| key.trim() == "model_reasoning_effort")
 }
 
 /// Whether the command already chooses a model (`--model`, Codex's `-m`), which a remembered pin

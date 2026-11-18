@@ -284,6 +284,9 @@ action_kinds! {
     SessionDetailsStop => "sessionDetailsStop",
     SessionDetailsOpen => "sessionDetailsOpen",
 
+    // The where pill's Copy branch and Open folder (`extras/where_pill.rs`).
+    WherePill => "wherePill",
+
     // Per-message actions.
     RewindOpen => "rewindOpen",
     RewindCancel => "rewindCancel",

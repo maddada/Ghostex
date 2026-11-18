@@ -429,6 +429,19 @@ the release after 10.14.0; watch that one closely):
   every redispatch restores the same entry, so ask the user before deleting it
   (`gh cache delete <key> -R maddada/Ghostex`, key from the restore step's log),
   then redispatch; the next run builds and stores it fresh.
+- The macOS job builds GhosttyKit with `-Doptimize=ReleaseSafe` (releases
+  through 11.9.0 shipped a Debug kit; crash #653) and restores it from
+  `warm-ghosttykit-macos-arm64-zig0.17.1-releasesafe-<ghostty sha>`. The first
+  release after a Ghostty bump or a key change builds it with Zig in "Prepare
+  references and GhosttyKit" (a few minutes); the summary says hit or miss.
+- Each macOS run keeps a private symbol map, the Actions artifact
+  `ghostex-symbols-X.Y.Z-macos-arm64-<build id>` (90 days, never on the
+  release). The build id is the one a crash report prints. It holds
+  `ghostex-gpui.map` (ld64's link map: every function's address, GhosttyKit's
+  included) and a README on reading a frame against it:
+  `gh run download <run> -R maddada/Ghostex -n ghostex-symbols-…`. "Keep the
+  symbol map of this build" only warns when no map matches the shipped binary;
+  then nothing is uploaded, and the release goes on.
 - `cargo --timings` reports: `cargo-timings-macos-arm64`,
   `cargo-timings-windows-<arch>` (desktop crate) and
   `cargo-timings-windows-<arch>-runtime` (gxserver, wmx, prompt editor). Open

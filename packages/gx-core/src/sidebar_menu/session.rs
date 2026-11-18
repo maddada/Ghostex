@@ -435,12 +435,12 @@ fn set_session_tag_value(message: &serde_json::Value) -> Option<Option<String>> 
     )
 }
 
-/// Move to New Sessions Group, or the Move to Group page once the project has a group to move to or
+/// Move to New Group, or the Move to Group page once the project has a group to move to or
 /// the row is in one.
 ///
 /// CDXC:ContextMenus 2026-11-05 DECISION:
 /// User (Q1311): a group of a project's sessions is a "sessions group": its rows read Move to New
-/// Sessions Group and New Sessions Group, and "New Group" names a group of projects (Add to Group).
+/// Group (renamed from Move to New Sessions Group, 2026-11-18: too long) and New Sessions Group, and "New Group" names a group of projects (Add to Group).
 /// A sessions group never makes a folder; a new folder is Add Project's New project folder.
 ///
 /// CDXC:ContextMenus 2026-10-23 WHY:
@@ -457,7 +457,7 @@ fn move_to_group_item(id: &str, moves: Option<&SessionGroupMoves>, stale: bool) 
         )
     };
     let Some(moves) = moves.filter(|moves| !stale && !moves.groups.is_empty()) else {
-        return new_group("Move to New Sessions Group");
+        return new_group("Move to New Group");
     };
     let mut children = vec![new_group("New Sessions Group")];
     for group in &moves.groups {
@@ -616,6 +616,7 @@ fn full_menu(
     /*
     CDXC:ContextMenus 2026-11-15 DECISION:
     User (Android screenshot of the long-press menu running off the screen): "This is too long", then picked the quick row with "Put sleep under advanced, 4 quick actions only pls" (Q3420 C) and the same change on the desktop's right-click menu (Q3421 Yes). The menu opens with a row of icon buttons, Rename, Pin and Copy ID (the phone adds Voice Call, which the desktop has no row for), then Snooze, Park, Note and Tag As as rows with no line between them; Sleep (or Wake) moves to the top of Advanced. Each keeps its hover-strip rule (`shown`). Supersedes Copy ID's own row above Tag As (2026-11-12, copy.rs); the order inside the list is still ChatGPT's (2026-10-01). The phone's menu (`apps/mobile/app/src/screens/sessions-screen/sidebar-menus.ts`) must match.
+    Since 2026-11-18 Copy ID is the first row of the Copy submenu (copy.rs) and the desktop's Open in a Popup is the quick row's third button (gx_store/sidebar_menus.rs), so this row holds Rename and Pin here.
     */
     let shown = |action: HoverAction| {
         mirror.contains(&action) || (action != HoverAction::Note && !enabled.contains(&action))
@@ -634,7 +635,6 @@ fn full_menu(
             });
         }
     }
-    quick.extend(super::copy::copy_id_row(row, group));
     if !quick.is_empty() {
         menu.push(MenuItem::quick_row(quick));
     }

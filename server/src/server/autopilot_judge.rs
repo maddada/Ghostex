@@ -20,14 +20,20 @@ use crate::autopilot::{self, AutopilotConfig, SupervisorModel};
 use crate::coordinators::SessionKey;
 use crate::presentation::presentation_activity;
 
-const SUPERVISOR_FILE: &str = "autopilot-supervisor.json";
-const SUPERVISOR_TITLE: &str = "Autopilot supervisor";
+use crate::autopilot::{SupervisorRecord, SUPERVISOR_TITLE};
 /// Least time between two wakes.
 const WAKE_GAP_MS: i64 = 60_000;
 /// A wake that the supervisor has not finished after this long lets the next one through.
 const WAKE_STALE_MS: i64 = 20 * 60_000;
 /// `wake`'s answer while the supervisor is still on an earlier wake: no failure.
 const BUSY: &str = "busy";
+/// The supervisor's context at and above which Ghostex compacts it between wakes, in tokens.
+const COMPACT_AT_TOKENS: u64 = 120_000;
+/// Least time between two looks at its context, and after a compaction before the next.
+const COMPACT_CHECK_MS: i64 = 60_000;
+const COMPACT_SETTLE_MS: i64 = 10 * 60_000;
+/// A wake this recent may still be starting its turn: no compaction yet.
+const COMPACT_AFTER_WAKE_MS: i64 = 2 * 60_000;
 /// How long Autopilot waits before trying again after the 1st, 2nd, … failed start or wake; the
 /// last one repeats.
 const RETRY_AFTER_MS: &[i64] = &[10_000, 30_000, 60_000, 5 * 60_000, 15 * 60_000];
@@ -59,6 +65,11 @@ struct Judge {
     retry_at_ms: i64,
     /// The settings and accounts the failures happened under: a change tries again at once.
     setup: String,
+    /// The last look at the supervisor's context, and the last compaction sent.
+    compact_checked_ms: i64,
+    compacted_ms: i64,
+    /// Its context is too big and its agent can't compact: the next wake starts a new session.
+    start_fresh: bool,
 }
 
 fn judge() -> &'static Mutex<Judge> {
@@ -90,25 +101,12 @@ pub(super) fn forget_session(key: &SessionKey) {
     }
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SupervisorRecord {
-    project_id: String,
-    session_id: String,
-    agent: String,
-}
-
 fn read_record(paths: &crate::paths::GxserverPaths) -> Option<SupervisorRecord> {
-    std::fs::read_to_string(paths.app_state_dir.join(SUPERVISOR_FILE))
-        .ok()
-        .and_then(|text| serde_json::from_str(&text).ok())
+    autopilot::read_supervisor_record(paths)
 }
 
 fn write_record(paths: &crate::paths::GxserverPaths, record: &SupervisorRecord) {
-    let _ = std::fs::write(
-        paths.app_state_dir.join(SUPERVISOR_FILE),
-        serde_json::to_string_pretty(record).unwrap_or_default(),
-    );
+    autopilot::write_supervisor_record(paths, record);
 }
 
 /// The supervisor's session: Autopilot leaves it out of everything else.
@@ -291,8 +289,13 @@ async fn wake(
     items: &[JudgmentItem],
     now: i64,
 ) -> std::result::Result<u64, String> {
-    let record = match live_supervisor(state) {
+    let fresh = judge()
+        .lock()
+        .map(|mut judge| std::mem::take(&mut judge.start_fresh))
+        .unwrap_or(false);
+    let record = match live_supervisor(state).filter(|_| !fresh) {
         Some((record, session)) => {
+            restore_title(state, &record, &session);
             let busy =
                 presentation_activity(&session, &crate::presentation::now_iso()) == "working";
             let last = judge().lock().map(|judge| judge.last_wake_ms).unwrap_or(0);
@@ -309,6 +312,7 @@ async fn wake(
     let n = autopilot::next_wake_number(&dir);
     let body = wake_body(config, items, n);
     let path = autopilot::write_wake(&dir, n, &body).map_err(|error| error.to_string())?;
+    let key = (record.project_id.clone(), record.session_id.clone());
     let cli = crate::ghostex_cli::launchers::sibling_cli_executable();
     let message = format!(
         "Ghostex Autopilot, wake {n}. First read {readme} and {notes}, then the session notes it names, then handle {wake}. Run Ghostex's CLI as `{cli}` (where the notes say `ghostex`): it is the one this Ghostex ships.",
@@ -316,14 +320,186 @@ async fn wake(
         notes = dir.join("notes.md").display(),
         wake = path.display(),
     );
-    super::autopilot_runtime::send_text(
-        state,
-        &(record.project_id.clone(), record.session_id.clone()),
-        &message,
-    )
-    .await
-    .map_err(|error| format!("Couldn't wake the supervisor: {error}"))?;
+    if let Err(error) = send_to_supervisor(state, &key, &message).await {
+        // A wake that didn't get through leaves no numbered file: the next try reuses the number.
+        let _ = std::fs::remove_file(&path);
+        return Err(format!("Couldn't wake the supervisor: {error}"));
+    }
     Ok(n)
+}
+
+/// Sends the supervisor its wake. A new supervisor first shows its agent's "Trust this folder?"
+/// for its own notes folder, which Ghostex made: Ghostex trusts it for the agent and sends.
+///
+/// CDXC:Autopilot 2026-11-18 WHY:
+/// The first supervisor on the user's computer sat 17 minutes on Claude's folder-trust prompt for ~/.local/state/ghostex/autopilot: every wake was refused ("Trust this folder?. Answer it in chat before sending.") and every retry wrote another numbered wake file, so one judgment call made six. The folder is Ghostex's own, so answering the prompt here is no decision taken for the user; Codex's "Trust and continue" is answered the same way. A failed wake removes its file (`wake`).
+async fn send_to_supervisor(
+    state: &AppState,
+    key: &SessionKey,
+    message: &str,
+) -> std::result::Result<(), String> {
+    if let Some(params) = super::autopilot_answers::trust_folder_answer(state, key) {
+        super::autopilot_runtime::answer(state, key, &params).await?;
+        return super::autopilot_runtime::send_after_prompt_closes(state, key, message).await;
+    }
+    match super::autopilot_runtime::send_text(state, key, message).await {
+        Err(error) if error.ends_with("Answer it in chat before sending.") => {
+            let Some(params) = super::autopilot_answers::trust_folder_answer(state, key) else {
+                return Err(error);
+            };
+            super::autopilot_runtime::answer(state, key, &params).await?;
+            super::autopilot_runtime::send_after_prompt_closes(state, key, message).await
+        }
+        result => result,
+    }
+}
+
+/// Compacts the supervisor between wakes once its context reaches 120K tokens. Called after every
+/// tick; looks at most once a minute.
+///
+/// CDXC:Autopilot 2026-11-18 DECISION:
+/// User: "also i would like that we compact that thread often like before it gets to 200k to keep cost on it low". While the supervisor is idle between wakes (never mid-wake: not while it works, nor in the two minutes after a wake was sent) and its last known context is 120K tokens or more, Ghostex types its agent's compact command, and logs it. Its notes files hold what it knows, so nothing is lost. An agent with no compact command gets a new supervisor session at the next wake instead (`start_fresh`).
+pub(super) async fn maybe_compact(state: Arc<AppState>) {
+    let config = autopilot::read_config(&state.paths);
+    let now = chrono::Utc::now().timestamp_millis();
+    {
+        let Ok(mut judge) = judge().lock() else {
+            return;
+        };
+        if !config.enabled
+            || judge.waking
+            || judge.start_fresh
+            || now - judge.compact_checked_ms < COMPACT_CHECK_MS
+            || now - judge.compacted_ms < COMPACT_SETTLE_MS
+            || now - judge.last_wake_ms < COMPACT_AFTER_WAKE_MS
+        {
+            return;
+        }
+        judge.compact_checked_ms = now;
+    }
+    if crate::network_status::is_offline() {
+        return;
+    }
+    let Some((record, session)) = live_supervisor(&state) else {
+        return;
+    };
+    if presentation_activity(&session, &crate::presentation::now_iso()) == "working" {
+        return;
+    }
+    let (tokens, command) = {
+        let Ok(db) = open_gxserver_database(&state.paths) else {
+            return;
+        };
+        let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        let Some(tokens) = crate::carry_on_compaction::context_tokens(&repository, &session)
+            .filter(|tokens| *tokens >= COMPACT_AT_TOKENS)
+        else {
+            return;
+        };
+        (
+            tokens,
+            crate::carry_on_compaction::compact_command(&session),
+        )
+    };
+    let size = crate::carry_on_compaction::short_tokens(tokens);
+    let (did, outcome) = match command {
+        Some(command) => match crate::carry_on_compaction::send_like_coordinator(
+            &state,
+            &record.project_id,
+            &record.session_id,
+            command,
+        )
+        .await
+        {
+            Ok(()) => {
+                if let Ok(mut judge) = judge().lock() {
+                    judge.compacted_ms = now;
+                }
+                (
+                    format!(
+                        "Compacted it ({command}) between wakes; its notes keep what it knows."
+                    ),
+                    autopilot::Outcome::Done,
+                )
+            }
+            Err(error) => (
+                format!("Couldn't compact it: {error}."),
+                autopilot::Outcome::Failed,
+            ),
+        },
+        None => {
+            if let Ok(mut judge) = judge().lock() {
+                judge.start_fresh = true;
+            }
+            (
+                "Its agent can't compact, so the next wake starts a new supervisor session; its notes keep what it knows.".to_string(),
+                autopilot::Outcome::Done,
+            )
+        }
+    };
+    autopilot::append_log(
+        &state.paths,
+        &autopilot::LogEntry {
+            at: crate::coordinators::iso_from_ms(now).unwrap_or_default(),
+            project_id: record.project_id.clone(),
+            session_id: record.session_id.clone(),
+            title: SUPERVISOR_TITLE.to_string(),
+            project: "Autopilot".to_string(),
+            saw: format!("Its conversation reached {size} tokens."),
+            did,
+            rule: "supervisor-compact".to_string(),
+            outcome,
+        },
+    );
+}
+
+/// Puts "Autopilot supervisor" back on a supervisor the agent renamed (Claude named the first ones
+/// after their first message), unless the user renamed it. Runs when gxserver starts and on each
+/// wake.
+fn restore_title(state: &AppState, record: &SupervisorRecord, session: &Value) {
+    if session["title"].as_str() == Some(SUPERVISOR_TITLE)
+        || session
+            .pointer("/runtimeSettings/pendingAgentTitleRequestTitleSource")
+            .and_then(Value::as_str)
+            == Some("user")
+    {
+        return;
+    }
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let mut runtime = session["runtimeSettings"]
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    runtime.insert("titleSource".into(), json!("ghostex"));
+    let updated = repository.update_session(
+        json!({
+            "projectId": record.project_id,
+            "sessionId": record.session_id,
+            "title": SUPERVISOR_TITLE,
+            "runtimeSettings": runtime,
+        })
+        .as_object()
+        .expect("object literal"),
+    );
+    if updated.is_ok() {
+        let _ = schedule_presentation_session_delta(
+            state,
+            &db,
+            &repository,
+            &record.project_id,
+            &record.session_id,
+        );
+    }
+}
+
+/// When gxserver starts: the supervisor gets its own title back (`restore_title`).
+pub(super) fn restore_title_at_start(state: &AppState) {
+    if let Some((record, session)) = live_supervisor(state) {
+        restore_title(state, &record, &session);
+    }
 }
 
 /// What a failed start or wake depends on: the Autopilot settings and whether each agent has an
@@ -418,6 +594,9 @@ fn wake_body(config: &AutopilotConfig, items: &[JudgmentItem], n: u64) -> String
             not_allowed.join(", ")
         }
     );
+    if items.iter().any(|item| item.why.starts_with("Check-up:")) {
+        body.push_str("\nCheck-up: these sessions look like they need a nudge that Autopilot's rules didn't give. For each, decide whether to tell it how to carry on (`--message`), reload it (`--reload`), or leave it for the user (`--leave`).\n");
+    }
     for item in items {
         body.push_str(&format!(
             "\n## {title} ({project})\n\nSession: `{p}` `{s}` (ref `{p}:{s}`). Its notes: `sessions/{p}-{s}.md`.\n\nWhy you: {why}\n\n{detail}\n",

@@ -1184,6 +1184,25 @@ fn main() {
     The user chose to stop exporting symbols from the app's executables. The GhosttyKit archive CI builds leaves glslang, SPIRV-Cross and libc++ template instances as visible weak symbols, so the 10.30.0 app exported 17,784 of them: their export trie, names and weak binds cost about 0.8 MB of the DMG, and dyld coalesced every one at launch. Nothing loads symbols from these executables (GPUI's dlsym looks up CoreGraphics functions), so none need exporting.
     */
     println!("cargo:rustc-link-arg-bins=-Wl,-no_exported_symbols");
+    /*
+    CDXC:CrashReports 2026-11-18 WHY: crash #653 had to be mapped by hand from function starts and
+    string references, because the shipped executable has no symbol table (`strip = "symbols"`,
+    .cargo/config.toml). The release sets GHOSTEX_LINK_MAP_DIR (tooling/release-gpui/macos.sh), and
+    ld64 then writes the address of every function it placed in ghostex-gpui to a link map beside
+    the build. The map is a side output: the executable is byte-identical with or without it (same
+    Mach-O UUID, the build id a crash report carries), and the release keeps it as a private
+    Actions artifact named by that UUID. Local builds leave the variable unset and write nothing.
+    */
+    println!("cargo:rerun-if-env-changed=GHOSTEX_LINK_MAP_DIR");
+    if let Some(link_map_dir) = env::var_os("GHOSTEX_LINK_MAP_DIR").filter(|dir| !dir.is_empty()) {
+        let link_map_dir = PathBuf::from(link_map_dir);
+        fs::create_dir_all(&link_map_dir)
+            .unwrap_or_else(|error| panic!("failed to create {}: {error}", link_map_dir.display()));
+        println!(
+            "cargo:rustc-link-arg-bin=ghostex-gpui=-Wl,-map,{}",
+            link_map_dir.join("ghostex-gpui.map").display()
+        );
+    }
 
     println!("cargo:rustc-link-lib=framework=Cocoa");
     println!("cargo:rustc-link-lib=framework=Foundation");

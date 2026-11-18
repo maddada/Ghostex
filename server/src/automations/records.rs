@@ -13,9 +13,11 @@ pub(super) fn upsert_automation(
         r#"
         INSERT INTO automations (
           automationId, projectId, agentId, name, prompt, enabled, scheduleJson,
-          executionModeJson, nextRunAt, createdAt, updatedAt
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+          executionModeJson, nextRunAt, createdAt, updatedAt, model, effort
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
         ON CONFLICT(automationId) DO UPDATE SET
+          model = excluded.model,
+          effort = excluded.effort,
           projectId = excluded.projectId,
           agentId = excluded.agentId,
           name = excluded.name,
@@ -38,6 +40,8 @@ pub(super) fn upsert_automation(
             automation.next_run_at,
             automation.created_at,
             automation.updated_at,
+            automation.model,
+            automation.effort,
         ],
     )
     .map_err(sql_error)?;
@@ -322,6 +326,34 @@ pub(super) fn has_active_run(
     Ok(count > 0)
 }
 
+/// The run record for a due run that cannot start because an earlier run of the same automation
+/// is still going. It names how long that run has been going and counts as unread, so a held
+/// automation shows in the runs list instead of looking as if it never fired (GitHub #656).
+pub(super) fn skipped_run_record(
+    db: &Connection,
+    automation: &AutomationDefinitionRecord,
+) -> Result<AutomationRunRecord, DomainStateError> {
+    let started: Option<String> = db
+        .query_row(
+            "SELECT MIN(createdAt) FROM automation_runs WHERE automationId = ?1 AND status IN ('queued', 'running')",
+            [&automation.id],
+            |row| row.get(0),
+        )
+        .map_err(sql_error)?;
+    let minutes = started
+        .and_then(|started| chrono::DateTime::parse_from_rfc3339(&started).ok())
+        .map(|started| (chrono::Utc::now().timestamp() - started.timestamp()).max(0) / 60);
+    let message = match minutes {
+        Some(0) => "Skipped because this automation's previous run, started less than a minute ago, is still going.".to_string(),
+        Some(1) => "Skipped because this automation's previous run, started a minute ago, is still going.".to_string(),
+        Some(minutes) => format!("Skipped because this automation's previous run, started {minutes} minutes ago, is still going."),
+        None => "Skipped because another run for this automation is still active.".to_string(),
+    };
+    let mut run = create_run_record(automation, "skipped", Some(&message));
+    run.is_unread = true;
+    Ok(run)
+}
+
 pub(super) fn is_run_active(
     db: &Connection,
     project_id: &str,
@@ -358,6 +390,8 @@ fn automation_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AutomationDe
             .get::<_, Option<String>>("precheckJson")?
             .map(|text| parse_json_value(&text)),
         deliver: row.get("deliver")?,
+        model: row.get("model")?,
+        effort: row.get("effort")?,
     })
 }
 
@@ -398,6 +432,12 @@ pub(super) fn automations_to_value(automations: Vec<AutomationDefinitionRecord>)
                     "schedule": automation.schedule,
                     "updatedAt": automation.updated_at,
                 });
+                if let Some(model) = automation.model {
+                    value["model"] = json!(model);
+                }
+                if let Some(effort) = automation.effort {
+                    value["effort"] = json!(effort);
+                }
                 // A GBot's routine says whose it is; an older client ignores the extra fields.
                 if let Some(bot_id) = automation.owner_bot_id {
                     value["ownerBotId"] = json!(bot_id);

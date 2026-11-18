@@ -315,26 +315,33 @@ pub(crate) fn execute_gpui_sidebar_native_project_path_action(
     } else {
         gpui_gxserver_workspace_project_path_by_id(&message.project_id)?
     };
-    if let Some(target_id) = message.target_id.as_deref() {
-        let target = gpui_visible_open_targets_from_current_settings()
-            .into_iter()
-            .find(|target| target.id == target_id)
-            .ok_or_else(|| "That Open In target is no longer available.".to_string())?;
-        return gpui_launch_open_target(&target, &path)
-            .map(|_| GpuiSidebarNativeProjectPathActionResult::Opened);
-    }
     if message.action.copies_path() {
         return Ok(GpuiSidebarNativeProjectPathActionResult::Copied(
             gpui_path_string(&path),
         ));
     }
+    // Every open below needs the folder; a missing one (an unplugged drive) says so instead of
+    // launching an opener that fails out of sight.
+    if let Some(missing) = gpui_missing_project_folder_message(&path) {
+        return Err(missing);
+    }
+    if let Some(target_id) = message.target_id.as_deref() {
+        let target = gpui_visible_open_targets_from_current_settings()
+            .into_iter()
+            .find(|target| target.id == target_id)
+            .ok_or_else(|| "That Open In target is no longer available.".to_string())?;
+        if matches!(target.launch, GpuiOpenTargetLaunch::Finder) {
+            return gpui_open_project_folder(&path)
+                .map(|_| GpuiSidebarNativeProjectPathActionResult::Opened);
+        }
+        return gpui_launch_open_target(&target, &path)
+            .map(|_| GpuiSidebarNativeProjectPathActionResult::Opened);
+    }
     if message.action.opens_in_ide() {
         return gpui_open_project_path_for_native_ide_action(message.action, &path)
             .map(|_| GpuiSidebarNativeProjectPathActionResult::Opened);
     }
-    gpui_open_path(&path)
-        .map(|_| GpuiSidebarNativeProjectPathActionResult::Opened)
-        .map_err(|_| "Could not open that project location.".to_string())
+    gpui_open_project_folder(&path).map(|_| GpuiSidebarNativeProjectPathActionResult::Opened)
 }
 
 pub(crate) fn gpui_resolve_sidebar_git_changed_file(

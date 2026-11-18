@@ -536,13 +536,21 @@ impl GhostexGpuiApp {
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             display_id,
-            // The Ghostex titlebar on macOS, as the board's window has (native_kanban/window.rs).
+            // The popup's header is its title band on every platform (render.rs): on macOS the
+            // traffic lights sit in it, Windows hides its system caption, and Linux asks for no
+            // window-manager frame, as the main window does (workspace_windows/open.rs); where the
+            // window manager draws a titlebar anyway, the header sits under it without buttons of
+            // its own.
             titlebar: Some(TitlebarOptions {
                 title: Some(title.clone().into()),
-                appears_transparent: cfg!(target_os = "macos"),
+                appears_transparent: true,
                 traffic_light_position: cfg!(target_os = "macos")
                     .then(|| gpui::point(px(11.0), px(11.5))),
             }),
+            #[cfg(target_os = "linux")]
+            window_decorations: Some(gpui::WindowDecorations::Client),
+            // The header holds draggable tabs, so the app, not AppKit, decides which drags there
+            // move the window (`window_drag_region`).
             #[cfg(target_os = "macos")]
             app_owns_titlebar_drag: true,
             // The popup takes part in window glass as the main window does (window_glass.rs).
@@ -680,6 +688,16 @@ impl GhostexGpuiApp {
             self.session_popup_save_open_list();
             self.session_popup_settle(cx);
         }
+    }
+
+    /// The popup shown in window `window`, if that window is a popup's.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    pub(crate) fn session_popup_in_window(&self, window: gpui::WindowId) -> Option<SessionPopupId> {
+        self.session_popups
+            .windows
+            .iter()
+            .find(|popup| popup.window.window_id() == window)
+            .map(|popup| popup.id)
     }
 
     /// Closes popup `id`'s window quietly; its sessions go back to their panes.

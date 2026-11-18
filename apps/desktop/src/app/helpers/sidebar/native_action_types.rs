@@ -98,6 +98,17 @@ impl GpuiSidebarNativeProjectPathAction {
         )
     }
 
+    /// The warning toast's title when the action fails: Open Folder names itself, so "Can't open
+    /// shortpoint: /Volumes/Files isn't connected" reads under the click that caused it.
+    pub(crate) fn failure_toast_title(self) -> &'static str {
+        match self {
+            Self::OpenRecentProjectInFinder
+            | Self::OpenWorkspaceProjectInFinder
+            | Self::OpenActiveWorkspaceProjectInFinder => "Open Folder",
+            _ => "Native action unavailable",
+        }
+    }
+
     pub(crate) fn copies_path(self) -> bool {
         matches!(
             self,

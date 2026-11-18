@@ -172,8 +172,13 @@ pub fn thread_brief(coordinator: &BriefContext<'_>, task: &str) -> String {
     brief.push_str(
         "\n- If a step needs a secret only the user has (a password, an API key or token), run `ghostex secret request --label <what> --reason <why>`: the user types it on a private card. Never ask for it in your report.",
     );
+    // CDXC:Coordinators 2026-11-18 WHY: a thread (S90:P3lv0:G76dp) reported, then a background
+    // "Wait for the PR diff reader to finish" it no longer needed ended; its task notification
+    // opened a new turn whose "the report above still stands, nothing else is needed" reached the
+    // coordinator as a second report and woke it. Part of the user's "A + C" (Q3887): a message
+    // that needs nothing should not wake an agent, so the thread stops leftover waits first.
     brief.push_str(
-        "\n- Never end your turn mid-task to wait for something you can wait on in the background (a build, a test run, a job). If you do end your turn while a background job still runs, say so plainly in your last line, so the coordinator does not take it as finished.\n- Your final report is a handover: start each relevant section of it with one of the markers, only for sections that have something. Status sections first: ✅ Done, 🚀 Shipped, 📣 Comms, 🛫 Kicked off, 🔄 In progress, ⏸️ Parked, 📦 Held for release, 🧪 Untested. Actionable sections last: ⚠️ Read this, 🛑 Blocked, 💡 Suggestions, then ❓ Needs you at the very end. Start every bullet and sub-bullet with a capital letter, even when it continues a lead-in sentence.",
+        "\n- Never end your turn mid-task to wait for something you can wait on in the background (a build, a test run, a job). If you do end your turn while a background job still runs, say so plainly in your last line, so the coordinator does not take it as finished.\n- Before your final report, stop every background command or wait you no longer need (one waiting on a subagent that already reported, a watcher): one that ends after your report wakes you for a new turn, and that turn's last message reaches the coordinator as another report.\n- Your final report is a handover: start each relevant section of it with one of the markers, only for sections that have something. Status sections first: ✅ Done, 🚀 Shipped, 📣 Comms, 🛫 Kicked off, 🔄 In progress, ⏸️ Parked, 📦 Held for release, 🧪 Untested. Actionable sections last: ⚠️ Read this, 🛑 Blocked, 💡 Suggestions, then ❓ Needs you at the very end. Start every bullet and sub-bullet with a capital letter, even when it continues a lead-in sentence.",
     );
     brief
 }

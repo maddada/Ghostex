@@ -125,9 +125,13 @@ pub(crate) struct ConnectPoll {
 /// What the window asks its host to do. The window removes its own window before `Close`,
 /// `OpenRemote` and `OpenTailscale`.
 pub(crate) enum ConnectDeviceCommand {
-    /// Install the helper if needed, turn SSH access and Easy Connect on; the host reports each
-    /// step with `prepare_progress` and answers with `prepared`.
+    /// Install the helper if needed and turn Easy Connect on; the host reports each step with
+    /// `prepare_progress`, says whether SSH access is on with `ssh_checked`, and answers with
+    /// `prepared`. It never turns SSH access on: only `EnableSsh` does.
     Prepare,
+    /// Turn SSH access on (the window's Turn on SSH button, after it said what that does); the
+    /// host answers `ssh_turned_on`.
+    EnableSsh,
     /// Install the Easy Connect helper (the window's Install button); the host reports each step
     /// with `helper_install_progress` and answers with `helper_installed` or `needs_helper`.
     InstallHelper,
@@ -237,6 +241,23 @@ enum Stage {
     Connected(WaitingDevice),
 }
 
+/*
+CDXC:RemotePairing 2026-11-18 DECISION:
+GitHub #663: Connect a Computer kept "The other computer's code" box locked until this computer passed an SSH check, and on Windows opening the window tried to install OpenSSH Server and open port 22 in the firewall on its own; on a managed company PC the install failed and the box never unlocked. User's pick: "The code box must not wait on the SSH check, and nothing may be installed without the user agreeing first." Pasting another computer's code only needs outgoing connections (`/api/pairComputer` isn't a door call), so the box unlocks once Easy Connect is on. SSH access is needed only when something connects to this computer: this computer's own code (a phone or another computer uses it) and Connect both ways. While SSH is off, the square that code appears in says so, what turning it on does on this OS, and offers Turn on SSH; only that click (or Settings > Remote's own button) calls `/api/enableSshAccess`. Who may pair, and the owner-only code and approvals, are unchanged.
+*/
+/// Whether SSH access lets other devices connect to this computer, as this window knows it.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum SshAccess {
+    /// On, or not read (an older gxserver): the code shows as it always did.
+    On,
+    /// Off: the code's square asks to turn it on.
+    Off,
+    /// The Turn on SSH click is running (the OS may be asking for a password).
+    TurningOn,
+    /// Turning it on failed; why.
+    Failed(String),
+}
+
 pub(crate) struct GpuiConnectDeviceWindow {
     host: ConnectDeviceHost,
     palette: ModalPalette,
@@ -250,6 +271,8 @@ pub(crate) struct GpuiConnectDeviceWindow {
     tailscale_refresh: Option<Task<()>>,
     require_presence: bool,
     stage: Stage,
+    /// SSH access on this computer: this computer's own code waits for it, pasting doesn't.
+    ssh: SshAccess,
     code: Option<ConnectCode>,
     qr: Option<(String, Option<QrGrid>)>,
     waiting: Option<WaitingDevice>,
@@ -306,6 +329,7 @@ impl GpuiConnectDeviceWindow {
             tailscale_refresh: None,
             require_presence: config.require_presence,
             stage: Stage::Preparing(None),
+            ssh: SshAccess::On,
             code: None,
             qr: None,
             waiting: None,
@@ -372,6 +396,38 @@ impl GpuiConnectDeviceWindow {
         cx.notify();
     }
 
+    /// Whether SSH access is on here, read while turning things on.
+    pub(crate) fn ssh_checked(&mut self, on: bool, cx: &mut Context<Self>) {
+        if self.ssh != SshAccess::TurningOn {
+            self.ssh = if on { SshAccess::On } else { SshAccess::Off };
+            cx.notify();
+        }
+    }
+
+    /// The answer to Turn on SSH: on, still off (the admin prompt was cancelled), or why it failed.
+    pub(crate) fn ssh_turned_on(&mut self, result: Result<bool, String>, cx: &mut Context<Self>) {
+        self.ssh = match result {
+            Ok(true) => SshAccess::On,
+            Ok(false) => SshAccess::Off,
+            Err(message) => SshAccess::Failed(message),
+        };
+        cx.notify();
+    }
+
+    /// This computer's own code waits for SSH access (pasting another computer's code doesn't).
+    pub(super) fn own_code_needs_ssh(&self) -> bool {
+        self.ssh != SshAccess::On
+    }
+
+    fn turn_on_ssh(&mut self, cx: &mut Context<Self>) {
+        if self.ssh == SshAccess::TurningOn {
+            return;
+        }
+        self.ssh = SshAccess::TurningOn;
+        cx.notify();
+        (self.host)(ConnectDeviceCommand::EnableSsh, cx);
+    }
+
     /// Easy Connect is on (or couldn't be turned on): start asking for the code.
     pub(crate) fn prepared(&mut self, result: Result<(), String>, cx: &mut Context<Self>) {
         match result {
@@ -390,7 +446,11 @@ impl GpuiConnectDeviceWindow {
         if let Some(name) = poll.computer_name.filter(|name| !name.trim().is_empty()) {
             self.computer_name = name;
         }
-        if poll.code.is_some() || self.code.is_none() {
+        // Without SSH access nothing could use this computer's code, so it isn't shown (or sent
+        // by Connect both ways) until SSH is on.
+        if self.own_code_needs_ssh() {
+            self.code = None;
+        } else if poll.code.is_some() || self.code.is_none() {
             self.code = poll.code;
         }
         self.paired_ids = poll.paired_ids.into_iter().collect();
@@ -843,6 +903,114 @@ impl GpuiConnectDeviceWindow {
             .into_any_element()
     }
 
+    /// What turning SSH access on does on this computer's OS, in one sentence.
+    pub(super) fn ssh_turn_on_sentence() -> &'static str {
+        if cfg!(windows) {
+            "If OpenSSH Server isn't installed, Ghostex installs it and allows port 22 in the firewall, after an admin prompt."
+        } else if cfg!(target_os = "macos") {
+            "Ghostex turns on Remote Login, after your Mac asks for your password."
+        } else {
+            "Ghostex starts this computer's SSH server, after it asks for your password."
+        }
+    }
+
+    /// SSH access is off (or turning it on failed): why this computer's code waits for it, what
+    /// turning it on does, and Turn on SSH. Nothing is turned on until that click.
+    fn ssh_ask_content(&self, cx: &mut Context<Self>) -> AnyElement {
+        let p = self.palette;
+        let computer = self.kind() == ConnectDeviceKind::Computer;
+        if self.ssh == SshAccess::TurningOn {
+            return self.spinner_line("Turning on SSH. Your computer may ask for your password.");
+        }
+        let failed = match &self.ssh {
+            SshAccess::Failed(message) => Some(message.clone()),
+            _ => None,
+        };
+        let heading = if failed.is_some() {
+            "SSH didn't turn on"
+        } else if computer {
+            "This computer's code needs SSH"
+        } else {
+            "The code needs SSH on this computer"
+        };
+        let explanation: SharedString = match failed.clone() {
+            Some(message) => message.into(),
+            None => format!(
+                "{} {}",
+                if computer {
+                    "The other computer connects to this one over SSH."
+                } else {
+                    "Your phone connects to this computer over SSH."
+                },
+                Self::ssh_turn_on_sentence()
+            )
+            .into(),
+        };
+        v_flex()
+            .w_full()
+            .min_w_0()
+            .items_center()
+            .gap(px(10.0))
+            .px(px(16.0))
+            .text_center()
+            .child(
+                h_flex()
+                    .gap(px(8.0))
+                    .items_center()
+                    .child(modal_icon(
+                        ICON_ALERT,
+                        16.0,
+                        if failed.is_some() {
+                            p.destructive
+                        } else {
+                            p.foreground
+                        },
+                    ))
+                    .child(
+                        div()
+                            .text_size(px(15.0))
+                            .line_height(px(21.0))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(hsla(p.foreground))
+                            .child(heading),
+                    ),
+            )
+            .child(
+                div()
+                    .w_full()
+                    .text_size(px(13.0))
+                    .line_height(px(19.0))
+                    .text_color(hsla(if failed.is_some() {
+                        p.destructive
+                    } else {
+                        p.muted
+                    }))
+                    .child(explanation),
+            )
+            .child(div().pt(px(2.0)).w(px(160.0)).child(modal_action_button(
+                &p,
+                "connect-device-turn-on-ssh",
+                if failed.is_some() {
+                    "Try again"
+                } else {
+                    "Turn on SSH"
+                },
+                None,
+                ModalButtonTone::Primary,
+                false,
+                |this: &mut Self, _window, cx| this.turn_on_ssh(cx),
+                cx,
+            )))
+            .when(computer, |this| {
+                this.child(
+                    self.muted("Pasting the other computer's code below works without it.")
+                        .w_full()
+                        .text_size(px(12.0)),
+                )
+            })
+            .into_any_element()
+    }
+
     /// The dashed square the code appears in (at least `height` tall, taller for the helper's
     /// screens): what is happening, or what went wrong.
     fn code_placeholder(&self, height: f32, cx: &mut Context<Self>) -> AnyElement {
@@ -852,6 +1020,7 @@ impl GpuiConnectDeviceWindow {
             Stage::NeedsHelper(error) => self.helper_missing_content(error.clone(), cx),
             Stage::InstallingHelper(note) => self.helper_installing_content(note.clone()),
             Stage::Preparing(Some(note)) => self.spinner_line(note.clone()),
+            Stage::Ready if self.own_code_needs_ssh() => self.ssh_ask_content(cx),
             Stage::Ready if self.code_refused() => {
                 self.code_refused_content(self.poll_error.clone().unwrap_or_default())
             }

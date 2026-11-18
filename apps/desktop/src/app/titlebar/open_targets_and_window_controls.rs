@@ -307,10 +307,17 @@ impl GhostexGpuiApp {
                                 window.zoom_window();
                                 cx.notify();
                             }
-                            // The same question and clean-up as the window manager's close
-                            // (app/workspace_windows/close.rs).
+                            // A session popup's Close puts its sessions back in their panes, as
+                            // its window manager close does (session_popup/mod.rs); a main
+                            // window asks the same question and cleans up as the window
+                            // manager's close (app/workspace_windows/close.rs).
                             GpuiWindowCaptionControl::Close => {
-                                if this.workspace_window_should_close(window, cx) {
+                                let popup = this.session_popup_in_window(
+                                    Window::window_handle(window).window_id(),
+                                );
+                                if let Some(popup) = popup {
+                                    this.close_session_popup_window(popup, cx);
+                                } else if this.workspace_window_should_close(window, cx) {
                                     window.remove_window();
                                 }
                             }

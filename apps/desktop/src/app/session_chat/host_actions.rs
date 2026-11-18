@@ -692,6 +692,24 @@ impl GhostexGpuiApp {
             self.open_file_changes(&paths, window, cx);
             return;
         }
+        // The where pill's Open folder (native_chat/where_pill.rs): the sidebar's own Open Folder
+        // on the chat's project, which also covers a project on another computer.
+        if action == "openProjectFolder" {
+            if let Some(group_id) = message
+                .get("groupId")
+                .and_then(serde_json::Value::as_str)
+                .filter(|group_id| !group_id.is_empty())
+            {
+                self.dispatch_native_sidebar_command(
+                    serde_json::json!({
+                        "type": "openWorkspaceProjectInFinderForGroup",
+                        "groupId": group_id,
+                    }),
+                    cx,
+                );
+            }
+            return;
+        }
         if action == "locateFile" {
             let Some(path) = message.get("path").and_then(serde_json::Value::as_str) else {
                 return;
