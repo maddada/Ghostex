@@ -96,7 +96,14 @@ fn coordinator_params(
         }
 
         object.remove("draft");
-        object.insert("coordinator".to_string(), json!({}));
+        // CDXC:Coordinators 2026-11-18 FIX: its first message waits in the agent's box for Start
+        // (session_chat_first_message.rs). The dialog sent `{}` here, so gxserver sent the
+        // message at once (smoke test of 11.10.0: "New Coordinator from the UI started without
+        // Start"); `gx_store/git/prompt_agent.rs` sets the same flag for its own coordinators.
+        object.insert(
+            "coordinator".to_string(),
+            json!({ "holdFirstMessage": true }),
+        );
         let runtime = object
             .entry("runtimeSettings")
             .or_insert_with(|| Value::Object(Map::new()));
@@ -446,5 +453,26 @@ impl GhostexGpuiApp {
             });
         })
         .detach();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The New Coordinator dialog's create asks gxserver to hold the first message for Start,
+    /// on this computer and on a remote one (CDXC:Coordinators 2026-11-18).
+    #[test]
+    fn coordinator_create_holds_its_first_message() {
+        let remote = coordinator_params(
+            remote_agent_launch_params("claude", "p1", Map::new(), None, "Checkout"),
+            "user",
+            Some("opus[1m]"),
+            Some("high"),
+        );
+        assert_eq!(remote["coordinator"]["holdFirstMessage"], json!(true));
+        assert!(remote.get("draft").is_none());
+        assert_eq!(remote["agentModel"], json!("opus[1m]"));
+        assert_eq!(remote["runtimeSettings"]["titleSource"], json!("user"));
     }
 }
