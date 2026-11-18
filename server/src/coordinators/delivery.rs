@@ -90,6 +90,7 @@ pub fn resolve_thread_transcript(
 /// `Some(true)` when the thread's transcript records a user turn sent at or after `since_ms` that
 /// carries `needles`, `Some(false)` when it was read and does not, `None` when there is no
 /// transcript to read yet. `path` caches the resolved file between checks.
+#[track_caller]
 pub fn transcript_records_message(
     session: &Value,
     needles: &[String],
@@ -108,6 +109,7 @@ pub fn transcript_records_message(
 /// BLOCKING, as `transcript_records_message`, for a message of only images sent at `since_ms`:
 /// `Some(true)` once the transcript has a user row with an image from the send on, or a row the
 /// agent wrote after it (see `IMAGES_ONLY_PENDING_MESSAGE`).
+#[track_caller]
 pub fn transcript_records_images_only_message(
     session: &Value,
     since_ms: i64,
@@ -139,6 +141,7 @@ pub fn transcript_records_images_only_message(
 /// BLOCKING. Whether the thread's transcript has a row `matches` accepts, paging back from the
 /// newest row until rows older than the send (`since_ms`, with the clock slack); `None` when there
 /// is no transcript to read yet.
+#[track_caller]
 fn transcript_has_row(
     session: &Value,
     since_ms: i64,

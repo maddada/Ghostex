@@ -29,8 +29,8 @@ use crate::session_chat_tail::SessionChatTailPage;
 
 /// The bytes of transcript the kept answers may span together; the oldest go first past it.
 const KEPT_BYTES: u64 = 48 * 1024 * 1024;
-/// The answers kept at most, whatever their size.
-const KEPT_ANSWERS: usize = 64;
+/// The answers kept at most, whatever their size (`KEPT_BYTES` bounds the memory).
+const KEPT_ANSWERS: usize = 256;
 /// Asks for one transcript within `HOT_WINDOW` past which its callers are logged.
 const HOT_READS: u32 = 40;
 const HOT_WINDOW: Duration = Duration::from_secs(10);
@@ -47,6 +47,9 @@ struct Key {
 
 struct Kept {
     version: TranscriptFileVersion,
+    /// `session_chat_pending_rewind_generation` when it was read: a rewind recorded or cleared
+    /// since changes the page without touching the file.
+    rewinds: u64,
     page: SessionChatTailPage,
     /// The bytes the page was read from, for `KEPT_BYTES`.
     bytes: u64,
@@ -68,10 +71,12 @@ pub(crate) fn tail_page(
     caller: &'static Location<'static>,
     read: impl FnOnce() -> std::io::Result<SessionChatTailPage>,
 ) -> std::io::Result<SessionChatTailPage> {
+    let tail = before_offset.is_none();
     let Ok(version) = crate::session_chat::read_transcript_file_version(path) else {
-        note_read(path, caller, true);
+        note_read(path, caller, true, tail);
         return read();
     };
+    let rewinds = crate::session_chat_rewind_state::session_chat_pending_rewind_generation();
     let key = Key {
         agent: std::mem::discriminant(&agent),
         path: path.to_path_buf(),
@@ -79,27 +84,35 @@ pub(crate) fn tail_page(
         before_offset,
     };
     if let Ok(mut kept) = kept().lock() {
-        if let Some(entry) = kept.get_mut(&key).filter(|entry| entry.version == version) {
+        if let Some(entry) = kept
+            .get_mut(&key)
+            .filter(|entry| entry.version == version && entry.rewinds == rewinds)
+        {
             entry.used = Instant::now();
             let page = entry.page.clone();
             drop(kept);
-            note_read(path, caller, false);
+            note_read(path, caller, false, tail);
             return Ok(page);
         }
     }
-    note_read(path, caller, true);
+    note_read(path, caller, true, tail);
     let page = read()?;
-    // Still the file that was read: a write during the read leaves nothing kept.
+    // Still the file (and the rewinds) that was read: a change during the read keeps nothing.
     if crate::session_chat::read_transcript_file_version(path)
         .ok()
         .as_ref()
         == Some(&version)
+        && crate::session_chat_rewind_state::session_chat_pending_rewind_generation() == rewinds
     {
+        // A cursor past the end (a stitched one encodes its hop) counts as the file's end.
         let bytes = match &page {
             SessionChatTailPage::Page {
                 before_offset: from,
                 ..
-            } => before_offset.unwrap_or(version.size).saturating_sub(*from),
+            } => before_offset
+                .unwrap_or(version.size)
+                .min(version.size)
+                .saturating_sub(*from),
             SessionChatTailPage::NotFound => 0,
         };
         if let Ok(mut kept) = kept().lock() {
@@ -107,6 +120,7 @@ pub(crate) fn tail_page(
                 key,
                 Kept {
                     version,
+                    rewinds,
                     page: page.clone(),
                     bytes,
                     used: Instant::now(),
@@ -121,7 +135,9 @@ pub(crate) fn tail_page(
 /// Drops the least recently used answers past `KEPT_ANSWERS` or `KEPT_BYTES`.
 fn trim(kept: &mut HashMap<Key, Kept>) {
     loop {
-        let bytes: u64 = kept.values().map(|entry| entry.bytes).sum();
+        let bytes = kept
+            .values()
+            .fold(0u64, |sum, entry| sum.saturating_add(entry.bytes));
         if kept.len() <= KEPT_ANSWERS && bytes <= KEPT_BYTES {
             return;
         }
@@ -151,8 +167,13 @@ fn asks() -> &'static Mutex<HashMap<PathBuf, Asks>> {
 }
 
 /// Counts one ask for `path` by `caller` (`read` when the file was actually read), and logs the
-/// callers once the transcript is asked for more than `HOT_READS` times in `HOT_WINDOW`.
-pub(crate) fn note_read(path: &Path, caller: &'static Location<'static>, read: bool) {
+/// callers once the transcript is asked for more than `HOT_READS` times in `HOT_WINDOW`. Only
+/// asks for the newest rows (`tail`) count: walking back through older pages (a turn's work, a
+/// delivery check, history) asks many times in a row by design.
+pub(crate) fn note_read(path: &Path, caller: &'static Location<'static>, read: bool, tail: bool) {
+    if !tail {
+        return;
+    }
     let now = Instant::now();
     let Ok(mut asks) = asks().lock() else {
         return;

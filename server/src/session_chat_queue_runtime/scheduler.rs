@@ -246,12 +246,14 @@ struct CachedTranscriptTail {
 }
 
 impl SessionChatTranscriptGate {
+    #[track_caller]
     pub(crate) fn is_working(&mut self, session: &Value) -> bool {
         self.lifecycle(session)
             .is_some_and(|lifecycle| lifecycle.state == SessionChatTurnLifecycleState::Working)
     }
 
     /// The newest turn's lifecycle in the session's transcript, `None` without one.
+    #[track_caller]
     pub(crate) fn lifecycle(
         &mut self,
         session: &Value,
@@ -272,6 +274,7 @@ impl SessionChatTranscriptGate {
     /// The newest `limit` messages and the newest turn's lifecycle, read again only when the
     /// transcript file changed (its length or modification time) since the last read. For a
     /// watcher that looks at many idle sessions every tick: an unchanged file costs one `stat`.
+    #[track_caller]
     pub(crate) fn tail(&mut self, session: &Value, limit: usize) -> Option<&TranscriptTail> {
         let (transcript_agent, path) = self.resolve(session)?;
         let stamp = std::fs::metadata(&path)

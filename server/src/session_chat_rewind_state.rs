@@ -100,6 +100,17 @@ pub fn set_session_chat_pending_rewind(transcript_path: &Path, pending: SessionC
         entries.insert(store_key(transcript_path), pending);
         save(&entries);
     }
+    PENDING_REWIND_GENERATION.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+}
+
+/// Moves each time a pending rewind is recorded or cleared: tail reads skip the rewound rows
+/// (`session_chat_branch`), so a page kept from before is not the page a read gives now
+/// (session_chat_tail_cache.rs).
+static PENDING_REWIND_GENERATION: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
+pub(crate) fn session_chat_pending_rewind_generation() -> u64 {
+    PENDING_REWIND_GENERATION.load(std::sync::atomic::Ordering::Acquire)
 }
 
 pub fn session_chat_pending_rewind(transcript_path: &Path) -> Option<SessionChatPendingRewind> {
@@ -113,6 +124,7 @@ pub fn clear_session_chat_pending_rewind(transcript_path: &Path) {
     if let Ok(mut entries) = store().lock() {
         if entries.remove(&store_key(transcript_path)).is_some() {
             save(&entries);
+            PENDING_REWIND_GENERATION.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
         }
     }
 }

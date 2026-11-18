@@ -52,7 +52,12 @@ fn follower_snapshot_drain(
     let mut retried = false;
     loop {
         // Counted with the tail page reads, so a snapshot loop names itself too (GitHub #668).
-        crate::session_chat_tail_cache::note_read(file_path, std::panic::Location::caller(), true);
+        crate::session_chat_tail_cache::note_read(
+            file_path,
+            std::panic::Location::caller(),
+            true,
+            true,
+        );
         let mut tail = read_session_chat_transcript_tail_file(
             file_path,
             limit,

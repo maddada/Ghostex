@@ -545,6 +545,7 @@ pub struct SessionChatStitchedPage {
     pub fork_info: Option<SessionChatForkInfo>,
 }
 
+#[track_caller]
 fn unstitched(
     agent: SessionChatTranscriptAgent,
     file_path: &Path,
@@ -566,6 +567,7 @@ one request answers with `limit` real rows no matter how many files they span.
 loadable ancestor remains; it is false at the root of the lineage and at a
 boundary whose ancestor is gone, which is exactly where the divider says so.
 */
+#[track_caller]
 pub fn read_session_chat_tail_page_stitched(
     agent: SessionChatTranscriptAgent,
     file_path: &Path,
