@@ -34,6 +34,22 @@ struct CachedExistingSessionNames {
     names: HashSet<String>,
 }
 
+#[derive(Default)]
+struct ListedSessionNamesCache {
+    entry: Option<CachedExistingSessionNames>,
+    /// CDXC:Zmx 2026-11-18 WHY:
+    /// A session host that accepts wmx's ping but never answers makes `list --short` run to its 5 second timeout. Misses are serialized behind `LISTED_SESSION_NAMES_PROBE` and a failed list is remembered for the TTL, so readers queued behind a hung list fail at once instead of each starting their own 5 second list (the identity probe's 2026-09-27 failure memory, for names).
+    failed_at: Option<Instant>,
+}
+
+/// Whether data read at `read_at` is fresh for a reader that asked at `asked_at`.
+///
+/// CDXC:Zmx 2026-11-18 WHY:
+/// Freshness is judged against when the reader asked, not when it got the lock: a reader that queued behind a slow probe (2 to 5 seconds) accepts that probe's result, as it would have if it had arrived just after, instead of starting another probe of its own.
+fn fresh_for(read_at: Instant, asked_at: Instant, max_age: Duration) -> bool {
+    asked_at.saturating_duration_since(read_at) < max_age
+}
+
 /*
 CDXC:Zmx 2026-09-11 WHY:
 This cache used to be keyed by the exact requested name set. The fleet-status
@@ -71,8 +87,8 @@ struct ProcessIdentitiesCache {
     shutdown: Option<tokio::sync::broadcast::Receiver<()>>,
 }
 
-static EXISTING_SESSION_NAMES_CACHE: OnceLock<Mutex<Option<CachedExistingSessionNames>>> =
-    OnceLock::new();
+static EXISTING_SESSION_NAMES_CACHE: OnceLock<Mutex<ListedSessionNamesCache>> = OnceLock::new();
+static LISTED_SESSION_NAMES_PROBE: Mutex<()> = Mutex::new(());
 static PROCESS_IDENTITIES_CACHE: OnceLock<Mutex<ProcessIdentitiesCache>> = OnceLock::new();
 static PROCESS_IDENTITIES_PROBE: Mutex<()> = Mutex::new(());
 
@@ -98,6 +114,19 @@ fn ensure_process_identity_probe_active(cache: &ProcessIdentitiesCache) -> ZmxEn
         ));
     }
     Ok(())
+}
+
+/// The shutdown check of `ensure_process_identity_probe_active` for a reader that does not hold
+/// the identity cache.
+fn ensure_probes_active() -> ZmxEndpointResult<()> {
+    match PROCESS_IDENTITIES_CACHE.get() {
+        Some(cache) => ensure_process_identity_probe_active(
+            &cache
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()),
+        ),
+        None => Ok(()),
+    }
 }
 
 pub(crate) fn invalidate_zmx_process_identity_cache() {
@@ -136,23 +165,54 @@ pub fn read_cached_zmx_existing_session_names() -> Result<HashSet<String>, ZmxEn
 
 /// The live session names from `zmx list --short`, cached for the two-second TTL.
 fn read_listed_session_names() -> Result<HashSet<String>, ZmxEndpointError> {
-    let cache = EXISTING_SESSION_NAMES_CACHE.get_or_init(|| Mutex::new(None));
-    if let Ok(guard) = cache.lock() {
+    let asked_at = Instant::now();
+    let cache = EXISTING_SESSION_NAMES_CACHE.get_or_init(Mutex::default);
+    let cached = || {
+        let guard = cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if let Some(entry) = guard
+            .entry
             .as_ref()
-            .filter(|entry| entry.fetched_at.elapsed() < ZMX_PROBE_CACHE_TTL)
+            .filter(|entry| fresh_for(entry.fetched_at, asked_at, ZMX_PROBE_CACHE_TTL))
         {
-            return Ok(entry.names.clone());
+            return Some(Ok(entry.names.clone()));
         }
+        if guard
+            .failed_at
+            .is_some_and(|failed_at| failed_at.elapsed() < ZMX_PROBE_CACHE_TTL)
+        {
+            return Some(Err(ZmxEndpointError::DependencyUnavailable(
+                "The session list failed moments ago.".to_string(),
+            )));
+        }
+        None
+    };
+    if let Some(result) = cached() {
+        return result;
     }
-    let names = read_zmx_existing_session_names()?;
-    if let Ok(mut guard) = cache.lock() {
-        *guard = Some(CachedExistingSessionNames {
-            fetched_at: Instant::now(),
-            names: names.clone(),
-        });
+    let _probe = LISTED_SESSION_NAMES_PROBE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    ensure_probes_active()?;
+    if let Some(result) = cached() {
+        return result;
     }
-    Ok(names)
+    let listed = read_zmx_existing_session_names();
+    let mut guard = cache
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    match &listed {
+        Ok(names) => {
+            guard.entry = Some(CachedExistingSessionNames {
+                fetched_at: Instant::now(),
+                names: names.clone(),
+            });
+            guard.failed_at = None;
+        }
+        Err(_) => guard.failed_at = Some(Instant::now()),
+    }
+    listed
 }
 
 /// Presentation-freshness read of the live zmx process identities, served from
@@ -182,6 +242,7 @@ fn read_process_identities_within(
     if session_names.is_empty() {
         return Ok(HashMap::new());
     }
+    let asked_at = Instant::now();
     let cache =
         PROCESS_IDENTITIES_CACHE.get_or_init(|| Mutex::new(ProcessIdentitiesCache::default()));
     {
@@ -196,7 +257,9 @@ fn read_process_identities_within(
         guard
             .recent_names
             .retain(|_, at| now.duration_since(*at) < ZMX_PROBE_RECENT_NAMES_WINDOW);
-        if let Some(snapshot) = fresh_process_snapshot(&guard, session_names, home_dir, max_age) {
+        if let Some(snapshot) =
+            fresh_process_snapshot(&guard, session_names, home_dir, max_age, asked_at)
+        {
             return Ok(select_identities(&snapshot.identities, session_names));
         }
         ensure_no_recent_probe_failure(&guard)?;
@@ -211,7 +274,9 @@ fn read_process_identities_within(
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         ensure_process_identity_probe_active(&guard)?;
-        if let Some(snapshot) = fresh_process_snapshot(&guard, session_names, home_dir, max_age) {
+        if let Some(snapshot) =
+            fresh_process_snapshot(&guard, session_names, home_dir, max_age, asked_at)
+        {
             return Ok(select_identities(&snapshot.identities, session_names));
         }
         ensure_no_recent_probe_failure(&guard)?;
@@ -223,7 +288,7 @@ fn read_process_identities_within(
         (names, guard.generation)
     };
     #[cfg(windows)]
-    let probed = shared_process_snapshot_within(max_age).and_then(|output| {
+    let probed = shared_process_snapshot_within(max_age, asked_at).and_then(|output| {
         if !output.whole {
             return Err(super::provider::process_snapshot_unreadable());
         }
@@ -299,20 +364,27 @@ static SHARED_PROCESS_SNAPSHOT: Mutex<SharedProcessSnapshot> = Mutex::new(Shared
 });
 
 #[cfg(windows)]
-fn shared_process_snapshot_if_within(max_age: Duration) -> Option<ProcessSnapshotOutput> {
+fn shared_process_snapshot_if_within(
+    max_age: Duration,
+    asked_at: Instant,
+) -> Option<ProcessSnapshotOutput> {
     SHARED_PROCESS_SNAPSHOT
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .output
         .clone()
-        .filter(|output| output.read_at.elapsed() < max_age)
+        .filter(|output| fresh_for(output.read_at, asked_at, max_age))
 }
 
-/// The shared output if it is younger than `max_age`, otherwise a new probe stored for every
-/// reader. The caller holds `PROCESS_IDENTITIES_PROBE`, so concurrent misses start one probe.
+/// The shared output if it is fresh for a reader that asked at `asked_at`, otherwise a new probe
+/// stored for every reader. The caller holds `PROCESS_IDENTITIES_PROBE`, so concurrent misses
+/// start one probe.
 #[cfg(windows)]
-fn shared_process_snapshot_within(max_age: Duration) -> ZmxEndpointResult<ProcessSnapshotOutput> {
-    if let Some(output) = shared_process_snapshot_if_within(max_age) {
+fn shared_process_snapshot_within(
+    max_age: Duration,
+    asked_at: Instant,
+) -> ZmxEndpointResult<ProcessSnapshotOutput> {
+    if let Some(output) = shared_process_snapshot_if_within(max_age, asked_at) {
         return Ok(output);
     }
     let generation = SHARED_PROCESS_SNAPSHOT
@@ -335,14 +407,19 @@ fn shared_process_snapshot_within(max_age: Duration) -> ZmxEndpointResult<Proces
     Ok(output)
 }
 
+/// How long a name read waits for a process snapshot another reader is running (see below).
+#[cfg(windows)]
+const NAME_READ_SNAPSHOT_PATIENCE: Duration = Duration::from_millis(250);
+
 /// The live session names from the shared `wmx process-snapshot` output, two seconds old at most.
 ///
 /// CDXC:Zmx 2026-11-18 WHY:
-/// A name read that misses waits on the probe lock, so a `process-snapshot` that hangs to its 5 second timeout would make every session-list request and self-heal tick queue behind it and then run its own 5 second probe: the stall the 2026-09-27 failure memory fixed for identity reads. A failed probe is remembered for the two-second TTL like an identity probe's, and while it is, or when the probe fails, names come from `wmx list --short` (its own two-second cache) outside the lock, as they did before the shared snapshot, so self-heal and the existence repair never depend on the process walk working.
+/// A name read that misses waits on the probe lock, so a `process-snapshot` that hangs to its 5 second timeout would make every session-list request and self-heal tick queue behind it and then run its own 5 second probe: the stall the 2026-09-27 failure memory fixed for identity reads. A failed probe is remembered for the two-second TTL like an identity probe's, and while it is, or when the probe fails, names come from `wmx list --short` (its own two-second cache) outside the lock, as they did before the shared snapshot, so self-heal and the existence repair never depend on the process walk working. A name read also waits at most `NAME_READ_SNAPSHOT_PATIENCE` for a probe another reader is running (a normal one takes under 100 ms, and its output is taken as soon as it lands) before reading the list: with both `process-snapshot` and `list --short` hung, a session-list request otherwise queued behind one hung probe after the other and took up to 25 seconds.
 #[cfg(windows)]
 fn windows_live_session_names() -> Result<HashSet<String>, ZmxEndpointError> {
+    let asked_at = Instant::now();
     let fresh_names = || {
-        shared_process_snapshot_if_within(ZMX_PROBE_CACHE_TTL)
+        shared_process_snapshot_if_within(ZMX_PROBE_CACHE_TTL, asked_at)
             .and_then(|output| super::provider::process_snapshot_live_names(&output.stdout))
     };
     if let Some(names) = fresh_names() {
@@ -350,10 +427,23 @@ fn windows_live_session_names() -> Result<HashSet<String>, ZmxEndpointError> {
     }
     let cache =
         PROCESS_IDENTITIES_CACHE.get_or_init(|| Mutex::new(ProcessIdentitiesCache::default()));
-    {
-        let _probe = PROCESS_IDENTITIES_PROBE
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let probe = loop {
+        match PROCESS_IDENTITIES_PROBE.try_lock() {
+            Ok(guard) => break Some(guard),
+            Err(std::sync::TryLockError::Poisoned(poisoned)) => break Some(poisoned.into_inner()),
+            Err(std::sync::TryLockError::WouldBlock) => {
+                // The probe in flight stores its output before it resolves identities.
+                if let Some(names) = fresh_names() {
+                    return Ok(names);
+                }
+                if asked_at.elapsed() >= NAME_READ_SNAPSHOT_PATIENCE {
+                    break None;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+    };
+    if let Some(_probe) = probe {
         let generation = {
             let guard = cache
                 .lock()
@@ -368,7 +458,7 @@ fn windows_live_session_names() -> Result<HashSet<String>, ZmxEndpointError> {
                 .map(|()| guard.generation)
         };
         if let Some(generation) = generation {
-            if let Some(names) = shared_process_snapshot_within(ZMX_PROBE_CACHE_TTL)
+            if let Some(names) = shared_process_snapshot_within(ZMX_PROBE_CACHE_TTL, asked_at)
                 .ok()
                 .and_then(|output| super::provider::process_snapshot_live_names(&output.stdout))
             {
@@ -382,6 +472,7 @@ fn windows_live_session_names() -> Result<HashSet<String>, ZmxEndpointError> {
             }
         }
     }
+    ensure_probes_active()?;
     read_listed_session_names()
 }
 
@@ -402,9 +493,10 @@ fn fresh_process_snapshot<'a>(
     session_names: &[String],
     home_dir: &Path,
     max_age: Duration,
+    asked_at: Instant,
 ) -> Option<&'a CachedProcessIdentities> {
     cache.snapshot.as_ref().filter(|snapshot| {
-        snapshot.fetched_at.elapsed() < max_age
+        fresh_for(snapshot.fetched_at, asked_at, max_age)
             && snapshot.home_dir == home_dir
             && session_names
                 .iter()
