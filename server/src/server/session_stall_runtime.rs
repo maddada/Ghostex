@@ -92,6 +92,9 @@ fn watched(session: &Value, key: &SessionKey, now_iso: &str) -> bool {
         // the turn (CDXC:Coordinators 2026-11-13 in session_status/model.rs).
         || crate::presentation::working_only_in_background(session, now_iso)
         || waits_on_the_user(session, now_iso)
+        // Claude's idle compaction after a finished turn is no turn running
+        // (CDXC:Coordinators 2026-11-18 in coordinators/idle_compaction.rs).
+        || coordinators::idle_compacted_after_turn_end(session)
     {
         return false;
     }
