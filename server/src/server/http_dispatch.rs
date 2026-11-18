@@ -176,118 +176,13 @@ where
 /// async workers, each waiting up to 5 s on a busy database, so a burst of them could fill every
 /// worker while the finished git processes and the heartbeat waited behind them.
 pub(crate) fn blocking_section<R>(work: impl FnOnce() -> R) -> R {
-    // Already inside one on this thread (a route that reaches another through `block_on`): it holds
-    // its permit and is off the worker already.
-    if HOLDS_SQLITE_PERMIT.get() {
-        return work();
-    }
-    let run = || {
-        let _permit = SqlitePermit::acquire();
-        work()
-    };
     let multi_thread = tokio::runtime::Handle::try_current().is_ok_and(|runtime| {
         runtime.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread
     });
-    match multi_thread.then(BlockedSection::enter).flatten() {
-        Some(_section) => tokio::task::block_in_place(run),
-        None => run(),
-    }
-}
-
-/*
-CDXC:ServerApi 2026-11-18 WHY:
-Review of the change above: with the workers no longer the bound, a whole burst of domain requests
-reached SQLite at once, and SQLite's busy wait (5 s, `storage/pool.rs`) is not fair, so writes
-that used to queue and then succeed failed ("Ghostex couldn't save that change"). So at most
-`sqlite_permits` sections use SQLite at once; the rest wait for a permit off the workers, without
-spending their busy wait. Measured on a test gxserver (18 workers), 60 saveStashedPrompt writes
-behind a write lock: held 6 s, 5 failed before the change above, 59 with it, 18 with one permit
-per worker and 4 with 4 permits; held 2 s, 0, 21 to 38, 8 and 0.
-More permits only let more writers give up at once (one that read before writing gets "busy"
-without waiting at all), so the bound is a quarter of the workers, at least 4, which also keeps
-the open connections within the pool's idle set. At most `MAX_BLOCKED_SECTIONS` wait off the
-workers at once, each holding one of tokio's blocking threads (shared with git reads and every
-`spawn_blocking`); past that a section runs on its worker, as before.
-*/
-const MAX_BLOCKED_SECTIONS: usize = 128;
-
-fn sqlite_permits() -> usize {
-    static PERMITS: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
-    *PERMITS.get_or_init(|| {
-        let workers = std::thread::available_parallelism()
-            .map(std::num::NonZeroUsize::get)
-            .unwrap_or(4);
-        (workers / 4).max(4)
-    })
-}
-
-thread_local! {
-    static HOLDS_SQLITE_PERMIT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-}
-
-struct SqlitePermits {
-    used: std::sync::Mutex<usize>,
-    freed: std::sync::Condvar,
-}
-
-static SQLITE_PERMITS: SqlitePermits = SqlitePermits {
-    used: std::sync::Mutex::new(0),
-    freed: std::sync::Condvar::new(),
-};
-
-struct SqlitePermit;
-
-impl SqlitePermit {
-    fn acquire() -> Self {
-        let limit = sqlite_permits();
-        let mut used = SQLITE_PERMITS
-            .used
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        while *used >= limit {
-            used = SQLITE_PERMITS
-                .freed
-                .wait(used)
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-        }
-        *used += 1;
-        HOLDS_SQLITE_PERMIT.set(true);
-        SqlitePermit
-    }
-}
-
-impl Drop for SqlitePermit {
-    fn drop(&mut self) {
-        HOLDS_SQLITE_PERMIT.set(false);
-        let mut used = SQLITE_PERMITS
-            .used
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        *used = used.saturating_sub(1);
-        drop(used);
-        SQLITE_PERMITS.freed.notify_one();
-    }
-}
-
-static BLOCKED_SECTIONS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-
-/// One section waiting or running off its worker; `None` once `MAX_BLOCKED_SECTIONS` are.
-struct BlockedSection;
-
-impl BlockedSection {
-    fn enter() -> Option<Self> {
-        use std::sync::atomic::Ordering;
-        if BLOCKED_SECTIONS.fetch_add(1, Ordering::AcqRel) >= MAX_BLOCKED_SECTIONS {
-            BLOCKED_SECTIONS.fetch_sub(1, Ordering::AcqRel);
-            return None;
-        }
-        Some(BlockedSection)
-    }
-}
-
-impl Drop for BlockedSection {
-    fn drop(&mut self) {
-        BLOCKED_SECTIONS.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+    if multi_thread {
+        tokio::task::block_in_place(work)
+    } else {
+        work()
     }
 }
 
