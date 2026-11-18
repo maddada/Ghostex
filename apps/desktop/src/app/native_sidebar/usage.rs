@@ -221,7 +221,9 @@ impl GhostexGpuiApp {
         let scale = appearance.scale;
         let height = self.native_sidebar_usage_strip_height(count, scale);
         // The panel is inset from the strip's frame so its padding plus this inset is the strip's.
-        let inset_x = (SIDEBAR_USAGE_INSET - SIDEBAR_USAGE_FROSTED_PADDING) * scale;
+        let inset_left = (SIDEBAR_USAGE_INSET - SIDEBAR_USAGE_FROSTED_PADDING) * scale;
+        let inset_right =
+            (self.native_sidebar_usage_inset_right() - SIDEBAR_USAGE_FROSTED_PADDING) * scale;
         let inset_top = (SIDEBAR_USAGE_TOP_PADDING - SIDEBAR_USAGE_FROSTED_PADDING) * scale;
         let inset_bottom = (SIDEBAR_USAGE_BOTTOM_PADDING - SIDEBAR_USAGE_FROSTED_PADDING) * scale;
         let app = cx.entity();
@@ -234,9 +236,9 @@ impl GhostexGpuiApp {
                 .occlude()
                 .on_prepaint(move |bounds, window, cx| {
                     let frame = gpui::Bounds::new(
-                        bounds.origin + gpui::point(px(inset_x), px(inset_top)),
+                        bounds.origin + gpui::point(px(inset_left), px(inset_top)),
                         gpui::size(
-                            bounds.size.width - px(2.0 * inset_x),
+                            bounds.size.width - px(inset_left + inset_right),
                             bounds.size.height - px(inset_top + inset_bottom),
                         ),
                     );
@@ -331,12 +333,27 @@ impl GhostexGpuiApp {
         count.div_ceil(rows).max(1)
     }
 
+    /// The strip's right inset before the zoom scale.
+    ///
+    /// CDXC:Sidebar 2026-11-18 DECISION:
+    /// User: "reduce the gap on the right here for the sidebar so it matches the left side (14px on right side, and 7px on left side currently)". Docked beside the work area card, the sidebar's right edge is not the cards' visible edge: the divider's 1pt and the frame's gutter lie between it and the card, so the cards stood 8 + 6 = 14pt from the card but 8pt from the window's left edge. The right inset gives up that gutter (the list's own `pr(2)` against its `pl(6)` does the same), so both sides read 8pt. The floating sidebar and the frame off have no gutter beside the strip and keep the full inset.
+    fn native_sidebar_usage_inset_right(&self) -> f32 {
+        if work_area_frame_active() && !self.sidebar_collapsed {
+            (SIDEBAR_USAGE_INSET - WORK_AREA_FRAME_MARGIN).max(0.0)
+        } else {
+            SIDEBAR_USAGE_INSET
+        }
+    }
+
     /// How many meters fit in a row at the sidebar's current width.
     fn native_sidebar_usage_fitting_columns(&self, scale: f32) -> usize {
         let gap = SIDEBAR_USAGE_GAP * scale;
         // Every column but the last carries a gap, so the row fits one more card than
         // the plain division would allow.
-        let usable_width = (self.sidebar_width - 2.0 * SIDEBAR_USAGE_INSET * scale + gap).max(0.0);
+        let usable_width = (self.sidebar_width
+            - (SIDEBAR_USAGE_INSET + self.native_sidebar_usage_inset_right()) * scale
+            + gap)
+            .max(0.0);
         ((usable_width / (SIDEBAR_USAGE_METER_MIN_WIDTH * scale + gap)).floor() as usize)
             .clamp(1, SIDEBAR_USAGE_MAX_COLUMNS)
     }
@@ -385,7 +402,13 @@ impl GhostexGpuiApp {
             route,
         };
 
-        align_badge_columns(&mut meters, &host, columns, self.sidebar_width);
+        align_badge_columns(
+            &mut meters,
+            &host,
+            columns,
+            self.sidebar_width,
+            self.native_sidebar_usage_inset_right(),
+        );
 
         let rows = meters
             .chunks(columns)
@@ -393,12 +416,13 @@ impl GhostexGpuiApp {
             .collect::<Vec<_>>();
 
         // In the frosted panel the panel's 1px border takes the first pixel of its padding.
-        let (padding_x, padding_top, padding_bottom) = if route.is_some() {
+        let (padding_left, padding_right, padding_top, padding_bottom) = if route.is_some() {
             let padding = (SIDEBAR_USAGE_FROSTED_PADDING * scale - 1.0).max(0.0);
-            (padding, padding, padding)
+            (padding, padding, padding, padding)
         } else {
             (
                 SIDEBAR_USAGE_INSET * scale,
+                self.native_sidebar_usage_inset_right() * scale,
                 SIDEBAR_USAGE_TOP_PADDING * scale,
                 SIDEBAR_USAGE_BOTTOM_PADDING * scale,
             )
@@ -417,7 +441,8 @@ impl GhostexGpuiApp {
                 .relative()
                 .w_full()
                 .flex_shrink_0()
-                .px(px(padding_x))
+                .pl(px(padding_left))
+                .pr(px(padding_right))
                 .pt(px(padding_top))
                 .pb(px(padding_bottom))
                 .when(pinned, |strip| {
@@ -556,7 +581,8 @@ impl GhostexGpuiApp {
                     .when(hidden || meter_count == 0, |line| {
                         line.pb(px(SIDEBAR_BOTTOM_LINE_BOTTOM_PADDING * scale))
                     })
-                    .px(px(SIDEBAR_USAGE_INSET * scale))
+                    .pl(px(SIDEBAR_USAGE_INSET * scale))
+                    .pr(px(self.native_sidebar_usage_inset_right() * scale))
                     // CDXC:Workspaces 2026-10-11 DECISION: User: the workspace picker sits at the
                     // bottom left of the app, a little in from the sidebar's edge (10px, as it
                     // was in the bottom bar) so it lines up with the account cards under it.
@@ -571,7 +597,8 @@ impl GhostexGpuiApp {
                     .w_full()
                     .flex_shrink_0()
                     .h(px(SIDEBAR_USAGE_HANDLE_LINE_HEIGHT * scale))
-                    .px(px(SIDEBAR_USAGE_INSET * scale))
+                    .pl(px(SIDEBAR_USAGE_INSET * scale))
+                    .pr(px(self.native_sidebar_usage_inset_right() * scale))
                     .justify_end()
                     .child(handle)
                     .into_any_element()
@@ -734,7 +761,7 @@ impl GhostexGpuiApp {
         div()
             .id("native-sidebar-usage-hide-hover")
             .absolute()
-            .right(px(SIDEBAR_USAGE_INSET * scale))
+            .right(px(self.native_sidebar_usage_inset_right() * scale))
             // Its bottom edge sits 2px above the cards.
             .top(px((SIDEBAR_USAGE_TOP_PADDING
                 - 2.0
@@ -833,6 +860,7 @@ fn align_badge_columns(
     host: &GpuiAccountUsageMeterHost,
     columns: usize,
     sidebar_width: f32,
+    inset_right: f32,
 ) {
     let longest = meters
         .iter()
@@ -846,7 +874,7 @@ fn align_badge_columns(
     let scale = host.scale;
     let gap = SIDEBAR_USAGE_GAP * scale;
     let column_width = (sidebar_width
-        - 2.0 * SIDEBAR_USAGE_INSET * scale
+        - (SIDEBAR_USAGE_INSET + inset_right) * scale
         - columns.saturating_sub(1) as f32 * gap)
         / columns.max(1) as f32;
     let room = column_width
