@@ -1670,6 +1670,17 @@ pub(crate) async fn select_session_chat_model(
             Some(error.message),
         );
     }
+    // CDXC:Coordinators 2026-11-18 SEE-ALSO: `coordinator_choice` in agent_model_pins.rs (the
+    // user's decision): a coordinator's pick, session-only or not, is what its agent's next
+    // coordinator starts on.
+    if !model.is_empty() || !effort.is_empty() {
+        crate::agent_model_pins::record_coordinator_pick(
+            &target.session,
+            agent.as_deref().unwrap_or_default(),
+            &model,
+            &effort,
+        );
+    }
     log_picker(
         LogLevel::Info,
         "sessionChatCodexModelPicked",

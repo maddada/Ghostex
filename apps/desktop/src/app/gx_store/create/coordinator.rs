@@ -100,9 +100,12 @@ fn coordinator_params(
         // (session_chat_first_message.rs). The dialog sent `{}` here, so gxserver sent the
         // message at once (smoke test of 11.10.0: "New Coordinator from the UI started without
         // Start"); `gx_store/git/prompt_agent.rs` sets the same flag for its own coordinators.
+        // `useLastModel`: gxserver starts it on the model and effort the user last switched a
+        // coordinator of this agent to, instead of the defaults above (CDXC:Coordinators
+        // 2026-11-18 on `coordinator_choice` in server/src/agent_model_pins.rs).
         object.insert(
             "coordinator".to_string(),
-            json!({ "holdFirstMessage": true }),
+            json!({ "holdFirstMessage": true, "useLastModel": true }),
         );
         let runtime = object
             .entry("runtimeSettings")

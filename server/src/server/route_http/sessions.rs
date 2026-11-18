@@ -105,7 +105,12 @@ pub(super) async fn route_sessions_http(
                 if params.contains_key("account") {
                     state.accounts.refresh(&state.paths.home_dir, false);
                 }
-                let params = &coordinator_runtime::prepare_coordinator_create_params(params)?;
+                let mut params = coordinator_runtime::prepare_coordinator_create_params(params)?;
+                // A new coordinator starts on the model and effort its agent's last coordinator
+                // was switched to (CDXC:Coordinators 2026-11-18 in agent_model_pins.rs).
+                let family = crate::agents::requested_agent_family_id(db, &project, &params);
+                crate::agent_model_pins::apply_coordinator_choice(&mut params, family.as_deref());
+                let params = &params;
                 let create_params = create_agent_session_params_for_project(db, &project, params)?;
                 let created_session = repository.create_session(&create_params, false)?;
                 crate::agents::turn_create_cap::record_turn_create(turn_create);

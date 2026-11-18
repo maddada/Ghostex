@@ -177,6 +177,13 @@ pub fn coordinator_create_params(launch: CoordinatorLaunch<'_>) -> Value {
         "coordinator": { "goal": launch.goal, "firstRequest": launch.task },
     });
     // CDXC:Coordinators 2026-10-17 SEE-ALSO: packages/gx-chat-core/src/menus/orchestrator_effort.rs (the user's Low/Medium/High/XHigh decision, 2026-10-31); without an effort an orchestrator starts on High where its launch takes an effort. ZCode takes no effort choice; its model rides agentModel and gxserver queues it as a `/model` line ahead of the first message.
+    // Neither given: the defaults below, which gxserver swaps for the model and effort the user
+    // last switched a coordinator of this agent to (`apply_coordinator_choice` in
+    // agent_model_pins.rs). The phone's New Coordinator and the voice agent come this way too.
+    if launch.model.is_none() && launch.effort.is_none() {
+        params["coordinator"][crate::agent_model_pins::COORDINATOR_LAST_MODEL_KEY] =
+            Value::Bool(true);
+    }
     let effort = launch.effort.or_else(|| {
         family
             .and_then(super::default_orchestrator_effort)

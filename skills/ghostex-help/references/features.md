@@ -3950,13 +3950,21 @@ version of the Projects features in Cursor and Claude Code.
   with every agent set up on that computer (any agent can run a coordinator;
   press Tab on Claude or Codex to pick an account). Pick one and the coordinator
   starts with its first message typed into the agent's input box but not sent,
-  so you can change the model and effort first. It starts on Opus 5.5 at High on
-  Claude, High effort on Codex and Antigravity, and every other agent on its own
-  default model. In its chat the message shows as a **First message** card at
+  so you can change the model and effort first. It starts on the model and
+  effort you last switched a coordinator of the same agent to (in the First
+  message card's pickers, the model pill, or the agent's own model switch),
+  whether you start it from the computer, a browser, the phone or
+  `ghostex coordinator create`; the computer that runs it remembers this. Until
+  you have switched one, it starts on Opus 5.5 at High on Claude, High effort on
+  Codex and Antigravity, and every other agent on its own default model. In its chat the message shows as a **First message** card at
   the top of the chat box (Show all, **Edit**, **Start**): change the model or
   effort with the model pill under the box (Ghostex takes the message out of the
   agent's box while the agent's own picker runs, then types it back) or in its
-  terminal, then press **Start**. **Edit** moves the message into the chat box.
+  terminal, then press **Start**. When the model and effort it would start on
+  are low-end (see Model note below), the card says "This model might give a
+  degraded experience." with a **Confirm** button: Start, and Enter with a
+  request typed, wait until you press Confirm, and picking a model that isn't
+  low-end hides the line. **Edit** moves the message into the chat box.
   Pressing Enter in its terminal starts it too, and so does any message you send
   it (typing your first request and pressing Enter starts the coordinator with
   the first message, then your request right behind it). From a terminal or
@@ -3984,7 +3992,9 @@ version of the Projects features in Cursor and Claude Code.
   To pick from every level the agent has (Max, Ultra and the like), turn on
   **Every effort level in coordinator pickers** (an advanced setting in Settings > Chat);
   a coordinator works best on High or XHigh. From a terminal: `ghostex coordinator
-  create [--agent <id>] [--goal <text>] [--task <first request>]`.
+  create [--agent <id>] [--goal <text>] [--task <first request>]
+  [--model <model>] [--effort <effort>]` (without `--model` or `--effort` it
+  starts on the remembered model and effort).
 - **Model note**: Ghostex never tells a coordinator anything about the model
   it runs on. In a coordinator's model picker, a low-end pick (Haiku, Sonnet,
   or a Flash, Mini, Lite or Nano tier such as DeepSeek Flash) or Opus, Fable,

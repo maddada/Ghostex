@@ -76,6 +76,10 @@ struct PinFile {
     defaults: BTreeMap<String, DefaultPin>,
     #[serde(default)]
     sessions: BTreeMap<String, SessionReading>,
+    /// The model and effort the user last switched a coordinator to, per agent family (any agent
+    /// whose coordinator launch takes a model, not only the pinned families).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    coordinators: BTreeMap<String, ModelPin>,
 }
 
 struct PinStore {
@@ -143,7 +147,12 @@ fn drop_unlaunchable_pins(file: &mut PinFile) -> bool {
     file.sessions.retain(|_, reading| {
         reading.family.is_empty() || launchable_model(&reading.family, &reading.pin.model)
     });
-    file.defaults.len() != defaults || file.sessions.len() != sessions
+    let coordinators = file.coordinators.len();
+    file.coordinators
+        .retain(|family, pin| launchable_model(family, &pin.model));
+    file.defaults.len() != defaults
+        || file.sessions.len() != sessions
+        || file.coordinators.len() != coordinators
 }
 
 fn save(store: &PinStore) {
@@ -417,9 +426,6 @@ pub(crate) fn observe_detection(
     agent: Option<&str>,
     detected: &SessionChatTerminalDetection,
 ) {
-    let Some(family) = agent.map(str::trim).and_then(pin_family) else {
-        return;
-    };
     if !detected.attempted {
         return;
     }
@@ -428,6 +434,12 @@ pub(crate) fn observe_detection(
         .as_ref()
         .and_then(|options| live_pin(&options.selection.model, &options.selection.effort))
     else {
+        return;
+    };
+    if let Some(agent) = agent.map(str::trim).filter(|agent| !agent.is_empty()) {
+        observe_coordinator_switch(paths, server_id, project_id, session_id, agent, &pin);
+    }
+    let Some(family) = agent.map(str::trim).and_then(pin_family) else {
         return;
     };
     let key = session_key(project_id, session_id);
@@ -496,6 +508,192 @@ pub(crate) fn observe_detection(
         );
     }
     save(&store);
+}
+
+/// The `coordinator` field of a create that sent its client's default model and effort
+/// (`agentModel`/`agentEffort`), asking gxserver to start the coordinator on the ones the user
+/// last switched a coordinator of that agent to instead ([`apply_coordinator_choice`]). An older
+/// gxserver ignores it and starts on the defaults sent.
+pub(crate) const COORDINATOR_LAST_MODEL_KEY: &str = "useLastModel";
+
+/// Whether a coordinator of `family` starts on a chosen model, so one is worth remembering.
+fn coordinator_family_takes_model(family: &str) -> bool {
+    ghostex_gx_chat_core::protocol::coordinator_launch_takes_model(family)
+}
+
+/// The model and effort the user last switched a coordinator of `family` to, if any.
+///
+/// CDXC:Coordinators 2026-11-18 DECISION:
+/// User (follow-up to GitHub #658): a new coordinator starts on the model and effort the user last switched a coordinator of the same agent (Claude, Codex, OMP, ...) to, in the first-message card's pickers or in the agent's own model switch while it runs; with nothing remembered it keeps today's default (Opus 5.5 High for Claude). The computer that runs the coordinator decides, so it applies to coordinators started from the desktop, web, CLI and phone: their creates send their defaults with `coordinator.useLastModel` ([`COORDINATOR_LAST_MODEL_KEY`]) and gxserver swaps the remembered pair in ([`apply_coordinator_choice`]). It is kept apart from the agent-wide defaults above: a coordinator pick never changes what other sessions start on, and settings sync does not carry it.
+/// SEE-ALSO: server/src/coordinators/create.rs (`coordinator_create_params`, the CLI, phone and voice), apps/desktop/src/app/gx_store/create/coordinator.rs (the desktop and web dialog), server/src/session_chat_codex_picker.rs (a chat pick records it), packages/gx-chat-core/src/composer/first_message.rs (the card's confirm line for a low-end pick).
+pub(crate) fn coordinator_choice(family: &str) -> Option<ModelPin> {
+    let store = store().lock().ok()?;
+    store
+        .file
+        .coordinators
+        .get(family)
+        .filter(|pin| launchable_model(family, &pin.model))
+        .cloned()
+}
+
+/// Remembers `pin` as the last model and effort a coordinator of `family` was switched to. A
+/// reading without an effort keeps the remembered effort of the same model.
+pub(crate) fn record_coordinator_choice(family: &str, mut pin: ModelPin) {
+    if !coordinator_family_takes_model(family) || !launchable_model(family, &pin.model) {
+        return;
+    }
+    if !ghostex_gx_chat_core::protocol::coordinator_launch_takes_effort(family) {
+        pin.effort = None;
+        pin.effort_label = None;
+    }
+    let Ok(mut store) = store().lock() else {
+        return;
+    };
+    let old = store.file.coordinators.get(family).cloned();
+    if pin.effort.is_none() {
+        if let Some(old) = old.as_ref().filter(|old| old.model == pin.model) {
+            pin.effort = old.effort.clone();
+            pin.effort_label = old.effort_label.clone();
+        }
+    }
+    let pin = with_known_labels(pin, old.as_ref());
+    if old.as_ref() == Some(&pin) {
+        return;
+    }
+    store.file.coordinators.insert(family.to_string(), pin);
+    save(&store);
+}
+
+/// A create that asked for it ([`COORDINATOR_LAST_MODEL_KEY`]) starts its coordinator on the
+/// remembered model and effort of its agent instead of the defaults it sent; with nothing
+/// remembered the defaults stay.
+pub(crate) fn apply_coordinator_choice(params: &mut Map<String, Value>, family: Option<&str>) {
+    let asked = params
+        .get("coordinator")
+        .and_then(|coordinator| coordinator.get(COORDINATOR_LAST_MODEL_KEY))
+        .and_then(Value::as_bool)
+        == Some(true);
+    let Some(family) = family.filter(|_| asked) else {
+        return;
+    };
+    let Some(pin) = coordinator_choice(family) else {
+        return;
+    };
+    params.insert("agentModel".to_string(), json!(pin.model));
+    if let Some(effort) = pin
+        .effort
+        .filter(|_| ghostex_gx_chat_core::protocol::coordinator_launch_takes_effort(family))
+    {
+        params.insert("agentEffort".to_string(), json!(effort));
+    }
+}
+
+/// Whether a session's `runtimeSettings` mark it as a coordinator.
+fn runtime_is_coordinator(session: &Value) -> bool {
+    session
+        .get("runtimeSettings")
+        .and_then(Value::as_object)
+        .is_some_and(crate::agents::session_is_coordinator)
+}
+
+/// A model pick applied in a coordinator's chat (the first-message card's pickers included)
+/// becomes the model its agent's next coordinator starts on. An effort-only pick keeps the model
+/// the session was last seen on.
+pub(crate) fn record_coordinator_pick(session: &Value, family: &str, model: &str, effort: &str) {
+    if !runtime_is_coordinator(session) {
+        return;
+    }
+    let project_id = session.get("projectId").and_then(Value::as_str);
+    let session_id = session.get("sessionId").and_then(Value::as_str);
+    let model = Some(model.trim())
+        .filter(|model| !model.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            let key = session_key(project_id?, session_id?);
+            coordinator_readings()
+                .lock()
+                .ok()?
+                .get(&key)
+                .map(|pin| pin.model.clone())
+        });
+    let Some(model) = model else {
+        return;
+    };
+    let effort = Some(effort.trim())
+        .filter(|effort| !effort.is_empty())
+        .map(str::to_string);
+    if let (Some(project_id), Some(session_id)) = (project_id, session_id) {
+        if let Ok(mut readings) = coordinator_readings().lock() {
+            readings.insert(
+                session_key(project_id, session_id),
+                ModelPin {
+                    model: model.clone(),
+                    effort: effort.clone(),
+                    ..ModelPin::default()
+                },
+            );
+        }
+    }
+    record_coordinator_choice(
+        family,
+        ModelPin {
+            model,
+            effort,
+            ..ModelPin::default()
+        },
+    );
+}
+
+/// The last live reading of each session, kept to notice a switch (the first reading is the
+/// launch, not a switch).
+fn coordinator_readings() -> &'static Mutex<std::collections::HashMap<String, ModelPin>> {
+    static READINGS: OnceLock<Mutex<std::collections::HashMap<String, ModelPin>>> = OnceLock::new();
+    READINGS.get_or_init(Default::default)
+}
+
+/// A coordinator whose live reading moved to another model or effort (a `/model` typed in its
+/// terminal, the agent's own switch) teaches its agent's next coordinator. The session row is
+/// read only on a change.
+fn observe_coordinator_switch(
+    paths: &crate::paths::GxserverPaths,
+    server_id: &str,
+    project_id: &str,
+    session_id: &str,
+    family: &str,
+    pin: &ModelPin,
+) {
+    if !coordinator_family_takes_model(family) {
+        return;
+    }
+    let previous = {
+        let Ok(mut readings) = coordinator_readings().lock() else {
+            return;
+        };
+        if readings.len() > MAX_SESSION_READINGS {
+            readings.clear();
+        }
+        readings.insert(session_key(project_id, session_id), pin.clone())
+    };
+    let Some(previous) = previous else {
+        return;
+    };
+    let switched =
+        previous.model != pin.model || (pin.effort.is_some() && previous.effort != pin.effort);
+    if !switched {
+        return;
+    }
+    let is_coordinator = crate::storage::open_gxserver_database(paths)
+        .ok()
+        .and_then(|db| {
+            crate::domain::DomainRepository::new(&db, server_id)
+                .get_session(project_id, session_id)
+                .ok()
+                .flatten()
+        })
+        .is_some_and(|session| runtime_is_coordinator(&session));
+    if is_coordinator {
+        record_coordinator_choice(family, pin.clone());
+    }
 }
 
 /// The session's `runtimeSettings` record of what it was started on.
