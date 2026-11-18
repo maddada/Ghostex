@@ -215,7 +215,15 @@ pub(super) fn import_briefs_once(db: &Connection) {
         put_back();
         return;
     }
-    let _ = std::fs::rename(&converting, data.join("briefs.converted.json"));
+    // An earlier conversion's file is kept: this one takes a name of its own.
+    let mut kept = data.join("briefs.converted.json");
+    if kept.exists() {
+        kept = data.join(format!(
+            "briefs.converted-{}.json",
+            chrono::Utc::now().format("%Y%m%d-%H%M%S")
+        ));
+    }
+    let _ = std::fs::rename(&converting, kept);
     eprintln!(
         "[gxserver] Work items: converted {sessions} session briefs into {items} work items once."
     );
