@@ -223,6 +223,7 @@ fn model_menu_context(state: &ChatState, options: &NativeChatOptions) -> Option<
         session_key: options.session_key.clone(),
         draft,
         orchestrator: crate::menus::options::limits_orchestrator_efforts(state),
+        coordinator: crate::menus::options::is_orchestrator(state),
         raw: Value::Object(raw),
     })
 }

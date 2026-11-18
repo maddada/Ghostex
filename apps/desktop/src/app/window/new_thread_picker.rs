@@ -143,7 +143,7 @@ pub(crate) fn new_thread_picker_coordinator_height(agent_count: usize, place: bo
 /// runs on, and the project and computer it runs in.
 ///
 /// CDXC:Coordinators 2026-11-13 DECISION:
-/// User (Q2980 "Build it: auto-send + remind on drift"): the New Coordinator form drops its agent and model fields; when it is done, the normal New Thread picker opens titled "Pick the coordinator's agent", with every agent and its accounts on Tab, and the pick starts the coordinator and sends its first message. It shows only agents (no Coordinator, Browser or Terminal row, no Run on row), and a warning line under the list when the highlighted agent would start on a model a coordinator works worse on (gx-protocol `coordinator_quality_concern`).
+/// User (Q2980 "Build it: auto-send + remind on drift"): the New Coordinator form drops its agent and model fields; when it is done, the normal New Thread picker opens titled "Pick the coordinator's agent", with every agent and its accounts on Tab, and the pick starts the coordinator and sends its first message. It shows only agents (no Coordinator, Browser or Terminal row, no Run on row), and a warning line under the list when the highlighted agent would start on a low-end model (gx-protocol `coordinator_model_may_degrade`; its words are "You might get a degraded experience." since 2026-11-18).
 ///
 /// CDXC:Coordinators 2026-11-16 DECISION:
 /// User: "i'm not able to pick which machine or account the coordinator starts on. please we need to show this list on the 2nd step when creating a coordinator, so i can pick the machine up top (the project pre selected there has to be the one i'm in ofc)". The step has the New Thread picker's own project row (`In <project> <computer>`, new_thread_picker_place.rs) under its title, starting on the project and computer the form was opened for (the one the first step had); picking another project or computer there lists that computer's agents, their warnings and that computer's accounts on Tab (`CoordinatorPlace`), and the pick creates the coordinator there with the account picked (none: the account a session started there would use). Supersedes the 2026-11-13 "no project list" above.
@@ -155,7 +155,7 @@ pub(crate) struct NewThreadPickerCoordinatorStep {
     pub(crate) group_id: String,
     /// The name the form was given (empty: the placeholder "Coordinator").
     pub(crate) name: String,
-    /// "Coordinator quality may be degraded on <model>" by agent id, for the agents whose start
+    /// "You might get a degraded experience." by agent id, for the agents whose start
     /// model or effort gives a concern.
     pub(crate) warnings: std::collections::BTreeMap<String, String>,
 }

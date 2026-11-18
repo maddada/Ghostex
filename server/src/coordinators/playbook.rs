@@ -911,15 +911,8 @@ pub fn handle_coordinator_playbook_endpoint(
                 None => None,
             };
             let changes_only = changes.is_some();
-            // Added after the version and the read record are taken, so it never reads as a
-            // changed guide (model_quality.rs).
-            let mut guide = changes.unwrap_or(guide);
-            if let Some(line) = reader
-                .as_ref()
-                .and_then(|key| super::coordinator_quality_guide_line(repository, key))
-            {
-                guide = format!("{}\n\n{line}\n", guide.trim_end());
-            }
+            // CDXC:Coordinators 2026-11-18 DECISION: GitHub #665, user: "no need to mention that model isn't best to the AI itself". The guide never mentions the model a coordinator runs on; a low-end pick is noted to the user in the model picker (gx-protocol `coordinator_model_may_degrade`).
+            let guide = changes.unwrap_or(guide);
             Ok(json!({
                 "guide": guide,
                 "version": version,

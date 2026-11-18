@@ -161,6 +161,11 @@ pub struct ModelMenuRow {
     /// level is missing or unoffered (no level is marked as current). Other rows use the session
     /// level, else the model's default, else the middle of its list.
     pub effort: String,
+    /// In a coordinator's chat, this model at `effort` may give a degraded experience
+    /// (gx-protocol `coordinator_model_may_degrade`); a renderer stepping to another level reads
+    /// that level's own flag in `efforts`. Filled by the projection.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub degraded: bool,
 }
 
 /// `ModelMenuEffort`: one reasoning level a row offers.
@@ -169,6 +174,9 @@ pub struct ModelMenuRow {
 pub struct ModelMenuEffort {
     pub value: String,
     pub label: String,
+    /// In a coordinator's chat, the row's model at this level may give a degraded experience.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub degraded: bool,
 }
 
 /// One tab of the picker.
@@ -455,6 +463,7 @@ pub fn model_menu_rows(
             show_agent: favorites_tab,
             efforts: Vec::new(),
             effort: String::new(),
+            degraded: false,
             entry: ModelMenuEntry {
                 // Only the rows inside the Legacy models list say so, so a client can find where
                 // that list starts (the phone puts its toggle before the first of them).

@@ -624,6 +624,7 @@ impl ChatOptionMenuPanel {
         let view = state.view.clone();
         let active = state.active;
         let traits = state.display_traits(self.menu.read(cx).model_effort.as_deref());
+        let degraded_note = state.degraded_note(self.menu.read(cx).model_effort.as_deref());
         let shake = state
             .shake_at
             .map_or(0.0, |at| shake_offset(at.elapsed().as_secs_f32()));
@@ -838,13 +839,45 @@ impl ChatOptionMenuPanel {
                 &palette,
                 cx,
             ))
-            .child(render_key_hints(
-                view["sessionScope"] == true,
-                &appearance,
-                &palette,
-            ))
+            .child(match degraded_note {
+                Some(note) => render_degraded_note(note, &appearance, &palette),
+                None => render_key_hints(view["sessionScope"] == true, &appearance, &palette),
+            })
             .into_any_element()
     }
+}
+
+/// A coordinator picker's quiet note, in the key reminder's place along the card's bottom edge
+/// (same height, so the card never moves), while the highlighted pick may give a degraded
+/// experience.
+///
+/// CDXC:Coordinators 2026-11-18 DECISION: GitHub #665, user: "let's just show a warning in the model picker if it's a low end model ... just say you might get degraded experience that's all". A small amber mark and muted words, never red and never a dialog. SEE-ALSO: gx-protocol `coordinator_model_may_degrade` (the rule).
+fn render_degraded_note(
+    note: String,
+    appearance: &ChatAppearance,
+    palette: &Palette,
+) -> AnyElement {
+    let scale = appearance.scale;
+    div()
+        .id("model-menu-degraded-note")
+        .flex_shrink_0()
+        .h(px(HINTS_HEIGHT * scale))
+        .px(px(10.0 * scale))
+        .border_t_1()
+        .border_color(palette.ink(0.08))
+        .flex()
+        .items_center()
+        .gap(px(6.0 * scale))
+        .text_size(px(11.0 * scale))
+        .text_color(palette.muted)
+        .child(
+            svg()
+                .path("titlebar/alert-triangle.svg")
+                .size(px(11.0 * scale))
+                .text_color(palette.star),
+        )
+        .child(note)
+        .into_any_element()
 }
 
 /// The compact key reminder along the card's bottom edge. Option+Enter is listed only where the

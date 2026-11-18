@@ -3961,14 +3961,14 @@ version of the Projects features in Cursor and Claude Code.
   it (typing your first request and pressing Enter starts the coordinator with
   the first message, then your request right behind it). From a terminal or
   another agent, `ghostex coordinator create` does the same unless you add
-  `--start`, which sends the first message at once. Use a very
-  good model: the coordinator is the agent you talk to all day, and the main way
-  Ghostex itself is built. When the highlighted agent would start on a model
-  other than Opus, Fable, GPT Sol or GPT Astra, below medium effort, or on a
-  model Ghostex can't tell, the picker says "Coordinator quality may be degraded
-  on <model>" under the list (on the phone, the agent's row gets an (i) with
-  that line). Claude (cloud) is not offered: a coordinator runs on a computer
-  with Ghostex.
+  `--start`, which sends the first message at once. Any agent and model can
+  run a coordinator; it is the agent you talk to all day, so a strong model
+  gives the best results. When the highlighted agent would start on a low-end
+  model (Haiku, Sonnet, or a Flash, Mini, Lite or Nano tier such as DeepSeek
+  Flash), or on Opus, Fable, Astra or Sol at medium effort or below, the picker
+  says "You might get a degraded experience." under the list (on the phone, the
+  agent's row gets an (i) with that line). Claude (cloud) is not offered: a
+  coordinator runs on a computer with Ghostex.
   Its first message is always "Read and adhere to this skill:
   /ghostex-coordinator", written the way its agent runs a skill
   (`$ghostex-coordinator` on Codex and most others), shown locked in the
@@ -3985,14 +3985,16 @@ version of the Projects features in Cursor and Claude Code.
   **Every effort level in coordinator pickers** (an advanced setting in Settings > Chat);
   a coordinator works best on High or XHigh. From a terminal: `ghostex coordinator
   create [--agent <id>] [--goal <text>] [--task <first request>]`.
-- **Model warning**: while a coordinator runs on a model other than Opus,
-  Fable, GPT Sol or GPT Astra, below medium effort, or on a model Ghostex can't
-  tell, its chat shows an amber "Coordinator quality may be degraded on
-  <model>" pill (on the computer, in Ghostex in a browser and on the phone). It
-  follows the model and effort as you change them; click it and choose **Hide
-  for this chat** to stop seeing it in that chat. The coordinator is told the
-  same in its playbook and says once that a coordinator works best on Opus 5.5
-  at medium or high, or GPT 6.1 Sol at high.
+- **Model note**: Ghostex never tells a coordinator anything about the model
+  it runs on. In a coordinator's model picker, a low-end pick (Haiku, Sonnet,
+  or a Flash, Mini, Lite or Nano tier such as DeepSeek Flash) or Opus, Fable,
+  Astra or Sol at medium effort or below shows a quiet "You might get a
+  degraded experience." line along the picker's bottom edge, and the chat shows
+  the same as an amber pill (on the computer, in Ghostex in a browser and on
+  the phone). Opus, Fable, Astra and Sol at High, XHigh or above, and every
+  other model (Antigravity's Orchestrator (Argon) included), show nothing.
+  The pill follows the model and effort as you change them; click it and choose
+  **Hide for this chat** to stop seeing it in that chat.
 - **Staying on track**: when a coordinator's reply asks you something in plain
   text instead of a form or an item ask, does the work itself (editing code or
   running builds) instead of starting a thread, or leaves out the marked

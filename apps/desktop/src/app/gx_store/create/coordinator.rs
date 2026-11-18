@@ -23,7 +23,7 @@ use crate::app::window::{
     DEFAULT_CLAUDE_COORDINATOR_MODEL, NewCoordinatorAgent, NewCoordinatorRefusal,
 };
 use ghostex_gx_chat_core::protocol::{
-    coordinator_launch_takes_effort, coordinator_quality_concern,
+    COORDINATOR_DEGRADED_TEXT, coordinator_launch_takes_effort, coordinator_model_may_degrade,
 };
 
 /// The agent family a launcher row runs as: the coordinator family it is one of
@@ -49,8 +49,8 @@ fn coordinator_start_options(family: &str) -> (Option<&'static str>, Option<&'st
 }
 
 /// The agent picker's warning for a coordinator on `family`: by the model it starts on (Claude's
-/// coordinator model, else the agent's default in `catalog`) and its effort. A model Ghostex does
-/// not know warns too.
+/// coordinator model, else the agent's default in `catalog`) and its effort: only a low-end pick
+/// (gx-protocol `coordinator_model_may_degrade`) says anything.
 fn coordinator_start_warning(family: &str, catalog: Option<&AgentModelCatalog>) -> Option<String> {
     let (start_model, effort) = coordinator_start_options(family);
     let lineup = catalog.and_then(|catalog| catalog.agents.get(family));
@@ -65,7 +65,8 @@ fn coordinator_start_warning(family: &str, catalog: Option<&AgentModelCatalog>) 
             .and_then(|model| model.default_effort.as_deref())
             .or_else(|| lineup.and_then(|agent| agent.default_effort.as_deref()))
     });
-    coordinator_quality_concern(value, label, effort).map(|concern| concern.pill_text())
+    coordinator_model_may_degrade(value, label, effort)
+        .then(|| COORDINATOR_DEGRADED_TEXT.to_string())
 }
 
 /// The title a coordinator is created with, and its source: an unnamed coordinator is a placeholder

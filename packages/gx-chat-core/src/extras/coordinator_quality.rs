@@ -1,12 +1,12 @@
-//! The warning pill a coordinator's chat shows while its model or effort may make it work worse
-//! ("Coordinator quality may be degraded on Sonnet 5.5"), from the model and effort the chat's
+//! The note pill a coordinator's chat shows while its model or effort may give a degraded
+//! experience ("You might get a degraded experience."), from the model and effort the chat's
 //! model pill reads (gxserver's `selectedOptions`), so it follows a model or effort change at once.
 //! Its menu hides it for this chat; the hide is kept per session in the `notices` store, under its
 //! own key, so it survives a restart.
 //!
 //! CDXC:Coordinators 2026-11-13 WHY:
 //! The pill waits until the chat knows the model (a value the agent reported, the launch flags, or the user's pick) or gxserver has read the agent's screen and found none, and until the hide has been read, so a coordinator on a good model never flashes the warning while its chat starts.
-//! SEE-ALSO: packages/gx-protocol/src/coordinator.rs (the user's decision, the rule and its words), apps/desktop/src/app/native_chat/chat_pills.rs (desktop and web), apps/mobile/app/src/chat/native/cards/ChatPills.tsx (the phone), server/src/coordinators/model_quality.rs (the guide line).
+//! SEE-ALSO: packages/gx-protocol/src/coordinator.rs (the user's decision, the rule and its words), apps/desktop/src/app/native_chat/chat_pills.rs (desktop and web), apps/mobile/app/src/chat/native/cards/ChatPills.tsx (the phone), packages/gx-chat-core/src/menus/picker/projection.rs (the model picker's note).
 
 use serde_json::json;
 
@@ -15,7 +15,7 @@ use crate::effect::Effect;
 use crate::event::StorageKey;
 use crate::menus::option_catalog::session_option_catalog;
 use crate::menus::option_values::{option_value_label, OptionSource};
-use crate::protocol::coordinator_quality_concern;
+use crate::protocol::{coordinator_model_may_degrade, COORDINATOR_DEGRADED_TEXT};
 use crate::questions::drafts::NOTICES_STORE;
 use crate::state::ChatState;
 
@@ -25,8 +25,7 @@ pub const QUALITY_PILL: &str = "coordinatorQuality";
 pub const DISMISS_COMMAND: &str = "dismissCoordinatorQuality";
 const KEY_PREFIX: &str = "coordinatorQuality:";
 const HIDE_LABEL: &str = "Hide for this chat";
-const ADVICE: &str =
-    "A coordinator works well on Opus 5.5 at medium or high effort, or GPT 6.1 Sol at high.";
+const ADVICE: &str = "From the model and effort this coordinator runs on.";
 
 /// Whether this chat hid the pill: `None` until the stored answer is read.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -86,8 +85,8 @@ pub fn dismiss(state: &mut ChatState) -> Vec<Effect> {
     }]
 }
 
-/// The pill, on a coordinator whose model is not one it works well on (or is unknown) or whose
-/// effort is below medium, until this chat hides it.
+/// The pill, on a coordinator whose model or effort may give a degraded experience
+/// ([`coordinator_model_may_degrade`]), until this chat hides it.
 pub fn pill(state: &ChatState) -> Option<ChatPill> {
     if state.session.coordinator_threads.is_none()
         || state.extras.coordinator_quality.hidden != Some(false)
@@ -116,14 +115,16 @@ pub fn pill(state: &ChatState) -> Option<ChatPill> {
             option_value_label(&state.menus.model_catalog, &catalog.model, values)
         })
     });
-    let concern = coordinator_quality_concern(
+    if !coordinator_model_may_degrade(
         model.map(|entry| entry.value.as_str()),
         label
             .as_deref()
             .or(model.and_then(|entry| entry.label.as_deref())),
         known("effort").map(|entry| entry.value.as_str()),
-    )?;
-    let text = concern.pill_text();
+    ) {
+        return None;
+    }
+    let text = COORDINATOR_DEGRADED_TEXT.to_string();
     Some(ChatPill {
         id: QUALITY_PILL.to_string(),
         label: text.clone(),

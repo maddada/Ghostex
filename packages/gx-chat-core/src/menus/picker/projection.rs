@@ -4,6 +4,7 @@
 //! e1's `computeNativeChatOptions` output; what it can be built from here is
 //! [`ModelMenuContext`], which carries the same fields.
 
+use ghostex_gx_protocol::{coordinator_model_may_degrade, COORDINATOR_DEGRADED_TEXT};
 use serde_json::{json, Value};
 
 use crate::menus::catalog::AgentModelCatalog;
@@ -52,6 +53,8 @@ pub struct ModelMenuContext {
     /// An orchestrator's chat while Show all effort levels is off: every row offers only the
     /// orchestrator effort levels (`orchestrator_efforts`), plus the level the session is on.
     pub orchestrator: bool,
+    /// A coordinator's chat, whose picker notes a pick that may give a degraded experience.
+    pub coordinator: bool,
     /// The value `modelMenuContext` itself is published as.
     ///
     /// Its `descriptors` and `state` are family e1's own shapes, which e2 does not model, so e1
@@ -194,6 +197,7 @@ fn model_menu_row_efforts(
             ModelMenuEffort {
                 label: if named.is_empty() { label } else { named },
                 value,
+                degraded: false,
             }
         })
         .collect();
@@ -220,6 +224,20 @@ fn model_menu_row_efforts(
         .or_else(|| offered(default_value.as_deref()))
         .unwrap_or_else(|| efforts[efforts.len() / 2].value.clone());
     (efforts, effort)
+}
+
+/// Marks, in a coordinator's chat, the row and each of its levels that may give a degraded
+/// experience (CDXC:Coordinators 2026-11-18 in gx-protocol `coordinator_model_may_degrade`). A
+/// row without levels is judged on its model alone.
+fn mark_degraded(row: &mut ModelMenuRow) {
+    let value = row.entry.value.clone();
+    let label = row.entry.label.clone();
+    let degrades =
+        |effort: Option<&str>| coordinator_model_may_degrade(Some(&value), Some(&label), effort);
+    for effort in &mut row.efforts {
+        effort.degraded = degrades(Some(&effort.value));
+    }
+    row.degraded = degrades(Some(row.effort.as_str()).filter(|effort| !effort.is_empty()));
 }
 
 /// The search text the open tab filters by: none on a tab too short to show the search field, so
@@ -275,6 +293,9 @@ pub fn model_menu_projection(
             .map(|mut row| {
                 (row.efforts, row.effort) =
                     model_menu_row_efforts(&row, context, catalog, &mut provider_catalogs);
+                if context.coordinator {
+                    mark_degraded(&mut row);
+                }
                 row
             })
             .collect();
@@ -318,6 +339,9 @@ pub fn model_menu_projection(
             &traits,
         ),
         "error": context.selection_error,
+        // What a coordinator's picker says while the highlighted row, at the level it would be
+        // picked with, is marked `degraded`; absent outside a coordinator's chat.
+        "degradedNote": context.coordinator.then_some(COORDINATOR_DEGRADED_TEXT),
         "disabled": context.disabled,
         // Right-click applies to this session only where the agent can; elsewhere the hint says
         // why not.

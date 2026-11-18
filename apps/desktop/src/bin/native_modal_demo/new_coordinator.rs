@@ -18,7 +18,7 @@ use std::rc::Rc;
 fn agent(id: &str, warning: Option<&str>) -> NewCoordinatorAgent {
     NewCoordinatorAgent {
         agent_id: id.to_string(),
-        warning: warning.map(|model| format!("Coordinator quality may be degraded on {model}")),
+        warning: warning.map(|_model| "You might get a degraded experience.".to_string()),
     }
 }
 

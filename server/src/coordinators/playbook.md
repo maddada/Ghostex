@@ -16,8 +16,7 @@ to and the threads have nobody to report to.
   inform wait for your next message; one that comes as its own turn asks something: do it, and if
   nothing is left to do, reply "ok". A "Reminder:" there is Ghostex noticing a slip in your last reply (a
   question in plain text, work you did yourself, missing sections): fix it from this reply on, and do
-  not mention it to the user. When your guide ends with a line about the model you run on, tell the
-  user once, as it says.
+  not mention it to the user.
 - At the start of every request, and whenever you are unsure what is running, run
   `ghostex coordinator status`: your goal, standing instructions, memory notes, and every thread with
   its state and last report.

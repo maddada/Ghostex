@@ -27,7 +27,7 @@ pub const COORDINATOR_AGENT_FAMILIES: [&str; 11] = [
 /// True for the agent families a new orchestrator can run on: every agent Ghostex can name.
 ///
 /// CDXC:Coordinators 2026-11-13 DECISION:
-/// User (Q2980 "Build it: auto-send + remind on drift"): "Any harness, account and model is allowed: remove every limit on which model or harness a coordinator can use." So gxserver no longer refuses a coordinator, a promotion or Make Coordinator for an agent outside [`COORDINATOR_AGENT_FAMILIES`]; that list now only orders `ghostex coordinator create`'s default, names the agents whose skill folder Ghostex installs the playbook into (the others get the guide line, gx-chat-core `coordinator_skill_line`) and the ones whose launch takes a model. A weak or unknown model gets a warning instead ([`coordinator_quality_concern`]). Supersedes the 2026-10-20 WHY above as a limit.
+/// User (Q2980 "Build it: auto-send + remind on drift"): "Any harness, account and model is allowed: remove every limit on which model or harness a coordinator can use." So gxserver no longer refuses a coordinator, a promotion or Make Coordinator for an agent outside [`COORDINATOR_AGENT_FAMILIES`]; that list now only orders `ghostex coordinator create`'s default, names the agents whose skill folder Ghostex installs the playbook into (the others get the guide line, gx-chat-core `coordinator_skill_line`) and the ones whose launch takes a model. A low-end model gets a note in the model picker instead ([`coordinator_model_may_degrade`]). Supersedes the 2026-10-20 WHY above as a limit.
 pub fn coordinator_agent_family_supported(family: &str) -> bool {
     !family.trim().is_empty()
 }
@@ -100,21 +100,13 @@ pub fn coordinator_agent_families_text() -> String {
     }
 }
 
-/// Why a coordinator's model may make it work worse: what its chat's warning pill, the agent
-/// picker's step and its guide line say.
+/// The words a coordinator's model picker, chat pill and agent picker step show when its model or
+/// effort may give the user a degraded experience ([`coordinator_model_may_degrade`]).
 ///
-/// CDXC:Coordinators 2026-11-13 DECISION:
-/// User (Q2980 "Build it: auto-send + remind on drift"): any agent, account and model may run a coordinator, but when its model is not Opus, Fable, GPT Sol or GPT Astra (any version), its effort is below medium, or Ghostex does not know its model, Ghostex warns: its guide gets a line telling it to tell the user once that a coordinator needs Opus 5.5 at medium or high, or GPT 6.1 Sol at high, its chat shows "Coordinator quality may be degraded on <model>" (dismissible per session, live as the model or effort changes), and the agent picker step shows the same warning for such a model. An effort Ghostex does not know is no reason on its own.
-/// SEE-ALSO: server/src/coordinators/playbook.rs (the guide line), packages/gx-chat-core (the pill), apps/desktop/src/app/window/new_thread_picker.rs (the picker step), apps/mobile/app/src/chat/native/cards/ChatPills.tsx (the phone draws the pill the wasm chat core decides), apps/mobile/app/src/sessions/coordinatorQuality.ts (the phone agent step's copy of this rule).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CoordinatorQualityConcern {
-    /// The model as the user knows it (its label, else its value); `None` when it is unknown.
-    pub model: Option<String>,
-    /// The effort, when it is known.
-    pub effort: Option<String>,
-    /// The effort is below medium.
-    pub low_effort: bool,
-}
+/// CDXC:Coordinators 2026-11-18 DECISION:
+/// GitHub #665 (an Antigravity coordinator on Orchestrator (Argon) was told it runs on a model Ghostex can't identify), user: "i wanna let people pick any model, no need to mention that model isn't best to the AI itself. let's just show a warning in the model picker if it's a low end model like deepseek flash haiku sonnet or opus medium/low. just say you might get degraded experience that's all. opus fable astra sol high and xhigh don't show this (any version of those)". So the coordinator's guide never mentions its model, and the user sees "You might get a degraded experience." only on a low-end model (Haiku, Sonnet, any Flash, Mini, Lite or Nano tier, DeepSeek Flash included), or on Opus, Fable, Astra or Sol (any version) at medium effort or below. Every other model (Argon, one Ghostex does not know) and an unknown effort says nothing. Supersedes the 2026-11-13 Q2980 decision that warned on every model but Opus, Fable, GPT Sol and GPT Astra and put a line in the guide.
+/// SEE-ALSO: packages/gx-chat-core/src/menus/picker/projection.rs (the model picker's note), packages/gx-chat-core/src/extras/coordinator_quality.rs (the chat's pill), apps/desktop/src/app/gx_store/create/coordinator.rs (the agent picker's step), apps/mobile/app/src/sessions/coordinatorQuality.ts (the phone's copy of this rule).
+pub const COORDINATOR_DEGRADED_TEXT: &str = "You might get a degraded experience.";
 
 /// The words of a model value or label, lowercased: `claude-opus-5-5` reads `claude opus 5 5`.
 fn model_words(text: &str) -> Vec<String> {
@@ -124,84 +116,51 @@ fn model_words(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// True for a model a coordinator works well on: Opus, Fable, GPT Sol or GPT Astra, any version
-/// (`opus[1m]`, `claude-opus-5-5`, `Fable 5`, `gpt-6.1-sol`, `GPT-6.1 Astra`).
-pub fn coordinator_model_is_strong(model: &str) -> bool {
-    let words = model_words(model);
-    let has = |word: &str| words.iter().any(|candidate| candidate == word);
-    has("opus") || has("fable") || (has("gpt") && (has("sol") || has("astra")))
-}
-
-/// True for an effort below medium (`low`, `minimal`, `none`).
-pub fn coordinator_effort_is_low(effort: &str) -> bool {
-    matches!(
-        effort.trim().to_ascii_lowercase().as_str(),
-        "low" | "minimal" | "none" | "min"
-    )
-}
-
-/// The concern about a coordinator on `model` (its value and label, either may be empty) at
-/// `effort`, or `None` when it runs on a model it works well on at medium or above.
-pub fn coordinator_quality_concern(
-    model_value: Option<&str>,
-    model_label: Option<&str>,
-    effort: Option<&str>,
-) -> Option<CoordinatorQualityConcern> {
-    let present = |text: Option<&str>| {
-        text.map(str::trim)
-            .filter(|text| !text.is_empty() && !text.eq_ignore_ascii_case("default"))
-            .map(str::to_string)
-    };
-    let value = present(model_value);
-    let label = present(model_label);
-    let effort = present(effort);
-    let strong = [value.as_deref(), label.as_deref()]
-        .into_iter()
-        .flatten()
-        .any(coordinator_model_is_strong);
-    let low_effort = effort.as_deref().is_some_and(coordinator_effort_is_low);
-    if strong && !low_effort {
-        return None;
-    }
-    Some(CoordinatorQualityConcern {
-        model: label.or(value),
-        effort,
-        low_effort,
+/// True for a small model tier: Haiku, Sonnet, or any Flash, Mini, Lite or Nano (`deepseek-v4-flash`,
+/// `gemini-3-flash-lite`, `gpt-6-mini`).
+pub fn coordinator_model_is_low_end(model: &str) -> bool {
+    model_words(model).iter().any(|word| {
+        matches!(
+            word.as_str(),
+            "haiku" | "sonnet" | "flash" | "mini" | "lite" | "nano"
+        )
     })
 }
 
-impl CoordinatorQualityConcern {
-    /// What it runs on, for the pill: "Sonnet 5.5", "Opus 5.5 at low effort", "an unknown model".
-    pub fn runs_on(&self) -> String {
-        let model = self
-            .model
-            .clone()
-            .unwrap_or_else(|| "an unknown model".to_string());
-        match (&self.effort, self.low_effort) {
-            (Some(effort), true) => format!("{model} at {effort} effort"),
-            _ => model,
-        }
-    }
+/// True for Opus, Fable, Astra or Sol, any version (`opus[1m]`, `claude-opus-5-5`, `Fable 5`,
+/// `gpt-6.1-sol`, `GPT-6.1 Astra`), which warn only at medium effort or below.
+pub fn coordinator_model_is_top(model: &str) -> bool {
+    model_words(model)
+        .iter()
+        .any(|word| matches!(word.as_str(), "opus" | "fable" | "astra" | "sol"))
+}
 
-    /// The warning pill's words: "Coordinator quality may be degraded on Sonnet 5.5".
-    pub fn pill_text(&self) -> String {
-        format!("Coordinator quality may be degraded on {}", self.runs_on())
-    }
+/// True for medium effort or below (`medium`, `low`, `minimal`, `none`).
+pub fn coordinator_effort_is_medium_or_lower(effort: &str) -> bool {
+    matches!(
+        effort.trim().to_ascii_lowercase().as_str(),
+        "medium" | "med" | "low" | "minimal" | "min" | "none"
+    )
+}
 
-    /// The line a coordinator's guide gets.
-    pub fn guide_line(&self) -> String {
-        let model = self
-            .model
-            .clone()
-            .unwrap_or_else(|| "a model Ghostex can't identify".to_string());
-        let runs_on = match &self.effort {
-            Some(effort) => format!("{model} at {effort} effort"),
-            None => model,
-        };
-        format!(
-            "You run on {runs_on}. Tell the user once that a coordinator needs Opus 5.5 at medium or high, or GPT 6.1 Sol at high, to work well."
-        )
+/// True when a coordinator on `model` (its value and label, either may be empty) at `effort` may
+/// give a degraded experience.
+pub fn coordinator_model_may_degrade(
+    model_value: Option<&str>,
+    model_label: Option<&str>,
+    effort: Option<&str>,
+) -> bool {
+    let names: Vec<&str> = [model_value, model_label]
+        .into_iter()
+        .flatten()
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .collect();
+    if names.iter().any(|name| coordinator_model_is_low_end(name)) {
+        return true;
     }
+    names.iter().any(|name| coordinator_model_is_top(name))
+        && effort.is_some_and(coordinator_effort_is_medium_or_lower)
 }
 
 #[cfg(test)]
@@ -222,5 +181,35 @@ mod tests {
         assert!(!coordinator_launch_takes_effort("dsh"));
         assert!(coordinator_launch_takes_model("opencode"));
         assert!(coordinator_launch_takes_effort("claude"));
+    }
+
+    #[test]
+    fn only_a_low_end_pick_may_degrade_a_coordinator() {
+        let degrades = |value: &str, label: &str, effort: Option<&str>| {
+            coordinator_model_may_degrade(Some(value), Some(label), effort)
+        };
+        // Low-end tiers warn at any effort.
+        assert!(degrades("claude-haiku-5-5", "Haiku 5.5", None));
+        assert!(degrades("sonnet", "Sonnet 5.5", Some("high")));
+        assert!(degrades("deepseek-v4-flash", "DeepSeek Flash", Some("max")));
+        assert!(degrades("gemini-3-flash-lite", "", None));
+        assert!(degrades("gpt-6-mini", "GPT-6 Mini", Some("xhigh")));
+        // The top four warn at medium or below only.
+        assert!(degrades("opus[1m]", "Opus 5.5", Some("medium")));
+        assert!(degrades("claude-fable-5-2", "Fable 5.2", Some("low")));
+        assert!(degrades("gpt-6.1-sol", "GPT-6.1 Sol", Some("minimal")));
+        assert!(!degrades("gpt-6.1-astra", "GPT-6.1 Astra", Some("high")));
+        assert!(!degrades("opus", "Opus 5.5", Some("xhigh")));
+        assert!(!degrades("claude-opus-5-5", "", Some("max")));
+        assert!(!degrades("opus", "Opus 5.5", None));
+        // Every other model says nothing (#665: Argon), as does an unknown one.
+        assert!(!degrades(
+            "gemini-pro-orchestrator-g1-pro",
+            "Orchestrator (Argon)",
+            Some("low")
+        ));
+        assert!(!coordinator_model_may_degrade(None, None, Some("low")));
+        // "gemini" holds "mini" but is not the word.
+        assert!(!degrades("gemini-3-pro", "Gemini 3 Pro", None));
     }
 }

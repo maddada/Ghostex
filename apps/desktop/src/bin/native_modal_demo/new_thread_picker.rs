@@ -263,20 +263,15 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         .then(|| NewThreadPickerCoordinatorStep {
             group_id: "local:demo".to_string(),
             name: "Checkout redesign".to_string(),
-            warnings: [
-                ("grok", "Grok 4.3"),
-                ("hermes", "an unknown model"),
-                ("pi", "an unknown model"),
-                ("zcode", "GLM-5"),
-            ]
-            .into_iter()
-            .map(|(agent, model)| {
-                (
-                    agent.to_string(),
-                    format!("Coordinator quality may be degraded on {model}"),
-                )
-            })
-            .collect(),
+            warnings: ["cursor", "grok"]
+                .into_iter()
+                .map(|agent| {
+                    (
+                        agent.to_string(),
+                        "You might get a degraded experience.".to_string(),
+                    )
+                })
+                .collect(),
         });
     let coordinator_height = coordinator
         .as_ref()

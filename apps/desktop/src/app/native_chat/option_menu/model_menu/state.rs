@@ -247,6 +247,23 @@ impl ModelMenuState {
             .to_owned()
     }
 
+    /// A coordinator picker's note ("You might get a degraded experience.") while the browsed row,
+    /// at the level a pick of it carries, is marked degraded (gx-chat-core `mark_degraded`).
+    pub(super) fn degraded_note(&self, effort: Option<&str>) -> Option<String> {
+        let note = self.view["degradedNote"].as_str()?;
+        let row = self.browsed_row()?;
+        let level = self.effort_for(row, effort);
+        let degraded = row["efforts"]
+            .as_array()
+            .and_then(|efforts| {
+                efforts
+                    .iter()
+                    .find(|entry| entry["value"] == level.as_str())
+            })
+            .map_or(row["degraded"] == true, |entry| entry["degraded"] == true);
+        degraded.then(|| note.to_owned())
+    }
+
     /// The footer buttons as drawn: the Reasoning button follows the browsed row.
     pub(super) fn display_traits(&self, effort: Option<&str>) -> Vec<Value> {
         let row = self.browsed_row();

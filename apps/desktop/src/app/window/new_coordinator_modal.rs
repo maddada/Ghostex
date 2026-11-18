@@ -65,8 +65,8 @@ fn coordinator_first_line() -> String {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct NewCoordinatorAgent {
     pub(crate) agent_id: String,
-    /// "Coordinator quality may be degraded on <model>" when the model and effort it starts a
-    /// coordinator on give a concern (gx-protocol `coordinator_quality_concern`).
+    /// "You might get a degraded experience." when the model and effort it starts a
+    /// coordinator on may degrade (gx-protocol `coordinator_model_may_degrade`).
     pub(crate) warning: Option<String>,
 }
 
