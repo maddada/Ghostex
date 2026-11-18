@@ -35,14 +35,14 @@ const GROUP_HEIGHT: f32 = 22.0;
 const FOLD_HEIGHT: f32 = 26.0;
 /// The quiet line when nothing is listed.
 const EMPTY_HEIGHT: f32 = 28.0;
-/// A row: its title line, then up to two lines of its last report, inside its padding.
+/// A row: its title line, then its work item's Now line and its stats line when it has them
+/// (gx-chat-core `nowLine` and `stats`, CDXC:Coordinators 2026-11-18 on `RowStat`), inside its
+/// padding.
 const TITLE_LINE: f32 = 20.0;
-const PREVIEW_LINE: f32 = 18.0;
+const NOW_LINE: f32 = 18.0;
+const STATS_LINE: f32 = 18.0;
 const ROW_PAD_TOP: f32 = 4.0;
 const ROW_PAD_BOTTOM: f32 = 5.0;
-/// About how many characters fill one preview line at the menu's width: a longer preview gets its
-/// second line. The line clamps, so a guess that runs short ends in an ellipsis instead of growing.
-const PREVIEW_LINE_CHARS: usize = 68;
 
 /// One piece of the list, in the order it draws.
 enum Entry<'a> {
@@ -96,17 +96,43 @@ fn entries(panel: &Value) -> Vec<Entry<'_>> {
     list
 }
 
-/// How many lines of its report a row shows.
-fn preview_lines(row: &Value) -> usize {
-    match text(row, "preview").chars().count() {
-        0 => 0,
-        count if count <= PREVIEW_LINE_CHARS => 1,
-        _ => 2,
-    }
+fn has_stats(row: &Value) -> bool {
+    row["stats"]
+        .as_array()
+        .is_some_and(|stats| !stats.is_empty())
 }
 
 fn row_height(row: &Value) -> f32 {
-    ROW_PAD_TOP + TITLE_LINE + preview_lines(row) as f32 * PREVIEW_LINE + ROW_PAD_BOTTOM
+    let now = if text(row, "nowLine").is_empty() {
+        0.0
+    } else {
+        NOW_LINE
+    };
+    let stats = if has_stats(row) { STATS_LINE } else { 0.0 };
+    ROW_PAD_TOP + TITLE_LINE + now + stats + ROW_PAD_BOTTOM
+}
+
+/// The icon of a stats piece: the phase's, or the Quiet View lines' for the counts
+/// (completed_work_row.rs `stat_icon`).
+fn stat_icon(kind: &str) -> &'static str {
+    match kind {
+        "reading" => "titlebar/file-search.svg",
+        "web" => "titlebar/world.svg",
+        "editing" => "titlebar/pencil-code.svg",
+        "building" => "titlebar/package.svg",
+        "testing" => "titlebar/test-pipe.svg",
+        "command" => "titlebar/terminal-2.svg",
+        "agent" => "titlebar/robot.svg",
+        "planning" => "titlebar/list-check.svg",
+        "thinking" => "titlebar/bulb.svg",
+        "approval" => "titlebar/shield-check.svg",
+        "question" => "titlebar/help-circle.svg",
+        "stalled" => "titlebar/clock.svg",
+        "untested" => "titlebar/flask.svg",
+        "delivered" | "finished" => "titlebar/circle-check.svg",
+        "files" => "titlebar/pencil.svg",
+        _ => "titlebar/tool.svg",
+    }
 }
 
 fn entry_height(entry: &Entry<'_>) -> f32 {
@@ -346,7 +372,7 @@ impl NativeChatView {
                 .into_any_element(),
         };
         let title = text(row, "title");
-        let preview = text(row, "preview");
+        let now_line = text(row, "nowLine");
         let branch = text(row, "branch");
         let age = age_label(&text(row, "activeAt"));
         // A worker on another computer than the coordinator's: its server, which the click opens
@@ -372,7 +398,6 @@ impl NativeChatView {
         };
         let (icon, icon_color) =
             super::markdown_links::session_pill_icon(&logo, row["coordinator"] == true, p);
-        let lines = preview_lines(row);
         let title_line = div()
             .id(gpui::SharedString::from(format!(
                 "chat-coordinator-thread-line:{key}"
@@ -470,19 +495,18 @@ impl NativeChatView {
                     .flex_1()
                     .min_w_0()
                     .child(title_line)
-                    .when(lines > 0, |column| {
+                    .when(!now_line.is_empty(), |column| {
                         column.child(
                             div()
                                 .min_w_0()
-                                .line_height(px(PREVIEW_LINE * s))
-                                .max_h(px(lines as f32 * PREVIEW_LINE * s))
-                                .overflow_hidden()
-                                .line_clamp(lines)
-                                .text_ellipsis()
+                                .h(px(NOW_LINE * s))
+                                .line_height(px(NOW_LINE * s))
+                                .truncate()
                                 .text_color(p.card_muted)
-                                .child(preview),
+                                .child(now_line),
                         )
-                    }),
+                    })
+                    .when(has_stats(row), |column| column.child(stats_line(row, p))),
             )
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.invoke(command.clone(), cx);
@@ -583,6 +607,41 @@ impl NativeChatView {
     }
 }
 
+/// "Building · 46 tool calls · 3 files": the row's phase in the row's muted text, then its turn's
+/// counts in the quieter grey, each after its icon.
+fn stats_line(row: &Value, p: &ChatAppearance) -> AnyElement {
+    let s = p.scale;
+    let mut line = div()
+        .h(px(STATS_LINE * s))
+        .min_w_0()
+        .flex()
+        .items_center()
+        .gap(px(10.0 * s))
+        .overflow_hidden()
+        .text_size(px(12.0 * s));
+    for (index, stat) in row["stats"].as_array().into_iter().flatten().enumerate() {
+        let phase = index == 0;
+        line = line.child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(4.0 * s))
+                .min_w_0()
+                .when(!phase, |piece| piece.flex_shrink_0())
+                .text_color(if phase { p.card_muted } else { p.muted })
+                .child(
+                    gpui::svg()
+                        .path(stat_icon(&text(stat, "kind")))
+                        .size(px(12.0 * s))
+                        .flex_shrink_0()
+                        .text_color(p.muted),
+                )
+                .child(div().min_w_0().truncate().child(text(stat, "label"))),
+        );
+    }
+    line.into_any_element()
+}
+
 /// "Running 2" above the running rows, "Needs you 1" above those waiting on the user.
 fn group_label(label: &'static str, count: usize, p: &ChatAppearance) -> AnyElement {
     let s = p.scale;
@@ -623,9 +682,10 @@ mod tests {
     #[test]
     fn live_rows_first_and_finished_folded() {
         let rows = json!([
-            {"key": "a", "status": "working", "preview": "short"},
+            {"key": "a", "status": "working", "nowLine": "short"},
             {"key": "b", "status": "approval"},
-            {"key": "c", "status": "done", "preview": "x".repeat(100)},
+            {"key": "c", "status": "done", "nowLine": "x",
+             "stats": [{"kind": "delivered", "label": "Delivered"}]},
         ]);
         let folded = json!({"rows": rows, "step": 0, "finishedLabel": "1 in the last 2 hours",
             "finishedStep": 1, "moreLabel": "Show recent"});
@@ -639,9 +699,9 @@ mod tests {
             shape(&open),
             ["Running 1", "a", "Needs you 1", "b", "fold", "c"]
         );
-        // The open list adds the long row (two preview lines) and the footer.
+        // The open list adds the finished row (its Now and stats lines) and the footer.
         let grown = threads_menu_height(&open) - threads_menu_height(&folded);
-        assert_eq!(grown, 2.0 + (4.0 + 20.0 + 36.0 + 5.0) + 4.0 + 26.0);
+        assert_eq!(grown, 2.0 + (4.0 + 20.0 + 18.0 + 18.0 + 5.0) + 4.0 + 26.0);
         let quiet = json!({"rows": [], "emptyLabel": "No workers working"});
         assert_eq!(shape(&quiet), ["empty"]);
     }

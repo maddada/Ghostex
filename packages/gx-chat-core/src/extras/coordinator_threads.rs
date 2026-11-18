@@ -68,14 +68,106 @@ pub struct CoordinatorThreadRow {
     /// Its last activity (ISO), which the desktop popover shows as "4m" at the row's right.
     #[serde(default)]
     pub active_at: String,
-    /// What the desktop popover previews in up to two lines: gxserver's longer `preview` of the
-    /// report, or the line, with the Markdown reduced to the words it shows ([`plain_preview`]).
-    #[serde(default)]
-    pub preview: String,
+    /// The second line of its Workers row: where its first work item stands, as the coordinator
+    /// last set it (`item now`), in plain words ([`plain_preview`]); "" for a thread on no item or
+    /// an item with none. Set by [`attach_items`].
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub now_line: String,
+    /// The third line of its Workers row ([`row_stats`]): first its phase (what its newest tool
+    /// call is doing, what it waits on, or how it ended), then its turn's tool calls and changed
+    /// files. Each `kind` is a phase key or `tools` / `files`, which the renderers draw an icon for.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stats: Vec<RowStat>,
     /// The agent gxserver names on the thread (`agent`), for its logo when the host does not list
     /// its session.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub agent: String,
+}
+
+/// One piece of a Workers row's stats line: "Building", "46 tool calls", "3 files".
+///
+/// CDXC:Coordinators 2026-11-18 DECISION:
+/// User, of the Workers popover's line under each running worker (the thread's newest chat words,
+/// such as "Picked up: Thanks, no tooltip is fine…" or "Compiles clean. Formatting only my
+/// files…"): "The text here is useless man." On the design page they picked Q3970 B, "a running
+/// row's text is the work item's Now line"; for Q3971 (where the worker's latest line goes) none of
+/// the options but "show these instead pls" with the design's phase and counts line ("Building ·
+/// 46 tool calls · 3 files") and "no need for the last message to be sent here at all, won't be
+/// shown, it's not needed"; for Q3972 (finished rows) "see above answers", so a finished row gets
+/// the same lines with how it ended in place of the live phase; Q3973 keep the header; Q3974 the
+/// phone follows the desktop. So a row is its title line, then its first item's Now line when
+/// there is one ([`attach_items`]), then this stats line ([`row_stats`]); gxserver stopped sending
+/// the report preview (`preview`) the popover drew, and works out the phase and the counts from
+/// the thread's whole newest turn (server/src/coordinators/turn_work.rs, `turnWork` on the row).
+/// Supersedes Q3215's two lines of the report.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct RowStat {
+    pub kind: String,
+    pub label: String,
+}
+
+/// The words for a phase key gxserver names (`turnWork.phase`, turn_work.rs `phase_of`) or the
+/// core gives a row that is not running.
+pub fn phase_label(kind: &str) -> &'static str {
+    match kind {
+        "reading" => "Reading code",
+        "web" => "Reading the web",
+        "editing" => "Editing files",
+        "building" => "Building",
+        "testing" => "Testing",
+        "command" => "Running a command",
+        "agent" => "Running a subagent",
+        "planning" => "Planning",
+        "tool" => "Using a tool",
+        "thinking" => "Thinking",
+        "approval" => "Needs your approval",
+        "question" => "Waiting for an answer",
+        "untested" => "Untested",
+        "delivered" => "Delivered",
+        _ => "Finished",
+    }
+}
+
+/// A row's stats line from gxserver's row: the phase first, then the counts of its newest turn
+/// (`turnWork`). A working thread with no calls yet is thinking; one gone quiet says so in its own
+/// words (`stalled`, `stuck`: gxserver's warning in `detail`, coordinators/stall.rs); a finished
+/// one says how it ended: untested when its report has an Untested section, delivered when it
+/// reported.
+fn row_stats(row: &Value, status: &str) -> Vec<RowStat> {
+    let work = &row["turnWork"];
+    let (kind, label) = match status {
+        "working" if row["stalled"] == true || row["stuck"] == true => {
+            ("stalled".to_string(), text(row, "detail"))
+        }
+        "working" => {
+            let phase = match text(work, "phase") {
+                phase if phase.is_empty() => "thinking".to_string(),
+                phase => phase,
+            };
+            let label = phase_label(&phase).to_string();
+            (phase, label)
+        }
+        "approval" | "question" => (status.to_string(), phase_label(status).to_string()),
+        _ if row["untested"] == true => {
+            ("untested".to_string(), phase_label("untested").to_string())
+        }
+        _ if !text(row, "lastReport").is_empty() => (
+            "delivered".to_string(),
+            phase_label("delivered").to_string(),
+        ),
+        _ => ("finished".to_string(), phase_label("finished").to_string()),
+    };
+    let mut stats = vec![RowStat { kind, label }];
+    let count = |key: &str| work[key].as_u64().unwrap_or(0) as usize;
+    stats.extend(
+        crate::transcript::work_summary::counted_work_stats(count("toolCalls"), count("files"))
+            .into_iter()
+            .map(|stat| RowStat {
+                kind: text(&stat, "kind"),
+                label: text(&stat, "label"),
+            }),
+    );
+    stats
 }
 
 /// A work item a thread is on, as a pill in its Workers row, and the card that pill shows on hover
@@ -304,6 +396,14 @@ fn attach_items(rows: &mut [CoordinatorThreadRow], work: Option<&Value>) {
         } else {
             String::new()
         };
+        // Its Workers row's second line: where its newest open item stands (the open ones sort
+        // first), in plain words.
+        row.now_line = on
+            .iter()
+            .map(|item| text(item, "now"))
+            .find(|now| !now.trim().is_empty())
+            .map(|now| plain_preview(&now))
+            .unwrap_or_default();
         let rest = on.split_off(on.len().min(ITEMS_SHOWN));
         row.items = on.iter().map(|item| work_pill(item, &report)).collect();
         if !rest.is_empty() {
@@ -463,54 +563,48 @@ fn parse_rows(rows: Option<&Value>) -> Vec<(String, CoordinatorThreadRow)> {
         .map(|row| {
             let state = text(row, "state");
             let working = state == "working";
-            (
-                text(row, "activeAt"),
-                CoordinatorThreadRow {
-                    // A thread on another computer keeps that computer in its key: ids are only
-                    // unique within one gxserver.
-                    key: match text(row, "serverId") {
-                        server_id if server_id.is_empty() => {
-                            format!("{}:{}", text(row, "projectId"), text(row, "sessionId"))
-                        }
-                        server_id => format!(
-                            "{server_id}:{}:{}",
-                            text(row, "projectId"),
-                            text(row, "sessionId")
-                        ),
-                    },
-                    project_id: text(row, "projectId"),
-                    session_id: text(row, "sessionId"),
-                    title: text(row, "title"),
-                    detail: text(row, "detail"),
-                    working,
-                    needs_approval: !working
-                        && row.get("needsApproval") == Some(&Value::Bool(true)),
-                    waiting: state == "waiting",
-                    recent: row.get("recent") == Some(&Value::Bool(true)),
-                    branch: text(row, "branch"),
-                    lifecycle_state: text(row, "lifecycleState"),
-                    server_id: text(row, "serverId"),
-                    computer: text(row, "computer"),
-                    last_report: text(row, "lastReport"),
-                    status: if working {
-                        "working"
-                    } else if row.get("needsApproval") == Some(&Value::Bool(true)) {
-                        "approval"
-                    } else if state == "waiting" {
-                        "question"
-                    } else {
-                        "done"
+            let mut parsed = CoordinatorThreadRow {
+                // A thread on another computer keeps that computer in its key: ids are only
+                // unique within one gxserver.
+                key: match text(row, "serverId") {
+                    server_id if server_id.is_empty() => {
+                        format!("{}:{}", text(row, "projectId"), text(row, "sessionId"))
                     }
-                    .to_string(),
-                    active_at: text(row, "activeAt"),
-                    agent: text(row, "agent"),
-                    preview: plain_preview(&match text(row, "preview") {
-                        preview if preview.is_empty() => text(row, "detail"),
-                        preview => preview,
-                    }),
-                    ..CoordinatorThreadRow::default()
+                    server_id => format!(
+                        "{server_id}:{}:{}",
+                        text(row, "projectId"),
+                        text(row, "sessionId")
+                    ),
                 },
-            )
+                project_id: text(row, "projectId"),
+                session_id: text(row, "sessionId"),
+                title: text(row, "title"),
+                detail: text(row, "detail"),
+                working,
+                needs_approval: !working && row.get("needsApproval") == Some(&Value::Bool(true)),
+                waiting: state == "waiting",
+                recent: row.get("recent") == Some(&Value::Bool(true)),
+                branch: text(row, "branch"),
+                lifecycle_state: text(row, "lifecycleState"),
+                server_id: text(row, "serverId"),
+                computer: text(row, "computer"),
+                last_report: text(row, "lastReport"),
+                status: if working {
+                    "working"
+                } else if row.get("needsApproval") == Some(&Value::Bool(true)) {
+                    "approval"
+                } else if state == "waiting" {
+                    "question"
+                } else {
+                    "done"
+                }
+                .to_string(),
+                active_at: text(row, "activeAt"),
+                agent: text(row, "agent"),
+                ..CoordinatorThreadRow::default()
+            };
+            parsed.stats = row_stats(row, &parsed.status);
+            (text(row, "activeAt"), parsed)
         })
         .collect()
 }
@@ -594,7 +688,8 @@ pub fn coordinator_threads_panel(
     // two lines of the report with its Markdown stripped (Q3215), and every row's real agent logo,
     // gxserver's `agent` standing in for a session the host does not list (Q3216). The desktop
     // draws it from `header`, `finishedLabel`, `finishedStep` and each row's `status`,
-    // `activeAt`, `preview` and `agentLogo`; `meta`, `moreLabel` and the rest stay as they were,
+    // `activeAt`, `preview` (since 2026-11-18 `nowLine` and `stats`, see `RowStat`) and
+    // `agentLogo`; `meta`, `moreLabel` and the rest stay as they were,
     // so the phone's own Workers sheet (AgentPanels.tsx) and older apps are unchanged.
     let needs_you = flying.saturating_sub(working);
     let mut header = Vec::new();
@@ -860,7 +955,8 @@ mod tests {
         );
     }
 
-    /// A row previews gxserver's longer `preview` (else its line) as words, without Markdown.
+    /// A row's Now line is its item's `now` as words, without Markdown, and its stats line the
+    /// phase and counts of its turn; the phone's `detail` stays as gxserver sent it.
     #[test]
     fn previews_drop_markdown() {
         assert_eq!(
@@ -874,19 +970,29 @@ mod tests {
         assert_eq!(super::plain_preview("a [b] c"), "a [b] c");
         let panel = coordinator_threads_panel(
             Some(&json!({"threads": [
-                {"projectId": "p", "sessionId": "a", "state": "working", "detail": "[x](y) one"},
-                {"projectId": "p", "sessionId": "b", "state": "working", "detail": "one", "preview": "one. two"},
-            ]})),
+                {"projectId": "p", "sessionId": "a", "state": "working", "detail": "[x](y) one",
+                 "turnWork": {"phase": "building", "toolCalls": 46, "files": 3}},
+                {"projectId": "p", "sessionId": "b", "state": "working", "detail": "one"},
+            ], "work": {"items": [
+                {"kind": "item", "key": "work:1", "ref": "W1", "status": "in_progress",
+                 "now": "Taking out **the** [tests](https://x.y)",
+                 "threads": [{"projectId": "p", "sessionId": "a"}]},
+            ]}})),
             0,
             None,
         )
         .unwrap();
-        assert_eq!(panel.rows[0].preview, "x one");
+        assert_eq!(panel.rows[0].now_line, "Taking out the tests");
+        let labels = |row: &super::CoordinatorThreadRow| {
+            row.stats.iter().map(|stat| stat.label.clone()).collect::<Vec<_>>()
+        };
+        assert_eq!(labels(&panel.rows[0]), ["Building", "46 tool calls", "3 files"]);
         assert_eq!(
             panel.rows[0].detail, "[x](y) one",
             "the phone's line is unchanged"
         );
-        assert_eq!(panel.rows[1].preview, "one. two");
+        assert_eq!(panel.rows[1].now_line, "");
+        assert_eq!(labels(&panel.rows[1]), ["Thinking"]);
     }
 
     /// A thread whose session the host does not list still gets its agent's logo from gxserver's

@@ -798,7 +798,7 @@ fn sends_agent_message(name: &str, input: &Value) -> bool {
     }
 }
 
-fn collect_file_paths(name: &str, input: &Value, paths: &mut BTreeSet<String>) {
+pub(crate) fn collect_file_paths(name: &str, input: &Value, paths: &mut BTreeSet<String>) {
     let name = name.rsplit('.').next().unwrap_or(name).to_ascii_lowercase();
     let parsed = input
         .as_str()

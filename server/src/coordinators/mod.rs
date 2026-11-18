@@ -42,6 +42,7 @@ mod stopped_by_restart;
 mod thread_messages;
 mod thread_reads;
 mod title;
+mod turn_work;
 mod turns;
 mod user_handoff;
 mod work;

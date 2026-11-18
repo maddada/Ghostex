@@ -302,6 +302,15 @@ impl SessionChatTranscriptGate {
         self.tail.as_ref().map(|cached| &cached.tail)
     }
 
+    /// The session's transcript agent and file (`resolve`), for a reader that pages through more
+    /// than the newest rows (coordinators/turn_work.rs).
+    pub(crate) fn transcript(
+        &mut self,
+        session: &Value,
+    ) -> Option<(crate::session_chat::SessionChatTranscriptAgent, PathBuf)> {
+        self.resolve(session)
+    }
+
     /// The session's transcript agent and file, resolved once per conversation identity.
     fn resolve(
         &mut self,

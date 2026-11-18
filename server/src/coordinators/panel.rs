@@ -19,7 +19,7 @@ use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Map, Value};
 
-use super::brief::{report_headline, report_preview};
+use super::brief::report_headline;
 use super::endpoint::session_title_of;
 use super::live::{thread_live, ThreadLive};
 use super::records::{list_coordinators, SessionKey, ThreadRecord};
@@ -33,10 +33,6 @@ use crate::presentation::{effective_lifecycle_state, now_iso};
 
 /// How long after its last activity a thread that neither works nor waits is still listed.
 const RECENT_THREAD_MS: i64 = 2 * 60 * 60 * 1000;
-
-/// How much of a finished thread's report its Workers row previews (`preview`): two lines of the
-/// desktop popover, with the link targets the chat core strips taken into account.
-const PREVIEW_CHARS: usize = 320;
 
 /// The threads active since this computer's midnight, which the Workers popover's header counts
 /// ("30 today").
@@ -534,15 +530,6 @@ fn build_row(
         .filter(|report| !report.trim().is_empty())
         .map(|report| report_headline(report, 140));
     let report_line = last_report.clone();
-    // The line is the report itself (not a live activity, a prompt or the brief): its preview may
-    // run on past the headline.
-    let detail_is_report = match state {
-        ThreadState::Waiting => false,
-        ThreadState::Working => {
-            live.and_then(|live| live.activity.as_ref()).is_none() && last_report.is_some()
-        }
-        _ => last_report.is_some(),
-    };
     let detail = match state {
         ThreadState::Waiting => session
             .and_then(waiting_prompt)
@@ -581,13 +568,21 @@ fn build_row(
     if let Some(report) = &report_line {
         row["lastReport"] = json!(report);
     }
-    // The longer line the desktop's Workers popover previews in two lines (Q3215); older clients
-    // read `detail` only.
-    if let Some(report) = thread.last_report.as_deref().filter(|_| detail_is_report) {
-        row["preview"] = json!(report_preview(report, PREVIEW_CHARS));
-    }
-    if is_recent(&active_at, now) {
+    let recent = is_recent(&active_at, now);
+    if recent {
         row["recent"] = json!(true);
+    }
+    // What its newest turn is doing and has done, for its Workers row (turn_work.rs); read only for
+    // the threads the popover lists without "N more".
+    if recent || matches!(state, ThreadState::Working | ThreadState::Waiting) {
+        if let Some(work) = session.and_then(|session| {
+            super::turn_work::turn_work(
+                &(thread.project_id.clone(), thread.session_id.clone()),
+                session,
+            )
+        }) {
+            row["turnWork"] = work.to_value();
+        }
     }
     // Its tag as its sidebar row shows it (a legacy favorite reads as the `favorite` tag), for its
     // board card (board.rs).
@@ -610,14 +605,12 @@ fn build_row(
     {
         // Its terminal ended and Ghostex could not restart it (session_self_heal.rs).
         row["detail"] = json!(detail);
-        drop_preview(&mut row);
         row["stuck"] = json!(true);
     } else if state == ThreadState::Working {
         if let Some(quiet) = super::stall::session_quiet(&thread.project_id, &thread.session_id)
             .filter(|quiet| quiet.stalled)
         {
             row["detail"] = json!(super::stall::quiet_detail(&quiet, now.timestamp_millis()));
-            drop_preview(&mut row);
             row["stalled"] = json!(true);
             if quiet.stuck {
                 row["stuck"] = json!(true);
@@ -735,9 +728,6 @@ fn build_remote_row(thread: &RemoteThreadRecord, now: chrono::DateTime<chrono::U
         .filter(|report| !report.trim().is_empty())
     {
         row["lastReport"] = json!(report_headline(report, 140));
-        if !unreachable && !matches!(state, "working" | "waiting") {
-            row["preview"] = json!(report_preview(report, PREVIEW_CHARS));
-        }
     }
     if is_recent(&thread.updated_at, now) {
         row["recent"] = json!(true);
@@ -754,13 +744,6 @@ fn build_remote_row(thread: &RemoteThreadRecord, now: chrono::DateTime<chrono::U
         row["lifecycleState"] = json!(lifecycle);
     }
     row
-}
-
-/// A row whose line was replaced by a warning previews that warning, not its report.
-fn drop_preview(row: &mut Value) {
-    if let Some(row) = row.as_object_mut() {
-        row.remove("preview");
-    }
 }
 
 /// When `is_recent` turns false for this row, if it is true now.
@@ -1143,7 +1126,8 @@ mod tests {
         assert_eq!(active_today(&threads, now), 2);
     }
 
-    /// A finished remote thread previews its report past the headline; a working one has none.
+    /// A finished remote thread's line is its report's headline; no row carries the report's
+    /// longer preview since the Workers popover stopped quoting it (turn_work.rs).
     #[test]
     fn a_finished_thread_previews_its_report() {
         let now = chrono::DateTime::parse_from_rfc3339("2026-11-04T17:30:00.000Z")
@@ -1154,10 +1138,7 @@ mod tests {
             Some("✅ **Done:**\n- Fixed the [pill](https://x.y/1).\n- Added a test.".to_string());
         let row = build_remote_row(&thread, now);
         assert_eq!(row["detail"], "Fixed the [pill](https://x.y/1).");
-        assert_eq!(
-            row["preview"],
-            "Fixed the [pill](https://x.y/1). Added a test."
-        );
+        assert!(row.get("preview").is_none());
         let working = build_remote_row(&remote_thread(Some("working")), now);
         assert!(working.get("preview").is_none());
     }
