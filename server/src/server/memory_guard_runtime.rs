@@ -137,8 +137,9 @@ fn measure(state: &AppState) -> Vec<Candidate> {
         .iter()
         .map(|(_, name, _)| name.clone())
         .collect::<Vec<_>>();
-    let agents = read_cached_zmx_session_process_identities(&names, &state.paths.home_dir)
-        .unwrap_or_default();
+    let agents =
+        crate::zmx::read_display_zmx_session_process_identities(&names, &state.paths.home_dir)
+            .unwrap_or_default();
     let rows = snapshot_user_processes();
     let mut candidates = sessions
         .into_iter()

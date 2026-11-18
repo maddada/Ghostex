@@ -154,7 +154,7 @@ fn refresh_fleet_status(state: &AppState, shutdown: &tokio::sync::broadcast::Rec
     if stopping() {
         return;
     }
-    let _ = crate::zmx::read_cached_zmx_session_process_identities(
+    let _ = crate::zmx::read_display_zmx_session_process_identities(
         &candidate_names,
         &state.paths.home_dir,
     );

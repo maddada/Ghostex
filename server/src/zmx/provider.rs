@@ -695,6 +695,27 @@ pub fn read_zmx_session_process_identities(
     if session_names.is_empty() {
         return Ok(HashMap::new());
     }
+    let (stdout, whole) = run_zmx_process_snapshot_probe()?;
+    if !whole {
+        return Err(process_snapshot_unreadable());
+    }
+    Ok(zmx_session_process_identities_from_probe(
+        &stdout,
+        session_names,
+        home_dir,
+    ))
+}
+
+pub(super) fn process_snapshot_unreadable() -> ZmxEndpointError {
+    ZmxEndpointError::DependencyUnavailable(
+        "Could not read the session process snapshot.".to_string(),
+    )
+}
+
+/// The process-snapshot probe's output (`zmx list` on macOS and Linux; on Windows `wmx
+/// process-snapshot`, its session list and then every process row) and whether it is whole:
+/// `false` when it was cut at the stdout cap, where only its head can be read.
+pub(super) fn run_zmx_process_snapshot_probe() -> ZmxEndpointResult<(String, bool)> {
     let zmx = require_zmx()?;
     let result = run_zmx_probe_script(
         build_zmx_process_snapshot_command(&zmx.executable_path),
@@ -704,16 +725,25 @@ pub fn read_zmx_session_process_identities(
         },
     )
     .map_err(ZmxEndpointError::DependencyUnavailable)?;
-    if result.exit_code != 0 {
-        return Err(ZmxEndpointError::DependencyUnavailable(
-            "Could not read the session process snapshot.".to_string(),
-        ));
+    match result.exit_code {
+        0 => Ok((result.stdout, true)),
+        // `run_zmx_probe_script`'s code for output cut at the cap (a timeout is 124).
+        125 if result.stdout_truncated => Ok((result.stdout, false)),
+        _ => Err(process_snapshot_unreadable()),
     }
+}
+
+/// Each named session's agent identity from one probe output (`run_zmx_process_snapshot_probe`).
+pub(super) fn zmx_session_process_identities_from_probe(
+    stdout: &str,
+    session_names: &[String],
+    home_dir: &Path,
+) -> HashMap<String, ZmxProcessIdentity> {
     // macOS and Linux read the process rows in-process (process_table_macos.rs,
     // session_tree.rs); the script ran `zmx list` only.
     #[cfg(unix)]
     let mut identities = {
-        let root_pids_by_session_name = parse_zmx_root_pids(&result.stdout, session_names);
+        let root_pids_by_session_name = parse_zmx_root_pids(stdout, session_names);
         let mut root_pids = root_pids_by_session_name
             .values()
             .copied()
@@ -727,7 +757,7 @@ pub fn read_zmx_session_process_identities(
     };
     #[cfg(windows)]
     let mut identities = {
-        let (ps_output, zmx_list_output) = parse_zmx_process_snapshot_sections(&result.stdout);
+        let (ps_output, zmx_list_output) = parse_zmx_process_snapshot_sections(stdout);
         parse_zmx_session_process_identities(&ps_output, session_names, &zmx_list_output)
     };
     let needs_open_files = |identity: &ZmxProcessIdentity| {
@@ -783,7 +813,27 @@ pub fn read_zmx_session_process_identities(
         identity.agent_session_id = Some(agent_session_id);
         identity.agent_session_path = Some(agent_session_path);
     }
-    Ok(identities)
+    identities
+}
+
+/// Every session `wmx process-snapshot` listed, the same set `wmx list --short` prints (both are
+/// wmx's `client::list`, run at the start of the snapshot). The list comes before the process
+/// rows, so it can be read from an output cut at the stdout cap; `None` unless both section
+/// markers are there in order, so an output cut inside the list never reads as "no sessions".
+#[cfg(windows)]
+pub(super) fn process_snapshot_live_names(stdout: &str) -> Option<HashSet<String>> {
+    let list_at = stdout.find("__GHOSTEX_ZMX_LIST__")?;
+    let ps_at = stdout.find("__GHOSTEX_PS__")?;
+    if ps_at <= list_at {
+        return None;
+    }
+    let (_, zmx_list_output) = parse_zmx_process_snapshot_sections(stdout);
+    Some(
+        zmx_list_output
+            .lines()
+            .filter_map(parse_zmx_list_name)
+            .collect(),
+    )
 }
 
 pub fn read_zmx_existing_session_names() -> Result<HashSet<String>, ZmxEndpointError> {

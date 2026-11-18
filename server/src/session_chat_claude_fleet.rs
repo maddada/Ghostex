@@ -665,7 +665,7 @@ pub(crate) fn read_claude_fleet(
         return Ok(None);
     }
     let (_, process_started) =
-        crate::session_chat_fleet_process::current_process(session, "claude")?;
+        crate::session_chat_fleet_process::current_process_for_display(session, "claude")?;
     current.retain(|(_, _, turn, _, _, _)| turn.timestamp >= process_started);
     current.sort_by(|a, b| {
         a.2.started_at

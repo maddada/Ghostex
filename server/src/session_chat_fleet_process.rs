@@ -7,8 +7,18 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+/// The agent process from the two-second snapshot, for decisions such as a run boundary.
 pub(crate) fn current_process(session: &Value, agent: &str) -> anyhow::Result<(i64, i64)> {
-    let process = current_process_with_files(session, agent)?;
+    let process = read_current_process(session, agent, false)?;
+    Ok((process.pid, process.started_at))
+}
+
+/// The agent process for the subagent status display, from the display snapshot (`read_display_zmx_session_process_identities`).
+pub(crate) fn current_process_for_display(
+    session: &Value,
+    agent: &str,
+) -> anyhow::Result<(i64, i64)> {
+    let process = read_current_process(session, agent, true)?;
     Ok((process.pid, process.started_at))
 }
 
@@ -18,18 +28,30 @@ pub(crate) struct CurrentProcess {
     pub open_file_paths: Option<Arc<[PathBuf]>>,
 }
 
+/// The agent process with its open files, for the Codex subagent status display (display snapshot).
 pub(crate) fn current_process_with_files(
     session: &Value,
     agent: &str,
+) -> anyhow::Result<CurrentProcess> {
+    read_current_process(session, agent, true)
+}
+
+fn read_current_process(
+    session: &Value,
+    agent: &str,
+    display: bool,
 ) -> anyhow::Result<CurrentProcess> {
     let name = session
         .get("zmxName")
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow::anyhow!("Session has no process owner"))?;
-    let identities = crate::zmx::read_cached_zmx_session_process_identities(
-        &[name.to_string()],
-        &crate::paths::get_gxserver_paths(None).home_dir,
-    )
+    let names = [name.to_string()];
+    let home = crate::paths::get_gxserver_paths(None).home_dir;
+    let identities = if display {
+        crate::zmx::read_display_zmx_session_process_identities(&names, &home)
+    } else {
+        crate::zmx::read_cached_zmx_session_process_identities(&names, &home)
+    }
     .map_err(|e| anyhow::anyhow!("Cannot read subagent process owner: {e:?}"))?;
     let identity = identities
         .get(name)
