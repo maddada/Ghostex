@@ -1331,6 +1331,18 @@ impl GhostexGpuiApp {
                                     },
                                 ),
                         )
+                        // A row's (i) (Remove Active projects' way back): its note as a
+                        // tooltip on the icon alone, never a second line under the label.
+                        .when_some(item["info"].as_str().map(str::to_owned), |row, info| {
+                            row.child(self.native_sidebar_menu_info_button(
+                                format!("native-menu-info-{panel_index}-{item_index}"),
+                                info,
+                                foreground.opacity(0.55),
+                                hover,
+                                scale,
+                                cx,
+                            ))
+                        })
                         .when(item["supportsChat"] == true, |row| {
                             row.child(
                                 gpui::svg()

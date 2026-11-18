@@ -9,7 +9,9 @@ use serde_json::{Value, json};
 
 use crate::GhostexGpuiApp;
 
-/// The star's right-click menu: New Space, then Remove Active projects with where to bring it back.
+/// The star's right-click menu: New Space, then Remove Active projects, its (i) saying where to
+/// bring it back (a tooltip, not a second line: the user's 2026-11-18 "remove this pls, put an i
+/// icon to the right of it").
 pub(crate) fn active_projects_menu() -> Value {
     json!([
         {"label": "Manage", "heading": true},
@@ -18,7 +20,7 @@ pub(crate) fn active_projects_menu() -> Value {
         {
             "label": "Remove Active projects",
             "icon": "eyeOff",
-            "detail": "Turn it back on in Settings",
+            "info": "Turn it back on in Settings > Sidebar & Sessions > Spaces",
             "command": {"type": "removeActiveProjects"},
         },
     ])

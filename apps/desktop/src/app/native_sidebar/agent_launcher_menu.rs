@@ -237,7 +237,6 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let scaled = |value: f32| px(value * scale);
-        let tooltip_delay = self.configured_tooltip_delay();
         let disabled = item["disabled"] == true;
         let primary = item["primary"] == true;
         let account = matches!(LauncherRow::of(item), LauncherRow::Account { .. });
@@ -377,34 +376,15 @@ impl GhostexGpuiApp {
             // goes to the frosted tooltip window above the menu's own (frosted_host.rs).
             .when_some(item["info"].as_str().map(str::to_owned), |row, info| {
                 row.child(
-                    div()
-                        .id(format!(
-                            "native-agent-launcher-info-{panel_index}-{item_index}"
-                        ))
-                        .flex_shrink_0()
-                        .mr(scaled(8.0))
-                        .p(scaled(2.0))
-                        .rounded(scaled(4.0))
-                        .hover(|button| button.bg(palette.hover))
-                        .child(
-                            svg()
-                                .path(crate::app::consts::TITLEBAR_ICON_INFO)
-                                .size(scaled(14.0))
-                                .text_color(palette.muted),
-                        )
-                        .on_hover(cx.listener(move |app, hovered: &bool, window, cx| {
-                            app.set_native_sidebar_menu_info_hover(*hovered, window, cx);
-                        }))
-                        .tooltip_show_delay(tooltip_delay)
-                        .tooltip(move |window, cx| {
-                            super::tooltips::sidebar_style_card_tooltip(
-                                info.to_string(),
-                                20.0,
-                                0.0,
-                                window,
-                                cx,
-                            )
-                        }),
+                    self.native_sidebar_menu_info_button(
+                        format!("native-agent-launcher-info-{panel_index}-{item_index}"),
+                        info,
+                        palette.muted,
+                        palette.hover,
+                        scale,
+                        cx,
+                    )
+                    .mr(scaled(8.0)),
                 )
             })
             .when_some(item.get("secondary"), |row, secondary| {
@@ -463,6 +443,45 @@ impl GhostexGpuiApp {
                 )
             })
             .into_any_element()
+    }
+
+    /// A menu row's (i): its `info` text as a real frosted tooltip while the pointer is on it,
+    /// the one tooltip a sidebar menu shows (CDXC:Tooltips 2026-10-17 in menus.rs). Under window
+    /// glass it goes to the frosted tooltip window above the menu's own (frosted_host.rs). A
+    /// click on it stays on it, so the row it sits in does not run.
+    pub(super) fn native_sidebar_menu_info_button(
+        &self,
+        id: String,
+        info: String,
+        color: Hsla,
+        hover: Hsla,
+        scale: f32,
+        cx: &mut gpui::Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
+        let tooltip_delay = self.configured_tooltip_delay();
+        div()
+            .id(id)
+            .role(gpui::Role::Button)
+            .aria_label(info.clone())
+            .flex_shrink_0()
+            .p(px(2.0 * scale))
+            .rounded(px(4.0 * scale))
+            .hover(move |button| button.bg(hover))
+            .child(
+                svg()
+                    .path(crate::app::consts::TITLEBAR_ICON_INFO)
+                    .size(px(14.0 * scale))
+                    .text_color(color),
+            )
+            .on_hover(cx.listener(move |app, hovered: &bool, window, cx| {
+                app.set_native_sidebar_menu_info_hover(*hovered, window, cx);
+            }))
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_click(|_, _, cx| cx.stop_propagation())
+            .tooltip_show_delay(tooltip_delay)
+            .tooltip(move |window, cx| {
+                super::tooltips::sidebar_style_card_tooltip(info.clone(), 20.0, 0.0, window, cx)
+            })
     }
 
     /// Lifts the open menu's tooltip suppression while the pointer is on a row's (i), so its
