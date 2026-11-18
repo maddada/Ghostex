@@ -114,18 +114,74 @@ fn queue() -> DispatchQueue {
         .0
 }
 
+/// File events, so a change names its file (an ignore rule edited) and not only its folder.
+const K_FS_EVENT_STREAM_CREATE_FLAG_FILE_EVENTS: u32 = 0x10;
+/// Event flags that say events were lost or the watched tree moved: always a change.
+const K_FS_EVENT_STREAM_EVENT_FLAGS_LOST: u32 = 0x01 | 0x02 | 0x04 | 0x20 | 0x40 | 0x80;
+
+/// What a stream's callback writes: the flag the reader takes, and the folders whose changes git
+/// never sees.
+///
+/// CDXC:Git 2026-11-18 WHY:
+/// GitHub #666: a build writing into an ignored folder (`target/`, `node_modules/`) raised the
+/// flag like any other write, so a busy project's Git answers were thrown away on almost every
+/// poll and read again with several git processes each time. A change inside a folder git
+/// ignores and that holds no tracked file cannot change any Git answer, so it no longer raises
+/// the flag (`folder_watch::git_ignored_folders` names those folders when the watch starts).
+/// Once an ignore rule may have changed (a `.gitignore` or `info/exclude` written), every change
+/// counts again for the life of the watch, as before.
+struct Signal {
+    changed: AtomicBool,
+    /// Each ignored folder's real path with a trailing `/`.
+    ignored: Vec<Vec<u8>>,
+    filtering_off: AtomicBool,
+}
+
+impl Signal {
+    /// Whether one event can change a Git answer.
+    fn counts(&self, path: &[u8], flags: u32) -> bool {
+        if flags & K_FS_EVENT_STREAM_EVENT_FLAGS_LOST != 0 {
+            return true;
+        }
+        if path.ends_with(b"/.gitignore") || path.ends_with(b"/info/exclude") {
+            self.filtering_off.store(true, Ordering::Release);
+            return true;
+        }
+        self.filtering_off.load(Ordering::Acquire)
+            || !self.ignored.iter().any(|folder| path.starts_with(folder))
+    }
+}
+
 extern "C" fn changed(
     _stream: FSEventStreamRef,
     info: *mut c_void,
     count: usize,
-    _paths: *mut c_void,
-    _flags: *const u32,
+    paths: *mut c_void,
+    flags: *const u32,
     _ids: *const u64,
 ) {
-    if count > 0 {
-        // SAFETY: `info` is the `AtomicBool` the watch keeps alive until its stream is invalidated
-        // and the queue has drained (`Drop`).
-        unsafe { &*(info as *const AtomicBool) }.store(true, Ordering::Release);
+    if count == 0 {
+        return;
+    }
+    // SAFETY: `info` is the `Signal` the watch keeps alive until its stream is invalidated and the
+    // queue has drained (`Drop`).
+    let signal = unsafe { &*(info as *const Signal) };
+    // Every event is looked at (no early stop), so an ignore rule written in the same batch as
+    // another change still turns the filtering off.
+    let counts = (0..count).fold(false, |counts, index| {
+        // SAFETY: without `kFSEventStreamCreateFlagUseCFTypes`, `paths` is an array of `count`
+        // NUL-terminated C strings and `flags` an array of `count` flags, valid for this call.
+        let (path, flags) = unsafe {
+            (
+                std::ffi::CStr::from_ptr(*(paths as *const *const std::ffi::c_char).add(index))
+                    .to_bytes(),
+                *flags.add(index),
+            )
+        };
+        signal.counts(path, flags) || counts
+    });
+    if counts {
+        signal.changed.store(true, Ordering::Release);
     }
 }
 
@@ -134,7 +190,7 @@ extern "C" fn nothing(_: *mut c_void) {}
 /// An FSEvents stream over the folders one answer depends on.
 pub(super) struct FolderWatch {
     stream: FSEventStreamRef,
-    changed: Arc<AtomicBool>,
+    signal: Arc<Signal>,
 }
 
 // SAFETY: the stream is only started, stopped and released through this value, under the cache's lock.
@@ -143,10 +199,37 @@ unsafe impl Send for FolderWatch {}
 impl FolderWatch {
     /// Watches every folder with everything under it, or `None` when there are none or the stream cannot start.
     pub(super) fn new(folders: &[PathBuf]) -> Option<Self> {
+        Self::start(folders, &[], false)
+    }
+
+    /// `new` for a repository's folders: a change inside one of `ignored` (folders git ignores,
+    /// `Signal`) is not one, and a written ignore rule is noticed (`ignore_rules_changed`) even
+    /// when nothing is skipped yet, so a folder ignored later is skipped once the watch restarts.
+    pub(super) fn skipping(folders: &[PathBuf], ignored: &[PathBuf]) -> Option<Self> {
+        Self::start(folders, ignored, true)
+    }
+
+    fn start(folders: &[PathBuf], ignored: &[PathBuf], file_events: bool) -> Option<Self> {
         if folders.is_empty() {
             return None;
         }
-        let changed = Arc::new(AtomicBool::new(false));
+        let signal = Arc::new(Signal {
+            changed: AtomicBool::new(false),
+            ignored: ignored
+                .iter()
+                .map(|folder| {
+                    let mut bytes = folder.as_os_str().as_bytes().to_vec();
+                    bytes.push(b'/');
+                    bytes
+                })
+                .collect(),
+            filtering_off: AtomicBool::new(false),
+        });
+        let create_flags = if file_events {
+            K_FS_EVENT_STREAM_CREATE_FLAG_NO_DEFER | K_FS_EVENT_STREAM_CREATE_FLAG_FILE_EVENTS
+        } else {
+            K_FS_EVENT_STREAM_CREATE_FLAG_NO_DEFER
+        };
         // SAFETY: CoreFoundation objects are created here and released once the stream holds them.
         unsafe {
             // FSEvents reports real paths; a folder reached through a symlink (`/var` is
@@ -187,7 +270,7 @@ impl FolderWatch {
             }
             let context = FSEventStreamContext {
                 version: 0,
-                info: Arc::as_ptr(&changed) as *mut c_void,
+                info: Arc::as_ptr(&signal) as *mut c_void,
                 retain: std::ptr::null(),
                 release: std::ptr::null(),
                 copy_description: std::ptr::null(),
@@ -199,7 +282,7 @@ impl FolderWatch {
                 paths,
                 K_FS_EVENT_STREAM_EVENT_ID_SINCE_NOW,
                 LATENCY,
-                K_FS_EVENT_STREAM_CREATE_FLAG_NO_DEFER,
+                create_flags,
             );
             CFRelease(paths);
             if stream.is_null() {
@@ -211,13 +294,19 @@ impl FolderWatch {
                 FSEventStreamRelease(stream);
                 return None;
             }
-            Some(Self { stream, changed })
+            Some(Self { stream, signal })
         }
     }
 
     /// Whether anything changed since the watch started or since the last call.
     pub(super) fn take_changed(&self) -> bool {
-        self.changed.swap(false, Ordering::AcqRel)
+        self.signal.changed.swap(false, Ordering::AcqRel)
+    }
+
+    /// Whether an ignore rule was written since the watch started, so its skipped folders may be
+    /// out of date (every change counts from then on).
+    pub(super) fn ignore_rules_changed(&self) -> bool {
+        self.signal.filtering_off.load(Ordering::Acquire)
     }
 }
 
@@ -228,7 +317,7 @@ fn changed_callback() -> FSEventStreamCallback {
 impl Drop for FolderWatch {
     fn drop(&mut self) {
         // SAFETY: the stream came from FSEventStreamCreate and is released once. Draining the queue
-        // after invalidating it lets a callback already running finish before `changed` is freed.
+        // after invalidating it lets a callback already running finish before `signal` is freed.
         unsafe {
             FSEventStreamStop(self.stream);
             FSEventStreamInvalidate(self.stream);

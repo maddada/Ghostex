@@ -95,8 +95,13 @@ impl<V: Clone> ChangeGatedCache<V> {
                     outside_repository: true,
                 };
             }
+            // macOS skips the changes git never sees (`folder_watch_macos::Signal`).
+            #[cfg(target_os = "macos")]
+            let watch = FolderWatch::skipping(&folders, &git_ignored_folders(project));
+            #[cfg(not(target_os = "macos"))]
+            let watch = FolderWatch::new(&folders);
             Entry {
-                watch: FolderWatch::new(&folders),
+                watch,
                 answer: None,
                 used: now,
                 watched_at: now,
@@ -108,6 +113,16 @@ impl<V: Clone> ChangeGatedCache<V> {
         let watch = entry.watch.as_ref()?;
         if watch.take_changed() {
             entry.answer = None;
+            // An ignore rule was written: watch again with the rules as they are now, so the
+            // ignored folders it names are skipped again (the answer is read afresh either way).
+            #[cfg(target_os = "macos")]
+            if watch.ignore_rules_changed() && !entry.outside_repository {
+                entry.watch = FolderWatch::skipping(
+                    &watched_folders(project, git),
+                    &git_ignored_folders(project),
+                );
+                entry.watched_at = now;
+            }
         }
         #[cfg(target_os = "macos")]
         if entry.outside_repository
@@ -230,6 +245,84 @@ fn watched_folders(project: &Path, git: GitFolders) -> Vec<PathBuf> {
         }
     }
     Vec::new()
+}
+
+/// Folders builds and package managers write into, asked about even before they exist.
+#[cfg(target_os = "macos")]
+const BUILD_FOLDERS: &[&str] = &[
+    "target",
+    "node_modules",
+    "dist",
+    "build",
+    "out",
+    ".next",
+    ".nuxt",
+    ".turbo",
+    ".cache",
+    ".build",
+    "coverage",
+    "DerivedData",
+    ".gradle",
+    ".venv",
+    "__pycache__",
+];
+
+/// The real paths of `project`'s top-level folders (and `BUILD_FOLDERS`) that git ignores and
+/// that hold no tracked file: nothing written in them changes a Git answer. Empty when git cannot
+/// say, so every change counts, as before. Two git reads, once per watch.
+#[cfg(target_os = "macos")]
+fn git_ignored_folders(project: &Path) -> Vec<PathBuf> {
+    use crate::session_git_status::run_git_probe_command;
+    let Some(cwd) = project.to_str() else {
+        return Vec::new();
+    };
+    let mut names: std::collections::BTreeSet<String> =
+        BUILD_FOLDERS.iter().map(|name| name.to_string()).collect();
+    if let Ok(entries) = std::fs::read_dir(project) {
+        for entry in entries.flatten() {
+            if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                continue;
+            }
+            if let Some(name) = entry.file_name().to_str().filter(|name| *name != ".git") {
+                names.insert(name.to_string());
+            }
+        }
+    }
+    // One name per line (`-z` needs `--stdin`); a name git quotes simply never matches an event.
+    let mut args = vec!["check-ignore".to_string(), "--".to_string()];
+    args.extend(names.iter().map(|name| format!("{name}/")));
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    // Exits 1 when nothing is ignored: no answer, nothing skipped.
+    let Some(ignored) = run_git_probe_command(cwd, &args) else {
+        return Vec::new();
+    };
+    let ignored: Vec<&str> = ignored
+        .lines()
+        .map(|name| name.trim_end_matches('/'))
+        .filter(|name| !name.is_empty() && !name.contains('/'))
+        .collect();
+    if ignored.is_empty() {
+        return Vec::new();
+    }
+    // A folder holding a tracked file (added with `git add -f`) shows its changes in git.
+    let mut args = vec!["ls-files", "-z", "--"];
+    args.extend(ignored.iter().copied());
+    let Some(tracked) = run_git_probe_command(cwd, &args) else {
+        return Vec::new();
+    };
+    let tracked: std::collections::HashSet<&str> = tracked
+        .split('\0')
+        .filter_map(|path| path.split('/').next())
+        .filter(|name| !name.is_empty())
+        .collect();
+    let Ok(root) = std::fs::canonicalize(project) else {
+        return Vec::new();
+    };
+    ignored
+        .into_iter()
+        .filter(|name| !tracked.contains(name))
+        .map(|name| root.join(name))
+        .collect()
 }
 
 /// The folder a one-line Git pointer file names after `prefix`, resolved against `base` when relative.
