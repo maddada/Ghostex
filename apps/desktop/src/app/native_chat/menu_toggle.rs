@@ -37,6 +37,12 @@ impl ChatMenuToggle {
         self.open = None;
     }
 
+    /// The menu about to go up belongs to `trigger`, opened by something other than a press on
+    /// it (a count opening the Work panel's card under the header's button).
+    pub(in crate::app::native_chat) fn arm(&mut self, trigger: &'static str) {
+        self.pending = Some(trigger);
+    }
+
     /// A menu is going up now: it belongs to the trigger the guard armed, if any.
     pub(in crate::app::native_chat) fn note_opened(&mut self) {
         self.open = self.pending.take();

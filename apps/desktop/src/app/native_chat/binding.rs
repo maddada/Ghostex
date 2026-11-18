@@ -126,6 +126,8 @@ impl GhostexGpuiApp {
                             cx.notify();
                         }
                     }
+                    // The main header's or a popup's Work button (the popup redraws from the app).
+                    NativeChatEvent::WorkButton => cx.notify(),
                     // The header leaves the project out while the pill names it.
                     NativeChatEvent::WherePillProject => cx.notify(),
                     NativeChatEvent::ComposerFocused => {

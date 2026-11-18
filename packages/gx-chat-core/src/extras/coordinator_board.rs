@@ -1205,7 +1205,7 @@ pub fn coordinator_board_with(
 #[derive(Clone, Debug, PartialEq)]
 pub struct BoardInputs {
     threads: Stamped<Option<crate::document::SharedValue>>,
-    /// An ordinary session's own work (`work_source::own_work`), compared by value.
+    /// An ordinary session's own work (`work_source::own_work`), by its stamp.
     own_work: Stamped<Option<Value>>,
     panels: Stamped<crate::state::PanelsState>,
     askers: Stamped<Vec<crate::transcript::open_questions::Asker>>,
@@ -1537,6 +1537,14 @@ pub fn show_group(state: &mut ChatState, group: &str) -> Vec<crate::effect::Effe
                 .first()
                 .map(|row| text(row, "key").to_string())
         });
+    // Needs you also counts the chat's own open questions (`question_rows`), which the work
+    // value doesn't hold: the newest is the row it opens at, so the count is never a dead spot.
+    let key = key.or_else(|| {
+        (group == "needs")
+            .then(|| question_rows(state, 0).into_iter().next())
+            .flatten()
+            .map(|row| row.key)
+    });
     let Some(key) = key else {
         return Vec::new();
     };

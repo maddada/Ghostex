@@ -102,6 +102,11 @@ impl NativeChatView {
         cx.notify();
     }
 
+    /// The app wants this chat's panel on screen now (its header button serves this chat).
+    pub(crate) fn session_details_wanted(&self) -> bool {
+        self.session_details.wanted
+    }
+
     /// The panel applies to this chat (the extension is on and the chat knows its agent).
     pub(crate) fn session_details_available(&self) -> bool {
         self.snapshot["sessionDetails"]["enabled"] == true

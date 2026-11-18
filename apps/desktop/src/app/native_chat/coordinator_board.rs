@@ -364,6 +364,8 @@ pub(crate) struct CoordinatorBoardView {
     /// Where the window header's Work button was painted (the app's, set every frame): the
     /// floating card opens under it (work_topic.rs).
     pub(super) header_anchor: Option<std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>>,
+    /// What the header's Work button last showed for this chat (`note_work_button`).
+    pub(super) work_button_shown: Option<(bool, bool, usize)>,
     /// The Topic line being rewritten in place, and what hears its Enter and Escape
     /// (work_topic.rs).
     pub(super) topic_edit: Option<(
@@ -2359,6 +2361,11 @@ impl NativeChatView {
             }
             return;
         }
+        // Like the header's Work button, it docks in place of Session details: that panel's
+        // width doesn't count against docking, and it goes away once Work docks.
+        if self.session_details.wanted {
+            self.session_details.docked = false;
+        }
         if self.board_view() == COLUMNS_VIEW {
             if !self.chat_menu_is_open(BOARD_COLUMNS_TRIGGER) {
                 self.open_board_columns_after_dock(window, cx);
@@ -2366,17 +2373,11 @@ impl NativeChatView {
         } else if self.board_fits(p) {
             self.board.open = true;
             self.work_panel_takes_the_spot(cx);
-        } else if let Some(anchor) = self.work_header_anchor() {
-            // Under the header's Work button, as that button opens it.
-            if !self.chat_menu_is_open(BOARD_TRIGGER) {
-                cx.defer_in(window, move |this, window, cx| {
-                    this.open_work_card_under(anchor, window, cx);
-                });
-            }
         } else if !self.chat_menu_is_open(BOARD_TRIGGER) {
-            let pill = self.pill_bounds.cell(BOARD_MENU).get();
+            // Under the header's Work button, as that button opens it (or the pane's corner).
+            let anchor = self.work_card_anchor();
             cx.defer_in(window, move |this, window, cx| {
-                this.toggle_pill_menu(BOARD_MENU, pill, window, cx);
+                this.open_work_card_under(anchor, window, cx);
             });
         }
     }
@@ -2443,6 +2444,7 @@ impl NativeChatView {
         if menu_lost {
             self.close_board_card_menu(cx);
         }
+        self.note_work_button(cx);
         let fits = self.board_fits(p);
         let docked = self.board.open
             && fits

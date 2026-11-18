@@ -1871,7 +1871,7 @@ pub struct WorkInputs {
     /// (shared, `document::SharedValue`), which hold the `work` the cards were built from.
     threads: u64,
     held_threads: Option<crate::document::SharedValue>,
-    /// An ordinary session's own work (`work_source::own_work`), compared by value.
+    /// An ordinary session's own work (`work_source::own_work`), by its stamp.
     own_work: crate::state::Stamped<Option<Value>>,
     messages: usize,
     last_id: String,

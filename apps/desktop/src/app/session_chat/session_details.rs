@@ -156,9 +156,15 @@ impl GhostexGpuiApp {
         let Some(chat) = self.native_chat_views.get(&session_id).cloned() else {
             return;
         };
-        let opening = !chat.read(cx).work_panel_shown();
+        let (opening, details_shown) = {
+            let chat = chat.read(cx);
+            (!chat.work_panel_shown(), chat.session_details_wanted())
+        };
         let key = self.session_details_chat_key(session_id);
+        // Only a panel on screen for this chat makes way: a saved choice for a chat the header
+        // doesn't show it for (a popup's) stays as it is.
         let details_put_away = opening
+            && details_shown
             && key
                 .as_ref()
                 .is_some_and(|key| self.session_details.choices.is_open(key));
@@ -239,12 +245,17 @@ impl GhostexGpuiApp {
             .flatten()
             .map(|chat| chat.entity_id());
         let anchor = self.session_details.button_bounds.clone();
+        // The header's Work button serves the chat its Session details button does.
+        let work_target = self
+            .session_details_target_chat()
+            .map(|chat| chat.entity_id());
         let work_anchor = self.session_details.work_button_bounds.clone();
         for chat in self.native_chat_views.values() {
             let wanted = target == Some(chat.entity_id());
+            let served = work_target == Some(chat.entity_id());
             chat.update(cx, |chat, cx| {
                 chat.set_session_details_wanted(wanted, Some(anchor.clone()), cx);
-                chat.set_work_header_anchor(work_anchor.clone());
+                chat.set_work_header_anchor(served.then(|| work_anchor.clone()));
             });
         }
     }

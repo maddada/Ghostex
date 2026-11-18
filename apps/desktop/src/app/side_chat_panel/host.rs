@@ -143,7 +143,9 @@ impl GhostexGpuiApp {
                     NativeChatEvent::DraftState(_) => {}
                     // The header names a pane's chat, never the side panel's.
                     NativeChatEvent::WherePillProject => {}
-                    NativeChatEvent::SessionDetailsRing => cx.notify(),
+                    NativeChatEvent::SessionDetailsRing | NativeChatEvent::WorkButton => {
+                        cx.notify()
+                    }
                     NativeChatEvent::Host(message) => {
                         let message = message.clone();
                         // In the side chat's own window (CDXC:SessionChat 2026-11-11 on

@@ -270,6 +270,12 @@ impl NativeChatView {
             .chain(this.note_input.iter())
             .chain(this.form_inputs.values().map(|entry| &entry.input))
             .any(|input| input.read(cx).focus_handle(cx).is_focused(window))
+            // The Work panel's Topic field (work_topic.rs): its digits never answer a card.
+            || this
+                .board
+                .topic_edit
+                .iter()
+                .any(|(input, _)| input.read(cx).focus_handle(cx).is_focused(window))
         {
             cx.propagate();
             return;

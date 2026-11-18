@@ -524,7 +524,7 @@ impl Render for GhostexGpuiApp {
             let work_anchor = self.work_button_bounds.clone();
             view.update(cx, |view, cx| {
                 view.set_session_details_wanted(wanted, Some(anchor.clone()), cx);
-                view.set_work_header_anchor(work_anchor);
+                view.set_work_header_anchor(Some(work_anchor));
             });
         }
         let header = self.render_workarea_header(cx);

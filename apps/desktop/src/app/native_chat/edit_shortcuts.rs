@@ -330,6 +330,7 @@ impl NativeChatView {
                     .iter()
                     .chain(self.files_links_input.iter())
                     .chain(self.secret_fields())
+                    .chain(self.board.topic_edit.iter().map(|(input, _)| input))
                     .chain(
                         self.terminal_picker_input
                             .iter()

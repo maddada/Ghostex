@@ -207,6 +207,20 @@ impl NativeChatView {
             .sum::<u64>() as usize
     }
 
+    /// Tells the app when what the header's Work button shows for this chat changed
+    /// (`NativeChatEvent::WorkButton`); checked every frame, cheap.
+    pub(super) fn note_work_button(&mut self, cx: &mut Context<Self>) {
+        let now = (
+            self.work_panel_available(),
+            self.work_panel_shown(),
+            self.work_panel_waiting(),
+        );
+        if self.board.work_button_shown != Some(now) {
+            self.board.work_button_shown = Some(now);
+            cx.emit(super::state::NativeChatEvent::WorkButton);
+        }
+    }
+
     /// The Work panel is on screen: docked, floating, or as columns.
     pub(crate) fn work_panel_shown(&self) -> bool {
         self.coordinator_board_docked()
@@ -243,11 +257,28 @@ impl NativeChatView {
     }
 
     /// The app's say: where its header's Work button is painted, for the floating card.
+    /// `None` for a chat the main header's button doesn't serve (another split pane's, a popup
+    /// window's): its card opens at the pane's top-right corner (`work_card_anchor`).
     pub(crate) fn set_work_header_anchor(
         &mut self,
-        anchor: std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>,
+        anchor: Option<std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>>,
     ) {
-        self.board.header_anchor = Some(anchor);
+        self.board.header_anchor = anchor;
+    }
+
+    /// Where the floating card opens when the panel can't dock: under the header's Work button
+    /// while it serves this chat, else at the pane's top-right corner, as Session details' does.
+    pub(super) fn work_card_anchor(&self) -> Bounds<Pixels> {
+        self.work_header_anchor().unwrap_or_else(|| {
+            let pane = self.bounds.get();
+            Bounds::new(
+                gpui::point(
+                    pane.origin.x + pane.size.width - gpui::px(8.0),
+                    pane.origin.y,
+                ),
+                gpui::size(gpui::px(0.0), gpui::px(0.0)),
+            )
+        })
     }
 
     /// The header's Work button's bounds, while it has been painted.
@@ -272,6 +303,8 @@ impl NativeChatView {
             return;
         };
         self.menu_side = Some(super::option_menu::MenuSide::Right);
+        // Owned by the Work trigger, so its pressed look and a second press read it as open.
+        self.menu_toggle.arm(trigger);
         self.show_chat_menu(
             vec![
                 json!({"pillMenu": {"id": super::coordinator_board::BOARD_MENU, "height": height}}),

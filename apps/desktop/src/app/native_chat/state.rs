@@ -90,6 +90,10 @@ pub(crate) enum NativeChatEvent {
     /// context percentage moved. The app draws the header and does not redraw for the chat's own
     /// changes, so without this the ring showed whatever the last unrelated redraw caught.
     SessionDetailsRing,
+    /// What the header's Work button shows for this chat changed: whether it has a Work panel,
+    /// whether the panel is shown, how many wait on the user (native_chat/work_topic.rs). The app
+    /// and a popup window draw that button and don't redraw for the chat's own changes.
+    WorkButton,
     /// The where pill started or stopped showing the project (`where_pill_shows_project`). The app
     /// draws the header, which leaves the project out of its breadcrumb meanwhile.
     WherePillProject,

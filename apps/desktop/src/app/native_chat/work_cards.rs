@@ -913,26 +913,30 @@ impl NativeChatView {
                     _ => "In progress",
                 };
                 // A count opens the Work panel at its group, as the header's Work button opens it
-                // (docked where there is room, else under that button).
+                // (docked where there is room, else under that button); only a chat with a Work
+                // panel has one to open.
+                let opens = board.is_object();
                 div()
                     .id(gpui::SharedString::from(format!("work-dock-count:{group}")))
                     .flex()
                     .items_center()
                     .gap(px(5.0 * s))
                     .flex_shrink_0()
-                    .role(gpui::Role::Button)
-                    .aria_label(tip)
-                    .chat_cursor_pointer()
                     .tooltip(move |window, cx| {
                         gpui_component::tooltip::Tooltip::new(tip).build(window, cx)
                     })
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        this.invoke(
-                            json!({"type": "showCoordinatorBoardGroup", "group": group}),
-                            cx,
-                        );
-                    }))
+                    .when(opens, |mark| {
+                        mark.role(gpui::Role::Button)
+                            .aria_label(tip)
+                            .chat_cursor_pointer()
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                cx.stop_propagation();
+                                this.invoke(
+                                    json!({"type": "showCoordinatorBoardGroup", "group": group}),
+                                    cx,
+                                );
+                            }))
+                    })
                     .child(
                         svg()
                             .path(icon)
