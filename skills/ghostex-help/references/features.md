@@ -2084,16 +2084,16 @@ in Bypass as soon as it has finished what it is doing (at once if it is idle), o
 the same conversation, and that chat keeps starting in Bypass from then on. While it
 waits, the Mode button says "Bypass when idle"; turn the switch off to cancel. Only
 that chat changes, and only you can turn it on (agents can't). From the CLI:
-`ghostex select-session-chat-model <session> --mode bypass|auto|manual|accept-edits|plan`.
+`ghostex select-session-chat-model <session> --mode bypass|auto|manual|accept-edits|plan --defer`.
 Codex chats have a Mode button too, for what Codex is allowed to do: Ask for
 approval (it asks before editing outside the project or using the
 internet), Approve for me (an automatic reviewer approves safe actions and only
 unsafe ones come to you), Full Access (no approvals at all) or Read Only. The
 check follows the mode Codex is in, also when you change it with `/permissions`
-in the terminal, and a pick applies to the running session right away, even
-while Codex is working. A session started with Agent approvals set to accept all
+in the terminal, and a pick applies to the running session as soon as Codex
+finishes what it is doing (at once if it is idle). A session started with Agent approvals set to accept all
 starts in Full Access. Plan mode stays in the options menu. From the CLI:
-`ghostex select-session-chat-model <session> --permissions ask-for-approval|approve-for-me|full-access|read-only`.
+`ghostex select-session-chat-model <session> --permissions ask-for-approval|approve-for-me|full-access|read-only --defer`.
 `/resume` works from the chat. In Claude Code and Codex chats it opens a Resume a
 conversation card listing the agent's own conversations: type to search, Up and
 Down move, Enter resumes the highlighted one, Escape cancels, or click a row (tap it
@@ -2161,7 +2161,7 @@ Antigravity is really in. The context meter shows how many tokens Antigravity's
 latest step filled; Antigravity does not report its window size, so the meter
 shows no percentage. Commands: `ghostex send-session-chat-message`,
 `ghostex answer-session-chat-prompt`,
-`ghostex select-session-chat-model <session> --mode default|accept-edits|auto|plan`.
+`ghostex select-session-chat-model <session> --mode default|accept-edits|auto|plan --defer`.
 Sending a message to a sleeping session wakes it. While the agent is still
 starting, the message shows in the chat right away and is typed in as soon as
 the agent's input box appears. It keeps waiting for as long as the session is
