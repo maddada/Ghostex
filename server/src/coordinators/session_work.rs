@@ -219,9 +219,17 @@ pub(super) fn extension_on_cached() -> bool {
 /// This computer's sessions that are threads of a coordinator on another computer
 /// (`REMOTE_COORDINATOR_THREAD_KEY`): their coordinator keeps their work. Read again once a minute,
 /// not every tick (a thread linked since is refused by `require_session_work` meanwhile).
+static REMOTE_THREADS: Mutex<Option<(std::time::Instant, Vec<SessionKey>)>> = Mutex::new(None);
+
+/// A session was just made a remote coordinator's thread: the next tick reads them again.
+pub fn forget_remote_threads() {
+    if let Ok(mut read) = REMOTE_THREADS.lock() {
+        *read = None;
+    }
+}
+
 fn remote_threads(db: &Connection) -> Vec<SessionKey> {
-    static READ: Mutex<Option<(std::time::Instant, Vec<SessionKey>)>> = Mutex::new(None);
-    let Ok(mut read) = READ.lock() else {
+    let Ok(mut read) = REMOTE_THREADS.lock() else {
         return read_remote_threads(db);
     };
     if let Some((at, keys)) = read.as_ref() {

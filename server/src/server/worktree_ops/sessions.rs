@@ -293,6 +293,10 @@ pub(crate) fn normalize_worktree_session_create_request(
             .filter(|value| !value.is_empty())
         {
             runtime_settings.insert(key.to_string(), json!(value));
+            // A new thread of a remote coordinator keeps no Work panel of its own, from now.
+            if key == crate::coordinators::REMOTE_COORDINATOR_THREAD_KEY {
+                crate::coordinators::forget_remote_threads();
+            }
         }
     }
     if !runtime_settings.is_empty() {

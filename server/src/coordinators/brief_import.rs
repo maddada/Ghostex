@@ -217,8 +217,10 @@ pub(super) fn import_briefs_once(db: &Connection) {
     if !converting.is_file() && std::fs::rename(&store, &converting).is_err() {
         return;
     }
+    // Put back for a later tick to try again.
     let put_back = || {
         let _ = std::fs::rename(&converting, &store);
+        LOOKED.store(false, Ordering::Relaxed);
     };
     // An earlier start committed this file's items and stopped before renaming it.
     let committed: Option<String> = db
@@ -246,7 +248,8 @@ pub(super) fn import_briefs_once(db: &Connection) {
         .ok()
         .and_then(|text| serde_json::from_str::<Value>(&text).ok())
     else {
-        put_back();
+        // Not a brief store it can read: put back, and not tried again until the next start.
+        let _ = std::fs::rename(&converting, &store);
         return;
     };
     // Every item and Topic in one immediate transaction (it holds the write lock from the

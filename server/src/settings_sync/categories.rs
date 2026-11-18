@@ -294,6 +294,7 @@ impl Engine<'_> {
                 continue;
             }
             let (current, _) = self.category_values(prefix)?;
+            let extension_skills = super::lists_bridge::extension_skill_names(self.state);
             let wanted: Vec<(String, Option<Value>, String)> = self
                 .store
                 .entries
@@ -301,6 +302,11 @@ impl Engine<'_> {
                 .filter(|entry| key_category(&entry.key) == prefix && value_key(prefix, &entry.key))
                 .filter(|entry| current.get(&entry.key) != entry.value.as_ref())
                 .filter(|entry| !self.playbook_entry_ignored(entry, &current))
+                // An extension's skill is never written from another computer
+                // (lists_bridge.rs), so it is not logged as a change either.
+                .filter(|entry| {
+                    !super::lists_bridge::is_extension_skill_key(&entry.key, &extension_skills)
+                })
                 .map(|entry| {
                     (
                         entry.key.clone(),

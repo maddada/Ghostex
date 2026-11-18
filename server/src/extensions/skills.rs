@@ -77,6 +77,26 @@ fn owned_by(skill_dir: &Path, extension_id: &str) -> bool {
             .is_ok_and(|owner| owner.trim() == extension_id)
 }
 
+/// Whether `entry` is a link whose target is `canonical`, whether or not that target exists now.
+fn links_to(entry: &Path, canonical: &Path) -> bool {
+    let Ok(target) = fs::read_link(entry) else {
+        return false;
+    };
+    let target = match entry.parent() {
+        Some(parent) if target.is_relative() => parent.join(target),
+        _ => target,
+    };
+    let same_folder = |a: &Path, b: &Path| match (fs::canonicalize(a), fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a == b,
+    };
+    target.file_name() == canonical.file_name()
+        && match (target.parent(), canonical.parent()) {
+            (Some(a), Some(b)) => same_folder(a, b),
+            _ => false,
+        }
+}
+
 /// Why the skill can't go in without replacing someone else's, or `None` when it can.
 fn clash(home: &Path, extension_id: &str, name: &str) -> Option<String> {
     if GHOSTEX_AGENT_SKILL_NAMES.contains(&name)
@@ -98,7 +118,11 @@ fn clash(home: &Path, extension_id: &str, name: &str) -> Option<String> {
         }
         let points_at_ours =
             ours && canonical_real.is_some() && fs::canonicalize(&entry).ok() == canonical_real;
-        if !points_at_ours {
+        // A link Ghostex made from an agent's folder to the canonical copy (`~/.claude/skills/<name>`
+        // -> `~/.agents/skills/<name>`) stays ours while that copy is gone (the extension was
+        // off): putting the copy back makes it whole again.
+        let ours_or_missing = ours || fs::symlink_metadata(&canonical).is_err();
+        if !points_at_ours && !(ours_or_missing && links_to(&entry, &canonical)) {
             return Some(format!("Your agents already have a skill named {name}."));
         }
     }
