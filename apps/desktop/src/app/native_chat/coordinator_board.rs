@@ -252,6 +252,54 @@ fn expanded_card_height(row: &Value) -> f32 {
     20.0 + lines(&text(row, "title")) * 20.0 + detail + body + 28.0 + 32.0
 }
 
+/// A card's ⋯ and right-click menu: the core's `menu` (Open, Mention in chat, Tags, Mark done,
+/// Drop), and on a Needs you card its dock row's own actions after Open and Mention: Show in chat,
+/// Mark answered, Dismiss (or Mark as read) and Snooze, which opens its choices
+/// (`board_snooze_choices`). They are added here, not in the core's shared `menu`, because the
+/// phone already adds them from the card's `actions` (workItemParts.tsx `workMenuRows`).
+///
+/// CDXC:Coordinators 2026-11-19 DECISION:
+/// A Needs you card no longer opens in place (`board_dock_card`), so its menu is where these
+/// actions live on the desktop, as they do in the dock row's ⋯.
+fn board_menu_entries(row: &Value) -> Vec<Value> {
+    let mut entries = row["menu"].as_array().cloned().unwrap_or_default();
+    let dock = &row["dock"];
+    if !dock.is_object() {
+        return entries;
+    }
+    let mut extra = Vec::new();
+    if dock["showInChat"].is_object() {
+        extra.push(
+            json!({"label": "Show in chat", "icon": "message", "command": dock["showInChat"]}),
+        );
+    }
+    if dock["markAnswered"].is_object() {
+        extra.push(json!({"label": "Mark answered", "icon": "circle-check", "command": dock["markAnswered"]}));
+    }
+    if dock["dismiss"].is_object() {
+        let label = dock["dismissLabel"].as_str().unwrap_or("Dismiss");
+        extra.push(json!({"label": label, "icon": "x", "command": dock["dismiss"]}));
+    }
+    if dock["snooze"]
+        .as_array()
+        .is_some_and(|choices| !choices.is_empty())
+    {
+        extra.push(json!({"label": "Snooze", "icon": "clock", "submenu": "snooze"}));
+    }
+    // After Open and Mention in chat, before Tags, Mark done and Drop.
+    let at = entries
+        .iter()
+        .position(|entry| {
+            !matches!(
+                entry["command"]["type"].as_str(),
+                Some("insertBoardReference")
+            ) && text(entry, "label") != text(row, "openLabel")
+        })
+        .unwrap_or(entries.len());
+    entries.splice(at..at, extra);
+    entries
+}
+
 /// A card's Snooze choices: its opened card's (`actions.snooze`), else its dock row's (a Needs you
 /// card's menu, gx-chat-core `card_menu`).
 fn board_snooze_choices(row: &Value) -> Vec<Value> {
@@ -1242,7 +1290,7 @@ impl NativeChatView {
         let toggle = row["toggle"].clone();
         let reference = text(row, "reference");
         let clickable = command.is_object() || toggle.is_object();
-        let has_menu = row["menu"].as_array().is_some_and(|menu| !menu.is_empty());
+        let has_menu = !board_menu_entries(row).is_empty();
         let hover_group = gpui::SharedString::from(format!("chat-board-card-hover:{key}"));
         let age = text(row, "age");
         let age_width = age.chars().count() as f32 * CHIP_CHAR * 0.95 + 4.0;
@@ -1643,7 +1691,7 @@ impl NativeChatView {
     ) -> gpui::Div {
         let s = p.scale;
         let key = text(row, "key");
-        let has_menu = row["menu"].as_array().is_some_and(|menu| !menu.is_empty());
+        let has_menu = !board_menu_entries(row).is_empty();
         div()
             .relative()
             .flex_shrink_0()
@@ -1697,7 +1745,7 @@ impl NativeChatView {
         let key = text(row, "key");
         let title = text(row, "title");
         let focus = self.board.focus.as_ref().filter(|focus| focus.key == key);
-        let has_menu = row["menu"].as_array().is_some_and(|menu| !menu.is_empty());
+        let has_menu = !board_menu_entries(row).is_empty();
         let hover_group = gpui::SharedString::from(format!("chat-board-card-hover:{key}"));
         let relayed = Some(text(&row["openThread"], "sessionId"))
             .filter(|session| !session.is_empty())
@@ -2073,7 +2121,7 @@ impl NativeChatView {
             let untag = usize::from(!text(&row, "tag").is_empty());
             (1 + untag + options) as f32 * SIDEBAR_MENU_ROW_HEIGHT + SIDEBAR_MENU_SEPARATOR_HEIGHT
         } else {
-            row["menu"].as_array().map_or(0, Vec::len) as f32 * SIDEBAR_MENU_ROW_HEIGHT
+            board_menu_entries(&row).len() as f32 * SIDEBAR_MENU_ROW_HEIGHT
         };
         let width = if menu.snooze {
             BOARD_SNOOZE_MENU_WIDTH
@@ -2392,7 +2440,7 @@ impl NativeChatView {
             }
         } else {
             let agent_icon = text(&row, "agentIcon");
-            for entry in row["menu"].as_array().cloned().unwrap_or_default() {
+            for entry in board_menu_entries(&row) {
                 let label = text(&entry, "label");
                 let icon = match text(&entry, "icon").as_str() {
                     "agent" => format!("agent-icons/{agent_icon}.svg"),

@@ -88,8 +88,7 @@ pub struct BoardMenuItem {
     /// What picking it sends, `null` for `Tags`, which lists the board's `tagOptions` instead.
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub command: Value,
-    /// `tags` for the row that opens the tag list, `snooze` for a Needs you card's Snooze (its dock
-    /// row's `snooze` choices), "" otherwise.
+    /// `tags` for the row that opens the tag list, "" otherwise.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub submenu: String,
     /// Remove: drawn in the destructive red where the platform does.
@@ -736,48 +735,6 @@ fn card_menu(row: &BoardRow, work: bool) -> Vec<BoardMenuItem> {
             label: "Mention in chat".to_string(),
             icon: "message-plus".to_string(),
             command: json!({"type": "insertBoardReference", "reference": row.reference}),
-            ..BoardMenuItem::default()
-        });
-    }
-    // A Needs you card's dock row's own actions (`BoardRow::dock`, work_cards.rs `dock_with`):
-    // Show in chat, Mark answered, Dismiss (or Mark as read) and Snooze, as its ⋯ in the dock
-    // offers them, since the card no longer opens in place to show them as buttons.
-    let dock = &row.dock;
-    if dock["showInChat"].is_object() {
-        menu.push(BoardMenuItem {
-            label: "Show in chat".to_string(),
-            icon: "message".to_string(),
-            command: dock["showInChat"].clone(),
-            ..BoardMenuItem::default()
-        });
-    }
-    if dock["markAnswered"].is_object() {
-        menu.push(BoardMenuItem {
-            label: "Mark answered".to_string(),
-            icon: "circle-check".to_string(),
-            command: dock["markAnswered"].clone(),
-            ..BoardMenuItem::default()
-        });
-    }
-    if dock["dismiss"].is_object() {
-        menu.push(BoardMenuItem {
-            label: dock["dismissLabel"]
-                .as_str()
-                .unwrap_or("Dismiss")
-                .to_string(),
-            icon: "x".to_string(),
-            command: dock["dismiss"].clone(),
-            ..BoardMenuItem::default()
-        });
-    }
-    if dock["snooze"]
-        .as_array()
-        .is_some_and(|choices| !choices.is_empty())
-    {
-        menu.push(BoardMenuItem {
-            label: "Snooze".to_string(),
-            icon: "clock".to_string(),
-            submenu: "snooze".to_string(),
             ..BoardMenuItem::default()
         });
     }
