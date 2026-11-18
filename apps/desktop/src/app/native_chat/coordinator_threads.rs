@@ -35,11 +35,19 @@ const GROUP_HEIGHT: f32 = 22.0;
 const FOLD_HEIGHT: f32 = 26.0;
 /// The quiet line when nothing is listed.
 const EMPTY_HEIGHT: f32 = 28.0;
-/// A row: its title line, then its work item's Now line and its stats line when it has them
-/// (gx-chat-core `nowLine` and `stats`, CDXC:Coordinators 2026-11-18 on `RowStat`), inside its
-/// padding.
+/// A row: its title line, then its stats line (gx-chat-core `stats`, CDXC:Coordinators 2026-11-18
+/// on `RowStat`), inside its padding. Always those two lines: its work item's Now line (`nowLine`)
+/// shows only in the card its hover opens.
+///
+/// CDXC:Coordinators 2026-11-18 DECISION:
+/// User, of the rows with a Now line under the title: "pls make the description line appear when
+/// hovering on each worker. i want all workers to be 2 lines always." Every row, running or
+/// finished, is its title line and its stats line; hovering the row shows the frosted card the
+/// work item refs use, headed by the row's title, with the Now line under it (and the computer of
+/// a worker on another computer). A row with no Now line has no card. The phone's sheet follows
+/// (AgentPanels.tsx: the Now line on a long press). Supersedes the Now line as the row's second
+/// line from earlier the same day.
 const TITLE_LINE: f32 = 20.0;
-const NOW_LINE: f32 = 18.0;
 const STATS_LINE: f32 = 18.0;
 const ROW_PAD_TOP: f32 = 4.0;
 const ROW_PAD_BOTTOM: f32 = 5.0;
@@ -96,20 +104,9 @@ fn entries(panel: &Value) -> Vec<Entry<'_>> {
     list
 }
 
-fn has_stats(row: &Value) -> bool {
-    row["stats"]
-        .as_array()
-        .is_some_and(|stats| !stats.is_empty())
-}
-
-fn row_height(row: &Value) -> f32 {
-    let now = if text(row, "nowLine").is_empty() {
-        0.0
-    } else {
-        NOW_LINE
-    };
-    let stats = if has_stats(row) { STATS_LINE } else { 0.0 };
-    ROW_PAD_TOP + TITLE_LINE + now + stats + ROW_PAD_BOTTOM
+/// Every row is two lines; one from an older core with no stats keeps its second line empty.
+fn row_height(_row: &Value) -> f32 {
+    ROW_PAD_TOP + TITLE_LINE + STATS_LINE + ROW_PAD_BOTTOM
 }
 
 /// The icon of a stats piece: the phase's, or the Quiet View lines' for the counts
@@ -376,13 +373,17 @@ impl NativeChatView {
         let branch = text(row, "branch");
         let age = age_label(&text(row, "activeAt"));
         // A worker on another computer than the coordinator's: its server, which the click opens
-        // it on, and its name, which the tooltip says (the title shows the computer's icon).
+        // it on, and its name, which the hover card says (the title shows the computer's icon).
         let computer = text(row, "computer");
-        let tooltip = [title.as_str(), computer.as_str(), branch.as_str()]
-            .into_iter()
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n");
+        // The hover card: the title as its heading, then the Now line (and the computer); none
+        // without a Now line.
+        let card = (!now_line.is_empty()).then(|| {
+            [title.as_str(), now_line.as_str(), computer.as_str()]
+                .into_iter()
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n")
+        });
         let command = json!({
             "type": "openCoordinatorThread",
             "serverId": row["serverId"],
@@ -407,9 +408,6 @@ impl NativeChatView {
             .gap(px(6.0 * s))
             .min_w_0()
             .h(px(TITLE_LINE * s))
-            .tooltip(move |window, cx| {
-                gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
-            })
             .child(
                 gpui::svg()
                     .path(icon)
@@ -495,19 +493,19 @@ impl NativeChatView {
                     .flex_1()
                     .min_w_0()
                     .child(title_line)
-                    .when(!now_line.is_empty(), |column| {
-                        column.child(
-                            div()
-                                .min_w_0()
-                                .h(px(NOW_LINE * s))
-                                .line_height(px(NOW_LINE * s))
-                                .truncate()
-                                .text_color(p.card_muted)
-                                .child(now_line),
-                        )
-                    })
-                    .when(has_stats(row), |column| column.child(stats_line(row, p))),
+                    .child(stats_line(row, p)),
             )
+            .when_some(card, |row, card| {
+                row.tooltip(move |window, cx| {
+                    crate::app::native_sidebar::tooltips::sidebar_style_card_tooltip(
+                        card.clone(),
+                        0.0,
+                        0.0,
+                        window,
+                        cx,
+                    )
+                })
+            })
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.invoke(command.clone(), cx);
                 this.close_pill_menu(cx);
@@ -699,9 +697,9 @@ mod tests {
             shape(&open),
             ["Running 1", "a", "Needs you 1", "b", "fold", "c"]
         );
-        // The open list adds the finished row (its Now and stats lines) and the footer.
+        // The open list adds the finished row (its two lines) and the footer.
         let grown = threads_menu_height(&open) - threads_menu_height(&folded);
-        assert_eq!(grown, 2.0 + (4.0 + 20.0 + 18.0 + 18.0 + 5.0) + 4.0 + 26.0);
+        assert_eq!(grown, 2.0 + (4.0 + 20.0 + 18.0 + 5.0) + 4.0 + 26.0);
         let quiet = json!({"rows": [], "emptyLabel": "No workers working"});
         assert_eq!(shape(&quiet), ["empty"]);
     }

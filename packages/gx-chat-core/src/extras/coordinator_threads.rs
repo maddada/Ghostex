@@ -68,12 +68,14 @@ pub struct CoordinatorThreadRow {
     /// Its last activity (ISO), which the desktop popover shows as "4m" at the row's right.
     #[serde(default)]
     pub active_at: String,
-    /// The second line of its Workers row: where its first work item stands, as the coordinator
-    /// last set it (`item now`), in plain words ([`plain_preview`]); "" for a thread on no item or
-    /// an item with none. Set by [`attach_items`].
+    /// What its Workers row's hover card says (a long press on the phone): where its first work
+    /// item stands, as the coordinator last set it (`item now`), in plain words
+    /// ([`plain_preview`]); "" for a thread on no item or an item with none, which has no card. Set
+    /// by [`attach_items`]. It took a line of the row until the user's "i want all workers to be 2
+    /// lines always" (CDXC:Coordinators 2026-11-18 in the desktop's coordinator_threads.rs).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub now_line: String,
-    /// The third line of its Workers row ([`row_stats`]): first its phase (what its newest tool
+    /// The second line of its Workers row ([`row_stats`]): first its phase (what its newest tool
     /// call is doing, what it waits on, or how it ended), then its turn's tool calls and changed
     /// files. Each `kind` is a phase key or `tools` / `files`, which the renderers draw an icon for.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -99,7 +101,8 @@ pub struct CoordinatorThreadRow {
 /// there is one ([`attach_items`]), then this stats line ([`row_stats`]); gxserver stopped sending
 /// the report preview (`preview`) the popover drew, and works out the phase and the counts from
 /// the thread's whole newest turn (server/src/coordinators/turn_work.rs, `turnWork` on the row).
-/// Supersedes Q3215's two lines of the report.
+/// Supersedes Q3215's two lines of the report. Later the same day the Now line left the row for
+/// its hover card, so every row is two lines (`now_line`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct RowStat {
     pub kind: String,
@@ -396,7 +399,7 @@ fn attach_items(rows: &mut [CoordinatorThreadRow], work: Option<&Value>) {
         } else {
             String::new()
         };
-        // Its Workers row's second line: where its newest open item stands (the open ones sort
+        // Its Workers row's hover card: where its newest open item stands (the open ones sort
         // first), in plain words.
         row.now_line = on
             .iter()
