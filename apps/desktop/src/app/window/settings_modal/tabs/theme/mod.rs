@@ -1,9 +1,11 @@
-//! The Theme page (packages/core-ui/settings-modal/tabs/theme.tsx (deleted 2026-10-01) and theme-simple-controls.tsx (deleted 2026-10-01)):
-//! Colours, Transparency, Chat and terminal, and the links to related rows on General. Its rows
-//! are the General catalog's `theming` section, so the same search finds them.
+//! The rail's Interface pages (packages/core-ui/settings-modal/tabs/theme.tsx (deleted 2026-10-01) and theme-simple-controls.tsx (deleted 2026-10-01)):
+//! Themes (Themes, Colours, Glass, Chat colours, Fine-tune colours, Terminal colours), Text & Fonts,
+//! Size & Zoom and Window & Layout, one view drawing the page it was made for. Each page's rows are
+//! one General catalog section (`theming`, `textFonts`, `sizeZoom`, `windowLayout`), so the same
+//! search finds them.
 //!
 //! CDXC:Theming 2026-10-16 DECISION:
-//! User: "doesn't look so good … can we please make this look nicer? … don't copy everything", then picked direction A (Calm rows) of the mockups in docs/2026-10-16/theme-page. Supersedes the 2026-09-25 layout. The Theme page's rows carry an icon tile (this page only; other pages keep their rows). Appearance is three preview cards (System, Light, Dark). Each group is one card whose rare rows fold under a More row: Colours (Dark mode colour and Light mode colour as two rows of squares, Colourfulness; More: the sidebar and work area set apart, the active pane outline), Transparency (one Off / Dark only / Always control replacing Enable transparency and Use transparency, Strength, Blur, Behind the glass with its pictures or Live gallery; More: picture position, Live speed and brightness, play only when plugged in, the four tints, menu blur) and Chat and terminal (the two themes; More: the terminal palettes), then Related on General. The three-way choices keep the existing row control ("same as what we have now dont change this") and Blur stays as it was ("dont change this"). Custom colour is a "+" square after the squares that opens the Pick Color dialog right at it; no rows open under the colour row (2026-10-17, User: "very bad to have the same colors twice here why??? pls fix no need for these 2 rows that appear when i click on the + option in the colors pls"). The custom colour's depth has no control of its own: Colourfulness sets it (2026-10-17, the user's pick: "Remove it: Colourfulness alone sets how deep the custom colour is"). The squares are "smaller and simpler": 20px, one flat colour, today's ring drawn thinner. A search hit inside a group's More opens it.
+//! User: "doesn't look so good … can we please make this look nicer? … don't copy everything", then picked direction A (Calm rows) of the mockups in docs/2026-10-16/theme-page. Supersedes the 2026-09-25 layout. The Theme page's rows carry an icon tile (this page only; other pages keep their rows). Appearance is three preview cards (System, Light, Dark). Each group is one card whose rare rows fold under a More row: Colours (Dark mode colour and Light mode colour as two rows of squares, Colourfulness; More: the sidebar and work area set apart, the active pane outline), Transparency (one Off / Dark only / Always control replacing Enable transparency and Use transparency, Strength, Blur, Behind the glass with its pictures or Live gallery; More: picture position, Live speed and brightness, play only when plugged in, the four tints, menu blur) and Chat and terminal (the two themes; More: the terminal palettes), then Related on General. The three-way choices keep the existing row control ("same as what we have now dont change this") and Blur stays as it was ("dont change this"). Custom colour is a "+" square after the squares that opens the Pick Color dialog right at it; no rows open under the colour row (2026-10-17, User: "very bad to have the same colors twice here why??? pls fix no need for these 2 rows that appear when i click on the + option in the colors pls"). The custom colour's depth has no control of its own: Colourfulness sets it (2026-10-17, the user's pick: "Remove it: Colourfulness alone sets how deep the custom colour is"). The squares are "smaller and simpler": 20px, one flat colour, today's ring drawn thinner. A search hit inside a group's More opens it. The page itself is split into four since 2026-11-18 (CDXC:Settings in model.rs): Appearance and the presets lead Themes, the active pane outline moved to Window & Layout, the terminal palettes show without a More row, Theme colours is Fine-tune colours with every row under its More row, and Related on General is gone (its two links sit in Size & Zoom and Terminal colours).
 mod art;
 mod chat_colours;
 mod chat_preview;
@@ -23,9 +25,8 @@ use super::super::super::native_modal_kit::*;
 use super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::fields::{
     ButtonVariant, DropdownState, FieldStates, RowSpec, SettingsPage, SliderSaver,
-    advanced_fold_header, open_tint_picker, reset_key, searchable_select_field, select_field,
-    setting_row, settings_button, settings_section, toggle_field, toggle_field_with,
-    trigger_tint_picker,
+    open_tint_picker, reset_key, searchable_select_field, select_field, setting_row,
+    settings_button, settings_section, toggle_field, toggle_field_with, trigger_tint_picker,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -38,9 +39,9 @@ use colours::{
     preset_label, preset_options, preview_colours, preview_scheme_dark, swatch_paint,
 };
 use controls::{
-    ICON_APPEARANCE, ICON_CHAT, ICON_COLOURFULNESS, ICON_DARK, ICON_FONT, ICON_LIGHT, ICON_SIDEBAR,
-    ICON_TERMINAL, SWATCH_GAP, appearance_card, colourfulness_preview, colourfulness_slider,
-    custom_swatch, more_options_button, swatch,
+    ICON_APPEARANCE, ICON_CHAT, ICON_COLOURFULNESS, ICON_DARK, ICON_LIGHT, ICON_TERMINAL,
+    SWATCH_GAP, appearance_card, colourfulness_preview, colourfulness_slider, custom_swatch,
+    more_options_button, swatch,
 };
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Context, Entity, IntoElement, ParentElement as _,
@@ -62,8 +63,9 @@ const GHOSTTY_THEME_UNMANAGED_VALUE: &str = "__ghostex_ghostty_theme_unmanaged__
 pub(super) enum MoreGroup {
     Colours,
     Transparency,
-    ChatTerminal,
     ThemeColours,
+    /// Size & Zoom's More size options: Scale areas separately and what it shows.
+    Size,
 }
 
 impl MoreGroup {
@@ -71,8 +73,8 @@ impl MoreGroup {
         match self {
             MoreGroup::Colours => 0,
             MoreGroup::Transparency => 1,
-            MoreGroup::ChatTerminal => 2,
-            MoreGroup::ThemeColours => 3,
+            MoreGroup::ThemeColours => 2,
+            MoreGroup::Size => 3,
         }
     }
 
@@ -80,12 +82,7 @@ impl MoreGroup {
     /// of them opens it.
     fn keys(self) -> &'static [&'static str] {
         match self {
-            MoreGroup::Colours => &[
-                "themeSidebarContrast",
-                "themeWorkAreaContrast",
-                "showActivePaneOutline",
-                "workspaceActivePaneBorderColor",
-            ],
+            MoreGroup::Colours => &["themeSidebarContrast", "themeWorkAreaContrast"],
             MoreGroup::Transparency => &[
                 "windowGlassVideoOnlyOnPower",
                 "windowGlassLiveSpeed",
@@ -97,8 +94,15 @@ impl MoreGroup {
                 "windowGlassWorkAreaTintLight",
                 "windowGlassMenuBlurRadius",
             ],
-            MoreGroup::ChatTerminal => &["terminalGhosttyTheme", "terminalGhosttyLightTheme"],
             MoreGroup::ThemeColours => &["themeRoles"],
+            MoreGroup::Size => &[
+                "interfaceScaleAreasSeparately",
+                "agentManagerZoomPercent",
+                "sessionChatZoomPercent",
+                "filesZoomPercent",
+                "terminalFontSize",
+                "linuxDisplayScale",
+            ],
         }
     }
 }
@@ -109,12 +113,16 @@ thread_local! {
     static REMEMBERED_MORE_OPEN: Cell<[bool; 4]> = const { Cell::new([false; 4]) };
 }
 
+/// One of the rail's Interface pages (Themes, Text & Fonts, Size & Zoom, Window & Layout): the same
+/// view, drawing the groups of page `page` (CDXC:Settings 2026-11-18 in model.rs).
 pub(crate) fn theme_tab_view(
     store: &Entity<SettingsStore>,
+    page: SettingsTabId,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyView {
-    cx.new(|cx| ThemeTab::new(store.clone(), window, cx)).into()
+    cx.new(|cx| ThemeTab::new(store.clone(), page, window, cx))
+        .into()
 }
 
 /// CDXC:Settings 2026-11-08 WHY:
@@ -130,6 +138,8 @@ const COLOURFULNESS_ROW_SIDE_BY_SIDE: f32 = 640.0;
 
 pub(crate) struct ThemeTab {
     pub(super) store: Entity<SettingsStore>,
+    /// Which Interface page this view draws.
+    page: SettingsTabId,
     fields: FieldStates,
     /// Which appearance the Colourfulness preview shows while Appearance is System (the window's
     /// own, or light for the preview binary's `theme-light-scheme`).
@@ -171,7 +181,12 @@ fn palette_light_dropdown(page: &mut ThemeTab) -> &mut DropdownState {
 }
 
 impl ThemeTab {
-    fn new(store: Entity<SettingsStore>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(
+        store: Entity<SettingsStore>,
+        page: SettingsTabId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         cx.observe(&store, |_, _, cx| cx.notify()).detach();
         chat_preview::register_preview_fonts(cx);
         cx.subscribe(
@@ -205,8 +220,11 @@ impl ThemeTab {
         let sidebar = values.f64("themeSidebarContrast");
         let split_areas = sidebar != values.f64("themeWorkAreaContrast")
             || colours::colourfulness_step_for_points(sidebar).is_none();
+        let separately =
+            ghostex_settings_catalog::interface_scale::scale_areas_separately(values.map());
         let mut page = Self {
             store,
+            page,
             fields: FieldStates::default(),
             scheme_dark,
             picked_dark: false,
@@ -231,6 +249,10 @@ impl ThemeTab {
         // More theme colours opens by itself while one of its colours is set (roles.rs).
         if roles::more_roles_set(&page.store.read(cx).values().value("themeRoles")) > 0 {
             page.more_open[MoreGroup::ThemeColours.index()] = true;
+        }
+        // More size options opens by itself while the areas are sized apart, so their sliders show.
+        if separately {
+            page.more_open[MoreGroup::Size.index()] = true;
         }
         page.apply_preview_state(window, cx);
         page
@@ -437,8 +459,7 @@ impl ThemeTab {
         ]
         .iter()
         .any(|key| visible(key));
-        let colours_visible = visible("sidebarTheme")
-            || dark_colour_visible
+        let colours_visible = dark_colour_visible
             || light_colour_visible
             || visible("themeSidebarContrast")
             || more_has_hit(MoreGroup::Colours, t.searching, &visible);
@@ -446,9 +467,6 @@ impl ThemeTab {
             return None;
         }
         let mut rows: Vec<AnyElement> = Vec::new();
-        if visible("sidebarTheme") {
-            rows.push(self.appearance_row(t, window, cx));
-        }
         if dark_colour_visible {
             rows.push(self.theme_colour_row(t, true, window, cx));
         }
@@ -526,7 +544,7 @@ impl ThemeTab {
                 &p,
                 "theme-more-colours",
                 "More colour options",
-                "Sidebar and work area apart, active pane outline",
+                "The sidebar and work area apart",
                 shown,
                 move |page, _window, cx| page.set_more_open(MoreGroup::Colours, !open, cx),
                 cx,
@@ -543,7 +561,7 @@ impl ThemeTab {
     /// sit on. macOS only; None elsewhere or when a search hides all three.
     ///
     /// CDXC:Settings 2026-11-08 DECISION:
-    /// User: "please also move this whole setting under a new advanced area in the interface page in settings". Both rows moved out of Colours into the page's collapsed Advanced fold (`ADVANCED_MAIN_SETTING_KEYS`), as About does with Experimental: a search shows the matching rows in this section in place and the fold stays out.
+    /// User: "please also move this whole setting under a new advanced area in the interface page in settings". Both rows moved out of Colours into the page's collapsed Advanced fold (`ADVANCED_MAIN_SETTING_KEYS`), as About does with Experimental: a search shows the matching rows in this section in place and the fold stays out. Superseded 2026-11-18 (CDXC:Settings in model.rs, Q4153): the rows are the Window & Layout page's Window frame group, shown without a fold.
     fn window_frame_section(&mut self, t: &ThemeCx, cx: &mut Context<Self>) -> Option<AnyElement> {
         if !cfg!(target_os = "macos") {
             return None;
@@ -880,6 +898,20 @@ impl ThemeTab {
                 cx,
             ));
         }
+        rows
+    }
+
+    /// Window & Layout's Panes: the active pane outline and its colour (in More colour options
+    /// until 2026-11-18).
+    fn panes_section(
+        &mut self,
+        t: &ThemeCx,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let p = t.p;
+        let values = t.values.clone();
+        let mut rows: Vec<AnyElement> = Vec::new();
         if t.visible("showActivePaneOutline") {
             rows.push(toggle_field(
                 self,
@@ -911,7 +943,25 @@ impl ThemeTab {
                 cx,
             ));
         }
-        rows
+        settings_section(&p, "Panes", None, None, rows).map(IntoElement::into_any_element)
+    }
+
+    /// Themes: Appearance's three preview cards, then the presets (presets.rs).
+    fn themes_section(
+        &mut self,
+        t: &ThemeCx,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let mut rows: Vec<AnyElement> = Vec::new();
+        if t.visible("sidebarTheme") {
+            rows.push(self.appearance_row(t, window, cx));
+        }
+        if !t.searching {
+            let p = t.p;
+            rows.extend(self.presets_strip(&p, &t.values, cx));
+        }
+        settings_section(&t.p, "Themes", None, None, rows).map(IntoElement::into_any_element)
     }
 
     /// The "+" square: the custom colour for that mode, and its Pick Color dialog opened at the
@@ -926,7 +976,51 @@ impl ThemeTab {
         open_tint_picker(self, tint_key, &tint, window, cx);
     }
 
-    fn chat_terminal_section(
+    /// Chat theme or Terminal theme: Follow app, Light, Dark or System.
+    pub(super) fn appearance_override_row(
+        &mut self,
+        t: &ThemeCx,
+        key: &'static str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        if !t.visible(key) {
+            return None;
+        }
+        let (label, description, icon) = if key == "sessionChatTheme" {
+            (
+                "Chat theme",
+                "Follow the app theme, or choose a separate appearance for chat.",
+                ICON_CHAT,
+            )
+        } else {
+            (
+                "Terminal theme",
+                "Follow the app theme, or choose a separate appearance for terminals.",
+                ICON_TERMINAL,
+            )
+        };
+        let options = settings_catalog().options(module::SETTINGS, "SESSION_CHAT_THEME_OPTIONS");
+        let allowed: Vec<String> = options.iter().map(|option| option.value.clone()).collect();
+        let p = t.p;
+        Some(select_field(
+            self,
+            &p,
+            key,
+            t.spec(key, label, description).icon(icon),
+            Some(reset_key::<Self>(key)),
+            &options,
+            &t.values.choice(key, &allowed),
+            None,
+            move |page: &mut Self, next, _window, cx| page.save(key, json!(next), cx),
+            window,
+            cx,
+        ))
+    }
+
+    /// Terminal colours: Terminal theme, the two terminal palettes, and the link to Terminal
+    /// background on the Terminal page.
+    fn terminal_colours_section(
         &mut self,
         t: &ThemeCx,
         window: &mut Window,
@@ -936,193 +1030,144 @@ impl ThemeTab {
         let values = t.values.clone();
         let visible_fn = t.visible.clone();
         let visible = |key: &str| visible_fn(key);
-        if !(visible("sessionChatTheme")
-            || visible("terminalColorScheme")
-            || more_has_hit(MoreGroup::ChatTerminal, t.searching, &visible))
-        {
-            return None;
-        }
-        let options = settings_catalog().options(module::SETTINGS, "SESSION_CHAT_THEME_OPTIONS");
-        let allowed: Vec<String> = options.iter().map(|option| option.value.clone()).collect();
         let mut rows: Vec<AnyElement> = Vec::new();
-        for (key, label, description, icon) in [
-            (
-                "sessionChatTheme",
-                "Chat theme",
-                "Follow the app theme, or choose a separate appearance for chat.",
-                ICON_CHAT,
-            ),
-            (
-                "terminalColorScheme",
-                "Terminal theme",
-                "Follow the app theme, or choose a separate appearance for terminals.",
-                ICON_TERMINAL,
-            ),
-        ] {
-            if !visible(key) {
-                continue;
+        rows.extend(self.appearance_override_row(t, "terminalColorScheme", window, cx));
+        let base = settings_catalog().options(module::SETTINGS, "GHOSTTY_THEME_SETTING_OPTIONS");
+        // `getGhosttyThemeSettingOptions`: a configured theme outside the bundled list stays listed.
+        let with_current = |current: &str| {
+            let mut options = base.clone();
+            if !current.is_empty() && !options.iter().any(|option| option.value == current) {
+                options.insert(
+                    0,
+                    SettingOption {
+                        label: current.to_string(),
+                        value: current.to_string(),
+                    },
+                );
             }
-            rows.push(select_field(
+            options
+        };
+        if visible("terminalGhosttyTheme") {
+            let current = values.string("terminalGhosttyTheme");
+            let options = with_current(&current);
+            let shown_value = if current.is_empty() {
+                GHOSTTY_THEME_UNMANAGED_VALUE.to_string()
+            } else {
+                current
+            };
+            rows.push(searchable_select_field(
                 self,
                 &p,
-                key,
-                t.spec(key, label, description).icon(icon),
-                Some(reset_key::<Self>(key)),
+                "terminalGhosttyTheme",
+                t.spec(
+                    "terminalGhosttyTheme",
+                    "Terminal palette in dark mode",
+                    "Uses the dark theme set in Ghostex's terminal config, or GitHub Dark when none is set.",
+                ),
+                Some(reset_key::<Self>("terminalGhosttyTheme")),
                 &options,
-                &values.choice(key, &allowed),
-                None,
-                move |page: &mut Self, next, _window, cx| page.save(key, json!(next), cx),
+                &shown_value,
+                palette_dark_dropdown,
+                |page: &mut Self, next, _window, cx| {
+                    let value = if next == GHOSTTY_THEME_UNMANAGED_VALUE {
+                        String::new()
+                    } else {
+                        next
+                    };
+                    page.save("terminalGhosttyTheme", json!(value), cx);
+                },
                 window,
                 cx,
             ));
         }
-        let shown = self.more_shown(MoreGroup::ChatTerminal, t.searching, &visible);
-        if !t.searching {
-            let open = self.more_open[MoreGroup::ChatTerminal.index()];
-            rows.push(more_options_button(
+        if visible("terminalGhosttyLightTheme") {
+            let current = values.string("terminalGhosttyLightTheme");
+            let options: Vec<SettingOption> = with_current(&current)
+                .into_iter()
+                .filter(|option| option.value != GHOSTTY_THEME_UNMANAGED_VALUE)
+                .collect();
+            rows.push(searchable_select_field(
+                self,
                 &p,
-                "theme-more-chat-terminal",
-                "Terminal palettes",
-                "The terminal colours in dark mode and in light mode",
-                shown,
-                move |page, _window, cx| page.set_more_open(MoreGroup::ChatTerminal, !open, cx),
+                "terminalGhosttyLightTheme",
+                t.spec(
+                    "terminalGhosttyLightTheme",
+                    "Terminal palette in light mode",
+                    "Uses the light theme set in Ghostex's terminal config, or GitHub Light when none is set.",
+                ),
+                Some(reset_key::<Self>("terminalGhosttyLightTheme")),
+                &options,
+                &current,
+                palette_light_dropdown,
+                |page: &mut Self, next, _window, cx| {
+                    page.save("terminalGhosttyLightTheme", json!(next), cx)
+                },
+                window,
                 cx,
             ));
         }
-        if shown {
-            let base =
-                settings_catalog().options(module::SETTINGS, "GHOSTTY_THEME_SETTING_OPTIONS");
-            // `getGhosttyThemeSettingOptions`: a configured theme outside the bundled list stays listed.
-            let with_current = |current: &str| {
-                let mut options = base.clone();
-                if !current.is_empty() && !options.iter().any(|option| option.value == current) {
-                    options.insert(
-                        0,
-                        SettingOption {
-                            label: current.to_string(),
-                            value: current.to_string(),
-                        },
-                    );
-                }
-                options
-            };
-            if visible("terminalGhosttyTheme") {
-                let current = values.string("terminalGhosttyTheme");
-                let options = with_current(&current);
-                let shown_value = if current.is_empty() {
-                    GHOSTTY_THEME_UNMANAGED_VALUE.to_string()
-                } else {
-                    current
-                };
-                rows.push(searchable_select_field(
-                    self,
-                    &p,
-                    "terminalGhosttyTheme",
-                    t.spec(
-                        "terminalGhosttyTheme",
-                        "Terminal palette in dark mode",
-                        "Uses the dark theme set in Ghostex's terminal config, or GitHub Dark when none is set.",
-                    ),
-                    Some(reset_key::<Self>("terminalGhosttyTheme")),
-                    &options,
-                    &shown_value,
-                    palette_dark_dropdown,
-                    |page: &mut Self, next, _window, cx| {
-                        let value = if next == GHOSTTY_THEME_UNMANAGED_VALUE {
-                            String::new()
-                        } else {
-                            next
-                        };
-                        page.save("terminalGhosttyTheme", json!(value), cx);
-                    },
-                    window,
-                    cx,
-                ));
-            }
-            if visible("terminalGhosttyLightTheme") {
-                let current = values.string("terminalGhosttyLightTheme");
-                let options: Vec<SettingOption> = with_current(&current)
-                    .into_iter()
-                    .filter(|option| option.value != GHOSTTY_THEME_UNMANAGED_VALUE)
-                    .collect();
-                rows.push(searchable_select_field(
-                    self,
-                    &p,
-                    "terminalGhosttyLightTheme",
-                    t.spec(
-                        "terminalGhosttyLightTheme",
-                        "Terminal palette in light mode",
-                        "Uses the light theme set in Ghostex's terminal config, or GitHub Light when none is set.",
-                    ),
-                    Some(reset_key::<Self>("terminalGhosttyLightTheme")),
-                    &options,
-                    &current,
-                    palette_light_dropdown,
-                    |page: &mut Self, next, _window, cx| {
-                        page.save("terminalGhosttyLightTheme", json!(next), cx)
-                    },
-                    window,
-                    cx,
-                ));
-            }
-        }
-        settings_section(&p, "Chat and terminal", None, None, rows)
-            .map(IntoElement::into_any_element)
-    }
-
-    /// Related settings on the Sidebar & Sessions and Terminal pages: each Open searches
-    /// that page for the row.
-    fn related_section(
-        &mut self,
-        p: &SettingsPalette,
-        cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
-        let rows = [
-            (
-                "Sidebar size",
-                "Sidebar Interface Size",
-                ICON_SIDEBAR,
-                SettingsTabId::Sidebar,
-            ),
-            (
+        if !t.searching {
+            rows.push(related_link_row(
+                &p,
+                1,
                 "Terminal background colour and image",
                 "Terminal background",
                 ICON_TERMINAL,
                 SettingsTabId::Terminal,
-            ),
-        ]
-        .into_iter()
-        .enumerate()
-        .map(|(index, (label, query, icon, tab))| {
-            let button = settings_button(
-                p,
-                SharedString::from(format!("theme-related-{index}")),
-                "Open",
-                None,
-                ButtonVariant::Outline,
-                false,
-                None,
-                move |page: &mut Self, _window, cx| {
-                    let store = page.store.clone();
-                    store.update(cx, |store, cx| {
-                        store.set_search_query(query.to_string(), cx);
-                        store.set_active_tab(tab, cx);
-                    });
-                },
                 cx,
-            );
-            setting_row(
-                p,
-                format!("theme-related-row-{index}"),
-                RowSpec::new(label).icon(icon),
-                None,
-                button,
-                cx,
-            )
-        })
-        .collect();
-        settings_section(p, "Related on General", None, None, rows)
+            ));
+        }
+        settings_section(&p, "Terminal colours", None, None, rows)
             .map(IntoElement::into_any_element)
+    }
+}
+
+/// A row whose Open searches another page for a setting that lives there (the Related on
+/// General card until 2026-11-18): `index` keeps the element ids that card gave it.
+fn related_link_row(
+    p: &SettingsPalette,
+    index: usize,
+    label: &'static str,
+    query: &'static str,
+    icon: &'static str,
+    tab: SettingsTabId,
+    cx: &mut Context<ThemeTab>,
+) -> AnyElement {
+    let button = settings_button(
+        p,
+        SharedString::from(format!("theme-related-{index}")),
+        "Open",
+        None,
+        ButtonVariant::Outline,
+        false,
+        None,
+        move |page: &mut ThemeTab, _window, cx| {
+            let store = page.store.clone();
+            store.update(cx, |store, cx| {
+                store.set_search_query(query.to_string(), cx);
+                store.set_active_tab(tab, cx);
+            });
+        },
+        cx,
+    );
+    setting_row(
+        p,
+        format!("theme-related-row-{index}"),
+        RowSpec::new(label).icon(icon),
+        None,
+        button,
+        cx,
+    )
+}
+
+/// The catalog section an Interface page renders (CDXC:Settings 2026-11-18 in the settings
+/// catalog's general/theme.rs).
+fn page_section(page: SettingsTabId) -> &'static str {
+    match page {
+        SettingsTabId::TextFonts => "textFonts",
+        SettingsTabId::SizeZoom => "sizeZoom",
+        SettingsTabId::WindowLayout => "windowLayout",
+        _ => "theming",
     }
 }
 
@@ -1133,9 +1178,11 @@ impl Render for ThemeTab {
             let hud = store.hud().cloned().unwrap_or_default();
             let native_picker =
                 hud.get("appIconPickerUnavailable").and_then(Value::as_bool) != Some(true);
-            // `rowVisible(settingsSearch.theming, key)`, looked up once per render.
+            // `rowVisible(settingsSearch[section], key)` for this page's catalog section, looked up
+            // once per render.
+            let section_id = page_section(self.page);
             let theming_keys: HashMap<String, bool> = settings_catalog()
-                .general_section("theming")
+                .general_section(section_id)
                 .map(|section| {
                     section
                         .settings
@@ -1143,7 +1190,7 @@ impl Render for ThemeTab {
                         .map(|row| {
                             (
                                 row.key.clone(),
-                                store.theme_row_visible("theming", &row.key),
+                                store.theme_row_visible(section_id, &row.key),
                             )
                         })
                         .collect()
@@ -1174,96 +1221,74 @@ impl Render for ThemeTab {
             )
         };
         let p = t.p;
+        let tab = self.page;
         let mut blocks: Vec<PageBlock> = Vec::new();
-        let colours = self.colours_section(&t, window, cx);
-        let font = self.font_section(&t, window, cx);
-        let interface_scale = self.interface_scale_section(&t, window, cx);
-        let transparency = self.transparency_section(&t, window, cx);
-        let chat_terminal = self.chat_terminal_section(&t, window, cx);
-        let window_frame = self.window_frame_section(&t, cx);
-        let theme_colours = self.theme_colours_section(&t, window, cx);
-        let chat_colours = self.chat_colours_section(&t, window, cx);
-        let anything = window_frame.is_some()
-            || theme_colours.is_some()
-            || chat_colours.is_some()
-            || colours.is_some()
-            || font.is_some()
-            || interface_scale.is_some()
-            || transparency.is_some()
-            || chat_terminal.is_some()
-            || !t.searching;
-        if !anything {
+        match tab {
+            SettingsTabId::TextFonts => {
+                let (fonts, text) = self.font_sections(&t, window, cx);
+                blocks.extend(fonts.map(|section| PageBlock::section("fonts", section)));
+                blocks.extend(text.map(|section| PageBlock::section("text", section)));
+            }
+            SettingsTabId::SizeZoom => {
+                blocks.extend(
+                    self.interface_scale_section(&t, window, cx)
+                        .map(|section| PageBlock::section("size", section)),
+                );
+            }
+            SettingsTabId::WindowLayout => {
+                blocks.extend(
+                    self.window_frame_section(&t, cx)
+                        .map(|section| PageBlock::section("windowFrame", section)),
+                );
+                blocks.extend(
+                    self.panes_section(&t, window, cx)
+                        .map(|section| PageBlock::section("panes", section)),
+                );
+            }
+            _ => {
+                // Q4153's order: Themes (Appearance, the presets, then "Theme it in your words"),
+                // Colours, Glass, Chat colours, Fine-tune colours, Terminal colours.
+                blocks.extend(
+                    self.themes_section(&t, window, cx)
+                        .map(|section| PageBlock::section("themes", section)),
+                );
+                if !t.searching {
+                    blocks.extend(
+                        self.prompt_gallery_section(&p, cx)
+                            .map(|section| PageBlock::section("themeByPrompt", section)),
+                    );
+                }
+                blocks.extend(
+                    self.colours_section(&t, window, cx)
+                        .map(|section| PageBlock::section("theming", section)),
+                );
+                blocks.extend(
+                    self.transparency_section(&t, window, cx)
+                        .map(|section| PageBlock::section("transparency", section)),
+                );
+                blocks.extend(
+                    self.chat_colours_section(&t, window, cx)
+                        .map(|section| PageBlock::section("chatColours", section)),
+                );
+                blocks.extend(
+                    self.theme_colours_section(&t, window, cx)
+                        .map(|section| PageBlock::section("themeColours", section)),
+                );
+                blocks.extend(
+                    self.terminal_colours_section(&t, window, cx)
+                        .map(|section| PageBlock::section("terminalColours", section)),
+                );
+            }
+        }
+        if blocks.is_empty() && t.searching {
             let store = self.store.clone();
             blocks.push(PageBlock::plain(render_no_matches(
                 &p,
-                SettingsTabId::Theme,
+                tab,
                 &matching,
                 move |tab, _window, cx| store.update(cx, |store, cx| store.set_active_tab(tab, cx)),
             )));
         }
-        // "Theme it in your words" leads the page, above Text (prompt_gallery.rs).
-        if !t.searching {
-            blocks.extend(
-                self.prompt_gallery_section(&p, cx)
-                    .map(|section| PageBlock::section("themeByPrompt", section)),
-            );
-        }
-        // Chat colours sits right under it (chat_colours.rs).
-        blocks.extend(chat_colours.map(|section| PageBlock::section("chatColours", section)));
-        // CDXC:Settings 2026-10-31: User, of the Text section: "move this section to the top of the
-        // interface page in settings".
-        blocks.extend(font.map(|section| PageBlock::section("font", section)));
-        blocks.extend(interface_scale.map(|section| PageBlock::section("interfaceScale", section)));
-        // Presets sit right above the colours they set, under Text and Interface scale.
-        if !t.searching {
-            blocks.extend(
-                self.presets_section(&p, &t.values, cx)
-                    .map(|section| PageBlock::section("presets", section)),
-            );
-        }
-        blocks.extend(colours.map(|section| PageBlock::section("theming", section)));
-        blocks.extend(transparency.map(|section| PageBlock::section("transparency", section)));
-        blocks.extend(chat_terminal.map(|section| PageBlock::section("chatTerminal", section)));
-        blocks.extend(theme_colours.map(|section| PageBlock::section("themeColours", section)));
-        // Advanced: the window frame rows sit in a collapsed fold at the bottom, or in place while
-        // a search matches them (CDXC:Settings 2026-10-29 in search.rs, like About).
-        if let Some(section) = window_frame {
-            if t.searching {
-                blocks.push(PageBlock::section("windowFrame", section));
-            } else {
-                let tab = SettingsTabId::Theme;
-                // A deep link to the section opens the fold, as General's does.
-                let pending = self.store.update(cx, |store, _| {
-                    store.tracker(tab).borrow().pending_scroll.clone()
-                });
-                if pending.as_deref() == Some("windowFrame") {
-                    self.store
-                        .update(cx, |store, _| store.open_advanced_fold(tab));
-                }
-                let open = self.store.read(cx).advanced_fold_open(tab);
-                blocks.push(PageBlock::section(
-                    "advancedFold",
-                    advanced_fold_header(
-                        &p,
-                        open,
-                        move |page: &mut Self, _window, cx| {
-                            let store = page.store.clone();
-                            store.update(cx, |store, cx| store.toggle_advanced_fold(tab, cx));
-                        },
-                        cx,
-                    ),
-                ));
-                if open {
-                    blocks.push(PageBlock::section("windowFrame", section));
-                }
-            }
-        }
-        if !t.searching {
-            blocks.extend(
-                self.related_section(&p, cx)
-                    .map(|section| PageBlock::section("related", section)),
-            );
-        }
-        settings_page(&self.store, SettingsTabId::Theme, &p, blocks, cx)
+        settings_page(&self.store, tab, &p, blocks, cx)
     }
 }

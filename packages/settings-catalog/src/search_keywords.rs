@@ -22,7 +22,7 @@ pub fn search_keywords(key: &str) -> &'static [&'static str] {
         | "codeServerUseVscodeInsidersUserConfig"
         | "codeServerNewWindowsAsTabs"
         | "switchSourceView" => CODE_EDITOR,
-        // The Interface page's UI Scale group.
+        // The Size & Zoom page (the Interface page's UI Scale group until 2026-11-18).
         "interfaceScalePercent"
         | "interfaceScaleAreasSeparately"
         | "agentManagerZoomPercent"

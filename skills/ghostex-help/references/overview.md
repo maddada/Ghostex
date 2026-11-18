@@ -70,8 +70,9 @@ hotkeys Every shortcut and its default binding
   back at the next launch.
 - **Quick Access** (Cmd+Shift+P): search every command, pane action, settings
   shortcut, and recent session. Cmd+P opens it on Recent Sessions.
-- **Settings** (Cmd+,): **Updates** first (with how many updates count) and **Interface** under it,
-  then five labelled groups: **Working** (Chat, Sidebar & Sessions, Terminal, Files & Links,
+- **Settings** (Cmd+,): **Updates** first (with how many updates count) and **Experience** under it,
+  then the **Interface** group (Themes, Text & Fonts, Size & Zoom, Window & Layout) and five more
+  labelled groups: **Working** (Chat, Sidebar & Sessions, Terminal, Files & Links,
   Projects), **Keyboard & voice** (Hotkeys, Dictation, Voice Agent), **Agents & accounts** (Agents,
   Accounts, Autopilot, Secrets, Integrations), **Connections** (Remote, Sync, Collab) and
   **System** (Notifications, Power & Sleep, Security, About); a group shows only while one of its

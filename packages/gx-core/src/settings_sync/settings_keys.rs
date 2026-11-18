@@ -102,8 +102,11 @@ pub fn category_setting_keys(prefix: &str) -> Vec<&'static str> {
             .collect()
     };
     match prefix {
-        "appearance" => section("theming")
+        // The rail's Interface pages, one catalog section each (CDXC:Settings 2026-11-18 in the
+        // settings catalog's general/theme.rs).
+        "appearance" => ["theming", "textFonts", "sizeZoom", "windowLayout"]
             .into_iter()
+            .flat_map(section)
             .filter(|key| !APPEARANCE_LEFT_OUT.contains(key))
             .chain(APPEARANCE_WITHOUT_ROWS.iter().copied())
             .collect(),

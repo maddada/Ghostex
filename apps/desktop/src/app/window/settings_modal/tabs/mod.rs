@@ -64,7 +64,10 @@ pub(crate) fn settings_tab_view(
         SettingsTabId::Integrations => integrations::integrations_tab_view(store, cx),
         SettingsTabId::CloudBoxes => cloud_boxes::cloud_boxes_tab_view(store, cx),
         SettingsTabId::Hotkeys => hotkeys::hotkeys_tab_view(store, cx),
-        SettingsTabId::Theme => theme::theme_tab_view(store, window, cx),
+        SettingsTabId::Theme
+        | SettingsTabId::TextFonts
+        | SettingsTabId::SizeZoom
+        | SettingsTabId::WindowLayout => theme::theme_tab_view(store, tab, window, cx),
         SettingsTabId::OpenTargets => open_targets::open_targets_tab_view(store, window, cx),
         SettingsTabId::OsIntegration => os_integration::os_integration_tab_view(store, cx),
         SettingsTabId::Extensions => extensions::extensions_tab_view(store, window, cx),

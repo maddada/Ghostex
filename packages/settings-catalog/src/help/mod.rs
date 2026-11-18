@@ -33,7 +33,7 @@ use crate::json::{Json, ToJson, J};
 use crate::layout::{general_group, general_navigation, GENERAL_GROUPS};
 use crate::rows::{SettingOption, SettingRow};
 use crate::{default_value, defaults, extra_pages, general_sections, hotkey_definitions, Platform};
-use supplemental::{Tab, ABOUT, SUPPLEMENTAL_ROWS, THEME};
+use supplemental::{interface_tab, Tab, ABOUT, SUPPLEMENTAL_ROWS, THEME};
 
 pub use render::{hotkeys_markdown, settings_markdown};
 
@@ -228,7 +228,7 @@ fn value_type(key: &str, has_options: bool) -> ValueType {
     }
 }
 
-/// Where a row sits: page, group (only the Theme page's `appearance` group), section.
+/// Where a row sits: page, group (only the Interface pages' `appearance` group), section.
 struct Location {
     tab: Tab,
     group: Option<(&'static str, &'static str)>,
@@ -305,8 +305,9 @@ pub fn catalog() -> Catalog {
                 };
                 // A General page is its own tab (CDXC:Settings 2026-10-29 in layout.rs); only the
                 // Theme page still renders a group of this catalog.
+                // The Interface group's sections are pages of their own (interface_tab).
                 let location = Location {
-                    tab: tab.unwrap_or((group.id, group.title)),
+                    tab: tab.map_or((group.id, group.title), |_| interface_tab(section.id)),
                     group: tab.map(|_| (group.id, group.title)),
                     section: section.id.to_string(),
                     section_title: section.title.to_string(),
@@ -319,7 +320,7 @@ pub fn catalog() -> Catalog {
     for item in general_navigation() {
         place_group(None, item.id, &mut entries);
     }
-    // The `appearance` group renders on the Theme page, after the General pages.
+    // The `appearance` group is the rail's Interface group: its four pages follow the General pages.
     place_group(Some(THEME), "appearance", &mut entries);
 
     let grouped: HashSet<&str> = GENERAL_GROUPS

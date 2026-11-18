@@ -49,10 +49,9 @@ use crate::json::J;
 /// User: "i still don't know how a user can see the coordinator playbook". The Coordinator
 /// playbook row (`orchestratorPlaybook`: View playbook and Edit overrides) shows on the Chat page
 /// itself, out of its Advanced section, superseding the Q30-Q32 move above for that one row.
+/// CDXC:Settings 2026-11-18: Frame the work area, the window buttons and Close buttons on the right
+/// left this list for the Window & Layout page (general/theme.rs).
 pub const ADVANCED_MAIN_SETTING_KEYS: &[&str] = &[
-    "workAreaFrame",
-    "showWindowButtonsWhenSidebarCollapsed",
-    "closeButtonsOnRight",
     "closeEmptySessionsOnNew",
     "worktreeSessionsInProject",
     "sidebarHideDisconnectedMachines",
@@ -673,21 +672,6 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "customSidebarTitlebarBackgroundTintColor",
             "lightThemePreset",
             "customSidebarTitlebarLightBackgroundTintColor",
-            "sessionChatFontFamily",
-            "terminalFontFamily",
-            "interfaceScalePercent",
-            "interfaceScaleAreasSeparately",
-            "linuxDisplayScale",
-            "agentManagerZoomPercent",
-            "sessionChatZoomPercent",
-            "filesZoomPercent",
-            "terminalFontSize",
-            "sessionChatTextStrengthPercent",
-            "sessionChatMutedThinking",
-            "sessionChatTheme",
-            "terminalColorScheme",
-            "terminalGhosttyLightTheme",
-            "terminalGhosttyTheme",
             "windowGlass",
             "windowGlassSource",
             "windowGlassSameForLightAndDark",
@@ -708,11 +692,41 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "windowGlassWorkAreaTintDark",
             "windowGlassSidebarOpacityLight",
             "windowGlassWorkAreaTintLight",
-            "showActivePaneOutline",
-            "workspaceActivePaneBorderColor",
+            "sessionChatTheme",
+            "terminalColorScheme",
+            "terminalGhosttyLightTheme",
+            "terminalGhosttyTheme",
+        ],
+    ),
+    (
+        "textFonts",
+        &[
+            "sessionChatFontFamily",
+            "terminalFontFamily",
+            "sessionChatTextStrengthPercent",
+            "sessionChatMutedThinking",
+        ],
+    ),
+    (
+        "sizeZoom",
+        &[
+            "interfaceScalePercent",
+            "interfaceScaleAreasSeparately",
+            "agentManagerZoomPercent",
+            "sessionChatZoomPercent",
+            "filesZoomPercent",
+            "terminalFontSize",
+            "linuxDisplayScale",
+        ],
+    ),
+    (
+        "windowLayout",
+        &[
             "workAreaFrame",
             "showWindowButtonsWhenSidebarCollapsed",
             "closeButtonsOnRight",
+            "showActivePaneOutline",
+            "workspaceActivePaneBorderColor",
         ],
     ),
     ("sidebarTags", &["sidebarSessionTagListItems"]),
@@ -1137,10 +1151,18 @@ pub const MAIN_SETTINGS_SECTION_SETTING_KEYS: &[(&str, &[&str])] = &[
 pub const MAIN_SETTINGS_SUBSECTION_NAVIGATION: J = J::Obj(&[
     (
         "appearance",
-        J::Arr(&[J::Obj(&[
-            ("id", J::Str("theming")),
-            ("title", J::Str("Interface")),
-        ])]),
+        J::Arr(&[
+            J::Obj(&[("id", J::Str("theming")), ("title", J::Str("Themes"))]),
+            J::Obj(&[
+                ("id", J::Str("textFonts")),
+                ("title", J::Str("Text & Fonts")),
+            ]),
+            J::Obj(&[("id", J::Str("sizeZoom")), ("title", J::Str("Size & Zoom"))]),
+            J::Obj(&[
+                ("id", J::Str("windowLayout")),
+                ("title", J::Str("Window & Layout")),
+            ]),
+        ]),
     ),
     (
         "chat",
@@ -1216,6 +1238,9 @@ pub const MAIN_SETTINGS_SUBSECTION_NAVIGATION: J = J::Obj(&[
 pub const MAIN_SETTINGS_SUBSECTION_PARENT_IDS: &[(&str, &str)] = &[
     ("sleepingSessions", "sidebar"),
     ("theming", "appearance"),
+    ("textFonts", "appearance"),
+    ("sizeZoom", "appearance"),
+    ("windowLayout", "appearance"),
     ("chat", "chat"),
     ("markedHandovers", "chat"),
     ("sidebar", "sidebar"),

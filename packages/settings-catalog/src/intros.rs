@@ -1,5 +1,5 @@
 //! The one line under every Settings page's title that says what the page is for, by the page's
-//! rail id (the desktop's `SettingsTabId::id`, the catalog's page ids, `theme` for Interface).
+//! rail id (the desktop's `SettingsTabId::id`, the catalog's page ids, `theme` for Themes).
 //!
 //! CDXC:Settings 2026-11-08 DECISION:
 //! User (Q1712 "Page title and line", Q1713 skipped so the proposed lines stand as written): every Settings page shows its title with a one-line intro under it, kept here per page so a new page can't ship without one (`every_rail_page_has_an_intro` in the desktop's settings_modal/model.rs and this crate's tests).
@@ -12,7 +12,10 @@ pub const PAGE_INTROS: &[(&str, &str)] = &[
     ("chat", "How agent chats look and behave: the default view, transcript width, question cards and Ghostex pages."),
     ("sidebar", "How the sidebar lists your sessions, what each card shows, and parking and sleeping sessions."),
     ("terminal", "The terminal's look, scrolling and tab behavior."),
-    ("theme", "Theme, colours, fonts and glass for the whole app."),
+    ("theme", "Themes, colours and glass for the whole app, the chat and the terminal."),
+    ("textFonts", "The app and monospace fonts, and how strong text reads in chat."),
+    ("sizeZoom", "How big the sidebar, chat, Files and terminal text are drawn."),
+    ("windowLayout", "The window's frame, its buttons, and the outline of the active pane."),
     ("notifications", "Sounds and alerts when an agent finishes or needs you."),
     ("tools", "Where files, links and dev servers open: in Ghostex, your browser or your editor."),
     ("system", "What Ghostex does when your computer starts, when idle views sleep, and keeping the computer awake."),

@@ -1,6 +1,7 @@
-//! The Interface page's Text section: the app and monospace fonts, picked from the fonts installed
-//! on this computer, how strong the chat's text reads, and a preview of all of them. The chat and
-//! Files zooms moved to the Interface scale section (`interface_scale.rs`).
+//! The Text & Fonts page: Fonts (the app and monospace fonts, picked from the fonts installed on
+//! this computer) and Text (how strong the chat's text reads, thinking in grey), with a preview of
+//! all of them under the last of the two shown. The chat and Files zooms are on Size & Zoom
+//! (`interface_scale.rs`).
 use super::super::super::catalog::{module, settings_catalog};
 use super::super::super::fields::{
     DropdownState, FontList, SliderBinding, font_picker_field, reset_key, settings_section,
@@ -36,12 +37,13 @@ fn pending_monospace_font(page: &mut ThemeTab) -> &mut Option<String> {
 }
 
 impl ThemeTab {
-    pub(super) fn font_section(
+    /// The Fonts and Text groups of the Text & Fonts page (CDXC:Settings 2026-11-18 in model.rs).
+    pub(super) fn font_sections(
         &mut self,
         t: &ThemeCx,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
+    ) -> (Option<AnyElement>, Option<AnyElement>) {
         let p = t.p;
         let number = |name: &str| settings_catalog().number(module::SETTINGS, name);
         let mut rows = Vec::new();
@@ -101,6 +103,7 @@ impl ThemeTab {
                 cx,
             ));
         }
+        let font_rows = std::mem::take(&mut rows);
         if t.visible(TEXT_STRENGTH_KEY) {
             rows.push(slider_number_field(
                 self,
@@ -110,7 +113,7 @@ impl ThemeTab {
                     "Text strength",
                     "How strong agents' replies and your messages read in chat. 0% is the standard colour; 100% is full white in dark mode and full black in light mode. Thinking and code keep their colours.",
                 )
-                // Every row of the Text card has its icon, so the titles line up (CDXC:Settings
+                // Every row of the Text and Fonts cards has its icon, so the titles line up (CDXC:Settings
                 // 2026-11-10 on `settings_note_row` in fields/row.rs).
                 .icon(ICON_TEXT_STRENGTH),
                 Some(reset_key::<Self>(TEXT_STRENGTH_KEY)),
@@ -140,15 +143,21 @@ impl ThemeTab {
                 cx,
             ));
         }
-        if rows.is_empty() {
-            return None;
-        }
-        rows.push(chat_preview(
+        let (mut font_rows, mut text_rows) = (font_rows, rows);
+        let preview = chat_preview(
             &p,
             &t.values,
             preview_body_family(self.pending_font.as_deref()),
             preview_mono_family(self.pending_monospace_font.as_deref()),
-        ));
-        settings_section(&p, "Text", None, None, rows).map(IntoElement::into_any_element)
+        );
+        if !text_rows.is_empty() {
+            text_rows.push(preview);
+        } else if !font_rows.is_empty() {
+            font_rows.push(preview);
+        }
+        (
+            settings_section(&p, "Fonts", None, None, font_rows).map(IntoElement::into_any_element),
+            settings_section(&p, "Text", None, None, text_rows).map(IntoElement::into_any_element),
+        )
     }
 }

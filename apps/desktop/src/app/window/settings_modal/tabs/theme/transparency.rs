@@ -383,7 +383,7 @@ impl ThemeTab {
             rows.push(more_options_button(
                 &p,
                 "theme-more-transparency",
-                "More transparency options",
+                "More glass options",
                 "Picture position, Live speed, sidebar and work area tints, menu blur",
                 shown,
                 move |page, _window, cx| page.set_more_open(MoreGroup::Transparency, !open, cx),
@@ -393,7 +393,7 @@ impl ThemeTab {
         if shown {
             rows.extend(self.more_transparency_rows(t, single, window, cx));
         }
-        super::super::super::fields::settings_section(&p, "Transparency", None, None, rows)
+        super::super::super::fields::settings_section(&p, "Glass", None, None, rows)
             .map(IntoElement::into_any_element)
     }
 

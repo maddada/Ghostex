@@ -5,7 +5,7 @@
 use gpui::{Hsla, Styled as _, Svg, px, rgb, svg};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// `closeButtonsOnRight` (Settings > Interface > Advanced, macOS only; off when unset).
+/// `closeButtonsOnRight` (Settings > Window & Layout, macOS only; off when unset).
 ///
 /// CDXC:AppModal 2026-11-10 DECISION:
 /// User: "the x button to close dialogs and toasts need to be on top left on mac not on top right (add advanced to switch it to the other side for people who want, show this setting only on mac". On macOS the close X of every app modal (the frame's corner X, window/modal_window_frame.rs), every sheet nested in Settings, the dialogs that draw their own X in their header (Markdown table, Mermaid diagram, visual page, picture viewer) and every toast sits at the top left, where macOS puts a window's close button; Close buttons on the right puts them back at the top right. Windows, Linux and the web build keep them on the right and show no row.

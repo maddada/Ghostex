@@ -1,4 +1,4 @@
-//! The Presets group of the Interface page: twenty theme presets (Catppuccin, Dracula, Solarized,
+//! The presets of the Themes page's Themes group: twenty theme presets (Catppuccin, Dracula, Solarized,
 //! Tokyo Night, Nord, Kanagawa, Everforest, Gruvbox Material) above the colours. A preset writes
 //! the existing colour settings in one save; it is not a stored choice, so the card that matches
 //! the current settings shows as selected and any later edit simply leaves no card selected.
@@ -14,7 +14,7 @@
 //! packages/settings-catalog/src/data/theme_presets.rs.
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::catalog::{module, settings_catalog};
-use super::super::super::fields::{settings_icon, settings_section, tooltip_text};
+use super::super::super::fields::{settings_icon, tooltip_text};
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::SettingsValues;
 use super::ThemeTab;
@@ -187,7 +187,9 @@ impl ThemeTab {
     ///
     /// CDXC:Theming 2026-11-08 DECISION:
     /// User, of the preset panel: "Please make these a scrollable sideways (1 line) list and make each one 1 word max. it's ugly now please make it nicer area. also takes too much space". The presets sit in one row under the heading, about a card and its label tall. (2026-11-08, User: "presets works well but please put them in a card like the ones below have": the row sits in the same section card as Colours and Transparency and scrolls inside it, its cards passing under the card's edges, where the fades sit in the card's fill.) Labels are one word (the family's own word plus the moon or sun where a family is only Dark and Light). A thin hairline separates families, and a small quiet caption names a family above its first card only where no card says it (Catppuccin, Tokyo Night, Kanagawa): a caption over "Solarized" would say it twice. The row scrolls with a sideways swipe, Shift and the wheel, or a finger; a vertical swipe or wheel turn still scrolls the page. Like the chat box's pills (pills_strip.rs), an edge that hides more fades into the card and dims the cards it cuts, so nothing paints a dark band on glass. On open the row brings the picked card into view.
-    pub(super) fn presets_section(
+    /// The presets' sideways row, drawn inside the Themes group (CDXC:Settings 2026-11-18 in
+    /// model.rs).
+    pub(super) fn presets_strip(
         &mut self,
         p: &SettingsPalette,
         values: &SettingsValues,
@@ -348,7 +350,7 @@ impl ThemeTab {
                 .size_full(),
             )
             .into_any_element();
-        settings_section(p, "Presets", None, None, vec![body]).map(IntoElement::into_any_element)
+        Some(body)
     }
 }
 

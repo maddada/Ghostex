@@ -14,7 +14,7 @@
 //! `theme-custom-picker` (the same, with the dark "+" square's Pick Color dialog open),
 //! `theme-glass-picture`, `theme-glass-live`, `theme-glass-live-dark-only`,
 //! `theme-glass-live-video`, `theme-glass-opaque` and `theme-glass-blocked`. `theme-presets` opens
-//! Interface at its Presets row, and `theme-presets-<preset id>` (`theme-presets-kg-wave`) with that
+//! Themes at its Themes group (the presets), and `theme-presets-<preset id>` (`theme-presets-kg-wave`) with that
 //! preset picked, which the row scrolls into view. `theme-colours` opens it at Colours, `theme-at-<section>` at that section
 //! (`transparency`, `chatTerminal`).
 use serde_json::{Map, Value, json};
@@ -163,7 +163,7 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
         return Some(json!({ "initialTab": "theme", "initialSection": section }));
     }
     if state.starts_with("theme-presets") {
-        return Some(json!({ "initialTab": "theme", "initialSection": "presets" }));
+        return Some(json!({ "initialTab": "theme", "initialSection": "themes" }));
     }
     // `GHOSTEX_NATIVE_MODAL_DEMO_QUERY` filters the page, e.g. "permissions" for the grant rows.
     let query = super::super::env("GHOSTEX_NATIVE_MODAL_DEMO_QUERY");

@@ -1,13 +1,17 @@
-//! The Interface page's Interface scale section: one Scale for the sidebar, the chat, Files and
-//! the terminal text, and Scale areas separately, which swaps it for a slider per area
-//! (CDXC:Settings 2026-11-05 DECISION in the settings catalog's `interface_scale.rs`).
+//! The Size & Zoom page's Size group: one Scale for the sidebar, the chat, Files and the terminal
+//! text, the link to the sidebar's size, and under More size options Scale areas separately, which
+//! swaps Scale for a slider per area (CDXC:Settings 2026-11-05 DECISION in the settings catalog's
+//! `interface_scale.rs`), and on Linux the Display scale (Q4153, CDXC:Settings 2026-11-18 in
+//! model.rs).
 use super::super::super::catalog::{module, settings_catalog};
 use super::super::super::fields::{
     SliderBinding, reset_key, settings_section, slider_number_field, toggle_field_with,
 };
+use super::super::super::model::SettingsTabId;
 #[cfg(target_os = "linux")]
 use super::super::super::{catalog::SettingOption, fields::select_field};
-use super::{ThemeCx, ThemeTab};
+use super::controls::{ICON_SIDEBAR, more_options_button};
+use super::{MoreGroup, ThemeCx, ThemeTab, related_link_row};
 use ghostex_settings_catalog::interface_scale::{
     INTERFACE_SCALE_SETTING, MAX_INTERFACE_SCALE_PERCENT, MIN_INTERFACE_SCALE_PERCENT,
     SCALE_AREAS_SEPARATELY_SETTING, SCALED_AREA_SETTINGS, SIDEBAR_ZOOM_RANGE,
@@ -72,6 +76,34 @@ impl ThemeTab {
                 cx,
             ));
         }
+        if !t.searching {
+            rows.push(related_link_row(
+                &p,
+                0,
+                "Sidebar size",
+                "Sidebar Interface Size",
+                ICON_SIDEBAR,
+                SettingsTabId::Sidebar,
+                cx,
+            ));
+        }
+        let shown = self.more_shown(MoreGroup::Size, t.searching, &|key| t.visible(key));
+        if !t.searching {
+            let open = self.more_open[MoreGroup::Size.index()];
+            rows.push(more_options_button(
+                &p,
+                "theme-more-size",
+                "More size options",
+                "Scale the sidebar, chat, Files and terminal text apart",
+                shown,
+                move |page, _window, cx| page.set_more_open(MoreGroup::Size, !open, cx),
+                cx,
+            ));
+        }
+        if !shown {
+            return settings_section(&p, "Size", None, None, rows)
+                .map(IntoElement::into_any_element);
+        }
         rows.push(toggle_field_with(
             &p,
             SCALE_AREAS_SEPARATELY_SETTING,
@@ -97,8 +129,6 @@ impl ThemeTab {
             },
             cx,
         ));
-        #[cfg(target_os = "linux")]
-        rows.push(display_scale_field(self, t, window, cx));
         if separately {
             let areas = [
                 (
@@ -152,11 +182,13 @@ impl ThemeTab {
                 ));
             }
         }
-        settings_section(&p, "UI Scale", None, None, rows).map(IntoElement::into_any_element)
+        #[cfg(target_os = "linux")]
+        rows.push(display_scale_field(self, t, window, cx));
+        settings_section(&p, "Size", None, None, rows).map(IntoElement::into_any_element)
     }
 }
 
-/// Settings > Interface > Display scale (Linux only): what Ghostex found at launch, and Automatic
+/// Settings > Size & Zoom > Display scale (Linux only): what Ghostex found at launch, and Automatic
 /// or a fixed scale, which `linux_x11_scale::pin_gpui_x11_scale_factor` reads at the next launch
 /// (CDXC:PlatformSupport 2026-11-08 DECISION in the settings catalog's `interface_scale.rs`).
 #[cfg(target_os = "linux")]

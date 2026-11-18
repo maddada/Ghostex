@@ -18,7 +18,7 @@ Usage:
   gx theme redo [<change-id>] [--json]
   gx theme history [--json]
 
-read     Every look setting on Settings > Interface, grouped, with its current
+read     Every look setting on the Settings > Interface pages, grouped, with its current
          value and what it does, and anything the current look makes hard to read.
 set      Changes one or more look settings or theme colours as one change, saved
          at once in the running app. Values are read as `ghostex settings set`

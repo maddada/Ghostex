@@ -1229,7 +1229,7 @@ where they are while you open, change and close views.
   left edge, click a session, or start a new agent, and the Agents Panel floats
   to the right of the sidebar. It is always 520px wide and takes your typing right
   away. This works on macOS, Windows and Linux. On a Mac with **Show the window
-  buttons when the sidebar is collapsed** off (Settings > Interface > Advanced),
+  buttons when the sidebar is collapsed** off (Settings > Window & Layout),
   and in full screen, the floating sidebar runs the window's full height, and with
   Frame the work area on it floats as a card inside the frame.
 - Panel animations: showing or hiding the sidebar, the side panel, the Agents Panel
@@ -1442,7 +1442,7 @@ where they are while you open, change and close views.
   Windows, Apple or Ubuntu mark).
 
 Related settings: everything under Sidebar & Sessions > Sidebar, `interfaceScalePercent`
-and `agentManagerZoomPercent` (the sidebar's size, Settings > Interface > UI Scale), `sidebarSpacesEnabled`,
+and `agentManagerZoomPercent` (the sidebar's size, Settings > Size & Zoom), `sidebarSpacesEnabled`,
 `sidebarSpaceSwitchBehavior`, `sidebarSpaceFollowActiveSession`.
 
 ## Commands pane
@@ -2685,9 +2685,9 @@ a message from another OMP agent is a "Message from" card, and the advisor's not
 "Advisor shared notes" card whose severity pills (such as "1 concern") show what it holds; click it
 to read the notes. On the phone the card shows the most serious note's severity and how many
 other notes there are.
-Chat follows the app theme by default. In Settings > Interface > Advanced, set Chat theme to Light, Dark, or System for a separate appearance, or choose Follow app to use the main Appearance (`sessionChatTheme`, `sidebarTheme`).
+Chat follows the app theme by default. In Settings > Themes > Chat colours, set Chat theme to Light, Dark, or System for a separate appearance, or choose Follow app to use the main Appearance (`sessionChatTheme`, `sidebarTheme`).
 
-The chat's size follows UI Scale in Settings > Interface (see Appearance and app): Scale sizes the chat together with the sidebar, Files and the terminal text, and with Scale areas separately on, Chat zoom (%) sizes it alone, including messages, controls, and the prompt composer, from 70% to 200% in 5% steps (`sessionChatZoomPercent`). With a chat focused, Cmd+= and Cmd+- (Ctrl on Windows and Linux) step whichever of the two applies, so every chat changes size together and the new level is saved; Cmd+0 sets it back to 100%.
+The chat's size follows Scale in Settings > Size & Zoom (see Appearance and app): Scale sizes the chat together with the sidebar, Files and the terminal text, and with Scale areas separately on, Chat zoom (%) sizes it alone, including messages, controls, and the prompt composer, from 70% to 200% in 5% steps (`sessionChatZoomPercent`). With a chat focused, Cmd+= and Cmd+- (Ctrl on Windows and Linux) step whichever of the two applies, so every chat changes size together and the new level is saved; Cmd+0 sets it back to 100%.
 
 To search a chat, press Cmd+F (Ctrl+F on Windows and Linux) with the chat focused, including while typing in the chat box. Only what you can see is searched: text inside a folded turn, tool group, thinking or collapsed card, or the hidden part of a long message behind Show more, is skipped until you open it. Every matching word is highlighted, the current one more strongly, and the counter shows which match you are on. The search starts at the newest match, the one nearest the bottom of the chat, and counts from there (1/42 is the newest; a + after the total means older messages aren't loaded yet): Shift+Enter or the up arrow goes to the previous, older match (loading older messages when it needs them), Enter or the down arrow back toward the newest, and the chat scrolls to it. Escape or the close button ends the search and returns you to the chat box. On the phone, Search Conversation in the session's menu opens the same search.
 
@@ -2794,7 +2794,7 @@ to Detailed view switch in its Settings > Advanced.
 
 While the agent is working, its thinking shows as a closed "Thinking…" card with the newest finished line beside it, so it never pushes the rest of the chat away; click (or tap) the card to read the whole thought, which keeps the newest lines in view as they arrive, and click again to close it. The commands the thought runs stay in view below the card, and when the turn ends everything folds into its "Previous turn" card as before. This works the same for every agent, on the computer, the web and the phone.
 
-Show thinking in grey (Settings > Interface > Text, off by default) shows the agent's thinking in grey, so it reads apart from the agent's replies, which Text strength sets how bright (`sessionChatMutedThinking`); the phone has the same switch in its Settings > Chat.
+Show thinking in grey (Settings > Text & Fonts, off by default) shows the agent's thinking in grey, so it reads apart from the agent's replies, which Text strength sets how bright (`sessionChatMutedThinking`); the phone has the same switch in its Settings > Chat.
 
 Tool call lines (Settings > Extensions > Experimental, off by default; on the phone, Settings > Chat > Tool call lines) draw each run of an agent's tool calls as one quiet line with no box: its tools' icons, the running call's own words while it runs (with "+2 more" for the run's other calls), then the call's words for a run of one or "Used 3 tools" for a longer run, with a red "1 failed" count and the time. Click (or tap) the line to see its calls as rows, each in its tense with its result and time and the reason for a failure; Detailed view opens every line and Simple keeps them shut, and a call waiting for your approval opens its line. Opening a call shows its output's first 12 lines and a Show all button for the rest. A run that starts a background task, or reports one ending, stays as rows (`chatToolCallLines`).
 
@@ -3582,8 +3582,8 @@ you are scrolled up or have text selected. To go back to the terminal's own
 scrollback, type `/tui` in Codex, choose Scrollback, then restart the session
 (Sleep and Wake it, or Full Reload).
 
-Terminals follow the app theme by default. The Interface page in Settings holds
-Appearance, and its Advanced part holds Chat theme and Terminal theme.
+Terminals follow the app theme by default. Settings > Themes holds Appearance,
+Chat theme (under Chat colours) and Terminal theme (under Terminal colours, with the palettes).
 Terminal theme can override the app with Light, Dark, or System. The palette
 selectors show the theme set in Ghostex's terminal config, including separate light
 and dark selections when configured. A single theme is used for both appearances
@@ -3595,16 +3595,16 @@ inactive projects. The appearance override and light palette apply to Ghostex on
 Terminal background (Settings, Terminal) is Black / white by default: pure black
 behind dark terminals and pure white behind light ones. Choose Follow theme to use
 the theme's background color instead, or Custom color to pick your own for both
-dark and light mode. A theme preset (Settings > Interface > Presets) sets Follow theme.
+dark and light mode. A theme preset (Settings > Themes, under Appearance) sets Follow theme.
 
 Terminals are see-through only while the window is: set Transparency to Dark only
-or Always (Settings, Interface, Transparency; it starts Off on Windows and Dark only on
+or Always (Settings > Themes > Glass; it starts Off on Windows and Dark only on
 macOS and Linux). Background opacity (Settings, Terminal) then sets how much of the
 work area's tint terminals keep: 100% matches the rest of the work area, lower
 shows more of your desktop through them. While transparency is off the row offers
 Turn on transparency instead. The window's Blur (on Windows with Desktop and windows,
-the Acrylic, Plain blur or Off choice) is set on the Interface page only (Settings > Interface >
-Transparency). Ghostty's own `background-opacity`
+the Acrylic, Plain blur or Off choice) is set on the Themes page only (Settings > Themes >
+Glass). Ghostty's own `background-opacity`
 and `background-blur` lines in the terminal config do not change Ghostex's panes.
 
 On macOS, Terminal shaders runs the `custom-shader` files from
@@ -3616,7 +3616,7 @@ off to go back to normal rendering; running sessions keep going. If a shader fil
 does not compile, terminals keep their normal look. Windows and Linux are not
 supported yet.
 
-The Monospace font (Settings > Interface > Text, `terminalFontFamily`, default
+The Monospace font (Settings > Text & Fonts, `terminalFontFamily`, default
 JetBrains Mono) sets one font for terminals, code in the Files view, diffs, code
 blocks, inline code and tool output in chat. Its list shows the monospace fonts
 installed on this computer; type any other name or a Ghostty list in its search
@@ -3627,7 +3627,7 @@ follows Text strength and Show thinking in grey. Terminals on remote machines
 follow it, because this computer draws them. The phone keeps its own fonts.
 
 Related settings: `terminalFontFamily`, `terminalFontSize` (with `interfaceScalePercent`,
-Settings > Interface > UI Scale), `terminalGhosttyTheme`, `terminalColorScheme`, `terminalGhosttyLightTheme`,
+Settings > Size & Zoom), `terminalGhosttyTheme`, `terminalColorScheme`, `terminalGhosttyLightTheme`,
 `terminalBackgroundMode`, `workspaceBackgroundColor`, `terminalBackgroundOpacity`,
 `windowGlass`, `windowGlassBlurRadius`, `windowGlassWindowsBlur`, `terminalCursorStyle`, `terminalPane*PaddingPx`,
 `terminalScrollbackLimitMb`, `terminalCopyOnSelect`, `promptEditorBackend`,
@@ -7551,8 +7551,8 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   Settings > Agents, `agentAcceptAllEnabled`), with a small preview window
   that shows your picks at once, next to the look: Appearance, the theme
   colour squares (Dark and Light tabs), Colourfulness and one Transparency row
-  (the simple choices from Settings > Interface), with a "More theme options
-  in Settings > Interface" link that opens the Interface page. Turning
+  (the simple choices from Settings > Themes), with a "More theme options
+  in Settings → Themes" link that opens the Themes page. Turning
   transparency on there also switches Appearance to Dark. The last panel also
   says that Ghostex sends anonymous usage analytics (see "Usage analytics"
   below for the launch option that turns them off). Setup asks for no project
@@ -7804,7 +7804,7 @@ never comes back after that. Settings > About always has a **Star on GitHub**
 row.
 
 Any agent can restyle Ghostex when you ask it ("make it darker", "give it a blue theme",
-"let more of my desktop show through"). It changes the settings on the Interface page with
+"let more of my desktop show through"). It changes the settings on the Interface pages with
 `ghostex theme set`, several at once as one change, and they apply at once, as a change in
 Settings does. The agent's chat shows a Theme changed card naming the agent and listing what
 changed, with Undo. When a change makes something hard to read (a sidebar or work area tint so
@@ -7813,7 +7813,7 @@ the card and the command say what is hard to read. `ghostex theme undo` and `gho
 step through the last 20 changes, kept across restarts, and `ghostex theme history` lists them
 with when they were made, by which agent or by you, and what changed; Undo is refused once a
 setting it would put back was changed again.
-Settings > Interface opens with **Theme it in your words**, which says an agent can do this:
+Settings > Themes has **Theme it in your words**, right under Appearance and the presets, which says an agent can do this:
 **Ask an agent** opens a Help chat with a starter prompt as its draft to edit and send, and six
 example themes (Firefly Forest, Ember Forge, Synthwave '84, Polar Night, Inkstone and Orchid
 Dusk) each show a picture, the prompt that describes them, **Copy prompt** and **Apply**. Apply
@@ -7829,11 +7829,10 @@ which stays see-through on window glass, or a colour (#7dd3fc, or #7dd3fc80 with
 one not set keeps the theme's own. Links follow the accent while Links is empty, and the chat's
 pill dots take the accent (questions), warning (working) and danger (approvals) once those are
 set. Agents set them with `ghostex theme set` ("the borders are too bright" becomes
-`ghostex theme set --dark border=4%`), and you can in Settings > Interface. **Chat colours**, right
-under Theme it in your words, has a live chat preview and Your messages, Chat box, Cards and
-Accent; Your messages' slider says how see-through your bubble is, so the glass shows through it.
-**Theme colours**, further down, has the rest: Borders, Dividers, Text and Grey text show at once,
-the others under More theme colours, which opens by itself while one of them is set. Every colour
+`ghostex theme set --dark border=4%`), and you can in Settings > Themes. **Chat colours** has Chat theme, a live chat preview and
+Your messages, Chat box, Cards and Accent; Your messages' slider says how see-through your bubble is, so the glass shows through it.
+**Fine-tune colours**, further down, has the rest under More theme colours (Borders, Dividers,
+Text, Grey text and the others), which opens by itself while one of them is set. Every colour
 has a swatch that opens the colour picker, a box for an exact value, an opacity slider once it is
 set and Reset, with one line per appearance the app shows. After an example theme is applied, the
 gallery says which one and how many colours it set, and Change them opens them. They change the
@@ -7842,27 +7841,32 @@ to read (under 4.5:1 for text, 3:1 for grey text, the accent, links and status c
 on a fill) or a border or divider all but vanish, the change is saved and the card says so.
 Commands: `ghostex theme read`, `ghostex theme set <key>=<value> ...`, `ghostex theme undo`, `ghostex theme redo`, `ghostex theme history`. Settings: `themeRoles`.
 
-Theme colours, colourfulness, the work area frame, window glass, and active pane outline live on the
-Interface page in Settings, right below General (`ghostex settings open --tab theme`).
-It has Theme it in your words, Chat colours, Text, UI Scale, Presets, Colours, Transparency and Theme colours sections, with Advanced controls and links
-to related settings on General; a search for a row inside More opens it.
-Text: App font lists the fonts installed on this computer, with a search field and
+Settings has an **Interface** group in its sidebar, right under Experience, with four pages
+(`ghostex settings open --tab interface` lists their settings):
+**Themes** (`--tab theme`): Themes (Appearance, the presets, Theme it in your words), Colours,
+Glass, Chat colours (with Chat theme), Fine-tune colours and Terminal colours (Terminal theme,
+the palettes and a link to Terminal background); **Text & Fonts** (`--tab textFonts`): Fonts and
+Text; **Size & Zoom** (`--tab sizeZoom`): Scale, a link to the sidebar's size, and More size
+options; **Window & Layout** (`--tab windowLayout`): Window frame (Frame the work area, the window
+buttons, Close buttons on the right) and Panes (the active pane outline). A search for a row
+inside a More fold opens it.
+Fonts: App font lists the fonts installed on this computer, with a search field and
 each name drawn in its own font; monospaced fonts sit at the end of the list. The
 pick applies to the whole app (sidebar, chat, composer, menus, dialogs, Settings,
 tooltips and notifications), while terminals, code, diffs and other monospace text
 keep their own font. App default, at the top of the list, goes back to Ghostex's
 own fonts. A saved font that isn't on this computer stays listed as not installed,
 and the app uses its own fonts until it is. The phone keeps its own font. To make
-chat text stronger, use Settings > Interface > Text strength, from the standard colour
+chat text stronger, use Settings > Text & Fonts > Text strength, from the standard colour
 (0%, the default) up to full white in dark mode or full black in light mode, on the
 computer and the phone; muted text, links, code blocks and status colours stay as they are.
 Settings: `sessionChatFontFamily`, `terminalFontFamily`, `sessionChatTextStrengthPercent`.
-UI Scale, under Text, sets how big things are. Scale (70% to 200%, 100% by
+Size & Zoom sets how big things are. Scale (70% to 200%, 100% by
 default) sizes the sidebar, every chat, files open in Files (with the Changes diff)
 and the terminal text together; the header, tabs, menus and dialogs keep their size.
 Cmd+= and Cmd+- (Ctrl on Windows and Linux) step Scale from anywhere except a web
 page, which keeps its own zoom, and Cmd+0 sets 100%. Turn on Scale areas separately
-to give each area its own slider instead: Sidebar zoom (50% to 200%), Chat zoom and
+(under More size options, which opens by itself while it is on) to give each area its own slider instead: Sidebar zoom (50% to 200%), Chat zoom and
 Files zoom (70% to 200%) and Terminal font size (8 to 32 points). Each starts at the
 size Scale gave it, Scale no longer applies, and the keys change only the area you
 are in (in a terminal, only that terminal until it restarts). If you had changed one
@@ -7871,13 +7875,13 @@ changes size. The Terminal page's Font size row links here.
 On Linux, the whole app first takes its size from your desktop's display scale
 (GNOME, KDE, Hyprland and COSMIC included), so the header, menus, dialogs and web
 pages match your other apps, and UI Scale applies on top. Display scale,
-under Scale areas separately (Linux only), shows the scale Ghostex found and lets
+last under More size options (Linux only), shows the scale Ghostex found and lets
 you pick a fixed one from 100% to 300% if it gets it wrong; it takes effect when
 Ghostex restarts. The first time Ghostex finds a display scale above 100% on
 COSMIC while UI Scale is raised, it offers once to set UI Scale back
 to 100%.
 Settings: `interfaceScalePercent`, `interfaceScaleAreasSeparately`, `linuxDisplayScale`, `agentManagerZoomPercent`, `sessionChatZoomPercent`, `filesZoomPercent`, `terminalFontSize`.
-Presets, right above Colours, are twenty theme cards in one row that scrolls
+The presets, in the Themes group under Appearance, are twenty theme cards in one row that scrolls
 sideways (swipe sideways, hold Shift and turn the wheel, or drag with a finger); a
 thin line separates families: Catppuccin (Mocha, Macchiato, Frappé, Latte), Dracula
 and Alucard, Solarized, Tokyo Night (Night, Storm, Moon, Day), Nord, Kanagawa (Wave,

@@ -577,21 +577,24 @@ mod tests {
     #[test]
     fn the_monospace_font_is_found_by_its_name_and_its_old_one() {
         for query in ["monospace", "monospace font", "font family", "ghostty font"] {
-            assert!(finds_row(query, "theming", "terminalFontFamily"), "{query}");
+            assert!(
+                finds_row(query, "textFonts", "terminalFontFamily"),
+                "{query}"
+            );
         }
     }
 
     #[test]
-    fn the_moved_chat_rows_are_found_on_the_interface_page() {
+    fn the_moved_chat_rows_are_found_on_the_interface_pages() {
         assert!(finds_row(
             "text strength",
-            "theming",
+            "textFonts",
             "sessionChatTextStrengthPercent"
         ));
-        assert!(finds_row("chat zoom", "theming", "sessionChatZoomPercent"));
+        assert!(finds_row("chat zoom", "sizeZoom", "sessionChatZoomPercent"));
         assert!(finds_row(
             "thinking in grey",
-            "theming",
+            "textFonts",
             "sessionChatMutedThinking"
         ));
     }
@@ -613,7 +616,14 @@ mod tests {
         let general = GeneralSearch::new("spaces", Vec::new());
         assert!(general.subsection_visible("spaces", true));
         assert!(general.subsection_visible("sidebar", true));
-        for section in ["theming", "chat", "autoSleep", "terminal", "editor"] {
+        for section in [
+            "theming",
+            "textFonts",
+            "chat",
+            "autoSleep",
+            "terminal",
+            "editor",
+        ] {
             assert!(!general.subsection_visible(section, true), "{section}");
         }
         for tab in ["sync", "workspaces", "agents"] {

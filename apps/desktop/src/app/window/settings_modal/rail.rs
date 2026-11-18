@@ -146,7 +146,13 @@ pub(crate) fn rail_pages(store: &SettingsStore) -> Vec<RailPage> {
             return true;
         }
         match tab {
+            // The Interface pages: one catalog section each (CDXC:Settings 2026-11-18 in model.rs).
             SettingsTabId::Theme => general.subsection_visible("theming", power_visible),
+            SettingsTabId::TextFonts => general.subsection_visible("textFonts", power_visible),
+            SettingsTabId::SizeZoom => general.subsection_visible("sizeZoom", power_visible),
+            SettingsTabId::WindowLayout => {
+                general.subsection_visible("windowLayout", power_visible)
+            }
             SettingsTabId::Hotkeys => !sections.is_empty(),
             other => match other.general_group() {
                 Some(group) => general.group_visible(group),

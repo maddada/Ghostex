@@ -4,31 +4,18 @@ use crate::json::Opt;
 use crate::rows::{row, section, Section};
 use crate::Platform;
 
-pub(crate) fn theming(platform: Platform) -> Section {
-    let mut rows = vec![
+/// CDXC:Settings 2026-11-18 DECISION:
+/// User (Q4153, after arranging the Interface tab on a page): "let's split interface into multiple tabs also please to make each one more focused", "themes / glass / colors need to be in 1 area. text and fonts need to be in separate page for sure", "close button on the right and frame the main area and other ones like that need to be in separate place", and (Q4154's note) "under a new section in the sidebar called interface". The one `theming` section is four, one per page of the rail's Interface group: Themes (keeps the `theming` id and the `theme` tab, so old deep links and searches land there), Text & Fonts, Size & Zoom and Window & Layout. Every setting keeps its key, default and behaviour; only the page it is on changed.
+/// SEE-ALSO: layout.rs (`GENERAL_GROUPS`' `appearance`), help/mod.rs (the four tabs), apps/desktop/src/app/window/settings_modal/model.rs (`RailTier::Interface`).
+pub(crate) fn theming() -> Section {
+    let rows = vec![
             row("sidebarTheme", "Appearance", "Follow the system appearance by default, or choose Light or Dark.").options(SIDEBAR_THEME_SETTING_OPTIONS),
             row("darkThemePreset", "Dark mode colour", "The colour of the sidebar and window in dark mode: one of sixteen colour squares, or the + square for a custom colour.").options(DARK_THEME_PRESET_OPTIONS),
             row("customSidebarTitlebarBackgroundTintColor", "Custom dark mode tint", "The custom dark mode colour, chosen in the colour picker the + square opens."),
             row("lightThemePreset", "Light mode colour", "The colour of the sidebar and window in light mode: one of sixteen colour squares, or the + square for a custom colour.").options(LIGHT_THEME_PRESET_OPTIONS),
+            row("customSidebarTitlebarLightBackgroundTintColor", "Custom light mode tint", "The custom light mode colour, chosen in the colour picker the + square opens."),
             row("themeSidebarContrast", "Sidebar colourfulness", "How much of the theme colour shows in the sidebar, from Subtle (deeper, nearly neutral) through Vivid (lighter, more colourful) to Full, which shows the colour you picked itself. Colourfulness sets the sidebar and work area together, and how deep a custom colour is."),
             row("themeWorkAreaContrast", "Work area colourfulness", "How much of the theme colour shows in the work area (chat, terminals and views), from Subtle to Full. Colourfulness sets the sidebar and work area together."),
-            row("customSidebarTitlebarLightBackgroundTintColor", "Custom light mode tint", "The custom light mode colour, chosen in the colour picker the + square opens."),
-            row("sessionChatFontFamily", "App font", "Pick one of the fonts installed on this computer for the whole app: sidebar, chat, menus, dialogs and Settings, then press Apply. App default keeps Ghostex's own fonts. Terminals and code use the Monospace font."),
-            row("terminalFontFamily", "Monospace font", "Font family for terminals, code in the Files view, diffs, code blocks and tool output in chat. Pick an installed monospace font, or type a Ghostty font-family name, then press Apply."),
-            // CDXC:Settings 2026-11-05 DECISION: User (issue #425): one Interface scale section with Scale and a Scale areas separately switch that reveals the Sidebar, Chat, Files and Terminal font size sliders (interface_scale.rs has the full decision).
-            row("interfaceScalePercent", "Scale (%)", "Scale the sidebar, every chat, files open in the Files view and the terminal text together, from 70% to 200%. The header, tabs, menus and dialogs keep their size. Cmd+= and Cmd+- (Ctrl on Windows and Linux) change it from anywhere, and Cmd+0 sets 100%. Default: 100%."),
-            row("interfaceScaleAreasSeparately", "Scale areas separately", "Give the sidebar, chat, Files and terminal text their own sizes instead of one Scale. Cmd+= and Cmd+- then change only the area you are in. Default: off, or on when you had already changed one of those sizes."),
-            row("agentManagerZoomPercent", "Sidebar zoom (%)", "Scale the sidebar, from 50% to 200%, when Scale areas separately is on."),
-            row("sessionChatZoomPercent", "Chat zoom (%)", "Scale every desktop chat, including messages and the prompt composer, from 70% to 200% in 5% steps, when Scale areas separately is on. Cmd+= and Cmd+- in a chat change it too, and Cmd+0 sets 100%. Default: 100%."),
-            row("filesZoomPercent", "Files zoom (%)", "Scale the text of a file open in the Files view (Markdown, text and code, with its line numbers) and the Changes diff, from 70% to 200% in 5% steps, when Scale areas separately is on. Cmd+= and Cmd+- (Ctrl on Windows and Linux) in an open file change it too, and Cmd+0 sets 100%. Default: 100%."),
-            row("terminalFontSize", "Terminal font size", "The terminal text size in points, when Scale areas separately is on. Cmd+= and Cmd+- in a terminal change it for that terminal only until it restarts. Default: 13."),
-            row("sessionChatTextStrengthPercent", "Text strength", "How strong agents' replies and your messages read in chat, on the computer and the phone. 0% is the standard colour; 100% is full white in dark mode and full black in light mode. Muted text, links, code blocks and status colours stay as they are."),
-            row("sessionChatMutedThinking", "Show thinking in grey", "Show the agent's thinking in grey, so it reads apart from the agent's replies."),
-            row("sessionChatTheme", "Chat theme", "Follow the app theme by default, or override chat with Light, Dark, or System.").options(SESSION_CHAT_THEME_OPTIONS),
-            row("terminalColorScheme", "Terminal theme", "Follow the app theme by default, or override terminals with Light, Dark, or System.").options(SESSION_CHAT_THEME_OPTIONS),
-            row("terminalGhosttyLightTheme", "Terminal palette in light mode", "Uses the light theme set in Ghostex's terminal config, or GitHub Light when none is set.").options(&ghostty_themes_without_unmanaged()),
-            row("terminalGhosttyTheme", "Terminal palette in dark mode", "Uses the dark theme set in Ghostex's terminal config, or GitHub Dark when none is set.").options(GHOSTTY_THEME_SETTING_OPTIONS),
-            row("themeRoles", "Theme colours", "Borders, dividers, text, grey text, the accent, links, cards, controls, menus, selected and hovered rows, the focus ring, your messages, the chat box, code blocks and the status colours, each set apart for dark and light mode as an opacity (4%) or a colour (#7dd3fc), with a colour picker and an opacity slider. Your messages, the chat box, cards and the accent are in Chat colours. Empty keeps the theme's own; Reset puts it back. Agents change them with `ghostex theme set`."),
             row("windowGlass", "Transparency", "Let your desktop show through the window: Off, Dark only (light mode stays solid) or Always.").options(WINDOW_GLASS_OPTIONS),
             row("windowGlassSource", "Behind the glass", "Desktop and windows, your wallpaper, a picture you choose, or Live: a calm animation in your theme colours or your own video.").options(WINDOW_GLASS_SOURCE_OPTIONS),
             // CDXC:Settings 2026-10-29 DECISION (cleanup Q19): one switch keeps the light-mode picture, video, Live
@@ -51,26 +38,59 @@ pub(crate) fn theming(platform: Platform) -> Section {
             row("windowGlassWorkAreaTintDark", "Work area tint in dark mode", "How much of the desktop the work area hides in dark mode, set on its own so either area can be the darker one. Lower shows more of your desktop through it."),
             row("windowGlassSidebarOpacityLight", "Sidebar tint in light mode", "How much of the desktop the sidebar hides in light mode. Lower shows more of your desktop through it."),
             row("windowGlassWorkAreaTintLight", "Work area tint in light mode", "How much of the desktop the work area hides in light mode, set on its own so either area can be the darker one. Lower shows more of your desktop through it."),
-            row("showActivePaneOutline", "Show active pane outline", "Show an outline around the currently focused pane."),
-            row("workspaceActivePaneBorderColor", "Active pane outline colour", "Color of the outline around the currently focused pane."),
-            row("workAreaFrame", "Frame the work area", "Show the work area as a card inside the window, with a thin margin all around, a hairline border and a light shadow. Off keeps the work area edge to edge."),
-            // CDXC:Settings 2026-11-08 DECISION: User: "please add setting under this [Frame the work area] to show traffic lights on macos when sidebar is collapsed (default to yes). only show this sub setting on macos. also please move this whole setting under a new advanced area in the interface page in settings". Both rows sit in the Interface page's Advanced fold (`ADVANCED_MAIN_SETTING_KEYS`).
-            row("showWindowButtonsWhenSidebarCollapsed", "Show the window buttons when the sidebar is collapsed", "Keep the red, yellow and green window buttons in the window's top left while the sidebar is collapsed. Off hides them until you open the floating sidebar, which carries them in its top row. Full screen keeps its own title bar either way."),
-            // CDXC:AppModal 2026-11-10 DECISION in apps/desktop/src/app/window/round_close_button.rs: on macOS the close X of dialogs and toasts sits at their top left; this macOS-only row in the Interface page's Advanced fold puts it back on the right.
-            row("closeButtonsOnRight", "Close buttons on the right", "Put the X that closes dialogs and pop-up messages at their top right. Off keeps it at their top left, where macOS puts a window's close button."),
+            row("sessionChatTheme", "Chat theme", "Follow the app theme by default, or override chat with Light, Dark, or System.").options(SESSION_CHAT_THEME_OPTIONS),
+            row("themeRoles", "Theme colours", "Borders, dividers, text, grey text, the accent, links, cards, controls, menus, selected and hovered rows, the focus ring, your messages, the chat box, code blocks and the status colours, each set apart for dark and light mode as an opacity (4%) or a colour (#7dd3fc), with a colour picker and an opacity slider. Your messages, the chat box, cards and the accent are in Chat colours. Empty keeps the theme's own; Reset puts it back. Agents change them with `ghostex theme set`."),
+            row("terminalColorScheme", "Terminal theme", "Follow the app theme by default, or override terminals with Light, Dark, or System.").options(SESSION_CHAT_THEME_OPTIONS),
+            row("terminalGhosttyTheme", "Terminal palette in dark mode", "Uses the dark theme set in Ghostex's terminal config, or GitHub Dark when none is set.").options(GHOSTTY_THEME_SETTING_OPTIONS),
+            row("terminalGhosttyLightTheme", "Terminal palette in light mode", "Uses the light theme set in Ghostex's terminal config, or GitHub Light when none is set.").options(&ghostty_themes_without_unmanaged()),
+    ];
+    section("theming", "Themes", rows)
+}
+
+/// Settings > Text & Fonts (CDXC:Settings 2026-11-18 at [`theming`]).
+pub(crate) fn text_fonts() -> Section {
+    let rows = vec![
+            row("sessionChatFontFamily", "App font", "Pick one of the fonts installed on this computer for the whole app: sidebar, chat, menus, dialogs and Settings, then press Apply. App default keeps Ghostex's own fonts. Terminals and code use the Monospace font."),
+            row("terminalFontFamily", "Monospace font", "Font family for terminals, code in the Files view, diffs, code blocks and tool output in chat. Pick an installed monospace font, or type a Ghostty font-family name, then press Apply."),
+            row("sessionChatTextStrengthPercent", "Text strength", "How strong agents' replies and your messages read in chat, on the computer and the phone. 0% is the standard colour; 100% is full white in dark mode and full black in light mode. Muted text, links, code blocks and status colours stay as they are."),
+            row("sessionChatMutedThinking", "Show thinking in grey", "Show the agent's thinking in grey, so it reads apart from the agent's replies."),
+    ];
+    section("textFonts", "Text & Fonts", rows)
+}
+
+/// Settings > Size & Zoom (CDXC:Settings 2026-11-18 at [`theming`]).
+pub(crate) fn size_zoom(platform: Platform) -> Section {
+    let mut rows = vec![
+            // CDXC:Settings 2026-11-05 DECISION: User (issue #425): one Interface scale section with Scale and a Scale areas separately switch that reveals the Sidebar, Chat, Files and Terminal font size sliders (interface_scale.rs has the full decision).
+            row("interfaceScalePercent", "Scale (%)", "Scale the sidebar, every chat, files open in the Files view and the terminal text together, from 70% to 200%. The header, tabs, menus and dialogs keep their size. Cmd+= and Cmd+- (Ctrl on Windows and Linux) change it from anywhere, and Cmd+0 sets 100%. Default: 100%."),
+            row("interfaceScaleAreasSeparately", "Scale areas separately", "Give the sidebar, chat, Files and terminal text their own sizes instead of one Scale. Cmd+= and Cmd+- then change only the area you are in. Default: off, or on when you had already changed one of those sizes."),
+            row("agentManagerZoomPercent", "Sidebar zoom (%)", "Scale the sidebar, from 50% to 200%, when Scale areas separately is on."),
+            row("sessionChatZoomPercent", "Chat zoom (%)", "Scale every desktop chat, including messages and the prompt composer, from 70% to 200% in 5% steps, when Scale areas separately is on. Cmd+= and Cmd+- in a chat change it too, and Cmd+0 sets 100%. Default: 100%."),
+            row("filesZoomPercent", "Files zoom (%)", "Scale the text of a file open in the Files view (Markdown, text and code, with its line numbers) and the Changes diff, from 70% to 200% in 5% steps, when Scale areas separately is on. Cmd+= and Cmd+- (Ctrl on Windows and Linux) in an open file change it too, and Cmd+0 sets 100%. Default: 100%."),
+            row("terminalFontSize", "Terminal font size", "The terminal text size in points, when Scale areas separately is on. Cmd+= and Cmd+- in a terminal change it for that terminal only until it restarts. Default: 13."),
     ];
     if platform == Platform::Linux {
-        // CDXC:PlatformSupport 2026-11-08 DECISION: User (issue #503): a Linux-only Display scale row under Scale areas separately (interface_scale.rs has the full decision).
-        let after = rows
-            .iter()
-            .position(|row| row.key == "interfaceScaleAreasSeparately")
-            .map_or(rows.len(), |index| index + 1);
-        rows.insert(
-            after,
+        // CDXC:PlatformSupport 2026-11-08 DECISION: User (issue #503): a Linux-only Display scale row (interface_scale.rs has the full decision).
+        // Last on the page, as Q4153 arranged it.
+        rows.push(
             row("linuxDisplayScale", "Display scale", "How big the whole app is drawn: the header, menus, dialogs and web pages too. Automatic follows your desktop's display scale; pick a fixed one if Ghostex gets it wrong. UI Scale applies on top. Takes effect when Ghostex restarts. Default: Automatic.").options(crate::interface_scale::LINUX_DISPLAY_SCALE_OPTIONS),
         );
     }
-    section("theming", "Interface", rows)
+    section("sizeZoom", "Size & Zoom", rows)
+}
+
+/// Settings > Window & Layout (CDXC:Settings 2026-11-18 at [`theming`]).
+pub(crate) fn window_layout() -> Section {
+    let rows = vec![
+            row("workAreaFrame", "Frame the work area", "Show the work area as a card inside the window, with a thin margin all around, a hairline border and a light shadow. Off keeps the work area edge to edge."),
+            // CDXC:Settings 2026-11-08 DECISION: User: "please add setting under this [Frame the work area] to show traffic lights on macos when sidebar is collapsed (default to yes). only show this sub setting on macos. also please move this whole setting under a new advanced area in the interface page in settings". The Advanced fold is superseded by CDXC:Settings 2026-11-18 at [`theming`]: both rows are shown on the Window & Layout page.
+            row("showWindowButtonsWhenSidebarCollapsed", "Show the window buttons when the sidebar is collapsed", "Keep the red, yellow and green window buttons in the window's top left while the sidebar is collapsed. Off hides them until you open the floating sidebar, which carries them in its top row. Full screen keeps its own title bar either way."),
+            // CDXC:AppModal 2026-11-10 DECISION in apps/desktop/src/app/window/round_close_button.rs: on macOS the close X of dialogs and toasts sits at their top left; this macOS-only row on the Window & Layout page puts it back on the right.
+            row("closeButtonsOnRight", "Close buttons on the right", "Put the X that closes dialogs and pop-up messages at their top right. Off keeps it at their top left, where macOS puts a window's close button."),
+            row("showActivePaneOutline", "Show active pane outline", "Show an outline around the currently focused pane."),
+            row("workspaceActivePaneBorderColor", "Active pane outline colour", "Color of the outline around the currently focused pane."),
+    ];
+    section("windowLayout", "Window & Layout", rows)
 }
 
 /// `GHOSTTY_THEME_SETTING_OPTIONS` without "Use terminal config file": the light palette always names a theme.

@@ -41,8 +41,9 @@ use std::rc::Rc;
 /// The roles the Chat colours group shows (chat_colours.rs), so Theme colours leaves them out.
 pub(super) const CHAT_COLOUR_ROLES: [&str; 4] = ["userMessage", "chatBox", "surface", "accent"];
 
-/// How many of Theme colours' own roles show without opening More theme colours.
-const FIRST_ROLES: usize = 4;
+/// How many of Fine-tune colours' own roles show without opening More theme colours: none, so the
+/// group is one More row until opened (CDXC:Settings 2026-11-18 in model.rs, Q4153).
+const FIRST_ROLES: usize = 0;
 
 /// The swatch's side, and the slider track's width beside the text box.
 const SWATCH: f32 = 24.0;
@@ -476,7 +477,7 @@ impl ThemeTab {
                 let more_open = self.more_open[MoreGroup::ThemeColours.index()];
                 let summary = if set_under_more == 0 {
                     SharedString::from(
-                        "Links, controls, menus, rows, the focus ring, code blocks, status colours",
+                        "Borders, dividers, text, links, controls, menus, rows, status colours",
                     )
                 } else if set_under_more == 1 {
                     SharedString::from("1 of these is set")
@@ -513,7 +514,7 @@ impl ThemeTab {
         }
         super::super::super::fields::settings_section(
             &p,
-            "Theme colours",
+            "Fine-tune colours",
             Some(SharedString::from(
                 "Pick a colour, or drag its opacity so the glass shows through. A value can also be an opacity of the text colour (4%) or a colour (#7dd3fc). Empty keeps the theme's own; your messages, the chat box, cards and the accent are in Chat colours.",
             )),

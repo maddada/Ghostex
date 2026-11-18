@@ -91,7 +91,7 @@ fn ghostty_preset(page: &mut GeneralTab, recommended: bool, cx: &mut Context<Gen
 }
 
 /// CDXC:Settings 2026-10-31 DECISION:
-/// User: the Terminal page gets a link row to the moved Monospace font, which jumps to it on the Interface page. The font itself lives once, beside the App font and the chat preview (`theme/font.rs`).
+/// User: the Terminal page gets a link row to the moved Monospace font, which jumps to it on the Interface page (Text & Fonts since 2026-11-18). The font itself lives once, beside the App font and the chat preview (`theme/font.rs`).
 fn monospace_font_link(p: &SettingsPalette, cx: &mut Context<GeneralTab>) -> AnyElement {
     let button = settings_button(
         p,
@@ -104,7 +104,7 @@ fn monospace_font_link(p: &SettingsPalette, cx: &mut Context<GeneralTab>) -> Any
         |page: &mut GeneralTab, _window, cx| {
             let store = page.store.clone();
             store.update(cx, |store, cx| {
-                store.scroll_to_section(SettingsTabId::Theme, "font", cx);
+                store.scroll_to_section(SettingsTabId::TextFonts, "fonts", cx);
             });
         },
         cx,
@@ -113,7 +113,7 @@ fn monospace_font_link(p: &SettingsPalette, cx: &mut Context<GeneralTab>) -> Any
         p,
         "terminal-monospace-font-link-row",
         RowSpec::new("Monospace font")
-            .description("The terminal's font is set on the Interface page, with the App font."),
+            .description("The terminal's font is set on the Text & Fonts page, with the App font."),
         None,
         button,
         cx,
@@ -121,7 +121,7 @@ fn monospace_font_link(p: &SettingsPalette, cx: &mut Context<GeneralTab>) -> Any
 }
 
 /// The terminal's font size is one of the Interface scale areas (CDXC:Settings 2026-11-05 in the
-/// settings catalog's `interface_scale.rs`), so it lives on the Interface page.
+/// settings catalog's `interface_scale.rs`), so it lives on the Size & Zoom page.
 fn font_size_link(p: &SettingsPalette, cx: &mut Context<GeneralTab>) -> AnyElement {
     let button = settings_button(
         p,
@@ -134,7 +134,7 @@ fn font_size_link(p: &SettingsPalette, cx: &mut Context<GeneralTab>) -> AnyEleme
         |page: &mut GeneralTab, _window, cx| {
             let store = page.store.clone();
             store.update(cx, |store, cx| {
-                store.scroll_to_section(SettingsTabId::Theme, "interfaceScale", cx);
+                store.scroll_to_section(SettingsTabId::SizeZoom, "size", cx);
             });
         },
         cx,
@@ -143,7 +143,7 @@ fn font_size_link(p: &SettingsPalette, cx: &mut Context<GeneralTab>) -> AnyEleme
         p,
         "terminal-font-size-link-row",
         RowSpec::new("Font size").description(
-            "The terminal's text size is set on the Interface page, under UI Scale, with the sidebar, chat and Files sizes.",
+            "The terminal's text size is set on the Size & Zoom page, with the sidebar, chat and Files sizes.",
         ),
         None,
         button,

@@ -30,10 +30,16 @@ pub struct NavItem {
 
 /// Which search sections each General page renders, in rendered order. Single-section pages
 /// keep using that section's own search result (no separate page-title match). `appearance` is
-/// the Interface page, which has its own tab.
+/// the rail's Interface group, whose four pages have their own tabs.
 pub const GENERAL_GROUPS: &[GeneralGroup] = &[
     group("experience", "Experience", &["experience"]),
-    group("appearance", "Interface", &["theming"]),
+    // The rail's Interface group: four pages with their own tabs (CDXC:Settings 2026-11-18 in
+    // general/theme.rs), one section each.
+    group(
+        "appearance",
+        "Interface",
+        &["theming", "textFonts", "sizeZoom", "windowLayout"],
+    ),
     group("chat", "Chat", &["chat", "markedHandovers"]),
     group(
         "sidebar",

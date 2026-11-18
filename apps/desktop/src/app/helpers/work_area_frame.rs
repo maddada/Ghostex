@@ -23,7 +23,7 @@ use crate::app::helpers::*;
 static WORK_AREA_FRAME: AtomicBool = AtomicBool::new(true);
 
 /// `showWindowButtonsWhenSidebarCollapsed` (on when unset), the sub-setting of the frame row in
-/// Settings > Interface > Advanced.
+/// Settings > Window & Layout.
 ///
 /// CDXC:Titlebar 2026-11-08 DECISION:
 /// User: "please add setting under this [Frame the work area] to show traffic lights on macos when sidebar is collapsed (default to yes). only show this sub setting on macos". On, the window's traffic lights stay in its top left with the sidebar collapsed, whether or not the frame is on, and the header's toggle keeps the docked sidebar's room for them (`window_controls_state` in floating_reveal/model.rs); the floating sidebar then carries no lights of its own. Off is what the 2026-11-06 and 2026-11-07 decisions made of it: the lights hide with the sidebar and show in the floating sidebar's top row. Full screen is unchanged either way. Supersedes, as a default, those decisions' always-hidden lights.

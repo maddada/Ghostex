@@ -3964,11 +3964,11 @@
       "title": "Appearance",
       "subtitle": "Follow the system appearance by default, or choose Light or Dark.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
+      "sectionTitle": "Themes",
       "type": "enum",
       "default": "system",
       "options": [
@@ -3992,11 +3992,11 @@
       "title": "Dark mode colour",
       "subtitle": "The colour of the sidebar and window in dark mode: one of sixteen colour squares, or the + square for a custom colour.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
+      "sectionTitle": "Themes",
       "type": "enum",
       "default": "gray",
       "options": [
@@ -4076,11 +4076,11 @@
       "title": "Custom dark mode tint",
       "subtitle": "The custom dark mode colour, chosen in the colour picker the + square opens.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
+      "sectionTitle": "Themes",
       "type": "string",
       "default": "#808080",
       "agentWritable": true
@@ -4090,11 +4090,11 @@
       "title": "Light mode colour",
       "subtitle": "The colour of the sidebar and window in light mode: one of sixteen colour squares, or the + square for a custom colour.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
+      "sectionTitle": "Themes",
       "type": "enum",
       "default": "gray",
       "options": [
@@ -4170,15 +4170,29 @@
       "agentWritable": true
     },
     {
+      "key": "customSidebarTitlebarLightBackgroundTintColor",
+      "title": "Custom light mode tint",
+      "subtitle": "The custom light mode colour, chosen in the colour picker the + square opens.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "string",
+      "default": "#808080",
+      "agentWritable": true
+    },
+    {
       "key": "themeSidebarContrast",
       "title": "Sidebar colourfulness",
       "subtitle": "How much of the theme colour shows in the sidebar, from Subtle (deeper, nearly neutral) through Vivid (lighter, more colourful) to Full, which shows the colour you picked itself. Colourfulness sets the sidebar and work area together, and how deep a custom colour is.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
+      "sectionTitle": "Themes",
       "type": "number",
       "default": 0,
       "agentWritable": true
@@ -4188,181 +4202,431 @@
       "title": "Work area colourfulness",
       "subtitle": "How much of the theme colour shows in the work area (chat, terminals and views), from Subtle to Full. Colourfulness sets the sidebar and work area together.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
+      "sectionTitle": "Themes",
       "type": "number",
       "default": 0,
       "agentWritable": true
     },
     {
-      "key": "customSidebarTitlebarLightBackgroundTintColor",
-      "title": "Custom light mode tint",
-      "subtitle": "The custom light mode colour, chosen in the colour picker the + square opens.",
+      "key": "windowGlass",
+      "title": "Transparency",
+      "subtitle": "Let your desktop show through the window: Off, Dark only (light mode stays solid) or Always.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "string",
-      "default": "#808080",
+      "sectionTitle": "Themes",
+      "type": "enum",
+      "default": "auto",
+      "options": [
+        {
+          "label": "Dark only",
+          "value": "auto"
+        },
+        {
+          "label": "Always",
+          "value": "frosted"
+        },
+        {
+          "label": "Off",
+          "value": "opaque"
+        }
+      ],
+      "agentWritable": true,
+      "platformDefaults": {
+        "windows": "opaque"
+      }
+    },
+    {
+      "key": "windowGlassSource",
+      "title": "Behind the glass",
+      "subtitle": "Desktop and windows, your wallpaper, a picture you choose, or Live: a calm animation in your theme colours or your own video.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "enum",
+      "default": "desktopAndWindows",
+      "options": [
+        {
+          "label": "Desktop and windows",
+          "value": "desktopAndWindows"
+        },
+        {
+          "label": "Wallpaper only",
+          "value": "wallpaper"
+        },
+        {
+          "label": "Custom image",
+          "value": "customImage"
+        },
+        {
+          "label": "Live",
+          "value": "live"
+        }
+      ],
       "agentWritable": true
     },
     {
-      "key": "sessionChatFontFamily",
-      "title": "App font",
-      "subtitle": "Pick one of the fonts installed on this computer for the whole app: sidebar, chat, menus, dialogs and Settings, then press Apply. App default keeps Ghostex's own fonts. Terminals and code use the Monospace font.",
+      "key": "windowGlassSameForLightAndDark",
+      "title": "Same for light and dark",
+      "subtitle": "Use the dark-mode picture, video, Live background and tints in light mode too. Turn off to pick them for light mode separately.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
+      "sectionTitle": "Themes",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": true
+    },
+    {
+      "key": "windowGlassImagePlacement",
+      "title": "Picture position",
+      "subtitle": "Where the wallpaper, custom picture or your own Live video sits behind the glass. Stays with the desktop can trail the window while you drag it.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "enum",
+      "default": "static",
+      "options": [
+        {
+          "label": "Moves with the window",
+          "value": "static"
+        },
+        {
+          "label": "Stays with the desktop",
+          "value": "desktop"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "windowGlassImageDark",
+      "title": "Picture for dark mode",
+      "subtitle": "The picture the glass blurs in dark mode when Picture shows behind the glass.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
       "type": "string",
       "default": "",
       "agentWritable": true
     },
     {
-      "key": "terminalFontFamily",
-      "title": "Monospace font",
-      "subtitle": "Font family for terminals, code in the Files view, diffs, code blocks and tool output in chat. Pick an installed monospace font, or type a Ghostty font-family name, then press Apply.",
+      "key": "windowGlassImageLight",
+      "title": "Picture for light mode",
+      "subtitle": "The picture the glass blurs in light mode when Picture shows behind the glass.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
+      "sectionTitle": "Themes",
       "type": "string",
-      "default": "JetBrains Mono",
+      "default": "",
       "agentWritable": true
     },
     {
-      "key": "interfaceScalePercent",
-      "title": "Scale (%)",
-      "subtitle": "Scale the sidebar, every chat, files open in the Files view and the terminal text together, from 70% to 200%. The header, tabs, menus and dialogs keep their size. Cmd+= and Cmd+- (Ctrl on Windows and Linux) change it from anywhere, and Cmd+0 sets 100%. Default: 100%.",
+      "key": "windowGlassVideoDark",
+      "title": "Your video for dark mode",
+      "subtitle": "The video file the glass plays in dark mode when Live is set to Your video.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "number",
-      "default": 100,
-      "min": 70,
-      "max": 200,
-      "step": 5,
+      "sectionTitle": "Themes",
+      "type": "string",
+      "default": "",
       "agentWritable": true
     },
     {
-      "key": "interfaceScaleAreasSeparately",
-      "title": "Scale areas separately",
-      "subtitle": "Give the sidebar, chat, Files and terminal text their own sizes instead of one Scale. Cmd+= and Cmd+- then change only the area you are in. Default: off, or on when you had already changed one of those sizes.",
+      "key": "windowGlassVideoLight",
+      "title": "Your video for light mode",
+      "subtitle": "The video file the glass plays in light mode when Live is set to Your video.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
+      "sectionTitle": "Themes",
+      "type": "string",
+      "default": "",
+      "agentWritable": true
+    },
+    {
+      "key": "windowGlassVideoOnlyOnPower",
+      "title": "Play only when plugged in",
+      "subtitle": "Pause the Live animation or video while your computer runs on battery. It always pauses when Ghostex is in the background.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
       "type": "boolean",
-      "default": false,
+      "default": true,
       "agentWritable": true
     },
     {
-      "key": "agentManagerZoomPercent",
-      "title": "Sidebar zoom (%)",
-      "subtitle": "Scale the sidebar, from 50% to 200%, when Scale areas separately is on.",
+      "key": "windowGlassLiveStyleDark",
+      "title": "Live background for dark mode",
+      "subtitle": "The animation, or your own video, the glass shows in dark mode when Live shows behind the glass.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
+      "sectionTitle": "Themes",
+      "type": "enum",
+      "default": "aurora",
+      "options": [
+        {
+          "label": "Aurora",
+          "value": "aurora"
+        },
+        {
+          "label": "Ink",
+          "value": "ink"
+        },
+        {
+          "label": "Drift",
+          "value": "drift"
+        },
+        {
+          "label": "Nebula",
+          "value": "nebula"
+        },
+        {
+          "label": "Silk",
+          "value": "silk"
+        },
+        {
+          "label": "Bokeh",
+          "value": "bokeh"
+        },
+        {
+          "label": "Waves",
+          "value": "waves"
+        },
+        {
+          "label": "Mesh",
+          "value": "mesh"
+        },
+        {
+          "label": "Your video",
+          "value": "video"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "windowGlassLiveStyleLight",
+      "title": "Live background for light mode",
+      "subtitle": "The animation, or your own video, the glass shows in light mode when Live shows behind the glass.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "enum",
+      "default": "drift",
+      "options": [
+        {
+          "label": "Aurora",
+          "value": "aurora"
+        },
+        {
+          "label": "Ink",
+          "value": "ink"
+        },
+        {
+          "label": "Drift",
+          "value": "drift"
+        },
+        {
+          "label": "Nebula",
+          "value": "nebula"
+        },
+        {
+          "label": "Silk",
+          "value": "silk"
+        },
+        {
+          "label": "Bokeh",
+          "value": "bokeh"
+        },
+        {
+          "label": "Waves",
+          "value": "waves"
+        },
+        {
+          "label": "Mesh",
+          "value": "mesh"
+        },
+        {
+          "label": "Your video",
+          "value": "video"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "windowGlassLiveSpeed",
+      "title": "Live background speed",
+      "subtitle": "How fast the Live animation moves, from a quarter of its pace to twice as fast.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
       "type": "number",
-      "default": 100,
-      "min": 50,
-      "max": 200,
+      "default": 1,
       "agentWritable": true
     },
     {
-      "key": "sessionChatZoomPercent",
-      "title": "Chat zoom (%)",
-      "subtitle": "Scale every desktop chat, including messages and the prompt composer, from 70% to 200% in 5% steps, when Scale areas separately is on. Cmd+= and Cmd+- in a chat change it too, and Cmd+0 sets 100%. Default: 100%.",
+      "key": "windowGlassLiveBrightness",
+      "title": "Live background brightness",
+      "subtitle": "How bright the Live animation glows behind the glass. Lower keeps it a subtle glow.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
+      "sectionTitle": "Themes",
       "type": "number",
-      "default": 100,
-      "min": 70,
-      "max": 200,
-      "step": 5,
+      "default": 60,
       "agentWritable": true
     },
     {
-      "key": "filesZoomPercent",
-      "title": "Files zoom (%)",
-      "subtitle": "Scale the text of a file open in the Files view (Markdown, text and code, with its line numbers) and the Changes diff, from 70% to 200% in 5% steps, when Scale areas separately is on. Cmd+= and Cmd+- (Ctrl on Windows and Linux) in an open file change it too, and Cmd+0 sets 100%. Default: 100%.",
+      "key": "windowGlassBlurRadius",
+      "title": "Blur",
+      "subtitle": "How soft what shows behind the window looks, in points. 0 shows it sharp. On Windows and Linux, Desktop and windows uses the system blur, so this sets the wallpaper, picture and video blur; on Windows, Blur on Windows picks that system blur.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
+      "sectionTitle": "Themes",
       "type": "number",
-      "default": 100,
-      "min": 70,
-      "max": 200,
-      "step": 5,
-      "agentWritable": true
+      "default": 60,
+      "agentWritable": true,
+      "availability": "Not shown on Windows while Behind the glass is Desktop and windows."
     },
     {
-      "key": "terminalFontSize",
-      "title": "Terminal font size",
-      "subtitle": "The terminal text size in points, when Scale areas separately is on. Cmd+= and Cmd+- in a terminal change it for that terminal only until it restarts. Default: 13.",
+      "key": "windowGlassWindowsBlur",
+      "title": "Blur on Windows",
+      "subtitle": "How Windows blurs what shows behind the window while Desktop and windows shows behind the glass. Windows has no blur amount to set, so pick Acrylic (Windows' own frosted blur), Plain blur (the same blur without Windows' grey frost, so the tints can go fully clear; it takes more work to draw) or Off (sharp, the fastest).",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
+      "sectionTitle": "Themes",
+      "type": "enum",
+      "default": "acrylic",
+      "options": [
+        {
+          "label": "Acrylic",
+          "value": "acrylic"
+        },
+        {
+          "label": "Plain blur",
+          "value": "plain"
+        },
+        {
+          "label": "Off",
+          "value": "off"
+        }
+      ],
+      "agentWritable": true,
+      "availability": "Only on Windows."
+    },
+    {
+      "key": "windowGlassMenuBlurRadius",
+      "title": "Menu blur",
+      "subtitle": "How soft what shows behind menus, panels, dialogs and tooltips looks, in points. Menus, panels and dialogs blur a quarter more than this number; tooltips use it as is. 0 shows it sharp.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
       "type": "number",
-      "default": 13,
-      "agentWritable": true
+      "default": 20,
+      "agentWritable": true,
+      "availability": "Only on macOS."
     },
     {
-      "key": "sessionChatTextStrengthPercent",
-      "title": "Text strength",
-      "subtitle": "How strong agents' replies and your messages read in chat, on the computer and the phone. 0% is the standard colour; 100% is full white in dark mode and full black in light mode. Muted text, links, code blocks and status colours stay as they are.",
+      "key": "windowGlassSidebarOpacityDark",
+      "title": "Sidebar tint in dark mode",
+      "subtitle": "How much of the desktop the sidebar hides in dark mode. Lower shows more of your desktop through it.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
+      "sectionTitle": "Themes",
       "type": "number",
-      "default": 0,
-      "min": 0,
-      "max": 100,
-      "step": 10,
+      "default": 94,
       "agentWritable": true
     },
     {
-      "key": "sessionChatMutedThinking",
-      "title": "Show thinking in grey",
-      "subtitle": "Show the agent's thinking in grey, so it reads apart from the agent's replies.",
+      "key": "windowGlassWorkAreaTintDark",
+      "title": "Work area tint in dark mode",
+      "subtitle": "How much of the desktop the work area hides in dark mode, set on its own so either area can be the darker one. Lower shows more of your desktop through it.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "boolean",
-      "default": false,
+      "sectionTitle": "Themes",
+      "type": "number",
+      "default": 94,
+      "agentWritable": true
+    },
+    {
+      "key": "windowGlassSidebarOpacityLight",
+      "title": "Sidebar tint in light mode",
+      "subtitle": "How much of the desktop the sidebar hides in light mode. Lower shows more of your desktop through it.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "number",
+      "default": 97,
+      "agentWritable": true
+    },
+    {
+      "key": "windowGlassWorkAreaTintLight",
+      "title": "Work area tint in light mode",
+      "subtitle": "How much of the desktop the work area hides in light mode, set on its own so either area can be the darker one. Lower shows more of your desktop through it.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "number",
+      "default": 97,
       "agentWritable": true
     },
     {
@@ -4370,11 +4634,11 @@
       "title": "Chat theme",
       "subtitle": "Follow the app theme by default, or override chat with Light, Dark, or System.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
+      "sectionTitle": "Themes",
       "type": "enum",
       "default": "app",
       "options": [
@@ -4396,17 +4660,31 @@
         }
       ],
       "agentWritable": true
+    },
+    {
+      "key": "themeRoles",
+      "title": "Theme colours",
+      "subtitle": "Borders, dividers, text, grey text, the accent, links, cards, controls, menus, selected and hovered rows, the focus ring, your messages, the chat box, code blocks and the status colours, each set apart for dark and light mode as an opacity (4%) or a colour (#7dd3fc), with a colour picker and an opacity slider. Your messages, the chat box, cards and the accent are in Chat colours. Empty keeps the theme's own; Reset puts it back. Agents change them with `ghostex theme set`.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "json",
+      "default": {},
+      "agentWritable": false
     },
     {
       "key": "terminalColorScheme",
       "title": "Terminal theme",
       "subtitle": "Follow the app theme by default, or override terminals with Light, Dark, or System.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
+      "sectionTitle": "Themes",
       "type": "enum",
       "default": "app",
       "options": [
@@ -4425,2046 +4703,6 @@
         {
           "label": "Dark",
           "value": "dark"
-        }
-      ],
-      "agentWritable": true
-    },
-    {
-      "key": "terminalGhosttyLightTheme",
-      "title": "Terminal palette in light mode",
-      "subtitle": "Uses the light theme set in Ghostex's terminal config, or GitHub Light when none is set.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "enum",
-      "default": "GitHub Light Default",
-      "options": [
-        {
-          "label": "0x96f",
-          "value": "0x96f"
-        },
-        {
-          "label": "12-bit Rainbow",
-          "value": "12-bit Rainbow"
-        },
-        {
-          "label": "3024 Day",
-          "value": "3024 Day"
-        },
-        {
-          "label": "3024 Night",
-          "value": "3024 Night"
-        },
-        {
-          "label": "Aardvark Blue",
-          "value": "Aardvark Blue"
-        },
-        {
-          "label": "Abernathy",
-          "value": "Abernathy"
-        },
-        {
-          "label": "Adventure",
-          "value": "Adventure"
-        },
-        {
-          "label": "Adventure Time",
-          "value": "Adventure Time"
-        },
-        {
-          "label": "Adwaita",
-          "value": "Adwaita"
-        },
-        {
-          "label": "Adwaita Dark",
-          "value": "Adwaita Dark"
-        },
-        {
-          "label": "Afterglow",
-          "value": "Afterglow"
-        },
-        {
-          "label": "Aizen Dark",
-          "value": "Aizen Dark"
-        },
-        {
-          "label": "Aizen Light",
-          "value": "Aizen Light"
-        },
-        {
-          "label": "Alabaster",
-          "value": "Alabaster"
-        },
-        {
-          "label": "Alien Blood",
-          "value": "Alien Blood"
-        },
-        {
-          "label": "Andromeda",
-          "value": "Andromeda"
-        },
-        {
-          "label": "Apple Classic",
-          "value": "Apple Classic"
-        },
-        {
-          "label": "Apple System Colors",
-          "value": "Apple System Colors"
-        },
-        {
-          "label": "Apple System Colors Light",
-          "value": "Apple System Colors Light"
-        },
-        {
-          "label": "Arcoiris",
-          "value": "Arcoiris"
-        },
-        {
-          "label": "Ardoise",
-          "value": "Ardoise"
-        },
-        {
-          "label": "Argonaut",
-          "value": "Argonaut"
-        },
-        {
-          "label": "Arthur",
-          "value": "Arthur"
-        },
-        {
-          "label": "Atelier Sulphurpool",
-          "value": "Atelier Sulphurpool"
-        },
-        {
-          "label": "Atom",
-          "value": "Atom"
-        },
-        {
-          "label": "Atom One Dark",
-          "value": "Atom One Dark"
-        },
-        {
-          "label": "Atom One Light",
-          "value": "Atom One Light"
-        },
-        {
-          "label": "Aura",
-          "value": "Aura"
-        },
-        {
-          "label": "Aurora",
-          "value": "Aurora"
-        },
-        {
-          "label": "Ayu",
-          "value": "Ayu"
-        },
-        {
-          "label": "Ayu Light",
-          "value": "Ayu Light"
-        },
-        {
-          "label": "Ayu Mirage",
-          "value": "Ayu Mirage"
-        },
-        {
-          "label": "Banana Blueberry",
-          "value": "Banana Blueberry"
-        },
-        {
-          "label": "Batman",
-          "value": "Batman"
-        },
-        {
-          "label": "Belafonte Day",
-          "value": "Belafonte Day"
-        },
-        {
-          "label": "Belafonte Night",
-          "value": "Belafonte Night"
-        },
-        {
-          "label": "Birds Of Paradise",
-          "value": "Birds Of Paradise"
-        },
-        {
-          "label": "Black Metal",
-          "value": "Black Metal"
-        },
-        {
-          "label": "Black Metal (Bathory)",
-          "value": "Black Metal (Bathory)"
-        },
-        {
-          "label": "Black Metal (Burzum)",
-          "value": "Black Metal (Burzum)"
-        },
-        {
-          "label": "Black Metal (Dark Funeral)",
-          "value": "Black Metal (Dark Funeral)"
-        },
-        {
-          "label": "Black Metal (Gorgoroth)",
-          "value": "Black Metal (Gorgoroth)"
-        },
-        {
-          "label": "Black Metal (Immortal)",
-          "value": "Black Metal (Immortal)"
-        },
-        {
-          "label": "Black Metal (Khold)",
-          "value": "Black Metal (Khold)"
-        },
-        {
-          "label": "Black Metal (Marduk)",
-          "value": "Black Metal (Marduk)"
-        },
-        {
-          "label": "Black Metal (Mayhem)",
-          "value": "Black Metal (Mayhem)"
-        },
-        {
-          "label": "Black Metal (Nile)",
-          "value": "Black Metal (Nile)"
-        },
-        {
-          "label": "Black Metal (Venom)",
-          "value": "Black Metal (Venom)"
-        },
-        {
-          "label": "Blazer",
-          "value": "Blazer"
-        },
-        {
-          "label": "Blue Berry Pie",
-          "value": "Blue Berry Pie"
-        },
-        {
-          "label": "Blue Dolphin",
-          "value": "Blue Dolphin"
-        },
-        {
-          "label": "Blue Matrix",
-          "value": "Blue Matrix"
-        },
-        {
-          "label": "Bluloco Dark",
-          "value": "Bluloco Dark"
-        },
-        {
-          "label": "Bluloco Light",
-          "value": "Bluloco Light"
-        },
-        {
-          "label": "Borland",
-          "value": "Borland"
-        },
-        {
-          "label": "Box",
-          "value": "Box"
-        },
-        {
-          "label": "Breadog",
-          "value": "Breadog"
-        },
-        {
-          "label": "Breeze",
-          "value": "Breeze"
-        },
-        {
-          "label": "Bright Lights",
-          "value": "Bright Lights"
-        },
-        {
-          "label": "Broadcast",
-          "value": "Broadcast"
-        },
-        {
-          "label": "Brogrammer",
-          "value": "Brogrammer"
-        },
-        {
-          "label": "Builtin Dark",
-          "value": "Builtin Dark"
-        },
-        {
-          "label": "Builtin Light",
-          "value": "Builtin Light"
-        },
-        {
-          "label": "Builtin Pastel Dark",
-          "value": "Builtin Pastel Dark"
-        },
-        {
-          "label": "Builtin Tango Dark",
-          "value": "Builtin Tango Dark"
-        },
-        {
-          "label": "Builtin Tango Light",
-          "value": "Builtin Tango Light"
-        },
-        {
-          "label": "C64",
-          "value": "C64"
-        },
-        {
-          "label": "CGA",
-          "value": "CGA"
-        },
-        {
-          "label": "CLRS",
-          "value": "CLRS"
-        },
-        {
-          "label": "Calamity",
-          "value": "Calamity"
-        },
-        {
-          "label": "Carbonfox",
-          "value": "Carbonfox"
-        },
-        {
-          "label": "Catppuccin Frappe",
-          "value": "Catppuccin Frappe"
-        },
-        {
-          "label": "Catppuccin Latte",
-          "value": "Catppuccin Latte"
-        },
-        {
-          "label": "Catppuccin Macchiato",
-          "value": "Catppuccin Macchiato"
-        },
-        {
-          "label": "Catppuccin Mocha",
-          "value": "Catppuccin Mocha"
-        },
-        {
-          "label": "Chalk",
-          "value": "Chalk"
-        },
-        {
-          "label": "Chalkboard",
-          "value": "Chalkboard"
-        },
-        {
-          "label": "Challenger Deep",
-          "value": "Challenger Deep"
-        },
-        {
-          "label": "Chester",
-          "value": "Chester"
-        },
-        {
-          "label": "Ciapre",
-          "value": "Ciapre"
-        },
-        {
-          "label": "Citruszest",
-          "value": "Citruszest"
-        },
-        {
-          "label": "Cobalt Neon",
-          "value": "Cobalt Neon"
-        },
-        {
-          "label": "Cobalt Next",
-          "value": "Cobalt Next"
-        },
-        {
-          "label": "Cobalt Next Dark",
-          "value": "Cobalt Next Dark"
-        },
-        {
-          "label": "Cobalt Next Minimal",
-          "value": "Cobalt Next Minimal"
-        },
-        {
-          "label": "Cobalt2",
-          "value": "Cobalt2"
-        },
-        {
-          "label": "Coffee Theme",
-          "value": "Coffee Theme"
-        },
-        {
-          "label": "Crayon Pony Fish",
-          "value": "Crayon Pony Fish"
-        },
-        {
-          "label": "Cursor Dark",
-          "value": "Cursor Dark"
-        },
-        {
-          "label": "Cursor Light",
-          "value": "Cursor Light"
-        },
-        {
-          "label": "Cutie Pro",
-          "value": "Cutie Pro"
-        },
-        {
-          "label": "Cyberdyne",
-          "value": "Cyberdyne"
-        },
-        {
-          "label": "Cyberpunk",
-          "value": "Cyberpunk"
-        },
-        {
-          "label": "Cyberpunk Scarlet Protocol",
-          "value": "Cyberpunk Scarlet Protocol"
-        },
-        {
-          "label": "Dalton Dark",
-          "value": "Dalton Dark"
-        },
-        {
-          "label": "Dark Modern",
-          "value": "Dark Modern"
-        },
-        {
-          "label": "Dark Pastel",
-          "value": "Dark Pastel"
-        },
-        {
-          "label": "Dark+",
-          "value": "Dark+"
-        },
-        {
-          "label": "Darkermatrix",
-          "value": "Darkermatrix"
-        },
-        {
-          "label": "Darkmatrix",
-          "value": "Darkmatrix"
-        },
-        {
-          "label": "Darkside",
-          "value": "Darkside"
-        },
-        {
-          "label": "Dawnfox",
-          "value": "Dawnfox"
-        },
-        {
-          "label": "Dayfox",
-          "value": "Dayfox"
-        },
-        {
-          "label": "Deep",
-          "value": "Deep"
-        },
-        {
-          "label": "Desert",
-          "value": "Desert"
-        },
-        {
-          "label": "Detuned",
-          "value": "Detuned"
-        },
-        {
-          "label": "Dimidium",
-          "value": "Dimidium"
-        },
-        {
-          "label": "Dimmed Monokai",
-          "value": "Dimmed Monokai"
-        },
-        {
-          "label": "Django",
-          "value": "Django"
-        },
-        {
-          "label": "Django Reborn Again",
-          "value": "Django Reborn Again"
-        },
-        {
-          "label": "Django Smooth",
-          "value": "Django Smooth"
-        },
-        {
-          "label": "Dogxi Misty",
-          "value": "Dogxi Misty"
-        },
-        {
-          "label": "Doom One",
-          "value": "Doom One"
-        },
-        {
-          "label": "Doom Peacock",
-          "value": "Doom Peacock"
-        },
-        {
-          "label": "Dot Gov",
-          "value": "Dot Gov"
-        },
-        {
-          "label": "Dracula",
-          "value": "Dracula"
-        },
-        {
-          "label": "Dracula+",
-          "value": "Dracula+"
-        },
-        {
-          "label": "Duckbones",
-          "value": "Duckbones"
-        },
-        {
-          "label": "Duotone Dark",
-          "value": "Duotone Dark"
-        },
-        {
-          "label": "Duskfox",
-          "value": "Duskfox"
-        },
-        {
-          "label": "ENCOM",
-          "value": "ENCOM"
-        },
-        {
-          "label": "Earthsong",
-          "value": "Earthsong"
-        },
-        {
-          "label": "Electron Highlighter",
-          "value": "Electron Highlighter"
-        },
-        {
-          "label": "Elegant",
-          "value": "Elegant"
-        },
-        {
-          "label": "Elemental",
-          "value": "Elemental"
-        },
-        {
-          "label": "Elementary",
-          "value": "Elementary"
-        },
-        {
-          "label": "Embark",
-          "value": "Embark"
-        },
-        {
-          "label": "Embers Dark",
-          "value": "Embers Dark"
-        },
-        {
-          "label": "Espresso",
-          "value": "Espresso"
-        },
-        {
-          "label": "Espresso Libre",
-          "value": "Espresso Libre"
-        },
-        {
-          "label": "Everblush",
-          "value": "Everblush"
-        },
-        {
-          "label": "Everforest Dark Hard",
-          "value": "Everforest Dark Hard"
-        },
-        {
-          "label": "Everforest Light Med",
-          "value": "Everforest Light Med"
-        },
-        {
-          "label": "Fahrenheit",
-          "value": "Fahrenheit"
-        },
-        {
-          "label": "Fairyfloss",
-          "value": "Fairyfloss"
-        },
-        {
-          "label": "Farmhouse Dark",
-          "value": "Farmhouse Dark"
-        },
-        {
-          "label": "Farmhouse Light",
-          "value": "Farmhouse Light"
-        },
-        {
-          "label": "Fideloper",
-          "value": "Fideloper"
-        },
-        {
-          "label": "Firefly Traditional",
-          "value": "Firefly Traditional"
-        },
-        {
-          "label": "Firefox Dev",
-          "value": "Firefox Dev"
-        },
-        {
-          "label": "Firewatch",
-          "value": "Firewatch"
-        },
-        {
-          "label": "Fish Tank",
-          "value": "Fish Tank"
-        },
-        {
-          "label": "Flat",
-          "value": "Flat"
-        },
-        {
-          "label": "Flatland",
-          "value": "Flatland"
-        },
-        {
-          "label": "Flexoki Dark",
-          "value": "Flexoki Dark"
-        },
-        {
-          "label": "Flexoki Light",
-          "value": "Flexoki Light"
-        },
-        {
-          "label": "Floraverse",
-          "value": "Floraverse"
-        },
-        {
-          "label": "Forest Blue",
-          "value": "Forest Blue"
-        },
-        {
-          "label": "Framer",
-          "value": "Framer"
-        },
-        {
-          "label": "Front End Delight",
-          "value": "Front End Delight"
-        },
-        {
-          "label": "Fun Forrest",
-          "value": "Fun Forrest"
-        },
-        {
-          "label": "Galaxy",
-          "value": "Galaxy"
-        },
-        {
-          "label": "Galizur",
-          "value": "Galizur"
-        },
-        {
-          "label": "Ghostex Alucard",
-          "value": "Ghostex Alucard"
-        },
-        {
-          "label": "Ghostex Catppuccin Frappé",
-          "value": "Ghostex Catppuccin Frappe"
-        },
-        {
-          "label": "Ghostex Catppuccin Latte",
-          "value": "Ghostex Catppuccin Latte"
-        },
-        {
-          "label": "Ghostex Catppuccin Macchiato",
-          "value": "Ghostex Catppuccin Macchiato"
-        },
-        {
-          "label": "Ghostex Catppuccin Mocha",
-          "value": "Ghostex Catppuccin Mocha"
-        },
-        {
-          "label": "Ghostex Dracula",
-          "value": "Ghostex Dracula"
-        },
-        {
-          "label": "Ghostex Everforest Dark",
-          "value": "Ghostex Everforest Dark"
-        },
-        {
-          "label": "Ghostex Everforest Light",
-          "value": "Ghostex Everforest Light"
-        },
-        {
-          "label": "Ghostex Gruvbox Material Dark",
-          "value": "Ghostex Gruvbox Material Dark"
-        },
-        {
-          "label": "Ghostex Gruvbox Material Light",
-          "value": "Ghostex Gruvbox Material Light"
-        },
-        {
-          "label": "Ghostex Kanagawa Dragon",
-          "value": "Ghostex Kanagawa Dragon"
-        },
-        {
-          "label": "Ghostex Kanagawa Lotus",
-          "value": "Ghostex Kanagawa Lotus"
-        },
-        {
-          "label": "Ghostex Kanagawa Wave",
-          "value": "Ghostex Kanagawa Wave"
-        },
-        {
-          "label": "Ghostex Nord",
-          "value": "Ghostex Nord"
-        },
-        {
-          "label": "Ghostex Solarized Dark",
-          "value": "Ghostex Solarized Dark"
-        },
-        {
-          "label": "Ghostex Solarized Light",
-          "value": "Ghostex Solarized Light"
-        },
-        {
-          "label": "Ghostex Tokyo Night Day",
-          "value": "Ghostex Tokyo Night Day"
-        },
-        {
-          "label": "Ghostex Tokyo Night Moon",
-          "value": "Ghostex Tokyo Night Moon"
-        },
-        {
-          "label": "Ghostex Tokyo Night Night",
-          "value": "Ghostex Tokyo Night Night"
-        },
-        {
-          "label": "Ghostex Tokyo Night Storm",
-          "value": "Ghostex Tokyo Night Storm"
-        },
-        {
-          "label": "Ghostty Default Style Dark",
-          "value": "Ghostty Default Style Dark"
-        },
-        {
-          "label": "GitHub",
-          "value": "GitHub"
-        },
-        {
-          "label": "GitHub Dark",
-          "value": "GitHub Dark"
-        },
-        {
-          "label": "GitHub Dark Colorblind",
-          "value": "GitHub Dark Colorblind"
-        },
-        {
-          "label": "GitHub Dark Default",
-          "value": "GitHub Dark Default"
-        },
-        {
-          "label": "GitHub Dark Dimmed",
-          "value": "GitHub Dark Dimmed"
-        },
-        {
-          "label": "GitHub Dark High Contrast",
-          "value": "GitHub Dark High Contrast"
-        },
-        {
-          "label": "GitHub Light Colorblind",
-          "value": "GitHub Light Colorblind"
-        },
-        {
-          "label": "GitHub Light",
-          "value": "GitHub Light Default"
-        },
-        {
-          "label": "GitHub Light High Contrast",
-          "value": "GitHub Light High Contrast"
-        },
-        {
-          "label": "GitLab Dark",
-          "value": "GitLab Dark"
-        },
-        {
-          "label": "GitLab Dark Grey",
-          "value": "GitLab Dark Grey"
-        },
-        {
-          "label": "GitLab Light",
-          "value": "GitLab Light"
-        },
-        {
-          "label": "Glacier",
-          "value": "Glacier"
-        },
-        {
-          "label": "Grape",
-          "value": "Grape"
-        },
-        {
-          "label": "Grass",
-          "value": "Grass"
-        },
-        {
-          "label": "Grey Green",
-          "value": "Grey Green"
-        },
-        {
-          "label": "Gruber Darker",
-          "value": "Gruber Darker"
-        },
-        {
-          "label": "Gruvbox Dark",
-          "value": "Gruvbox Dark"
-        },
-        {
-          "label": "Gruvbox Dark Hard",
-          "value": "Gruvbox Dark Hard"
-        },
-        {
-          "label": "Gruvbox Light",
-          "value": "Gruvbox Light"
-        },
-        {
-          "label": "Gruvbox Light Hard",
-          "value": "Gruvbox Light Hard"
-        },
-        {
-          "label": "Gruvbox Material",
-          "value": "Gruvbox Material"
-        },
-        {
-          "label": "Gruvbox Material Dark",
-          "value": "Gruvbox Material Dark"
-        },
-        {
-          "label": "Gruvbox Material Light",
-          "value": "Gruvbox Material Light"
-        },
-        {
-          "label": "Guezwhoz",
-          "value": "Guezwhoz"
-        },
-        {
-          "label": "HaX0R Blue",
-          "value": "HaX0R Blue"
-        },
-        {
-          "label": "HaX0R Gr33N",
-          "value": "HaX0R Gr33N"
-        },
-        {
-          "label": "HaX0R R3D",
-          "value": "HaX0R R3D"
-        },
-        {
-          "label": "Hacktober",
-          "value": "Hacktober"
-        },
-        {
-          "label": "Hardcore",
-          "value": "Hardcore"
-        },
-        {
-          "label": "Harper",
-          "value": "Harper"
-        },
-        {
-          "label": "Havn Daggry",
-          "value": "Havn Daggry"
-        },
-        {
-          "label": "Havn Skumring",
-          "value": "Havn Skumring"
-        },
-        {
-          "label": "Heeler",
-          "value": "Heeler"
-        },
-        {
-          "label": "Highway",
-          "value": "Highway"
-        },
-        {
-          "label": "Hipster Green",
-          "value": "Hipster Green"
-        },
-        {
-          "label": "Hivacruz",
-          "value": "Hivacruz"
-        },
-        {
-          "label": "Homebrew",
-          "value": "Homebrew"
-        },
-        {
-          "label": "Hopscotch",
-          "value": "Hopscotch"
-        },
-        {
-          "label": "Hopscotch.256",
-          "value": "Hopscotch.256"
-        },
-        {
-          "label": "Horizon",
-          "value": "Horizon"
-        },
-        {
-          "label": "Horizon Bright",
-          "value": "Horizon Bright"
-        },
-        {
-          "label": "Hot Dog Stand",
-          "value": "Hot Dog Stand"
-        },
-        {
-          "label": "Hot Dog Stand (Mustard)",
-          "value": "Hot Dog Stand (Mustard)"
-        },
-        {
-          "label": "Hurtado",
-          "value": "Hurtado"
-        },
-        {
-          "label": "Hybrid",
-          "value": "Hybrid"
-        },
-        {
-          "label": "IBM 5153 CGA",
-          "value": "IBM 5153 CGA"
-        },
-        {
-          "label": "IBM 5153 CGA (Black)",
-          "value": "IBM 5153 CGA (Black)"
-        },
-        {
-          "label": "IC Green PPL",
-          "value": "IC Green PPL"
-        },
-        {
-          "label": "IC Orange PPL",
-          "value": "IC Orange PPL"
-        },
-        {
-          "label": "IR Black",
-          "value": "IR Black"
-        },
-        {
-          "label": "IRIX Console",
-          "value": "IRIX Console"
-        },
-        {
-          "label": "IRIX Terminal",
-          "value": "IRIX Terminal"
-        },
-        {
-          "label": "Iceberg Dark",
-          "value": "Iceberg Dark"
-        },
-        {
-          "label": "Iceberg Light",
-          "value": "Iceberg Light"
-        },
-        {
-          "label": "Idea",
-          "value": "Idea"
-        },
-        {
-          "label": "Idle Toes",
-          "value": "Idle Toes"
-        },
-        {
-          "label": "Jackie Brown",
-          "value": "Jackie Brown"
-        },
-        {
-          "label": "Japanesque",
-          "value": "Japanesque"
-        },
-        {
-          "label": "Jellybeans",
-          "value": "Jellybeans"
-        },
-        {
-          "label": "JetBrains Darcula",
-          "value": "JetBrains Darcula"
-        },
-        {
-          "label": "Jubi",
-          "value": "Jubi"
-        },
-        {
-          "label": "Kanagawa Dragon",
-          "value": "Kanagawa Dragon"
-        },
-        {
-          "label": "Kanagawa Lotus",
-          "value": "Kanagawa Lotus"
-        },
-        {
-          "label": "Kanagawa Wave",
-          "value": "Kanagawa Wave"
-        },
-        {
-          "label": "Kanagawabones",
-          "value": "Kanagawabones"
-        },
-        {
-          "label": "Kanso Ink",
-          "value": "Kanso Ink"
-        },
-        {
-          "label": "Kanso Mist",
-          "value": "Kanso Mist"
-        },
-        {
-          "label": "Kanso Pearl",
-          "value": "Kanso Pearl"
-        },
-        {
-          "label": "Kanso Zen",
-          "value": "Kanso Zen"
-        },
-        {
-          "label": "Kibble",
-          "value": "Kibble"
-        },
-        {
-          "label": "Kitty Default",
-          "value": "Kitty Default"
-        },
-        {
-          "label": "Kitty Low Contrast",
-          "value": "Kitty Low Contrast"
-        },
-        {
-          "label": "Kolorit",
-          "value": "Kolorit"
-        },
-        {
-          "label": "Konsolas",
-          "value": "Konsolas"
-        },
-        {
-          "label": "Kurokula",
-          "value": "Kurokula"
-        },
-        {
-          "label": "Lab Fox",
-          "value": "Lab Fox"
-        },
-        {
-          "label": "Laser",
-          "value": "Laser"
-        },
-        {
-          "label": "Later This Evening",
-          "value": "Later This Evening"
-        },
-        {
-          "label": "Lavandula",
-          "value": "Lavandula"
-        },
-        {
-          "label": "Light Owl",
-          "value": "Light Owl"
-        },
-        {
-          "label": "Liquid Carbon",
-          "value": "Liquid Carbon"
-        },
-        {
-          "label": "Liquid Carbon Transparent",
-          "value": "Liquid Carbon Transparent"
-        },
-        {
-          "label": "Lovelace",
-          "value": "Lovelace"
-        },
-        {
-          "label": "Man Page",
-          "value": "Man Page"
-        },
-        {
-          "label": "Mariana",
-          "value": "Mariana"
-        },
-        {
-          "label": "Material",
-          "value": "Material"
-        },
-        {
-          "label": "Material Dark",
-          "value": "Material Dark"
-        },
-        {
-          "label": "Material Darker",
-          "value": "Material Darker"
-        },
-        {
-          "label": "Material Design Colors",
-          "value": "Material Design Colors"
-        },
-        {
-          "label": "Material Ocean",
-          "value": "Material Ocean"
-        },
-        {
-          "label": "Mathias",
-          "value": "Mathias"
-        },
-        {
-          "label": "Matrix",
-          "value": "Matrix"
-        },
-        {
-          "label": "Matte Black",
-          "value": "Matte Black"
-        },
-        {
-          "label": "Medallion",
-          "value": "Medallion"
-        },
-        {
-          "label": "Melange Dark",
-          "value": "Melange Dark"
-        },
-        {
-          "label": "Melange Light",
-          "value": "Melange Light"
-        },
-        {
-          "label": "Mellifluous",
-          "value": "Mellifluous"
-        },
-        {
-          "label": "Mellow",
-          "value": "Mellow"
-        },
-        {
-          "label": "Miasma",
-          "value": "Miasma"
-        },
-        {
-          "label": "Midnight In Mojave",
-          "value": "Midnight In Mojave"
-        },
-        {
-          "label": "Mirage",
-          "value": "Mirage"
-        },
-        {
-          "label": "Misterioso",
-          "value": "Misterioso"
-        },
-        {
-          "label": "Modus Operandi",
-          "value": "Modus Operandi"
-        },
-        {
-          "label": "Modus Operandi Tinted",
-          "value": "Modus Operandi Tinted"
-        },
-        {
-          "label": "Modus Vivendi",
-          "value": "Modus Vivendi"
-        },
-        {
-          "label": "Modus Vivendi Tinted",
-          "value": "Modus Vivendi Tinted"
-        },
-        {
-          "label": "Molokai",
-          "value": "Molokai"
-        },
-        {
-          "label": "Mona Lisa",
-          "value": "Mona Lisa"
-        },
-        {
-          "label": "Monokai Classic",
-          "value": "Monokai Classic"
-        },
-        {
-          "label": "Monokai Pro",
-          "value": "Monokai Pro"
-        },
-        {
-          "label": "Monokai Pro Light",
-          "value": "Monokai Pro Light"
-        },
-        {
-          "label": "Monokai Pro Light Sun",
-          "value": "Monokai Pro Light Sun"
-        },
-        {
-          "label": "Monokai Pro Machine",
-          "value": "Monokai Pro Machine"
-        },
-        {
-          "label": "Monokai Pro Octagon",
-          "value": "Monokai Pro Octagon"
-        },
-        {
-          "label": "Monokai Pro Ristretto",
-          "value": "Monokai Pro Ristretto"
-        },
-        {
-          "label": "Monokai Pro Spectrum",
-          "value": "Monokai Pro Spectrum"
-        },
-        {
-          "label": "Monokai Remastered",
-          "value": "Monokai Remastered"
-        },
-        {
-          "label": "Monokai Soda",
-          "value": "Monokai Soda"
-        },
-        {
-          "label": "Monokai Vivid",
-          "value": "Monokai Vivid"
-        },
-        {
-          "label": "Monospace Dark",
-          "value": "Monospace Dark"
-        },
-        {
-          "label": "Monospace Light",
-          "value": "Monospace Light"
-        },
-        {
-          "label": "Moonfly",
-          "value": "Moonfly"
-        },
-        {
-          "label": "N0Tch2K",
-          "value": "N0Tch2K"
-        },
-        {
-          "label": "Neobones Dark",
-          "value": "Neobones Dark"
-        },
-        {
-          "label": "Neobones Light",
-          "value": "Neobones Light"
-        },
-        {
-          "label": "Neon",
-          "value": "Neon"
-        },
-        {
-          "label": "Neopolitan",
-          "value": "Neopolitan"
-        },
-        {
-          "label": "Neutron",
-          "value": "Neutron"
-        },
-        {
-          "label": "Night Lion V1",
-          "value": "Night Lion V1"
-        },
-        {
-          "label": "Night Lion V2",
-          "value": "Night Lion V2"
-        },
-        {
-          "label": "Night Owl",
-          "value": "Night Owl"
-        },
-        {
-          "label": "Night Owlish Light",
-          "value": "Night Owlish Light"
-        },
-        {
-          "label": "Nightfox",
-          "value": "Nightfox"
-        },
-        {
-          "label": "Niji",
-          "value": "Niji"
-        },
-        {
-          "label": "No Clown Fiesta",
-          "value": "No Clown Fiesta"
-        },
-        {
-          "label": "No Clown Fiesta Light",
-          "value": "No Clown Fiesta Light"
-        },
-        {
-          "label": "Nocturnal Winter",
-          "value": "Nocturnal Winter"
-        },
-        {
-          "label": "Nord",
-          "value": "Nord"
-        },
-        {
-          "label": "Nord Light",
-          "value": "Nord Light"
-        },
-        {
-          "label": "Nord Wave",
-          "value": "Nord Wave"
-        },
-        {
-          "label": "Nordfox",
-          "value": "Nordfox"
-        },
-        {
-          "label": "Novel",
-          "value": "Novel"
-        },
-        {
-          "label": "Nvim Dark",
-          "value": "Nvim Dark"
-        },
-        {
-          "label": "Nvim Light",
-          "value": "Nvim Light"
-        },
-        {
-          "label": "Obsidian",
-          "value": "Obsidian"
-        },
-        {
-          "label": "Ocean",
-          "value": "Ocean"
-        },
-        {
-          "label": "Oceanic Material",
-          "value": "Oceanic Material"
-        },
-        {
-          "label": "Oceanic Next",
-          "value": "Oceanic Next"
-        },
-        {
-          "label": "Ollie",
-          "value": "Ollie"
-        },
-        {
-          "label": "One Dark Two",
-          "value": "One Dark Two"
-        },
-        {
-          "label": "One Double Dark",
-          "value": "One Double Dark"
-        },
-        {
-          "label": "One Double Light",
-          "value": "One Double Light"
-        },
-        {
-          "label": "One Half Dark",
-          "value": "One Half Dark"
-        },
-        {
-          "label": "One Half Light",
-          "value": "One Half Light"
-        },
-        {
-          "label": "Onenord",
-          "value": "Onenord"
-        },
-        {
-          "label": "Onenord Light",
-          "value": "Onenord Light"
-        },
-        {
-          "label": "Operator Mono Dark",
-          "value": "Operator Mono Dark"
-        },
-        {
-          "label": "Overnight Slumber",
-          "value": "Overnight Slumber"
-        },
-        {
-          "label": "Oxocarbon",
-          "value": "Oxocarbon"
-        },
-        {
-          "label": "Pale Night Hc",
-          "value": "Pale Night Hc"
-        },
-        {
-          "label": "Pandora",
-          "value": "Pandora"
-        },
-        {
-          "label": "Paraiso Dark",
-          "value": "Paraiso Dark"
-        },
-        {
-          "label": "Paul Millr",
-          "value": "Paul Millr"
-        },
-        {
-          "label": "Pencil Dark",
-          "value": "Pencil Dark"
-        },
-        {
-          "label": "Pencil Light",
-          "value": "Pencil Light"
-        },
-        {
-          "label": "Peppermint",
-          "value": "Peppermint"
-        },
-        {
-          "label": "Phala Green Dark",
-          "value": "Phala Green Dark"
-        },
-        {
-          "label": "Piatto Light",
-          "value": "Piatto Light"
-        },
-        {
-          "label": "Pierre Dark",
-          "value": "Pierre Dark"
-        },
-        {
-          "label": "Pierre Light",
-          "value": "Pierre Light"
-        },
-        {
-          "label": "Pnevma",
-          "value": "Pnevma"
-        },
-        {
-          "label": "Poimandres",
-          "value": "Poimandres"
-        },
-        {
-          "label": "Poimandres Darker",
-          "value": "Poimandres Darker"
-        },
-        {
-          "label": "Poimandres Storm",
-          "value": "Poimandres Storm"
-        },
-        {
-          "label": "Poimandres White",
-          "value": "Poimandres White"
-        },
-        {
-          "label": "Popping And Locking",
-          "value": "Popping And Locking"
-        },
-        {
-          "label": "Powershell",
-          "value": "Powershell"
-        },
-        {
-          "label": "Primary",
-          "value": "Primary"
-        },
-        {
-          "label": "Pro",
-          "value": "Pro"
-        },
-        {
-          "label": "Pro Light",
-          "value": "Pro Light"
-        },
-        {
-          "label": "Purple Rain",
-          "value": "Purple Rain"
-        },
-        {
-          "label": "Purplepeter",
-          "value": "Purplepeter"
-        },
-        {
-          "label": "Rapture",
-          "value": "Rapture"
-        },
-        {
-          "label": "Raycast Dark",
-          "value": "Raycast Dark"
-        },
-        {
-          "label": "Raycast Light",
-          "value": "Raycast Light"
-        },
-        {
-          "label": "Rebecca",
-          "value": "Rebecca"
-        },
-        {
-          "label": "Red Alert",
-          "value": "Red Alert"
-        },
-        {
-          "label": "Red Planet",
-          "value": "Red Planet"
-        },
-        {
-          "label": "Red Sands",
-          "value": "Red Sands"
-        },
-        {
-          "label": "Relaxed",
-          "value": "Relaxed"
-        },
-        {
-          "label": "Retro",
-          "value": "Retro"
-        },
-        {
-          "label": "Retro Legends",
-          "value": "Retro Legends"
-        },
-        {
-          "label": "Rippedcasts",
-          "value": "Rippedcasts"
-        },
-        {
-          "label": "Rose Pine",
-          "value": "Rose Pine"
-        },
-        {
-          "label": "Rose Pine Dawn",
-          "value": "Rose Pine Dawn"
-        },
-        {
-          "label": "Rose Pine Moon",
-          "value": "Rose Pine Moon"
-        },
-        {
-          "label": "Rouge 2",
-          "value": "Rouge 2"
-        },
-        {
-          "label": "Royal",
-          "value": "Royal"
-        },
-        {
-          "label": "Ryuuko",
-          "value": "Ryuuko"
-        },
-        {
-          "label": "Sakura",
-          "value": "Sakura"
-        },
-        {
-          "label": "Scarlet Protocol",
-          "value": "Scarlet Protocol"
-        },
-        {
-          "label": "Sea Shells",
-          "value": "Sea Shells"
-        },
-        {
-          "label": "Seafoam Pastel",
-          "value": "Seafoam Pastel"
-        },
-        {
-          "label": "SeedFlip Abyss",
-          "value": "SeedFlip Abyss"
-        },
-        {
-          "label": "SeedFlip Amethyst",
-          "value": "SeedFlip Amethyst"
-        },
-        {
-          "label": "SeedFlip Canopy",
-          "value": "SeedFlip Canopy"
-        },
-        {
-          "label": "SeedFlip Carbon",
-          "value": "SeedFlip Carbon"
-        },
-        {
-          "label": "SeedFlip Coral",
-          "value": "SeedFlip Coral"
-        },
-        {
-          "label": "SeedFlip Ember",
-          "value": "SeedFlip Ember"
-        },
-        {
-          "label": "SeedFlip Glacier",
-          "value": "SeedFlip Glacier"
-        },
-        {
-          "label": "SeedFlip Inkwell",
-          "value": "SeedFlip Inkwell"
-        },
-        {
-          "label": "SeedFlip Ivory",
-          "value": "SeedFlip Ivory"
-        },
-        {
-          "label": "SeedFlip Nightfall",
-          "value": "SeedFlip Nightfall"
-        },
-        {
-          "label": "SeedFlip Phosphor",
-          "value": "SeedFlip Phosphor"
-        },
-        {
-          "label": "SeedFlip Pulse",
-          "value": "SeedFlip Pulse"
-        },
-        {
-          "label": "SeedFlip Ultraviolet",
-          "value": "SeedFlip Ultraviolet"
-        },
-        {
-          "label": "SeedFlip Voltage",
-          "value": "SeedFlip Voltage"
-        },
-        {
-          "label": "SeedFlip Wavelength",
-          "value": "SeedFlip Wavelength"
-        },
-        {
-          "label": "Selenized Black",
-          "value": "Selenized Black"
-        },
-        {
-          "label": "Selenized Dark",
-          "value": "Selenized Dark"
-        },
-        {
-          "label": "Selenized Light",
-          "value": "Selenized Light"
-        },
-        {
-          "label": "Seoulbones Dark",
-          "value": "Seoulbones Dark"
-        },
-        {
-          "label": "Seoulbones Light",
-          "value": "Seoulbones Light"
-        },
-        {
-          "label": "Seti",
-          "value": "Seti"
-        },
-        {
-          "label": "Shades Of Purple",
-          "value": "Shades Of Purple"
-        },
-        {
-          "label": "Shaman",
-          "value": "Shaman"
-        },
-        {
-          "label": "Slate",
-          "value": "Slate"
-        },
-        {
-          "label": "Sleepy Hollow",
-          "value": "Sleepy Hollow"
-        },
-        {
-          "label": "Smyck",
-          "value": "Smyck"
-        },
-        {
-          "label": "Snazzy",
-          "value": "Snazzy"
-        },
-        {
-          "label": "Snazzy Soft",
-          "value": "Snazzy Soft"
-        },
-        {
-          "label": "Soft Server",
-          "value": "Soft Server"
-        },
-        {
-          "label": "Solarized Darcula",
-          "value": "Solarized Darcula"
-        },
-        {
-          "label": "Solarized Dark Higher Contrast",
-          "value": "Solarized Dark Higher Contrast"
-        },
-        {
-          "label": "Solarized Dark Patched",
-          "value": "Solarized Dark Patched"
-        },
-        {
-          "label": "Solarized Osaka Night",
-          "value": "Solarized Osaka Night"
-        },
-        {
-          "label": "Sonokai",
-          "value": "Sonokai"
-        },
-        {
-          "label": "Spacedust",
-          "value": "Spacedust"
-        },
-        {
-          "label": "Spacegray",
-          "value": "Spacegray"
-        },
-        {
-          "label": "Spacegray Bright",
-          "value": "Spacegray Bright"
-        },
-        {
-          "label": "Spacegray Eighties",
-          "value": "Spacegray Eighties"
-        },
-        {
-          "label": "Spacegray Eighties Dull",
-          "value": "Spacegray Eighties Dull"
-        },
-        {
-          "label": "Spiderman",
-          "value": "Spiderman"
-        },
-        {
-          "label": "Spring",
-          "value": "Spring"
-        },
-        {
-          "label": "Square",
-          "value": "Square"
-        },
-        {
-          "label": "Squirrelsong Dark",
-          "value": "Squirrelsong Dark"
-        },
-        {
-          "label": "Srcery",
-          "value": "Srcery"
-        },
-        {
-          "label": "Starlight",
-          "value": "Starlight"
-        },
-        {
-          "label": "Sublette",
-          "value": "Sublette"
-        },
-        {
-          "label": "Subliminal",
-          "value": "Subliminal"
-        },
-        {
-          "label": "Sugarplum",
-          "value": "Sugarplum"
-        },
-        {
-          "label": "Sundried",
-          "value": "Sundried"
-        },
-        {
-          "label": "Sunset Drive",
-          "value": "Sunset Drive"
-        },
-        {
-          "label": "Symfonic",
-          "value": "Symfonic"
-        },
-        {
-          "label": "Synthwave",
-          "value": "Synthwave"
-        },
-        {
-          "label": "Synthwave Alpha",
-          "value": "Synthwave Alpha"
-        },
-        {
-          "label": "Synthwave Everything",
-          "value": "Synthwave Everything"
-        },
-        {
-          "label": "Tango Adapted",
-          "value": "Tango Adapted"
-        },
-        {
-          "label": "Tango Half Adapted",
-          "value": "Tango Half Adapted"
-        },
-        {
-          "label": "Tearout",
-          "value": "Tearout"
-        },
-        {
-          "label": "Teerb",
-          "value": "Teerb"
-        },
-        {
-          "label": "Terafox",
-          "value": "Terafox"
-        },
-        {
-          "label": "Terminal Basic",
-          "value": "Terminal Basic"
-        },
-        {
-          "label": "Terminal Basic Dark",
-          "value": "Terminal Basic Dark"
-        },
-        {
-          "label": "Thayer Bright",
-          "value": "Thayer Bright"
-        },
-        {
-          "label": "The Hulk",
-          "value": "The Hulk"
-        },
-        {
-          "label": "Tinacious Design Dark",
-          "value": "Tinacious Design Dark"
-        },
-        {
-          "label": "Tinacious Design Light",
-          "value": "Tinacious Design Light"
-        },
-        {
-          "label": "TokyoNight",
-          "value": "TokyoNight"
-        },
-        {
-          "label": "TokyoNight Day",
-          "value": "TokyoNight Day"
-        },
-        {
-          "label": "TokyoNight Moon",
-          "value": "TokyoNight Moon"
-        },
-        {
-          "label": "TokyoNight Night",
-          "value": "TokyoNight Night"
-        },
-        {
-          "label": "TokyoNight Storm",
-          "value": "TokyoNight Storm"
-        },
-        {
-          "label": "Tomorrow",
-          "value": "Tomorrow"
-        },
-        {
-          "label": "Tomorrow Night",
-          "value": "Tomorrow Night"
-        },
-        {
-          "label": "Tomorrow Night Blue",
-          "value": "Tomorrow Night Blue"
-        },
-        {
-          "label": "Tomorrow Night Bright",
-          "value": "Tomorrow Night Bright"
-        },
-        {
-          "label": "Tomorrow Night Burns",
-          "value": "Tomorrow Night Burns"
-        },
-        {
-          "label": "Tomorrow Night Eighties",
-          "value": "Tomorrow Night Eighties"
-        },
-        {
-          "label": "Toy Chest",
-          "value": "Toy Chest"
-        },
-        {
-          "label": "Treehouse",
-          "value": "Treehouse"
-        },
-        {
-          "label": "Twilight",
-          "value": "Twilight"
-        },
-        {
-          "label": "Ubuntu",
-          "value": "Ubuntu"
-        },
-        {
-          "label": "Ultra Dark",
-          "value": "Ultra Dark"
-        },
-        {
-          "label": "Ultra Violent",
-          "value": "Ultra Violent"
-        },
-        {
-          "label": "Under The Sea",
-          "value": "Under The Sea"
-        },
-        {
-          "label": "Unikitty",
-          "value": "Unikitty"
-        },
-        {
-          "label": "Urple",
-          "value": "Urple"
-        },
-        {
-          "label": "Vague",
-          "value": "Vague"
-        },
-        {
-          "label": "Vaughn",
-          "value": "Vaughn"
-        },
-        {
-          "label": "Vercel",
-          "value": "Vercel"
-        },
-        {
-          "label": "Vesper",
-          "value": "Vesper"
-        },
-        {
-          "label": "Vibrant Ink",
-          "value": "Vibrant Ink"
-        },
-        {
-          "label": "Vimbones",
-          "value": "Vimbones"
-        },
-        {
-          "label": "Violet Dark",
-          "value": "Violet Dark"
-        },
-        {
-          "label": "Violet Light",
-          "value": "Violet Light"
-        },
-        {
-          "label": "Violite",
-          "value": "Violite"
-        },
-        {
-          "label": "Warm Neon",
-          "value": "Warm Neon"
-        },
-        {
-          "label": "Wez",
-          "value": "Wez"
-        },
-        {
-          "label": "Whimsy",
-          "value": "Whimsy"
-        },
-        {
-          "label": "Wild Cherry",
-          "value": "Wild Cherry"
-        },
-        {
-          "label": "Wilmersdorf",
-          "value": "Wilmersdorf"
-        },
-        {
-          "label": "Wombat",
-          "value": "Wombat"
-        },
-        {
-          "label": "Wryan",
-          "value": "Wryan"
-        },
-        {
-          "label": "Xcode Dark",
-          "value": "Xcode Dark"
-        },
-        {
-          "label": "Xcode Dark hc",
-          "value": "Xcode Dark hc"
-        },
-        {
-          "label": "Xcode Light",
-          "value": "Xcode Light"
-        },
-        {
-          "label": "Xcode Light hc",
-          "value": "Xcode Light hc"
-        },
-        {
-          "label": "Xcode WWDC",
-          "value": "Xcode WWDC"
-        },
-        {
-          "label": "Zenbones",
-          "value": "Zenbones"
-        },
-        {
-          "label": "Zenbones Dark",
-          "value": "Zenbones Dark"
-        },
-        {
-          "label": "Zenbones Light",
-          "value": "Zenbones Light"
-        },
-        {
-          "label": "Zenburn",
-          "value": "Zenburn"
-        },
-        {
-          "label": "Zenburned",
-          "value": "Zenburned"
-        },
-        {
-          "label": "Zenwritten Dark",
-          "value": "Zenwritten Dark"
-        },
-        {
-          "label": "Zenwritten Light",
-          "value": "Zenwritten Light"
-        },
-        {
-          "label": "branch",
-          "value": "branch"
-        },
-        {
-          "label": "hazyland",
-          "value": "hazyland"
-        },
-        {
-          "label": "iTerm2 Dark Background",
-          "value": "iTerm2 Dark Background"
-        },
-        {
-          "label": "iTerm2 Default",
-          "value": "iTerm2 Default"
-        },
-        {
-          "label": "iTerm2 Light Background",
-          "value": "iTerm2 Light Background"
-        },
-        {
-          "label": "iTerm2 Pastel Dark Background",
-          "value": "iTerm2 Pastel Dark Background"
-        },
-        {
-          "label": "iTerm2 Smoooooth",
-          "value": "iTerm2 Smoooooth"
-        },
-        {
-          "label": "iTerm2 Solarized Dark",
-          "value": "iTerm2 Solarized Dark"
-        },
-        {
-          "label": "iTerm2 Solarized Light",
-          "value": "iTerm2 Solarized Light"
-        },
-        {
-          "label": "iTerm2 Tango Dark",
-          "value": "iTerm2 Tango Dark"
-        },
-        {
-          "label": "iTerm2 Tango Light",
-          "value": "iTerm2 Tango Light"
-        },
-        {
-          "label": "novmbr",
-          "value": "novmbr"
-        },
-        {
-          "label": "owl",
-          "value": "owl"
-        },
-        {
-          "label": "traffic",
-          "value": "traffic"
-        },
-        {
-          "label": "urban",
-          "value": "urban"
         }
       ],
       "agentWritable": true
@@ -6474,11 +4712,11 @@
       "title": "Terminal palette in dark mode",
       "subtitle": "Uses the dark theme set in Ghostex's terminal config, or GitHub Dark when none is set.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
+      "sectionTitle": "Themes",
       "type": "enum",
       "default": "GitHub Dark",
       "options": [
@@ -8514,524 +6752,2267 @@
       "agentWritable": true
     },
     {
-      "key": "themeRoles",
-      "title": "Theme colours",
-      "subtitle": "Borders, dividers, text, grey text, the accent, links, cards, controls, menus, selected and hovered rows, the focus ring, your messages, the chat box, code blocks and the status colours, each set apart for dark and light mode as an opacity (4%) or a colour (#7dd3fc), with a colour picker and an opacity slider. Your messages, the chat box, cards and the accent are in Chat colours. Empty keeps the theme's own; Reset puts it back. Agents change them with `ghostex theme set`.",
+      "key": "terminalGhosttyLightTheme",
+      "title": "Terminal palette in light mode",
+      "subtitle": "Uses the light theme set in Ghostex's terminal config, or GitHub Light when none is set.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "json",
-      "default": {},
+      "sectionTitle": "Themes",
+      "type": "enum",
+      "default": "GitHub Light Default",
+      "options": [
+        {
+          "label": "0x96f",
+          "value": "0x96f"
+        },
+        {
+          "label": "12-bit Rainbow",
+          "value": "12-bit Rainbow"
+        },
+        {
+          "label": "3024 Day",
+          "value": "3024 Day"
+        },
+        {
+          "label": "3024 Night",
+          "value": "3024 Night"
+        },
+        {
+          "label": "Aardvark Blue",
+          "value": "Aardvark Blue"
+        },
+        {
+          "label": "Abernathy",
+          "value": "Abernathy"
+        },
+        {
+          "label": "Adventure",
+          "value": "Adventure"
+        },
+        {
+          "label": "Adventure Time",
+          "value": "Adventure Time"
+        },
+        {
+          "label": "Adwaita",
+          "value": "Adwaita"
+        },
+        {
+          "label": "Adwaita Dark",
+          "value": "Adwaita Dark"
+        },
+        {
+          "label": "Afterglow",
+          "value": "Afterglow"
+        },
+        {
+          "label": "Aizen Dark",
+          "value": "Aizen Dark"
+        },
+        {
+          "label": "Aizen Light",
+          "value": "Aizen Light"
+        },
+        {
+          "label": "Alabaster",
+          "value": "Alabaster"
+        },
+        {
+          "label": "Alien Blood",
+          "value": "Alien Blood"
+        },
+        {
+          "label": "Andromeda",
+          "value": "Andromeda"
+        },
+        {
+          "label": "Apple Classic",
+          "value": "Apple Classic"
+        },
+        {
+          "label": "Apple System Colors",
+          "value": "Apple System Colors"
+        },
+        {
+          "label": "Apple System Colors Light",
+          "value": "Apple System Colors Light"
+        },
+        {
+          "label": "Arcoiris",
+          "value": "Arcoiris"
+        },
+        {
+          "label": "Ardoise",
+          "value": "Ardoise"
+        },
+        {
+          "label": "Argonaut",
+          "value": "Argonaut"
+        },
+        {
+          "label": "Arthur",
+          "value": "Arthur"
+        },
+        {
+          "label": "Atelier Sulphurpool",
+          "value": "Atelier Sulphurpool"
+        },
+        {
+          "label": "Atom",
+          "value": "Atom"
+        },
+        {
+          "label": "Atom One Dark",
+          "value": "Atom One Dark"
+        },
+        {
+          "label": "Atom One Light",
+          "value": "Atom One Light"
+        },
+        {
+          "label": "Aura",
+          "value": "Aura"
+        },
+        {
+          "label": "Aurora",
+          "value": "Aurora"
+        },
+        {
+          "label": "Ayu",
+          "value": "Ayu"
+        },
+        {
+          "label": "Ayu Light",
+          "value": "Ayu Light"
+        },
+        {
+          "label": "Ayu Mirage",
+          "value": "Ayu Mirage"
+        },
+        {
+          "label": "Banana Blueberry",
+          "value": "Banana Blueberry"
+        },
+        {
+          "label": "Batman",
+          "value": "Batman"
+        },
+        {
+          "label": "Belafonte Day",
+          "value": "Belafonte Day"
+        },
+        {
+          "label": "Belafonte Night",
+          "value": "Belafonte Night"
+        },
+        {
+          "label": "Birds Of Paradise",
+          "value": "Birds Of Paradise"
+        },
+        {
+          "label": "Black Metal",
+          "value": "Black Metal"
+        },
+        {
+          "label": "Black Metal (Bathory)",
+          "value": "Black Metal (Bathory)"
+        },
+        {
+          "label": "Black Metal (Burzum)",
+          "value": "Black Metal (Burzum)"
+        },
+        {
+          "label": "Black Metal (Dark Funeral)",
+          "value": "Black Metal (Dark Funeral)"
+        },
+        {
+          "label": "Black Metal (Gorgoroth)",
+          "value": "Black Metal (Gorgoroth)"
+        },
+        {
+          "label": "Black Metal (Immortal)",
+          "value": "Black Metal (Immortal)"
+        },
+        {
+          "label": "Black Metal (Khold)",
+          "value": "Black Metal (Khold)"
+        },
+        {
+          "label": "Black Metal (Marduk)",
+          "value": "Black Metal (Marduk)"
+        },
+        {
+          "label": "Black Metal (Mayhem)",
+          "value": "Black Metal (Mayhem)"
+        },
+        {
+          "label": "Black Metal (Nile)",
+          "value": "Black Metal (Nile)"
+        },
+        {
+          "label": "Black Metal (Venom)",
+          "value": "Black Metal (Venom)"
+        },
+        {
+          "label": "Blazer",
+          "value": "Blazer"
+        },
+        {
+          "label": "Blue Berry Pie",
+          "value": "Blue Berry Pie"
+        },
+        {
+          "label": "Blue Dolphin",
+          "value": "Blue Dolphin"
+        },
+        {
+          "label": "Blue Matrix",
+          "value": "Blue Matrix"
+        },
+        {
+          "label": "Bluloco Dark",
+          "value": "Bluloco Dark"
+        },
+        {
+          "label": "Bluloco Light",
+          "value": "Bluloco Light"
+        },
+        {
+          "label": "Borland",
+          "value": "Borland"
+        },
+        {
+          "label": "Box",
+          "value": "Box"
+        },
+        {
+          "label": "Breadog",
+          "value": "Breadog"
+        },
+        {
+          "label": "Breeze",
+          "value": "Breeze"
+        },
+        {
+          "label": "Bright Lights",
+          "value": "Bright Lights"
+        },
+        {
+          "label": "Broadcast",
+          "value": "Broadcast"
+        },
+        {
+          "label": "Brogrammer",
+          "value": "Brogrammer"
+        },
+        {
+          "label": "Builtin Dark",
+          "value": "Builtin Dark"
+        },
+        {
+          "label": "Builtin Light",
+          "value": "Builtin Light"
+        },
+        {
+          "label": "Builtin Pastel Dark",
+          "value": "Builtin Pastel Dark"
+        },
+        {
+          "label": "Builtin Tango Dark",
+          "value": "Builtin Tango Dark"
+        },
+        {
+          "label": "Builtin Tango Light",
+          "value": "Builtin Tango Light"
+        },
+        {
+          "label": "C64",
+          "value": "C64"
+        },
+        {
+          "label": "CGA",
+          "value": "CGA"
+        },
+        {
+          "label": "CLRS",
+          "value": "CLRS"
+        },
+        {
+          "label": "Calamity",
+          "value": "Calamity"
+        },
+        {
+          "label": "Carbonfox",
+          "value": "Carbonfox"
+        },
+        {
+          "label": "Catppuccin Frappe",
+          "value": "Catppuccin Frappe"
+        },
+        {
+          "label": "Catppuccin Latte",
+          "value": "Catppuccin Latte"
+        },
+        {
+          "label": "Catppuccin Macchiato",
+          "value": "Catppuccin Macchiato"
+        },
+        {
+          "label": "Catppuccin Mocha",
+          "value": "Catppuccin Mocha"
+        },
+        {
+          "label": "Chalk",
+          "value": "Chalk"
+        },
+        {
+          "label": "Chalkboard",
+          "value": "Chalkboard"
+        },
+        {
+          "label": "Challenger Deep",
+          "value": "Challenger Deep"
+        },
+        {
+          "label": "Chester",
+          "value": "Chester"
+        },
+        {
+          "label": "Ciapre",
+          "value": "Ciapre"
+        },
+        {
+          "label": "Citruszest",
+          "value": "Citruszest"
+        },
+        {
+          "label": "Cobalt Neon",
+          "value": "Cobalt Neon"
+        },
+        {
+          "label": "Cobalt Next",
+          "value": "Cobalt Next"
+        },
+        {
+          "label": "Cobalt Next Dark",
+          "value": "Cobalt Next Dark"
+        },
+        {
+          "label": "Cobalt Next Minimal",
+          "value": "Cobalt Next Minimal"
+        },
+        {
+          "label": "Cobalt2",
+          "value": "Cobalt2"
+        },
+        {
+          "label": "Coffee Theme",
+          "value": "Coffee Theme"
+        },
+        {
+          "label": "Crayon Pony Fish",
+          "value": "Crayon Pony Fish"
+        },
+        {
+          "label": "Cursor Dark",
+          "value": "Cursor Dark"
+        },
+        {
+          "label": "Cursor Light",
+          "value": "Cursor Light"
+        },
+        {
+          "label": "Cutie Pro",
+          "value": "Cutie Pro"
+        },
+        {
+          "label": "Cyberdyne",
+          "value": "Cyberdyne"
+        },
+        {
+          "label": "Cyberpunk",
+          "value": "Cyberpunk"
+        },
+        {
+          "label": "Cyberpunk Scarlet Protocol",
+          "value": "Cyberpunk Scarlet Protocol"
+        },
+        {
+          "label": "Dalton Dark",
+          "value": "Dalton Dark"
+        },
+        {
+          "label": "Dark Modern",
+          "value": "Dark Modern"
+        },
+        {
+          "label": "Dark Pastel",
+          "value": "Dark Pastel"
+        },
+        {
+          "label": "Dark+",
+          "value": "Dark+"
+        },
+        {
+          "label": "Darkermatrix",
+          "value": "Darkermatrix"
+        },
+        {
+          "label": "Darkmatrix",
+          "value": "Darkmatrix"
+        },
+        {
+          "label": "Darkside",
+          "value": "Darkside"
+        },
+        {
+          "label": "Dawnfox",
+          "value": "Dawnfox"
+        },
+        {
+          "label": "Dayfox",
+          "value": "Dayfox"
+        },
+        {
+          "label": "Deep",
+          "value": "Deep"
+        },
+        {
+          "label": "Desert",
+          "value": "Desert"
+        },
+        {
+          "label": "Detuned",
+          "value": "Detuned"
+        },
+        {
+          "label": "Dimidium",
+          "value": "Dimidium"
+        },
+        {
+          "label": "Dimmed Monokai",
+          "value": "Dimmed Monokai"
+        },
+        {
+          "label": "Django",
+          "value": "Django"
+        },
+        {
+          "label": "Django Reborn Again",
+          "value": "Django Reborn Again"
+        },
+        {
+          "label": "Django Smooth",
+          "value": "Django Smooth"
+        },
+        {
+          "label": "Dogxi Misty",
+          "value": "Dogxi Misty"
+        },
+        {
+          "label": "Doom One",
+          "value": "Doom One"
+        },
+        {
+          "label": "Doom Peacock",
+          "value": "Doom Peacock"
+        },
+        {
+          "label": "Dot Gov",
+          "value": "Dot Gov"
+        },
+        {
+          "label": "Dracula",
+          "value": "Dracula"
+        },
+        {
+          "label": "Dracula+",
+          "value": "Dracula+"
+        },
+        {
+          "label": "Duckbones",
+          "value": "Duckbones"
+        },
+        {
+          "label": "Duotone Dark",
+          "value": "Duotone Dark"
+        },
+        {
+          "label": "Duskfox",
+          "value": "Duskfox"
+        },
+        {
+          "label": "ENCOM",
+          "value": "ENCOM"
+        },
+        {
+          "label": "Earthsong",
+          "value": "Earthsong"
+        },
+        {
+          "label": "Electron Highlighter",
+          "value": "Electron Highlighter"
+        },
+        {
+          "label": "Elegant",
+          "value": "Elegant"
+        },
+        {
+          "label": "Elemental",
+          "value": "Elemental"
+        },
+        {
+          "label": "Elementary",
+          "value": "Elementary"
+        },
+        {
+          "label": "Embark",
+          "value": "Embark"
+        },
+        {
+          "label": "Embers Dark",
+          "value": "Embers Dark"
+        },
+        {
+          "label": "Espresso",
+          "value": "Espresso"
+        },
+        {
+          "label": "Espresso Libre",
+          "value": "Espresso Libre"
+        },
+        {
+          "label": "Everblush",
+          "value": "Everblush"
+        },
+        {
+          "label": "Everforest Dark Hard",
+          "value": "Everforest Dark Hard"
+        },
+        {
+          "label": "Everforest Light Med",
+          "value": "Everforest Light Med"
+        },
+        {
+          "label": "Fahrenheit",
+          "value": "Fahrenheit"
+        },
+        {
+          "label": "Fairyfloss",
+          "value": "Fairyfloss"
+        },
+        {
+          "label": "Farmhouse Dark",
+          "value": "Farmhouse Dark"
+        },
+        {
+          "label": "Farmhouse Light",
+          "value": "Farmhouse Light"
+        },
+        {
+          "label": "Fideloper",
+          "value": "Fideloper"
+        },
+        {
+          "label": "Firefly Traditional",
+          "value": "Firefly Traditional"
+        },
+        {
+          "label": "Firefox Dev",
+          "value": "Firefox Dev"
+        },
+        {
+          "label": "Firewatch",
+          "value": "Firewatch"
+        },
+        {
+          "label": "Fish Tank",
+          "value": "Fish Tank"
+        },
+        {
+          "label": "Flat",
+          "value": "Flat"
+        },
+        {
+          "label": "Flatland",
+          "value": "Flatland"
+        },
+        {
+          "label": "Flexoki Dark",
+          "value": "Flexoki Dark"
+        },
+        {
+          "label": "Flexoki Light",
+          "value": "Flexoki Light"
+        },
+        {
+          "label": "Floraverse",
+          "value": "Floraverse"
+        },
+        {
+          "label": "Forest Blue",
+          "value": "Forest Blue"
+        },
+        {
+          "label": "Framer",
+          "value": "Framer"
+        },
+        {
+          "label": "Front End Delight",
+          "value": "Front End Delight"
+        },
+        {
+          "label": "Fun Forrest",
+          "value": "Fun Forrest"
+        },
+        {
+          "label": "Galaxy",
+          "value": "Galaxy"
+        },
+        {
+          "label": "Galizur",
+          "value": "Galizur"
+        },
+        {
+          "label": "Ghostex Alucard",
+          "value": "Ghostex Alucard"
+        },
+        {
+          "label": "Ghostex Catppuccin Frappé",
+          "value": "Ghostex Catppuccin Frappe"
+        },
+        {
+          "label": "Ghostex Catppuccin Latte",
+          "value": "Ghostex Catppuccin Latte"
+        },
+        {
+          "label": "Ghostex Catppuccin Macchiato",
+          "value": "Ghostex Catppuccin Macchiato"
+        },
+        {
+          "label": "Ghostex Catppuccin Mocha",
+          "value": "Ghostex Catppuccin Mocha"
+        },
+        {
+          "label": "Ghostex Dracula",
+          "value": "Ghostex Dracula"
+        },
+        {
+          "label": "Ghostex Everforest Dark",
+          "value": "Ghostex Everforest Dark"
+        },
+        {
+          "label": "Ghostex Everforest Light",
+          "value": "Ghostex Everforest Light"
+        },
+        {
+          "label": "Ghostex Gruvbox Material Dark",
+          "value": "Ghostex Gruvbox Material Dark"
+        },
+        {
+          "label": "Ghostex Gruvbox Material Light",
+          "value": "Ghostex Gruvbox Material Light"
+        },
+        {
+          "label": "Ghostex Kanagawa Dragon",
+          "value": "Ghostex Kanagawa Dragon"
+        },
+        {
+          "label": "Ghostex Kanagawa Lotus",
+          "value": "Ghostex Kanagawa Lotus"
+        },
+        {
+          "label": "Ghostex Kanagawa Wave",
+          "value": "Ghostex Kanagawa Wave"
+        },
+        {
+          "label": "Ghostex Nord",
+          "value": "Ghostex Nord"
+        },
+        {
+          "label": "Ghostex Solarized Dark",
+          "value": "Ghostex Solarized Dark"
+        },
+        {
+          "label": "Ghostex Solarized Light",
+          "value": "Ghostex Solarized Light"
+        },
+        {
+          "label": "Ghostex Tokyo Night Day",
+          "value": "Ghostex Tokyo Night Day"
+        },
+        {
+          "label": "Ghostex Tokyo Night Moon",
+          "value": "Ghostex Tokyo Night Moon"
+        },
+        {
+          "label": "Ghostex Tokyo Night Night",
+          "value": "Ghostex Tokyo Night Night"
+        },
+        {
+          "label": "Ghostex Tokyo Night Storm",
+          "value": "Ghostex Tokyo Night Storm"
+        },
+        {
+          "label": "Ghostty Default Style Dark",
+          "value": "Ghostty Default Style Dark"
+        },
+        {
+          "label": "GitHub",
+          "value": "GitHub"
+        },
+        {
+          "label": "GitHub Dark",
+          "value": "GitHub Dark"
+        },
+        {
+          "label": "GitHub Dark Colorblind",
+          "value": "GitHub Dark Colorblind"
+        },
+        {
+          "label": "GitHub Dark Default",
+          "value": "GitHub Dark Default"
+        },
+        {
+          "label": "GitHub Dark Dimmed",
+          "value": "GitHub Dark Dimmed"
+        },
+        {
+          "label": "GitHub Dark High Contrast",
+          "value": "GitHub Dark High Contrast"
+        },
+        {
+          "label": "GitHub Light Colorblind",
+          "value": "GitHub Light Colorblind"
+        },
+        {
+          "label": "GitHub Light",
+          "value": "GitHub Light Default"
+        },
+        {
+          "label": "GitHub Light High Contrast",
+          "value": "GitHub Light High Contrast"
+        },
+        {
+          "label": "GitLab Dark",
+          "value": "GitLab Dark"
+        },
+        {
+          "label": "GitLab Dark Grey",
+          "value": "GitLab Dark Grey"
+        },
+        {
+          "label": "GitLab Light",
+          "value": "GitLab Light"
+        },
+        {
+          "label": "Glacier",
+          "value": "Glacier"
+        },
+        {
+          "label": "Grape",
+          "value": "Grape"
+        },
+        {
+          "label": "Grass",
+          "value": "Grass"
+        },
+        {
+          "label": "Grey Green",
+          "value": "Grey Green"
+        },
+        {
+          "label": "Gruber Darker",
+          "value": "Gruber Darker"
+        },
+        {
+          "label": "Gruvbox Dark",
+          "value": "Gruvbox Dark"
+        },
+        {
+          "label": "Gruvbox Dark Hard",
+          "value": "Gruvbox Dark Hard"
+        },
+        {
+          "label": "Gruvbox Light",
+          "value": "Gruvbox Light"
+        },
+        {
+          "label": "Gruvbox Light Hard",
+          "value": "Gruvbox Light Hard"
+        },
+        {
+          "label": "Gruvbox Material",
+          "value": "Gruvbox Material"
+        },
+        {
+          "label": "Gruvbox Material Dark",
+          "value": "Gruvbox Material Dark"
+        },
+        {
+          "label": "Gruvbox Material Light",
+          "value": "Gruvbox Material Light"
+        },
+        {
+          "label": "Guezwhoz",
+          "value": "Guezwhoz"
+        },
+        {
+          "label": "HaX0R Blue",
+          "value": "HaX0R Blue"
+        },
+        {
+          "label": "HaX0R Gr33N",
+          "value": "HaX0R Gr33N"
+        },
+        {
+          "label": "HaX0R R3D",
+          "value": "HaX0R R3D"
+        },
+        {
+          "label": "Hacktober",
+          "value": "Hacktober"
+        },
+        {
+          "label": "Hardcore",
+          "value": "Hardcore"
+        },
+        {
+          "label": "Harper",
+          "value": "Harper"
+        },
+        {
+          "label": "Havn Daggry",
+          "value": "Havn Daggry"
+        },
+        {
+          "label": "Havn Skumring",
+          "value": "Havn Skumring"
+        },
+        {
+          "label": "Heeler",
+          "value": "Heeler"
+        },
+        {
+          "label": "Highway",
+          "value": "Highway"
+        },
+        {
+          "label": "Hipster Green",
+          "value": "Hipster Green"
+        },
+        {
+          "label": "Hivacruz",
+          "value": "Hivacruz"
+        },
+        {
+          "label": "Homebrew",
+          "value": "Homebrew"
+        },
+        {
+          "label": "Hopscotch",
+          "value": "Hopscotch"
+        },
+        {
+          "label": "Hopscotch.256",
+          "value": "Hopscotch.256"
+        },
+        {
+          "label": "Horizon",
+          "value": "Horizon"
+        },
+        {
+          "label": "Horizon Bright",
+          "value": "Horizon Bright"
+        },
+        {
+          "label": "Hot Dog Stand",
+          "value": "Hot Dog Stand"
+        },
+        {
+          "label": "Hot Dog Stand (Mustard)",
+          "value": "Hot Dog Stand (Mustard)"
+        },
+        {
+          "label": "Hurtado",
+          "value": "Hurtado"
+        },
+        {
+          "label": "Hybrid",
+          "value": "Hybrid"
+        },
+        {
+          "label": "IBM 5153 CGA",
+          "value": "IBM 5153 CGA"
+        },
+        {
+          "label": "IBM 5153 CGA (Black)",
+          "value": "IBM 5153 CGA (Black)"
+        },
+        {
+          "label": "IC Green PPL",
+          "value": "IC Green PPL"
+        },
+        {
+          "label": "IC Orange PPL",
+          "value": "IC Orange PPL"
+        },
+        {
+          "label": "IR Black",
+          "value": "IR Black"
+        },
+        {
+          "label": "IRIX Console",
+          "value": "IRIX Console"
+        },
+        {
+          "label": "IRIX Terminal",
+          "value": "IRIX Terminal"
+        },
+        {
+          "label": "Iceberg Dark",
+          "value": "Iceberg Dark"
+        },
+        {
+          "label": "Iceberg Light",
+          "value": "Iceberg Light"
+        },
+        {
+          "label": "Idea",
+          "value": "Idea"
+        },
+        {
+          "label": "Idle Toes",
+          "value": "Idle Toes"
+        },
+        {
+          "label": "Jackie Brown",
+          "value": "Jackie Brown"
+        },
+        {
+          "label": "Japanesque",
+          "value": "Japanesque"
+        },
+        {
+          "label": "Jellybeans",
+          "value": "Jellybeans"
+        },
+        {
+          "label": "JetBrains Darcula",
+          "value": "JetBrains Darcula"
+        },
+        {
+          "label": "Jubi",
+          "value": "Jubi"
+        },
+        {
+          "label": "Kanagawa Dragon",
+          "value": "Kanagawa Dragon"
+        },
+        {
+          "label": "Kanagawa Lotus",
+          "value": "Kanagawa Lotus"
+        },
+        {
+          "label": "Kanagawa Wave",
+          "value": "Kanagawa Wave"
+        },
+        {
+          "label": "Kanagawabones",
+          "value": "Kanagawabones"
+        },
+        {
+          "label": "Kanso Ink",
+          "value": "Kanso Ink"
+        },
+        {
+          "label": "Kanso Mist",
+          "value": "Kanso Mist"
+        },
+        {
+          "label": "Kanso Pearl",
+          "value": "Kanso Pearl"
+        },
+        {
+          "label": "Kanso Zen",
+          "value": "Kanso Zen"
+        },
+        {
+          "label": "Kibble",
+          "value": "Kibble"
+        },
+        {
+          "label": "Kitty Default",
+          "value": "Kitty Default"
+        },
+        {
+          "label": "Kitty Low Contrast",
+          "value": "Kitty Low Contrast"
+        },
+        {
+          "label": "Kolorit",
+          "value": "Kolorit"
+        },
+        {
+          "label": "Konsolas",
+          "value": "Konsolas"
+        },
+        {
+          "label": "Kurokula",
+          "value": "Kurokula"
+        },
+        {
+          "label": "Lab Fox",
+          "value": "Lab Fox"
+        },
+        {
+          "label": "Laser",
+          "value": "Laser"
+        },
+        {
+          "label": "Later This Evening",
+          "value": "Later This Evening"
+        },
+        {
+          "label": "Lavandula",
+          "value": "Lavandula"
+        },
+        {
+          "label": "Light Owl",
+          "value": "Light Owl"
+        },
+        {
+          "label": "Liquid Carbon",
+          "value": "Liquid Carbon"
+        },
+        {
+          "label": "Liquid Carbon Transparent",
+          "value": "Liquid Carbon Transparent"
+        },
+        {
+          "label": "Lovelace",
+          "value": "Lovelace"
+        },
+        {
+          "label": "Man Page",
+          "value": "Man Page"
+        },
+        {
+          "label": "Mariana",
+          "value": "Mariana"
+        },
+        {
+          "label": "Material",
+          "value": "Material"
+        },
+        {
+          "label": "Material Dark",
+          "value": "Material Dark"
+        },
+        {
+          "label": "Material Darker",
+          "value": "Material Darker"
+        },
+        {
+          "label": "Material Design Colors",
+          "value": "Material Design Colors"
+        },
+        {
+          "label": "Material Ocean",
+          "value": "Material Ocean"
+        },
+        {
+          "label": "Mathias",
+          "value": "Mathias"
+        },
+        {
+          "label": "Matrix",
+          "value": "Matrix"
+        },
+        {
+          "label": "Matte Black",
+          "value": "Matte Black"
+        },
+        {
+          "label": "Medallion",
+          "value": "Medallion"
+        },
+        {
+          "label": "Melange Dark",
+          "value": "Melange Dark"
+        },
+        {
+          "label": "Melange Light",
+          "value": "Melange Light"
+        },
+        {
+          "label": "Mellifluous",
+          "value": "Mellifluous"
+        },
+        {
+          "label": "Mellow",
+          "value": "Mellow"
+        },
+        {
+          "label": "Miasma",
+          "value": "Miasma"
+        },
+        {
+          "label": "Midnight In Mojave",
+          "value": "Midnight In Mojave"
+        },
+        {
+          "label": "Mirage",
+          "value": "Mirage"
+        },
+        {
+          "label": "Misterioso",
+          "value": "Misterioso"
+        },
+        {
+          "label": "Modus Operandi",
+          "value": "Modus Operandi"
+        },
+        {
+          "label": "Modus Operandi Tinted",
+          "value": "Modus Operandi Tinted"
+        },
+        {
+          "label": "Modus Vivendi",
+          "value": "Modus Vivendi"
+        },
+        {
+          "label": "Modus Vivendi Tinted",
+          "value": "Modus Vivendi Tinted"
+        },
+        {
+          "label": "Molokai",
+          "value": "Molokai"
+        },
+        {
+          "label": "Mona Lisa",
+          "value": "Mona Lisa"
+        },
+        {
+          "label": "Monokai Classic",
+          "value": "Monokai Classic"
+        },
+        {
+          "label": "Monokai Pro",
+          "value": "Monokai Pro"
+        },
+        {
+          "label": "Monokai Pro Light",
+          "value": "Monokai Pro Light"
+        },
+        {
+          "label": "Monokai Pro Light Sun",
+          "value": "Monokai Pro Light Sun"
+        },
+        {
+          "label": "Monokai Pro Machine",
+          "value": "Monokai Pro Machine"
+        },
+        {
+          "label": "Monokai Pro Octagon",
+          "value": "Monokai Pro Octagon"
+        },
+        {
+          "label": "Monokai Pro Ristretto",
+          "value": "Monokai Pro Ristretto"
+        },
+        {
+          "label": "Monokai Pro Spectrum",
+          "value": "Monokai Pro Spectrum"
+        },
+        {
+          "label": "Monokai Remastered",
+          "value": "Monokai Remastered"
+        },
+        {
+          "label": "Monokai Soda",
+          "value": "Monokai Soda"
+        },
+        {
+          "label": "Monokai Vivid",
+          "value": "Monokai Vivid"
+        },
+        {
+          "label": "Monospace Dark",
+          "value": "Monospace Dark"
+        },
+        {
+          "label": "Monospace Light",
+          "value": "Monospace Light"
+        },
+        {
+          "label": "Moonfly",
+          "value": "Moonfly"
+        },
+        {
+          "label": "N0Tch2K",
+          "value": "N0Tch2K"
+        },
+        {
+          "label": "Neobones Dark",
+          "value": "Neobones Dark"
+        },
+        {
+          "label": "Neobones Light",
+          "value": "Neobones Light"
+        },
+        {
+          "label": "Neon",
+          "value": "Neon"
+        },
+        {
+          "label": "Neopolitan",
+          "value": "Neopolitan"
+        },
+        {
+          "label": "Neutron",
+          "value": "Neutron"
+        },
+        {
+          "label": "Night Lion V1",
+          "value": "Night Lion V1"
+        },
+        {
+          "label": "Night Lion V2",
+          "value": "Night Lion V2"
+        },
+        {
+          "label": "Night Owl",
+          "value": "Night Owl"
+        },
+        {
+          "label": "Night Owlish Light",
+          "value": "Night Owlish Light"
+        },
+        {
+          "label": "Nightfox",
+          "value": "Nightfox"
+        },
+        {
+          "label": "Niji",
+          "value": "Niji"
+        },
+        {
+          "label": "No Clown Fiesta",
+          "value": "No Clown Fiesta"
+        },
+        {
+          "label": "No Clown Fiesta Light",
+          "value": "No Clown Fiesta Light"
+        },
+        {
+          "label": "Nocturnal Winter",
+          "value": "Nocturnal Winter"
+        },
+        {
+          "label": "Nord",
+          "value": "Nord"
+        },
+        {
+          "label": "Nord Light",
+          "value": "Nord Light"
+        },
+        {
+          "label": "Nord Wave",
+          "value": "Nord Wave"
+        },
+        {
+          "label": "Nordfox",
+          "value": "Nordfox"
+        },
+        {
+          "label": "Novel",
+          "value": "Novel"
+        },
+        {
+          "label": "Nvim Dark",
+          "value": "Nvim Dark"
+        },
+        {
+          "label": "Nvim Light",
+          "value": "Nvim Light"
+        },
+        {
+          "label": "Obsidian",
+          "value": "Obsidian"
+        },
+        {
+          "label": "Ocean",
+          "value": "Ocean"
+        },
+        {
+          "label": "Oceanic Material",
+          "value": "Oceanic Material"
+        },
+        {
+          "label": "Oceanic Next",
+          "value": "Oceanic Next"
+        },
+        {
+          "label": "Ollie",
+          "value": "Ollie"
+        },
+        {
+          "label": "One Dark Two",
+          "value": "One Dark Two"
+        },
+        {
+          "label": "One Double Dark",
+          "value": "One Double Dark"
+        },
+        {
+          "label": "One Double Light",
+          "value": "One Double Light"
+        },
+        {
+          "label": "One Half Dark",
+          "value": "One Half Dark"
+        },
+        {
+          "label": "One Half Light",
+          "value": "One Half Light"
+        },
+        {
+          "label": "Onenord",
+          "value": "Onenord"
+        },
+        {
+          "label": "Onenord Light",
+          "value": "Onenord Light"
+        },
+        {
+          "label": "Operator Mono Dark",
+          "value": "Operator Mono Dark"
+        },
+        {
+          "label": "Overnight Slumber",
+          "value": "Overnight Slumber"
+        },
+        {
+          "label": "Oxocarbon",
+          "value": "Oxocarbon"
+        },
+        {
+          "label": "Pale Night Hc",
+          "value": "Pale Night Hc"
+        },
+        {
+          "label": "Pandora",
+          "value": "Pandora"
+        },
+        {
+          "label": "Paraiso Dark",
+          "value": "Paraiso Dark"
+        },
+        {
+          "label": "Paul Millr",
+          "value": "Paul Millr"
+        },
+        {
+          "label": "Pencil Dark",
+          "value": "Pencil Dark"
+        },
+        {
+          "label": "Pencil Light",
+          "value": "Pencil Light"
+        },
+        {
+          "label": "Peppermint",
+          "value": "Peppermint"
+        },
+        {
+          "label": "Phala Green Dark",
+          "value": "Phala Green Dark"
+        },
+        {
+          "label": "Piatto Light",
+          "value": "Piatto Light"
+        },
+        {
+          "label": "Pierre Dark",
+          "value": "Pierre Dark"
+        },
+        {
+          "label": "Pierre Light",
+          "value": "Pierre Light"
+        },
+        {
+          "label": "Pnevma",
+          "value": "Pnevma"
+        },
+        {
+          "label": "Poimandres",
+          "value": "Poimandres"
+        },
+        {
+          "label": "Poimandres Darker",
+          "value": "Poimandres Darker"
+        },
+        {
+          "label": "Poimandres Storm",
+          "value": "Poimandres Storm"
+        },
+        {
+          "label": "Poimandres White",
+          "value": "Poimandres White"
+        },
+        {
+          "label": "Popping And Locking",
+          "value": "Popping And Locking"
+        },
+        {
+          "label": "Powershell",
+          "value": "Powershell"
+        },
+        {
+          "label": "Primary",
+          "value": "Primary"
+        },
+        {
+          "label": "Pro",
+          "value": "Pro"
+        },
+        {
+          "label": "Pro Light",
+          "value": "Pro Light"
+        },
+        {
+          "label": "Purple Rain",
+          "value": "Purple Rain"
+        },
+        {
+          "label": "Purplepeter",
+          "value": "Purplepeter"
+        },
+        {
+          "label": "Rapture",
+          "value": "Rapture"
+        },
+        {
+          "label": "Raycast Dark",
+          "value": "Raycast Dark"
+        },
+        {
+          "label": "Raycast Light",
+          "value": "Raycast Light"
+        },
+        {
+          "label": "Rebecca",
+          "value": "Rebecca"
+        },
+        {
+          "label": "Red Alert",
+          "value": "Red Alert"
+        },
+        {
+          "label": "Red Planet",
+          "value": "Red Planet"
+        },
+        {
+          "label": "Red Sands",
+          "value": "Red Sands"
+        },
+        {
+          "label": "Relaxed",
+          "value": "Relaxed"
+        },
+        {
+          "label": "Retro",
+          "value": "Retro"
+        },
+        {
+          "label": "Retro Legends",
+          "value": "Retro Legends"
+        },
+        {
+          "label": "Rippedcasts",
+          "value": "Rippedcasts"
+        },
+        {
+          "label": "Rose Pine",
+          "value": "Rose Pine"
+        },
+        {
+          "label": "Rose Pine Dawn",
+          "value": "Rose Pine Dawn"
+        },
+        {
+          "label": "Rose Pine Moon",
+          "value": "Rose Pine Moon"
+        },
+        {
+          "label": "Rouge 2",
+          "value": "Rouge 2"
+        },
+        {
+          "label": "Royal",
+          "value": "Royal"
+        },
+        {
+          "label": "Ryuuko",
+          "value": "Ryuuko"
+        },
+        {
+          "label": "Sakura",
+          "value": "Sakura"
+        },
+        {
+          "label": "Scarlet Protocol",
+          "value": "Scarlet Protocol"
+        },
+        {
+          "label": "Sea Shells",
+          "value": "Sea Shells"
+        },
+        {
+          "label": "Seafoam Pastel",
+          "value": "Seafoam Pastel"
+        },
+        {
+          "label": "SeedFlip Abyss",
+          "value": "SeedFlip Abyss"
+        },
+        {
+          "label": "SeedFlip Amethyst",
+          "value": "SeedFlip Amethyst"
+        },
+        {
+          "label": "SeedFlip Canopy",
+          "value": "SeedFlip Canopy"
+        },
+        {
+          "label": "SeedFlip Carbon",
+          "value": "SeedFlip Carbon"
+        },
+        {
+          "label": "SeedFlip Coral",
+          "value": "SeedFlip Coral"
+        },
+        {
+          "label": "SeedFlip Ember",
+          "value": "SeedFlip Ember"
+        },
+        {
+          "label": "SeedFlip Glacier",
+          "value": "SeedFlip Glacier"
+        },
+        {
+          "label": "SeedFlip Inkwell",
+          "value": "SeedFlip Inkwell"
+        },
+        {
+          "label": "SeedFlip Ivory",
+          "value": "SeedFlip Ivory"
+        },
+        {
+          "label": "SeedFlip Nightfall",
+          "value": "SeedFlip Nightfall"
+        },
+        {
+          "label": "SeedFlip Phosphor",
+          "value": "SeedFlip Phosphor"
+        },
+        {
+          "label": "SeedFlip Pulse",
+          "value": "SeedFlip Pulse"
+        },
+        {
+          "label": "SeedFlip Ultraviolet",
+          "value": "SeedFlip Ultraviolet"
+        },
+        {
+          "label": "SeedFlip Voltage",
+          "value": "SeedFlip Voltage"
+        },
+        {
+          "label": "SeedFlip Wavelength",
+          "value": "SeedFlip Wavelength"
+        },
+        {
+          "label": "Selenized Black",
+          "value": "Selenized Black"
+        },
+        {
+          "label": "Selenized Dark",
+          "value": "Selenized Dark"
+        },
+        {
+          "label": "Selenized Light",
+          "value": "Selenized Light"
+        },
+        {
+          "label": "Seoulbones Dark",
+          "value": "Seoulbones Dark"
+        },
+        {
+          "label": "Seoulbones Light",
+          "value": "Seoulbones Light"
+        },
+        {
+          "label": "Seti",
+          "value": "Seti"
+        },
+        {
+          "label": "Shades Of Purple",
+          "value": "Shades Of Purple"
+        },
+        {
+          "label": "Shaman",
+          "value": "Shaman"
+        },
+        {
+          "label": "Slate",
+          "value": "Slate"
+        },
+        {
+          "label": "Sleepy Hollow",
+          "value": "Sleepy Hollow"
+        },
+        {
+          "label": "Smyck",
+          "value": "Smyck"
+        },
+        {
+          "label": "Snazzy",
+          "value": "Snazzy"
+        },
+        {
+          "label": "Snazzy Soft",
+          "value": "Snazzy Soft"
+        },
+        {
+          "label": "Soft Server",
+          "value": "Soft Server"
+        },
+        {
+          "label": "Solarized Darcula",
+          "value": "Solarized Darcula"
+        },
+        {
+          "label": "Solarized Dark Higher Contrast",
+          "value": "Solarized Dark Higher Contrast"
+        },
+        {
+          "label": "Solarized Dark Patched",
+          "value": "Solarized Dark Patched"
+        },
+        {
+          "label": "Solarized Osaka Night",
+          "value": "Solarized Osaka Night"
+        },
+        {
+          "label": "Sonokai",
+          "value": "Sonokai"
+        },
+        {
+          "label": "Spacedust",
+          "value": "Spacedust"
+        },
+        {
+          "label": "Spacegray",
+          "value": "Spacegray"
+        },
+        {
+          "label": "Spacegray Bright",
+          "value": "Spacegray Bright"
+        },
+        {
+          "label": "Spacegray Eighties",
+          "value": "Spacegray Eighties"
+        },
+        {
+          "label": "Spacegray Eighties Dull",
+          "value": "Spacegray Eighties Dull"
+        },
+        {
+          "label": "Spiderman",
+          "value": "Spiderman"
+        },
+        {
+          "label": "Spring",
+          "value": "Spring"
+        },
+        {
+          "label": "Square",
+          "value": "Square"
+        },
+        {
+          "label": "Squirrelsong Dark",
+          "value": "Squirrelsong Dark"
+        },
+        {
+          "label": "Srcery",
+          "value": "Srcery"
+        },
+        {
+          "label": "Starlight",
+          "value": "Starlight"
+        },
+        {
+          "label": "Sublette",
+          "value": "Sublette"
+        },
+        {
+          "label": "Subliminal",
+          "value": "Subliminal"
+        },
+        {
+          "label": "Sugarplum",
+          "value": "Sugarplum"
+        },
+        {
+          "label": "Sundried",
+          "value": "Sundried"
+        },
+        {
+          "label": "Sunset Drive",
+          "value": "Sunset Drive"
+        },
+        {
+          "label": "Symfonic",
+          "value": "Symfonic"
+        },
+        {
+          "label": "Synthwave",
+          "value": "Synthwave"
+        },
+        {
+          "label": "Synthwave Alpha",
+          "value": "Synthwave Alpha"
+        },
+        {
+          "label": "Synthwave Everything",
+          "value": "Synthwave Everything"
+        },
+        {
+          "label": "Tango Adapted",
+          "value": "Tango Adapted"
+        },
+        {
+          "label": "Tango Half Adapted",
+          "value": "Tango Half Adapted"
+        },
+        {
+          "label": "Tearout",
+          "value": "Tearout"
+        },
+        {
+          "label": "Teerb",
+          "value": "Teerb"
+        },
+        {
+          "label": "Terafox",
+          "value": "Terafox"
+        },
+        {
+          "label": "Terminal Basic",
+          "value": "Terminal Basic"
+        },
+        {
+          "label": "Terminal Basic Dark",
+          "value": "Terminal Basic Dark"
+        },
+        {
+          "label": "Thayer Bright",
+          "value": "Thayer Bright"
+        },
+        {
+          "label": "The Hulk",
+          "value": "The Hulk"
+        },
+        {
+          "label": "Tinacious Design Dark",
+          "value": "Tinacious Design Dark"
+        },
+        {
+          "label": "Tinacious Design Light",
+          "value": "Tinacious Design Light"
+        },
+        {
+          "label": "TokyoNight",
+          "value": "TokyoNight"
+        },
+        {
+          "label": "TokyoNight Day",
+          "value": "TokyoNight Day"
+        },
+        {
+          "label": "TokyoNight Moon",
+          "value": "TokyoNight Moon"
+        },
+        {
+          "label": "TokyoNight Night",
+          "value": "TokyoNight Night"
+        },
+        {
+          "label": "TokyoNight Storm",
+          "value": "TokyoNight Storm"
+        },
+        {
+          "label": "Tomorrow",
+          "value": "Tomorrow"
+        },
+        {
+          "label": "Tomorrow Night",
+          "value": "Tomorrow Night"
+        },
+        {
+          "label": "Tomorrow Night Blue",
+          "value": "Tomorrow Night Blue"
+        },
+        {
+          "label": "Tomorrow Night Bright",
+          "value": "Tomorrow Night Bright"
+        },
+        {
+          "label": "Tomorrow Night Burns",
+          "value": "Tomorrow Night Burns"
+        },
+        {
+          "label": "Tomorrow Night Eighties",
+          "value": "Tomorrow Night Eighties"
+        },
+        {
+          "label": "Toy Chest",
+          "value": "Toy Chest"
+        },
+        {
+          "label": "Treehouse",
+          "value": "Treehouse"
+        },
+        {
+          "label": "Twilight",
+          "value": "Twilight"
+        },
+        {
+          "label": "Ubuntu",
+          "value": "Ubuntu"
+        },
+        {
+          "label": "Ultra Dark",
+          "value": "Ultra Dark"
+        },
+        {
+          "label": "Ultra Violent",
+          "value": "Ultra Violent"
+        },
+        {
+          "label": "Under The Sea",
+          "value": "Under The Sea"
+        },
+        {
+          "label": "Unikitty",
+          "value": "Unikitty"
+        },
+        {
+          "label": "Urple",
+          "value": "Urple"
+        },
+        {
+          "label": "Vague",
+          "value": "Vague"
+        },
+        {
+          "label": "Vaughn",
+          "value": "Vaughn"
+        },
+        {
+          "label": "Vercel",
+          "value": "Vercel"
+        },
+        {
+          "label": "Vesper",
+          "value": "Vesper"
+        },
+        {
+          "label": "Vibrant Ink",
+          "value": "Vibrant Ink"
+        },
+        {
+          "label": "Vimbones",
+          "value": "Vimbones"
+        },
+        {
+          "label": "Violet Dark",
+          "value": "Violet Dark"
+        },
+        {
+          "label": "Violet Light",
+          "value": "Violet Light"
+        },
+        {
+          "label": "Violite",
+          "value": "Violite"
+        },
+        {
+          "label": "Warm Neon",
+          "value": "Warm Neon"
+        },
+        {
+          "label": "Wez",
+          "value": "Wez"
+        },
+        {
+          "label": "Whimsy",
+          "value": "Whimsy"
+        },
+        {
+          "label": "Wild Cherry",
+          "value": "Wild Cherry"
+        },
+        {
+          "label": "Wilmersdorf",
+          "value": "Wilmersdorf"
+        },
+        {
+          "label": "Wombat",
+          "value": "Wombat"
+        },
+        {
+          "label": "Wryan",
+          "value": "Wryan"
+        },
+        {
+          "label": "Xcode Dark",
+          "value": "Xcode Dark"
+        },
+        {
+          "label": "Xcode Dark hc",
+          "value": "Xcode Dark hc"
+        },
+        {
+          "label": "Xcode Light",
+          "value": "Xcode Light"
+        },
+        {
+          "label": "Xcode Light hc",
+          "value": "Xcode Light hc"
+        },
+        {
+          "label": "Xcode WWDC",
+          "value": "Xcode WWDC"
+        },
+        {
+          "label": "Zenbones",
+          "value": "Zenbones"
+        },
+        {
+          "label": "Zenbones Dark",
+          "value": "Zenbones Dark"
+        },
+        {
+          "label": "Zenbones Light",
+          "value": "Zenbones Light"
+        },
+        {
+          "label": "Zenburn",
+          "value": "Zenburn"
+        },
+        {
+          "label": "Zenburned",
+          "value": "Zenburned"
+        },
+        {
+          "label": "Zenwritten Dark",
+          "value": "Zenwritten Dark"
+        },
+        {
+          "label": "Zenwritten Light",
+          "value": "Zenwritten Light"
+        },
+        {
+          "label": "branch",
+          "value": "branch"
+        },
+        {
+          "label": "hazyland",
+          "value": "hazyland"
+        },
+        {
+          "label": "iTerm2 Dark Background",
+          "value": "iTerm2 Dark Background"
+        },
+        {
+          "label": "iTerm2 Default",
+          "value": "iTerm2 Default"
+        },
+        {
+          "label": "iTerm2 Light Background",
+          "value": "iTerm2 Light Background"
+        },
+        {
+          "label": "iTerm2 Pastel Dark Background",
+          "value": "iTerm2 Pastel Dark Background"
+        },
+        {
+          "label": "iTerm2 Smoooooth",
+          "value": "iTerm2 Smoooooth"
+        },
+        {
+          "label": "iTerm2 Solarized Dark",
+          "value": "iTerm2 Solarized Dark"
+        },
+        {
+          "label": "iTerm2 Solarized Light",
+          "value": "iTerm2 Solarized Light"
+        },
+        {
+          "label": "iTerm2 Tango Dark",
+          "value": "iTerm2 Tango Dark"
+        },
+        {
+          "label": "iTerm2 Tango Light",
+          "value": "iTerm2 Tango Light"
+        },
+        {
+          "label": "novmbr",
+          "value": "novmbr"
+        },
+        {
+          "label": "owl",
+          "value": "owl"
+        },
+        {
+          "label": "traffic",
+          "value": "traffic"
+        },
+        {
+          "label": "urban",
+          "value": "urban"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "customSidebarTitlebarBackgroundDarknessPercent",
+      "title": "Custom dark mode depth (set by Colourfulness)",
+      "subtitle": "How deep the custom dark mode colour is. Colourfulness sets it whenever it moves; it has no control of its own.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "number",
+      "default": 96,
+      "min": 85,
+      "max": 100,
+      "agentWritable": true
+    },
+    {
+      "key": "customSidebarTitlebarLightBackgroundLightnessPercent",
+      "title": "Custom light mode depth (set by Colourfulness)",
+      "subtitle": "How deep the custom light mode colour is. Colourfulness sets it whenever it moves; it has no control of its own.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "number",
+      "default": 96,
+      "agentWritable": true
+    },
+    {
+      "key": "customSidebarTitlebarForegroundColor",
+      "title": "Sidebar foreground color (derived)",
+      "subtitle": "Derived from Background Contrast and Background Tint; change those instead.",
+      "tab": "theme",
+      "tabTitle": "Themes",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Themes",
+      "type": "string",
+      "default": "#d8d8d8",
       "agentWritable": false
     },
     {
-      "key": "windowGlass",
-      "title": "Transparency",
-      "subtitle": "Let your desktop show through the window: Off, Dark only (light mode stays solid) or Always.",
+      "key": "customSidebarTitlebarBackgroundColor",
+      "title": "Sidebar background color (derived)",
+      "subtitle": "Derived from Background Contrast and Background Tint; change those instead.",
       "tab": "theme",
-      "tabTitle": "Interface",
+      "tabTitle": "Themes",
       "group": "appearance",
       "groupTitle": "Interface",
       "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "enum",
-      "default": "auto",
-      "options": [
-        {
-          "label": "Dark only",
-          "value": "auto"
-        },
-        {
-          "label": "Always",
-          "value": "frosted"
-        },
-        {
-          "label": "Off",
-          "value": "opaque"
-        }
-      ],
-      "agentWritable": true,
-      "platformDefaults": {
-        "windows": "opaque"
-      }
+      "sectionTitle": "Themes",
+      "type": "string",
+      "default": "#0b0b0b",
+      "agentWritable": false
     },
     {
-      "key": "windowGlassSource",
-      "title": "Behind the glass",
-      "subtitle": "Desktop and windows, your wallpaper, a picture you choose, or Live: a calm animation in your theme colours or your own video.",
-      "tab": "theme",
-      "tabTitle": "Interface",
+      "key": "sessionChatFontFamily",
+      "title": "App font",
+      "subtitle": "Pick one of the fonts installed on this computer for the whole app: sidebar, chat, menus, dialogs and Settings, then press Apply. App default keeps Ghostex's own fonts. Terminals and code use the Monospace font.",
+      "tab": "textFonts",
+      "tabTitle": "Text & Fonts",
       "group": "appearance",
       "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "enum",
-      "default": "desktopAndWindows",
-      "options": [
-        {
-          "label": "Desktop and windows",
-          "value": "desktopAndWindows"
-        },
-        {
-          "label": "Wallpaper only",
-          "value": "wallpaper"
-        },
-        {
-          "label": "Custom image",
-          "value": "customImage"
-        },
-        {
-          "label": "Live",
-          "value": "live"
-        }
-      ],
-      "agentWritable": true
-    },
-    {
-      "key": "windowGlassSameForLightAndDark",
-      "title": "Same for light and dark",
-      "subtitle": "Use the dark-mode picture, video, Live background and tints in light mode too. Turn off to pick them for light mode separately.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "boolean",
-      "default": true,
-      "agentWritable": true
-    },
-    {
-      "key": "windowGlassImagePlacement",
-      "title": "Picture position",
-      "subtitle": "Where the wallpaper, custom picture or your own Live video sits behind the glass. Stays with the desktop can trail the window while you drag it.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "enum",
-      "default": "static",
-      "options": [
-        {
-          "label": "Moves with the window",
-          "value": "static"
-        },
-        {
-          "label": "Stays with the desktop",
-          "value": "desktop"
-        }
-      ],
-      "agentWritable": true
-    },
-    {
-      "key": "windowGlassImageDark",
-      "title": "Picture for dark mode",
-      "subtitle": "The picture the glass blurs in dark mode when Picture shows behind the glass.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
+      "section": "textFonts",
+      "sectionTitle": "Text & Fonts",
       "type": "string",
       "default": "",
       "agentWritable": true
     },
     {
-      "key": "windowGlassImageLight",
-      "title": "Picture for light mode",
-      "subtitle": "The picture the glass blurs in light mode when Picture shows behind the glass.",
-      "tab": "theme",
-      "tabTitle": "Interface",
+      "key": "terminalFontFamily",
+      "title": "Monospace font",
+      "subtitle": "Font family for terminals, code in the Files view, diffs, code blocks and tool output in chat. Pick an installed monospace font, or type a Ghostty font-family name, then press Apply.",
+      "tab": "textFonts",
+      "tabTitle": "Text & Fonts",
       "group": "appearance",
       "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
+      "section": "textFonts",
+      "sectionTitle": "Text & Fonts",
       "type": "string",
-      "default": "",
+      "default": "JetBrains Mono",
       "agentWritable": true
     },
     {
-      "key": "windowGlassVideoDark",
-      "title": "Your video for dark mode",
-      "subtitle": "The video file the glass plays in dark mode when Live is set to Your video.",
-      "tab": "theme",
-      "tabTitle": "Interface",
+      "key": "sessionChatTextStrengthPercent",
+      "title": "Text strength",
+      "subtitle": "How strong agents' replies and your messages read in chat, on the computer and the phone. 0% is the standard colour; 100% is full white in dark mode and full black in light mode. Muted text, links, code blocks and status colours stay as they are.",
+      "tab": "textFonts",
+      "tabTitle": "Text & Fonts",
       "group": "appearance",
       "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "string",
-      "default": "",
-      "agentWritable": true
-    },
-    {
-      "key": "windowGlassVideoLight",
-      "title": "Your video for light mode",
-      "subtitle": "The video file the glass plays in light mode when Live is set to Your video.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "string",
-      "default": "",
-      "agentWritable": true
-    },
-    {
-      "key": "windowGlassVideoOnlyOnPower",
-      "title": "Play only when plugged in",
-      "subtitle": "Pause the Live animation or video while your computer runs on battery. It always pauses when Ghostex is in the background.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "boolean",
-      "default": true,
-      "agentWritable": true
-    },
-    {
-      "key": "windowGlassLiveStyleDark",
-      "title": "Live background for dark mode",
-      "subtitle": "The animation, or your own video, the glass shows in dark mode when Live shows behind the glass.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "enum",
-      "default": "aurora",
-      "options": [
-        {
-          "label": "Aurora",
-          "value": "aurora"
-        },
-        {
-          "label": "Ink",
-          "value": "ink"
-        },
-        {
-          "label": "Drift",
-          "value": "drift"
-        },
-        {
-          "label": "Nebula",
-          "value": "nebula"
-        },
-        {
-          "label": "Silk",
-          "value": "silk"
-        },
-        {
-          "label": "Bokeh",
-          "value": "bokeh"
-        },
-        {
-          "label": "Waves",
-          "value": "waves"
-        },
-        {
-          "label": "Mesh",
-          "value": "mesh"
-        },
-        {
-          "label": "Your video",
-          "value": "video"
-        }
-      ],
-      "agentWritable": true
-    },
-    {
-      "key": "windowGlassLiveStyleLight",
-      "title": "Live background for light mode",
-      "subtitle": "The animation, or your own video, the glass shows in light mode when Live shows behind the glass.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "enum",
-      "default": "drift",
-      "options": [
-        {
-          "label": "Aurora",
-          "value": "aurora"
-        },
-        {
-          "label": "Ink",
-          "value": "ink"
-        },
-        {
-          "label": "Drift",
-          "value": "drift"
-        },
-        {
-          "label": "Nebula",
-          "value": "nebula"
-        },
-        {
-          "label": "Silk",
-          "value": "silk"
-        },
-        {
-          "label": "Bokeh",
-          "value": "bokeh"
-        },
-        {
-          "label": "Waves",
-          "value": "waves"
-        },
-        {
-          "label": "Mesh",
-          "value": "mesh"
-        },
-        {
-          "label": "Your video",
-          "value": "video"
-        }
-      ],
-      "agentWritable": true
-    },
-    {
-      "key": "windowGlassLiveSpeed",
-      "title": "Live background speed",
-      "subtitle": "How fast the Live animation moves, from a quarter of its pace to twice as fast.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
+      "section": "textFonts",
+      "sectionTitle": "Text & Fonts",
       "type": "number",
-      "default": 1,
+      "default": 0,
+      "min": 0,
+      "max": 100,
+      "step": 10,
       "agentWritable": true
     },
     {
-      "key": "windowGlassLiveBrightness",
-      "title": "Live background brightness",
-      "subtitle": "How bright the Live animation glows behind the glass. Lower keeps it a subtle glow.",
-      "tab": "theme",
-      "tabTitle": "Interface",
+      "key": "sessionChatMutedThinking",
+      "title": "Show thinking in grey",
+      "subtitle": "Show the agent's thinking in grey, so it reads apart from the agent's replies.",
+      "tab": "textFonts",
+      "tabTitle": "Text & Fonts",
       "group": "appearance",
       "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "number",
-      "default": 60,
-      "agentWritable": true
-    },
-    {
-      "key": "windowGlassBlurRadius",
-      "title": "Blur",
-      "subtitle": "How soft what shows behind the window looks, in points. 0 shows it sharp. On Windows and Linux, Desktop and windows uses the system blur, so this sets the wallpaper, picture and video blur; on Windows, Blur on Windows picks that system blur.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "number",
-      "default": 60,
-      "agentWritable": true,
-      "availability": "Not shown on Windows while Behind the glass is Desktop and windows."
-    },
-    {
-      "key": "windowGlassWindowsBlur",
-      "title": "Blur on Windows",
-      "subtitle": "How Windows blurs what shows behind the window while Desktop and windows shows behind the glass. Windows has no blur amount to set, so pick Acrylic (Windows' own frosted blur), Plain blur (the same blur without Windows' grey frost, so the tints can go fully clear; it takes more work to draw) or Off (sharp, the fastest).",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "enum",
-      "default": "acrylic",
-      "options": [
-        {
-          "label": "Acrylic",
-          "value": "acrylic"
-        },
-        {
-          "label": "Plain blur",
-          "value": "plain"
-        },
-        {
-          "label": "Off",
-          "value": "off"
-        }
-      ],
-      "agentWritable": true,
-      "availability": "Only on Windows."
-    },
-    {
-      "key": "windowGlassMenuBlurRadius",
-      "title": "Menu blur",
-      "subtitle": "How soft what shows behind menus, panels, dialogs and tooltips looks, in points. Menus, panels and dialogs blur a quarter more than this number; tooltips use it as is. 0 shows it sharp.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "number",
-      "default": 20,
-      "agentWritable": true,
-      "availability": "Only on macOS."
-    },
-    {
-      "key": "windowGlassSidebarOpacityDark",
-      "title": "Sidebar tint in dark mode",
-      "subtitle": "How much of the desktop the sidebar hides in dark mode. Lower shows more of your desktop through it.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "number",
-      "default": 94,
-      "agentWritable": true
-    },
-    {
-      "key": "windowGlassWorkAreaTintDark",
-      "title": "Work area tint in dark mode",
-      "subtitle": "How much of the desktop the work area hides in dark mode, set on its own so either area can be the darker one. Lower shows more of your desktop through it.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "number",
-      "default": 94,
-      "agentWritable": true
-    },
-    {
-      "key": "windowGlassSidebarOpacityLight",
-      "title": "Sidebar tint in light mode",
-      "subtitle": "How much of the desktop the sidebar hides in light mode. Lower shows more of your desktop through it.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "number",
-      "default": 97,
-      "agentWritable": true
-    },
-    {
-      "key": "windowGlassWorkAreaTintLight",
-      "title": "Work area tint in light mode",
-      "subtitle": "How much of the desktop the work area hides in light mode, set on its own so either area can be the darker one. Lower shows more of your desktop through it.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "number",
-      "default": 97,
-      "agentWritable": true
-    },
-    {
-      "key": "showActivePaneOutline",
-      "title": "Show active pane outline",
-      "subtitle": "Show an outline around the currently focused pane.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
+      "section": "textFonts",
+      "sectionTitle": "Text & Fonts",
       "type": "boolean",
       "default": false,
-      "advanced": true,
       "agentWritable": true
     },
     {
-      "key": "workspaceActivePaneBorderColor",
-      "title": "Active pane outline colour",
-      "subtitle": "Color of the outline around the currently focused pane.",
-      "tab": "theme",
-      "tabTitle": "Interface",
+      "key": "interfaceScalePercent",
+      "title": "Scale (%)",
+      "subtitle": "Scale the sidebar, every chat, files open in the Files view and the terminal text together, from 70% to 200%. The header, tabs, menus and dialogs keep their size. Cmd+= and Cmd+- (Ctrl on Windows and Linux) change it from anywhere, and Cmd+0 sets 100%. Default: 100%.",
+      "tab": "sizeZoom",
+      "tabTitle": "Size & Zoom",
       "group": "appearance",
       "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "string",
-      "default": "#3b82f6",
-      "advanced": true,
+      "section": "sizeZoom",
+      "sectionTitle": "Size & Zoom",
+      "type": "number",
+      "default": 100,
+      "min": 70,
+      "max": 200,
+      "step": 5,
       "agentWritable": true
     },
     {
-      "key": "workAreaFrame",
-      "title": "Frame the work area",
-      "subtitle": "Show the work area as a card inside the window, with a thin margin all around, a hairline border and a light shadow. Off keeps the work area edge to edge.",
-      "tab": "theme",
-      "tabTitle": "Interface",
+      "key": "interfaceScaleAreasSeparately",
+      "title": "Scale areas separately",
+      "subtitle": "Give the sidebar, chat, Files and terminal text their own sizes instead of one Scale. Cmd+= and Cmd+- then change only the area you are in. Default: off, or on when you had already changed one of those sizes.",
+      "tab": "sizeZoom",
+      "tabTitle": "Size & Zoom",
       "group": "appearance",
       "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "boolean",
-      "default": true,
-      "advanced": true,
-      "agentWritable": true
-    },
-    {
-      "key": "showWindowButtonsWhenSidebarCollapsed",
-      "title": "Show the window buttons when the sidebar is collapsed",
-      "subtitle": "Keep the red, yellow and green window buttons in the window's top left while the sidebar is collapsed. Off hides them until you open the floating sidebar, which carries them in its top row. Full screen keeps its own title bar either way.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "boolean",
-      "default": true,
-      "advanced": true,
-      "agentWritable": true,
-      "availability": "Only on macOS."
-    },
-    {
-      "key": "closeButtonsOnRight",
-      "title": "Close buttons on the right",
-      "subtitle": "Put the X that closes dialogs and pop-up messages at their top right. Off keeps it at their top left, where macOS puts a window's close button.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
+      "section": "sizeZoom",
+      "sectionTitle": "Size & Zoom",
       "type": "boolean",
       "default": false,
-      "advanced": true,
-      "agentWritable": true,
-      "availability": "Only on macOS."
+      "agentWritable": true
+    },
+    {
+      "key": "agentManagerZoomPercent",
+      "title": "Sidebar zoom (%)",
+      "subtitle": "Scale the sidebar, from 50% to 200%, when Scale areas separately is on.",
+      "tab": "sizeZoom",
+      "tabTitle": "Size & Zoom",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "sizeZoom",
+      "sectionTitle": "Size & Zoom",
+      "type": "number",
+      "default": 100,
+      "min": 50,
+      "max": 200,
+      "agentWritable": true
+    },
+    {
+      "key": "sessionChatZoomPercent",
+      "title": "Chat zoom (%)",
+      "subtitle": "Scale every desktop chat, including messages and the prompt composer, from 70% to 200% in 5% steps, when Scale areas separately is on. Cmd+= and Cmd+- in a chat change it too, and Cmd+0 sets 100%. Default: 100%.",
+      "tab": "sizeZoom",
+      "tabTitle": "Size & Zoom",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "sizeZoom",
+      "sectionTitle": "Size & Zoom",
+      "type": "number",
+      "default": 100,
+      "min": 70,
+      "max": 200,
+      "step": 5,
+      "agentWritable": true
+    },
+    {
+      "key": "filesZoomPercent",
+      "title": "Files zoom (%)",
+      "subtitle": "Scale the text of a file open in the Files view (Markdown, text and code, with its line numbers) and the Changes diff, from 70% to 200% in 5% steps, when Scale areas separately is on. Cmd+= and Cmd+- (Ctrl on Windows and Linux) in an open file change it too, and Cmd+0 sets 100%. Default: 100%.",
+      "tab": "sizeZoom",
+      "tabTitle": "Size & Zoom",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "sizeZoom",
+      "sectionTitle": "Size & Zoom",
+      "type": "number",
+      "default": 100,
+      "min": 70,
+      "max": 200,
+      "step": 5,
+      "agentWritable": true
+    },
+    {
+      "key": "terminalFontSize",
+      "title": "Terminal font size",
+      "subtitle": "The terminal text size in points, when Scale areas separately is on. Cmd+= and Cmd+- in a terminal change it for that terminal only until it restarts. Default: 13.",
+      "tab": "sizeZoom",
+      "tabTitle": "Size & Zoom",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "sizeZoom",
+      "sectionTitle": "Size & Zoom",
+      "type": "number",
+      "default": 13,
+      "agentWritable": true
     },
     {
       "key": "linuxDisplayScale",
       "title": "Display scale",
       "subtitle": "Linux only. How big the whole app is drawn: the header, menus, dialogs and web pages too. Automatic follows your desktop's display scale; pick a fixed one if Ghostex gets it wrong. UI Scale applies on top. Takes effect when Ghostex restarts. Default: Automatic.",
-      "tab": "theme",
-      "tabTitle": "Interface",
+      "tab": "sizeZoom",
+      "tabTitle": "Size & Zoom",
       "group": "appearance",
       "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
+      "section": "sizeZoom",
+      "sectionTitle": "Size & Zoom",
       "type": "enum",
       "default": "auto",
       "options": [
@@ -9071,76 +9052,92 @@
       "agentWritable": true
     },
     {
+      "key": "workAreaFrame",
+      "title": "Frame the work area",
+      "subtitle": "Show the work area as a card inside the window, with a thin margin all around, a hairline border and a light shadow. Off keeps the work area edge to edge.",
+      "tab": "windowLayout",
+      "tabTitle": "Window & Layout",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "windowLayout",
+      "sectionTitle": "Window & Layout",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": true
+    },
+    {
+      "key": "showWindowButtonsWhenSidebarCollapsed",
+      "title": "Show the window buttons when the sidebar is collapsed",
+      "subtitle": "Keep the red, yellow and green window buttons in the window's top left while the sidebar is collapsed. Off hides them until you open the floating sidebar, which carries them in its top row. Full screen keeps its own title bar either way.",
+      "tab": "windowLayout",
+      "tabTitle": "Window & Layout",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "windowLayout",
+      "sectionTitle": "Window & Layout",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": true,
+      "availability": "Only on macOS."
+    },
+    {
+      "key": "closeButtonsOnRight",
+      "title": "Close buttons on the right",
+      "subtitle": "Put the X that closes dialogs and pop-up messages at their top right. Off keeps it at their top left, where macOS puts a window's close button.",
+      "tab": "windowLayout",
+      "tabTitle": "Window & Layout",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "windowLayout",
+      "sectionTitle": "Window & Layout",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true,
+      "availability": "Only on macOS."
+    },
+    {
+      "key": "showActivePaneOutline",
+      "title": "Show active pane outline",
+      "subtitle": "Show an outline around the currently focused pane.",
+      "tab": "windowLayout",
+      "tabTitle": "Window & Layout",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "windowLayout",
+      "sectionTitle": "Window & Layout",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "workspaceActivePaneBorderColor",
+      "title": "Active pane outline colour",
+      "subtitle": "Color of the outline around the currently focused pane.",
+      "tab": "windowLayout",
+      "tabTitle": "Window & Layout",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "windowLayout",
+      "sectionTitle": "Window & Layout",
+      "type": "string",
+      "default": "#3b82f6",
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
       "key": "workspacePaneGap",
       "title": "Pane gap",
       "subtitle": "Gap in pixels between split panes in the Agents view.",
-      "tab": "theme",
-      "tabTitle": "Interface",
+      "tab": "windowLayout",
+      "tabTitle": "Window & Layout",
       "group": "appearance",
       "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
+      "section": "windowLayout",
+      "sectionTitle": "Window & Layout",
       "type": "number",
       "default": 0,
       "agentWritable": true
-    },
-    {
-      "key": "customSidebarTitlebarBackgroundDarknessPercent",
-      "title": "Custom dark mode depth (set by Colourfulness)",
-      "subtitle": "How deep the custom dark mode colour is. Colourfulness sets it whenever it moves; it has no control of its own.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "number",
-      "default": 96,
-      "min": 85,
-      "max": 100,
-      "agentWritable": true
-    },
-    {
-      "key": "customSidebarTitlebarLightBackgroundLightnessPercent",
-      "title": "Custom light mode depth (set by Colourfulness)",
-      "subtitle": "How deep the custom light mode colour is. Colourfulness sets it whenever it moves; it has no control of its own.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "number",
-      "default": 96,
-      "agentWritable": true
-    },
-    {
-      "key": "customSidebarTitlebarForegroundColor",
-      "title": "Sidebar foreground color (derived)",
-      "subtitle": "Derived from Background Contrast and Background Tint; change those instead.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "string",
-      "default": "#d8d8d8",
-      "agentWritable": false
-    },
-    {
-      "key": "customSidebarTitlebarBackgroundColor",
-      "title": "Sidebar background color (derived)",
-      "subtitle": "Derived from Background Contrast and Background Tint; change those instead.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "string",
-      "default": "#0b0b0b",
-      "agentWritable": false
     },
     {
       "key": "updatesUpdateAll",

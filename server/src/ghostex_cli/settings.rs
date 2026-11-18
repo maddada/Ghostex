@@ -40,6 +40,9 @@ const SETTINGS_MODAL_TABS: &[&str] = &[
     "system",
     "theme",
     "interface",
+    "textFonts",
+    "sizeZoom",
+    "windowLayout",
     "integrations",
     "voiceAgent",
     "voice",
@@ -381,11 +384,15 @@ fn list_command(args: &[String]) -> CliResult<()> {
         .iter()
         .filter(|entry| !hidden_here(entry, &file))
         .filter(|entry| !writable_only || entry.agent_writable)
-        // The Interface page's id is still `theme`.
+        // `interface` names the rail's Interface group: its four pages (Themes keeps the `theme` id).
         .filter(|entry| {
-            tab_filter
-                .as_deref()
-                .is_none_or(|tab| entry.tab == if tab == "interface" { "theme" } else { tab })
+            tab_filter.as_deref().is_none_or(|tab| {
+                if tab == "interface" {
+                    entry.group.as_deref() == Some("appearance")
+                } else {
+                    entry.tab == tab
+                }
+            })
         })
         .collect();
     if parsed.flags.truthy("json") {

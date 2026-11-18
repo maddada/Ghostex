@@ -26,7 +26,11 @@ pub(crate) enum SettingsTabId {
     Notifications,
     FilesLinks,
     PowerSleep,
+    /// Themes (id `theme`): the first page of the rail's Interface group.
     Theme,
+    TextFonts,
+    SizeZoom,
+    WindowLayout,
     Integrations,
     CloudBoxes,
     Extensions,
@@ -57,8 +61,11 @@ pub(crate) enum SettingsTabId {
 /// User: "notifications under appearance makes 0 sense, same for hotkeys. please adjust the headings for the sections in the sidebar of the settings and move settings around so things make full sense". Q2510 (arrangement A, "Each heading names its pages"): Updates and Interface stand on top with no label; Working (Chat, Sidebar & Sessions, Terminal, Files & Links, Projects), Keyboard & voice (Hotkeys, Dictation, Voice Agent), Agents & accounts (Agents, Accounts, Autopilot, Secrets, Integrations), Connections (Remote, Sync, Collab) and System (Notifications, Power & Sleep, Security, About). Extensions and the pages that fold under it are unchanged, and no page is renamed, split or merged. Every page keeps its own show/hide rule; a group whose pages are all hidden shows no label, since a label is drawn only above a shown page ([`RailTier::label_before`]). Supersedes the six groups of 2026-11-08 (Q1770: Working, Appearance, Voice, Agents & accounts, Connections, Privacy & system) and Q1771's Updates alone on top.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum RailTier {
-    /// Updates and Interface, above the labelled groups with no label of their own.
+    /// Updates and Experience, above the labelled groups with no label of their own.
     Top,
+    /// Themes, Text & Fonts, Size & Zoom, Window & Layout (CDXC:Settings 2026-11-18 at
+    /// `SettingsTabId::tier`).
+    Interface,
     /// Chat, Sidebar & Sessions, Terminal, Files & Links, Projects.
     Working,
     /// Hotkeys, Dictation, Voice Agent.
@@ -77,6 +84,7 @@ impl RailTier {
     pub(crate) fn title(self) -> &'static str {
         match self {
             RailTier::Top => "",
+            RailTier::Interface => "Interface",
             RailTier::Working => "Working",
             RailTier::KeyboardVoice => "Keyboard & voice",
             RailTier::AgentsAccounts => "Agents & accounts",
@@ -96,14 +104,17 @@ impl RailTier {
 }
 
 impl SettingsTabId {
-    /// The rail order: Updates and Interface, the five labelled groups (CDXC:Settings 2026-11-11 at
+    /// The rail order: Updates and Experience, the Interface group, the five labelled groups (CDXC:Settings 2026-11-11 at
     /// `RailTier`) ending with About, then the Extensions page (the catalog) at the rail's bottom with the pages
     /// that fold under it ([`Self::EXTENSIONS_GROUP`]). Pages the shell filters (OS Integration,
     /// Connectors, Debugging, the built-in extensions' pages) leave the rail while they are off.
-    pub(crate) const RAIL_ORDER: [SettingsTabId; 31] = [
+    pub(crate) const RAIL_ORDER: [SettingsTabId; 34] = [
         SettingsTabId::Updates,
         SettingsTabId::Experience,
         SettingsTabId::Theme,
+        SettingsTabId::TextFonts,
+        SettingsTabId::SizeZoom,
+        SettingsTabId::WindowLayout,
         SettingsTabId::Chat,
         SettingsTabId::Sidebar,
         SettingsTabId::Terminal,
@@ -159,9 +170,13 @@ impl SettingsTabId {
         match self {
             // CDXC:Experience 2026-11-15: the presets page sits at the top, under Updates (the
             // design page's plan, in packages/settings-catalog/src/experience.rs).
-            SettingsTabId::Updates | SettingsTabId::Experience | SettingsTabId::Theme => {
-                RailTier::Top
-            }
+            SettingsTabId::Updates | SettingsTabId::Experience => RailTier::Top,
+            // CDXC:Settings 2026-11-18 DECISION:
+            // User (Q4153 and Q4154's note): the Interface page is four focused pages "under a new section in the sidebar called interface", where Interface was: Themes (themes, colours and glass in one place, keeping the `theme` id), Text & Fonts, Size & Zoom and Window & Layout. Supersedes Interface as one page in the top group (Q2510, 2026-11-11, above).
+            SettingsTabId::Theme
+            | SettingsTabId::TextFonts
+            | SettingsTabId::SizeZoom
+            | SettingsTabId::WindowLayout => RailTier::Interface,
             SettingsTabId::Chat
             | SettingsTabId::Sidebar
             | SettingsTabId::Terminal
@@ -224,6 +239,9 @@ impl SettingsTabId {
             SettingsTabId::FilesLinks => "tools",
             SettingsTabId::PowerSleep => "system",
             SettingsTabId::Theme => "theme",
+            SettingsTabId::TextFonts => "textFonts",
+            SettingsTabId::SizeZoom => "sizeZoom",
+            SettingsTabId::WindowLayout => "windowLayout",
             SettingsTabId::Integrations => "integrations",
             SettingsTabId::CloudBoxes => "cloudBoxes",
             SettingsTabId::Extensions => "extensions",
@@ -274,8 +292,11 @@ impl SettingsTabId {
             SettingsTabId::Notifications => "Notifications",
             SettingsTabId::FilesLinks => "Files & Links",
             SettingsTabId::PowerSleep => "Power & Sleep",
-            // CDXC:Settings 2026-10-31 DECISION: User: "let's also rename the theme page in settings to Interface". Only its name changed: its stored id stays `theme`, so saved navigation, `ghostex settings open --tab theme` and old deep links keep working, and `interface` opens it too.
-            SettingsTabId::Theme => "Interface",
+            // CDXC:Settings 2026-10-31 DECISION: User: "let's also rename the theme page in settings to Interface". Only its name changed: its stored id stays `theme`, so saved navigation, `ghostex settings open --tab theme` and old deep links keep working, and `interface` opens it too. Since 2026-11-18 (`tier`) Interface names the rail group and this first page of it is Themes; `theme` and `interface` still open it.
+            SettingsTabId::Theme => "Themes",
+            SettingsTabId::TextFonts => "Text & Fonts",
+            SettingsTabId::SizeZoom => "Size & Zoom",
+            SettingsTabId::WindowLayout => "Window & Layout",
             SettingsTabId::Integrations => "Integrations",
             SettingsTabId::CloudBoxes => "Cloud Boxes",
             SettingsTabId::Extensions => "Extensions",
@@ -313,6 +334,9 @@ impl SettingsTabId {
             SettingsTabId::FilesLinks => "modals/settings/file-text.svg",
             SettingsTabId::PowerSleep => "modals/settings/moon.svg",
             SettingsTabId::Theme => "modals/settings/palette.svg",
+            SettingsTabId::TextFonts => "modals/settings/typography.svg",
+            SettingsTabId::SizeZoom => "modals/settings/arrows-maximize.svg",
+            SettingsTabId::WindowLayout => "modals/settings/browser.svg",
             SettingsTabId::Integrations => "modals/settings/tools.svg",
             SettingsTabId::CloudBoxes => "modals/settings/box.svg",
             SettingsTabId::Extensions => "modals/settings/puzzle.svg",
@@ -567,8 +591,8 @@ mod tests {
         }
     }
 
-    /// CDXC:Settings 2026-11-11 (Q2510): Updates and Interface on top, then the five groups in the
-    /// user's order, each one unbroken run, then Extensions and its folded pages.
+    /// CDXC:Settings 2026-11-11 (Q2510): Updates on top, the Interface group (2026-11-18), then the
+    /// five groups in the user's order, each one unbroken run, then Extensions and its folded pages.
     #[test]
     fn rail_lists_the_top_pages_then_five_groups_then_extensions() {
         use SettingsTabId as T;
@@ -588,7 +612,11 @@ mod tests {
         assert_eq!(
             labelled,
             [
-                ("", vec!["Updates", "Experience", "Interface"]),
+                ("", vec!["Updates", "Experience"]),
+                (
+                    "Interface",
+                    vec!["Themes", "Text & Fonts", "Size & Zoom", "Window & Layout"]
+                ),
                 (
                     "Working",
                     vec![
@@ -623,6 +651,7 @@ mod tests {
             runs,
             [
                 RailTier::Top,
+                RailTier::Interface,
                 RailTier::Working,
                 RailTier::KeyboardVoice,
                 RailTier::AgentsAccounts,

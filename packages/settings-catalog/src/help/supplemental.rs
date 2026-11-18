@@ -8,9 +8,22 @@ use crate::json::{opt, Opt};
 /// A Settings page as the Help files name it: its id and title.
 pub(crate) type Tab = (&'static str, &'static str);
 
-/// The Interface page renders the `appearance` group's sections (Interface, App Icon) on its own
-/// tab. Its id stays `theme`.
-pub(crate) const THEME: Tab = ("theme", "Interface");
+/// The rail's Interface group (the catalog's `appearance` group): one page per section, Themes
+/// keeping the `theme` id (CDXC:Settings 2026-11-18 in general/theme.rs).
+pub(crate) const THEME: Tab = ("theme", "Themes");
+const TEXT_FONTS: Tab = ("textFonts", "Text & Fonts");
+const SIZE_ZOOM: Tab = ("sizeZoom", "Size & Zoom");
+const WINDOW_LAYOUT: Tab = ("windowLayout", "Window & Layout");
+
+/// The page of the Interface group that renders catalog section `section`.
+pub(crate) fn interface_tab(section: &str) -> Tab {
+    match section {
+        "textFonts" => TEXT_FONTS,
+        "sizeZoom" => SIZE_ZOOM,
+        "windowLayout" => WINDOW_LAYOUT,
+        _ => THEME,
+    }
+}
 /// The Terminal page, one of the pages General split into (layout.rs).
 const TERMINAL: Tab = ("terminal", "Terminal");
 const EXTENSIONS: Tab = ("extensions", "Extensions");
@@ -752,10 +765,10 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
     // (general/theme.rs), and the Help files describe the macOS one.
     Supplemental {
         key: "linuxDisplayScale",
-        tab: THEME,
+        tab: SIZE_ZOOM,
         group: Some("appearance"),
-        section: "theming",
-        section_title: "Interface",
+        section: "sizeZoom",
+        section_title: "Size & Zoom",
         title: "Display scale",
         subtitle: "Linux only. How big the whole app is drawn: the header, menus, dialogs and web pages too. Automatic follows your desktop's display scale; pick a fixed one if Ghostex gets it wrong. UI Scale applies on top. Takes effect when Ghostex restarts. Default: Automatic.",
         options: crate::interface_scale::LINUX_DISPLAY_SCALE_OPTIONS,
@@ -763,10 +776,10 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
     },
     Supplemental {
         key: "workspacePaneGap",
-        tab: THEME,
+        tab: WINDOW_LAYOUT,
         group: Some("appearance"),
-        section: "theming",
-        section_title: "Interface",
+        section: "windowLayout",
+        section_title: "Window & Layout",
         title: "Pane gap",
         subtitle: "Gap in pixels between split panes in the Agents view.",
         options: &[],
@@ -777,7 +790,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         tab: THEME,
         group: Some("appearance"),
         section: "theming",
-        section_title: "Interface",
+        section_title: "Themes",
         title: "Custom dark mode depth (set by Colourfulness)",
         subtitle: "How deep the custom dark mode colour is. Colourfulness sets it whenever it moves; it has no control of its own.",
         options: &[],
@@ -788,7 +801,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         tab: THEME,
         group: Some("appearance"),
         section: "theming",
-        section_title: "Interface",
+        section_title: "Themes",
         title: "Custom light mode depth (set by Colourfulness)",
         subtitle: "How deep the custom light mode colour is. Colourfulness sets it whenever it moves; it has no control of its own.",
         options: &[],
@@ -799,7 +812,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         tab: THEME,
         group: Some("appearance"),
         section: "theming",
-        section_title: "Interface",
+        section_title: "Themes",
         title: "Sidebar foreground color (derived)",
         subtitle: "Derived from Background Contrast and Background Tint; change those instead.",
         options: &[],
@@ -810,7 +823,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         tab: THEME,
         group: Some("appearance"),
         section: "theming",
-        section_title: "Interface",
+        section_title: "Themes",
         title: "Sidebar background color (derived)",
         subtitle: "Derived from Background Contrast and Background Tint; change those instead.",
         options: &[],

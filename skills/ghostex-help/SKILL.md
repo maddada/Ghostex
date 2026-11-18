@@ -64,7 +64,8 @@ they ask for one.
 
 4. To restyle Ghostex ("make it darker", "a blue theme", "more see-through",
    "a bigger font"), use `ghostex theme`. It changes the look settings of
-   Settings > Interface, several at once as one change the user can undo:
+   the Settings > Interface pages (Themes, Text & Fonts, Size & Zoom, Window
+   & Layout), several at once as one change the user can undo:
 
    ```bash
    ghostex theme read                          # every look setting, grouped, with what it does
@@ -95,12 +96,12 @@ they ask for one.
      `#7dd3fc80` with its opacity); `default` puts the theme's own back. To tone
      lines down, lower `border` and `divider` a point or two; to make grey
      text easier to read, raise `mutedText`. The user also finds them in
-     Settings > Interface > Theme colours. They change the computer and the
+     Settings > Themes > Fine-tune colours. They change the computer and the
      web app, not the phone.
    - Only the settings and colours `read` lists can change: say so instead of
      editing files for anything else.
-   - To make Ghostex look like a known theme, the Presets on Settings >
-     Interface do it in one click (Catppuccin, Dracula, Solarized, Tokyo Night,
+   - To make Ghostex look like a known theme, the presets on Settings >
+     Themes do it in one click (Catppuccin, Dracula, Solarized, Tokyo Night,
      Nord, Kanagawa, Everforest, Gruvbox); `ghostex settings open --tab theme`
      opens the page.
    - `ghostex theme` needs a Ghostex newer than 11.6.1. If it is unknown,

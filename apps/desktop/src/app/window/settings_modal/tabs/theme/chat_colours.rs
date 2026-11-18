@@ -58,11 +58,17 @@ impl ThemeTab {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        if !t.visible(THEME_ROLES_SETTING) {
+        // Chat theme leads the group (Q4153: "Chat colours: Chat theme, Chat colours preview, …").
+        let chat_theme = self.appearance_override_row(t, "sessionChatTheme", window, cx);
+        if chat_theme.is_none() && !t.visible(THEME_ROLES_SETTING) {
             return None;
         }
         let p = t.p;
-        let mut rows = Vec::new();
+        let mut rows: Vec<AnyElement> = chat_theme.into_iter().collect();
+        if !t.visible(THEME_ROLES_SETTING) {
+            return settings_section(&p, "Chat colours", None, None, rows)
+                .map(IntoElement::into_any_element);
+        }
         if !t.searching {
             rows.push(
                 div()

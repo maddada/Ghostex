@@ -993,7 +993,7 @@ impl GpuiOnboardingWindow {
                 .self_start()
                 .mt(s.px(10.0))
                 .cursor_pointer()
-                .child("More theme options in Settings → Interface ›"),
+                .child("More theme options in Settings → Themes ›"),
             "more-theme-options",
             interact::Ring::new(0.0, 0.0),
             interact::Keys::EnterSpace,
