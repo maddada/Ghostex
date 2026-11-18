@@ -43,6 +43,19 @@ strictly better than submitting an empty turn and dropping their text.
 */
 pub const SESSION_CHAT_VERIFY_SETTLE_MS: u64 = SESSION_CHAT_SUBMIT_DELAY_MS;
 pub const SESSION_CHAT_VERIFY_POLL_MS: u64 = 150;
+/*
+CDXC:SessionChat 2026-11-18 WHY:
+GitHub #666 (Windows, about 40 agents): a paste the terminal never showed was
+watched with a 512-row capture every 150 ms until the deadline, 30 s on
+Windows, so one failed message retried 3 to 5 times took about 200 captures.
+A paste that lands shows within the first second almost always, so the watch
+keeps the 150 ms pace for `SESSION_CHAT_VERIFY_FAST_POLL_FOR_MS` and then looks
+every `SESSION_CHAT_VERIFY_SLOW_POLL_MS`: a late paste is seen at most 350 ms
+later, and a failed one costs about a third of the captures. The deadline is
+unchanged.
+*/
+pub const SESSION_CHAT_VERIFY_FAST_POLL_FOR_MS: u64 = 1_000;
+pub const SESSION_CHAT_VERIFY_SLOW_POLL_MS: u64 = 500;
 pub const SESSION_CHAT_VERIFY_MIN_TIMEOUT_MS: u64 = 2_000;
 pub const SESSION_CHAT_VERIFY_MAX_TIMEOUT_MS: u64 = if cfg!(windows) { 30_000 } else { 8_000 };
 

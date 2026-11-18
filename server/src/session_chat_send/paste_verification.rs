@@ -121,6 +121,7 @@ pub(crate) async fn verify_session_chat_paste_landed(
     let mut readable = false;
     let mut extended = false;
     tokio::time::sleep(Duration::from_millis(settle_ms)).await;
+    let watch_started = std::time::Instant::now();
     loop {
         if job_generation != generation.load(Ordering::SeqCst) {
             return SessionChatPasteVerification::Cancelled;
@@ -155,7 +156,16 @@ pub(crate) async fn verify_session_chat_paste_landed(
         if std::time::Instant::now() >= deadline {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(SESSION_CHAT_VERIFY_POLL_MS)).await;
+        let poll_ms = if watch_started.elapsed()
+            < Duration::from_millis(SESSION_CHAT_VERIFY_FAST_POLL_FOR_MS)
+        {
+            SESSION_CHAT_VERIFY_POLL_MS
+        } else {
+            SESSION_CHAT_VERIFY_SLOW_POLL_MS
+        };
+        // Never past the deadline: a paste that never shows gives up when it did before.
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        tokio::time::sleep(Duration::from_millis(poll_ms).min(left)).await;
     }
     if readable {
         SessionChatPasteVerification::Absent
