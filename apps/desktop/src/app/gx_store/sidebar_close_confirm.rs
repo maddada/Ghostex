@@ -1,4 +1,5 @@
-//! Asks before a close that would stop a coordinator or a busy agent, then runs the same close.
+//! Asks before a close that would stop a coordinator or a busy agent, then runs the same close;
+//! the sidebar's other confirmations ask through the same dialog (`gx_store_confirm_in_app`).
 //! Which closes ask and what they say is gx-core's `close_confirmation`; this file holds the close
 //! while the question is open. The desktop and the GPUI web build compile it.
 //!
@@ -6,7 +7,7 @@
 //! apps/desktop/src/app/window/close_sessions_confirm_modal.rs (the dialog),
 //! apps/desktop/src/app/focus/agents_tab_actions.rs (the tab closes and Cmd+W that ask through it).
 
-use ghostex_gx_core::{SessionKey, close_confirmation, sidebar_close_targets};
+use ghostex_gx_core::{CloseConfirmation, SessionKey, close_confirmation, sidebar_close_targets};
 use gpui::AppContext;
 use serde_json::Value;
 
@@ -37,7 +38,25 @@ impl GhostexGpuiApp {
         let Some(confirmation) = close_confirmation(&self.gx_store.core, sessions) else {
             return false;
         };
-        self.gx_store.pending_session_close = Some(close);
+        self.gx_store_confirm_in_app(confirmation, close, cx);
+        true
+    }
+
+    /// Asks `confirmation` in Ghostex's own dialog (Cancel and a red confirm button) and runs
+    /// `action` on its confirm. Nothing runs when the dialog cannot open.
+    ///
+    /// CDXC:ContextMenus 2026-11-18 DECISION:
+    /// User, of the sidebar's Close Group question drawn as a macOS alert: "it should use a ghostex
+    /// one instead that looks like the other dialogs we have". The sidebar's confirmations (Close
+    /// Group, Remove GBot, Remove Department, Destroy Box) ask through the dialog a busy close
+    /// already uses, not `window.prompt`.
+    pub(crate) fn gx_store_confirm_in_app(
+        &mut self,
+        confirmation: CloseConfirmation,
+        action: PendingSessionClose,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.gx_store.pending_session_close = Some(action);
         let palette = self.gpui_native_dialog_palette();
         let host = self.native_app_modal_host(cx, |app, command, cx| {
             app.gx_store_answer_close_confirmation(command, cx);
@@ -63,7 +82,6 @@ impl GhostexGpuiApp {
             // The dialog could not open: nothing closes rather than closing without asking.
             self.gx_store.pending_session_close = None;
         }
-        true
     }
 
     /// The sidebar's doors: a row's Close button, middle click and menu item, a multi-selection's

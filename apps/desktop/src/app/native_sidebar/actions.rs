@@ -68,24 +68,21 @@ impl GhostexGpuiApp {
                         group.sessions.len(),
                         group.title
                     );
-                    let answer = window.prompt(
-                        gpui::PromptLevel::Warning,
-                        "Close group?",
-                        Some(&detail),
-                        &["Cancel", "Close Group"],
+                    let confirmation = ghostex_gx_core::CloseConfirmation {
+                        title: "Close group?".to_owned(),
+                        message: detail,
+                        confirm_label: "Close Group".to_owned(),
+                    };
+                    self.gx_store_confirm_in_app(
+                        confirmation,
+                        Box::new(move |app, cx| {
+                            app.dispatch_native_sidebar_command(
+                                json!({"type": "closeGroup", "groupId": id}),
+                                cx,
+                            )
+                        }),
                         cx,
                     );
-                    cx.spawn(async move |app, cx| {
-                        if answer.await == Ok(1) {
-                            let _ = app.update(cx, |app, cx| {
-                                app.dispatch_native_sidebar_command(
-                                    json!({"type": "closeGroup", "groupId": id}),
-                                    cx,
-                                )
-                            });
-                        }
-                    })
-                    .detach();
                 }
             }
         } else if action.command["type"] == "claudeCloudSessionAction" {
@@ -94,8 +91,8 @@ impl GhostexGpuiApp {
             self.run_native_sidebar_claude_cloud_action(&action.command, cx);
         } else if action.command["type"] == "agentboxSessionAction" {
             // A box session's Open Box Web App, Open Box Screen, Stop Box and Destroy Box
-            // (native_sidebar/agentbox.rs); Destroy asks first, which needs this window.
-            self.run_native_sidebar_agentbox_action(&action.command, window, cx);
+            // (native_sidebar/agentbox.rs); Destroy asks first.
+            self.run_native_sidebar_agentbox_action(&action.command, cx);
         } else if action
             .command
             .get("type")

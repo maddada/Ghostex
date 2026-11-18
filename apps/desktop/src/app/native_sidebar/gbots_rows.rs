@@ -667,7 +667,7 @@ impl GhostexGpuiApp {
     pub(crate) fn run_native_sidebar_gbots_command(
         &mut self,
         command: &Value,
-        window: &mut gpui::Window,
+        #[cfg_attr(ghostex_web, allow(unused_variables))] window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) {
         let text = |key: &str| {
@@ -702,7 +702,6 @@ impl GhostexGpuiApp {
                 machine,
                 text("departmentId"),
                 text("name"),
-                window,
                 cx,
             ),
             "memory" => self.open_gpui_gbot_settings_modal_on(
@@ -716,27 +715,23 @@ impl GhostexGpuiApp {
             "call" => self.call_gbot(&machine, bot_id, text("name"), window, cx),
             "remove" => {
                 let name = text("name");
-                let answer = window.prompt(
-                    gpui::PromptLevel::Warning,
-                    &format!("Remove {name}?"),
-                    Some("Its chats close and its folder goes to the Trash."),
-                    &["Cancel", "Remove GBot"],
+                self.gx_store_confirm_in_app(
+                    ghostex_gx_core::CloseConfirmation {
+                        title: format!("Remove {name}?"),
+                        message: "Its chats close and its folder goes to the Trash.".to_owned(),
+                        confirm_label: "Remove GBot".to_owned(),
+                    },
+                    Box::new(move |app, cx| {
+                        app.call_native_sidebar_gbots(
+                            &machine,
+                            json!({ "op": "remove", "bot": bot_id }),
+                            "GBot not removed",
+                            |_, _, _| {},
+                            cx,
+                        );
+                    }),
                     cx,
                 );
-                cx.spawn(async move |app, cx| {
-                    if answer.await == Ok(1) {
-                        let _ = app.update(cx, |app, cx| {
-                            app.call_native_sidebar_gbots(
-                                &machine,
-                                json!({ "op": "remove", "bot": bot_id }),
-                                "GBot not removed",
-                                |_, _, _| {},
-                                cx,
-                            );
-                        });
-                    }
-                })
-                .detach();
             }
             _ => {}
         }

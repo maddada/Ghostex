@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use ghostex_gx_core::SessionKey;
 use gpui::prelude::FluentBuilder;
-use gpui::{AnyElement, InteractiveElement, IntoElement, ParentElement, Styled, Window, div, px};
+use gpui::{AnyElement, InteractiveElement, IntoElement, ParentElement, Styled, div, px};
 use gpui_component::tooltip::ManagedTooltipExt as _;
 use serde_json::{Value, json};
 
@@ -120,7 +120,6 @@ impl GhostexGpuiApp {
     pub(crate) fn run_native_sidebar_agentbox_action(
         &mut self,
         command: &Value,
-        window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
         let Some(row_id) = command["sessionId"].as_str() else {
@@ -142,21 +141,17 @@ impl GhostexGpuiApp {
                 let detail = format!(
                     "This deletes {box_name} and everything in it that was not pushed or copied out. The session stays in the sidebar, but its agent cannot be resumed."
                 );
-                let answer = window.prompt(
-                    gpui::PromptLevel::Warning,
-                    "Destroy box?",
-                    Some(&detail),
-                    &["Cancel", "Destroy Box"],
+                self.gx_store_confirm_in_app(
+                    ghostex_gx_core::CloseConfirmation {
+                        title: "Destroy box?".to_owned(),
+                        message: detail,
+                        confirm_label: "Destroy Box".to_owned(),
+                    },
+                    Box::new(move |app, cx| {
+                        app.run_agentbox_box_call(session, "destroy", box_name, cx);
+                    }),
                     cx,
                 );
-                cx.spawn(async move |app, cx| {
-                    if answer.await == Ok(1) {
-                        let _ = app.update(cx, |app, cx| {
-                            app.run_agentbox_box_call(session, "destroy", box_name, cx);
-                        });
-                    }
-                })
-                .detach();
             }
             _ => {}
         }

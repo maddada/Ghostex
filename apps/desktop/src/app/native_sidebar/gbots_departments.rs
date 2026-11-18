@@ -174,30 +174,26 @@ impl GhostexGpuiApp {
         machine: String,
         department_id: String,
         name: String,
-        window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        let answer = window.prompt(
-            gpui::PromptLevel::Warning,
-            &format!("Remove the department {name}?"),
-            Some("Its GBots stay, in no department, with their chats and memory."),
-            &["Cancel", "Remove Department"],
+        self.gx_store_confirm_in_app(
+            ghostex_gx_core::CloseConfirmation {
+                title: format!("Remove the department {name}?"),
+                message: "Its GBots stay, in no department, with their chats and memory."
+                    .to_owned(),
+                confirm_label: "Remove Department".to_owned(),
+            },
+            Box::new(move |app, cx| {
+                app.call_native_sidebar_gbots(
+                    &machine,
+                    json!({ "op": "departmentRemove", "department": department_id }),
+                    "Department not removed",
+                    |_, _, _| {},
+                    cx,
+                );
+            }),
             cx,
         );
-        cx.spawn(async move |app, cx| {
-            if answer.await == Ok(1) {
-                let _ = app.update(cx, |app, cx| {
-                    app.call_native_sidebar_gbots(
-                        &machine,
-                        json!({ "op": "departmentRemove", "department": department_id }),
-                        "Department not removed",
-                        |_, _, _| {},
-                        cx,
-                    );
-                });
-            }
-        })
-        .detach();
     }
 }
 
