@@ -50,6 +50,8 @@ impl GhostexGpuiApp {
                     NativeChatEvent::ComposerFocused | NativeChatEvent::DraftState(_) => {}
                     // The header's ring is the web app's to draw.
                     NativeChatEvent::SessionDetailsRing => cx.notify(),
+                    // The header leaves the project out while the where pill names it.
+                    NativeChatEvent::WherePillProject => cx.notify(),
                 },
             );
         view.update(cx, |view, _| view.subscriptions.push(subscription));
