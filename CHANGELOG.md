@@ -2,6 +2,76 @@
 
 ## Unreleased
 
+## 11.10.0 - 2026-11-18
+
+**Ghostex 11.10.0 is out.** Pick any model and effort before a new coordinator starts, a where pill above the chat box, colour pickers and sliders for every theme colour, popups with tabs in their title bar, a calmer Workers list, and a long list of fixes from your reports.
+
+### 🧭 Coordinators
+
+- **A new coordinator's first message waits for you:** it sits in the chat box as a card with Show all, Edit and Start, so you can change the model and effort in the agent first. Typing a request and pressing Enter starts it with your request queued behind.
+- **Any model can run a coordinator,** Antigravity's Orchestrator (Argon) included. The model picker only adds a quiet "You might get a degraded experience." on low-end picks ([#665](https://github.com/maddada/Ghostex/issues/665)).
+- **The Workers list reads at a glance:** every worker is two lines, its title and what it's doing (Building, Testing, Editing files) with its tool calls and changed files. Hover a worker to see its work item's latest line.
+- **Fewer "ok" replies:** notes that only inform wait for your next message, and a bare "ok" after a thread's report is hidden.
+- **Autopilot:** read-only threads never wait on it, a switch lets read-only threads leave plan mode, and the supervisor gets regular check-ups and its own Open supervisor row.
+- **Sandboxed Codex sessions can run `ghostex` commands,** with everything else still sandboxed, and the command finds its session even when Codex hides Ghostex's variables ([#655](https://github.com/maddada/Ghostex/issues/655)).
+- **Automations can set the model and effort their runs start on,** a run whose prompt never arrives ends on its own instead of blocking every later run, and saving refuses fields it doesn't know ([#656](https://github.com/maddada/Ghostex/issues/656), [#662](https://github.com/maddada/Ghostex/issues/662)).
+
+### 💬 Chat
+
+- **A where pill above the chat box** shows the project, branch and the computer's own icon. Click it for the details: click any row to copy it, or use Copy path and Open folder. The header leaves the project out while the pill shows it.
+- **Long messages are sent instead of held forever** when they need more rows than Claude Code's or Codex's input box shows ([#654](https://github.com/maddada/Ghostex/issues/654)).
+- **Typing meant for a private secret card can never land in the chat box,** even if you click the chat box or a second card opens while you type ([#648](https://github.com/maddada/Ghostex/issues/648)).
+- **The chat no longer misses a turn** the terminal shows, with OMP and with Codex when hooks are off ([#649](https://github.com/maddada/Ghostex/issues/649), [#650](https://github.com/maddada/Ghostex/issues/650)).
+- **Switching to Chat while Claude's question is open** no longer hangs and fails ([#661](https://github.com/maddada/Ghostex/issues/661)).
+- **The chat jumps back to its end when you send,** thanks to @sebastianarena ([#657](https://github.com/maddada/Ghostex/pull/657)).
+- **Dismiss is quiet:** it no longer sends the agent a message, and finished items in the dock and finished-work cards offer Mark as read.
+- **Quiet View folds every message to a thread** into its summary line, and its tool call and changed-file counts no longer double up.
+- **Answered forms look calmer,** and a picture in a reply box no longer touches its label.
+- **Paste in terminal and Run work on the first click** when the Commands panel is closed.
+
+### 🎨 Look and feel
+
+- **Every theme colour has a colour picker and a slider,** and a new Chat colours group leads with your own message bubble, with a See-through slider and a live preview. Links, pill dots and code blocks follow your theme colours, and the page says which colours a gallery theme set.
+- **Popup windows have tabs in their title bar,** even with one tab. Drag tabs to combine, split or pull them out, the window has the main window's glass, and expand and shrink take effect right away.
+- **Menus are frosted:** the notifications menu blurs what's behind it, and a page's right-click menu closes when you click away or press Escape.
+- **A signed-out account shows a calm card** with one sentence and a Reconnect button, instead of a yellow box.
+
+### 📂 Sidebar
+
+- **Drag projects from other computers into any order** in the one list and in Spaces, and the order sticks.
+- **Sort sessions by Recent, Alphabetical or Created,** while pinned sessions keep your order, thanks to @sebastianarena ([#660](https://github.com/maddada/Ghostex/pull/660)).
+- **The session menu reads Rename, Pin, Popout,** Copy ID tops the Copy menu, and Move to New Group is shorter.
+- **Open Folder says why** when a project's drive isn't connected or its folder is gone, instead of doing nothing.
+- **A project on one computer shows its machine icon as a label,** and Remove Active projects explains itself in an (i) tooltip.
+- **Update all only updates the items it lists.**
+
+### 🌐 Remote computers
+
+- **Connect a Computer no longer waits on SSH,** and Ghostex never turns on SSH or installs OpenSSH by itself. On Linux, Turn on SSH shows your distro's install command with Copy, plus an Install button ([#663](https://github.com/maddada/Ghostex/issues/663)).
+- **A session link for another computer opens there,** with no stray "Couldn't open it".
+- **CLIProxyAPI hubs** can be added in Settings > Accounts once you turn on the CLIProxyAPI extension: see their accounts' usage and start sessions on the hub.
+- **The help explains working across computers:** threads and agents on other computers, and handing a conversation over.
+
+### 👤 Accounts
+
+- **A new session no longer starts on an account that's full only for another model,** and Claude sessions get a name even when Claude doesn't write one ([#664](https://github.com/maddada/Ghostex/issues/664)).
+- **Claude's idle compaction settings reach Claude only once you change them in Ghostex,** thanks to @sebastianarena ([#659](https://github.com/maddada/Ghostex/pull/659)).
+- **A finished Claude session stays finished** after its idle compaction, with no false "stalled" nudge.
+
+### 📱 On the phone
+
+- **Swipe between Spaces** on the sessions list, and the same where pill, first-message card, two-line Workers rows and Mark as read as the computer.
+- **The private secret card keeps the keyboard** while it's open.
+- **Autopilot settings** put Advanced above the Log, with the read-only switch and Open supervisor.
+
+### 🩹 Fixes and polish
+
+- **Fixed a crash when changing a setting after Ghostex updated its environment,** and crash reports now carry what was on screen, the last few app events and the exact build ([#653](https://github.com/maddada/Ghostex/issues/653)).
+- **Files opens links that point outside the project,** and Option-click opens a linked file in your default app ([#645](https://github.com/maddada/Ghostex/issues/645)).
+- **Linux updates show the command to run,** with Copy and the release page.
+- **The macOS terminal library is built optimized,** so the terminal is faster and lighter.
+- **A Codex effort written with spaces is replaced, not doubled,** thanks to @sebastianarena.
+
 ## 11.9.0 - 2026-11-17
 
 **Ghostex 11.9.0 is out.** Go back to the version you had in one click, report a crash in one click, sessions in their own window, plain approval cards, a setup row for Claude Swap and Codex Swap, and every release now passes a smoke test on macOS before it ships.
