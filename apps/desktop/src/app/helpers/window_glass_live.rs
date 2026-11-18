@@ -51,18 +51,33 @@ pub(crate) fn refresh_window_glass_live(object: &serde_json::Map<String, serde_j
             .unwrap_or_default()
             .to_string()
     };
+    // A style never saved is the catalog's default (Aurora in dark mode, Drift in light), the one
+    // Settings shows as chosen; read as empty, Live showed nothing until a style was picked.
+    let style = |key: &str| {
+        let saved = text(key);
+        if !saved.is_empty() {
+            return saved;
+        }
+        ghostex_settings_catalog::availability::default_value_on(
+            ghostex_settings_catalog::Platform::current(),
+            key,
+        )
+        .and_then(ghostex_settings_catalog::J::as_str)
+        .unwrap_or_default()
+        .to_string()
+    };
     let source = object
         .get("windowGlassSource")
         .and_then(serde_json::Value::as_str);
     live.live = matches!(source, Some("live" | "video"));
     let legacy_video = source == Some("video");
     live.style_dark = live_slot_style(
-        text("windowGlassLiveStyleDark"),
+        style("windowGlassLiveStyleDark"),
         &text("windowGlassVideoDark"),
         legacy_video,
     );
     live.style_light = live_slot_style(
-        text(crate::shared_settings::window_glass_light_key(
+        style(crate::shared_settings::window_glass_light_key(
             object,
             "windowGlassLiveStyleLight",
         )),
