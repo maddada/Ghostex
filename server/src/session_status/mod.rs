@@ -4,6 +4,7 @@
 use chrono::{SecondsFormat, TimeZone, Utc};
 use serde_json::{Map, Value};
 
+mod background_only_log;
 mod model;
 mod program_transition;
 #[cfg(test)]

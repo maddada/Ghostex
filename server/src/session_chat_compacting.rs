@@ -186,3 +186,31 @@ impl SessionChatCompactingPublisher {
         }));
     }
 }
+
+/// BLOCKING (at most one screen capture, through the detector's own cache lifetime). A running
+/// session that still carries the compacting marker has its screen read again, and the marker
+/// follows what that whole capture shows.
+///
+/// CDXC:Coordinators 2026-11-18 WHY:
+/// The marker is the screen's to set and clear (CDXC:AgentScreenDetection 2026-09-02 in session_chat_options/detector.rs), but the screen is only read while something follows the session. Claude Code 2.1.326 compacts an idle session on its own shortly before its prompt cache expires; a read during that compaction set the marker, nothing read the screen of the idle, unwatched session again, and the marker kept a finished session "working" for good: its sidebar dot, and on 2026-11-17 the stall nudges to three finished coordinator threads (coordinators/idle_compaction.rs). So the sidebar-wide stall tick reads the screen of every session still marked compacting until a capture says otherwise. A compaction that is still running keeps its marker.
+pub(crate) fn refresh_compacting_marker_from_screen(state: &AppState, session: &Value) {
+    if session_chat_compacting_detected_at(session).is_none() {
+        return;
+    }
+    let field = |key: &str| session.get(key).and_then(Value::as_str).map(str::to_string);
+    let (Some(project_id), Some(session_id)) = (field("projectId"), field("sessionId")) else {
+        return;
+    };
+    let agent = crate::session_chat_composer::session_chat_composer_agent_id(session);
+    let detection = crate::session_chat_options::SessionChatOptionDetector::new(state)
+        .detect_blocking(&project_id, &session_id, agent.as_deref(), false);
+    // The detector publishes a change it sees itself; a cache that already agreed with the screen
+    // while the stored marker did not (a write that lost a race) is put right here.
+    if detection.captured
+        && !crate::session_chat_terminal_activity::is_session_chat_compacting_activity(
+            detection.activity.as_ref(),
+        )
+    {
+        SessionChatCompactingPublisher::new(state).publish(&project_id, &session_id, None);
+    }
+}
