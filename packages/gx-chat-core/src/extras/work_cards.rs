@@ -104,12 +104,7 @@ pub fn turns_mark(turns: &[Turn]) -> (usize, String, String, Option<String>) {
 
 /// [`turns`] for a chat with work items, and none for any other: only their cards read them.
 pub fn turns_for_work(state: &ChatState) -> Vec<Turn> {
-    let has_work = state
-        .session
-        .coordinator_threads
-        .as_ref()
-        .and_then(|threads| threads.get("work"))
-        .is_some();
+    let has_work = crate::extras::work_source::work_of(state).is_some();
     if has_work {
         turns(state)
     } else {
@@ -641,11 +636,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 .map(|(at, row)| (now_ms - at > DAY_MS, at, row)),
         );
     }
-    let work = state
-        .session
-        .coordinator_threads
-        .as_ref()
-        .and_then(|threads| threads.get("work"));
+    let work = crate::extras::work_source::work_of(state);
     let items: Vec<&Value> = work
         .and_then(|work| work["items"].as_array())
         .into_iter()
@@ -902,12 +893,8 @@ const SETTLED_KEPT_MS: i64 = 3_600_000;
 pub fn settled_asks(state: &ChatState, context: &ChatContext) -> Value {
     let now_ms = context.now_millis();
     let mut out = serde_json::Map::new();
-    let items = state
-        .session
-        .coordinator_threads
-        .as_ref()
-        .and_then(|threads| threads.get("work"))
-        .and_then(|work| work["items"].as_array());
+    let items =
+        crate::extras::work_source::work_of(state).and_then(|work| work["items"].as_array());
     for item in items.into_iter().flatten() {
         for ask in item["asks"].as_array().into_iter().flatten() {
             if ask["open"] == true {
@@ -949,11 +936,7 @@ pub fn panel_actions_with(
     row: &Value,
     turns: &[Turn],
 ) -> Value {
-    let Some(items) = state
-        .session
-        .coordinator_threads
-        .as_ref()
-        .and_then(|threads| threads.get("work"))
+    let Some(items) = crate::extras::work_source::work_of(state)
         .and_then(|work| work.get("items"))
         .and_then(Value::as_array)
     else {
@@ -1419,11 +1402,7 @@ fn one_click(
 /// The Work panel row key of the open ask a question tag names (`work-ask:W3:Q12`), if a work item
 /// asks it.
 pub fn ask_key_of_tag(state: &ChatState, tag: &str) -> Option<String> {
-    let items = state
-        .session
-        .coordinator_threads
-        .as_ref()?
-        .get("work")?
+    let items = crate::extras::work_source::work_of(state)?
         .get("items")?
         .as_array()?;
     items.iter().find_map(|item| {
@@ -1492,11 +1471,7 @@ pub fn turn_summary(state: &ChatState) -> Option<String> {
     let newest = merged_turn(state, &turns)?;
     let turn_id = turns.get(newest)?.id.clone();
     let mut lines: BTreeMap<usize, TurnLine> = BTreeMap::new();
-    let items = state
-        .session
-        .coordinator_threads
-        .as_ref()?
-        .get("work")?
+    let items = crate::extras::work_source::work_of(state)?
         .get("items")?
         .as_array()?;
     for item in items.iter().filter(|item| item["kind"] == "item") {
@@ -1657,11 +1632,7 @@ pub fn project_with(
     context: &ChatContext,
     turns: &[Turn],
 ) -> (Value, Vec<OpenAsk>) {
-    let Some(items) = state
-        .session
-        .coordinator_threads
-        .as_deref()
-        .and_then(|threads| threads.get("work"))
+    let Some(items) = crate::extras::work_source::work_of(state)
         .and_then(|work| work.get("items"))
         .and_then(Value::as_array)
     else {
@@ -1880,11 +1851,7 @@ pub fn ages_change_at(state: &ChatState, cards: &Value, now_ms: i64) -> Option<i
 /// When the first snooze still running at `now_ms` ends: gxserver's `snoozedUntil` on an open ask,
 /// or one sent from here. Its ask is back under Needs you from then, in the dock and the panel.
 pub fn snoozes_end_at(state: &ChatState, now_ms: i64) -> Option<i64> {
-    let sent = state
-        .session
-        .coordinator_threads
-        .as_ref()
-        .and_then(|threads| threads.get("work"))
+    let sent = crate::extras::work_source::work_of(state)
         .and_then(|work| work.get("items"))
         .and_then(Value::as_array)
         .into_iter()
@@ -1904,6 +1871,8 @@ pub struct WorkInputs {
     /// (shared, `document::SharedValue`), which hold the `work` the cards were built from.
     threads: u64,
     held_threads: Option<crate::document::SharedValue>,
+    /// An ordinary session's own work (`work_source::own_work`), compared by value.
+    own_work: Option<Value>,
     messages: usize,
     last_id: String,
     last_has_words: bool,
@@ -1929,13 +1898,7 @@ fn worked(state: &ChatState) -> bool {
         && !state.transcript_view.chat_look.status_in_transcript
 }
 
-fn work_of(state: &ChatState) -> Option<&Value> {
-    state
-        .session
-        .coordinator_threads
-        .as_deref()
-        .and_then(|threads| threads.get("work"))
-}
+use crate::extras::work_source::work_of;
 
 impl WorkInputs {
     fn of(state: &ChatState) -> Self {
@@ -1943,6 +1906,7 @@ impl WorkInputs {
         Self {
             threads: state.session.coordinator_threads.stamp(),
             held_threads: (*state.session.coordinator_threads).clone(),
+            own_work: state.session.session_work.clone(),
             messages: state.messages.composed.len(),
             last_id: last.map(|message| message.id.clone()).unwrap_or_default(),
             last_has_words: last_has_words(state),
@@ -1962,6 +1926,7 @@ impl WorkInputs {
         let Self {
             threads,
             held_threads,
+            own_work,
             messages,
             last_id,
             last_has_words: had_words,
@@ -1979,6 +1944,7 @@ impl WorkInputs {
                     .map_or("", |message| message.id.as_str())
             || *had_words != last_has_words(state)
             || *was_worked != worked(state)
+            || *own_work != state.session.session_work
         {
             return false;
         }
@@ -2024,13 +1990,7 @@ pub fn project_kept(
     turns: &[Turn],
 ) -> (crate::document::SharedValue, Vec<OpenAsk>) {
     // Not a coordinator, or a gxserver that sends no work: nothing to build or keep.
-    if state
-        .session
-        .coordinator_threads
-        .as_deref()
-        .and_then(|threads| threads.get("work"))
-        .is_none()
-    {
+    if crate::extras::work_source::work_of(state).is_none() {
         *kept = None;
         return (json!([]).into(), Vec::new());
     }
@@ -2058,11 +2018,7 @@ pub fn project_kept(
 /// ? pill, and answering either settles both (gxserver settles the ask from the chat's answers;
 /// the core treats the form as answered once its ask is).
 pub fn card_tags(state: &ChatState) -> std::collections::BTreeSet<String> {
-    state
-        .session
-        .coordinator_threads
-        .as_deref()
-        .and_then(|threads| threads.get("work"))
+    crate::extras::work_source::work_of(state)
         .and_then(|work| work.get("items"))
         .and_then(Value::as_array)
         .into_iter()

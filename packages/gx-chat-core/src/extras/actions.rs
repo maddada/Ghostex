@@ -127,6 +127,22 @@ pub fn handle_with_ids(
                 })),
             }]
         }
+        // The line at the top of the Work panel, rewritten by the user with a click
+        // (server/src/coordinators/session_work.rs `write_topic`).
+        ActionKind::SetWorkTopic => {
+            let request_id = next_request_id();
+            state.extras.panels.board_change_requests.insert(request_id);
+            vec![crate::effect::Effect::SendRpc {
+                request_id,
+                method: crate::wire::ChatRpcMethod::CoordinatorBoard,
+                params: Box::new(serde_json::json!({
+                    "projectId": state.identity.project_id,
+                    "sessionId": state.identity.session_id,
+                    "op": "topic",
+                    "text": text(action, "text").trim(),
+                })),
+            }]
+        }
         // A snoozed work ask back under Needs you now, from the dock's Snoozed row
         // (server/src/coordinators/work.rs `unsnooze`). It shows there at once: the local mark
         // wins over gxserver's `snoozedUntil` until the wire agrees (`work_cards::snoozed`).

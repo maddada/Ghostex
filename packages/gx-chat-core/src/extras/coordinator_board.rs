@@ -277,6 +277,14 @@ pub struct CoordinatorBoard {
     /// `None` when gxserver sends no index, which dims nothing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_titles: Option<std::collections::BTreeMap<String, String>>,
+    /// The line at the top of the Work panel (`{text, byUser}`), `null` for none: what the
+    /// session is about, rewritten with a click (`setWorkTopic`). Only on the Work panel.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub topic: Value,
+    /// The panel lists an ordinary session's own items (`work_source::own_work`), not a
+    /// coordinator's.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub own: bool,
 }
 
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -953,7 +961,7 @@ pub fn coordinator_board_with(
     context: &ChatContext,
     turns: &[crate::extras::work_cards::Turn],
 ) -> Option<CoordinatorBoard> {
-    let threads = state.session.coordinator_threads.as_deref()?;
+    let threads = crate::extras::work_source::work_holder(state)?;
     // The work items, when gxserver sends them, laid out as the board was (work_panel.rs).
     let work_mode = threads.get("work").is_some_and(Value::is_object);
     let built;
@@ -1147,6 +1155,13 @@ pub fn coordinator_board_with(
         .filter(|group| !matches!(group.id.as_str(), "ideas" | "removed"))
         .all(|group| group.count == 0);
     Some(CoordinatorBoard {
+        topic: if work_mode {
+            crate::extras::work_source::topic(state)
+        } else {
+            Value::Null
+        },
+        own: state.session.coordinator_threads.is_none()
+            && crate::extras::work_source::own_work(state).is_some(),
         title: if work_mode { "Work" } else { "Board" }.to_string(),
         groups: out,
         meta: meta.join(" \u{b7} "),
@@ -1183,6 +1198,8 @@ pub fn coordinator_board_with(
 #[derive(Clone, Debug, PartialEq)]
 pub struct BoardInputs {
     threads: Stamped<Option<crate::document::SharedValue>>,
+    /// An ordinary session's own work (`work_source::own_work`), compared by value.
+    own_work: Option<Value>,
     panels: Stamped<crate::state::PanelsState>,
     askers: Stamped<Vec<crate::transcript::open_questions::Asker>>,
     questions: crate::questions::forms::QuestionsInputs,
@@ -1198,6 +1215,7 @@ impl BoardInputs {
         Self {
             turns: crate::extras::work_cards::turns_mark(turns),
             threads: state.session.coordinator_threads.clone(),
+            own_work: state.session.session_work.clone(),
             panels: state.extras.panels.clone(),
             askers: state.transcript_view.askers.clone(),
             questions: crate::questions::forms::QuestionsInputs::of(&state.questions),
@@ -1214,6 +1232,7 @@ impl BoardInputs {
         // inputs than it was built from would serve a stale value.
         let Self {
             threads,
+            own_work,
             panels,
             askers,
             questions,
@@ -1224,6 +1243,7 @@ impl BoardInputs {
         } = self;
         *mark == crate::extras::work_cards::turns_mark(turns)
             && threads.same_as(&state.session.coordinator_threads)
+            && *own_work == state.session.session_work
             && panels.same_as(&state.extras.panels)
             && askers.same_as(&state.transcript_view.askers)
             && questions.matches(&state.questions)
@@ -1260,11 +1280,7 @@ fn ages_change_at(state: &ChatState, now_ms: i64) -> Option<i64> {
         .filter_map(|group| group.get("rows").and_then(Value::as_array))
         .flatten()
         .filter_map(|row| at_ms(text(row, "at")));
-    let work = state
-        .session
-        .coordinator_threads
-        .as_deref()
-        .and_then(|threads| threads.get("work"))
+    let work = crate::extras::work_source::work_of(state)
         .and_then(|work| work.get("items"))
         .and_then(Value::as_array)
         .into_iter()
@@ -1463,11 +1479,7 @@ pub fn blocked_pill(board: &Value) -> Option<ChatPill> {
 /// group unfolds and shows every row, and the renderers open the panel and ring the row, the chat
 /// staying where it is (`open_questions::show`).
 pub fn focus_row(state: &mut ChatState, key: &str) -> Vec<crate::effect::Effect> {
-    let group = state
-        .session
-        .coordinator_threads
-        .as_ref()
-        .and_then(|threads| threads.get("work"))
+    let group = crate::extras::work_source::work_of(state)
         .map(crate::extras::work_panel::work_board)
         .and_then(|board| {
             board["groups"].as_array()?.iter().find_map(|group| {
@@ -1500,7 +1512,7 @@ pub fn focus_row(state: &mut ChatState, key: &str) -> Vec<crate::effect::Effect>
 pub fn show_group(state: &mut ChatState, group: &str) -> Vec<crate::effect::Effect> {
     // The Work panel's own groups when the chat has work items (`work_panel::work_board`), as the
     // dock's status line counts them; else gxserver's board.
-    let threads = state.session.coordinator_threads.as_deref();
+    let threads = crate::extras::work_source::work_holder(state);
     let built = threads
         .and_then(|threads| threads.get("work"))
         .map(crate::extras::work_panel::work_board);

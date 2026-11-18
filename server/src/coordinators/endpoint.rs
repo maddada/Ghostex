@@ -85,6 +85,18 @@ pub fn handle_coordinator_endpoint(
             if resolve_coordinator(db, &key).is_err() {
                 super::session_work::require_session_work(repository, &key)?;
             }
+            // The user rewrote the Work panel's Topic with a click (session_work.rs).
+            if params.get("op").and_then(Value::as_str) == Some("topic") {
+                let words = params
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let topic = super::session_work::write_topic(db, &key, words, true)?;
+                return Ok(CoordinatorEndpointOutput {
+                    result: json!({ "topic": topic }),
+                    changed_sessions: Vec::new(),
+                });
+            }
             // "Don't show again" on the coordinator tips, for every coordinator (intro.rs).
             if params.get("op").and_then(Value::as_str) == Some("hideIntro") {
                 super::intro::hide_intro(db)?;

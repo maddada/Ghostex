@@ -43,6 +43,7 @@ pub mod welcome;
 pub mod where_pill;
 pub mod work_cards;
 pub mod work_panel;
+pub mod work_source;
 pub mod working_card;
 pub mod working_card_label;
 pub mod working_strip;

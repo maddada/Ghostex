@@ -379,6 +379,12 @@ pub struct ChatSideState {
     /// every frame since 2026-11-16. Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub needs_you: Option<Value>,
+    /// This session's own work items while the Work items extension is on (`{ enabled, work?,
+    /// topic? }`, server/src/coordinators/session_work.rs): the Work panel, its dock rows and the
+    /// header's Work button for an ordinary session. `{ enabled: false }` for a coordinator, its
+    /// threads and any session while the extension is off. Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_work: Option<Value>,
     /// For a coordinator's thread, the approvals its coordinator's chat answered for it in the
     /// last 12 hours (`[{ at, label, from, question }]`, server/src/coordinators/relay.rs), drawn
     /// where its card was. Absent means unchanged.

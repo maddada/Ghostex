@@ -163,9 +163,14 @@ pub fn insert_session_work(frame: &mut Map<String, Value>, project_id: &str, ses
             .values
             .get(&key)
             .cloned()
-            .unwrap_or_else(|| json!({ "enabled": true }))
+            .unwrap_or_else(|| json!({ "enabled": true, "work": empty_work(), "topic": null }))
     };
     frame.insert("sessionWork".to_string(), value);
+}
+
+/// The work of a session with no items yet: an empty Work panel, with its Topic line.
+fn empty_work() -> Value {
+    json!({ "items": [], "asks": [], "counts": {}, "topic": null })
 }
 
 /// One ordinary session's `sessionWork`.
@@ -177,6 +182,8 @@ fn session_value(items: &[WorkItem], topic: Value, key: &SessionKey) -> Value {
             item["owner"] = json!({ "kind": "agent", "label": "Agent" });
         }
     }
+    // The Topic rides in `work` too, where a coordinator's does (panel.rs).
+    work["topic"] = topic.clone();
     json!({
         "enabled": true,
         "work": work,

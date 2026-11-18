@@ -107,6 +107,10 @@ pub fn side_state_moves(
             .as_ref()
             .is_some_and(|rows| session.needs_you.as_ref() != Some(rows))
         || side
+            .session_work
+            .as_ref()
+            .is_some_and(|work| session.session_work.as_ref() != Some(work))
+        || side
             .collab
             .as_ref()
             .is_some_and(|collab| session.collab.as_ref() != Some(collab))

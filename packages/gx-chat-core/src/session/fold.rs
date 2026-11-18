@@ -311,6 +311,11 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         .clone()
         .or_else(|| previous_side.and_then(|state| state.needs_you.clone()));
 
+    folded.result.state.session_work = side
+        .session_work
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.session_work.clone()));
+
     folded.result.state.side_chat_of = side
         .side_chat_of
         .clone()
