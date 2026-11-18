@@ -666,6 +666,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/readSessionChatReport"
         // CDXC:SessionChat 2026-10-31 WHY: remote-allowed like readSessionChat: the transcript it reads lives on the machine that runs the session.
         | "/api/readSessionChatResource"
+        // CDXC:SessionChat 2026-11-18 WHY: remote-allowed like readSessionChatResource: the question tags it reads come from the transcript of the machine that runs the session. It was routed (route_http/chat.rs) but never listed here, so `ghostex coordinator next-tag` and `ghostex work next-tag` were refused as an unknown endpoint.
+        | "/api/readSessionChatQuestionTags"
         // CDXC:CatchMeUp 2026-10-11 WHY: remote-allowed like readSessionChat: the transcript and the summary agent live on the machine that runs the session.
         | "/api/catchUpSession"
         // CDXC:FilesAndLinks 2026-10-12 WHY: remote-allowed like readSessionChat: the transcripts it reads live on the machine that runs the sessions.

@@ -200,15 +200,24 @@ pub fn session_work_summary(project_id: &str, session_id: &str) -> Value {
     })
 }
 
-/// One ordinary session's `sessionWork`.
-fn session_value(items: &[WorkItem], topic: Value, key: &SessionKey) -> Value {
-    let mut work = work_value(&[], items, false, Utc::now(), None, Some(key));
-    // The agent of the session is on its In progress items, not a coordinator.
-    for item in work["items"].as_array_mut().into_iter().flatten() {
+/// In an ordinary session's work (a list's `items`, or one item), its agent is on its In progress
+/// items, not a coordinator.
+pub(super) fn name_agent_owner(work: &mut Value) {
+    let mut rename = |item: &mut Value| {
         if item["owner"]["kind"] == "coordinator" {
             item["owner"] = json!({ "kind": "agent", "label": "Agent" });
         }
+    };
+    match work.get_mut("items").and_then(Value::as_array_mut) {
+        Some(items) => items.iter_mut().for_each(&mut rename),
+        None => rename(work),
     }
+}
+
+/// One ordinary session's `sessionWork`.
+fn session_value(items: &[WorkItem], topic: Value, key: &SessionKey) -> Value {
+    let mut work = work_value(&[], items, false, Utc::now(), None, Some(key));
+    name_agent_owner(&mut work);
     // The Topic rides in `work` too, where a coordinator's does (panel.rs).
     work["topic"] = topic.clone();
     json!({

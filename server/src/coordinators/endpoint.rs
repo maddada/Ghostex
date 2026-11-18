@@ -152,6 +152,9 @@ pub fn handle_coordinator_endpoint(
                 result["topic"] = super::session_work::read_topic(db, &key);
                 result["ordinary"] = json!(ordinary);
             }
+            if ordinary {
+                super::session_work::name_agent_owner(&mut result);
+            }
             Ok(CoordinatorEndpointOutput {
                 result,
                 changed_sessions: Vec::new(),
