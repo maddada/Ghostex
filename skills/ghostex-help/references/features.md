@@ -3838,8 +3838,11 @@ and reply reference automatically; an agent that sends with
 instead gets the same identity attached, so its message never shows as yours. A normal send reaches a busy agent at its
 next input boundary and wakes a sleeping one, so it is right for almost every
 message. Use `--body-file` for multiline messages, `--interrupt` for an urgent
-correction, or `--queue` to leave the message waiting until the current turn
-finishes. A queued message waits as long as that turn does, so send normally
+correction, `--queue` to leave the message waiting until the current turn
+finishes, or `--with-next` for a note that needs nothing from the recipient now:
+Ghostex holds it and types it right after the next message that session gets
+(yours, another session's, a queued one), so it never starts a turn by itself
+and never wakes a sleeping session; it works for any session. A queued message waits as long as that turn does, so send normally
 unless the point is to have the next task ready for an agent whose final
 message you have already read. A send reports `delivered` once the recipient's
 transcript shows the message, `accepted` when the agent took it but has not
@@ -4159,7 +4162,10 @@ version of the Projects features in Cursor and Claude Code.
   you**, **Blocked** (stopped until you act), **In progress**, **Waiting** (on
   another item, a question or something outside), **Later** and **Finished**.
   Threads, steps and what it asks you belong to the item, and a wait on another
-  item or question clears itself once that's done. Anything a coordinator needs
+  item or question clears itself once that's done. An ordinary session keeps
+  its own work items the same way while the Work items extension is on (see
+  Extensions). Agents keep them with `ghostex work item add|now|step|ask|wait|done`
+  (`ghostex coordinator item` is the same command) and `ghostex work list`. Anything a coordinator needs
   you to try, test, check or decide is an ask under Needs you, never left In
   progress or Waiting. A coordinator's reply is a
   set of marked sections with bullets, or a couple of sentences of news while
@@ -4252,9 +4258,15 @@ version of the Projects features in Cursor and Claude Code.
   over the chat (a page opens as the page), and a coordinator's question or work
   item opens in the Work panel. **Show in chat** is the one exception, and only
   when you press it.
-- **The Work panel**: on the computer, the button in the header above the chat
-  box opens it (the header carries the counts); on the phone the **Work** pill
-  does, reading "Work · 2 need you · 4 in progress" while the row has room. The
+- **The Work panel**: on the computer, the **Work** button in the window's header
+  opens it, with a count of what waits on you; it sits beside Session details,
+  and the two share the spot beside the chat, one at a time (opening one puts
+  the other away). The button in the header above the chat box opens it too
+  (that header carries the counts); on the phone the **Work** pill does, reading
+  "Work · 2 need you · 4 in progress" while the row has room. At the top of the
+  panel, the **Topic** says in one line what the session is about: click it to
+  rewrite it (Enter or a click away saves, Escape cancels); a Topic you wrote
+  stays yours, and an agent sets one with `ghostex work topic "<one line>"`. The
   panel lists
   every line of work by who has the ball: **Needs you** first (each naming the
   work it belongs to, with its answers or Done), then **Blocked**, **In
@@ -7135,13 +7147,17 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   and their threads; it stops once the extension is off or uninstalled). A
   panel's section can fold under its heading, a long list shows its first items
   with "N more", and a text can be editable: click it to rewrite it in place.
-  The Thread brief extension uses these: a side panel view with each session's
-  objective (click it to rewrite it; yours stays), status, next up, done,
-  blocked and parked items, kept by the session's agent through its skill, with
-  Refresh to ask for an update, and a Briefs button in the sidebar's top row
-  listing every session with a brief, its objective and its done count. While
-  it is on, new and resumed agent sessions start their brief on their own;
-  coordinators and their threads keep none. Turn its sidebar button or its sections off on its page in Settings >
+  The **Work items** extension (it was Thread brief) uses these: while it is on,
+  every ordinary session keeps its own work items the way a coordinator does,
+  in the same Work panel (the **Work** button in the window's header, with its
+  Topic), with what it asks you as rows above the chat box and on the phone,
+  and a **Work** button in the sidebar's top row lists every session with work
+  items, its Topic, how many are open and how many wait on you. New and resumed
+  agent sessions are told about it and its **work-items** skill is in place only
+  while it is on; turned off, ordinary sessions work exactly as before and
+  `ghostex work item` refuses in them. Coordinators keep theirs as before, and
+  their threads keep none. Updating from Thread brief turns each session's
+  brief into its work items once (the objective becomes the Topic). Turn its sidebar button or its sections off on its page in Settings >
   Extensions (Sidebar mode, Sections in Projects). On the phone, the extension's
   button sits in the sessions list's header, its sections show in the Project
   list, a tap ticks an item or opens it, and a long press opens its options
