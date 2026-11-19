@@ -48,9 +48,7 @@
 
 ### 🧭 Agents and coordinators
 
-- **`--body-file -` reads a message from standard input** for `ghostex agents send`, `agents create`, the main coordinator's send and `coordinator start-thread`, so text with backticks or `# Changelog
-
- can go through a quoted heredoc without the shell running it.
+- **`--body-file -` reads a message from standard input** for `ghostex agents send`, `agents create`, the main coordinator's send and `coordinator start-thread`, so text with backticks or `$` can go through a quoted heredoc without the shell running it.
 
 ### 🪟 Windows
 
