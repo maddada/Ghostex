@@ -141,17 +141,31 @@ pub(crate) fn discover(
         .into_iter()
         .filter_map(|p| Some((project_key(p.get("path")?.as_str()?), p)))
         .collect();
+    let former_root = paths.root_dir.clone();
     for conversation in conversations {
         // CDXC:Bots 2026-09-26 WHY:
         // A Hermes conversation belongs to its bot, the project at its profile folder.
         // Bot sync owns creating that project; an ordinary project made here would stop the folder from ever becoming a bot.
         let is_hermes = conversation.agent == hermes::HERMES_AGENT;
+        // A conversation from a folder Ghostex moved belongs to the project at its new place
+        // (`ghostex move-project-folder` keeps the former paths, project_folder_move/registry.rs).
+        let cwd = crate::project_folder_move::current_for_former(&former_root, &conversation.cwd)
+            .unwrap_or_else(|| conversation.cwd.clone());
         let project_key = if is_hermes {
             project_key(&conversation.agent_home.to_string_lossy())
         } else {
-            project_key(&conversation.cwd)
+            project_key(&cwd)
         };
         if is_hermes && !projects.contains_key(&project_key) {
+            continue;
+        }
+        // Not while its folder moves, and never a new project for a folder that is not there:
+        // the conversation is looked at again on a later pass (risk 6 of
+        // docs/2026-11-19/project-move-folder/PLAN.md).
+        if !is_hermes
+            && (crate::project_folder_move::path_is_moving(&conversation.cwd)
+                || (!projects.contains_key(&project_key) && !Path::new(&cwd).is_dir()))
+        {
             continue;
         }
         let inserted = transaction.execute("INSERT OR IGNORE INTO external_session_receipts (agent, conversationId) VALUES (?1, ?2)", (&conversation.agent, &conversation.id)).map_err(error)?;
@@ -163,8 +177,8 @@ pub(crate) fn discover(
             Some(project) => project.clone(),
             None => {
                 let project = repository.create_project(json!({
-                    "name": Path::new(&conversation.cwd).file_name().and_then(|s| s.to_str()).unwrap_or(&conversation.cwd),
-                    "path": conversation.cwd,
+                    "name": Path::new(&cwd).file_name().and_then(|s| s.to_str()).unwrap_or(&cwd),
+                    "path": cwd.clone(),
                     "isRecentProject": true,
                 }).as_object().unwrap())?;
                 projects.insert(project_key, project.clone());
@@ -173,7 +187,7 @@ pub(crate) fn discover(
         };
         repository.import_external_session(json!({
             "projectId": project["projectId"], "kind": "terminal", "surface": "workspace",
-            "agentId": conversation.agent, "title": conversation.title, "cwd": conversation.cwd,
+            "agentId": conversation.agent, "title": conversation.title, "cwd": cwd,
             "lifecycleState": "stopped", "lastActiveAt": conversation.updated,
             "providerState": {"lifecycleState": "missing", "probedAt": conversation.updated},
             "runtimeSettings": {
