@@ -711,8 +711,8 @@ pub(super) fn machines_section(
     )
 }
 
-/// The 32px icon tile of a machine tile.
-fn tile_icon(t: &RemoteTokens, path: &'static str) -> AnyElement {
+/// The 32px tile a machine tile's icon sits in.
+pub(super) fn tile_frame(t: &RemoteTokens) -> gpui::Div {
     div()
         .flex_shrink_0()
         .size(px(32.0))
@@ -723,6 +723,11 @@ fn tile_icon(t: &RemoteTokens, path: &'static str) -> AnyElement {
         .border_1()
         .border_color(hsla(t.edge(0.76)))
         .bg(hsla(t.card(0.58)))
+}
+
+/// The 32px icon tile of a machine tile.
+fn tile_icon(t: &RemoteTokens, path: &'static str) -> AnyElement {
+    tile_frame(t)
         .child(settings_icon(
             path,
             18.0,

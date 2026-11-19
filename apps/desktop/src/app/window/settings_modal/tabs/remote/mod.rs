@@ -1316,11 +1316,15 @@ impl RemoteTab {
                 RemoteFold::ThisComputer => current_machine::computer_name(self).into(),
                 _ => fold.title().into(),
             };
+            // This computer's row leads with its icon, as a saved computer's tile does.
+            let leading = matches!(fold, RemoteFold::ThisComputer)
+                .then(|| current_machine::this_computer_icon_tile(self, t, cx));
             let header = style::fold_row(
                 t,
                 fold.anchor(),
                 title,
                 line,
+                leading,
                 open,
                 move |tab: &mut Self, _window, cx| tab.toggle_fold(fold, cx),
                 cx,
