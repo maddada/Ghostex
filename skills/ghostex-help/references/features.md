@@ -2425,7 +2425,10 @@ shown" with the reason, and once that turn ends Ghostex asks the agent, once, to
 send those questions again in the right shape, so you never have to paste the
 error back; the broken card goes away when the new form arrives. Questions that need a picture,
 such as choosing between two mockups, come as a Live page instead, where you can
-also pick an option right at its mockup with the Pick button at the right end of its title. A
+also pick an option right at its mockup with the Pick button at the right end of its title. When a
+page lists items and asks which ones, each item has its own checkbox (a round one when you pick
+one) and a Note right on its row, a long item folds behind Show more, and the question under the
+list shows only what you picked and its note box. A
 page works the same way: its card reads Answered once you send, and opening it
 again shows what you sent. The desktop's floating page window, a form's popup (the work dock's Open, the Resources
 list) and the phone's page and form sheet fade out and close once your answers are

@@ -546,7 +546,9 @@ top (the header and the first lines), then in the window. Aim for the look of
   scale (the same axis, the same units), so the differences show without
   reading. Mark the recommended one with a `.gx-ribbon` and `recommended`.
 - **Then one question.** The `<gx-question>` sits directly under the row,
-  its choices in the same order, each with a `<small>` one-line trade-off.
+  its choices in the same order. When every choice has its tied variant, the
+  question shows only what was picked and its note, not the choices again, so
+  put each option's trade-off on its card (a `.how` line, `.gx-stat`s).
 - **Not too long.** Header, options and question fit roughly one screen.
   Leave out what the reader won't use to decide: more pages are better than
   one long one.
@@ -729,6 +731,9 @@ and `data-choice` (first bullet below), which gives it a Pick button:
   - When a question sits under mockups and no Pick could be tied,
     `ghostex visual check` and `ghostex show` say so, naming the question
     (a warning; the page still works). Add the attributes and check again.
+- **A list you ask about carries its picks on its rows** (see "Lists you
+  ask about" below): never list the items above a question and then again
+  as its choices.
 - Put the whole page in one `<gx-questions>`. It lays out like `<gx-page>`:
   the column, with `<gx-wide>` only for mockups wider than 720px (the
   wide Settings mockups above; the small header mockups stay in the column).
@@ -757,7 +762,9 @@ and `data-choice` (first bullet below), which gives it a Pick button:
   lettered "A." is choice a. Never move the recommended choice to the top;
   mark it with `recommended` where it already sits. A question whose choices
   run C, B, A under mockups A, B, C makes the reader pick the wrong one.
-- Write only that markup. The kit letters the choices, ends every choice
+- Write only that markup. When every choice of a question has its tied
+  variant or row, the question shows what was picked as chips, Other and its
+  note box, not the choices again. The kit letters the choices, ends every choice
   question with "Other / none of these" and a note box, ends the page with
   an "Anything else?" box (the reader can type there and paste images) just
   above the send button, and adds the send button. Nothing is ever preselected (the reader can also click a pick again
@@ -787,6 +794,82 @@ and `data-choice` (first bullet below), which gives it a Pick button:
     "Additional notes": "keep search at the top [Image #1](/Users/me/…/shot.png)"
   }
   </ghostex-page-answers>
+  ```
+
+### Lists you ask about: picks on rows
+
+When a page lists items (feature requests, issues, files, findings) and asks
+which ones, or which one, the reader picks on each item's own row. Never write
+the items above a question and then again as its `<gx-choice>` lines: the
+reader would read a row, scroll down to find it in the question, pick, and
+scroll back. `ghostex visual check` refuses a question that repeats three or
+more items listed above it. Only when `ghostex visual --help` mentions
+`<gx-pick>`; older Ghostex versions show the rows as plain text.
+
+Write each item once, as a `<gx-pick value="…">` holding Markdown (as long as
+it needs: paragraphs, lists, tables, fenced code, links, images by path,
+quotes, and raw HTML for a small mockup in a `.gx-frame`), inside an element
+with `data-question` naming the question. Start each with a heading: it is the
+row's title and its label. The question gets no `<gx-choice>` lines; the kit
+makes them from the rows, in their order:
+
+```html
+<div data-question="Q7">
+  <div data-pick-group>
+    <h3>Agent workflow</h3>
+    <gx-pick value="FB-34" recommended>
+      ##### `FB-34` Edit ticket details after it is created
+
+      Agents can't change a ticket's requester email once it exists.
+
+      - Requester email and name
+      - Description
+
+      > I copy the email into a note, then ping an admin.
+    </gx-pick>
+    <gx-pick value="FB-29">
+      ##### `FB-29` Canned responses in New ticket
+
+      | Where | Today | After |
+      |---|---|---|
+      | New ticket | No | Yes |
+    </gx-pick>
+  </div>
+</div>
+<gx-question tag="Q7" multiple title="Which of these go in before cutover?">
+  <p>Whatever you leave unpicked is planned for after cutover.</p>
+</gx-question>
+```
+
+- **Rows in HTML:** `data-pick="value"` on any element (an `article`, an
+  `li`, a table's `tr`) works the same, with `data-recommended`; its first
+  child heading is its title. `data-question` may sit on the row itself.
+- **Side by side:** put the rows in a `.gx-options` row (with
+  `data-question` on it) to compare two to four as cards, for example for a
+  pick-one question.
+- **Groups:** wrap rows in an element with `data-pick-group` whose first
+  heading names the group; for pick many its heading gets a checkbox that
+  picks the whole group.
+- **What the kit adds:** a checkbox at the start of every row (a radio for a
+  question without `multiple`; the whole row picks, links, code, tables and
+  pictures in it do their own thing), a Note on every row, a filter, Picked
+  only and Pick recommended above a list of eight rows or more, a bar at the
+  bottom of the screen while the rows are on it, and the keys (arrows or J
+  and K, Space, O to open a row, N for its note). A row longer than about 16
+  lines folds behind Show more, which names what it hides. Don't add any of
+  this yourself, and don't shorten an item to fit: write it whole.
+- **The question** under the rows shows what was picked as chips, Other and
+  its note box. Give it the `title`, `tag`, `multiple` and a `<p>`, nothing
+  else. A `<gx-choice>` you do write for a row (to give it another label)
+  is matched to the row by its value or label.
+- **The answers** have the usual shape: the picked values as a list (one
+  value for pick one), keyed by the question, and each row's note as
+  `"<key> · <value> (note)"`:
+
+  ```text
+  {"Which of these go in before cutover?": ["FB-34", "FB-30"],
+   "Which of these go in before cutover? · FB-30 (note)": "after the import",
+   "Which of these go in before cutover? (note)": "revisit search later"}
   ```
 
 For an answer the kit can't ask for, such as a ranking or a spot on a

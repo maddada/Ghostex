@@ -710,6 +710,13 @@ Pages (Live pages):
   .gx-options row of tied sections (each gets a Pick button), one question
   under them, and keep it to about one screen. The skill's
   examples/plan-review.html shows the whole shape.
+  A page that lists items and asks about them puts the picks on the rows:
+  each item a <gx-pick value=\"FB-34\"> with Markdown inside (or data-pick on
+  any element), under data-question=\"Q3\", and a <gx-question tag=\"Q3\">
+  with no <gx-choice> lines: the kit makes the choices from the rows, gives
+  each row a checkbox (a radio for pick one) and a Note, folds long rows,
+  and the question shows only what was picked. check refuses a question
+  that lists the items above it again.
 
 Exported pages:
   Any Live page can be exported: one HTML file that opens in any browser
