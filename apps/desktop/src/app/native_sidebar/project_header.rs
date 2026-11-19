@@ -563,17 +563,7 @@ impl GhostexGpuiApp {
             .child(
                 div()
                     .when(chip.hidden, |icon| icon.opacity(0.35))
-                    // The computer you're on wears its pip (computer_mark.rs `with_here_pip`),
-                    // unless the needs-you dot holds that corner.
-                    .child(super::computer_mark::with_here_pip(
-                        titlebar_svg_icon(asset, 12.0 * scale, appearance.muted),
-                        12.0 * scale,
-                        scale,
-                        chip.machine_id == ghostex_gx_core::LOCAL_MACHINE_ID
-                            && dot.is_none()
-                            && crate::app::gx_chat::session_directory::several_computers(),
-                        appearance.foreground,
-                    )),
+                    .child(titlebar_svg_icon(asset, 12.0 * scale, appearance.muted)),
             )
             .when_some(dot, |chip, color| {
                 chip.child(

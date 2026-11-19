@@ -136,17 +136,7 @@ impl GhostexGpuiApp {
             } else {
                 appearance.chrome_icon
             });
-        if local {
-            // The computer you're on wears its pip; its tile only shows beside another computer's
-            // (computer_mark.rs `with_here_pip`).
-            super::computer_mark::with_here_pip(
-                icon,
-                size,
-                appearance.scale,
-                true,
-                appearance.foreground,
-            )
-        } else if busy {
+        if busy && !local {
             icon.with_throttled_animation(
                 format!("native-machine-busy-{}", machine.id),
                 std::time::Duration::from_millis(900),
@@ -202,8 +192,7 @@ impl GhostexGpuiApp {
         let tooltip = self.native_machine_tooltip(machine);
         let tooltip_span = super::tooltips::SidebarTooltipSpan::sidebar(self.sidebar_width, scale);
         // An update waiting there: the tab's arrow, small on the tile's top-right corner, clear of
-        // the dots at its bottom centre. Only another computer's tile shows one, so it never meets
-        // the pip on this computer's icon (computer_mark.rs `with_here_pip`).
+        // the dots at its bottom centre.
         let update = (!local)
             .then(|| self.remote_app_update_tab_badge(&id))
             .flatten()
