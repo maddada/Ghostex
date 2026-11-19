@@ -146,7 +146,7 @@ fn machine_icon(pill: &Value) -> String {
 }
 
 /// The session runs on the computer you're on, beside another computer the sidebar lists: its icon
-/// is underlined (native_sidebar/computer_mark.rs `with_here_line`). A Cloud Box or a box is not the
+/// has its dot (native_sidebar/computer_mark.rs `with_here_dot`). A Cloud Box or a box is not the
 /// computer, so it wears none.
 fn here(pill: &Value) -> bool {
     !matches!(
@@ -205,7 +205,7 @@ fn card_header(pill: &Value, ink: CardInk, s: f32) -> gpui::Div {
                 .child(text(card, "title")),
         )
         .child(div().flex_1())
-        .child(crate::app::native_sidebar::computer_mark::with_here_line(
+        .child(crate::app::native_sidebar::computer_mark::with_here_dot(
             svg()
                 .path(machine_icon(pill))
                 .size(px(14.0 * s))
@@ -214,7 +214,7 @@ fn card_header(pill: &Value, ink: CardInk, s: f32) -> gpui::Div {
             14.0 * s,
             s,
             here(pill),
-            ink.foreground,
+            ink.secondary,
         ))
         .child(
             // The computer's name gets most of the row (a chosen name such as "Mohamad's MacBook
@@ -401,12 +401,14 @@ impl NativeChatView {
             machine_icon(&pill)
         };
         let left = half()
-            .child(crate::app::native_sidebar::computer_mark::with_here_line(
+            .child(crate::app::native_sidebar::computer_mark::with_here_dot_at(
                 icon(place_icon),
                 ICON * s,
                 s,
                 !main_hub && here(&pill),
-                p.foreground,
+                p.card_muted,
+                // The pill is short: the dot sits 1px under the icon to clear its edge.
+                1.0,
             ))
             .when(project_w > 0.0, |half| {
                 half.child(label(project.clone(), project_w, p.foreground))

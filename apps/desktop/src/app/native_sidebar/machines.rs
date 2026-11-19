@@ -32,17 +32,17 @@ pub(crate) fn machine_icons_room(shown: usize) -> f32 {
     shown as f32 * (MACHINE_ICON_SIZE + MACHINE_ICON_GAP) + MACHINE_DIVIDER_ROOM
 }
 
-/// How far this computer's tile lifts its icon while it shows status dots, before the zoom, so the
-/// line under the icon (computer_mark.rs `with_here_line`) clears the dots at the bottom centre.
-const HERE_LINE_LIFT: f32 = 4.0;
+/// How far this computer's tile lifts its icon while it shows status dots, and the dot's gap under
+/// the icon then, before the zoom, so the faint dot under the icon (computer_mark.rs
+/// `with_here_dot`) ends where the status dots' ring begins.
+const HERE_DOT_LIFT: f32 = 5.5;
+const HERE_DOT_LIFTED_GAP: f32 = 1.0;
 
 /// A computer's icon in its tile, lifted while `lift` (this computer's, over its status dots).
 fn tile_face(icon: AnyElement, lift: bool, scale: f32) -> gpui::Div {
     div()
         .flex()
-        .when(lift, |face| {
-            face.relative().top(px(-HERE_LINE_LIFT * scale))
-        })
+        .when(lift, |face| face.relative().top(px(-HERE_DOT_LIFT * scale)))
         .child(icon)
 }
 
@@ -133,6 +133,7 @@ impl GhostexGpuiApp {
         systems: &HashMap<String, &'static str>,
         appearance: &SidebarAppearance,
         size: f32,
+        lifted: bool,
     ) -> AnyElement {
         let busy = ghostex_gx_core::machine_state_is_busy(&machine.state);
         let local = machine.id == ghostex_gx_core::LOCAL_MACHINE_ID;
@@ -151,14 +152,19 @@ impl GhostexGpuiApp {
                 appearance.chrome_icon
             });
         if local {
-            // The computer you're on is underlined; its tile only shows beside another computer's
-            // (computer_mark.rs `with_here_line`).
-            super::computer_mark::with_here_line(
+            // The computer you're on has its dot; its tile only shows beside another computer's
+            // (computer_mark.rs `with_here_dot`).
+            super::computer_mark::with_here_dot_at(
                 icon,
                 size,
                 appearance.scale,
                 true,
-                appearance.foreground,
+                appearance.muted,
+                if lifted {
+                    HERE_DOT_LIFTED_GAP
+                } else {
+                    super::computer_mark::DOT_GAP
+                },
             )
         } else if busy {
             icon.with_throttled_animation(
@@ -217,7 +223,7 @@ impl GhostexGpuiApp {
         let tooltip_span = super::tooltips::SidebarTooltipSpan::sidebar(self.sidebar_width, scale);
         // An update waiting there: the tab's arrow, small on the tile's top-right corner, clear of
         // the dots at its bottom centre. Only another computer's tile shows one, so it never meets
-        // the line under this computer's icon (computer_mark.rs `with_here_line`).
+        // the dot under this computer's icon (computer_mark.rs `with_here_dot`).
         let update = (!local)
             .then(|| self.remote_app_update_tab_badge(&id))
             .flatten()
@@ -267,7 +273,13 @@ impl GhostexGpuiApp {
             })
             .hover(|tile| tile.bg(appearance.hover))
             .child(tile_face(
-                self.native_machine_icon(machine, systems, appearance, 15.0 * scale),
+                self.native_machine_icon(
+                    machine,
+                    systems,
+                    appearance,
+                    15.0 * scale,
+                    local && has_status,
+                ),
                 local && has_status,
                 scale,
             ))
@@ -429,7 +441,13 @@ impl GhostexGpuiApp {
             .cursor_pointer()
             .hover(|tile| tile.bg(appearance.hover))
             .child(tile_face(
-                self.native_machine_icon(picked, systems, appearance, 15.0 * scale),
+                self.native_machine_icon(
+                    picked,
+                    systems,
+                    appearance,
+                    15.0 * scale,
+                    picked.id == ghostex_gx_core::LOCAL_MACHINE_ID && has_status,
+                ),
                 picked.id == ghostex_gx_core::LOCAL_MACHINE_ID && has_status,
                 scale,
             ))

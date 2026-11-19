@@ -46,8 +46,8 @@ pub(crate) fn set_computer_icons(icons: std::collections::HashMap<String, &'stat
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(icons);
 }
 
-/// Whether more than one computer is in the sidebar, so the computer you're on is underlined
-/// (native_sidebar/computer_mark.rs `with_here_line`). Never in the web build, which shows one.
+/// Whether more than one computer is in the sidebar, so the computer you're on has its dot
+/// (native_sidebar/computer_mark.rs `with_here_dot`). Never in the web build, which shows one.
 pub(crate) fn several_computers() -> bool {
     COMPUTER_ICONS
         .lock()

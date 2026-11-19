@@ -889,13 +889,13 @@ impl NativeChatView {
                 _ if id == "memory" => Some("titlebar/file-text.svg"),
                 _ => None,
             };
-            // The computer you're on is underlined beside another computer
-            // (native_sidebar/computer_mark.rs `with_here_line`).
+            // The computer you're on has its dot beside another computer
+            // (native_sidebar/computer_mark.rs `with_here_dot`).
             let here = row["icon"] == "computer"
                 && self.config.machine_id == ghostex_gx_core::LOCAL_MACHINE_ID
                 && crate::app::gx_chat::session_directory::several_computers();
             let leading = icon.map(|icon| {
-                crate::app::native_sidebar::computer_mark::with_here_line(
+                crate::app::native_sidebar::computer_mark::with_here_dot(
                     svg()
                         .path(icon)
                         .size(px(14.0 * s))
@@ -904,7 +904,7 @@ impl NativeChatView {
                     14.0 * s,
                     s,
                     here,
-                    p.foreground,
+                    p.muted,
                 )
             });
             let text = match row["badge"].as_str() {

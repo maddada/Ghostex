@@ -62,18 +62,18 @@ pub(super) fn computer_name(tab: &RemoteTab) -> String {
         .unwrap_or_else(crate::host_name::local_computer_name)
 }
 
-/// The line under this computer's icon: its width (a share of the icon's), height and gap under
-/// the icon, as the sidebar draws it (native_sidebar/computer_mark.rs `with_here_line`, which
+/// The faint dot under this computer's icon: its diameter, gap under the icon and share of the muted
+/// text colour, as the sidebar draws it (native_sidebar/computer_mark.rs `with_here_dot`, which
 /// Settings, also drawn by the preview binary, can't call).
-const LINE_WIDTH: f32 = 0.62;
-const LINE_HEIGHT: f32 = 1.5;
-const LINE_GAP: f32 = 2.0;
+const DOT_SIZE: f32 = 3.0;
+const DOT_GAP: f32 = 2.0;
+const DOT_OPACITY: f32 = 0.55;
 
 /// This computer's icon (the one picked for it, else its system's), in the tile a saved computer's
-/// row has, underlined while another computer shows in the sidebar.
+/// row has, with the faint dot under it while another computer shows in the sidebar.
 ///
-/// CDXC:RemoteMachines 2026-11-20 SEE-ALSO: native_sidebar/computer_mark.rs `with_here_line` (Q4248,
-/// the line under the computer you're on).
+/// CDXC:RemoteMachines 2026-11-20 SEE-ALSO: native_sidebar/computer_mark.rs `with_here_dot` (the faint
+/// dot under the computer you're on, like the macOS Dock's).
 pub(super) fn this_computer_icon_tile(
     tab: &RemoteTab,
     t: &RemoteTokens,
@@ -113,12 +113,11 @@ pub(super) fn this_computer_icon_tile(
                     icon.child(
                         div()
                             .absolute()
-                            .left(px(SIZE * (1.0 - LINE_WIDTH) / 2.0))
-                            .top(px(SIZE + LINE_GAP))
-                            .w(px(SIZE * LINE_WIDTH))
-                            .h(px(LINE_HEIGHT))
-                            .rounded(px(1.0))
-                            .bg(hsla(t.foreground)),
+                            .left(px((SIZE - DOT_SIZE) / 2.0))
+                            .top(px(SIZE + DOT_GAP))
+                            .size(px(DOT_SIZE))
+                            .rounded_full()
+                            .bg(hsla(t.muted).opacity(DOT_OPACITY)),
                     )
                 }),
         )
