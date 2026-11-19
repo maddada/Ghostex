@@ -107,6 +107,29 @@ after-release commit (see "Keeping the list").
      `termination reported by launchd (0, 0, 0)` mean a clean quit) plus the
      crash baseline, and finish the remaining GUI steps on the main display
      with background accessibility presses, checking `HIDIdleTime` first.
+   - **Without SpaceO** (11.11.0 run: not installed, `ghostex spaceo status`
+     says so): drive the main display with background cua-driver only; it
+     covers every step except the Search palette half of 5.2 (see there).
+     cua-driver's foreground and desktop-scope input (`delivery_mode:
+     "foreground"`, `scope: "desktop"`) does not reach Ghostex at all: with
+     Ghostex frontmost, desktop keys and Escape left the open palette
+     untouched and foreground pixel clicks pressed nothing. Don't spend time
+     on it. If the user is active (`HIDIdleTime` resets while you are idle),
+     stay in the background.
+   - Frosted sidebar menus (session and project right-click menus) expose
+     only Rename, Pin and Open in a Popup to accessibility; the other rows
+     (Snooze, Park, Advanced, Move to New Group…) can't be pressed in the
+     background (a pixel click on the menu window falls through). Press
+     Escape on the main window (`press_key` pid + its window_id) to dismiss
+     a menu; a background click elsewhere does not.
+   - In `run_script`, `cua.listWindows()` returns `{windows:[…]}`, not an
+     array.
+   - Codex sessions can open on Codex's own "Update available" picker
+     (11.11.0 run: 0.169.1 → 0.170.0); `agents send` then refuses with
+     "Update Codex to …? Answer it in chat before sending". Press Escape in
+     each Codex session (`ghostex send-key <ref> escape`, which picks Skip;
+     never "Update now") and resend with the `--request-id` it printed. The
+     coordinator's First message card survives it.
 7. **A crash at any time** (the app disappears from `list_apps`, a new file in
    `crashes/`, a new panic line, a new DiagnosticReport, or `ghostex sessions`
    hangs more than 15 seconds) is a **Stop**, whichever step was running. Log it
@@ -155,6 +178,11 @@ from the create result.
    3.1) shows only the welcome screen, which has no element to press; press
    its card's Edit/Start area or, once it has replied, a transcript button
    such as `Worked for … · N tool calls` (`spaceo_find "Worked for"`).
+   To keep inside the 15 seconds, do quit, launch and both presses in one
+   `run_script` (`cua.launch("/Applications/Ghostex.app")`, poll
+   `cua.listWindows({pid})` for the big layer-0 window, `app.query({role:
+   "row", name})` then `app.click(token)`, `app.query({name: "Worked for"})`
+   and click it) and return the times; then time `ghostex sessions --json`.
 4. **Pass:** all three answer. **Stop** if any hangs (the freeze).
 
 **1.3 A chat with no saved Reply draft.** Fixes `dbcb1b304`, `52100362b` (v11.8.0).
@@ -209,9 +237,16 @@ otherwise.
 3. `ghostex focus <id>` (keyboard focus to the pane), then type a second
    command with real keys (`spaceo_type` `echo smoke-keys-4.1` with submit, or
    cua-driver `type_text` and `press_key` Return), so real keys are tested, not
-   only the CLI. Also paste one line: save the user's clipboard (`pbpaste >
-   $W/clipboard-saved.txt`), put the line on it, cua-driver `hotkey` cmd+v on
+   only the CLI. Without SpaceO, `type_text` with only pid/window is refused
+   (`no_focused_text_input`); pass the token of the `AXTextArea "Terminal"`
+   row (`get_window_state` query `Terminal`). Also paste one line: save the
+   user's clipboard, put the line on it, cua-driver `hotkey` cmd+v on
    the window (it runs Edit > Paste), Return, then restore the clipboard.
+   `pbpaste` saves text only: when `osascript -e 'clipboard info'` shows an
+   image or HTML, save and restore every type with
+   `~/.local/share/agent-work/Ghostex/smoke/scripts/pbarchive save|restore
+   <file>` (Swift, NSPasteboard; `cmp` a second save against the first to
+   prove the restore).
 4. **Pass:** `ghostex read-text <id> --lines 20` shows `smoke-ok-4.1` and
    `smoke-keys-4.1`, and the paste lands with no "can't be delivered" message.
    **Stop** if typed keys or the paste don't arrive (`dd5fd7d46`, next release).
@@ -220,7 +255,9 @@ otherwise.
 1. Open a browser pane: `ghostex browser open https://duckduckgo.com --project-id $P --reuse none`.
 2. Type `ghostex terminal` and press Return. A background click can't focus the
    address bar, but DuckDuckGo focuses its own search box, so the keys land
-   there; say which box you typed in.
+   there; say which box you typed in. Without SpaceO the box isn't focused
+   by itself: `type_text` with x,y on DuckDuckGo's box (no element_token)
+   pixel-focuses it in the background and types; check with `zoom`.
 3. **Pass:** every letter shows in the box (screenshot) and a results page loads
    with links (read its title or text). **Stop** if keys don't land; **Warn** if
    the page doesn't load (network). The native window title stays "Ghostex",
@@ -247,7 +284,15 @@ Settings' search. **Pass:** each shows every letter and the list narrows. Clear
 both. The sidebar has no filter box of its own: its search is the Search
 palette, the sidebar's `Search (⌘P)` button (`spaceo_find "search"`), which
 opens on its Sessions tab with the box focused (a TextField labelled
-`Search sessions...`); Escape closes it.
+`Search sessions...`); Escape closes it. Without SpaceO (Ghostex not
+the active app, 11.11.0 run) this half can't be driven: pressing the button
+by accessibility opens the palette and it closes again at once; Cmd+P
+(`hotkey` on the main window) keeps it open, but cua-driver refuses to type
+into it (`window_not_key`: macOS still reports the main window as key), and
+pid-targeted `press_key` letters close it and land in the open chat's box
+as stray text (clear them and check `read-session-chat-queue` `.draft`).
+Mark that half NOT RUN (tool route) and say so; Settings' search, the
+chat box (5.4) and the terminal (4.1) still cover native typing.
 
 **5.3 An inline HTML page with inputs.**
 1. Write a throwaway page to `$W/smoke-page.html` from the `ghostex-visuals`
@@ -300,7 +345,9 @@ opens on its Sessions tab with the box focused (a TextField labelled
 1. `ghostex focus $ref` (the 2.1 chat; this puts keyboard focus in its chat
    box), type a short message `smoke-chat-5.4` with real keys, press Return.
    `ghostex read-session-chat-queue $ref --json` `.draft.content` shows what
-   the box holds.
+   the box holds. In the background, `type_text` needs the composer's
+   `AXTextArea` token (query `AXTextArea`; after a send the query
+   `Message composer` no longer returns the row).
 2. Then a long one-line message (about 600 characters of `smoke ` repeated, no
    newline), press Return (`b89d89a10`, next release).
 3. **Pass:** each time the box empties and the message shows in the transcript
@@ -333,8 +380,12 @@ files to `$W` before 6.1 and put the old values back after 6.2.
 
 Close every `smoke-*-runN` session (`ghostex agents close <ref>` for threads and
 coordinators, which then stay in `coordinator list` as `stopped`; `ghostex kill`
-for terminals), retire the test page, close the browser tabs you opened (the
-tab's x), remove any project a step added (`ghostex remove-project --project-id <id>`),
+for terminals), retire the test page and close its page window (its `Close`
+button is in the tree), close the browser tabs you opened (the tab's x; it
+isn't in the accessibility tree and File > Close Pane stays disabled, so
+without SpaceO close its DevTools target: `curl
+http://127.0.0.1:9334/json/close/<id>` with the id from `/json/list`, which
+drops the tab and the split cleanly), remove any project a step added (`ghostex remove-project --project-id <id>`),
 put any setting you touched back (Claude and Codex defaults, the clipboard),
 and end the SpaceO session (`spaceo_session_destroy` with `keep_apps`; a
 hover tooltip left on its display blocks that until Ghostex next restarts). List what you removed in the report (AGENTS.md:
