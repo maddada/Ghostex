@@ -94,8 +94,16 @@ pub(crate) fn changed(id: &str, updated: bool) {
             if item["latest"].is_string() {
                 item["installed"] = item["latest"].clone();
             }
-            if item["state"] == "available" {
+            // Whatever the check stored (an update, an Install in Not installed, a failure, a
+            // row caught mid-update), it is in place now.
+            if matches!(
+                item["state"].as_str(),
+                Some("available" | "notInstalled" | "failed" | "updating")
+            ) {
                 item["state"] = json!("upToDate");
+                item["canInstall"] = json!(false);
+                item["error"] = Value::Null;
+                item["progress"] = Value::Null;
             }
         }
     }
