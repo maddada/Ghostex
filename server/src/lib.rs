@@ -60,6 +60,7 @@ pub(crate) mod gbots;
 pub mod ghostex_cli;
 pub mod git_ship_workflow;
 pub mod global_project_defaults;
+pub(crate) mod grokbot;
 pub(crate) mod headless_settings;
 pub(crate) mod hermes_gateway;
 pub(crate) mod hookless_activity;

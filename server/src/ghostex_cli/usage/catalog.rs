@@ -266,6 +266,10 @@ pub fn usage() -> String {
             "Ask the user for a password, API key or token through a private card in this session's chat, and wait for the answer. The value never enters the chat or your context: when saved, the result names an owner-only file (deleted after 24 hours) to read inside the command that needs it. Use it instead of asking for a secret in chat, and for a sudo password",
         ),
         format_help_command(
+            "grokbot [status] | connect [<url>] [--key-stdin] | notify [--kind ask|blocked|done|report|info] \"<text>\" | test | disconnect | brief | instructions",
+            "Connect the Ghostex bot in Grok Bot (xAI) so the user can drive agents from it and agents can reach them: connect keeps its webhook routine's address and key (asked without showing it, never printed), notify sends the user a note through it, brief is the bot's current command list",
+        ),
+        format_help_command(
             "needs-you add \"what to do\" [--detail text] [--command text] [--answer label]... | list [--all] | done Q<n> | drop Q<n>",
             "Put a step only the user can do (a sudo command, a tap on their phone, a sign-in, a check by eye) above this session's chat box as a to-do with a Done button; it stays until they press Done or you clear it, and their answer arrives as \"Q61: Done\". Add one without being asked whenever such a step blocks your work",
         ),

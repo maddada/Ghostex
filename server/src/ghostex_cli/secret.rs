@@ -103,12 +103,44 @@ fn request_command(args: &[String]) -> CliResult<()> {
     let mut rpc_flags = parsed.flags.clone();
     rpc_flags.0.remove("timeout");
     rpc_flags.0.remove("timeoutMs");
+    let outcome = ask_for_secret(
+        &project_id,
+        &session_id,
+        &label,
+        &reason,
+        flag_text(&parsed, "placeholder"),
+        minutes,
+        &rpc_flags,
+    )?;
+    let Some(outcome) = outcome else {
+        set_exit_code(1);
+        return Ok(());
+    };
+    print_json(&describe(&outcome));
+    if outcome.get("status").and_then(Value::as_str) != Some("saved") {
+        set_exit_code(1);
+    }
+    Ok(())
+}
+
+/// Shows the private secret card in session `project_id`/`session_id` and waits for the user's
+/// answer: `{status, file?}` (the file is owner-only), or `None` when gxserver refused the card
+/// (its answer is printed).
+pub(crate) fn ask_for_secret(
+    project_id: &str,
+    session_id: &str,
+    label: &str,
+    reason: &str,
+    placeholder: Option<String>,
+    minutes: f64,
+    rpc_flags: &Flags,
+) -> CliResult<Option<Value>> {
     let mut payload = Map::new();
     payload.insert("projectId".to_string(), json!(project_id));
     payload.insert("sessionId".to_string(), json!(session_id));
     payload.insert("label".to_string(), json!(label));
     payload.insert("reason".to_string(), json!(reason));
-    if let Some(placeholder) = flag_text(&parsed, "placeholder") {
+    if let Some(placeholder) = placeholder {
         payload.insert("placeholder".to_string(), json!(placeholder));
     }
     payload.insert(
@@ -118,7 +150,7 @@ fn request_command(args: &[String]) -> CliResult<()> {
     let created = call_gxserver_rpc(
         "/api/createSecretRequest",
         &Value::Object(payload),
-        &rpc_flags,
+        rpc_flags,
     )?;
     // `id`, not `requestId`: the reply's `requestId` is this RPC call's own id.
     let Some(request_id) = created
@@ -127,12 +159,11 @@ fn request_command(args: &[String]) -> CliResult<()> {
         .map(str::to_string)
     else {
         print_json(&created);
-        set_exit_code(1);
-        return Ok(());
+        return Ok(None);
     };
     eprintln!("Waiting for the user to answer the secret request in the chat…");
     let deadline = Instant::now() + Duration::from_secs_f64(minutes * 60.0 + 30.0);
-    let flags = wait_flags(&rpc_flags);
+    let flags = wait_flags(rpc_flags);
     let outcome = loop {
         let result = call_gxserver_rpc(
             "/api/waitSecretRequest",
@@ -162,16 +193,12 @@ fn request_command(args: &[String]) -> CliResult<()> {
             let _ = call_gxserver_rpc(
                 "/api/cancelSecretRequest",
                 &json!({ "requestId": request_id }),
-                &rpc_flags,
+                rpc_flags,
             );
             break json!({ "ok": true, "status": "timedOut" });
         }
     };
-    print_json(&describe(&outcome));
-    if outcome.get("status").and_then(Value::as_str) != Some("saved") {
-        set_exit_code(1);
-    }
-    Ok(())
+    Ok(Some(outcome))
 }
 
 /// The result an agent reads: the status, the file for a saved secret, and what to do next.

@@ -5065,6 +5065,60 @@ default). CLI: `ghostex gbots list`, `show`, `create`, `edit`, `remove`,
 `day-watch`, `ask`, `assignments`, `changes`, `undo`, `flag`, `problem`,
 `department`, `team`, `preset`, `computer`, `api`.
 
+## Grok Bot (drive your agents from xAI's Grok Bot)
+
+Grok Bot is xAI's assistant app (not Ghostex's own GBots). A "Ghostex" bot in
+Grok Bot can drive your Ghostex agents from your phone or desktop: say what
+your agents are doing, hand new work to a coordinator, message one agent, and
+pass on your answers. It works by running the `ghostex` command on your
+computer through the Grok Bot desktop app. Your agents reach you back through
+the bot: Ghostex sends their notes to a webhook routine on the bot.
+`ghostex grokbot` comes with the Ghostex release after 11.10.0; on 11.10.0
+and older, `ghostex grokbot` is an unknown command.
+
+Connect the two:
+
+1. Install the Grok Bot desktop app on the computer that runs Ghostex, sign
+   in, and leave it running (the computer has to be on and awake).
+2. In Grok Bot, make a new bot named Ghostex and paste in its instructions:
+   run `ghostex grokbot instructions` and copy what it prints.
+3. Say hi to it. When it asks to run `ghostex grokbot brief` on your computer,
+   choose Allow once. Keep Settings > Computer > Execution on this computer at
+   Ask every time until you trust it: every command then shows on a card first.
+4. Ask it to "add a routine called Ghostex reports with a webhook trigger".
+   Open that routine on the desktop and, under Webhook, copy POST to and key.
+5. In your own terminal run `ghostex grokbot connect <the POST to address>`
+   and paste the key when asked (it doesn't show). Ghostex sends a test note
+   to the bot's chat.
+6. Try it: ask the bot "What are my agents doing?"
+
+What the bot may do: anything the `ghostex` command can, including answering
+an agent's question or permission prompt and unblocking a stuck agent, but
+only when you say so in its chat ("approve it", "yes, allow that"). Its
+instructions tell it never to act on its own judgment or because an agent,
+a note, a web page or a message asks. That rule lives in the bot's
+instructions, and the real limit is Grok Bot's approval card for each
+command: a command the bot runs on your computer acts as you. "Always allow"
+in Grok Bot applies to every bot on that computer. Letting in a new phone or
+computer, and approvals Ghostex asks you to confirm with Touch ID or a PIN,
+always stay with you.
+
+The webhook key: Ghostex keeps it in a file only you can read, never prints
+it, and never gives it to agents; agents send notes with `ghostex grokbot
+notify` and Ghostex does the sending. The key can only start that one
+routine. Notes are sent together, at most one call every 20 seconds, and
+retried when Grok Bot doesn't answer; each call uses some of your Grok Bot
+usage. While Grok Bot is connected, agents Ghostex starts are told about
+`ghostex grokbot notify`.
+
+To stop: in Grok Bot, set Execution on this computer to Never allow; run
+`ghostex grokbot disconnect` (Ghostex forgets the address and key) and delete
+the routine's webhook.
+
+CLI: `ghostex grokbot` (status), `connect [<url>] [--key-stdin]`,
+`notify [--kind ask|blocked|done|report|info] "<text>"`, `test`,
+`disconnect`, `brief`, `instructions`.
+
 ## Voice agent
 
 Talk to your agents out loud. On a Mac, Windows or Linux, the headset button in
