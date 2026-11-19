@@ -264,10 +264,36 @@ impl NativeChatView {
     ) -> Option<AnyElement> {
         let open = row["open"].clone();
         let reply = row["reply"].clone();
+        // Details: the question's details and its answers are in its panel (gx-chat-core
+        // `details_fields`), which a click on the row opens too.
+        if row["details"] == true {
+            let shown = key.to_string();
+            return Some(
+                self.dock_tone_button(
+                    gpui::SharedString::from(format!("work-row-details:{key}")),
+                    "Details",
+                    Some("titlebar/file-text.svg"),
+                    ToneButton::Secondary,
+                    None,
+                    false,
+                    p,
+                )
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    cx.stop_propagation();
+                    this.open_dock_ask_modal(&shown, window, cx);
+                }))
+                .into_any_element(),
+            );
+        }
         // Each carries its icon, so it reads as an action and not as an answer.
         let (label, icon, id) = if open.is_object() {
             (
-                "Open",
+                // Answer while it asks something, Open for a page that only waits to be seen.
+                if text(row, "openLabel") == "Answer" {
+                    "Answer"
+                } else {
+                    "Open"
+                },
                 "titlebar/arrow-up-right.svg",
                 format!("work-row-open:{key}"),
             )

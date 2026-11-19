@@ -179,6 +179,9 @@ never with your built-in question tool:
   about ten words, no item or code names ("Ship the new pairing screen today?"). Everything else
   (why, what to check, where) goes in `--detail`, read when the row is opened: Markdown (bold, code,
   links, lists; `#123` links to the PR) in a few short lines or bullets, not one long paragraph.
+  Give `--detail` only when the user needs it to decide: the row then shows Details, and its answers
+  wait in the panel under the detail. A yes/no the title answers alone gets no `--detail`, so its
+  answers stay on the row, one click.
 - **One quick pick, 2 to 4 short answers, nothing to explain:** a Markdown link per answer after the
   question: `Delete the branch? [Yes](ghostex-answer:Q41 "recommended") [No](ghostex-answer:Q41)`.
 - **Several questions, a text answer, multi-select, or choices that need a line of detail:** a
