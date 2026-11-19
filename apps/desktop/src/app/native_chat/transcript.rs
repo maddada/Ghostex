@@ -597,6 +597,24 @@ impl NativeChatView {
                 .into_any_element();
         }
         let row = self.message_row_drawn(message, p, window, cx);
+        // A right press inside a prompt or a final reply opens its ⋯ menu (transcript_menu.rs).
+        let row = match self.message_menu_rows(message) {
+            Some(rows) => {
+                let id = text(message, "id");
+                div()
+                    .w_full()
+                    .min_w_0()
+                    .on_mouse_down(
+                        gpui::MouseButton::Right,
+                        cx.listener(move |chat, event: &gpui::MouseDownEvent, window, cx| {
+                            chat.message_secondary_press(&id, rows.clone(), event, window, cx)
+                        }),
+                    )
+                    .child(row)
+                    .into_any_element()
+            }
+            None => row,
+        };
         let row = match message["id"].as_str() {
             Some(id) if message["role"] == "assistant" => self.reply_arrival_row(id, row, window),
             _ => row,

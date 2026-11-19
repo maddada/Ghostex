@@ -1,6 +1,7 @@
 //! The transcript's right-click menu: reference rows on a pill or link, then Copy, Add to Chat and
 //! Reply.
 
+use super::message_actions::MESSAGE_MENU_TRIGGER;
 use super::state::NativeChatView;
 use gpui::{Context, MouseDownEvent, Pixels, Point, Window};
 use serde_json::{Value, json};
@@ -101,6 +102,58 @@ impl NativeChatView {
     ) {
         if self.show_transcript_menu(None, event.position, window, cx) {
             cx.stop_propagation();
+        }
+    }
+
+    /// A right press inside a prompt or a final reply that no pill, link or control claimed first:
+    /// the message's own ⋯ menu (`rows`) at the pointer. With text selected the transcript menu's
+    /// Copy, Add to Chat and Reply come first, then a separator, then the message's rows.
+    ///
+    /// CDXC:SessionChat 2026-11-19 DECISION:
+    /// User: "pls make this menu appear when i right click in the middle of a message of mine; also same idea for ai's messages". The ⋯ button's menu opens from a right press anywhere in the message, on the same toggle key as the button, so the ⋯ stays shown while it is up and a second right press closes it.
+    pub(super) fn message_secondary_press(
+        &mut self,
+        id: &str,
+        rows: Vec<Value>,
+        event: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if rows.is_empty() {
+            return;
+        }
+        let at = event.position;
+        let selection = gpui_component::TextSelection::selected_text(window, cx)
+            .trim()
+            .to_owned();
+        let mut menu = if selection.is_empty() || !self.in_main_transcript(at) {
+            Vec::new()
+        } else {
+            self.transcript_menu_rows(None, &selection)
+        };
+        // The Reply popover opens where the menu did (reply_popover.rs).
+        for row in &mut menu {
+            if row["command"]["type"] == "replyToSelection" {
+                row["command"]["at"] = json!([f32::from(at.x), f32::from(at.y)]);
+            }
+        }
+        if !menu.is_empty() {
+            menu.push(json!({"separator":true}));
+        }
+        menu.extend(rows);
+        cx.stop_propagation();
+        if self.chat_menu_toggled_shut(MESSAGE_MENU_TRIGGER, cx) {
+            return;
+        }
+        // A chat drawn in one of its own windows (the floating chat) keeps the menu there.
+        let in_main = self
+            .open_main_window(cx)
+            .is_none_or(|main| main == window.window_handle());
+        self.message_menu = Some(id.to_owned());
+        if in_main {
+            self.show_chat_menu_at(menu, at, 240.0, window, cx);
+        } else {
+            self.show_chat_menu_in_window_at(menu, at, 240.0, window, cx);
         }
     }
 

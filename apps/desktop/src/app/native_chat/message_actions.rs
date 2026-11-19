@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 
 /// Toggle key in `menu_toggle.rs` for every message's ⋯ menu: a second press on a ⋯ while its
 /// menu is up only closes it.
-const MESSAGE_MENU_TRIGGER: &str = "chat-message-more";
+pub(super) const MESSAGE_MENU_TRIGGER: &str = "chat-message-more";
 
 impl NativeChatView {
     /// The focus a reply tracks for its action row; at Message spacing Compact (`compact`) your
@@ -40,6 +40,20 @@ impl NativeChatView {
         let focus = state.read(cx).clone();
         let focused = focus.contains_focused(window, cx);
         Some((focus, focused))
+    }
+
+    /// The ⋯ menu's rows for a prompt of yours or a final reply, the ones that have a ⋯ under
+    /// them; `None` for any other row.
+    pub(super) fn message_menu_rows(&self, message: &Value) -> Option<Vec<Value>> {
+        if Self::has_user_bar(message) {
+            let id = text(message, "id");
+            let prompt = text(message, "copyText");
+            Some(self.user_menu_rows(message, &id, &prompt))
+        } else if self.has_reply_actions(message) {
+            Some(self.reply_menu_rows(message))
+        } else {
+            None
+        }
     }
 
     /// Whether a prompt of yours has an action row: anything to copy.
@@ -199,7 +213,7 @@ impl NativeChatView {
     ///
     /// CDXC:VoiceMode 2026-10-21 DECISION:
     /// User (Q24): the desktop's Read aloud action goes last among the reply's actions. It reads Stop reading on the reply being read; the core decides both (packages/gx-chat-core/src/read_aloud/actions.rs), and it shows only while Read aloud is on and this computer has a voice (`readAloud.available`).
-    fn reply_menu_rows(&self, message: &Value) -> Vec<Value> {
+    pub(super) fn reply_menu_rows(&self, message: &Value) -> Vec<Value> {
         let id = text(message, "id");
         let markdown = text(message, "copyText");
         let mut rows = vec![json!({
@@ -218,9 +232,8 @@ impl NativeChatView {
                 "command":{"type":"markdownSaveOpen","markdown":markdown},
             }));
         }
-        if let Some(row) = self.fork_from_here_row(&id) {
-            rows.push(row);
-        }
+        // CDXC:SessionChat 2026-11-19 DECISION:
+        // User: "i dont think fork from here makes sense on agent's message?? it only makes sense on my messages so remove it from their messages 3 dots". Fork from here stays on your own prompts' ⋯ menu only (`user_menu_rows`).
         let read_aloud = &self.snapshot["readAloud"];
         if read_aloud["available"] == true {
             let reading = read_aloud["speakingId"] == message["id"];
@@ -394,7 +407,7 @@ impl NativeChatView {
     /// agent whose rewind Ghostex drives, and the composer could send right now, because the daemon
     /// types the rewind into that same pane. Which prompt is a rewind target at all is decided in
     /// the core (`canRewind`, packages/gx-chat-core/src/transcript/presentation.rs).
-    fn user_menu_rows(&self, message: &Value, id: &str, prompt: &str) -> Vec<Value> {
+    pub(super) fn user_menu_rows(&self, message: &Value, id: &str, prompt: &str) -> Vec<Value> {
         let saved = self.snapshot["savedPrompts"][id].as_str().unwrap_or("");
         // A rewind types into the session's own pane, so a child transcript never offers one
         // (React's subagent viewer mounted its list without `rewindToMessage` for the same reason).
@@ -471,7 +484,7 @@ impl NativeChatView {
     }
 
     /// Fork from here (#362): a new session of the same agent whose conversation ends at this
-    /// message, opened beside this one. Offered where the core says the agent's conversation can be
+    /// prompt of yours, opened beside this one. Offered where the core says the agent's conversation can be
     /// cut at a message (`forkFromMessageAvailable`, Claude Code only), never in a subagent's
     /// transcript, which is not the session's own conversation.
     fn fork_from_here_row(&self, id: &str) -> Option<Value> {
