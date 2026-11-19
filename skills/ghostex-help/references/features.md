@@ -1813,8 +1813,10 @@ left). An answer given in a coordinator's list or Work panel waits out a
 restarting service the same way.
 Type `/` in the chat box to pick one of the agent's skills (`$` opens the same
 list), `@` to mention a project file, and `+` (at the start or after a space) to mention another agent
-session of the same project: the list shows each session's logo, title and
-whether it is working, newest first, and narrows as you type. A picked session
+session: the list shows this project's agents first, then every other agent you can
+reach, grouped under each computer's name (the project shows on each row), with each
+session's logo, title and whether it is working, newest first. Typing narrows it by
+title, project or computer across every group. A picked session
 goes in as a mention, `[<title>](<Global Ref>)`, which the agent can pass to
 `ghostex agents send`. The skills list holds the skills that agent's own CLI loads: its
 home skills folders (Codex, Pi, Cursor and GitHub Copilot also read
