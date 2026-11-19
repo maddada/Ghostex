@@ -118,6 +118,7 @@ fn code_server_row(
     app: &GhostexGpuiApp,
     store: Option<&component_store::ComponentStore>,
     warning: &mut Option<String>,
+    measure_sizes: bool,
 ) -> PluginsModalRow {
     let installing =
         app.source_code_server_runtime.state == SourceCodeServerRuntimeLaunchState::Installing;
@@ -160,7 +161,9 @@ fn code_server_row(
             version = source_code_server_checkout_version(&path)
                 .unwrap_or_else(|| "Source checkout".to_string());
         }
-        size_bytes = component_store::path_size_bytes(&path).unwrap_or(0);
+        if measure_sizes {
+            size_bytes = component_store::path_size_bytes(&path).unwrap_or(0);
+        }
     }
 
     let status = if app.plugin_settings_action_errors.contains_key("code")
@@ -223,12 +226,30 @@ fn source_code_server_checkout_version(repo_root: &Path) -> Option<String> {
 }
 
 pub(super) fn plugin_settings_status_message(app: &GhostexGpuiApp) -> serde_json::Value {
+    plugin_settings_status(app, true)
+}
+
+/// The same rows without their sizes, for the Updates list, which reads only their state.
+///
+/// CDXC:Updates 2026-11-19 WHY: a row's size comes from walking its folder on disk, and the
+/// Updates list was built on the UI thread every time it was published (its watch every few
+/// seconds while a computer's list moved, and twice whenever Settings opened). On Windows the
+/// bundled code-server folder is 6,217 files: one walk froze the window for over a second
+/// (a profile of the user's app had it at 64% of a two-second spike).
+pub(super) fn plugin_settings_status_without_sizes(app: &GhostexGpuiApp) -> serde_json::Value {
+    plugin_settings_status(app, false)
+}
+
+fn plugin_settings_status(app: &GhostexGpuiApp, measure_sizes: bool) -> serde_json::Value {
     let store_result = on_demand_component_store();
     let mut warning = store_result.as_ref().err().cloned();
     let store = store_result.ok().flatten();
     let rows = [
-        ("code", code_server_row(app, store.as_ref(), &mut warning)),
-        ("cef", cef_row(store.as_ref(), &mut warning)),
+        (
+            "code",
+            code_server_row(app, store.as_ref(), &mut warning, measure_sizes),
+        ),
+        ("cef", cef_row(store.as_ref(), &mut warning, measure_sizes)),
     ];
     let plugins = rows
         .into_iter()
@@ -314,6 +335,7 @@ fn plugin_settings_status_wire(status: PluginsModalStatus) -> (&'static str, Str
 fn cef_row(
     store: Option<&component_store::ComponentStore>,
     warning: &mut Option<String>,
+    measure_sizes: bool,
 ) -> PluginsModalRow {
     use crate::app::helpers::web_runtime::{WebRuntimeState, web_runtime_state};
     let state = web_runtime_state();
@@ -336,7 +358,10 @@ fn cef_row(
             Err(error) => set_first_warning(warning, error),
         }
     }
-    if !managed_installed && let Some(path) = bundled_path.as_deref() {
+    if measure_sizes
+        && !managed_installed
+        && let Some(path) = bundled_path.as_deref()
+    {
         size_bytes = component_store::path_size_bytes(path).unwrap_or_else(|error| {
             set_first_warning(warning, error);
             0

@@ -121,7 +121,7 @@ impl GhostexGpuiApp {
 
     /// The VS Code view (code-server) while its view is on, and the Chromium runtime.
     fn component_update_items(&self, auto: &[String]) -> Vec<Value> {
-        let status = crate::plugins_modal::plugin_settings_status_message(self);
+        let status = crate::plugins_modal::plugin_settings_status_without_sizes(self);
         let store = crate::on_demand_component_store().ok().flatten();
         let mut items = Vec::new();
         for (plugin, component, name) in [
