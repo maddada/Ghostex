@@ -15,19 +15,23 @@ pub(super) async fn route_grokbot_http(
         endpoint,
         request_id,
         body_json,
+        caller,
         ..
     } = request;
     // Off the async runtime: `connect` and `test` call Grok Bot.
     let worker_state = state.clone();
     let worker_endpoint = endpoint.path.clone();
     let worker_request_id = request_id.clone();
+    let server_id = state.metadata.server_id.clone();
     let response = tokio::task::spawn_blocking(move || {
         handle_domain_http(
             &worker_state,
             worker_endpoint,
             worker_request_id,
             &body_json,
-            |_, _, params, _| crate::grokbot::handle(&worker_state.paths, params),
+            |_, _, params, _| {
+                crate::grokbot::handle(&worker_state.paths, params, &caller, &server_id)
+            },
         )
     })
     .await;

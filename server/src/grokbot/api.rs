@@ -7,6 +7,7 @@ use super::delivery::{self, files_lock, now_ms, MAX_QUEUE};
 use super::store::{self, Connection, QueuedNote};
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
+use crate::security::Principal;
 
 pub(crate) const GROKBOT_ENDPOINT: &str = "/api/grokbot";
 
@@ -31,6 +32,35 @@ fn clean(value: &str, max: usize, multiline: bool) -> String {
         .filter(|c| !c.is_control() || (multiline && matches!(c, '\n' | '\t')))
         .take(max)
         .collect()
+}
+
+/// A session's global reference (`S90:P3lv0:G9jt7`): three parts of letters, digits, `-` and
+/// `_`, so a reference can never carry shell syntax into the command the bot runs with it.
+fn is_global_ref(value: &str) -> bool {
+    let parts = value.split(':').collect::<Vec<_>>();
+    parts.len() == 3
+        && parts.iter().all(|part| {
+            !part.is_empty()
+                && part.len() <= 64
+                && part
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+        })
+}
+
+/// CDXC:GrokBot 2026-11-20 WHY: `connect`, `test` and `disconnect` change or use where the key
+/// goes, so only this computer's own callers make them: the desktop app, the token file (the
+/// user's terminal, and the Grok Bot desktop app's commands) and this computer's agent sessions.
+/// The `full_local` label in protocol.rs doesn't keep paired phones or other computers out (every
+/// request reaches the router as a local one), so the caller is checked here.
+fn require_this_computer(caller: &Principal) -> Result<(), DomainStateError> {
+    match caller {
+        Principal::Owner { .. } | Principal::LocalAgent | Principal::Session { .. } => Ok(()),
+        _ => Err(DomainStateError {
+            code: "forbidden",
+            message: "Connect, test and disconnect Grok Bot on the computer itself.".to_string(),
+        }),
+    }
 }
 
 /// The webhook address: https, or http to this computer only (a stand-in while testing).
@@ -114,6 +144,9 @@ fn connect(paths: &GxserverPaths, params: &Map<String, Value>) -> Result<Value, 
         };
         store::write_connection(paths, &connection).map_err(io_error)?;
     }
+    delivery::note_post();
+    // Notes queued before (or under an older key) go out now.
+    delivery::kick(paths);
     let mut result = status(paths);
     result["tested"] = json!(tested.is_ok());
     if let Err(message) = tested {
@@ -138,7 +171,14 @@ fn test(paths: &GxserverPaths) -> Result<Value, DomainStateError> {
     else {
         return Err(not_connected());
     };
+    if let Some(wait) = delivery::wait_before_next_post() {
+        return Err(DomainStateError::bad_request(format!(
+            "Ghostex sends Grok Bot at most one call every 20 seconds. Try again in {} seconds.",
+            wait.as_secs().max(1)
+        )));
+    }
     let note = test_note("Test from Ghostex. Reply here to check the bot can reach Ghostex too.");
+    delivery::note_post();
     let outcome = delivery::post(&connection.url, &key, &delivery::body(&[note]));
     let _guard = files_lock();
     if let Some(mut connection) = store::read_connection(paths) {
@@ -169,7 +209,12 @@ fn not_connected() -> DomainStateError {
     )
 }
 
-fn notify(paths: &GxserverPaths, params: &Map<String, Value>) -> Result<Value, DomainStateError> {
+fn notify(
+    paths: &GxserverPaths,
+    params: &Map<String, Value>,
+    caller: &Principal,
+    server_id: &str,
+) -> Result<Value, DomainStateError> {
     if store::read_connection(paths).is_none() || store::read_key(paths).is_none() {
         return Err(not_connected());
     }
@@ -188,13 +233,24 @@ fn notify(paths: &GxserverPaths, params: &Map<String, Value>) -> Result<Value, D
         from.and_then(|from| text(from, key))
             .map(|value| clean(&value, MAX_FIELD_CHARS, false))
     };
+    // An agent's own session token names the sender; anyone else's ref is kept only in the
+    // global reference shape, since the bot runs `ghostex agents send <ref> …` with it.
+    let reply_to = match caller {
+        Principal::Session {
+            project_id,
+            session_id,
+            ..
+        } => Some(format!("{server_id}:{project_id}:{session_id}")),
+        _ => from.and_then(|from| text(from, "ref")),
+    }
+    .filter(|value| is_global_ref(value));
     let note = QueuedNote {
         at: now_ms(),
         kind,
         text: body,
         project: field("project"),
         agent: field("agent"),
-        reply_to: field("ref"),
+        reply_to,
     };
     let queued = {
         let _guard = files_lock();
@@ -221,13 +277,19 @@ fn disconnect(paths: &GxserverPaths) -> Result<Value, DomainStateError> {
 pub(crate) fn handle(
     paths: &GxserverPaths,
     params: &Map<String, Value>,
+    caller: &Principal,
+    server_id: &str,
 ) -> Result<Value, DomainStateError> {
-    match text(params, "op").as_deref().unwrap_or("status") {
+    let op = text(params, "op").unwrap_or_else(|| "status".to_string());
+    if matches!(op.as_str(), "connect" | "disconnect" | "test") {
+        require_this_computer(caller)?;
+    }
+    match op.as_str() {
         "status" => Ok(status(paths)),
         "connect" => connect(paths, params),
         "disconnect" => disconnect(paths),
         "test" => test(paths),
-        "notify" => notify(paths, params),
+        "notify" => notify(paths, params, caller, server_id),
         other => Err(DomainStateError::bad_request(format!(
             "Unknown op \"{other}\": use status, connect, disconnect, test or notify."
         ))),

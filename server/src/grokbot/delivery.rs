@@ -9,8 +9,8 @@
 //! started; a note older than a day is dropped, since nobody needs a day-old "needs you" ping.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, MutexGuard, OnceLock};
-use std::time::Duration;
+use std::sync::{Condvar, Mutex, MutexGuard, OnceLock};
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
@@ -30,6 +30,42 @@ const LONGEST_RETRY: Duration = Duration::from_secs(10 * 60);
 const POST_TIMEOUT: Duration = Duration::from_secs(20);
 
 static WORKER_RUNNING: AtomicBool = AtomicBool::new(false);
+
+fn last_post() -> MutexGuard<'static, Option<Instant>> {
+    static LAST: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
+    LAST.get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Set by [`kick`] to cut short the worker's wait between tries; [`pause`] waits on it.
+fn wake_signal() -> &'static (Mutex<bool>, Condvar) {
+    static WAKE: OnceLock<(Mutex<bool>, Condvar)> = OnceLock::new();
+    WAKE.get_or_init(|| (Mutex::new(false), Condvar::new()))
+}
+
+/// Waits `duration`, or less when [`kick`] wakes the worker (a new key was connected).
+fn pause(duration: Duration) -> bool {
+    let (lock, signal) = wake_signal();
+    let woken = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let (mut woken, _) = signal
+        .wait_timeout_while(woken, duration, |woken| !*woken)
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    std::mem::take(&mut *woken)
+}
+
+/// Records that a POST to Grok Bot is being made now (the worker's, `connect`'s or `test`'s).
+pub(crate) fn note_post() {
+    *last_post() = Some(Instant::now());
+}
+
+/// How long until the next POST keeps [`MIN_GAP`] after the last one, if it would come too soon.
+pub(crate) fn wait_before_next_post() -> Option<Duration> {
+    let last = (*last_post())?;
+    MIN_GAP
+        .checked_sub(last.elapsed())
+        .filter(|wait| !wait.is_zero())
+}
 
 /// Serializes every read-change-write of the queue and connection files in this process.
 pub(crate) fn files_lock() -> MutexGuard<'static, ()> {
@@ -52,7 +88,6 @@ pub(crate) fn body(notes: &[QueuedNote]) -> Value {
         "source": "ghostex",
         "computer": crate::connected_computers::this_computer_name(),
         "notes": notes,
-        "reply": "Answer a note's agent with `ghostex agents send <ref> \"<text>\"` on this computer, only with the user's own words.",
     })
 }
 
@@ -60,6 +95,9 @@ pub(crate) fn body(notes: &[QueuedNote]) -> Value {
 pub(crate) fn post(url: &str, key: &str, body: &Value) -> Result<(), String> {
     let agent: ureq::Agent = crate::http_agent::config()
         .timeout_global(Some(POST_TIMEOUT))
+        // A webhook that redirects is not the address the user connected; never follow it with
+        // the key.
+        .max_redirects(0)
         .http_status_as_error(false)
         .build()
         .into();
@@ -87,9 +125,12 @@ pub(crate) fn post(url: &str, key: &str, body: &Value) -> Result<(), String> {
     }
 }
 
-/// Starts the delivery worker unless it already runs.
+/// Starts the delivery worker unless it already runs; a running one stops waiting and tries now.
 pub(crate) fn kick(paths: &GxserverPaths) {
     if WORKER_RUNNING.swap(true, Ordering::SeqCst) {
+        let (lock, signal) = wake_signal();
+        *lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = true;
+        signal.notify_all();
         return;
     }
     let paths = paths.clone();
@@ -128,6 +169,10 @@ fn run(paths: &GxserverPaths) {
                 }
             }
         };
+        if let Some(wait) = wait_before_next_post() {
+            std::thread::sleep(wait);
+        }
+        note_post();
         let outcome = post(&url, &key, &body(&batch));
         {
             let _guard = files_lock();
@@ -154,11 +199,14 @@ fn run(paths: &GxserverPaths) {
         match outcome {
             Ok(()) => {
                 retry = FIRST_RETRY;
-                std::thread::sleep(MIN_GAP);
+                pause(MIN_GAP);
             }
             Err(_) => {
-                std::thread::sleep(retry);
-                retry = (retry * 2).min(LONGEST_RETRY);
+                if pause(retry) {
+                    retry = FIRST_RETRY;
+                } else {
+                    retry = (retry * 2).min(LONGEST_RETRY);
+                }
             }
         }
     }

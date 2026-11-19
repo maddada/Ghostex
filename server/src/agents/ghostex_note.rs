@@ -115,7 +115,8 @@ pub(crate) fn launch_note_text(
 
 /// [`launch_note_text`] for the current settings, followed, `with_extensions`, by the line of each
 /// installed extension that may add one (extensions/agent_notes.rs) and, while Grok Bot is
-/// connected, the line that tells agents about `ghostex grokbot notify` (grokbot/mod.rs).
+/// connected, by the line that tells agents about `ghostex grokbot notify` (grokbot/mod.rs),
+/// which coordinators get too.
 pub(crate) fn current_launch_note_text(
     paths: &GxserverPaths,
     with_extensions: bool,
@@ -123,10 +124,14 @@ pub(crate) fn current_launch_note_text(
     let note = ghostex_note_enabled(paths).then(|| ghostex_note_text(agent_preview_browser(paths)));
     let text = launch_note_text(note.as_deref(), super::marked_handovers_enabled(paths));
     // Unit tests assert exact commands, which must not depend on the user's extensions.
-    if cfg!(test) || !with_extensions {
+    if cfg!(test) {
         return text;
     }
-    let mut notes = crate::extensions::agent_notes::installed_agent_notes(paths);
+    let mut notes = if with_extensions {
+        crate::extensions::agent_notes::installed_agent_notes(paths)
+    } else {
+        Vec::new()
+    };
     notes.extend(crate::grokbot::agent_note(paths));
     with_extension_notes(text, &notes)
 }
