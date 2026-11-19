@@ -27,6 +27,37 @@ pub(crate) struct GpuiAppModalHostWindow {
     // None when CEF browser creation failed; the window then stays empty until
     // the user closes it (CDXC:CefRuntime 2026-07-11).
     pub(crate) surface: Option<Entity<CefSurface>>,
+    /// The frame every app modal draws, here around the extension's page, for its corner X.
+    frame: Entity<crate::app::window::ModalWindowFrame>,
+}
+
+/// The extension's page inside the modal's frame.
+///
+/// CDXC:Extensions 2026-11-19 DECISION:
+/// User, after the Git extension's modal got stuck on screen with no way to close it: fix closing "for any extension modal (Escape, a close button, clicking outside where appropriate)". An extension modal now has the round X every app modal has on its corner, always shown because the page under it takes the pointer moves that reveal it elsewhere; it closes the window like its native close, and Escape the page leaves alone closes it too (`ui.escape` in app/extensions/rpc.rs). It does not close on a click outside: it is one of the big centre modals, which the user asked to stay open on a click away (CDXC:AppModal 2026-10-04 in window/modal_window_frame.rs).
+struct ExtensionModalPage {
+    surface: Option<Entity<CefSurface>>,
+}
+
+impl Render for ExtensionModalPage {
+    fn render(&mut self, _window: &mut Window, _cx: &mut gpui::Context<Self>) -> impl IntoElement {
+        div()
+            .size_full()
+            .bg(app_modal_host_background())
+            .children(self.surface.clone())
+    }
+}
+
+impl crate::app::window::native_modal_kit::ModalCornerClose for ExtensionModalPage {
+    /// The app's window-closed observer ends the modal and gives the keyboard back
+    /// (`handle_gpui_app_modal_window_closed`).
+    fn close_from_corner(&mut self, window: &mut Window, _cx: &mut gpui::Context<Self>) {
+        window.remove_window();
+    }
+
+    fn always_shows_corner_close(&self, _cx: &App) -> bool {
+        true
+    }
 }
 
 impl GpuiAppModalHostWindow {
@@ -39,6 +70,7 @@ impl GpuiAppModalHostWindow {
             cef::ExtensionBridgeSurfaceSpec,
             cef::ExtensionBridgeEventHandler,
         ),
+        palette: crate::app::window::native_modal_kit::ModalPalette,
         cx: &mut App,
     ) -> Entity<Self> {
         let parent_ns_view = cef_parent_native_view(window)
@@ -74,6 +106,10 @@ impl GpuiAppModalHostWindow {
                 window.scale_factor(),
             );
         }
+        let page = cx.new(|_| ExtensionModalPage {
+            surface: surface.clone(),
+        });
+        let frame = cx.new(|_| crate::app::window::ModalWindowFrame::new(page, palette));
         cx.new(move |_cx| Self {
             #[cfg(target_os = "windows")]
             _mouse_navigation_release: {
@@ -89,6 +125,7 @@ impl GpuiAppModalHostWindow {
             current_modal: modal,
             initial_window_size,
             surface,
+            frame,
         })
     }
 
@@ -107,9 +144,6 @@ impl GpuiAppModalHostWindow {
 
 impl Render for GpuiAppModalHostWindow {
     fn render(&mut self, _window: &mut Window, _cx: &mut gpui::Context<Self>) -> impl IntoElement {
-        div()
-            .size_full()
-            .bg(app_modal_host_background())
-            .children(self.surface.clone())
+        div().size_full().child(self.frame.clone())
     }
 }

@@ -222,6 +222,23 @@ impl GhostexGpuiApp {
                     close();
                 }
             }
+            /*
+            CDXC:Extensions 2026-11-19 DECISION:
+            User, after the Git extension's modal got stuck on screen with no way to close it: fix closing "for any extension modal (Escape, a close button ...)". The bridge sends this when the page let an Escape through (sidebar_bridge_manifest.rs), and it closes only a modal or popup; a view or panel ignores it, since closing there would switch the window away.
+            */
+            "ui.escape" => {
+                responder(success_response(
+                    &request.request_id,
+                    serde_json::Value::Null,
+                ));
+                if matches!(
+                    surface_context.placement,
+                    GpuiExtensionPlacement::Modal | GpuiExtensionPlacement::Popup
+                ) && let Some(close) = close_handler
+                {
+                    close();
+                }
+            }
             // A sidebar extension's web page: the token it calls the extension API with
             // (extensions/web_blocks.rs, cef/sidebar_bridge_manifest.rs).
             "page.session" => self.run_extension_rpc(

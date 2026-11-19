@@ -454,6 +454,12 @@ pub(crate) trait ModalCornerClose: Render {
         true
     }
 
+    /// True when the X shows without the pointer in the top band: an extension modal's page is a
+    /// CEF view that takes every pointer move, so the band never sees one (window/modal_host.rs).
+    fn always_shows_corner_close(&self, _cx: &App) -> bool {
+        false
+    }
+
     /// True while a click away must leave the modal open (an unsaved form, a hotkey being
     /// recorded). Read only by the modals that close on click-away
     /// (`popup_dismissal::close_app_modal_on_click_away`).

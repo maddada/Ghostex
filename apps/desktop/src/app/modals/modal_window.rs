@@ -457,7 +457,8 @@ impl GhostexGpuiApp {
             extension_bridge_surface,
             self.extension_modal_bridge_event_handler(self.app_modal_open_attempt_id, id, cx),
         );
-        let window_border = self.gpui_native_modal_palette().window_border();
+        let palette = self.gpui_native_modal_palette();
+        let window_border = palette.window_border();
         self.app_modal_window = cx
             .open_window(options, |modal_window, cx| {
                 if !modal.has_titlebar() {
@@ -480,6 +481,7 @@ impl GhostexGpuiApp {
                     modal,
                     open_message,
                     extension_bridge,
+                    palette,
                     cx,
                 )
             })

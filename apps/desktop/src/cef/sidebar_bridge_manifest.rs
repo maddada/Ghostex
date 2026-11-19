@@ -317,6 +317,12 @@ pub(crate) const EXTENSION_BRIDGE_RUNTIME_SHIM: &str = r#"
     return () => listeners.get(name)?.delete(callback);
   };
   Object.defineProperty(window, 'ghostex', { configurable: false, enumerable: true, value: Object.freeze(api) });
+  // An Escape the page leaves alone (not handled with preventDefault) closes a modal or popup the
+  // way Escape closes Ghostex's own; Ghostex ignores it in a view or panel (extensions/rpc.rs).
+  window.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
+    call('ui.escape').catch(() => {});
+  });
   // The bridge arrives when the page has loaded, after its own scripts ran: a page that needs it
   // at start waits for this event when `window.ghostex` is not there yet.
   window.dispatchEvent(new Event('ghostexready'));

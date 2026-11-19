@@ -23,13 +23,15 @@ use std::rc::Rc;
 #[derive(Default)]
 struct CornerCloseReveal {
     enabled: bool,
+    /// Shown without the pointer near it (`ModalCornerClose::always_shows_corner_close`).
+    always: bool,
     pointer_in_band: bool,
     pointer_on_button: bool,
 }
 
 impl CornerCloseReveal {
     fn visible(&self) -> bool {
-        self.enabled && (self.pointer_in_band || self.pointer_on_button)
+        self.enabled && (self.always || self.pointer_in_band || self.pointer_on_button)
     }
 }
 
@@ -52,6 +54,7 @@ pub(crate) struct ModalWindowFrame {
     content: AnyView,
     dismiss: Rc<dyn Fn(&mut Window, &mut App)>,
     shows_corner_close: Rc<dyn Fn(&App) -> bool>,
+    always_shows_corner_close: Rc<dyn Fn(&App) -> bool>,
     palette: ModalPalette,
     /// Created on the first render, which also opens the button's window, and again when the
     /// close button changes sides.
@@ -66,6 +69,7 @@ impl ModalWindowFrame {
     pub(crate) fn new<V: ModalCornerClose>(content: Entity<V>, palette: ModalPalette) -> Self {
         let dismiss_target = content.clone();
         let corner_close_target = content.clone();
+        let always_target = content.clone();
         Self {
             content: content.into(),
             dismiss: Rc::new(move |window, cx| {
@@ -73,6 +77,9 @@ impl ModalWindowFrame {
             }),
             shows_corner_close: Rc::new(move |cx| {
                 corner_close_target.read(cx).shows_corner_close(cx)
+            }),
+            always_shows_corner_close: Rc::new(move |cx| {
+                always_target.read(cx).always_shows_corner_close(cx)
             }),
             palette,
             reveal: None,
@@ -188,6 +195,8 @@ impl Render for ModalWindowFrame {
         let show_close = (self.shows_corner_close)(cx);
         let reveal = self.corner_close_reveal(window, cx);
         set_reveal(&reveal, cx, |r| &mut r.enabled, show_close);
+        let always = (self.always_shows_corner_close)(cx);
+        set_reveal(&reveal, cx, |r| &mut r.always, always);
         /*
         CDXC:AppModal 2026-11-16 DECISION:
         User: on Linux "pls put a thin border around the settings and other modals like it on arch, cuz the edge of the modal blends with the bg of the main window". Settings, Connect a computer, Add a computer and every other app modal draw a square surface tinted from the app chrome, and a Linux window gets no edge of its own from Ghostex (Hyprland's own border is the user's theme, often invisible), so each modal draws a 1px inner edge in `ModalPalette::window_border`, the colour Windows modals already get from DWM (`frame_app_modal_window`): the foreground mixed 16% into the modal surface, a soft gray in dark mode, never black or an accent. Linux only: macOS draws its rim and shadow around these windows, and Windows 11 draws the DWM border in this same colour, so a second line there would double the edge.
