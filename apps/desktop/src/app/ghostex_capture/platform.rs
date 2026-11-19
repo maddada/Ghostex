@@ -170,6 +170,18 @@ pub(crate) fn window_frame(native: NativeWindow) -> Option<Bounds<Pixels>> {
     }
 }
 
+/// Whether the window is minimised. Only Windows minimises the floating page window on its own
+/// (it is a child window everywhere else), so elsewhere this is false.
+pub(crate) fn window_minimized(native: NativeWindow) -> bool {
+    #[cfg(target_os = "windows")]
+    return unsafe { windows_sys::Win32::UI::WindowsAndMessaging::IsIconic(native as _) } != 0;
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = native;
+        false
+    }
+}
+
 /// Whether each display has its own Spaces, where a window that belongs to another (a child
 /// window) can only be shown on its owner's display. False where displays share one desktop.
 pub(crate) fn screens_have_separate_spaces() -> bool {

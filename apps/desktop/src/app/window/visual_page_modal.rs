@@ -561,6 +561,11 @@ impl GpuiVisualPageModalWindow {
     /// stay reachable (another display it cannot be shown on, off the top of the screen) puts it
     /// back first (`frame::settle`, GitHub issue #560).
     fn keep_frame(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // A minimised window (Windows) reports where Windows parks it, far off every display;
+        // keeping that or "putting it back" would move the window it is restored to.
+        if minimized(window) {
+            return;
+        }
         let frame = frame::shared_frame(window);
         let Some(main) = main_window_frame(cx) else {
             return;
@@ -580,6 +585,9 @@ impl GpuiVisualPageModalWindow {
             }
             let back = this
                 .update_in(cx, |_, window, cx| {
+                    if minimized(window) {
+                        return None;
+                    }
                     let main = main_window_frame(cx)?;
                     let to = frame::settle(
                         main,
@@ -884,6 +892,13 @@ impl Render for GpuiVisualPageModalWindow {
             .child(band)
             .child(body)
     }
+}
+
+/// Whether the page window is minimised (only Windows minimises it on its own).
+fn minimized(window: &Window) -> bool {
+    cef_parent_native_view(window).is_ok_and(|native| {
+        crate::app::ghostex_capture::platform::window_minimized(native as usize)
+    })
 }
 
 /// The main window's frame in the space all displays share (`frame::shared_frame`).

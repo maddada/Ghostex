@@ -139,17 +139,18 @@ fn place(
     };
     let frame = Bounds::new(
         point(main.origin.x + px(kept.x), main.origin.y + px(kept.y)),
-        size(
-            px(kept.width).max(MIN_SIZE.width),
-            px(kept.height).max(MIN_SIZE.height),
-        ),
+        size(px(kept.width), px(kept.height)),
     );
     reachable(main, frame, screens)
 }
 
-/// `frame` when its top band lies whole on a display it can be shown on, made to fit that display
-/// when it is larger; else centred on the main window on its display.
+/// `frame`, at least `MIN_SIZE`, when its top band lies whole on a display it can be shown on, made
+/// to fit that display when it is larger; else centred on the main window on its display.
+///
+/// CDXC:SessionChat 2026-11-19 WHY:
+/// User: "i have a stuck inline html on windows ghostex pls fix". On Windows the page window ended up a 133×23 strip (Windows' minimised-window size, not minimised) showing only its header's ⋯, – and × over the chat. A drag that ended there was "put back" at that size, and the size was kept for the next page. A frame smaller than `MIN_SIZE` is now grown back to it wherever it comes from, so such a strip turns back into a usable page window once it stops moving.
 fn reachable(main: Bounds<Pixels>, frame: Bounds<Pixels>, screens: &Screens) -> Bounds<Pixels> {
+    let frame = Bounds::new(frame.origin, frame.size.max(&MIN_SIZE));
     let band = Bounds::new(
         frame.origin,
         size(frame.size.width, px(super::TOP_BAND_HEIGHT)),
