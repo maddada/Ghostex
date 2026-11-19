@@ -23,6 +23,15 @@ const SIDEBAR_PAGE_FILE_TYPES: &[&str] = &[
     "html", "htm", "js", "mjs", "css", "svg", "png", "jpg", "jpeg", "gif", "webp", "woff", "woff2",
 ];
 
+/// The Thread brief extension (now Work items) before 0.3 declared a sidebar mode, which drew the
+/// "Show Briefs" button in the sidebar's top row. User, 2026-11-20: "pls remove this button from
+/// ghostex side also". Work items draws nothing in the sidebar (its Work panel and header button
+/// are Ghostex's own), so the mode of this extension id is never offered, whatever an older
+/// install still declares. Other extensions' modes and sections are untouched.
+fn is_retired_briefs_mode(id: &str) -> bool {
+    id == crate::coordinators::WORK_ITEMS_EXTENSION
+}
+
 /// An installed sidebar extension, as a panel call sees it.
 pub(crate) struct SidebarExtension {
     pub(crate) manifest: ExtensionManifest,
@@ -117,6 +126,7 @@ impl ExtensionRegistry {
                         .mode
                         .as_ref()
                         .filter(|_| !state.sidebar_mode_hidden)
+                        .filter(|_| !is_retired_briefs_mode(id))
                         .map(|mode| ExtensionSidebarMode {
                             title: mode.title.clone(),
                             icon: Some(icon_url(mode.icon.as_deref().unwrap_or(&manifest.icon))),
@@ -323,5 +333,16 @@ impl ExtensionRegistry {
                 eprintln!("Could not start sidebar extension {id}: {error}");
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_retired_briefs_mode;
+
+    #[test]
+    fn only_the_thread_brief_extension_loses_its_sidebar_mode() {
+        assert!(is_retired_briefs_mode("thread-brief"));
+        assert!(!is_retired_briefs_mode("bots"));
     }
 }
