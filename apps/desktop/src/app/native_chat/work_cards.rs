@@ -1494,6 +1494,13 @@ impl NativeChatView {
                     },
                 )))
                 .children(self.dock_row_command(&key, row, p, cx))
+                .children(after_command.map(|answers| {
+                    answers
+                        .pt_0()
+                        .pl(px((DOCK_ROW_PAD_X + DOCK_LEAD) * s))
+                        .pr(px(DOCK_ROW_PAD_X * s))
+                        .pb(px(6.0 * s))
+                }))
                 .into_any_element();
         }
         if opens_directly {
