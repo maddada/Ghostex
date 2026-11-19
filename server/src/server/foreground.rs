@@ -493,6 +493,7 @@ pub async fn run_gxserver_foreground(
     shared_settings_watch::start_shared_settings_watch(state.clone());
     crate::settings_sync::start_settings_sync(state.clone());
     crate::connected_computers::start_held_send_delivery(state.clone());
+    crate::remote_access::server_link_dialer::start(state.clone());
     workspaces_switch::start_workspaces_switch_watch(state.clone());
     crate::connectors::start_connectors(state.clone());
     super::security_http::start_security_events(state.clone());

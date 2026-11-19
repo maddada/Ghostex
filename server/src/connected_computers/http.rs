@@ -22,6 +22,7 @@ pub(crate) const CONNECTED_COMPUTER_ENDPOINTS: &[&str] = &[
 
 pub(crate) fn handle_connected_computers_http(
     state: &AppState,
+    caller: &crate::security::Principal,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -36,6 +37,32 @@ pub(crate) fn handle_connected_computers_http(
             );
         }
     };
+    /*
+    CDXC:ServerLinks 2026-11-19 FIX:
+    Fable 5.2's review of server links (GitHub #674), adopted by the user (2A): any agent's session token could call these for any server id, so it could take a linked server's grant (get its live token back, rotate it, lift a deny with `owner: true`) or register its own address under that server's id. For a server id a server link names here, only this computer's own clients (the app and the CLI through the token file, the owner session, a paired phone) may change its grant or registration; an agent's session token is refused. Every other server id, and the desktop app's own link, behave as before.
+    */
+    if matches!(caller, crate::security::Principal::Session { .. })
+        && endpoint_path != "/api/listConnectedComputers"
+    {
+        let server_id = params
+            .get("serverId")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .unwrap_or_default();
+        if !server_id.is_empty()
+            && crate::remote_access::server_links::is_linked_server_id(&state.paths, server_id)
+        {
+            return routed_json(
+                Some(endpoint_path),
+                StatusCode::FORBIDDEN,
+                rpc_error(
+                    "forbidden",
+                    "That computer is linked to this one as a server: only you can change its link (ghostex computers, or Settings › Remote).",
+                    Some(request_id),
+                ),
+            );
+        }
+    }
     let result = match endpoint_path.as_str() {
         "/api/registerConnectedComputer" => {
             match Registration::from_params(&params, &state.metadata.server_id) {

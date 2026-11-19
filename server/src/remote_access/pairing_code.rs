@@ -162,6 +162,83 @@ fn encode_base32(bytes: &[u8]) -> String {
 
 /// The QR payload: an encoded pairing code wrapped in the ghostex.dev link that
 /// opens the phone app.
+/// Reads a pasted Easy Connect code: `ghostex-ec1:…`, `GHOSTEX-EC2:…` (either case), or a
+/// ghostex.dev pairing link carrying one after `#` (what `ghostex computer-code` and Connect a
+/// Computer show). `None` for anything else. The same rules as the desktop's reader
+/// (apps/desktop/.../settings_modal/tabs/remote/model.rs `read_pairing_code`).
+pub fn decode_easy_connect_code_text(text: &str) -> Option<EasyConnectCode> {
+    let text = text.trim();
+    if text.is_empty() || text.chars().any(char::is_whitespace) {
+        return None;
+    }
+    let lower = text.to_ascii_lowercase();
+    if lower.starts_with("https://") || lower.starts_with("http://") {
+        let (_, fragment) = text.split_once('#')?;
+        let fragment = fragment.replace("%3A", ":").replace("%3a", ":");
+        return decode_easy_connect_code_text(&fragment);
+    }
+    if let Some(prefix) = text.get(..EASY_CONNECT_COMPACT_CODE_PREFIX.len()) {
+        if prefix.eq_ignore_ascii_case(EASY_CONNECT_COMPACT_CODE_PREFIX) {
+            return decode_compact(&text[EASY_CONNECT_COMPACT_CODE_PREFIX.len()..]);
+        }
+    }
+    let body = text.strip_prefix(EASY_CONNECT_CODE_PREFIX)?;
+    if body.len() % 4 == 1 {
+        return None;
+    }
+    let bytes = URL_SAFE_NO_PAD.decode(body.trim_end_matches('=')).ok()?;
+    let code: EasyConnectCode = serde_json::from_slice(&bytes).ok()?;
+    (code.v == 1 && !code.address.is_empty() && code.port != 0).then_some(code)
+}
+
+fn decode_compact(body: &str) -> Option<EasyConnectCode> {
+    const ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    let mut bytes = Vec::new();
+    let (mut buffer, mut bits) = (0u32, 0u32);
+    for char in body.bytes() {
+        let index = ALPHABET
+            .iter()
+            .position(|&letter| letter == char.to_ascii_uppercase())?;
+        buffer = ((buffer << 5) | index as u32) & 0xffff;
+        bits += 5;
+        if bits >= 8 {
+            bits -= 8;
+            bytes.push((buffer >> bits) as u8);
+        }
+    }
+    fn read_u16(rest: &mut &[u8]) -> Option<u16> {
+        let (head, tail) = rest.split_first_chunk::<2>()?;
+        *rest = tail;
+        Some(u16::from_be_bytes(*head))
+    }
+    fn read_field(rest: &mut &[u8]) -> Option<Vec<u8>> {
+        let length = read_u16(rest)? as usize;
+        let field = rest.get(..length)?.to_vec();
+        *rest = &rest[length..];
+        Some(field)
+    }
+    let mut rest = bytes.as_slice();
+    let address = read_field(&mut rest)?;
+    let secret = read_field(&mut rest)?;
+    let port = read_u16(&mut rest)?;
+    let ssh_port = read_u16(&mut rest)?;
+    let user = String::from_utf8(read_field(&mut rest)?).ok()?;
+    let name = String::from_utf8(read_field(&mut rest)?).ok()?;
+    if port == 0 || ssh_port == 0 || user.is_empty() || name.is_empty() || address.is_empty() {
+        return None;
+    }
+    Some(EasyConnectCode {
+        v: 1,
+        address: format!("{TAILCAT_ADDRESS_PREFIX}{}", URL_SAFE_NO_PAD.encode(address)),
+        name,
+        user,
+        port,
+        ssh_port,
+        secret: (!secret.is_empty()).then(|| URL_SAFE_NO_PAD.encode(secret)),
+        expires_at: None,
+    })
+}
+
 pub fn pairing_link(code: &str) -> String {
     format!("{PAIRING_LINK_PREFIX}{code}")
 }
@@ -215,6 +292,21 @@ pub struct RemotePairingRuntime {
     pending: Arc<Mutex<HashMap<String, PendingPairing>>>,
     /// The last renewal timestamp each device key signed, so a renewal can't be replayed.
     renewals: Arc<Mutex<HashMap<String, u64>>>,
+    /// Codes made for one device key only (a server link's second pairing, GitHub #674): secret
+    /// hash -> (that device public key, expiry ms). Kept apart from the code Connect a Computer
+    /// shows, which they never replace.
+    bound_secrets: Arc<Mutex<HashMap<String, (String, u64)>>>,
+}
+
+/// What [`RemotePairingRuntime::take_bound_secret`] found for a secret.
+#[derive(Debug, PartialEq, Eq)]
+pub enum BoundSecret {
+    /// Not a bound code: the usual code checks apply.
+    NotBound,
+    /// Bound to this device key and spent now.
+    Spent,
+    /// Bound to another device key: refused, and kept for the key it was made for.
+    OtherKey,
 }
 
 /// A phone that scanned the QR and waits for the owner to approve it.
@@ -533,6 +625,53 @@ impl RemotePairingRuntime {
         self.pending_map().remove(id)
     }
 
+    /*
+    CDXC:ServerLinks 2026-11-19 DECISION:
+    Fable 5.2's review of the server link design (GitHub #674), adopted by the user (2A): the code a
+    server makes for the second pairing of `ghostex computers add` (the other server pairing back to
+    it) goes only to that other server, inside its signed ask, and works only for that server's
+    pairing device key. A code taken on its way (or by an agent that read it) pairs nothing else, and
+    the code the Connect a Computer window shows is untouched. Single use, five minutes, and the
+    usual pairing attempt limit, like any code.
+    */
+    /// A new code that pairs only `device_public_key`, for five minutes, once.
+    pub fn bind_secret(&self, device_public_key: &str, now_ms: u64) -> String {
+        let fresh = mint_remote_pairing_secret(Utc::now() + REMOTE_PAIRING_SECRET_TTL);
+        let expires = now_ms + REMOTE_PAIRING_SECRET_TTL.num_milliseconds().max(0) as u64;
+        let mut bound = self
+            .bound_secrets
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        bound.retain(|_, (_, until)| *until > now_ms);
+        bound.insert(
+            fresh.secret_hash.clone(),
+            (device_public_key.to_string(), expires),
+        );
+        fresh.secret
+    }
+
+    /// Spends a bound code for `device_public_key` (see [`BoundSecret`]).
+    pub fn take_bound_secret(
+        &self,
+        secret_hash: &str,
+        device_public_key: &str,
+        now_ms: u64,
+    ) -> BoundSecret {
+        let mut bound = self
+            .bound_secrets
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        bound.retain(|_, (_, until)| *until > now_ms);
+        match bound.get(secret_hash) {
+            None => BoundSecret::NotBound,
+            Some((key, _)) if key == device_public_key => {
+                bound.remove(secret_hash);
+                BoundSecret::Spent
+            }
+            Some(_) => BoundSecret::OtherKey,
+        }
+    }
+
     /// Records a renewal's timestamp; `false` for one no newer than the last accepted.
     pub fn accept_renewal_timestamp(&self, device_id: &str, timestamp_ms: u64) -> bool {
         let mut renewals = self
@@ -624,6 +763,24 @@ mod tests {
             secret: Some("ZGVmZ2hpamtsbW5vcHFycw".to_string()),
             expires_at: None,
         }
+    }
+
+    #[test]
+    fn a_pasted_code_reads_back_in_every_form() {
+        let code = compact_vector_code();
+        let bare = encode_easy_connect_code(&code);
+        assert_eq!(decode_easy_connect_code_text(&bare), Some(code.clone()));
+        let compact = encode_easy_connect_compact_code(&code).unwrap();
+        assert_eq!(decode_easy_connect_code_text(&compact), Some(code.clone()));
+        assert_eq!(
+            decode_easy_connect_code_text(&compact.to_ascii_lowercase()),
+            Some(code.clone())
+        );
+        assert_eq!(
+            decode_easy_connect_code_text(&easy_connect_pairing_link(&code)),
+            Some(code)
+        );
+        assert_eq!(decode_easy_connect_code_text("nonsense"), None);
     }
 
     #[test]

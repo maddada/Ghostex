@@ -133,7 +133,22 @@ pub struct PairDeviceParams {
     pub device_key: Option<DeviceKey>,
     #[serde(default)]
     pub approver_key: Option<PairingApproverKey>,
+    /// A computer asking for a server link (`ghostex computers add`, GitHub #674): its own gxserver
+    /// server id. Phones never send it, and a phone's is dropped.
+    #[serde(default)]
+    pub server_link: Option<ServerLinkAsk>,
 }
+
+/// What a computer asking for a server link says about itself.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerLinkAsk {
+    pub server_id: String,
+}
+
+/// The end of a server link's approval summary (`approval_action`), which
+/// `ghostex_gx_protocol::plain_ask` reads to say what Approve lets the computer's agents do.
+pub const SERVER_LINK_SUMMARY_TAIL: &str = ghostex_gx_protocol::plain_ask::SERVER_LINK_SUMMARY_TAIL;
 
 /*
 CDXC:RemotePairing 2026-11-14 DECISION:
@@ -156,6 +171,9 @@ pub struct PairingStarted {
     pub expires_at_ms: u64,
     pub user: String,
     pub computer_name: String,
+    /// For a computer that asked for a server link: what this computer pins it to and tells it
+    /// back (`serverLink`, `serverId`, `deviceKey`), so the asking computer pins this one too.
+    pub server_link: Option<Value>,
 }
 
 #[derive(Debug)]
@@ -245,12 +263,37 @@ pub fn parse_pair_device_params(body: &Value) -> Result<PairDeviceParams, PairDe
         public_key: device_key.public_key.trim().to_string(),
     };
     validate_device_key(&device_key)?;
+    let server_link = match params.kind {
+        PairingDeviceKind::Phone => None,
+        PairingDeviceKind::Computer => params
+            .server_link
+            .map(|link| ServerLinkAsk {
+                server_id: link.server_id.trim().to_string(),
+            })
+            .map(|link| {
+                if crate::connected_computers::is_server_id(&link.server_id) {
+                    Ok(link)
+                } else {
+                    Err(PairDeviceError::BadRequest(
+                        "serverLink.serverId is not a gxserver server id.".to_string(),
+                    ))
+                }
+            })
+            .transpose()?,
+    };
     Ok(PairDeviceParams {
         secret: params.secret.trim().to_string(),
         device_name,
         platform,
-        // A computer's key is optional: one from before 2026-11-14 signs in with its own login.
-        ssh_public_key: params.ssh_public_key,
+        // A computer's key is optional: one from before 2026-11-14 signs in with its own login. A
+        // server link never gets one (the user's 1A on Fable 5.2's review, CDXC:ServerLinks
+        // 2026-11-19 in server_links.rs): only the Easy Connect tunnel and its agents' grant.
+        ssh_public_key: if server_link.is_some() {
+            String::new()
+        } else {
+            params.ssh_public_key
+        },
+        server_link,
         kind: params.kind,
         tailcat_client_key,
         device_key: Some(device_key),
@@ -378,6 +421,16 @@ fn approval_action(
                 words.join(" · ")
             ),
         ),
+        PairingDeviceKind::Computer if params.server_link.is_some() => (
+            format!(
+                "Let a {} computer that calls itself \"{}{SERVER_LINK_SUMMARY_TAIL}",
+                params.platform, params.device_name
+            ),
+            format!(
+                "Approve only if that computer shows the same three words: {}. Approving lets it reach this computer through Easy Connect and lets the agents on it start, message and read agents here (a server link), with no sign-in to this computer, until you remove it in Settings › Remote.",
+                words.join(" · ")
+            ),
+        ),
         PairingDeviceKind::Computer => (
             format!(
                 "Let a {} computer that calls itself \"{}\" connect through Easy Connect",
@@ -415,6 +468,9 @@ fn approval_action(
             "approverKeyId": approver_key_id,
             "words": words,
             "overSsh": over_ssh,
+            // What the owner approves includes the link and the server id it is pinned to
+            // (CDXC:ServerLinks 2026-11-19 in server_links.rs), so a plain pairing can't become one.
+            "serverLink": params.server_link.as_ref().map(|link| link.server_id.clone()),
         }))
 }
 
@@ -424,6 +480,8 @@ pub fn begin_pairing(
     pairing_runtime: &RemotePairingRuntime,
     security: &SecurityState,
     params: PairDeviceParams,
+    paths: &GxserverPaths,
+    own_server_id: &str,
 ) -> Result<PairingStarted, PairDeviceError> {
     record_pair_device_attempt()?;
     let fingerprint = match params.kind {
@@ -471,10 +529,27 @@ pub fn begin_pairing(
     */
     let repository = RemotePairingRepository::new(db);
     let secret_hash = hash_remote_pairing_secret(&params.secret);
-    if !repository.consume_valid_secret(&secret_hash, &now_iso())? {
-        return Err(PairDeviceError::CodeExpired);
+    // A code made for one server's device key only (CDXC:ServerLinks 2026-11-19 DECISION in
+    // pairing_code.rs): spent here by that key; any other key hears what an unknown code hears.
+    match pairing_runtime.take_bound_secret(&secret_hash, &device_key.public_key, now_ms()) {
+        super::pairing_code::BoundSecret::Spent => {}
+        super::pairing_code::BoundSecret::OtherKey => return Err(PairDeviceError::CodeExpired),
+        super::pairing_code::BoundSecret::NotBound => {
+            if !repository.consume_valid_secret(&secret_hash, &now_iso())? {
+                return Err(PairDeviceError::CodeExpired);
+            }
+            pairing_runtime.forget_secret();
+        }
     }
-    pairing_runtime.forget_secret();
+    // Checked once the code is spent, so it tells nobody without a code which servers are linked.
+    let server_link = match &params.server_link {
+        None => None,
+        Some(link) => Some(
+            super::server_links::door_link_offer(paths, db, own_server_id, &link.server_id, &device_key.public_key)
+                .map_err(PairDeviceError::BadRequest)?,
+        ),
+    };
+
     // Checked once the code is spent, so it tells nobody without a code which keys are paired
     // (CDXC:RemotePairing 2026-11-11 SECURITY in paired_devices.rs).
     if let Some(client_key) = params.tailcat_client_key.as_deref() {
@@ -490,7 +565,7 @@ pub fn begin_pairing(
     let pending_id = format!("pd_{}", uuid::Uuid::new_v4().simple());
     let words = match_words(&params.secret, &device_key.public_key);
     let key_id = approver_key_id(&device_key_bytes);
-    let action = approval_action(
+    let mut action = approval_action(
         &pending_id,
         &params,
         &key_id,
@@ -499,6 +574,17 @@ pub fn begin_pairing(
         approver_key.as_ref().map(|key| key.key_id.as_str()),
         false,
     );
+    // The card says what this computer already calls that server id (Fable 5.2's review): a
+    // computer claiming another one's id shows here under that other name.
+    if let Some(known) = server_link
+        .as_ref()
+        .and_then(|offer: &super::server_links::DoorLinkOffer| offer.known_as.clone())
+    {
+        let detail = action.detail.clone().unwrap_or_default();
+        action = action.detail(format!(
+            "{detail} Ghostex here already knows the server it names as \"{known}\"."
+        ));
+    }
     let now = now_ms();
     let requester = ApprovalRequester {
         kind: "newDevice".to_string(),
@@ -549,6 +635,7 @@ pub fn begin_pairing(
         expires_at_ms: request.expires_at_ms,
         user: identity.username,
         computer_name: identity.computer_name,
+        server_link: server_link.map(|offer| offer.answer),
     })
 }
 
@@ -656,6 +743,7 @@ pub fn begin_ssh_pairing(
                         expires_at_ms: pending.expires_at_ms,
                         user: identity.username,
                         computer_name: identity.computer_name,
+                        server_link: None,
                     },
                     nonce: pending.nonce,
                     reused: true,
@@ -767,6 +855,7 @@ pub fn begin_ssh_pairing(
                 expires_at_ms,
                 user: identity.username,
                 computer_name: identity.computer_name,
+                server_link: None,
             },
             nonce,
             reused: false,
@@ -820,6 +909,7 @@ pub fn begin_ssh_pairing(
             expires_at_ms: request.expires_at_ms,
             user: identity.username,
             computer_name: identity.computer_name,
+            server_link: None,
         },
         nonce,
         reused: false,
@@ -941,6 +1031,13 @@ pub fn pairing_status(
         .as_ref()
         .and_then(|request| request.decided_by.as_deref())
         == Some(Principal::LocalAgent.kind());
+    // Approved on one of the owner's own devices (the app's owner key or a paired phone), which
+    // record their device id, not a caller kind: only those let a server link in (CDXC:ServerLinks
+    // 2026-11-19 DECISION in server_links.rs).
+    let by_owner_device = request
+        .as_ref()
+        .and_then(|request| request.decided_by.as_deref())
+        .is_some_and(super::server_links::decided_by_owner_device);
     let status = request.map(|request| request.status);
     match status {
         Some(ApprovalStatus::Pending) => Ok(PairingStatusAnswer {
@@ -999,6 +1096,20 @@ pub fn pairing_status(
             };
             match finished {
                 Ok(mut answer) => {
+                    if let Some(server_id) = pending
+                        .action
+                        .params
+                        .get("serverLink")
+                        .and_then(Value::as_str)
+                    {
+                        super::server_links::settle_door_link(
+                            context.paths,
+                            &mut answer,
+                            server_id,
+                            &pending,
+                            by_owner_device && !tunnel_only,
+                        );
+                    }
                     // Let in by this computer's terminal while only its own app owned it: the
                     // computer that joined may now ask to manage it once it has signed in over
                     // SSH, with the one-time secret only it gets here (CDXC:Security 2026-11-17

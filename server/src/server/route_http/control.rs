@@ -88,6 +88,8 @@ pub(super) async fn route_control_http(
         | "/api/easyConnectAddresses"
         | crate::remote_access::EASY_CONNECT_CLIENT_KEY_ENDPOINT
         | crate::remote_access::COMPUTER_EASY_CONNECT_KEYS_ENDPOINT
+        | crate::remote_access::server_links::SERVER_LINK_ENDPOINT
+        | crate::remote_access::server_links::SERVER_LINKS_ENDPOINT
         | crate::remote_access::computer_link_keys::EASY_CONNECT_LINK_KEY_ENDPOINT => {
             handle_remote_access_http(&state, &caller, endpoint.path, request_id, &body_json).await
         }
@@ -116,6 +118,7 @@ pub(super) async fn route_control_http(
         path if crate::connected_computers::CONNECTED_COMPUTER_ENDPOINTS.contains(&path) => {
             crate::connected_computers::handle_connected_computers_http(
                 &state,
+                &caller,
                 endpoint.path,
                 request_id,
                 &body_json,

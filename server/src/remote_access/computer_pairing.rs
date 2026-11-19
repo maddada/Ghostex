@@ -289,10 +289,32 @@ pub fn start_computer_pairing(
     code: ComputerPairingCode,
     add_machine: Option<AddMachine>,
 ) -> Result<Value> {
+    start_computer_pairing_with(paths, code, add_machine, None)
+}
+
+/// A pairing that asks for a server link (GitHub #674, server_links.rs): it pairs and dials with
+/// `key_file` (gxserver's own Easy Connect key for that computer, never tailcat's shared
+/// `client-default`), sends no SSH key, and names this computer's server id.
+#[derive(Clone, Debug)]
+pub struct LinkPairing {
+    pub own_server_id: String,
+    pub key_file: PathBuf,
+}
+
+/// [`start_computer_pairing`], or a server link's pairing when `link` is set.
+pub fn start_computer_pairing_with(
+    paths: &GxserverPaths,
+    code: ComputerPairingCode,
+    add_machine: Option<AddMachine>,
+    link: Option<LinkPairing>,
+) -> Result<Value> {
     let binary = crate::tailcat::resolve_client_tailcat_binary().ok_or_else(|| {
         anyhow!("Install the Easy Connect helper first (Settings > Remote > Easy Connect).")
     })?;
-    let tailcat_client_key = ensure_tailcat_client_key(&binary)?;
+    let tailcat_client_key = match &link {
+        Some(link) => super::computer_link_keys::make_client_key(&binary, &link.key_file)?,
+        None => ensure_tailcat_client_key(&binary)?,
+    };
     let key_pkcs8 = load_or_create_device_key(paths)?;
     let public_key = device_public_key(&key_pkcs8)?;
     let local_port = free_local_port()?;
@@ -301,8 +323,9 @@ pub fn start_computer_pairing(
         base_url: format!("http://127.0.0.1:{local_port}"),
         local_port,
         remote_port: code.port,
-        // Pairing registers `client-default`, so it dials with that key.
-        client_key: None,
+        // Pairing registers `client-default`, so it dials with that key; a server link pairs with
+        // its own key.
+        client_key: link.as_ref().map(|link| link.key_file.clone()),
     };
     let tunnel = start_tailcat_tunnel(&binary, &plan).map_err(|error| anyhow!("{error}"))?;
     let identity = super::probe_cache::cached_remote_access_identity()?;
@@ -316,9 +339,17 @@ pub fn start_computer_pairing(
     });
     // This computer's own sign-in key (CDXC:RemotePairing 2026-11-14 in computer_ssh_key.rs). Without
     // one the pairing still works and this computer signs in with the saved password there.
-    match super::computer_ssh_key::load_or_create_computer_ssh_public_key(paths) {
-        Ok(line) => ask["sshPublicKey"] = json!(line),
-        Err(error) => eprintln!("[gxserver] computer pairing: no SSH key to send ({error:#})"),
+    // A server link sends none: it never signs in there (the user's 1A, CDXC:ServerLinks
+    // 2026-11-19 in server_links.rs).
+    if let Some(link) = &link {
+        ask["serverLink"] = json!({ "serverId": link.own_server_id });
+    } else {
+        match super::computer_ssh_key::load_or_create_computer_ssh_public_key(paths) {
+            Ok(line) => ask["sshPublicKey"] = json!(line),
+            Err(error) => {
+                eprintln!("[gxserver] computer pairing: no SSH key to send ({error:#})")
+            }
+        }
     }
     let started = post(local_port, "/api/pairDevice", ask, ASK_TIMEOUT);
     let started = match started {
@@ -366,7 +397,18 @@ pub fn start_computer_pairing(
                 add_machine,
             },
         );
-    Ok(json!({ "pendingId": pending_id, "words": words, "computerName": computer_name }))
+    let mut answer =
+        json!({ "pendingId": pending_id, "words": words, "computerName": computer_name });
+    if link.is_some() {
+        // What the other computer pinned and tells back (server_links.rs `door_link_offer`); an
+        // older computer says nothing, and the caller stops.
+        for key in ["serverLink", "serverId", "deviceKey"] {
+            if let Some(value) = started.get(key) {
+                answer[key] = value.clone();
+            }
+        }
+    }
+    Ok(answer)
 }
 
 /// `/api/computerPairingStatus`: asks the other computer, signed, where the pairing stands;
@@ -429,7 +471,7 @@ pub fn computer_pairing_status(paths: &GxserverPaths, pending_id: &str) -> Resul
             "sshKeyInstalled": ssh_key_installed,
         })
     });
-    Ok(json!({
+    let mut result = json!({
         "status": status,
         "computerName": computer_name,
         "deviceId": answer.get("deviceId"),
@@ -448,7 +490,15 @@ pub fn computer_pairing_status(paths: &GxserverPaths, pending_id: &str) -> Resul
         // Let in by that computer's terminal: only the tunnel, so the app signs in with the
         // user's own SSH login there.
         "tunnelOnly": answer.get("tunnelOnly").and_then(Value::as_bool) == Some(true),
-    }))
+    });
+    // A server link's outcome there: `linked`, or `notLinked` with why (server_links.rs); other
+    // pairings' answers stay exactly as before.
+    for key in ["serverLink", "serverLinkReason"] {
+        if let Some(value) = answer.get(key) {
+            result[key] = value.clone();
+        }
+    }
+    Ok(result)
 }
 
 /// The computers this one paired with through Easy Connect (pairing v2), kept in

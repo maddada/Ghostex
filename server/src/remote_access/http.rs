@@ -279,6 +279,8 @@ pub(crate) async fn handle_remote_access_http(
                     return Err(RemoteAccessHttpError::unknown_device(&device_id));
                 };
                 forget_approver_key(&security, &device, &caller);
+                // A server link to it ends both ways (CDXC:ServerLinks 2026-11-19 in server_links.rs).
+                super::server_links::on_device_removed(&paths, &device, true);
                 // A revoke never needs approval, so it has no SensitiveAction; the log still says it.
                 crate::audit::record(
                     crate::audit::Action::new("pairing.remove", "Removed a paired phone")
@@ -436,10 +438,18 @@ pub(crate) async fn handle_remote_access_http(
                         .into_response(endpoint_path, request_id)
                 }
             };
+            let own_server_id = state.metadata.server_id.clone();
             tokio::task::spawn_blocking(move || {
                 let db = open_gxserver_database(&paths)?;
                 let device_name = params.device_name.clone();
-                let started = begin_pairing(&db, &pairing_runtime, &security, params);
+                let started = begin_pairing(
+                    &db,
+                    &pairing_runtime,
+                    &security,
+                    params,
+                    &paths,
+                    &own_server_id,
+                );
                 // The phone asks with the code alone; the log names it.
                 crate::audit::record(
                     crate::audit::Action::new(
@@ -463,14 +473,21 @@ pub(crate) async fn handle_remote_access_http(
                 let started = started?;
                 // The phone waits through the tunnel; keep a locked Easy Connect open to it.
                 hold_tailcat_pairing_window_open(&paths, &tailcat_runtime);
-                Ok(json!({
+                let mut answer = json!({
                     "status": PairingStatus::Pending,
                     "pendingId": started.pending_id,
                     "words": started.words,
                     "expiresAtMs": started.expires_at_ms,
                     "user": started.user,
                     "computerName": started.computer_name,
-                }))
+                });
+                // Only a computer that asked for a server link gets these (server_links.rs).
+                if let (Some(object), Some(Value::Object(link))) =
+                    (answer.as_object_mut(), started.server_link)
+                {
+                    object.extend(link);
+                }
+                Ok(answer)
             })
             .await
         }
@@ -756,6 +773,54 @@ pub(crate) async fn handle_remote_access_http(
                     None,
                 );
                 started.map_err(|error| RemoteAccessHttpError::bad_request(format!("{error:#}")))
+            })
+            .await
+        }
+        super::server_links::SERVER_LINK_ENDPOINT => {
+            let ask: super::server_links::ServerLinkAsk =
+                match serde_json::from_value(params.clone()) {
+                    Ok(ask) => ask,
+                    Err(error) => {
+                        return RemoteAccessHttpError::bad_request(format!("Bad request: {error}"))
+                            .into_response(endpoint_path, request_id)
+                    }
+                };
+            let own_server_id = state.metadata.server_id.clone();
+            tokio::task::spawn_blocking(move || {
+                let db = open_gxserver_database(&paths)?;
+                let context = super::server_links::DoorContext {
+                    paths: &paths,
+                    db: &db,
+                    tailcat_runtime: &tailcat_runtime,
+                    device_tokens: &device_tokens,
+                    own_server_id: &own_server_id,
+                };
+                super::server_links::answer_ask(&context, ask).map_err(|refusal| {
+                    RemoteAccessHttpError {
+                        status: StatusCode::from_u16(refusal.status)
+                            .unwrap_or(StatusCode::BAD_REQUEST),
+                        code: refusal.code,
+                        message: refusal.message,
+                    }
+                })
+            })
+            .await
+        }
+        super::server_links::SERVER_LINKS_ENDPOINT => {
+            let state = state.clone();
+            let caller = caller.clone();
+            tokio::task::spawn_blocking(move || {
+                super::server_link_dialer::answer_local(&state, &caller, &params).map_err(
+                    |(status, message)| RemoteAccessHttpError {
+                        status: StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_REQUEST),
+                        code: match status {
+                            403 => "forbidden",
+                            404 => "notFound",
+                            _ => "badRequest",
+                        },
+                        message,
+                    },
+                )
             })
             .await
         }

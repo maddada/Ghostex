@@ -11,6 +11,8 @@ pub mod paired_devices;
 pub mod pairing_code;
 pub mod probe_cache;
 pub mod repository;
+pub mod server_link_dialer;
+pub mod server_links;
 pub mod ssh_enable;
 pub mod ssh_install;
 pub mod ssh_login_trace;

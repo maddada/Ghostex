@@ -284,7 +284,7 @@ fn register(
 }
 
 /// `tailcat genkey --client --key=<file>`: the key's public half, made the first time.
-fn make_client_key(binary: &Path, file: &Path) -> Result<String> {
+pub(crate) fn make_client_key(binary: &Path, file: &Path) -> Result<String> {
     let output = Command::new(binary)
         .args(["genkey", "--client", &format!("--key={}", file.display())])
         .output()

@@ -1202,6 +1202,10 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | crate::remote_access::EASY_CONNECT_CLIENT_KEY_ENDPOINT
         // CDXC:RemotePairing 2026-11-10 WHY: the desktop app asks its own gxserver for the key it dials a paired computer with; the answer is a key file on this computer, so only the local listener serves it.
         | crate::remote_access::computer_link_keys::EASY_CONNECT_LINK_KEY_ENDPOINT
+        // CDXC:ServerLinks 2026-11-19 WHY: this computer's CLI and apps list, add and remove its
+        // server links (remote_access/server_link_dialer.rs); adding one opens an Easy Connect
+        // tunnel from here, so like `/api/pairComputer` only this computer's own clients reach it.
+        | crate::remote_access::server_links::SERVER_LINKS_ENDPOINT
         | "/api/queryLogs" => full_local(path),
         /*
         CDXC:Feedback 2026-10-04 WHY:
@@ -1280,7 +1284,11 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         "/api/pairDevice"
         | "/api/pairingStatus"
         | "/api/renewDeviceToken"
-        | crate::remote_access::COMPUTER_EASY_CONNECT_KEYS_ENDPOINT => descriptor(
+        | crate::remote_access::COMPUTER_EASY_CONNECT_KEYS_ENDPOINT
+        // CDXC:ServerLinks 2026-11-19 WHY: a computer linked as a server asks for its agents'
+        // grant (and to pair back, or to end the link) the same way, signed with its pairing
+        // device key over this computer's server id; it holds no token here (server_links.rs).
+        | crate::remote_access::server_links::SERVER_LINK_ENDPOINT => descriptor(
             path,
             ApiPermission::FullLocal,
             false,
