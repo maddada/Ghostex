@@ -13,6 +13,7 @@ pub(crate) mod cooldown;
 pub(crate) mod launch;
 pub(crate) mod sidebar;
 mod store;
+mod usage_reads;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, OnceLock};
@@ -166,54 +167,43 @@ fn refresh(paths: &GxserverPaths, hub: &store::Hub) {
         return;
     }
     let previous = reading(&hub.id);
-    let result = (|| -> Result<Vec<AccountReading>, String> {
+    let store_reading = |reading: Reading| {
+        readings()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(hub.id.clone(), reading);
+    };
+    let listed = (|| -> Result<(String, Vec<Value>), String> {
         let key = store::open_key(paths, &hub.management_key)?;
         let files = client::auth_files(&hub.url, &key)?;
-        let now = Utc::now();
-        let reads: Vec<_> = files
-            .into_iter()
-            .filter_map(|file| Some((account_from_file(&file, now)?, file)))
-            .map(|(mut account, file)| {
-                let (url, key) = (hub.url.clone(), key.clone());
-                std::thread::spawn(move || {
-                    if account.status != "disabled" {
-                        match client::usage(&url, &key, &file) {
-                            Ok(Some(usage)) => account.usage = usage,
-                            Ok(None) => {}
-                            Err(error) => account.usage_error = Some(error),
-                        }
-                    }
-                    account
-                })
-            })
-            .collect();
-        Ok(reads
-            .into_iter()
-            .filter_map(|read| read.join().ok())
-            .collect())
+        Ok((key, files))
     })();
-    let next = match result {
-        Ok(mut accounts) => {
-            // A failed usage read keeps the account's last meters, marked by its error.
-            for account in &mut accounts {
-                if account.usage.is_empty() && account.usage_error.is_some() {
-                    if let Some(old) = previous.as_ref().and_then(|p| {
-                        p.accounts
-                            .iter()
-                            .find(|a| a.auth_index == account.auth_index)
-                    }) {
-                        account.usage = old.usage.clone();
-                    }
-                }
-            }
-            Reading {
+    match listed {
+        Ok((key, files)) => {
+            let now = Utc::now();
+            let mut accounts: Vec<AccountReading> = files
+                .iter()
+                .filter_map(|file| account_from_file(file, now))
+                .collect();
+            let updated_at = Some(Utc::now().to_rfc3339());
+            // Usage comes from each account's last reading, and due ones are read one at a time
+            // (usage_reads.rs); the list shows at once and each new reading as it lands.
+            usage_reads::fill(paths, hub, &key, &mut accounts, &files, |accounts| {
+                store_reading(Reading {
+                    error: None,
+                    accounts: accounts.to_vec(),
+                    updated_at: updated_at.clone(),
+                    fetched_at: Instant::now(),
+                });
+            });
+            store_reading(Reading {
                 error: None,
                 accounts,
-                updated_at: Some(Utc::now().to_rfc3339()),
+                updated_at,
                 fetched_at: Instant::now(),
-            }
+            });
         }
-        Err(error) => Reading {
+        Err(error) => store_reading(Reading {
             error: Some(error),
             accounts: previous
                 .as_ref()
@@ -221,12 +211,8 @@ fn refresh(paths: &GxserverPaths, hub: &store::Hub) {
                 .unwrap_or_default(),
             updated_at: previous.and_then(|p| p.updated_at),
             fetched_at: Instant::now(),
-        },
-    };
-    readings()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .insert(hub.id.clone(), next);
+        }),
+    }
     reading_now()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -498,6 +484,7 @@ pub(crate) fn handle(
                 hubs.remove(index);
                 store::write(paths, &hubs).map_err(io_error)?;
                 forget_reading(&id);
+                usage_reads::forget(&id);
                 launch::forget_key(paths.agent_config_home_dir(), &id);
                 return Ok(true);
             }

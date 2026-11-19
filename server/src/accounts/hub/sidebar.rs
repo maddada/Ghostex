@@ -128,5 +128,8 @@ pub(crate) fn set_shown(
     } else {
         hub.hidden_in_sidebar.insert(auth_index.to_string());
     }
-    store::write(paths, &hubs).map_err(super::io_error)
+    store::write(paths, &hubs).map_err(super::io_error)?;
+    // The next read lists the account with (or without) its usage again.
+    super::forget_reading(hub_id);
+    Ok(())
 }

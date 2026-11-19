@@ -167,13 +167,29 @@ fn api_call(
     Ok((status, serde_json::from_str(text).unwrap_or(Value::Null)))
 }
 
+/// Why one account's usage couldn't be read: the sentence to show, and whether the provider was
+/// limiting reads (429), which waits longer before the next one.
+pub(crate) struct UsageError {
+    pub message: String,
+    pub rate_limited: bool,
+}
+
+impl From<String> for UsageError {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            rate_limited: false,
+        }
+    }
+}
+
 /// One account's usage windows, read through the hub. `Ok(None)` for a provider Ghostex has no
 /// usage read for (the account is listed without meters).
 pub(crate) fn usage(
     url: &str,
     key: &str,
     file: &Value,
-) -> Result<Option<Vec<UsageWindow>>, String> {
+) -> Result<Option<Vec<UsageWindow>>, UsageError> {
     let provider = file
         .get("provider")
         .or_else(|| file.get("type"))
@@ -216,14 +232,23 @@ pub(crate) fn usage(
         401 | 403 => {
             return Err(format!(
                 "{provider_name} refused this account's login. Sign it in again on the hub."
-            ))
+            )
+            .into())
         }
-        429 => return Err(format!("{provider_name} is limiting usage reads. Ghostex tries again shortly.")),
-        0 => return Err("The hub couldn't read this account's usage.".to_string()),
+        429 => {
+            return Err(UsageError {
+                message: format!(
+                    "{provider_name} is limiting usage reads. Ghostex tries again in 30 minutes."
+                ),
+                rate_limited: true,
+            })
+        }
+        0 => return Err("The hub couldn't read this account's usage.".to_string().into()),
         status => {
             return Err(format!(
-                "{provider_name} usage is unavailable right now (HTTP {status}). Ghostex tries again shortly."
-            ))
+                "{provider_name} usage is unavailable right now (HTTP {status}). Ghostex tries again later."
+            )
+            .into())
         }
     }
     Ok(Some(if provider == "claude" {
