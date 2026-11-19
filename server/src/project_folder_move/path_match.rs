@@ -2,26 +2,13 @@
 //!
 //! Every comparison here is decided by facts read before the move (the folder's spellings and
 //! whether its volume ignores letter case), because afterwards the old path names nothing on disk
-//! (risk 4 of the plan; the same rule Rename Worktree follows since its Windows fix).
+//! (risk 4 of the plan). The part-by-part comparison is the shared one in
+//! packages/paths/src/folder_below.rs (Rename Worktree and Locate Folder use it too); `MovedRoot`
+//! keeps the spellings read before the move, which `MissingFolderRoot` can't once it has moved.
 
-/// A path with a drive letter (`C:\…`, `C:/…`) or a UNC or verbatim prefix (`\\server\…`).
-pub(crate) fn is_windows_path(path: &str) -> bool {
-    let bytes = path.as_bytes();
-    path.starts_with(r"\\")
-        || (bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':')
-}
-
-/// A path's parts: split on `/`, and on `\` too in a Windows path, whose `\\?\` prefix is dropped.
-pub(crate) fn split_parts(path: &str, windows: bool) -> Vec<&str> {
-    let path = if windows {
-        path.strip_prefix(r"\\?\").unwrap_or(path)
-    } else {
-        path
-    };
-    path.split(|c| c == '/' || (windows && c == '\\'))
-        .filter(|part| !part.is_empty() && *part != ".")
-        .collect()
-}
+pub(crate) use ghostex_paths::folder_below::{
+    is_windows_path, path_parts_below, split_path_parts as split_parts,
+};
 
 /// The moved folder as stored paths can spell it, and where it went.
 #[derive(Clone, Debug)]
@@ -44,24 +31,12 @@ impl MovedRoot {
         for root in &self.old_spellings {
             let windows = cfg!(windows) || is_windows_path(root);
             let ignore_case = windows || self.ignore_case;
-            let path_parts = split_parts(path, windows);
-            let root_parts = split_parts(root, windows);
-            if root_parts.is_empty() || path_parts.len() < root_parts.len() {
-                continue;
-            }
             // Both absolute, or both not: `/a/b` is not `a/b`.
             if path.starts_with('/') != root.starts_with('/') {
                 continue;
             }
-            let same = path_parts.iter().zip(&root_parts).all(|(a, b)| {
-                if ignore_case {
-                    a.to_lowercase() == b.to_lowercase()
-                } else {
-                    a == b
-                }
-            });
-            if same {
-                return Some(path_parts[root_parts.len()..].to_vec());
+            if let Some(rest) = path_parts_below(path, root, windows, ignore_case) {
+                return Some(rest);
             }
         }
         None
