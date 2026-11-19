@@ -771,12 +771,7 @@ impl GrokBotTab {
     }
 
     /// Right after connecting here (or after a No): did the test note arrive?
-    fn test_question(
-        &mut self,
-        p: &SettingsPalette,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Vec<AnyElement> {
+    fn test_question(&mut self, p: &SettingsPalette, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let busy = self.busy;
         let mut rows = vec![
             settings_list_item(
@@ -1043,7 +1038,8 @@ impl Render for GrokBotTab {
         };
         let on = self.enabled(cx);
         let mut blocks = Vec::new();
-        if search.row_visible("switch", SWITCH_KEY) {
+        // Off, the switch is the whole page, so it shows even when a search doesn't match it.
+        if !on || search.row_visible("switch", SWITCH_KEY) {
             let mut rows = vec![self.switch_row(&p, on, cx)];
             if !on {
                 rows.push(settings_note_row(&p, "Off: Ghostex sends nothing to Grok Bot and doesn't tell agents about it. This pauses notes only: the bot can still run ghostex commands on this computer through the Grok Bot desktop app until you set Execution on this computer to Never allow in Grok Bot (Settings > Computer)."));
@@ -1070,7 +1066,7 @@ impl Render for GrokBotTab {
                         && (self.asking_test || setup.test_arrived == Some(false)) =>
                 {
                     description = Some("Step 4 of 4".into());
-                    rows = self.test_question(&p, window, cx);
+                    rows = self.test_question(&p, cx);
                     if self.changing {
                         rows.push(card_inset(self.webhook_form(&p, window, cx)));
                     }

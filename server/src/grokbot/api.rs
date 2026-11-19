@@ -361,6 +361,13 @@ pub(crate) fn handle(
         "status" | "setup" | "instructions" | "disconnect"
     ) && !super::feature::on(paths)
     {
+        // An agent session's note: the user's choice, not something for the agent to undo.
+        if op == "notify" && matches!(caller, Principal::Session { .. }) {
+            return Err(DomainStateError {
+                code: super::feature::TURNED_OFF,
+                message: "The user turned Grok Bot off, so skip the note.".to_string(),
+            });
+        }
         return Err(super::feature::turned_off());
     }
     match op.as_str() {
