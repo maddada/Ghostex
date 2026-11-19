@@ -10981,12 +10981,12 @@
     },
     {
       "key": "grokBotHidden",
-      "title": "Turn off Grok Bot remote",
-      "subtitle": "Turn off Grok Bot remote: Ghostex stops sending your agents' notes to Grok Bot, refuses connect and test, and stops telling agents about it; the saved connection is kept. It pauses notes only: the bot can still run ghostex commands on this computer through the Grok Bot desktop app until you set Execution on this computer to Never allow in Grok Bot. On by default.",
+      "title": "Turn off Grok Bot Integration",
+      "subtitle": "Turn off Grok Bot Integration: Ghostex stops sending your agents' notes to Grok Bot, refuses connect and test, and stops telling agents about it; the saved connection is kept. It pauses notes only: the bot can still run ghostex commands on this computer through the Grok Bot desktop app until you set Execution on this computer to Never allow in Grok Bot. On by default.",
       "tab": "grokBot",
       "tabTitle": "Grok Bot",
       "section": "switch",
-      "sectionTitle": "Grok Bot remote",
+      "sectionTitle": "Grok Bot Integration",
       "type": "boolean",
       "default": false,
       "agentWritable": true
@@ -12214,8 +12214,8 @@
     },
     {
       "key": "grokWebHidden",
-      "title": "Turn off Grok Bot",
-      "subtitle": "Turn off Grok Bot: the Grok Bot button in the header and the Grok Bot view, which shows grok.com with a bar to switch between your Grok logins, each signed in on its own. Off by default; every login's sign-in is kept. Its start page and logins are on Settings > Files & Links > Browser.",
+      "title": "Turn off Grok Bot Embed",
+      "subtitle": "Turn off Grok Bot Embed: the Grok Bot button in the header and the Grok Bot view, which shows grok.com with a bar to switch between your Grok logins, each signed in on its own. Off by default; every login's sign-in is kept. Its start page and logins are on Settings > Files & Links > Browser.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",

@@ -5090,7 +5090,7 @@ the bot: Ghostex sends their notes to a webhook routine on the bot.
 and older, `ghostex grokbot` is an unknown command. Settings > Grok Bot, the
 guided setup below, comes with the release after that one.
 
-It's a built-in extension, Grok Bot remote, on by default. Its switch is at
+It's a built-in extension, Grok Bot Integration, on by default. Its switch is at
 the top of Settings > Grok Bot (right below Integrations) and on Settings >
 Extensions. Off, Ghostex sends nothing to Grok Bot, refuses connect, test and
 notes, agents are no longer told about it, and `ghostex grokbot brief` tells
@@ -5157,7 +5157,7 @@ usage. While Grok Bot is connected, agents Ghostex starts are told about
 To stop: in Grok Bot, set Execution on this computer to Never allow; click
 Disconnect in Settings > Grok Bot or run `ghostex grokbot disconnect`
 (Ghostex forgets the address and key), and delete the routine's webhook. To
-pause the notes instead, turn Grok Bot remote off at the top of Settings >
+pause the notes instead, turn Grok Bot Integration off at the top of Settings >
 Grok Bot (the bot can still run commands until Execution on this computer is
 Never allow).
 
@@ -7420,8 +7420,9 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   signed in as a different email than its account offers **Sign in as** the
   right account. With no saved Claude account, the page uses one shared
   sign-in. Setting: `claudeWebHidden`.
-- **Grok Bot** is a built-in extension, off by default: turn it on with its switch
-  in Settings > Extensions > Built-in to use grok.com inside Ghostex. It adds a
+- **Grok Bot Embed** is a built-in extension, off by default: turn it on with its switch
+  in Settings > Extensions > Built-in to use grok.com inside Ghostex. (Not Grok Bot
+  Integration, which lets a bot in the Grok Bot app control your agents: see "Grok Bot".) It adds a
   Grok Bot button to the header, left of the Claude button (both sit left of the voice button), and works like Claude:
   clicking it turns Grok Bot on and grok.com takes the whole window, the same way
   (the hidden panels, the header, showing the sidebar or opening a session

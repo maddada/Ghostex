@@ -186,7 +186,7 @@ fn run(paths: &GxserverPaths) {
             }
             let connection = store::read_connection(paths);
             let key = store::read_key(paths);
-            // Grok Bot remote turned off: stop; the notes wait in the queue until it is back on.
+            // Grok Bot Integration turned off: stop; the notes wait in the queue until it is back on.
             let on = super::feature::on(paths);
             match (connection, key) {
                 (Some(connection), Some(key)) if on && !queue.is_empty() => {

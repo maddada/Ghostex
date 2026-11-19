@@ -1,6 +1,6 @@
 use crate::rows::{row, section, Page, Section};
 
-/// Settings › Grok Bot: the Grok Bot remote built-in extension's own page, right below
+/// Settings › Grok Bot: the Grok Bot Integration built-in extension's own page, right below
 /// Integrations. Every row is a UI row with no stored value except the switch: gxserver keeps the
 /// connection (server/src/grokbot/), and the page walks the user through the setup.
 ///
@@ -18,8 +18,8 @@ pub(crate) fn page() -> Page {
 pub(crate) fn switch() -> Section {
     section(
         "switch",
-        "Grok Bot remote",
-        vec![row("grokBotHidden", "Turn off Grok Bot remote", "Turn off Grok Bot remote: Ghostex stops sending your agents' notes to Grok Bot, refuses connect and test, and stops telling agents about it; the saved connection is kept. It pauses notes only: the bot can still run ghostex commands on this computer through the Grok Bot desktop app until you set Execution on this computer to Never allow in Grok Bot. On by default.")],
+        "Grok Bot Integration",
+        vec![row("grokBotHidden", "Turn off Grok Bot Integration", "Turn off Grok Bot Integration: Ghostex stops sending your agents' notes to Grok Bot, refuses connect and test, and stops telling agents about it; the saved connection is kept. It pauses notes only: the bot can still run ghostex commands on this computer through the Grok Bot desktop app until you set Execution on this computer to Never allow in Grok Bot. On by default.")],
     )
 }
 

@@ -105,7 +105,7 @@ pub(crate) fn start_shared_settings_watch(state: Arc<AppState>) {
                 continue;
             };
             if watch.read_done(identity, read) {
-                // CDXC:GrokBot 2026-11-19 WHY: notes queued while Grok Bot remote was off go out as
+                // CDXC:GrokBot 2026-11-19 WHY: notes queued while Grok Bot Integration was off go out as
                 // soon as it is switched back on, whichever way it was (Settings > Grok Bot,
                 // Settings > Extensions, `ghostex settings set`), not only on a Grok Bot page read.
                 let paths = state.paths.clone();

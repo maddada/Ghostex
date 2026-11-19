@@ -380,11 +380,12 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("placement", J::Str("feature")),
         ("settingsKey", J::Str("grokWebHidden")),
         ("appWide", J::Bool(true)),
-        ("title", J::Str("Grok Bot")),
+        // CDXC:Extensions 2026-11-19 DECISION: User: rename the extensions so they aren't confusing: this one (grok.com in Ghostex) is "Grok Bot Embed", the one that lets Grok Bot talk to Ghostex is "Grok Bot Integration".
+        ("title", J::Str("Grok Bot Embed")),
         ("settingKeys", J::Arr(&[J::Str("grokWebStartPage"), J::Str("grokWebLogins")])),
     ]),
     // CDXC:GrokBot 2026-11-19 DECISION:
-    // User (Q4206 = A, the checklist), with: "don't put this under integrations put this as a new page in settings below integrations make it an enabled by default extension but allow people to disable this extension with a button at the top of the settings page". A whole-feature entry, on by default (`grokBotHidden`, default false; agents may switch it like any setting, Q2140). It owns no `settingsPages`: its Settings page (Settings > Grok Bot, right below Integrations) stays in the rail while it is off and shows only the switch, so the page is where it is turned back on. Off, gxserver refuses connect, test and notes, stops sending, and agents' launch notes and coordinators' guides leave out the Grok Bot line (server/src/grokbot/feature.rs); the saved connection is kept. Titled "Grok Bot remote" because "Grok Bot" is already the grok.com view's card above.
+    // User (Q4206 = A, the checklist), with: "don't put this under integrations put this as a new page in settings below integrations make it an enabled by default extension but allow people to disable this extension with a button at the top of the settings page". A whole-feature entry, on by default (`grokBotHidden`, default false; agents may switch it like any setting, Q2140). It owns no `settingsPages`: its Settings page (Settings > Grok Bot, right below Integrations) stays in the rail while it is off and shows only the switch, so the page is where it is turned back on. Off, gxserver refuses connect, test and notes, stops sending, and agents' launch notes and coordinators' guides leave out the Grok Bot line (server/src/grokbot/feature.rs); the saved connection is kept. Titled "Grok Bot Integration" (2026-11-19 rename) beside "Grok Bot Embed", the grok.com view above.
     // SEE-ALSO: apps/desktop/src/app/window/settings_modal/tabs/grok_bot.rs (the page), server/src/grokbot/ (the connection).
     J::Obj(&[
         ("description", J::Str("Control your agents from a \"Ghostex\" bot in xAI's Grok Bot app on your phone, and get their notes there. Settings > Grok Bot walks you through the setup.")),
@@ -393,7 +394,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("placement", J::Str("feature")),
         ("settingsKey", J::Str("grokBotHidden")),
         ("appWide", J::Bool(true)),
-        ("title", J::Str("Grok Bot remote")),
+        ("title", J::Str("Grok Bot Integration")),
         // The page's rows other than the switch, so Settings search leaves them out while it is off.
         ("settingKeys", J::Arr(&[J::Str("grokBotDesktopApp"), J::Str("grokBotMakeBot"), J::Str("grokBotWebhook"), J::Str("grokBotTestNote"), J::Str("grokBotConnection")])),
     ]),

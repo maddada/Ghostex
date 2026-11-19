@@ -1,4 +1,4 @@
-//! Whether the Grok Bot remote built-in extension is on (`grokBotHidden`, on by default;
+//! Whether the Grok Bot Integration built-in extension is on (`grokBotHidden`, on by default;
 //! CDXC:GrokBot 2026-11-19 in packages/settings-catalog/src/data/official_extensions.rs). While it
 //! is off, `/api/grokbot` refuses connect, test, notes and the setup marks (status, setup and the
 //! instructions still answer, so Settings > Grok Bot can show the switch), the delivery worker
@@ -17,7 +17,7 @@ use crate::domain::DomainStateError;
 /// The `code` `/api/grokbot` answers with while the extension is off.
 pub(crate) const TURNED_OFF: &str = "turnedOff";
 
-/// Whether Grok Bot remote is on in `settings` (the defaults when there are none: on).
+/// Whether Grok Bot Integration is on in `settings` (the defaults when there are none: on).
 pub(crate) fn on_in(settings: Option<&Value>) -> bool {
     built_in_extensions::on_with(GROK_BOT, |key| {
         settings
@@ -26,7 +26,7 @@ pub(crate) fn on_in(settings: Option<&Value>) -> bool {
     })
 }
 
-/// Whether Grok Bot remote is on, read fresh from this gxserver's settings file.
+/// Whether Grok Bot Integration is on, read fresh from this gxserver's settings file.
 pub(crate) fn on(paths: &crate::paths::GxserverPaths) -> bool {
     on_in(crate::session_lifecycle::read_sidebar_settings(paths).as_ref())
 }
@@ -63,7 +63,7 @@ mod tests {
     fn the_refusal_names_the_page() {
         assert_eq!(
             off_message(),
-            "Grok Bot remote is turned off. Turn it on at the top of Settings > Grok Bot."
+            "Grok Bot Integration is turned off. Turn it on at the top of Settings > Grok Bot."
         );
     }
 }

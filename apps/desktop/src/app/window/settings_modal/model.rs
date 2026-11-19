@@ -129,7 +129,7 @@ impl SettingsTabId {
         SettingsTabId::Autopilot,
         SettingsTabId::Secrets,
         SettingsTabId::Integrations,
-        // CDXC:GrokBot 2026-11-19 DECISION: User (Q4206): Grok Bot is "a new page in settings below integrations", the Grok Bot remote built-in extension's own page; it stays listed while the extension is off, to show the switch that turns it back on (official_extensions.rs).
+        // CDXC:GrokBot 2026-11-19 DECISION: User (Q4206): Grok Bot is "a new page in settings below integrations", the Grok Bot Integration built-in extension's own page; it stays listed while the extension is off, to show the switch that turns it back on (official_extensions.rs).
         SettingsTabId::GrokBot,
         SettingsTabId::Remote,
         SettingsTabId::Sync,

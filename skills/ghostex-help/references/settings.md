@@ -492,9 +492,9 @@ How to use this file:
 - **Switch to the session after sending** `ghostexCaptureSwitchToSession` (boolean, default true): After a prompt is sent from Floating Capture, the Ghostex window shows the session it went to, without coming in front of the app you are in.
 ## Grok Bot (tab `grokBot`)
 
-### Grok Bot remote
+### Grok Bot Integration
 
-- **Turn off Grok Bot remote** `grokBotHidden` (boolean, default false): Turn off Grok Bot remote: Ghostex stops sending your agents' notes to Grok Bot, refuses connect and test, and stops telling agents about it; the saved connection is kept. It pauses notes only: the bot can still run ghostex commands on this computer through the Grok Bot desktop app until you set Execution on this computer to Never allow in Grok Bot. On by default.
+- **Turn off Grok Bot Integration** `grokBotHidden` (boolean, default false): Turn off Grok Bot Integration: Ghostex stops sending your agents' notes to Grok Bot, refuses connect and test, and stops telling agents about it; the saved connection is kept. It pauses notes only: the bot can still run ghostex commands on this computer through the Grok Bot desktop app until you set Execution on this computer to Never allow in Grok Bot. On by default.
 ### Set up
 
 - **Grok Bot desktop app** `grokBotDesktopApp` (Settings UI row without a settings key; use `ghostex settings open`): Install the Grok Bot desktop app from x.ai/bot, sign in and leave it running: the bot runs Ghostex's commands on this computer through it. Ghostex ticks this off when it finds the app.
@@ -625,7 +625,7 @@ How to use this file:
 - **Turn off the Session details panel** `sessionDetailsPanelHidden` (boolean, default false): Turn off the Session details panel (beta): the context ring at the top right of the window, the panel beside Claude chats, and the Claude task list row on Settings > Agents. On by default.
 - **Turn off Session notes** `sessionNotesHidden` (boolean, default true): Turn off Session notes: Note in a session's menu and hover buttons, the note dot on its card, Session note in the chat's More actions, the Session Note hotkey and the ghostex session-note command, here and in the phone app. Off by default; notes you wrote are kept and come back when you turn it on.
 - **Turn off Claude** `claudeWebHidden` (boolean, default true): Turn off Claude: the Claude button in the header and the Claude view, which shows claude.ai with a bar to switch between your saved Claude accounts. Off by default; each account's claude.ai sign-in is kept.
-- **Turn off Grok Bot** `grokWebHidden` (boolean, default true): Turn off Grok Bot: the Grok Bot button in the header and the Grok Bot view, which shows grok.com with a bar to switch between your Grok logins, each signed in on its own. Off by default; every login's sign-in is kept. Its start page and logins are on Settings > Files & Links > Browser.
+- **Turn off Grok Bot Embed** `grokWebHidden` (boolean, default true): Turn off Grok Bot Embed: the Grok Bot button in the header and the Grok Bot view, which shows grok.com with a bar to switch between your Grok logins, each signed in on its own. Off by default; every login's sign-in is kept. Its start page and logins are on Settings > Files & Links > Browser.
 - **CLIProxyAPI** `cliProxyApiEnabled` (boolean, default false) [not agent-writable]: Turn CLIProxyAPI on or off: hubs in Settings > Accounts, the usage of the accounts each hub pools, and On the hub when a Claude or Codex session starts. Ghostex only points at a hub you run yourself. Off by default; saved hubs are kept while it is off.
 - **Turn off Connectors** `connectorsHidden` (boolean, default true): Turn off Connectors everywhere: the Connectors page in Settings, the apps your agents get and the ghostex connectors commands. Experimental, off by default; your sign-ins and connected apps are kept.
 - **Turn off OS Integration** `osIntegrationHidden` (boolean, default true): Leave the OS Integration page out of Settings. Experimental, off by default.

@@ -99,7 +99,7 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
 /// CDXC:GrokBot 2026-11-19 WHY: the bot runs `brief` at the start of every chat, so its first run
 /// is how Settings > Grok Bot sees "the bot reached this computer" (step 2 of the checklist). The
 /// mark is best-effort with a short wait: an older or stopped gxserver must not keep the bot from
-/// its commands. While Grok Bot remote is off, the bot is told so instead of getting the commands.
+/// its commands. While Grok Bot Integration is off, the bot is told so instead of getting the commands.
 fn brief_command(parsed: &ParsedArgs) -> CliResult<()> {
     let mut flags = parsed.flags.clone();
     flags.0.remove("timeoutMs");
@@ -119,7 +119,7 @@ fn brief_command(parsed: &ParsedArgs) -> CliResult<()> {
 
 fn print_status(answer: &Value) {
     if answer["enabled"] == false {
-        println!("Grok Bot remote is turned off: Ghostex sends nothing to Grok Bot. Turn it on at the top of Settings > Grok Bot.");
+        println!("Grok Bot Integration is turned off: Ghostex sends nothing to Grok Bot. Turn it on at the top of Settings > Grok Bot.");
         return;
     }
     if answer["connected"] != true {

@@ -399,7 +399,7 @@ pub(crate) fn handle(
     }
 }
 
-/// Picks up notes left waiting by a gxserver restart or while Grok Bot remote was off.
+/// Picks up notes left waiting by a gxserver restart or while Grok Bot Integration was off.
 pub(crate) fn resume_delivery(paths: &GxserverPaths) {
     if super::feature::on(paths) && !store::read_queue(paths).is_empty() {
         delivery::kick(paths);

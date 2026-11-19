@@ -1,4 +1,4 @@
-//! Settings › Grok Bot: the Grok Bot remote built-in extension's page. At the top, the switch that
+//! Settings › Grok Bot: the Grok Bot Integration built-in extension's page. At the top, the switch that
 //! turns the extension on or off (`grokBotHidden`); while it is off, that is all the page shows.
 //! While it is on and Grok Bot isn't connected, the setup checklist of Q4206 = A: four steps,
 //! each ticked off as Ghostex sees it happen (the desktop app found, the bot's first
@@ -528,9 +528,9 @@ impl GrokBotTab {
     }
 
     fn switch_row(&mut self, p: &SettingsPalette, on: bool, cx: &mut Context<Self>) -> AnyElement {
-        // The page's own words: the catalog row is "Turn off Grok Bot remote" (the key is
+        // The page's own words: the catalog row is "Turn off Grok Bot Integration" (the key is
         // `…Hidden`), which reads backwards beside a switch that is on when the extension is.
-        let title = "Grok Bot remote".to_string();
+        let title = "Grok Bot Integration".to_string();
         let subtitle = "Control your agents from a \"Ghostex\" bot in Grok Bot on your phone, and get their notes there.".to_string();
         let control = switch_control(
             p,
