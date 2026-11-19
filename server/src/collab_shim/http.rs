@@ -839,6 +839,7 @@ pub(crate) async fn host_call(state: &Arc<AppState>, call: HostCall) -> Result<V
             session_id,
             text,
             image_paths,
+            send_request_id,
         } => {
             let scope = shared(&project_id, &session_id)?;
             // CDXC:Collab 2026-11-20 WHY:
@@ -860,7 +861,9 @@ pub(crate) async fn host_call(state: &Arc<AppState>, call: HostCall) -> Result<V
                     "projectId": project_id,
                     "sessionId": session_id,
                     "text": text,
-                    "sendRequestId": Uuid::new_v4().to_string(),
+                    // One id per held message, so a Send tried again after a lost reply is not
+                    // delivered twice (the send ledger, session_chat_send_requests.rs).
+                    "sendRequestId": send_request_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
                 }
             });
             if !image_paths.is_empty() {

@@ -615,13 +615,49 @@ pub fn begin_send(share_id: &str, held_id: &str) -> Option<HeldMessage> {
     })
 }
 
-/// Ends a held message's send (`begin_send`), delivered or not.
-pub fn end_send(share_id: &str, held_id: &str) {
+/// Ends a held message's send (`begin_send`): clears its mark and, when it was delivered, takes it
+/// out under the same lock (`take_held` refuses while the mark is set).
+fn end_send(share_id: &str, held_id: &str, delivered: Option<&'static str>) {
     with_registry(|registry| {
         if let Some(live) = registry.live.get_mut(share_id) {
             live.sending.remove(held_id);
         }
+        if let Some(outcome) = delivered {
+            take_in(registry, share_id, held_id, outcome);
+        }
     });
+}
+
+/// A held message's send in progress (`begin_send`): `finish` ends it, and dropping it unfinished
+/// (the request was dropped mid-delivery) clears the sending mark, so Send works again.
+pub struct SendGuard {
+    share_id: String,
+    held_id: String,
+    done: bool,
+}
+
+impl SendGuard {
+    pub fn new(share_id: &str, held_id: &str) -> Self {
+        Self {
+            share_id: share_id.to_string(),
+            held_id: held_id.to_string(),
+            done: false,
+        }
+    }
+
+    /// Delivered: the message is taken out with `outcome`; refused: it stays held.
+    pub fn finish(mut self, delivered: bool, outcome: &'static str) {
+        self.done = true;
+        end_send(&self.share_id, &self.held_id, delivered.then_some(outcome));
+    }
+}
+
+impl Drop for SendGuard {
+    fn drop(&mut self) {
+        if !self.done {
+            end_send(&self.share_id, &self.held_id, None);
+        }
+    }
 }
 
 /// Takes a held message out (the owner sent, edited or declined it).
@@ -630,6 +666,26 @@ pub fn end_send(share_id: &str, held_id: &str) {
 /// page can tell its form whether its answers went on.
 pub fn take_held(share_id: &str, held_id: &str, outcome: &'static str) -> Option<HeldMessage> {
     with_registry(|registry| {
+        // A message being sent (`begin_send`) is not taken by Edit or Decline meanwhile.
+        if registry
+            .live
+            .get(share_id)
+            .is_some_and(|live| live.sending.contains(held_id))
+        {
+            return None;
+        }
+        take_in(registry, share_id, held_id, outcome)
+    })
+}
+
+/// [`take_held`]'s work, under a lock the caller holds.
+fn take_in(
+    registry: &mut Registry,
+    share_id: &str,
+    held_id: &str,
+    outcome: &'static str,
+) -> Option<HeldMessage> {
+    {
         let live = registry.live.get_mut(share_id)?;
         let index = live.held.iter().position(|held| held.id == held_id)?;
         let held = live.held.remove(index);
@@ -643,7 +699,7 @@ pub fn take_held(share_id: &str, held_id: &str, outcome: &'static str) -> Option
         }
         save_held(registry);
         Some(held)
-    })
+    }
 }
 
 /// The soonest moment a typing line runs out, so a timer can clear it.
