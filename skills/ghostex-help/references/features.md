@@ -989,6 +989,18 @@ history, groups, board and settings stay. Each computer keeps its own name for
 a project, and the Unified sidebar shows the repository's name instead. A
 worktree is renamed with Rename Worktree, which also renames its folder and
 branch.
+To move or rename a project's folder on disk, run `ghostex move-project-folder`
+with `--project-id`, `--path` or `--name` and the new full path (on the same
+drive). Ghostex moves the folder and everything it keeps about it: the project,
+its sessions (Claude and Codex pick their conversations up in the new folder),
+its worktrees' git links, its board and its automations. It changes nothing and
+says why while one of the project's sessions runs, while another program works
+inside the folder, when the new path exists, is on another drive or is in or out
+of a cloud-synced folder, and when the project has worktrees beside it and the
+folder would leave their parent folder. `--dry-run` lists what would change. If
+Ghostex or the computer stops in the middle, the move is finished the next time
+Ghostex starts; `--resume` finishes it now and `--abandon` forgets it. It works
+on this computer only, from the command line.
 To remove a project for good (the folder on your computer stays), use Remove in
 Settings > Projects or, from the command line, `ghostex remove-project` with
 `--project-id`, `--path` or `--name`; a name two projects share fails and lists
