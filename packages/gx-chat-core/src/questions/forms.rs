@@ -158,7 +158,8 @@ pub fn reopen_after_removed_answers(state: &mut ChatState, queued_prompt_id: &st
     }
 }
 
-fn answered(draft: &QuestionDraft) -> bool {
+/// Whether a question's draft answers it: a pick, words, or a skip.
+pub(crate) fn draft_answered(draft: &QuestionDraft) -> bool {
     draft.skipped
         || !draft.indices.is_empty()
         || draft.other_picked
@@ -176,7 +177,7 @@ fn save(state: &ChatState, id: &str) -> Vec<Effect> {
         .drafts
         .iter()
         .enumerate()
-        .filter(|(_, draft)| answered(draft))
+        .filter(|(_, draft)| draft_answered(draft))
         .map(|(index, draft)| (index.to_string(), draft.clone()))
         .collect();
     if !entry.notes.trim().is_empty() {
@@ -458,7 +459,7 @@ fn send_answers(
     // A question left blank is sent as `"skipped"` (the SessionChat 2026-10-16 DECISION on `SKIPPED` in packages/gx-visual/src/questions.rs), so a form may be sent with any number of questions unanswered, none included (then it is Skip all).
     let mut drafts = drafts;
     drafts.resize(form.questions.len(), QuestionDraft::default());
-    for draft in drafts.iter_mut().filter(|draft| !answered(draft)) {
+    for draft in drafts.iter_mut().filter(|draft| !draft_answered(draft)) {
         draft.skipped = true;
     }
     let answers = answers(&form, &drafts, &notes);
@@ -569,7 +570,7 @@ fn reopen_failed_combined_form(state: &mut ChatState, id: &str, answers_override
         if let Some(answers) = restore {
             if answers_override.is_some()
                 || entry.drafts.len() != form_def.questions.len()
-                || (!entry.drafts.iter().any(answered) && entry.notes.trim().is_empty())
+                || (!entry.drafts.iter().any(draft_answered) && entry.notes.trim().is_empty())
             {
                 entry.drafts = drafts_from_answers(form_def, answers);
                 entry.notes = notes_from_answers(form_def, answers);
