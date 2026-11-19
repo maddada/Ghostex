@@ -83,6 +83,39 @@ struct FoldMotion {
     from: f32,
 }
 
+impl FoldMotion {
+    fn elapsed_ms(&self) -> f32 {
+        self.started.elapsed().as_secs_f32() * 1000.0
+    }
+
+    /// How long the motion lasts, from its start.
+    fn span_ms(&self) -> f32 {
+        let metrics = &*METRICS;
+        match self.kind {
+            FoldMotionKind::Fold => (metrics.collapse_delay_ms + metrics.collapse_ms)
+                .max(metrics.heading_delay_ms + metrics.heading_ms),
+            FoldMotionKind::Open | FoldMotionKind::Close => {
+                let target = if self.kind == FoldMotionKind::Open {
+                    1.0
+                } else {
+                    0.0
+                };
+                // A reversal part of the way through covers only the distance left.
+                metrics.toggle_ms * (target - self.from).abs().max(0.2)
+            }
+        }
+    }
+
+    /// Past its end by more than [`SETTLE_GRACE_MS`]: a row still on screen has drawn its settled
+    /// form by then (`frame` settles the motion on that draw), so one that has not is not drawn.
+    fn abandoned(&self) -> bool {
+        self.elapsed_ms() >= self.span_ms() + SETTLE_GRACE_MS
+    }
+}
+
+/// How long after its end a motion keeps asking for frames, so its row draws the settled form.
+const SETTLE_GRACE_MS: f32 = 250.0;
+
 /// Every disclosure on screen that is moving, the state each was last drawn in, and the turns the
 /// transcript last drew as live rows.
 #[derive(Default)]
@@ -133,6 +166,7 @@ impl DisclosureMotions {
     /// start the fold, unless the log stays open (verbose mode) or motion is reduced.
     pub(super) fn arrived(&mut self, key: &str, folds_shut: bool, reduce_motion: bool) {
         if self.live.remove(key) && folds_shut && !reduce_motion {
+            self.settle_abandoned();
             self.observed.insert(key.to_string(), false);
             self.motions.insert(
                 key.to_string(),
@@ -172,6 +206,7 @@ impl DisclosureMotions {
                     self.frame(key)
                         .map(|frame| frame.log)
                         .unwrap_or(if open { 0.0 } else { 1.0 });
+                self.settle_abandoned();
                 self.motions.insert(
                     key.to_string(),
                     FoldMotion {
@@ -192,21 +227,40 @@ impl DisclosureMotions {
     }
 
     /// True while any disclosure still needs frames.
+    ///
+    /// CDXC:SessionChat 2026-11-19 WHY:
+    /// A motion used to count until its own row was drawn again after its end (`frame` settles it then). A row that left the list's view first, such as a finished turn folding in a coordinator chat while reports pushed it up, was never drawn again, so the motion stayed and every chat render and every transcript row asked for the next display frame: on Windows the whole window redrew about 200 times a second at idle and the UI thread ran at 67% until that row came back into view. A motion now counts only until a short grace after its time is up (`SETTLE_GRACE_MS`, for the draw that settles it), drawn or not.
     pub(super) fn running(&self) -> bool {
-        !self.motions.is_empty()
+        self.motions.values().any(|motion| !motion.abandoned())
     }
 
     /// True while `key` is opening or closing.
     pub(super) fn is_moving(&self, key: &str) -> bool {
-        self.motions.contains_key(key)
+        self.motions
+            .get(key)
+            .is_some_and(|motion| !motion.abandoned())
+    }
+
+    /// Drops the motions whose rows were not drawn to settle them (`running`).
+    fn settle_abandoned(&mut self) {
+        let abandoned: Vec<String> = self
+            .motions
+            .iter()
+            .filter(|(_, motion)| motion.abandoned())
+            .map(|(key, _)| key.clone())
+            .collect();
+        for key in abandoned {
+            self.settle(&key);
+        }
     }
 
     /// This frame of the motion on `key`, or `None` once it is at rest.
     pub(super) fn frame(&mut self, key: &str) -> Option<FoldFrame> {
         let motion = self.motions.get(key)?;
         let metrics = &*METRICS;
-        let elapsed = motion.started.elapsed().as_secs_f32() * 1000.0;
-        let (frame, end) = match motion.kind {
+        let elapsed = motion.elapsed_ms();
+        let end = motion.span_ms();
+        let frame = match motion.kind {
             FoldMotionKind::Fold => {
                 let dim = eased(progress(elapsed, 0.0, metrics.dim_ms));
                 let collapse = eased(progress(
@@ -219,17 +273,13 @@ impl DisclosureMotions {
                     metrics.heading_delay_ms,
                     metrics.heading_ms,
                 ));
-                (
-                    FoldFrame {
-                        kind: motion.kind,
-                        heading,
-                        heading_offset: metrics.heading_offset_px * (1.0 - heading),
-                        log: 1.0 - collapse,
-                        rows_opacity: 1.0 - (1.0 - metrics.dim_opacity) * dim,
-                    },
-                    (metrics.collapse_delay_ms + metrics.collapse_ms)
-                        .max(metrics.heading_delay_ms + metrics.heading_ms),
-                )
+                FoldFrame {
+                    kind: motion.kind,
+                    heading,
+                    heading_offset: metrics.heading_offset_px * (1.0 - heading),
+                    log: 1.0 - collapse,
+                    rows_opacity: 1.0 - (1.0 - metrics.dim_opacity) * dim,
+                }
             }
             FoldMotionKind::Open | FoldMotionKind::Close => {
                 let target = if motion.kind == FoldMotionKind::Open {
@@ -237,20 +287,14 @@ impl DisclosureMotions {
                 } else {
                     0.0
                 };
-                // A reversal part of the way through covers only the distance left.
-                let span = metrics.toggle_ms * (target - motion.from).abs().max(0.2);
-                let log =
-                    motion.from + (target - motion.from) * eased(progress(elapsed, 0.0, span));
-                (
-                    FoldFrame {
-                        kind: motion.kind,
-                        heading: 1.0,
-                        heading_offset: 0.0,
-                        log,
-                        rows_opacity: metrics.dim_opacity + (1.0 - metrics.dim_opacity) * log,
-                    },
-                    span,
-                )
+                let log = motion.from + (target - motion.from) * eased(progress(elapsed, 0.0, end));
+                FoldFrame {
+                    kind: motion.kind,
+                    heading: 1.0,
+                    heading_offset: 0.0,
+                    log,
+                    rows_opacity: metrics.dim_opacity + (1.0 - metrics.dim_opacity) * log,
+                }
             }
         };
         if elapsed >= end {
