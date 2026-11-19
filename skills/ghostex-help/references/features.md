@@ -1750,12 +1750,15 @@ transcripts, question and approval cards, rewind, and a note per session (with
 the Session notes extension on).
 **Approvals above the chat box**: when the agent asks for permission (a Claude
 Code or Codex permission prompt, a folder-trust question, a hook's Allow / Deny),
-it shows as a row in the list above the chat box with its command and short
-answers such as Yes, Always and No; hover one to read its full words, or click
-the row for the whole command. The keyboard answers as before. Once you answer,
-the row says Approved (or Denied) and the command for a few seconds, then
-leaves; the list above the chat box is the only bar there, with the agent's
-status on its top line.
+it shows as a row in the list above the chat box with the whole command (its
+first lines, then Show N more lines), the agent's warning when it gave one, and
+the agent's own answers (Yes, No, "Yes, and don't ask again for …"). Click the
+row for everything the agent showed. ⌘↩ (Ctrl+Enter on Windows and Linux)
+answers Yes only while the chat box is empty; with a draft it sends the draft.
+Once Ghostex has the answer, the row says Approved, Always allowed or Denied
+and the command for a few seconds, then leaves; the list above the chat box is
+the only bar there, with the agent's status on its top line. While the chat box
+is maximized, or a question card is open, the approval shows as its own card.
 **Quote or reply to part of the chat**: select any text in the chat (a reply,
 your own message, tool output or code) and a small bar of buttons shows by
 where you let go: Copy, Add to Chat (puts the text in the chat box as a quote)

@@ -325,9 +325,11 @@ impl NativeChatView {
             return;
         }
         // A live terminal dialog's numbered rows answer their number keys like a question card's
-        // options (dialog_rows.rs in the chat core).
+        // options (dialog_rows.rs in the chat core). Not while the dialog is an approval drawn as a
+        // dock row, which shows no numbers (gx-chat-core extras/dock_approvals.rs).
         if this.snapshot["noticeVisible"] == true
             && this.snapshot["terminalNotice"]["numbered"] == true
+            && this.approval_in_dock() != "notice"
             && this.snapshot["questionCard"]["busy"] != true
             && !key.modifiers.platform
             && !key.modifiers.control
@@ -432,9 +434,15 @@ impl NativeChatView {
             && !key.modifiers.alt
             && !key.modifiers.platform
             && !key.modifiers.control;
+        // CDXC:SessionChat 2026-11-20 WHY:
+        // Cmd+Enter (Ctrl+Enter on Windows and Linux) also sends a typed message now, so with a draft in the box it sends the draft and never answers the notice: an urgent "stop" must not approve a command (security review of the dock approval rows).
+        let draft_typed = this
+            .input
+            .as_ref()
+            .is_some_and(|input| !input.read(cx).value().trim().is_empty());
         if this.snapshot["noticeVisible"] == true
             && this.snapshot["questionCard"]["busy"] != true
-            && (primary || secondary)
+            && (secondary || (primary && !draft_typed))
             && !event.is_held
         {
             let notice = &this.snapshot["terminalNotice"];
