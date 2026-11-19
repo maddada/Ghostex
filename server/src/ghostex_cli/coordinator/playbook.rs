@@ -197,7 +197,7 @@ fn set_overrides(parsed: &ParsedArgs) -> CliResult<()> {
     let text = if parsed.flags.truthy("clearOverrides") {
         String::new()
     } else {
-        match text_or_file(parsed, "setOverrides")? {
+        match text_or_file(parsed, "setOverrides", "nothing was changed")? {
             Some(text) => text,
             None => parsed.rest.join(" "),
         }
@@ -338,7 +338,7 @@ fn edit_overrides(parsed: &ParsedArgs) -> CliResult<()> {
     let rule = || -> CliResult<String> {
         // `--body-file` wins; else `--add-override`'s own text; else the words after the number.
         let rule = if flag_text(&parsed.flags, "bodyFile").is_some() {
-            text_or_file(parsed, "addOverride")?.unwrap_or_default()
+            text_or_file(parsed, "addOverride", "nothing was changed")?.unwrap_or_default()
         } else if parsed.flags.contains("addOverride") {
             flag_text(&parsed.flags, "addOverride").unwrap_or_else(|| parsed.rest.join(" "))
         } else {

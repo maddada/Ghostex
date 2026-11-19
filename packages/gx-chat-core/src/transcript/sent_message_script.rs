@@ -235,12 +235,15 @@ impl<'a> Script<'a> {
 }
 
 /// What the CLI prints when it refuses or loses a send, by phrase.
-const SEND_ERRORS: [&str; 8] = [
+const SEND_ERRORS: [&str; 11] = [
     "failed or is uncertain",
     "Message body must not be empty",
     "is not an agent session",
     "Could not read message file",
     "Could not read task file",
+    "nothing was piped in",
+    "Could not read the message from standard input",
+    "Could not read the task from standard input",
     "exceeds the send limit",
     "Unknown or hidden agent type",
     "No matching session found",

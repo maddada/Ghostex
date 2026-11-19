@@ -77,14 +77,19 @@ pub(super) fn flag_text(flags: &Flags, key: &str) -> Option<String> {
 /// CDXC:Coordinators 2026-11-19 WHY: an empty `-` is refused, not passed on: `set-instructions
 /// --body-file -` with a forgotten heredoc (or `--set-overrides`) would otherwise save nothing over
 /// the coordinator's instructions or the project's overrides.
-pub(super) fn text_or_file(parsed: &ParsedArgs, text_key: &str) -> CliResult<Option<String>> {
+/// `unchanged` says in the refusal what did not happen ("nothing was changed").
+pub(super) fn text_or_file(
+    parsed: &ParsedArgs,
+    text_key: &str,
+    unchanged: &str,
+) -> CliResult<Option<String>> {
     if let Some(path) = flag_text(&parsed.flags, "bodyFile") {
         let text =
             crate::ghostex_cli::args::read_body_file(&path, "text").map_err(CliError::Other)?;
         if path == "-" && text.trim().is_empty() {
-            return Err(CliError::Other(
-                "--body-file - got no text on standard input, so nothing was changed. Put the text in a heredoc (<<'EOF' ... EOF) or a file.".into(),
-            ));
+            return Err(CliError::Other(format!(
+                "--body-file - got no text on standard input, so {unchanged}. Put the text in a heredoc (<<'EOF' ... EOF) or a file."
+            )));
         }
         return Ok(Some(text));
     }
@@ -835,7 +840,7 @@ fn update(command: &str, parsed: &ParsedArgs) -> CliResult<()> {
         }
         "set-goal" => params["goal"] = json!(value),
         _ => {
-            let text = match text_or_file(parsed, "text")? {
+            let text = match text_or_file(parsed, "text", "nothing was changed")? {
                 Some(text) => text,
                 None => value,
             };

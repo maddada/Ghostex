@@ -52,7 +52,6 @@ to and the threads have nobody to report to.
 - A brief that holds code, backticks, `$` or quotes goes through a quoted heredoc,
   `--body-file - <<'EOF'`, never in `--task "..."`: the shell runs a backtick-quoted command there
   before ghostex starts, and your turn and the user's messages wait on it.
-
 - The brief stands alone: the thread has none of your context. Say what to achieve, which files or
   areas matter, and what not to touch; put long material in a file and point to it.
 - The thread checks its own work and reports what it checked and what it could not. Ask for light

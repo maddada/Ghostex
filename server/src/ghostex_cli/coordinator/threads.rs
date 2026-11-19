@@ -160,7 +160,7 @@ fn remote_project_like(
 pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
     let title = flag_text(&parsed.flags, "title")
         .ok_or_else(|| CliError::Other("start-thread needs --title \"<3 to 6 words>\".".into()))?;
-    let task = text_or_file(parsed, "task")?
+    let task = text_or_file(parsed, "task", "no thread was started")?
         .filter(|task| !task.trim().is_empty())
         .ok_or_else(|| {
             CliError::Other("start-thread needs --task \"<brief>\" or --body-file <path>.".into())
