@@ -167,8 +167,8 @@ pub(crate) struct ThemeTab {
     pending_monospace_font: Option<String>,
     /// The Presets row's sideways scroll (presets.rs).
     presets_row: presets::PresetsRow,
-    /// "Theme it in your words": the example theme being applied or undone, and the last one
-    /// applied (prompt_gallery.rs).
+    /// The agent-made looks: the one being applied or undone, and the last one applied
+    /// (prompt_gallery.rs).
     prompt_gallery: prompt_gallery::PromptGallery,
     /// The Colours card's width at the last paint, so rows too narrow for their label and control
     /// side by side put the control under the label (`stacks`).
@@ -949,7 +949,8 @@ impl ThemeTab {
         settings_section(&p, "Panes", None, None, rows).map(IntoElement::into_any_element)
     }
 
-    /// Themes: Appearance's three preview cards, then the presets (presets.rs).
+    /// Themes: Appearance's three preview cards, then one row of the agent-made looks and the
+    /// presets (presets.rs), the applied look's line and Describe a look (prompt_gallery.rs).
     fn themes_section(
         &mut self,
         t: &ThemeCx,
@@ -963,6 +964,8 @@ impl ThemeTab {
         if !t.searching {
             let p = t.p;
             rows.extend(self.presets_strip(&p, &t.values, cx));
+            rows.extend(self.look_applied_row(&p, &t.values, cx));
+            rows.push(self.describe_look_row(&p, cx));
         }
         settings_section(&t.p, "Themes", None, None, rows).map(IntoElement::into_any_element)
     }
@@ -1213,18 +1216,12 @@ impl Render for ThemeTab {
                 );
             }
             _ => {
-                // Q4153's order: Themes (Appearance, the presets, then "Theme it in your words"),
+                // Q4153's order: Themes (Appearance, the looks and presets, Describe a look),
                 // Colours, Glass, Chat colours, Fine-tune colours, Terminal colours.
                 blocks.extend(
                     self.themes_section(&t, window, cx)
                         .map(|section| PageBlock::section("themes", section)),
                 );
-                if !t.searching {
-                    blocks.extend(
-                        self.prompt_gallery_section(&p, cx)
-                            .map(|section| PageBlock::section("themeByPrompt", section)),
-                    );
-                }
                 blocks.extend(
                     self.colours_section(&t, window, cx)
                         .map(|section| PageBlock::section("theming", section)),

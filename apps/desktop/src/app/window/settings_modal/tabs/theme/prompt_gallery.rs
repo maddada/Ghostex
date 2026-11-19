@@ -1,20 +1,25 @@
-//! The "Theme it in your words" card in the Themes page's Themes group: it teaches that an agent can
-//! restyle Ghostex from a plain description, with Ask an agent (a Help chat with a starter prompt
-//! as its draft), and a gallery of example themes (`THEME_GALLERY` in
-//! packages/settings-catalog/src/data/theme_gallery.rs), each with Apply and Copy prompt.
+//! The agent-made looks of the Themes page's Themes group and the way to ask an agent for one. The
+//! six example themes (`THEME_GALLERY` in packages/settings-catalog/src/data/theme_gallery.rs) lead
+//! the themes row as tiles of the presets' own kind (`theme_tile` in presets.rs): a press applies
+//! one, and its hover button, Make it your own, opens a Help chat with its prompt as the draft.
+//! Under the row, the applied look's line (Undo, Change them) and Describe a look, whose Ask an
+//! agent opens a Help chat with a starter prompt as its draft.
 //!
-//! CDXC:Theming 2026-11-18 DECISION:
-//! User, after picking six example themes from two rounds of agent-made looks: "the final 6 left implement those please in themes page". They asked that the Interface page teach people they can prompt an agent to theme Ghostex. The card follows the approved mockup (docs/2026-11-18/theme-by-prompt/index.html): a starter prompt, then the six themes as framed pictures with their name, their prompt, Apply and Copy prompt. Apply saves through `/api/theme` `set` like `ghostex theme set`, so it is one change in the theme history; the tile's button then reads Undo until another theme is applied.
+//! CDXC:Theming 2026-11-20 DECISION:
+//! User, of the presets row and the "Theme it in your words" card with its "A few starting points" gallery under it: "why do we have these 2 when they pretty much do very similar thing, pls fix". They are one gallery now: the six looks join the presets row first, as their own family captioned Agent-made, drawn like a preset with their picture as the preview; a press applies one through `/api/theme` `set` like `ghostex theme set` (one change in the theme history, Undo on the applied line until another theme is applied). Make it your own replaces Copy prompt, and the card's starter prompt is one Describe a look row. Supersedes the 2026-11-18 card of framed pictures with Apply and Copy prompt (docs/2026-11-18/theme-by-prompt/index.html).
 //! SEE-ALSO: server/src/theme/endpoint.rs (the change and its Undo), apps/desktop/src/app/titlebar/help_menu.rs (`ask_ghostex_help`, the chat Ask an agent opens).
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::catalog::{module, settings_catalog};
 use super::super::super::fields::{
-    SizedButtonSize, SizedButtonVariant, settings_section, settings_sized_button,
+    ButtonVariant, SizedButtonSize, SizedButtonVariant, settings_icon, settings_icon_button,
+    settings_sized_button,
 };
 use super::super::super::palette::SettingsPalette;
-use super::super::super::store::{post_store_message, store_copy_to_clipboard, store_gxserver_rpc};
+use super::super::super::store::{SettingsValues, post_store_message, store_gxserver_rpc};
 use super::ThemeTab;
 use super::colours::preview_scheme_dark;
+use super::presets::{TileSpec, theme_tile};
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, Image, ImageFormat, IntoElement, ObjectFit, ParentElement as _,
     SharedString, Styled as _, StyledImage as _, Window, div, img, px,
@@ -25,16 +30,21 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
-const CARD_TITLE: &str = "Theme it in your words";
-const CARD_COPY: &str = "Ask an agent to change Ghostex\u{2019}s colours, fonts and glass on this computer. Describe a mood, or copy an example below.";
+const DESCRIBE_TITLE: &str = "Describe a look";
+const DESCRIBE_COPY: &str = "An agent sets the colours, fonts and glass from your words, like \u{201c}a calm, dark look with frosted glass\u{201d}.";
 /// The draft Ask an agent stages in the Help chat.
 const STARTER_PROMPT: &str = "Give Ghostex a calm, dark look with soft colours and frosted glass.";
+/// The pictures' shape (960 x 660), and how a look's tile draws one: the window inside it spans
+/// about 7% to 93% across and 10% to 88% down.
+const PICTURE_ASPECT: f32 = 960.0 / 660.0;
+const PICTURE_WIDTH: f32 = 92.0;
+const PICTURE_LEFT: f32 = -6.7;
+const PICTURE_TOP: f32 = -7.5;
+/// The caption over the first look in the themes row.
+const LOOKS_CAPTION: &str = "Agent-made";
 const THEME_ENDPOINT: &str = "/api/theme";
 /// `/api/theme` waits up to 15s for the app to save, then 3s for the file to show it.
 const THEME_TIMEOUT: Duration = Duration::from_secs(20);
-/// The pictures' shape (960 x 660).
-const PICTURE_ASPECT: f32 = 960.0 / 660.0;
-const COLUMNS: usize = 3;
 /// The font settings a gallery theme leaves alone on a computer without its font.
 const FONT_KEYS: [&str; 2] = ["sessionChatFontFamily", "terminalFontFamily"];
 
@@ -164,16 +174,36 @@ fn applied_theme<'a>(
     })
 }
 
-/// "Orchid Dusk is applied. It set 16 colours, your messages included." and Change them, which
-/// opens the colours it set (CDXC:Theming 2026-11-18 in packages/settings-catalog/src/theme_roles.rs,
-/// Q3981 "both").
+/// "Orchid Dusk is applied. It set 16 colours, your messages included.", Undo while it is the
+/// look last applied here, and Change them, which opens the colours it set (CDXC:Theming 2026-11-18
+/// in packages/settings-catalog/src/theme_roles.rs, Q3981 "both").
 fn applied_line(
     p: &SettingsPalette,
     themes: &[GalleryTheme],
     roles: &Value,
+    gallery: &PromptGallery,
     cx: &mut Context<ThemeTab>,
 ) -> Option<AnyElement> {
     let (theme, count, mine) = applied_theme(themes, roles)?;
+    let undo = gallery
+        .applied
+        .as_ref()
+        .is_some_and(|(id, _)| *id == theme.id)
+        .then(|| {
+            settings_sized_button(
+                p,
+                "theme-look-undo",
+                "Undo",
+                None,
+                None,
+                SizedButtonVariant::Secondary,
+                SizedButtonSize::Sm,
+                gallery.busy.is_some(),
+                None,
+                |page: &mut ThemeTab, _window, cx| page.undo_gallery_theme(cx),
+                cx,
+            )
+        });
     let colours = if count == 1 {
         "1 colour".to_string()
     } else {
@@ -210,6 +240,7 @@ fn applied_line(
                             .child(detail),
                     ),
             )
+            .children(undo)
             .child(settings_sized_button(
                 p,
                 "theme-prompt-change-colours",
@@ -241,13 +272,13 @@ impl ThemeTab {
         });
     }
 
-    /// Asks an agent: a Help chat opens with the starter prompt as its draft, and Settings closes
-    /// so the chat shows. The window is removed here, as the shell's own close does
-    /// (settings_modal/shell.rs): the store's close only tells the app the modal is gone.
-    fn ask_agent_to_theme(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    /// Asks an agent: a Help chat opens with `draft` as its draft, and Settings closes so the chat
+    /// shows. The window is removed here, as the shell's own close does (settings_modal/shell.rs):
+    /// the store's close only tells the app the modal is gone.
+    fn ask_agent_to_theme(&mut self, draft: &str, window: &mut Window, cx: &mut Context<Self>) {
         post_store_message(
             &self.store,
-            json!({ "type": "askGhostexHelp", "question": STARTER_PROMPT }),
+            json!({ "type": "askGhostexHelp", "question": draft }),
             cx,
         );
         window.remove_window();
@@ -346,25 +377,159 @@ impl ThemeTab {
         Some(picture)
     }
 
-    /// The card: what an agent can do, Ask an agent, and the example themes.
-    pub(super) fn prompt_gallery_section(
+    /// The looks' tiles for the themes row, each with whether it is the applied one. `cut` is the
+    /// row's bits of the tiles an edge cuts; the looks are its first tiles.
+    pub(super) fn look_tiles(
+        &mut self,
+        p: &SettingsPalette,
+        values: &SettingsValues,
+        cut: u64,
+        cx: &mut Context<Self>,
+    ) -> Vec<(bool, AnyElement)> {
+        let themes = gallery_themes();
+        let roles = values.value("themeRoles");
+        let applied = applied_theme(&themes, &roles).map(|(theme, _, _)| theme.id.clone());
+        themes
+            .iter()
+            .enumerate()
+            .map(|(index, theme)| {
+                let selected = applied.as_deref() == Some(theme.id.as_str());
+                let caption = (index == 0).then(|| LOOKS_CAPTION.to_string());
+                let tile = self.look_tile(p, theme, caption, selected, cut & (1 << index) != 0, cx);
+                (selected, tile)
+            })
+            .collect()
+    }
+
+    /// One look: its picture as the preview, its name's first word as the label, and Make it your
+    /// own on hover. A press applies it, unless it is the one applied already.
+    fn look_tile(
+        &mut self,
+        p: &SettingsPalette,
+        theme: &GalleryTheme,
+        caption: Option<String>,
+        selected: bool,
+        cut: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let busy = self.prompt_gallery.busy.as_deref() == Some(theme.id.as_str());
+        let preview = self
+            .gallery_picture(&theme.id)
+            .map(|picture| {
+                // The picture frames the window in a margin; it is drawn larger so the window
+                // alone fills the preview.
+                div()
+                    .relative()
+                    .size_full()
+                    .overflow_hidden()
+                    .rounded(px(7.0))
+                    .when(busy, |this| this.opacity(0.5))
+                    .child(
+                        img(picture)
+                            .absolute()
+                            .left(px(PICTURE_LEFT))
+                            .top(px(PICTURE_TOP))
+                            .w(px(PICTURE_WIDTH))
+                            .h(px(PICTURE_WIDTH / PICTURE_ASPECT))
+                            .object_fit(ObjectFit::Fill),
+                    )
+                    .into_any_element()
+            })
+            .into_iter()
+            .collect();
+        let draft = format!("{} Then change this: ", theme.prompt);
+        // It floats over the picture, so it sits on the popups' own surface to stay readable on a
+        // dark picture in light mode.
+        let own = click_shield(div().rounded(px(7.0)).bg(hsla(p.popup_background)).child(
+            settings_icon_button(
+                p,
+                SharedString::from(format!("theme-look-own-{}", theme.id)),
+                "modals/settings/sparkles.svg",
+                12.0,
+                22.0,
+                ButtonVariant::Outline,
+                Some("Make it your own".into()),
+                false,
+                move |page: &mut Self, window, cx| page.ask_agent_to_theme(&draft, window, cx),
+                cx,
+            ),
+        ));
+        let id = theme.id.clone();
+        theme_tile(
+            p,
+            TileSpec {
+                id: SharedString::from(format!("theme-look-{}", theme.id)),
+                name: theme.name.clone().into(),
+                label: theme
+                    .name
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or_default()
+                    .to_string()
+                    .into(),
+                dark: true,
+                caption,
+                selected,
+                cut,
+            },
+            preview,
+            Some(own),
+            move |page, _window, cx| {
+                if !selected {
+                    page.apply_gallery_theme(&id, cx);
+                }
+            },
+            cx,
+        )
+    }
+
+    /// The applied look's line, under the themes row.
+    pub(super) fn look_applied_row(
+        &mut self,
+        p: &SettingsPalette,
+        values: &SettingsValues,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        applied_line(
+            p,
+            &gallery_themes(),
+            &values.value("themeRoles"),
+            &self.prompt_gallery,
+            cx,
+        )
+    }
+
+    /// Describe a look: what an agent can do, and Ask an agent.
+    pub(super) fn describe_look_row(
         &mut self,
         p: &SettingsPalette,
         cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
-        let starter = h_flex()
+    ) -> AnyElement {
+        h_flex()
             .w_full()
-            .gap(px(16.0))
+            .gap(px(12.0))
             .px(px(16.0))
             .py(px(12.0))
+            .child(settings_icon("modals/settings/sparkles.svg", 14.0, p.muted).flex_shrink_0())
             .child(
-                div()
+                v_flex()
                     .flex_1()
                     .min_w_0()
-                    .text_size(px(13.0))
-                    .line_height(px(19.0))
-                    .text_color(hsla(p.foreground))
-                    .child(format!("\u{201c}{STARTER_PROMPT}\u{201d}")),
+                    .gap(px(2.0))
+                    .child(
+                        div()
+                            .text_size(px(13.0))
+                            .line_height(px(19.0))
+                            .text_color(hsla(p.foreground))
+                            .child(DESCRIBE_TITLE),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(13.0))
+                            .line_height(px(18.57))
+                            .text_color(hsla(p.muted))
+                            .child(DESCRIBE_COPY),
+                    ),
             )
             .child(settings_sized_button(
                 p,
@@ -376,184 +541,9 @@ impl ThemeTab {
                 SizedButtonSize::Sm,
                 false,
                 None,
-                |page: &mut Self, window, cx| page.ask_agent_to_theme(window, cx),
+                |page: &mut Self, window, cx| page.ask_agent_to_theme(STARTER_PROMPT, window, cx),
                 cx,
             ))
-            .into_any_element();
-        let themes = gallery_themes();
-        let mut tiles: Vec<AnyElement> = themes
-            .iter()
-            .map(|theme| self.gallery_tile(p, theme, cx))
-            .collect();
-        let mut grid_rows = Vec::new();
-        while !tiles.is_empty() {
-            let rest = tiles.split_off(tiles.len().min(COLUMNS));
-            let mut row = std::mem::replace(&mut tiles, rest);
-            while row.len() < COLUMNS {
-                row.push(div().flex_1().min_w_0().into_any_element());
-            }
-            grid_rows.push(
-                h_flex()
-                    .w_full()
-                    .items_stretch()
-                    .gap(px(12.0))
-                    .children(row),
-            );
-        }
-        let gallery = v_flex()
-            .w_full()
-            .gap(px(12.0))
-            .px(px(16.0))
-            .pt(px(12.0))
-            .pb(px(16.0))
-            .child(
-                h_flex()
-                    .w_full()
-                    .items_end()
-                    .justify_between()
-                    .gap(px(12.0))
-                    .child(
-                        div()
-                            .text_size(px(13.0))
-                            .line_height(px(18.0))
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(hsla(p.foreground))
-                            .child("A few starting points"),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(11.0))
-                            .line_height(px(16.0))
-                            .text_color(hsla(p.muted))
-                            .child("Make any of these your own"),
-                    ),
-            )
-            .children(grid_rows)
-            .into_any_element();
-        let applied = applied_line(
-            p,
-            &themes,
-            &self.store.read(cx).values().value("themeRoles"),
-            cx,
-        );
-        let rows = if themes.is_empty() {
-            vec![starter]
-        } else {
-            [Some(starter), applied, Some(gallery)]
-                .into_iter()
-                .flatten()
-                .collect()
-        };
-        settings_section(
-            p,
-            CARD_TITLE,
-            Some(SharedString::from(CARD_COPY)),
-            None,
-            rows,
-        )
-        .map(IntoElement::into_any_element)
-    }
-
-    /// One example theme: its framed picture, name and prompt, then Apply (Undo once applied
-    /// here) and Copy prompt.
-    fn gallery_tile(
-        &mut self,
-        p: &SettingsPalette,
-        theme: &GalleryTheme,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let picture = self.gallery_picture(&theme.id);
-        let busy = self.prompt_gallery.busy.is_some();
-        let applied_here = self
-            .prompt_gallery
-            .applied
-            .as_ref()
-            .is_some_and(|(id, _)| *id == theme.id);
-        let id = theme.id.clone();
-        let prompt = theme.prompt.clone();
-        let apply = settings_sized_button(
-            p,
-            SharedString::from(format!("theme-gallery-apply-{}", theme.id)),
-            if applied_here { "Undo" } else { "Apply" },
-            None,
-            None,
-            SizedButtonVariant::Secondary,
-            SizedButtonSize::Xs,
-            busy,
-            None,
-            move |page: &mut Self, _window, cx| {
-                if applied_here {
-                    page.undo_gallery_theme(cx);
-                } else {
-                    page.apply_gallery_theme(&id, cx);
-                }
-            },
-            cx,
-        );
-        let copy = settings_sized_button(
-            p,
-            SharedString::from(format!("theme-gallery-copy-{}", theme.id)),
-            "Copy prompt",
-            Some("modals/settings/copy.svg"),
-            None,
-            SizedButtonVariant::Outline,
-            SizedButtonSize::Xs,
-            false,
-            None,
-            move |page: &mut Self, _window, cx| {
-                store_copy_to_clipboard(&page.store, prompt.clone(), cx);
-            },
-            cx,
-        );
-        v_flex()
-            .flex_1()
-            .min_w_0()
-            .rounded(px(10.0))
-            .border_1()
-            .border_color(hsla(p.hairline))
-            .overflow_hidden()
-            .child(
-                div()
-                    .w_full()
-                    .aspect_ratio(PICTURE_ASPECT)
-                    .overflow_hidden()
-                    .children(picture.map(|picture| {
-                        img(picture).w_full().h_full().object_fit(ObjectFit::Cover)
-                    })),
-            )
-            .child(
-                v_flex()
-                    .flex_1()
-                    .gap(px(4.0))
-                    .px(px(10.0))
-                    .pt(px(8.0))
-                    .pb(px(10.0))
-                    .child(
-                        div()
-                            .text_size(px(13.0))
-                            .line_height(px(18.0))
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(hsla(p.foreground))
-                            .child(theme.name.clone()),
-                    )
-                    .child(
-                        // It grows so every tile's buttons line up along the row's bottom.
-                        div()
-                            .flex_1()
-                            .text_size(px(11.0))
-                            .line_height(px(16.0))
-                            .text_color(hsla(p.muted))
-                            .child(theme.prompt.clone()),
-                    )
-                    .child(
-                        h_flex()
-                            .pt(px(6.0))
-                            .gap(px(6.0))
-                            .flex_wrap()
-                            .child(apply)
-                            .child(copy),
-                    ),
-            )
             .into_any_element()
     }
 }

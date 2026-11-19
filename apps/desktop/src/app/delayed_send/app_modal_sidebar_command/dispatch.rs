@@ -153,7 +153,7 @@ impl GhostexGpuiApp {
             | "toggleCloseAfterDone" => {
                 self.handle_gpui_app_modal_dialog_command(command_type, command, cx);
             }
-            // Settings > Interface's "Ask an agent" (settings_modal/tabs/theme/theme_gallery.rs).
+            // Settings > Themes' "Ask an agent" and "Make it your own" (settings_modal/tabs/theme/prompt_gallery.rs).
             "askGhostexHelp" => {
                 let question = command
                     .get("question")
