@@ -27,8 +27,4 @@ CREATE UNIQUE INDEX IF NOT EXISTS chat_message_numbers_message
 CREATE INDEX IF NOT EXISTS chat_message_numbers_id
   ON chat_message_numbers (projectId, sessionId, messageId);
 
--- A fork's copy of a message is found by when it was sent and what it says.
-CREATE INDEX IF NOT EXISTS chat_message_numbers_copy
-  ON chat_message_numbers (sentAt, textHash);
-
 PRAGMA user_version = 83;

@@ -195,19 +195,23 @@ struct Candidate {
     text: String,
 }
 
-/// The number a fork's copy of a message takes: that of a numbered message of another chat sent
-/// at the same moment with the same words.
+/// The number a fork's copy of a message takes: that of the message its parent chat (the session
+/// it was forked or restored from, `restoredFromSessionId`) sent at the same moment with the same
+/// words. Only the parent's: two unrelated chats can send the same words in the same millisecond
+/// (an automation writing to several), and neither is the other's copy.
 fn copied_number(db: &Connection, key: &ChatKey, sent_at: i64, hash: &str) -> Option<u32> {
-    db.query_row(
-        "SELECT number FROM chat_message_numbers \
-         WHERE sentAt = ?1 AND textHash = ?2 AND NOT (projectId = ?3 AND sessionId = ?4) \
-         ORDER BY createdAt LIMIT 1",
-        params![sent_at, hash, key.0, key.1],
-        |row| row.get(0),
-    )
-    .optional()
-    .ok()
-    .flatten()
+    let parent: String = db
+        .query_row(
+            "SELECT restoredFromSessionId FROM sessions WHERE projectId = ?1 AND sessionId = ?2",
+            params![key.0, key.1],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()
+        .ok()
+        .flatten()
+        .flatten()
+        .filter(|parent| !parent.is_empty() && *parent != key.1)?;
+    number_in_chat(db, &(key.0.clone(), parent), sent_at, hash)
 }
 
 /// Numbers the user's messages among `messages` that have none yet and writes `messageNumber`
@@ -683,7 +687,8 @@ mod tests {
     fn db() -> Connection {
         let db = Connection::open_in_memory().unwrap();
         db.execute_batch(
-            "CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL, updatedAt TEXT NOT NULL);",
+            "CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL, updatedAt TEXT NOT NULL);
+             CREATE TABLE sessions (projectId TEXT, sessionId TEXT, restoredFromSessionId TEXT);",
         )
         .unwrap();
         db.execute_batch(include_str!(
@@ -760,7 +765,16 @@ mod tests {
     #[test]
     fn a_fork_keeps_the_numbers_it_copied_and_goes_on() {
         let db = db();
-        let mut source = vec![user("a", 1_000, "one"), user("b", 2_000, "two")];
+        db.execute(
+            "INSERT INTO sessions (projectId, sessionId, restoredFromSessionId) VALUES ('P1', 'G1d', 'G1c')",
+            [],
+        )
+        .unwrap();
+        let mut source = vec![
+            user("z", 500, "earlier"),
+            user("a", 1_000, "one"),
+            user("b", 2_000, "two"),
+        ];
         annotate_with(&db, &mut source, "P1", "G1c");
         let mut fork = vec![
             user("a2", 1_000, "one"),
@@ -768,7 +782,11 @@ mod tests {
             user("c2", 3_000, "new in the fork"),
         ];
         annotate_with(&db, &mut fork, "P1", "G1d");
-        assert_eq!(numbers(&fork), vec![Some(1), Some(2), Some(3)]);
+        assert_eq!(numbers(&fork), vec![Some(2), Some(3), Some(4)]);
+        // An unrelated chat that sent the same words at the same moment is nobody's copy.
+        let mut other = vec![user("a3", 2_000, "two")];
+        annotate_with(&db, &mut other, "P1", "G1y");
+        assert_eq!(numbers(&other), vec![Some(1)]);
     }
 
     #[test]
