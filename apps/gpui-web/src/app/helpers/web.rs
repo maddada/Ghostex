@@ -123,6 +123,17 @@ pub(crate) fn sidebar_chrome_fill(_glass: bool, angle: f32) -> gpui::Background 
     crate::app::helpers::sidebar_chrome_gradient_fill(angle)
 }
 
+/// A page has no window glass, so an in-window surface keeps its colour (the desktop's
+/// `glass_lifted_surface` in window_glass.rs).
+pub(crate) fn glass_lifted_surface(fallback: gpui::Hsla) -> gpui::Hsla {
+    fallback
+}
+
+/// A page has no window glass, so an in-window surface keeps its colour.
+pub(crate) fn glass_lifted_opaque_surface(fallback: gpui::Hsla) -> gpui::Hsla {
+    fallback
+}
+
 /// A page has no window glass, so a menu keeps its solid fill.
 pub(crate) fn popup_window_surface(color: gpui::Hsla) -> gpui::Hsla {
     color

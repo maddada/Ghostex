@@ -1086,6 +1086,40 @@ pub(crate) fn glass_card(color: Hsla, strength: f32) -> Hsla {
     }
 }
 
+/// A surface drawn inside the main window over content under glass (CDXC:Theming 2026-11-20 in
+/// helpers/chrome_palette.rs): the work area's own colour lifted toward white, at
+/// `GLASS_LIFTED_ALPHA`. Glass off, `fallback`.
+pub(crate) fn glass_lifted_surface(fallback: Hsla) -> Hsla {
+    if window_glass_active() {
+        glass_lifted_from(workspace_background_color(), chrome_uses_light_appearance())
+    } else {
+        fallback
+    }
+}
+
+/// [`glass_lifted_surface`] kept opaque under glass.
+pub(crate) fn glass_lifted_opaque_surface(fallback: Hsla) -> Hsla {
+    if window_glass_active() {
+        glass_lifted_opaque_from(workspace_background_color(), chrome_uses_light_appearance())
+    } else {
+        fallback
+    }
+}
+
+/// How much of what is under it a glass veil covers.
+const GLASS_VEIL_ALPHA: f32 = 0.6;
+
+/// A dimming layer under glass (a scrim behind a card, a busy pane, a picture viewer): a veil of
+/// the work area's own colour instead of black, as Settings' nested dialogs dim their page
+/// (`nested_glass::nested_backdrop`). Glass off, `fallback`.
+pub(crate) fn glass_veil(fallback: Hsla) -> Hsla {
+    if window_glass_active() {
+        workspace_background_color().opacity(GLASS_VEIL_ALPHA)
+    } else {
+        fallback
+    }
+}
+
 /// CDXC:Theming 2026-09-23 DECISION:
 /// User picked "23a": under window glass the divider lines stay, but as faint see-through 1px lines like the chat composer's border (the chrome ink at 8%), instead of solid dark or light grey lines that read as grooves cut into the glass. Pane borders, resize rails, the sidebar edge and the command pane's edges all take it; focus and attention outlines and the resize hover highlight keep their colours. The opaque window keeps the given colour.
 /// The Dividers theme role replaces both when it is set (helpers/theme_roles.rs).
