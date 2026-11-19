@@ -19,7 +19,7 @@ pub(crate) fn switch() -> Section {
     section(
         "switch",
         "Grok Bot remote",
-        vec![row("grokBotHidden", "Grok Bot remote", "Control your agents from a \"Ghostex\" bot in xAI's Grok Bot app on your phone, and get their notes there. Turn it off to stop sending anything to Grok Bot; the saved connection is kept. On by default.")],
+        vec![row("grokBotHidden", "Turn off Grok Bot remote", "Turn off Grok Bot remote: Ghostex stops sending your agents' notes to Grok Bot, refuses connect and test, and stops telling agents about it; the saved connection is kept. It pauses notes only: the bot can still run ghostex commands on this computer through the Grok Bot desktop app until you set Execution on this computer to Never allow in Grok Bot. On by default.")],
     )
 }
 

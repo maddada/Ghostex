@@ -150,8 +150,14 @@ fn status_command(parsed: &ParsedArgs) -> CliResult<()> {
 
 fn simple_command(op: &str, parsed: &ParsedArgs, done: &str) -> CliResult<()> {
     let answer = call_gxserver_rpc(ENDPOINT, &json!({ "op": op }), &slow_flags(&parsed.flags))?;
-    // `test` answers `sent: false` with Grok Bot's refusal (Settings shows it as the step's state).
-    if answer["sent"] == false && !parsed.flags.contains("json") {
+    // `test` answers `sent: false` with Grok Bot's refusal (Settings shows it as the step's state);
+    // the command still fails, with or without --json.
+    if answer["sent"] == false {
+        if parsed.flags.contains("json") {
+            print_json(&answer);
+            set_exit_code(1);
+            return Ok(());
+        }
         return Err(CliError::Other(text(&answer, "message").to_string()));
     }
     if parsed.flags.contains("json") {

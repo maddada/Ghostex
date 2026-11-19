@@ -14,7 +14,6 @@
 //! User, after setting it up from the terminal: "the instructions here are good and worked but please add a user experience for this that helps the user go through it without even opening terminal should hold the users hand fully. also we should tell the agent to create the web hook right away from 1st message." Q4206 = A (a checklist that keeps every step in view and ticks each off by itself, so the user can switch to Grok Bot and back), with: "don't put this under integrations put this as a new page in settings below integrations make it an enabled by default extension but allow people to disable this extension with a button at the top of the settings page". The webhook form shows at once rather than after step 2, so someone whose bot already exists isn't held until it runs `brief` again; the test question shows only right after connecting here (or after a No), so a connection made from the terminal opens on the Connected view.
 //! SEE-ALSO: packages/settings-catalog/src/pages/grok_bot.rs (the rows Settings search finds), packages/settings-catalog/src/data/official_extensions.rs (the extension), server/src/grokbot/instructions.md (the bot makes the "Ghostex reports" routine in its first reply).
 use super::super::super::native_modal_kit::*;
-use super::super::catalog::settings_catalog;
 use super::super::fields::{
     ButtonVariant, FieldStates, ListItemStatus, RowSpec, SettingsPage, card_inset, setting_row,
     settings_button, settings_list_item, settings_note_row, settings_section, settings_text_input,
@@ -113,6 +112,8 @@ pub(crate) struct GrokBotTab {
     /// The Connected view's Change opened the webhook form again.
     changing: bool,
     copied: bool,
+    /// A `setup` read is on its way; the refresh skips its tick rather than stack another.
+    reading: bool,
     _refresh: Option<Task<()>>,
 }
 
@@ -218,7 +219,12 @@ impl GrokBotTab {
             loop {
                 cx.background_executor().timer(REFRESH_EVERY).await;
                 let alive = page.update(cx, |page, cx| {
-                    if page.store.read(cx).active_tab() == SettingsTabId::GrokBot && page.waiting()
+                    // Not while the extension is off (the page shows only its switch) or while
+                    // the last read hasn't answered.
+                    if page.store.read(cx).active_tab() == SettingsTabId::GrokBot
+                        && page.enabled(cx)
+                        && !page.reading
+                        && page.waiting()
                     {
                         page.read(cx);
                     }
@@ -241,6 +247,7 @@ impl GrokBotTab {
             asking_test: false,
             changing: false,
             copied: false,
+            reading: false,
             _refresh: Some(refresh),
         };
         tab.read(cx);
@@ -291,15 +298,20 @@ impl GrokBotTab {
     }
 
     fn read(&mut self, cx: &mut Context<Self>) {
+        self.reading = true;
         self.call(
             json!({ "op": "setup" }),
             READ_TIMEOUT,
             |page, result, _cx| match result {
                 Ok(answer) => {
+                    page.reading = false;
                     page.read_error = None;
                     page.setup = Some(Setup::from_answer(&answer));
                 }
-                Err(error) => page.read_error = Some(error),
+                Err(error) => {
+                    page.reading = false;
+                    page.read_error = Some(error);
+                }
             },
             cx,
         );
@@ -499,16 +511,6 @@ impl GrokBotTab {
         cx.notify();
     }
 
-    fn catalog_row(key: &str) -> Option<(String, String)> {
-        settings_catalog()
-            .extra_tab(SettingsTabId::GrokBot.id())?
-            .sections
-            .iter()
-            .flat_map(|section| section.settings.iter())
-            .find(|row| row.key == key)
-            .map(|row| (row.title.clone(), row.subtitle.clone()))
-    }
-
     fn note_line(p: &SettingsPalette, note: &Note) -> Option<AnyElement> {
         note.as_ref().map(|(bad, words)| {
             div()
@@ -524,8 +526,10 @@ impl GrokBotTab {
     }
 
     fn switch_row(&mut self, p: &SettingsPalette, on: bool, cx: &mut Context<Self>) -> AnyElement {
-        let (title, subtitle) = Self::catalog_row(SWITCH_KEY)
-            .unwrap_or_else(|| ("Grok Bot remote".to_string(), String::new()));
+        // The page's own words: the catalog row is "Turn off Grok Bot remote" (the key is
+        // `…Hidden`), which reads backwards beside a switch that is on when the extension is.
+        let title = "Grok Bot remote".to_string();
+        let subtitle = "Control your agents from a \"Ghostex\" bot in Grok Bot on your phone, and get their notes there.".to_string();
         let control = switch_control(
             p,
             "grok-bot-switch",
@@ -767,7 +771,12 @@ impl GrokBotTab {
     }
 
     /// Right after connecting here (or after a No): did the test note arrive?
-    fn test_question(&mut self, p: &SettingsPalette, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    fn test_question(
+        &mut self,
+        p: &SettingsPalette,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
         let busy = self.busy;
         let mut rows = vec![
             settings_list_item(
@@ -863,6 +872,47 @@ impl GrokBotTab {
                 ))
             });
         rows.push(card_inset(body.child(buttons)));
+        // Never a dead end: a wrong address or key is fixed here too, or the connection dropped.
+        rows.push(settings_list_item(
+            p,
+            None,
+            None,
+            "Wrong address or key?",
+            Self::detail(
+                "Paste the routine's POST to and key again, or disconnect and start over.",
+            ),
+            (!self.changing).then(|| {
+                h_flex()
+                    .gap(px(8.0))
+                    .child(settings_button(
+                        p,
+                        "grok-bot-test-change",
+                        "Change",
+                        None,
+                        ButtonVariant::Outline,
+                        busy,
+                        None,
+                        |page: &mut Self, _window, cx| {
+                            page.changing = true;
+                            page.connect_note = None;
+                            cx.notify();
+                        },
+                        cx,
+                    ))
+                    .child(settings_button(
+                        p,
+                        "grok-bot-test-disconnect",
+                        "Disconnect",
+                        None,
+                        ButtonVariant::Destructive,
+                        busy,
+                        None,
+                        |page: &mut Self, _window, cx| page.disconnect(cx),
+                        cx,
+                    ))
+                    .into_any_element()
+            }),
+        ));
         rows
     }
 
@@ -994,8 +1044,11 @@ impl Render for GrokBotTab {
         let on = self.enabled(cx);
         let mut blocks = Vec::new();
         if search.row_visible("switch", SWITCH_KEY) {
-            let row = self.switch_row(&p, on, cx);
-            if let Some(section) = settings_section(&p, "", None, None, vec![row]) {
+            let mut rows = vec![self.switch_row(&p, on, cx)];
+            if !on {
+                rows.push(settings_note_row(&p, "Off: Ghostex sends nothing to Grok Bot and doesn't tell agents about it. This pauses notes only: the bot can still run ghostex commands on this computer through the Grok Bot desktop app until you set Execution on this computer to Never allow in Grok Bot (Settings > Computer)."));
+            }
+            if let Some(section) = settings_section(&p, "", None, None, rows) {
                 let mut block = PageBlock::section("switch", section);
                 block.margin_top += PAGE_TOP_PADDING;
                 blocks.push(block);
@@ -1017,7 +1070,10 @@ impl Render for GrokBotTab {
                         && (self.asking_test || setup.test_arrived == Some(false)) =>
                 {
                     description = Some("Step 4 of 4".into());
-                    rows = self.test_question(&p, cx);
+                    rows = self.test_question(&p, window, cx);
+                    if self.changing {
+                        rows.push(card_inset(self.webhook_form(&p, window, cx)));
+                    }
                 }
                 Some(setup) if setup.connected => {
                     title = "Connection";
@@ -1048,18 +1104,18 @@ impl Render for GrokBotTab {
             } else {
                 "setup"
             };
-            let shown = if section_id == "connection" {
-                search.row_visible("connection", "grokBotConnection")
-            } else {
-                [
+            // The checklist and the Connected view are one area in two states: a search that
+            // finds any of their rows shows the one this page draws now, so a match never opens
+            // an empty page. While the extension is off its `settingKeys` keep them out of search.
+            let shown = search.row_visible("connection", "grokBotConnection")
+                || [
                     "grokBotDesktopApp",
                     "grokBotMakeBot",
                     "grokBotWebhook",
                     "grokBotTestNote",
                 ]
                 .iter()
-                .any(|key| search.row_visible("setup", key))
-            };
+                .any(|key| search.row_visible("setup", key));
             if shown && let Some(section) = settings_section(&p, title, description, None, rows) {
                 blocks.push(PageBlock::section(section_id, section));
             }

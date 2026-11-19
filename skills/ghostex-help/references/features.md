@@ -5082,7 +5082,10 @@ It's a built-in extension, Grok Bot remote, on by default. Its switch is at
 the top of Settings > Grok Bot (right below Integrations) and on Settings >
 Extensions. Off, Ghostex sends nothing to Grok Bot, refuses connect, test and
 notes, agents are no longer told about it, and `ghostex grokbot brief` tells
-the bot it's off; the saved connection is kept.
+the bot it's off; the saved connection is kept. Off pauses notes only: the
+bot can still run `ghostex` commands on this computer through the Grok Bot
+desktop app until you set Execution on this computer to Never allow in Grok
+Bot (Settings > Computer).
 
 Connect the two in Settings > Grok Bot, no terminal needed. Its checklist
 ticks each step off as Ghostex sees it happen:
@@ -5139,7 +5142,9 @@ usage. While Grok Bot is connected, agents Ghostex starts are told about
 To stop: in Grok Bot, set Execution on this computer to Never allow; click
 Disconnect in Settings > Grok Bot or run `ghostex grokbot disconnect`
 (Ghostex forgets the address and key), and delete the routine's webhook. To
-pause it instead, turn Grok Bot remote off at the top of Settings > Grok Bot.
+pause the notes instead, turn Grok Bot remote off at the top of Settings >
+Grok Bot (the bot can still run commands until Execution on this computer is
+Never allow).
 
 CLI: `ghostex grokbot` (status), `connect [<url>] [--key-stdin]`,
 `notify [--kind ask|blocked|done|report|info] "<text>"`, `test`,

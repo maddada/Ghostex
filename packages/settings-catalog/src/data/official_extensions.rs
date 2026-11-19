@@ -394,6 +394,8 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("settingsKey", J::Str("grokBotHidden")),
         ("appWide", J::Bool(true)),
         ("title", J::Str("Grok Bot remote")),
+        // The page's rows other than the switch, so Settings search leaves them out while it is off.
+        ("settingKeys", J::Arr(&[J::Str("grokBotDesktopApp"), J::Str("grokBotMakeBot"), J::Str("grokBotWebhook"), J::Str("grokBotTestNote"), J::Str("grokBotConnection")])),
     ]),
     // CDXC:Extensions 2026-10-19 DECISION:
     // User (Q306): Connectors, OS Integration and Debugging join the Settings rail's Extensions group, and "for the ones that aren't in extensions already add them to extensions and allow disabling/enabling them". Q313: "Switch on top of the gate": each is on by default and its page shows only while its switch is on and its gate (`gatedBy`) is open: Enable Experimental Features for Connectors and OS Integration. Debugging has no gate (CDXC:Settings 2026-10-29 in rail.rs: Show Advanced never hides a page), only its switch. Its Store card is left out while the gate is closed. Turning Connectors off also turns off `ghostex connectors` and its gxserver routes (server/src/connectors/gate.rs, whose CDXC:Connectors 2026-10-15 decision still holds). New `…Hidden` keys default to false, so nobody's Settings changes.

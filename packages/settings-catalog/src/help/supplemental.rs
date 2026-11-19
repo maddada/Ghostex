@@ -509,7 +509,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         section: "official",
         section_title: "Built-in",
         title: "Turn off Grok Bot remote",
-        subtitle: "Turn off Grok Bot remote: a \"Ghostex\" bot in xAI's Grok Bot app that controls your agents, and the notes your agents send it. Off, Ghostex sends nothing to Grok Bot, refuses connect and test, and agents are no longer told about it; the saved connection is kept. The switch is also at the top of Settings > Grok Bot. On by default.",
+        subtitle: "Turn off Grok Bot remote: a \"Ghostex\" bot in xAI's Grok Bot app that controls your agents, and the notes your agents send it. Off, Ghostex sends nothing to Grok Bot, refuses connect and test, and agents are no longer told about it; the saved connection is kept. It pauses notes only: the bot can still run ghostex commands on this computer through the Grok Bot desktop app until you set Execution on this computer to Never allow in Grok Bot. The switch is also at the top of Settings > Grok Bot. On by default.",
         options: &[],
         user_only: false,
     },

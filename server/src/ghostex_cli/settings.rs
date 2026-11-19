@@ -44,6 +44,7 @@ const SETTINGS_MODAL_TABS: &[&str] = &[
     "sizeZoom",
     "windowLayout",
     "integrations",
+    "grokBot",
     "voiceAgent",
     "voice",
     "connectors",

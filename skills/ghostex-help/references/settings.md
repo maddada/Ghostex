@@ -494,7 +494,7 @@ How to use this file:
 
 ### Grok Bot remote
 
-- **Grok Bot remote** `grokBotHidden` (boolean, default false): Control your agents from a "Ghostex" bot in xAI's Grok Bot app on your phone, and get their notes there. Turn it off to stop sending anything to Grok Bot; the saved connection is kept. On by default.
+- **Turn off Grok Bot remote** `grokBotHidden` (boolean, default false): Turn off Grok Bot remote: Ghostex stops sending your agents' notes to Grok Bot, refuses connect and test, and stops telling agents about it; the saved connection is kept. It pauses notes only: the bot can still run ghostex commands on this computer through the Grok Bot desktop app until you set Execution on this computer to Never allow in Grok Bot. On by default.
 ### Set up
 
 - **Grok Bot desktop app** `grokBotDesktopApp` (Settings UI row without a settings key; use `ghostex settings open`): Install the Grok Bot desktop app from x.ai/bot, sign in and leave it running: the bot runs Ghostex's commands on this computer through it. Ghostex ticks this off when it finds the app.

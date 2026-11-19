@@ -61,7 +61,7 @@ fn require_this_computer(caller: &Principal) -> Result<(), DomainStateError> {
         Principal::Owner { .. } | Principal::LocalAgent | Principal::Session { .. } => Ok(()),
         _ => Err(DomainStateError {
             code: "forbidden",
-            message: "Connect, test and disconnect Grok Bot on the computer itself.".to_string(),
+            message: "Only this computer's own apps, terminal and agents can change or check the Grok Bot connection.".to_string(),
         }),
     }
 }
@@ -128,7 +128,8 @@ fn connect(paths: &GxserverPaths, params: &Map<String, Value>) -> Result<Value, 
         .map(|key| key_from_paste(&key))
         .filter(|key| !key.is_empty())
         .ok_or_else(|| DomainStateError::bad_request("key is required: the routine's key."))?;
-    if key.len() > MAX_KEY_CHARS || key.chars().any(char::is_control) || key.contains(' ') {
+    // A routine's key is plain visible ASCII; anything else can't go in an HTTP header.
+    if key.len() > MAX_KEY_CHARS || !key.chars().all(|c| c.is_ascii_graphic()) {
         return Err(DomainStateError::bad_request(
             "That doesn't look like the routine's key. Copy key from its Webhook section.",
         ));
@@ -301,8 +302,13 @@ fn key_from_paste(pasted: &str) -> String {
             key = rest.trim();
         }
     }
-    if key.len() > 7 && key[..7].eq_ignore_ascii_case("bearer ") {
-        key = key[7..].trim();
+    // `get` rather than slicing: a paste with a multi-byte character near the start must not
+    // panic, since a panic message would quote the pasted text into gxserver's log.
+    if key
+        .get(..7)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("bearer "))
+    {
+        key = key.get(7..).unwrap_or_default().trim();
     }
     key.to_string()
 }
@@ -386,9 +392,9 @@ pub(crate) fn handle(
     }
 }
 
-/// Picks up notes a gxserver restart left waiting.
+/// Picks up notes left waiting by a gxserver restart or while Grok Bot remote was off.
 pub(crate) fn resume_delivery(paths: &GxserverPaths) {
-    if !store::read_queue(paths).is_empty() {
+    if super::feature::on(paths) && !store::read_queue(paths).is_empty() {
         delivery::kick(paths);
     }
 }
@@ -405,6 +411,9 @@ mod tests {
         assert_eq!(key_from_paste("Bearer abc123"), "abc123");
         // A key that merely contains a colon is kept whole.
         assert_eq!(key_from_paste("ab:c123"), "ab:c123");
+        // Multi-byte characters where "Bearer " would be never panic.
+        assert_eq!(key_from_paste("bearé key"), "bearé key");
+        assert_eq!(key_from_paste("ééééé"), "ééééé");
     }
 
     #[test]
