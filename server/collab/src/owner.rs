@@ -411,6 +411,40 @@ async fn handle_op(run: &mut Run<'_>, params: &Map<String, Value>) -> Result<Val
             } else {
                 None
             };
+            // CDXC:Collab 2026-11-20 WHY:
+            // Send delivers while the message is still held and takes it only once delivered: taken first, a guest who had left no longer had its pictures in the share, so gxserver could refuse the delivery with the message already gone (security review of the dock rows, T4). `begin_send` keeps a second Send from delivering it twice meanwhile; a refused delivery leaves it held, to send again or decline.
+            if action == "send" {
+                let held = shares::begin_send(&share.id, &held_id).ok_or((
+                    "notFound",
+                    "That message was already answered or is being sent.".to_string(),
+                ))?;
+                let words = text(params, "text").unwrap_or_else(|| held.text.clone());
+                let sent = deliver(
+                    &share,
+                    &crate::labelled_guest_text(&held.name, &words),
+                    &held.image_paths,
+                )
+                .await;
+                if let Some(approval) = &approval {
+                    run.performed(approval, sent.is_ok());
+                }
+                if sent.is_ok() {
+                    shares::take_held(&share.id, &held_id, outcome);
+                }
+                shares::end_send(&share.id, &held_id);
+                sent.map_err(|message| Stop::Refused("sendFailed", message))?;
+                chat_changed(&share);
+                crate::audit::record(
+                    &share,
+                    &title,
+                    "message",
+                    &held.name,
+                    Some(&held.text),
+                    held.image_paths.len(),
+                    Some("approved"),
+                );
+                return Ok(json!({ "sent": true }));
+            }
             let held = shares::take_held(&share.id, &held_id, outcome)
                 .ok_or(("notFound", "That message was already answered.".to_string()))?;
             chat_changed(&share);
@@ -426,21 +460,6 @@ async fn handle_op(run: &mut Run<'_>, params: &Map<String, Value>) -> Result<Val
                 );
             };
             return match action.as_str() {
-                "send" => {
-                    let words = text(params, "text").unwrap_or_else(|| held.text.clone());
-                    let sent = deliver(
-                        &share,
-                        &crate::labelled_guest_text(&held.name, &words),
-                        &held.image_paths,
-                    )
-                    .await;
-                    if let Some(approval) = &approval {
-                        run.performed(approval, sent.is_ok());
-                    }
-                    sent.map_err(|message| Stop::Refused("sendFailed", message))?;
-                    audit("approved");
-                    Ok(json!({ "sent": true }))
-                }
                 "edit" => {
                     audit("edited");
                     Ok(

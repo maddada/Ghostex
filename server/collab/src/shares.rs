@@ -101,6 +101,8 @@ struct Live {
     held: Vec<HeldMessage>,
     /// Held messages the owner answered lately: `(held id, "sent" | "edited" | "declined", when)`.
     resolved: Vec<(String, &'static str, i64)>,
+    /// Held messages whose Send is being delivered now (`begin_send`): a second Send waits.
+    sending: std::collections::BTreeSet<String>,
     owner_typing_until_ms: i64,
     code_misses: u32,
     code_locked_until_ms: i64,
@@ -600,6 +602,26 @@ pub fn peek_held(share_id: &str, held_id: &str) -> Option<HeldMessage> {
             .find(|held| held.id == held_id)
             .cloned()
     })
+}
+
+/// Marks a held message as being sent and returns it, or `None` when it is gone or already being
+/// sent. It stays held (its pictures stay the share's) until `take_held` after it was delivered,
+/// or `end_send` when delivery failed.
+pub fn begin_send(share_id: &str, held_id: &str) -> Option<HeldMessage> {
+    with_registry(|registry| {
+        let live = registry.live.get_mut(share_id)?;
+        let held = live.held.iter().find(|held| held.id == held_id)?.clone();
+        live.sending.insert(held_id.to_string()).then_some(held)
+    })
+}
+
+/// Ends a held message's send (`begin_send`), delivered or not.
+pub fn end_send(share_id: &str, held_id: &str) {
+    with_registry(|registry| {
+        if let Some(live) = registry.live.get_mut(share_id) {
+            live.sending.remove(held_id);
+        }
+    });
 }
 
 /// Takes a held message out (the owner sent, edited or declined it).
