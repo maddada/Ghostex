@@ -592,6 +592,8 @@ pub fn audit_lines(state: &ChatState) -> Value {
                 let label = text(line, "label");
                 let verb = if tone_of(label, false) == "deny" {
                     "Denied"
+                } else if crate::questions::pending_approval::lasting(label) {
+                    "Always allowed"
                 } else {
                     "Approved"
                 };

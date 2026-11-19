@@ -28,10 +28,21 @@ pub struct PendingApproval {
     pub denied: bool,
     /// gxserver applied it; the card waits for the prompt to leave.
     pub applied: bool,
-    /// The prompt left before gxserver's reply, and the line already says what was picked.
-    pub settled: bool,
     /// The command it answered, one line, for the settled row (`extras::dock_approvals`).
     pub command: String,
+}
+
+/// Whether an answer grants more than this one time ("Yes, and don't ask again …", "Always
+/// allow", "Trust and remember"): its settled row says "Always allowed".
+pub(crate) fn lasting(label: &str) -> bool {
+    let lower = label.to_lowercase();
+    !lower.trim_start().starts_with("no")
+        && !lower.trim_start().starts_with("deny")
+        && (lower.contains("don't ask again")
+            || lower.contains("always")
+            || lower.contains("remember")
+            || lower.contains("this session")
+            || lower.contains("for this conversation"))
 }
 
 /// Whether a picked label refuses.
@@ -87,7 +98,6 @@ pub fn begin(state: &ChatState, kind: &str, answer: &Value) -> Option<PendingApp
         card,
         label,
         applied: false,
-        settled: false,
     })
 }
 
@@ -125,15 +135,7 @@ pub fn holds_prompt(state: &ChatState) -> bool {
 /// already went); refused, the card comes back as it was.
 pub fn answered(state: &mut ChatState, applied: bool) {
     if !applied {
-        // A line settled while the refusal was on its way goes with it.
-        if state
-            .questions
-            .pending_approval
-            .take()
-            .is_some_and(|pending| pending.settled)
-        {
-            state.questions.settled_approval = None;
-        }
+        state.questions.pending_approval = None;
         return;
     }
     if let Some(pending) = state.questions.pending_approval.as_mut() {
@@ -158,21 +160,21 @@ pub fn sync(state: &mut ChatState) {
     if on_screen(state, &pending) {
         return;
     }
-    // The prompt left: the line says what was picked at once, even while gxserver's reply is
-    // still on its way (a refusal then takes it back, `answered`).
-    if pending.applied {
-        state.questions.pending_approval = None;
-        // Its row already settled while gxserver's reply was on its way, and may have left.
-        if pending.settled {
-            return;
-        }
-    } else if pending.settled {
+    // The prompt left, but the row says what was picked only once gxserver has said it applied it
+    // (`answered`): never "Approved" for an answer that may still be refused.
+    if !pending.applied {
         return;
-    } else if let Some(pending) = state.questions.pending_approval.as_mut() {
-        pending.settled = true;
     }
+    state.questions.pending_approval = None;
     state.questions.settled_approval = Some(json!({
-        "text": if pending.denied { "Denied" } else { "Approved" },
+        // A lasting grant says so ("Yes, and don't ask again …").
+        "text": if pending.denied {
+            "Denied"
+        } else if lasting(&pending.label) {
+            "Always allowed"
+        } else {
+            "Approved"
+        },
         "detail": format!("Picked \"{}\"", pending.label),
         "tone": if pending.denied { "bad" } else { "good" },
         "command": pending.command,
