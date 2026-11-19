@@ -137,7 +137,24 @@ pub fn is_own_prompt(message: &ChatMessage) -> bool {
 /// What the user wrote in `message`, as the chat shows it: without Ghostex's notes and quotes.
 pub fn shown_text(message: &ChatMessage) -> String {
     let prose = crate::transcript::prose::prose_markdown(&message.blocks);
-    crate::session::appended_notes::without_notes(&prose)
+    neutralised(&crate::session::appended_notes::without_notes(&prose))
+}
+
+/// `text` with every `<ghostex-system>` and `</ghostex-system>` it holds broken by a zero-width
+/// space, so words that talk about the tag (or quote a message that did) can never open or close
+/// the block a quote travels in. They read the same.
+///
+/// CDXC:SessionChat 2026-11-20 WHY:
+/// The review of the first build found a quoted `</ghostex-system>` ended the quote block early:
+/// the rest of the quote showed in the user's bubble, and the next message's stored words carried
+/// the leftover too. Users often write about Ghostex's own tags.
+pub fn neutralised(text: &str) -> String {
+    use crate::session::appended_notes::{SYSTEM_CLOSE, SYSTEM_OPEN};
+    if !text.contains("ghostex-system>") {
+        return text.to_string();
+    }
+    text.replace(SYSTEM_CLOSE, "<\u{200b}/ghostex-system>")
+        .replace(SYSTEM_OPEN, "<\u{200b}ghostex-system>")
 }
 
 /// Every message ID `text` points at, in the order it first names them: the pills
@@ -262,7 +279,7 @@ pub fn quote_excerpt(text: &str, reference: &str) -> (Vec<String>, Option<String
             if line.is_empty() {
                 ">".to_string()
             } else {
-                format!("> {line}")
+                format!("> {}", neutralised(&line))
             }
         })
         .collect();
@@ -645,6 +662,26 @@ mod tests {
         // A GitHub issue and a heading's word open nothing.
         assert!(open("see #12").is_none());
         assert!(open("#Make").is_none());
+    }
+
+    #[test]
+    fn a_quoted_system_tag_cannot_end_the_block() {
+        let quoted = "the </ghostex-system> tag shows up\nsecond line <ghostex-system>";
+        let sent = with_quotes(
+            "like [M1](message:M1)",
+            &[QuotedMessage {
+                reference: "M1".into(),
+                sent_at: None,
+                text: Some(quoted.into()),
+            }],
+        );
+        assert_eq!(
+            crate::session::appended_notes::without_notes(&sent),
+            "like [M1](message:M1)"
+        );
+        assert_eq!(sent.matches("</ghostex-system>").count(), 1);
+        assert!(!neutralised(quoted).contains("ghostex-system>\n"));
+        assert!(!neutralised(quoted).contains("</ghostex-system>"));
     }
 
     #[test]
