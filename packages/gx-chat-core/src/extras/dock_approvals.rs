@@ -5,6 +5,9 @@
 //!
 //! CDXC:SessionChat 2026-11-20 DECISION:
 //! User, of an "✓ Approved" bar between the dock and the chat box: "I don't like this 'approved' thingy. pls let's not show multiple bars like this above the dock chat box; the dock/dock bar should be the only one there." On the design page they picked "A. Settles in its row, then gone" (Q4243): an approval that still needs them is a dock row with Yes / Always / No, and once answered the row shows Approved for about 3 seconds and disappears, with no record kept in the chat; a thread's "Approved from <coordinator>" line gets the same treatment. This supersedes the 2026-11-08 "Approved" / "Denied" line in questions/pending_approval.rs, which stayed until the next prompt. The answers, the dimmed busy state and the refusal stay the card's (`questions::actions`), so keyboard answers and the composer's hold are unchanged; only where it is drawn moved. A notice this cannot turn into buttons keeps its card.
+//!
+//! CDXC:SessionChat 2026-11-20 WHY:
+//! A security review of the first version found an approval could wait undrawn and read as less than it grants. So: a row exists only where it is drawn (no row while a question card takes the dock's place; the dock never stays collapsed over one; the desktop draws the card while the chat box is maximized); the row shows the whole command (a Codex command runs from its `$ ` line to the next blank line) with "Show N more lines" and the agent's warning; a button says "Yes" or "No" only for exactly Yes, Allow, "Yes, proceed" or No, every other answer keeps the agent's words, which supersedes the Yes / Always / No wording above; and a new row's answers wait 400 ms before taking a click (the renderers).
 //! SEE-ALSO: extras/relayed_approvals.rs (`choices`, `body`: the same answers a coordinator's relayed card sends), apps/desktop/src/app/native_chat/work_cards.rs and apps/mobile/app/src/chat/native/cards/WorkCards.tsx (the rows), native_chat/composer.rs and apps/mobile/app/src/chat/native/cards/NativeChatCards.tsx (`approvalInDock` hides the card).
 
 use serde_json::{json, Value};
@@ -24,16 +27,25 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or_default()
 }
 
-/// The headings of Codex's approval dialogs, which reach the chat as a `codexInputBlocked` screen
-/// with the dialog's rows (server/src/session_chat_codex_blocking.rs lists the same words).
-const CODEX_APPROVAL_HEADINGS: [&str; 6] = [
+/// How Codex's approval dialogs start their heading; they reach the chat as a `codexInputBlocked`
+/// screen with the dialog's rows (server/src/session_chat_codex_blocking.rs lists the same words).
+const CODEX_APPROVAL_HEADINGS: [&str; 5] = [
     "Would you like to run the following command",
     "Would you like to send input to",
     "Do you want to approve network access to",
     "Would you like to grant these permissions",
     "Would you like to make the following edits",
-    "needs your approval",
 ];
+
+/// Whether a Codex dialog's heading is an approval's: it starts with one of the headings above, or
+/// ends with "needs your approval" (an MCP tool's), never merely contains the words.
+fn codex_approval_heading(title: &str) -> bool {
+    let title = title.trim();
+    CODEX_APPROVAL_HEADINGS
+        .iter()
+        .any(|heading| title.starts_with(heading))
+        || title.trim_end_matches('.').ends_with("needs your approval")
+}
 
 /// Whether a screen notice is an approval the dock shows as a row: `"permission"` (Claude
 /// Code's permission prompt, a Codex approval dialog) or `"trust"` (a folder-trust question).
@@ -44,11 +56,7 @@ pub fn approval_kind(notice: &TerminalNotice) -> Option<&'static str> {
         "codexInputBlocked" => notice
             .dialog
             .as_ref()
-            .filter(|dialog| {
-                CODEX_APPROVAL_HEADINGS
-                    .iter()
-                    .any(|heading| dialog.title.contains(heading))
-            })
+            .filter(|dialog| codex_approval_heading(&dialog.title))
             .map(|_| "permission"),
         _ => None,
     }
@@ -63,6 +71,13 @@ fn open_card(state: &ChatState) -> Option<Value> {
     }
     let notice = TerminalNotice::parse(state.session.terminal_notice.as_ref());
     let prompt = InteractivePrompt::parse(state.session.prompt.as_ref());
+    // A question card takes the chat box's place and the dock's with it, so the approval keeps its
+    // own card beside the question: it is never waiting without being drawn.
+    if prompt.as_ref().is_some_and(InteractivePrompt::is_question)
+        && crate::questions::gates::question_card_visible(state, prompt.as_ref(), notice.as_ref())
+    {
+        return None;
+    }
     let agent = state.session.agent.clone().unwrap_or_default();
     if let Some(notice) = notice.as_ref() {
         let kind = approval_kind(notice).unwrap_or_default();
@@ -89,35 +104,48 @@ fn open_card(state: &ChatState) -> Option<Value> {
     None
 }
 
-/// A button's short word: "Yes", "Always", "No" (or the card's own words when two would read the
-/// same), its full words in the tooltip.
-fn short_labels(labels: &[String]) -> Vec<String> {
-    let short: Vec<String> = labels
-        .iter()
-        .map(|label| {
-            let lower = label.trim().to_lowercase();
-            if lower.starts_with("no") || lower.starts_with("deny") || lower.starts_with("don't") {
-                "No".to_string()
-            } else if lower.contains("don't ask again")
-                || lower.contains("always")
-                || lower.contains("remember")
-                || lower.contains("this session")
-            {
-                "Always".to_string()
-            } else if lower.starts_with("yes") || lower == "allow" {
-                "Yes".to_string()
-            } else {
-                label.clone()
-            }
-        })
-        .collect();
-    let mut seen = std::collections::BTreeSet::new();
-    if short.iter().all(|label| seen.insert(label.clone())) {
-        short
-    } else {
-        labels.to_vec()
+/// A button's word: "Yes" only for exactly Yes, Allow or "Yes, proceed", "No" only for exactly No;
+/// every other answer keeps the agent's own words, so a lasting or scoped choice ("Yes, and don't
+/// ask again for …") always says what it grants.
+fn short_label(label: &str) -> String {
+    match label.trim().to_lowercase().as_str() {
+        "yes" | "allow" | "yes, proceed" => "Yes".to_string(),
+        "no" => "No".to_string(),
+        _ => label.to_string(),
     }
 }
+
+/// The command a Codex dialog approves: from its first `$ ` line through the lines after it, up to
+/// the next blank line (a script's later lines are part of it); the dialog's body when it names no
+/// command (an edit's diff, a permission's scope).
+pub(crate) fn dialog_command(body: &str) -> String {
+    let lines: Vec<&str> = body.lines().collect();
+    let Some(start) = lines
+        .iter()
+        .position(|line| line.trim_start().starts_with("$ "))
+    else {
+        return body.trim().to_string();
+    };
+    // The dialog's own indent (that of the `$ ` line) comes off every line; the script's stays.
+    let indent = lines[start].len() - lines[start].trim_start().len();
+    let mut command = vec![lines[start]
+        .trim_start()
+        .trim_start_matches("$ ")
+        .trim_end()];
+    command.extend(
+        lines[start + 1..]
+            .iter()
+            .take_while(|line| !line.trim().is_empty())
+            .map(|line| {
+                let lead = line.len() - line.trim_start().len();
+                line[lead.min(indent)..].trim_end()
+            }),
+    );
+    command.join("\n")
+}
+
+/// How many lines of the command its row shows before "Show N more lines".
+const COMMAND_PREVIEW_LINES: usize = 4;
 
 /// The first line of the command, with an ellipsis when there is more.
 fn command_line(code: &str) -> String {
@@ -137,13 +165,19 @@ fn open_row(state: &ChatState) -> Option<Value> {
         return None;
     }
     let (_, title, source, code, _, reason) = crate::extras::relayed_approvals::body(&card);
-    let pending = state.questions.pending_approval.as_ref();
-    let labels: Vec<String> = choices.iter().map(|choice| choice.label.clone()).collect();
-    let short = short_labels(&labels);
+    // The answer on its way for THIS card (a reply still out for the previous prompt does not make
+    // the next one busy).
+    let pending = state.questions.pending_approval.as_ref().filter(|_| {
+        crate::questions::pending_approval::holds_notice(state)
+            || crate::questions::pending_approval::holds_prompt(state)
+    });
+    let picked_label = pending.map(|pending| {
+        crate::questions::notice_choices::without_key_hint(&pending.label).to_string()
+    });
     let buttons: Vec<Value> = choices
         .iter()
-        .zip(short)
-        .map(|(choice, label)| {
+        .map(|choice| {
+            let label = short_label(&choice.label);
             let tooltip = if label == choice.label {
                 String::new()
             } else {
@@ -153,7 +187,7 @@ fn open_row(state: &ChatState) -> Option<Value> {
                 "label": label,
                 "tooltip": tooltip,
                 "recommended": false,
-                "picked": pending.is_some_and(|pending| pending.label == choice.label),
+                "picked": picked_label.as_deref() == Some(choice.label.as_str()),
                 "command": { "type": "answer", "answer": choice.answer },
             })
         })
@@ -168,15 +202,36 @@ fn open_row(state: &ChatState) -> Option<Value> {
             state.questions.prompt_key.clone().unwrap_or_default()
         ),
     };
-    // The panel a click on the row opens: the command, why it asks, where from, then what each
-    // short answer stands for (the phone has no tooltips): "**Always**: Yes, and don't ask again
-    // for …".
-    let reason = text(&reason, "text").trim().to_string();
+    // The whole command, every line: the row shows its first lines and "Show N more lines".
+    let command = code.trim_end().trim_start_matches('\n').to_string();
+    let lines: Vec<&str> = command.lines().collect();
+    let more = lines.len().saturating_sub(COMMAND_PREVIEW_LINES);
+    // Lines gxserver itself left out of a long command ("12 more lines in the terminal").
+    let cut = card["notice"]
+        .get("permissionRequest")
+        .and_then(|request| crate::questions::permission_card::presentation(request, ""))
+        .and_then(|details| {
+            details
+                .get("codeCut")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_default();
+    // Why the agent flagged it ("Dangerous rm operation …"), on the row itself.
+    let note = json!({
+        "text": text(&reason, "text").trim(),
+        "tone": match text(&reason, "tone") { "" => "warning", tone => tone },
+    });
+    // The panel a click on the row opens: the command, why it asks, where from, then the full words
+    // of an answer whose button says less ("Yes, proceed" as Yes).
     let mut parts: Vec<String> = Vec::new();
-    if !code.trim().is_empty() {
-        parts.push(format!("```\n{}\n```", code.trim_end()));
+    if !command.is_empty() {
+        parts.push(format!("```\n{command}\n```"));
     }
-    parts.extend([reason, source.trim().to_string()]);
+    if !cut.is_empty() {
+        parts.push(format!("_{cut}_"));
+    }
+    parts.extend([text(&note, "text").to_string(), source.trim().to_string()]);
     parts.extend(buttons.iter().filter_map(|button| {
         let tooltip = text(button, "tooltip");
         (!tooltip.is_empty()).then(|| format!("**{}**: {tooltip}", text(button, "label")))
@@ -196,7 +251,14 @@ fn open_row(state: &ChatState) -> Option<Value> {
         "kind": "approval",
         "status": "needs",
         "title": if title.is_empty() { "Needs your approval".to_string() } else { title },
-        "command": command_line(&code),
+        // Drawn as a block of its own (`commandLines`), never cut without saying so: the first
+        // lines, then "Show N more lines" (`commandMore`), and gxserver's own cut (`commandCut`).
+        "command": command,
+        "commandLines": true,
+        "commandPreview": lines.iter().take(COMMAND_PREVIEW_LINES).copied().collect::<Vec<_>>().join("\n"),
+        "commandMore": more,
+        "commandCut": cut,
+        "note": if text(&note, "text").is_empty() { Value::Null } else { note },
         "body": body,
         "detail": [],
         "age": "",
@@ -208,7 +270,7 @@ fn open_row(state: &ChatState) -> Option<Value> {
         "mention": "",
         "needs": true,
         // The dock stays up for it even while it would step aside (a long draft, the Work panel
-        // docked beside the chat).
+        // docked beside the chat), and never stays collapsed over it (`work_cards::dock_with`).
         "stays": true,
     }))
 }

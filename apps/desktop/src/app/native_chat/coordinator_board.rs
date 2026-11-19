@@ -447,6 +447,10 @@ pub(crate) struct CoordinatorBoardView {
     pub(super) dock_width: std::rc::Rc<std::cell::Cell<f32>>,
     /// The dock's rows' scroll position.
     pub(super) dock_scroll: gpui::ScrollHandle,
+    /// When each approval row was first drawn, by row key: its answers take no click for
+    /// `APPROVAL_ARM_MS` after it appears (work_actions.rs `approval_armed`).
+    pub(super) approval_seen:
+        std::rc::Rc<std::cell::RefCell<std::collections::HashMap<String, web_time::Instant>>>,
     /// Where the window header's Work button was painted (the app's, set every frame): the
     /// floating card opens under it (work_topic.rs).
     pub(super) header_anchor: Option<std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>>,
@@ -1795,7 +1799,11 @@ impl NativeChatView {
                 .unwrap_or_default();
             let mut lines = code.lines().map(str::trim).filter(|line| !line.is_empty());
             if let Some(first) = lines.next() {
-                let more = if lines.next().is_some() { " \u{2026}" } else { "" };
+                let more = if lines.next().is_some() {
+                    " \u{2026}"
+                } else {
+                    ""
+                };
                 dock["command"] = json!(format!("{first}{more}"));
             }
         }

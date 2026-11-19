@@ -246,19 +246,13 @@ pub(crate) fn body(card: &Value) -> (String, String, String, String, String, Val
                     details.get("reason").cloned().unwrap_or(Value::Null),
                 );
             }
-            // A Codex dialog names its command on `$ ` lines; a picker card in `approvalCommand`.
-            let dialog_commands: Vec<String> = raw_notice["dialog"]["body"]
-                .as_str()
-                .unwrap_or_default()
-                .lines()
-                .map(str::trim)
-                .filter(|line| line.starts_with("$ "))
-                .map(|line| line.trim_start_matches("$ ").to_string())
-                .collect();
-            let command = if dialog_commands.is_empty() {
+            // A Codex dialog names its command from its `$ ` line to the next blank line (or is its
+            // body, for an edit or a permission); a picker card in `approvalCommand`.
+            let dialog_body = raw_notice["dialog"]["body"].as_str().unwrap_or_default();
+            let command = if dialog_body.trim().is_empty() {
                 text(&raw_notice, "approvalCommand").trim().to_string()
             } else {
-                dialog_commands.join("\n")
+                crate::extras::dock_approvals::dialog_command(dialog_body)
             };
             match (&notice, &prompt) {
                 (Some(notice), _) if !notice.title.is_empty() => (

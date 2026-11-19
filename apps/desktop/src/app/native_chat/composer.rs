@@ -510,7 +510,7 @@ impl NativeChatView {
         }
         // An approval waiting on the agent is a row of the dock instead (gx-chat-core
         // extras/dock_approvals.rs); its card stays out of the stack.
-        let approval_in_dock = text(&self.snapshot, "approvalInDock");
+        let approval_in_dock = self.approval_in_dock();
         if approval_in_dock != "notice"
             && let Some(notice) = self.render_notice(p, window, cx)
         {
