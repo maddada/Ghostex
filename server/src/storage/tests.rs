@@ -39,6 +39,7 @@ fn initializes_sqlite_with_current_migrations_and_schema_layout() {
         vec![
             "agent_message_deliveries_waiting".to_string(),
             "chat_message_numbers_copy".to_string(),
+            "chat_message_numbers_id".to_string(),
             "chat_message_numbers_message".to_string(),
             "idx_app_user_data_kind_updated".to_string(),
             "idx_automation_runs_active".to_string(),

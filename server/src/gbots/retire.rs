@@ -188,6 +188,7 @@ fn remove_bots_and_chats(
     for project_id in &bot_projects {
         repository.remove_project(project_id)?;
         crate::session_chat_queue::forget_session_chat_queue(db, project_id, None)?;
+        crate::chat_message_numbers::forget(db, project_id, None);
         schedule_presentation_project_delta(state, db, repository, project_id, "projectUpdated")?;
     }
     Ok((bot_projects.len(), sessions.len()))

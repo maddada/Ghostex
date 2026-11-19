@@ -217,8 +217,45 @@ pub struct QuotedMessage {
     pub reference: String,
     /// When it was sent, already written for the agent (`2026-11-19 16:59`).
     pub sent_at: Option<String>,
-    /// Its words, or `None` when no message has that ID.
+    /// Its words, or `None` when no message has that ID. May be only their start
+    /// ([`quote_prefix`]) when `totals` gives the whole message's size.
     pub text: Option<String>,
+    /// The whole message's lines and characters ([`quote_totals`]) when `text` is only its start.
+    pub totals: Option<(usize, usize)>,
+}
+
+/// How much of a message gxserver keeps for quoting: comfortably more than one quote takes
+/// ([`QUOTE_MAX_CHARS`]), so the quote never runs out of words; `ghostex message show` reads the
+/// whole message from the transcript.
+pub const QUOTE_PREFIX_CHARS: usize = 1_000;
+
+/// `text` without blank lines at either end, as the quote counts it.
+fn quoted_lines(text: &str) -> Vec<&str> {
+    let lines: Vec<&str> = text.lines().map(str::trim_end).collect();
+    let first = lines.iter().position(|line| !line.trim().is_empty());
+    let last = lines.iter().rposition(|line| !line.trim().is_empty());
+    match (first, last) {
+        (Some(first), Some(last)) => lines[first..=last].to_vec(),
+        _ => Vec::new(),
+    }
+}
+
+/// The start of a message gxserver keeps for quoting it: its first [`QUOTE_PREFIX_CHARS`]
+/// characters, blank lines at either end dropped.
+pub fn quote_prefix(text: &str) -> String {
+    quoted_lines(text)
+        .join("\n")
+        .chars()
+        .take(QUOTE_PREFIX_CHARS)
+        .collect()
+}
+
+/// The whole message's lines and characters as a quote counts them, kept with its
+/// [`quote_prefix`] so the note under a quote says how much was left out.
+pub fn quote_totals(text: &str) -> (usize, usize) {
+    let lines = quoted_lines(text);
+    let chars = lines.iter().map(|line| line.chars().count()).sum();
+    (lines.len(), chars)
 }
 
 /// The start of `text` the agent is sent, as quoted lines, and the note on what was left out.
@@ -229,14 +266,17 @@ pub struct QuotedMessage {
 /// ends in "…". When anything was left out, the note says how much was kept and names the
 /// command that prints the whole message.
 pub fn quote_excerpt(text: &str, reference: &str) -> (Vec<String>, Option<String>) {
-    let lines: Vec<&str> = text.lines().map(str::trim_end).collect();
-    let first = lines.iter().position(|line| !line.trim().is_empty());
-    let last = lines.iter().rposition(|line| !line.trim().is_empty());
-    let lines: &[&str] = match (first, last) {
-        (Some(first), Some(last)) => &lines[first..=last],
-        _ => &[],
-    };
-    let total_chars: usize = lines.iter().map(|line| line.chars().count()).sum();
+    excerpt(text, reference, None)
+}
+
+/// [`quote_excerpt`] of a message's start (`text`), with the whole message's `totals` for the note.
+fn excerpt(
+    text: &str,
+    reference: &str,
+    totals: Option<(usize, usize)>,
+) -> (Vec<String>, Option<String>) {
+    let lines = quoted_lines(text);
+    let (total_lines, total_chars) = totals.unwrap_or_else(|| quote_totals(text));
     let mut kept: Vec<String> = Vec::new();
     let mut budget = QUOTE_MAX_CHARS;
     let mut cut_inside = false;
@@ -258,20 +298,19 @@ pub fn quote_excerpt(text: &str, reference: &str) -> (Vec<String>, Option<String
         cut_inside = true;
         break;
     }
-    let all_lines = kept.len() == lines.len() && !cut_inside;
+    let all_lines = kept.len() == total_lines && !cut_inside;
     let command = format!("`ghostex message show {reference}` prints all of it");
     let note = if all_lines {
         None
-    } else if cut_inside && kept.len() <= 1 && lines.len() == 1 {
+    } else if cut_inside && kept.len() <= 1 && total_lines == 1 {
         Some(format!(
             "(the first {} of {total_chars} characters; {command})",
             QUOTE_MAX_CHARS.min(total_chars)
         ))
     } else {
         Some(format!(
-            "(the first {} of {} lines; {command})",
+            "(the first {} of {total_lines} lines; {command})",
             kept.len(),
-            lines.len()
         ))
     };
     let quoted = kept
@@ -300,7 +339,7 @@ pub fn quotes_block(quotes: &[QuotedMessage], unquoted: &[String]) -> Option<Str
     for quote in quotes {
         match &quote.text {
             Some(text) => {
-                let (lines, note) = quote_excerpt(text, &quote.reference);
+                let (lines, note) = excerpt(text, &quote.reference, quote.totals);
                 let mut part = match &quote.sent_at {
                     Some(at) => format!("{} (sent {at}):", quote.reference),
                     None => format!("{}:", quote.reference),
@@ -564,6 +603,14 @@ mod tests {
             note.as_deref(),
             Some("(the first 6 of 14 lines; `ghostex message show M12` prints all of it)")
         );
+        // gxserver keeps only the start, with the whole message's size: the quote is the same.
+        let long = format!("{text}\n{}", "x".repeat(3_000));
+        let prefix = quote_prefix(&long);
+        assert_eq!(prefix.chars().count(), QUOTE_PREFIX_CHARS);
+        assert_eq!(
+            excerpt(&prefix, "M12", Some(quote_totals(&long))),
+            quote_excerpt(&long, "M12")
+        );
     }
 
     #[test]
@@ -588,11 +635,13 @@ mod tests {
                     reference: "M12".into(),
                     sent_at: Some("2026-11-19 16:59".into()),
                     text: Some("make them 30px".into()),
+                    totals: None,
                 },
                 QuotedMessage {
                     reference: "M99".into(),
                     sent_at: None,
                     text: None,
+                    totals: None,
                 },
             ],
             &["M7".to_string(), "G2.M8".to_string()],
@@ -687,6 +736,7 @@ mod tests {
                 reference: "M1".into(),
                 sent_at: None,
                 text: Some(quoted.into()),
+                totals: None,
             }],
             &[],
         );
