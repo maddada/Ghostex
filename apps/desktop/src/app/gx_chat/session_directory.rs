@@ -46,6 +46,16 @@ pub(crate) fn set_computer_icons(icons: std::collections::HashMap<String, &'stat
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(icons);
 }
 
+/// Whether more than one computer is in the sidebar, so the computer you're on wears its pip
+/// (native_sidebar/computer_mark.rs `with_here_pip`). Never in the web build, which shows one.
+pub(crate) fn several_computers() -> bool {
+    COMPUTER_ICONS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .as_ref()
+        .is_some_and(|icons| !icons.is_empty())
+}
+
 /// This computer's icon drawing (picked for it, else its system's), once its gxserver answered
 /// (`note_computer_icon` in gx_store/computer_icons.rs). Kept apart from [`COMPUTER_ICONS`], which
 /// is empty while this is the only computer.

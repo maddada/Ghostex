@@ -770,6 +770,7 @@ pub(super) fn fold_row<V: 'static>(
     id: &'static str,
     title: impl Into<SharedString>,
     line: String,
+    leading: Option<AnyElement>,
     open: bool,
     on_press: impl Fn(&mut V, &mut Window, &mut Context<V>) + 'static,
     cx: &mut Context<V>,
@@ -797,6 +798,7 @@ pub(super) fn fold_row<V: 'static>(
         })
         .hover(move |this| this.bg(hsla(wash)))
         .on_press(cx, on_press)
+        .children(leading)
         .child(
             v_flex()
                 .flex_1()
