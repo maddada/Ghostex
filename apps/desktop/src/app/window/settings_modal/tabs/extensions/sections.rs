@@ -790,10 +790,17 @@ impl ExtensionsTab {
             .as_ref()
             .is_some_and(|editor| editor.key == key);
         let open_id = id.clone();
+        // CDXC:Extensions 2026-11-20 DECISION:
+        // User: Settings > Extensions showed no sign that the installed Thread brief (0.2.0) had a newer catalog version (0.3.1). The Available group leaves out what is installed, and the installed card said nothing, so only the detail page could tell. The card now carries an "Update to vX" label after its title when the catalog's version is newer; the detail page keeps its Update button.
+        let update_to = self
+            .browser
+            .catalog_entry(&id)
+            .map(super::data::CatalogEntry::version)
+            .filter(|version| update_available(version, &extension.version()));
         grid_card(
             p,
             GridCardSpec {
-                badge: None,
+                badge: update_to.map(|version| SharedString::from(format!("Update to v{version}"))),
                 id: SharedString::from(format!("installed-{id}")),
                 icon: extension_icon_tile(p, icon_bytes, has_source, false),
                 control: Some(control.into_any_element()),
