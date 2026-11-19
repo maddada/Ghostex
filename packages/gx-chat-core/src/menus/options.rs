@@ -273,6 +273,7 @@ pub fn compute_native_chat_options(state: &ChatState, _context: &ChatContext) ->
                         .filter(|computer| computer.remote)
                         .map(|_| "another computer")
                 }),
+            state.core.hide_account_emails,
         ),
         options_title: options_title(&sections, pill_values.fast, pill_values.plan, ""),
         options_tooltip: options_title(

@@ -88,11 +88,68 @@ fn distinct_account_copies(accounts: &[Value]) -> Vec<Vec<&Value>> {
     shown
 }
 
-/// Whether gxserver reads this copy of an account as needing a sign-in: its saved login is dead,
-/// or a session on it reported "Login expired" (server/src/accounts/login_expired.rs), or the
-/// login now belongs to someone else. The states `ghostex accounts` calls `needsSignIn`.
+/// Whether gxserver reads this copy of an account as needing a sign-in: its saved login is dead
+/// or a session on it reported "Login expired" (`loginRequired`, server/src/accounts/login_expired.rs),
+/// the login now belongs to someone else (`identityChanged`), or it was synced from another
+/// computer and was never signed in on this one (`unavailable` with `syncedFrom`,
+/// server/src/accounts/endpoint.rs). A plain `unavailable` (the saved login is missing for another
+/// reason) is not drawn as signed out. A copy whose computer's connection was stopped
+/// (`connectionStopped`, [`flag_stopped_machine_accounts`]) is not either: its state is from before
+/// the connection ended, so it reads as a computer that can't be reached.
 fn signed_out(account: &Value) -> bool {
-    matches!(text(account, "status"), "loginRequired" | "identityChanged")
+    if account["connectionStopped"] == true {
+        return false;
+    }
+    match text(account, "status") {
+        "loginRequired" | "identityChanged" => true,
+        "unavailable" => !text(account, "syncedFrom").is_empty(),
+        _ => false,
+    }
+}
+
+/// A computer's accounts whose connection was stopped: they stay (an account only that computer
+/// has keeps its card), but faded and never amber, until the computer answers again and its rows
+/// are replaced (`refresh_titlebar_accounts`).
+pub(crate) fn flag_stopped_machine_accounts(accounts: &mut [Value], machine: &str) {
+    for account in accounts
+        .iter_mut()
+        .filter(|account| text(account, "titlebarMachine") == machine)
+    {
+        account["connectionStopped"] = json!(true);
+        account["machineUnreachable"] = json!(true);
+    }
+}
+
+/// How long a computer's reads may keep failing before its cards fade, even if only one failed.
+const UNREACHABLE_FADE_AFTER_MS: f64 = 90_000.0;
+
+fn now_ms() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as f64)
+        .unwrap_or(0.0)
+}
+
+/// Marks a computer's copy after a read of it failed. `counted` is whether this failure counts:
+/// one per refresh, and none when that refresh's cached read already answered (a slow full read
+/// is not a computer that can't be reached). The card fades only after two counted failures in a
+/// row, or once failures have gone on for [`UNREACHABLE_FADE_AFTER_MS`], so one dropped read
+/// doesn't flicker it.
+fn note_failed_read(account: &mut Value, counted: bool, now: f64) {
+    if counted {
+        let reads = account["unreachableReads"].as_u64().unwrap_or(0) + 1;
+        account["unreachableReads"] = json!(reads);
+        if !account["unreachableSince"].is_number() {
+            account["unreachableSince"] = json!(now);
+        }
+    }
+    let reads = account["unreachableReads"].as_u64().unwrap_or(0);
+    let long = account["unreachableSince"]
+        .as_f64()
+        .is_some_and(|since| now - since >= UNREACHABLE_FADE_AFTER_MS);
+    if reads >= 2 || long {
+        account["machineUnreachable"] = json!(true);
+    }
 }
 
 /// A computer's name as the user saved it in Settings > Remote, or "This computer".
@@ -122,8 +179,15 @@ fn provider_label(provider: &str) -> &'static str {
 
 /// The amber Settings > Accounts gives "Needs sign-in" (settings_modal/tabs/accounts/widgets.rs
 /// `TagTone::Warning`): the account's letters and numbers on a signed-out card.
-pub(crate) fn needs_sign_in_amber() -> gpui::Rgba {
-    chrome_color(0xfcd34d, 0xb45309)
+///
+/// CDXC:AgentProviders 2026-11-19 WHY:
+/// In light mode a Claude card's letters are Claude's own #9c4328, and the Settings amber #b45309
+/// sat too close to it to tell a signed-out Claude card at a glance (the review of 03107bf0d). A
+/// light Claude card takes a darker ochre, #785800: hue 44 against Claude's 14, and 5.2:1 on the
+/// light card (#e5e5e6, the 96% light chrome under the card's 5% black). Everywhere else keeps the
+/// Settings amber.
+pub(crate) fn needs_sign_in_amber(claude: bool) -> gpui::Rgba {
+    chrome_color(0xfcd34d, if claude { 0x785800 } else { 0xb45309 })
 }
 
 /// How a card shows that its account needs signing in somewhere.
@@ -139,8 +203,7 @@ pub(crate) enum MeterSignIn {
 }
 
 /// A card's sign-in state, whether its shown copy's computer could not be reached, and the
-/// tooltip that lists every computer's copy, for a card with a problem only (signed out on a
-/// computer, or a computer that did not answer).
+/// tooltip that lists every computer's copy, for a card that draws amber or faded only.
 ///
 /// CDXC:AgentProviders 2026-11-19 DECISION:
 /// User (Q4198 A): a card with a problem gets a tooltip naming each computer and the account's
@@ -156,7 +219,9 @@ fn meter_state(label: &str, copies: &[&Value]) -> (MeterSignIn, bool, Option<Str
     } else {
         MeterSignIn::SignedIn
     };
-    let problem = sign_in != MeterSignIn::SignedIn || copies.iter().any(|copy| unreachable(copy));
+    // Only a card that looks different (amber, or faded) explains itself: another computer that
+    // didn't answer leaves this card as it is, and so without a tooltip.
+    let problem = sign_in != MeterSignIn::SignedIn || unreachable(copies[0]);
     let tooltip = problem.then(|| {
         let mut lines = vec![format!(
             "{label} · {}",
@@ -730,6 +795,10 @@ impl GhostexGpuiApp {
                 continue;
             }
             cx.spawn(async move |this, cx| {
+                // The fade's debounce (`note_failed_read`): whether this refresh's cached read
+                // answered, and whether one of its failures was counted already.
+                let mut cached_answered = false;
+                let mut failure_counted = false;
                 for cached_only in [true, false] {
                     let target = target.clone();
                     let result = cx.background_executor().spawn(async move {
@@ -739,6 +808,9 @@ impl GhostexGpuiApp {
                             None => gpui_gxserver_rpc_result("/api/agentAccounts", &params, Duration::from_secs(60)),
                         }
                     }).await;
+                    let count_failure = result.is_err() && !cached_answered && !failure_counted;
+                    failure_counted |= count_failure;
+                    cached_answered |= cached_only && result.is_ok();
                     if this.update_in(cx, |this, window, cx| {
                         if this.titlebar_accounts_revision != revision {
                             return;
@@ -771,10 +843,11 @@ impl GhostexGpuiApp {
                                 }
                             }
                             Err(_) => {
+                                let now = now_ms();
                                 for account in this.titlebar_accounts.iter_mut().filter(|a| text(a, "titlebarMachine") == machine) {
                                     account["usageError"] = json!("Could not refresh account usage. Showing the last received snapshot.");
                                     account["usageStale"] = json!(true);
-                                    account["machineUnreachable"] = json!(true);
+                                    note_failed_read(account, count_failure, now);
                                 }
                             }
                         }
@@ -878,15 +951,16 @@ impl GhostexGpuiApp {
             icon(meter.codex)
         };
         let indicator = meter.indicator.clone();
+        let claude_card = meter.provider == "claude";
         let indicator_color = if meter.sign_in != MeterSignIn::SignedIn {
-            needs_sign_in_amber()
+            needs_sign_in_amber(claude_card)
         } else if meter.codex {
             chrome_color(0x7db8fb, 0x285b8c)
         } else {
             chrome_color(0xa4a8af, 0x9c4328)
         };
         let badge_color = if meter.sign_in == MeterSignIn::SignedOut {
-            needs_sign_in_amber()
+            needs_sign_in_amber(claude_card)
         } else {
             chrome_color(0xb9b9b9, 0x404040)
         };
@@ -1267,6 +1341,87 @@ mod tests {
             tooltip.as_deref(),
             Some("ST · Gemini\nThis computer: can't reach it, showing its last reading")
         );
+    }
+
+    /// Another computer that didn't answer leaves a signed-in card as it is: no tooltip.
+    #[test]
+    fn another_computer_not_answering_leaves_the_card_alone() {
+        let accounts = vec![
+            account("local", "claude", "claude-ms", "MS"),
+            with(
+                account("remote-a", "claude", "claude-ms", "MS"),
+                "machineUnreachable",
+                json!(true),
+            ),
+        ];
+        assert_eq!(state(&accounts), (MeterSignIn::SignedIn, false, None));
+    }
+
+    /// `unavailable` is signed out only for an account synced from another computer.
+    #[test]
+    fn unavailable_is_signed_out_only_when_synced() {
+        let synced = with(
+            with(
+                account("local", "claude", "claude-st", "ST"),
+                "status",
+                json!("unavailable"),
+            ),
+            "syncedFrom",
+            json!("Windows PC"),
+        );
+        assert_eq!(state(&[synced]).0, MeterSignIn::SignedOut);
+        let missing = with(
+            account("local", "claude", "claude-st", "ST"),
+            "status",
+            json!("unavailable"),
+        );
+        assert_eq!(state(&[missing]), (MeterSignIn::SignedIn, false, None));
+    }
+
+    /// A stopped computer's stale "signed out" can't keep a card amber: it fades instead.
+    #[test]
+    fn a_stopped_computers_copy_is_faded_not_amber() {
+        let mut accounts = vec![
+            account("local", "claude", "claude-st", "ST"),
+            with(
+                account("remote-a", "claude", "claude-st", "ST"),
+                "status",
+                json!("loginRequired"),
+            ),
+            with(
+                account("remote-a", "claude", "claude-only", "OT"),
+                "status",
+                json!("loginRequired"),
+            ),
+        ];
+        flag_stopped_machine_accounts(&mut accounts, "remote-a");
+        let copies = distinct_account_copies(&accounts);
+        let (sign_in, unreachable, tooltip) = meter_state("ST", &copies[0]);
+        assert_eq!(
+            (sign_in, unreachable, tooltip),
+            (MeterSignIn::SignedIn, false, None)
+        );
+        let (sign_in, unreachable, tooltip) = meter_state("OT", &copies[1]);
+        assert_eq!(sign_in, MeterSignIn::SignedIn);
+        assert!(unreachable);
+        assert!(tooltip.unwrap().contains("can't reach it"));
+    }
+
+    /// One failed read doesn't fade a card; two counted ones in a row, or 90 seconds, do. A failure
+    /// that isn't counted (the refresh's cached read answered) adds nothing.
+    #[test]
+    fn the_fade_waits_for_a_second_failed_read() {
+        let mut row = account("remote-a", "claude", "claude-ms", "MS");
+        note_failed_read(&mut row, false, 1_000.0);
+        assert!(row["machineUnreachable"].is_null() && row["unreachableReads"].is_null());
+        note_failed_read(&mut row, true, 1_000.0);
+        assert!(row["machineUnreachable"].is_null());
+        note_failed_read(&mut row, true, 31_000.0);
+        assert_eq!(row["machineUnreachable"], true);
+        let mut row = account("remote-a", "claude", "claude-ms", "MS");
+        note_failed_read(&mut row, true, 1_000.0);
+        note_failed_read(&mut row, false, 1_000.0 + UNREACHABLE_FADE_AFTER_MS);
+        assert_eq!(row["machineUnreachable"], true);
     }
 
     /// A card without a problem keeps no tooltip (2026-09-21).

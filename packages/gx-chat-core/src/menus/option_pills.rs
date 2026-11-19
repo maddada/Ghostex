@@ -41,9 +41,12 @@ pub fn account_indicator(accounts: Option<&AccountsState>) -> Option<String> {
 }
 
 /// The model pill's tooltip line while the account this session is bound to needs signing in on
-/// the session's computer (gxserver reads it `loginRequired` or `identityChanged`, the states
-/// `ghostex accounts` calls `needsSignIn`). `computer` is the session's computer's name, `None`
-/// for this computer. `None` while the account is signed in, or the session has none.
+/// the session's computer: gxserver reads it `loginRequired` or `identityChanged`, or
+/// `unavailable` for an account synced from another computer that was never signed in on this one
+/// (a plain `unavailable`, a saved login missing for another reason, is not called signed out).
+/// `computer` is the session's computer's name, `None` for this computer. The account's name is
+/// masked when Settings hides account emails. `None` while the account is signed in, or the
+/// session has none.
 ///
 /// CDXC:AgentProviders 2026-11-19 DECISION:
 /// User (Q4198 A, the signed-out accounts page): "i need to know (per machine) if the session is
@@ -55,6 +58,7 @@ pub fn account_indicator(accounts: Option<&AccountsState>) -> Option<String> {
 pub fn account_sign_in_note(
     accounts: Option<&AccountsState>,
     computer: Option<&str>,
+    hide_account_emails: bool,
 ) -> Option<String> {
     let accounts = accounts?;
     let session_account_id = accounts
@@ -65,10 +69,12 @@ pub fn account_sign_in_note(
         .accounts
         .iter()
         .find(|account| account.id.as_deref() == Some(session_account_id))?;
-    if !matches!(
-        active.status.as_deref(),
-        Some("loginRequired" | "identityChanged")
-    ) {
+    let signed_out = match active.status.as_deref() {
+        Some("loginRequired" | "identityChanged") => true,
+        Some("unavailable") => active.synced_from.is_some(),
+        _ => false,
+    };
+    if !signed_out {
         return None;
     }
     let label = account_indicator(Some(accounts)).unwrap_or_else(|| {
@@ -82,6 +88,7 @@ pub fn account_sign_in_note(
         Some(name) => format!("on {name}"),
         None => "on this computer".to_string(),
     };
+    let label = crate::menus::native_accounts::account_text(hide_account_emails, &label);
     Some(format!(
         "{label} is signed out {place}. Sending won't work until it signs in there."
     ))
@@ -195,21 +202,49 @@ mod tests {
     #[test]
     fn a_signed_out_account_on_a_remote_computer_names_it() {
         assert_eq!(
-            account_sign_in_note(Some(&accounts("loginRequired")), Some("Windows PC")).as_deref(),
+            account_sign_in_note(Some(&accounts("loginRequired")), Some("Windows PC"), false)
+                .as_deref(),
             Some("ST is signed out on Windows PC. Sending won't work until it signs in there.")
         );
         assert_eq!(
-            account_sign_in_note(Some(&accounts("identityChanged")), None).as_deref(),
+            account_sign_in_note(Some(&accounts("identityChanged")), None, false).as_deref(),
             Some("ST is signed out on this computer. Sending won't work until it signs in there.")
         );
     }
 
     #[test]
     fn a_signed_in_or_unbound_session_has_no_note() {
-        assert_eq!(account_sign_in_note(Some(&accounts("ready")), None), None);
+        assert_eq!(
+            account_sign_in_note(Some(&accounts("ready")), None, false),
+            None
+        );
         let mut unbound = accounts("loginRequired");
         unbound.session = None;
-        assert_eq!(account_sign_in_note(Some(&unbound), None), None);
-        assert_eq!(account_sign_in_note(None, None), None);
+        assert_eq!(account_sign_in_note(Some(&unbound), None, false), None);
+        assert_eq!(account_sign_in_note(None, None, false), None);
+    }
+
+    /// A plain `unavailable` is not signed out; one synced from another computer is.
+    #[test]
+    fn unavailable_is_signed_out_only_when_synced() {
+        assert_eq!(
+            account_sign_in_note(Some(&accounts("unavailable")), None, false),
+            None
+        );
+        let mut synced = accounts("unavailable");
+        synced.accounts[1].synced_from = Some("Windows PC".into());
+        assert!(account_sign_in_note(Some(&synced), None, false).is_some());
+    }
+
+    /// An account named by its email is masked when Settings hides account emails.
+    #[test]
+    fn the_note_masks_an_email_name() {
+        let mut named = accounts("loginRequired");
+        named.accounts[1].indicator = Some("-".into());
+        named.accounts[1].selector = None;
+        named.accounts[1].name = "someone@example.com".into();
+        let note = account_sign_in_note(Some(&named), None, true).unwrap();
+        assert!(!note.contains("someone@example.com"), "{note}");
+        assert!(note.starts_with("s•••e@"), "{note}");
     }
 }

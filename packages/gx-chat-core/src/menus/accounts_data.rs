@@ -73,6 +73,9 @@ pub struct Account {
     pub usage_error: Option<String>,
     /// Why gxserver stopped offering this login (its organization disabled subscription access).
     pub disabled_reason: Option<String>,
+    /// The computer this account was synced from, while it was never signed in on this one
+    /// (`syncedFrom`, server/src/accounts/endpoint.rs; its status is `unavailable`).
+    pub synced_from: Option<String>,
 }
 
 impl Account {
@@ -104,6 +107,7 @@ impl Account {
                 .and_then(js_number_or_text),
             usage_error: text("usageError").filter(|error| !error.is_empty()),
             disabled_reason: text("disabledReason").filter(|reason| !reason.is_empty()),
+            synced_from: text("syncedFrom").filter(|from| !from.is_empty()),
         }
     }
 }

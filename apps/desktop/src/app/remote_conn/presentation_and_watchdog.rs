@@ -392,6 +392,13 @@ impl GhostexGpuiApp {
             connection.terminate();
             self.unregister_connected_computer(remote_machine_id, connection.local_port);
         }
+        // Its sidebar meters stop counting its accounts' last state (CDXC:AgentProviders 2026-11-19
+        // in titlebar/account_usage.rs `signed_out`): a dropped computer's stale "signed out"
+        // can't keep a card amber.
+        crate::app::titlebar::account_usage::flag_stopped_machine_accounts(
+            &mut self.titlebar_accounts,
+            remote_machine_id,
+        );
         // The machine's Easy Connect forwarder stays: its terminals and the other windows'
         // connections ride on it (CDXC:RemotePairing 2026-11-10 in easy_connect_forward.rs).
     }
@@ -409,6 +416,10 @@ impl GhostexGpuiApp {
         }
         for (machine_id, local_port) in ended {
             self.unregister_connected_computer(&machine_id, local_port);
+            crate::app::titlebar::account_usage::flag_stopped_machine_accounts(
+                &mut self.titlebar_accounts,
+                &machine_id,
+            );
         }
         // The Easy Connect forwarders are process-wide, shared with another open window's
         // connection to the same machine (app/workspace_windows/).
