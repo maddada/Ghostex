@@ -335,7 +335,7 @@ fn strip_bare_image_markers(text: &str) -> (String, usize) {
 
 /// Splits `[Image #N](path)` references (the form Claude records a pasted picture in, and the
 /// form chat's composer writes) out of `text`: the text without them, and their paths in order.
-fn split_image_references(text: &str) -> (String, Vec<String>) {
+pub(crate) fn split_image_references(text: &str) -> (String, Vec<String>) {
     const OPEN: &str = "[Image #";
     let mut kept = String::with_capacity(text.len());
     let mut paths = Vec::new();

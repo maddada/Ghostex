@@ -840,7 +840,21 @@ pub(crate) async fn host_call(state: &Arc<AppState>, call: HostCall) -> Result<V
             text,
             image_paths,
         } => {
-            shared(&project_id, &session_id)?;
+            let scope = shared(&project_id, &session_id)?;
+            // CDXC:Collab 2026-11-20 WHY:
+            // A guest's message reaches the agent with its pictures, attached or named in its words (`[Image #1](/path)`), as files on this computer. The Collab component checks them against the guest's uploads, but gxserver does not take its word for it: a message naming any file this share's guests did not upload is refused, so a guest can never hand the owner's agent a path such as ~/.ssh/id_rsa (security review of the chat's dock rows, N8; the chat core draws only those uploads as pictures, gx-chat-core extras/collab.rs).
+            let referenced =
+                crate::session_chat_send::claude_queue_pull::split_image_references(&text).1;
+            if image_paths
+                .iter()
+                .chain(referenced.iter())
+                .any(|path| !scope.images.contains(path))
+            {
+                return Err(
+                    "A guest's message can carry only the pictures guests uploaded to this chat."
+                        .to_string(),
+                );
+            }
             let mut body = json!({
                 "params": {
                     "projectId": project_id,
