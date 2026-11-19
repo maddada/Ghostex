@@ -429,8 +429,8 @@ impl NativeChatView {
             .as_deref()
             .and_then(|page_id| self.page_thumbnail(page_id, &page.url, answered, cx));
         let detail = match &page.file {
-            Some(file) => format!("Ghostex page · {file}"),
-            None => "Ghostex page".to_string(),
+            Some(file) => format!("Live page · {file}"),
+            None => "Live page".to_string(),
         };
         let file = page.file.clone();
         // A page that waited only to be looked at says Seen once marked so (CDXC:SessionChat

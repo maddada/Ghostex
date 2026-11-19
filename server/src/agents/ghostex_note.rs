@@ -10,8 +10,10 @@ use crate::paths::GxserverPaths;
 ///
 /// CDXC:AgentGuide 2026-11-06 DECISION:
 /// User: "i hate saying 'inline html' and 'inline q' and inline graphs. can we have different name for those?", then "Let's say ghostex page / gx page, ghostex form / gx form, ghostex visuals / gx visuals", everywhere. The note names the three by those words, so "give me a gx page" or "ask me in a gx form" reaches `ghostex agent-guide`. Supersedes the 2026-11-02 "inline HTML and inline questions and inline charts & graphs" wording.
+/// CDXC:AgentGuide 2026-11-19 DECISION:
+/// User picked "Live page" (Q4207, Q4208) for what the 2026-11-06 decision named Ghostex page / gx page, superseding that part of it. The note says Live pages and keeps the old words beside it, so "give me a gx page" or "inline HTML" still reaches `ghostex agent-guide`.
 /// SEE-ALSO: server/src/agents/marked_handovers.rs (the launch channel it shares), skills/ghostex-agent-guide/SKILL.md (the same text for agents without a launch flag), server/src/ghostex_cli/agent_guide.rs.
-pub const GHOSTEX_NOTE: &str = "You are running inside Ghostex. Ghostex can show Ghostex pages (gx page: HTML), Ghostex forms (gx form: questions) and Ghostex visuals (gx visuals: charts, graphs) in this chat, open pages you build in its own browser, run other agents, and install Ghostex skills for the user (such as ghostex-visuals or ghostex-embedded-browser-use). When the user asks for one of these, or about Ghostex, run `ghostex agent-guide` first; otherwise don't bring it up.";
+pub const GHOSTEX_NOTE: &str = "You are running inside Ghostex. Ghostex can show Live pages (HTML; also called gx page or inline HTML), Ghostex forms (gx form: questions) and Ghostex visuals (gx visuals: charts, graphs) in this chat, open pages you build in its own browser, run other agents, and install Ghostex skills for the user (such as ghostex-visuals or ghostex-embedded-browser-use). When the user asks for one of these, or about Ghostex, run `ghostex agent-guide` first; otherwise don't bring it up.";
 
 /// The paragraph after the Ghostex note that has agents keep a to-do for each step only the user
 /// can do (server/src/session_needs_you/).

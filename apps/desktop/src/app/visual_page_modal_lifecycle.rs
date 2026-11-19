@@ -140,7 +140,7 @@ impl GhostexGpuiApp {
                     self.dispatch_gpui_app_modal_toast(
                         "warning",
                         "The Files view is turned off",
-                        "Turn the Files view on, or pick another place under Settings > Chat > Open Ghostex pages in.",
+                        "Turn the Files view on, or pick another place under Settings > Chat > Open Live pages in.",
                         cx,
                     );
                     return;
@@ -154,7 +154,7 @@ impl GhostexGpuiApp {
                             url,
                             remote_project,
                         },
-                        title: text("title").unwrap_or_else(|| "Ghostex page".to_string()),
+                        title: text("title").unwrap_or_else(|| "Live page".to_string()),
                         origin: Some(session_id),
                     },
                     cx,

@@ -240,7 +240,7 @@ impl GpuiVisualPageModalWindow {
             palette,
             url,
             title_known: title.is_some(),
-            title: title.unwrap_or_else(|| "Ghostex page".to_string()),
+            title: title.unwrap_or_else(|| "Live page".to_string()),
             page_url,
             open_message,
             surface: None,

@@ -242,12 +242,12 @@ fn chat_section(
         ));
     }
     rows.extend(page.toggle(g, s, "chatSendOnPick", "Send when you pick an answer", "When a question card asks one question, picking an answer sends it right away, without Send answers. Cards with several questions, multiple-choice questions, Other and text answers still wait for Send.", false, cx));
-    rows.extend(page.toggle(g, s, "chatAnswersWaitForIdle", "Wait for turn end before sending form answers", "Send answers from Ghostex forms and Ghostex pages only after the agent finishes its turn. Off sends them like a normal chat message, which the agent can read after its current tool call finishes.", false, cx));
+    rows.extend(page.toggle(g, s, "chatAnswersWaitForIdle", "Wait for turn end before sending form answers", "Send answers from Ghostex forms and Live pages only after the agent finishes its turn. Off sends them like a normal chat message, which the agent can read after its current tool call finishes.", false, cx));
     if g.visible(s, "chatPageOpenTarget") {
         let spec = g.spec(
             "chatPageOpenTarget",
-            "Open Ghostex pages in",
-            "Where a Ghostex page (gx page) an agent shows in chat, such as a mockup or a comparison, opens when you click its card: a popup over the chat, the Files view, or your default web browser. Answers you send from the page reach the agent the same way in all three. The phone always opens pages in its own viewer.",
+            "Open Live pages in",
+            "Where a Live page an agent shows in chat, such as a mockup or a comparison, opens when you click its card: a popup over the chat, the Files view, or your default web browser. Answers you send from the page reach the agent the same way in all three. The phone always opens pages in its own viewer.",
         );
         rows.extend(page.segmented(
             g,

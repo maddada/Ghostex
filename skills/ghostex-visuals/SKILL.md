@@ -4,13 +4,16 @@ description: >-
   Ghostex visuals (gx visuals): charts, stat tiles, tables and text layouts
   in the Ghostex chat with a fenced ```visual block. Ghostex forms (gx form):
   questions for the reader as a form in the chat with a ```questions block.
-  Ghostex pages (gx page): self-contained HTML pages (UI mockups, small
-  interactive tools, questions that need a picture) published with
-  `ghostex show`, which the chat shows as a card that opens the page. Use
-  only when the user asks for $ghostex-visuals, a Ghostex page, form or
-  visuals, or a gx page, gx form or gx visuals.
+  Live pages: self-contained HTML pages (UI mockups, small interactive
+  tools, questions that need a picture) published with `ghostex show`,
+  which the chat shows as a card that opens the page. Use only when the
+  user asks for $ghostex-visuals, a Live page, a Ghostex form or Ghostex
+  visuals, or by an older name: a Ghostex page, gx page, gx form, gx
+  visuals or inline HTML.
 # CDXC:SessionChat 2026-11-06 DECISION:
 # User: "i hate saying 'inline html' and 'inline q' and inline graphs. can we have different name for those?", then "Let's say ghostex page / gx page, ghostex form / gx form, ghostex visuals / gx visuals", everywhere: agents understand the new words, the app, help and docs use them, and the old words keep working quietly.
+# CDXC:SessionChat 2026-11-19 DECISION:
+# User picked "Live page" (Q4207, Q4208: "page" with a short word before it) for what the 2026-11-06 decision named Ghostex page / gx page; this supersedes that part of it. Forms and visuals keep their names, `ghostex show` and `ghostex page` keep theirs, and "Ghostex page", "gx page" and "inline HTML" still mean a Live page.
 disable-model-invocation: true
 ---
 
@@ -18,22 +21,23 @@ disable-model-invocation: true
 
 Ghostex draws what you put in your reply natively in the chat, on desktop,
 web and phone. Each kind has a name; the user uses these names, and so do
-you when you talk to them ("I made a Ghostex page", "answer the Ghostex
+you when you talk to them ("I made you a Live page", "answer the Ghostex
 form"):
 
 | Name | Short | What you write | Older words for it |
 | --- | --- | --- | --- |
 | Ghostex visuals | gx visuals | a ```visual block: charts, graphs, stats, tables, text layouts | inline graphs, inline charts |
 | Ghostex form | gx form | a ```questions block, or one-click answers for a quick pick | inline questions, inline q, question form |
-| Ghostex page | gx page | a self-contained HTML page published with `ghostex show` | inline HTML, chat page, HTML page |
+| Live page | page | a self-contained HTML page published with `ghostex show` | Ghostex page, gx page, inline HTML, chat page, HTML page |
 
-"Give me a gx page for this" means a Ghostex page, "ask me in a gx form" a
-Ghostex form, "show it as gx visuals" a ```visual block.
+"Give me a Live page for this" (or, in older words, a gx page or inline
+HTML) means a Live page, "ask me in a gx form" a Ghostex form, "show it as
+gx visuals" a ```visual block.
 
 - Prefer Ghostex visuals for charts, tables, stats and text layouts.
 - Ask questions in a Ghostex form: the chat shows a ```questions block as a
   form.
-- Use a Ghostex page only for what a block cannot express: UI mockups, small
+- Use a Live page only for what a block cannot express: UI mockups, small
   interactive tools, and questions the reader can only answer by seeing a
   picture.
 - Don't restate in prose what the visual already shows. Add only what it
@@ -175,7 +179,7 @@ a note box per question, and one Send button. Use it instead of asking in
 prose or as a numbered list, and instead of your agent's own question tool
 (AskUserQuestion and the like), which shows one question at a time. Only when
 the reader has to see something to answer (a UI mockup, a layout, a diagram)
-use a Ghostex page with questions instead (see "Ghostex pages with questions"
+use a Live page with questions instead (see "Live pages with questions"
 below).
 
 First run `ghostex visual --help`: if it doesn't mention ```questions, this
@@ -310,7 +314,7 @@ mentions `ghostex-answer:`; older versions show plain links.
   </ghostex-page-answers>
   ```
 
-## Ghostex pages: HTML published with `ghostex show`
+## Live pages: HTML published with `ghostex show`
 
 For a mockup or a small interactive tool, write **one self-contained HTML file**
 from this skeleton, and keep its `<meta name="ghostex-page" content="v2">`:
@@ -425,7 +429,7 @@ whose content overflows it or is cut off, content a sideways scroller can't
 reach, and text drawn over other text; it ends with an error while any are
 left. Look at the screenshots and fix everything it lists, including a "Pick
 buttons" warning that a question sits under mockups with no Pick button tied
-(see Ghostex pages with questions). `ghostex show` runs the narrow sizes
+(see Live pages with questions). `ghostex show` runs the narrow sizes
 again after publishing and lists anything left: fix it, run `ghostex show`
 again and reply with the new block. If `visual check` can't read an `.html`
 file, this Ghostex is older than the check: skip it.
@@ -445,7 +449,7 @@ Ghostex injects the page's look, so a page that styles itself fights it:
   - `<div class="gx-callout">` (add `data-tone="warn"`, `"good"` or `"bad"`).
   - `<div class="gx-card">`, several in a `<div class="gx-grid">`.
   - Options compared side by side: `<div class="gx-options">` holding one tied
-    `<section data-question data-choice>` per option (see Ghostex pages with questions), a
+    `<section data-question data-choice>` per option (see Live pages with questions), a
     `<span class="gx-ribbon">Recommended</span>` on the recommended one,
     `<div class="gx-chips"><span class="gx-chip"><b>38</b> files</span></div>`
     for small facts and
@@ -577,7 +581,7 @@ works.
    older copy of this skill: load the skill again and use the skeleton above.
 4. Paste the ```visual block it prints into your reply exactly as printed.
    The chat shows it as a card for your page. Clicking the card opens the page
-   where the reader chose under Settings > Chat > Open Ghostex pages in: a
+   where the reader chose under Settings > Chat > Open Live pages in: a
    floating window over the chat (the default), the Files view or their
    browser, and the floating window's ⋯ menu has Open in browser. The
    reader decides, so publish every page the same way and leave the block's
@@ -633,7 +637,7 @@ pages and give the HTML file's path instead.
 
 ### Exported pages
 
-Every Ghostex page can be exported: one HTML file that opens in any browser
+Every Live page can be exported: one HTML file that opens in any browser
 without Ghostex, for the user to send to someone else (a customer, a teammate,
 an issue's author) who answers it there. The user presses Export on the page's
 card or in its window's ⋯ menu (on the phone, on its card or sheet); you can write the same file yourself with
@@ -666,7 +670,7 @@ the user pastes it somewhere you read, looks like this:
 }
 ```
 
-### Ghostex pages with questions
+### Live pages with questions
 
 Only for questions the reader can answer by seeing something: two layouts to
 choose between, a mockup to react to, a diagram to mark up. Plain questions go

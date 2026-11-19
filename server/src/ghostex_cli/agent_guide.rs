@@ -6,6 +6,8 @@ use crate::ghostex_cli::rpc::{CliError, CliResult};
 ///
 /// CDXC:AgentGuide 2026-11-06 DECISION:
 /// User: "i hate saying 'inline html' and 'inline q' and inline graphs", then "ghostex page / gx page, ghostex form / gx form, ghostex visuals / gx visuals", everywhere: agents understand the new words, the old ones keep working quietly, and agents use the new names when they talk to the user.
+/// CDXC:AgentGuide 2026-11-19 DECISION:
+/// User picked "Live page" (Q4207, Q4208) for what the decision above named Ghostex page / gx page, superseding that part; the guide names Live pages and lists the old words beside them.
 /// SEE-ALSO: server/src/agents/ghostex_note.rs (the note and the browser setting), skills/ghostex-agent-guide/SKILL.md.
 const GUIDE: &str = "Ghostex agent guide
 
@@ -14,7 +16,7 @@ You run inside Ghostex, an app where the user runs coding agents in sessions lis
 Show things in the chat (use these names with the user; older words mean the same)
 - Ghostex visuals (gx visuals; \"inline graphs\"): charts, stat tiles, tables, in a ```visual block.
 - A Ghostex form (gx form; \"inline questions\"): questions with choices, a ```questions block; link what a question is about (Markdown link with the full URL, or a file path link).
-- A Ghostex page (gx page; \"inline HTML\"): mockups, small tools, picture questions; publish a self-contained HTML file with `ghostex show page.html`, paste the block it prints.
+- A Live page (once \"Ghostex page\", \"gx page\" or \"inline HTML\"): mockups, small tools, picture questions; publish a self-contained HTML file with `ghostex show page.html`, paste the block it prints.
 - Check first with `ghostex visual check <file>`.
 - Formats are in the ghostex-visuals skill; if missing, offer `ghostex visual install-skill`.
 
@@ -68,7 +70,7 @@ pub fn agent_guide_command(args: &[String]) -> CliResult<()> {
             Ok(())
         }
         Some("help" | "-h" | "--help") => {
-            println!("Usage: ghostex agent-guide\n       ghostex agent-guide install-skill [--json]\n\nPrint what an agent running in Ghostex can do with the ghostex CLI: Ghostex pages, forms and visuals in the chat, the browser, other agents, secrets, Ghostex skills and Ghostex Help. install-skill installs the ghostex-agent-guide skill, which gives agents Ghostex can't hand a launch note the same short note.");
+            println!("Usage: ghostex agent-guide\n       ghostex agent-guide install-skill [--json]\n\nPrint what an agent running in Ghostex can do with the ghostex CLI: Live pages, Ghostex forms and visuals in the chat, the browser, other agents, secrets, Ghostex skills and Ghostex Help. install-skill installs the ghostex-agent-guide skill, which gives agents Ghostex can't hand a launch note the same short note.");
             Ok(())
         }
         Some(other) => Err(CliError::Other(format!(

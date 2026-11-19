@@ -116,7 +116,7 @@ fn retire(state: &AppState, given: &[String]) -> Value {
         emit_frame(state, &project_id, &session_id);
         retired.push(json!({
             "id": id,
-            "title": record.get("title").and_then(Value::as_str).unwrap_or("Ghostex page"),
+            "title": record.get("title").and_then(Value::as_str).unwrap_or("Live page"),
         }));
     }
     json!({"retired": retired, "notFound": not_found, "noSession": no_session})

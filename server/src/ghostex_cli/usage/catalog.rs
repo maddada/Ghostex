@@ -295,11 +295,11 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "show <file.html> [--title text] [--json] [--no-check]",
-            "Publish a Ghostex page (gx page): a self-contained HTML page, and print the ```visual block that shows it as a card in the chat; the card opens it where the reader's Open Ghostex pages in setting says (a floating window over the chat by default). Questions written as <gx-questions> (or the page's own ghostex.submit(answers)) send the reader's answers back to you as a message; the block then lists the questions' tags, so the chat counts the page as unanswered until they arrive. When Chrome is installed it then opens the page at 360 and 600px and at 900px with large text and says what overflows, overlaps or did not fit (--no-check skips that). Ghostex paints the page's backdrop and glass cards itself; for a page that looks good at a glance (a strong header, options side by side in .gx-options with Pick buttons, one question under them, about one screen) follow $ghostex-visuals and its examples/plan-review.html",
+            "Publish a Live page (once called a Ghostex page or gx page): a self-contained HTML page, and print the ```visual block that shows it as a card in the chat; the card opens it where the reader's Open Live pages in setting says (a floating window over the chat by default). Questions written as <gx-questions> (or the page's own ghostex.submit(answers)) send the reader's answers back to you as a message; the block then lists the questions' tags, so the chat counts the page as unanswered until they arrive. When Chrome is installed it then opens the page at 360 and 600px and at 900px with large text and says what overflows, overlaps or did not fit (--no-check skips that). Ghostex paints the page's backdrop and glass cards itself; for a page that looks good at a glance (a strong header, options side by side in .gx-options with Pick buttons, one question under them, about one screen) follow $ghostex-visuals and its examples/plan-review.html",
         ),
         format_help_command(
             "page retire <page>... [--json]",
-            "Retire Ghostex pages you published and then replaced or no longer need: each page (its id or its address, the \"url\" in the block ghostex show printed) and its open questions stop waiting on the reader, so they leave the dock, the ? pill and the sidebar's dot on every computer and phone; the page still opens. A newer ghostex show of the same file already replaces its older cards by itself",
+            "Retire Live pages you published and then replaced or no longer need: each page (its id or its address, the \"url\" in the block ghostex show printed) and its open questions stop waiting on the reader, so they leave the dock, the ? pill and the sidebar's dot on every computer and phone; the page still opens. A newer ghostex show of the same file already replaces its older cards by itself",
         ),
         format_help_command(
             "visual check <file.json|-|page.html> [--width N] [--text-scale P] [--light] [--out file.png]",
@@ -469,7 +469,7 @@ pub fn usage() -> String {
         format_help_command("guide --help", "Show Ghostex Help skill setup"),
         format_help_command(
             "agent-guide",
-            "Print what an agent running in Ghostex can do: Ghostex pages, forms and visuals in the chat, the browser, other agents, secrets, Ghostex skills",
+            "Print what an agent running in Ghostex can do: Live pages, Ghostex forms and visuals in the chat, the browser, other agents, secrets, Ghostex skills",
         ),
         format_help_command(
             "help ask \"<question>\" [--new] [--timeout-seconds N] [--json]",

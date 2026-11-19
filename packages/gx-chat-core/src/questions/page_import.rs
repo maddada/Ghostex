@@ -40,7 +40,7 @@ pub fn import(state: &mut ChatState, text: &str, from_composer: bool) -> Vec<Eff
     if !is_exported_answers(text) {
         return vec![Effect::Toast {
             level: "error".to_string(),
-            message: "This isn't the answers of an exported Ghostex page.".to_string(),
+            message: "This isn't the answers of an exported Live page.".to_string(),
         }];
     }
     let request_id = state.core.allocate_request_id();

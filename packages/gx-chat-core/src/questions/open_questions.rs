@@ -25,6 +25,8 @@
 //!
 //! CDXC:SessionChat 2026-11-06 DECISION:
 //! User: "i hate saying 'inline html' and 'inline q' and inline graphs. can we have different name for those?", then "Let's say ghostex page / gx page, ghostex form / gx form, ghostex visuals / gx visuals", everywhere. The filters read All, Pages, Forms and Visuals (ids `html`, `qa`, `charts` unchanged), and an untitled row is a "Ghostex page", "Ghostex form" or "Ghostex visual". Supersedes the 2026-10-27 labels Html, Q&A and Charts.
+//! CDXC:SessionChat 2026-11-19 DECISION:
+//! User picked "Live page" (Q4207, Q4208): an untitled page row is now a "Live page", superseding "Ghostex page" above; the Pages filter keeps its name.
 
 // A title shows a link's words, not its Markdown (`questions/form_links.rs`).
 use crate::questions::form_links::plain_words;
@@ -452,7 +454,7 @@ fn indexed_row(
     let fallback = match entry.kind.as_str() {
         "form" => "Ghostex form",
         "chart" => "Ghostex visual",
-        _ => "Ghostex page",
+        _ => "Live page",
     };
     QuestionListRow {
         id: entry.id.clone(),
@@ -611,7 +613,7 @@ fn list_row(asker: &Asker, context: &ChatContext, labels: bool) -> QuestionListR
     let title = if asker.title.is_empty() {
         match asker.kind {
             AskerKind::Form => "Ghostex form".to_string(),
-            AskerKind::Page => "Ghostex page".to_string(),
+            AskerKind::Page => "Live page".to_string(),
         }
     } else {
         plain_words(&asker.title)
@@ -644,7 +646,7 @@ fn content_row(
     let (time, age, time_title) = time_fields(item.at, context, labels);
     let (kind, fallback) = match item.kind {
         ContentKind::Chart => ("chart", "Ghostex visual"),
-        _ => ("page", "Ghostex page"),
+        _ => ("page", "Live page"),
     };
     QuestionListRow {
         id: item.id.clone(),
@@ -1771,7 +1773,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            pill.sections[1].rows[0].title, "Ghostex page",
+            pill.sections[1].rows[0].title, "Live page",
             "a page without a title still reads as one"
         );
 

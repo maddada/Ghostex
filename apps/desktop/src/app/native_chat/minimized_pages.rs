@@ -89,7 +89,7 @@ impl MinimizedPage {
     /// ("3 of 16 answered", server/src/visual_pages/kit.rs).
     fn description(&self) -> String {
         let title = if self.title.trim().is_empty() {
-            "Ghostex page"
+            "Live page"
         } else {
             self.title.trim()
         };

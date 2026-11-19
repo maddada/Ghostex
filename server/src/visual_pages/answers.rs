@@ -110,7 +110,7 @@ pub(crate) async fn submit(
     let title = record
         .get("title")
         .and_then(Value::as_str)
-        .unwrap_or("Ghostex page")
+        .unwrap_or("Live page")
         .to_string();
     let message = tagged_answers_message(&state_dir, &id, &title, &answers);
     let (error, wait_for_idle) = deliver(

@@ -135,7 +135,12 @@ pub(crate) fn replace_page_answers_envelope(
     let (open, close, _) = spans
         .into_iter()
         .rfind(|(_, _, answers)| answers.page_id == page_id)?;
-    Some(format!("{}{}{}", &text[..open], replacement, &text[close..]))
+    Some(format!(
+        "{}{}{}",
+        &text[..open],
+        replacement,
+        &text[close..]
+    ))
 }
 
 /// All answers envelopes a user message holds (in document order) and the text written around
@@ -219,7 +224,7 @@ pub fn parse_page_answers(text: &str) -> Option<PageAnswers> {
     let title = attribute(head, "title")
         .map(|title| js_trim(&title).to_string())
         .filter(|title| !title.is_empty())
-        .unwrap_or_else(|| "Ghostex page".to_string());
+        .unwrap_or_else(|| "Live page".to_string());
     let body = js_trim(body);
     if body.contains(OPEN) && serde_json::from_str::<Value>(body).is_err() {
         return None;
@@ -476,8 +481,7 @@ pub fn project_page_answers(answers: &PageAnswers, form: Option<&QuestionForm>) 
                 let skipped = note_as_answer.is_none()
                     && (value.is_null()
                         || value.as_array().is_some_and(Vec::is_empty)
-                        || value.as_str()
-                            == Some(crate::transcript::question_forms::SKIPPED));
+                        || value.as_str() == Some(crate::transcript::question_forms::SKIPPED));
                 // The reader's own notes box ("Anything else?"), not a question.
                 let extra = asked.is_none()
                     && tag.is_empty()

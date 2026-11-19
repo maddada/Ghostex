@@ -257,7 +257,7 @@ impl GhostexGpuiApp {
                     .text_size(px(WORKAREA_HEADER_TITLE_TEXT_SIZE))
                     .text_color(p.subtle)
                     .when(review.is_some(), |this| this.child("Agent reply"))
-                    .when(published_page, |this| this.child("Ghostex page"))
+                    .when(published_page, |this| this.child("Live page"))
                     .children(review.clone().filter(|title| !title.is_empty()))
                     .when(deleted, |this| this.child("Deleted"))
                     .when(dirty, |this| this.child("Edited"))

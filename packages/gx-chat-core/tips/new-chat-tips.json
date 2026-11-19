@@ -197,7 +197,7 @@
       "id": "ghostex-pages-and-forms",
       "icon": "file-type-html",
       "title": "Ask for pages and forms",
-      "body": "Ask an agent for a gx page (a mockup or a report) or a gx form (questions with choices)."
+      "body": "Ask an agent for a Live page (a mockup or a report) or a gx form (questions with choices)."
     },
     {
       "id": "ghostex-visuals",

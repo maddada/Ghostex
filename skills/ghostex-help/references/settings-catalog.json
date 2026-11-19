@@ -483,7 +483,7 @@
     {
       "key": "chatAnswersWaitForIdle",
       "title": "Wait for turn end before sending form answers",
-      "subtitle": "Send answers from Ghostex forms and Ghostex pages only after the agent finishes its turn. Off sends them like a normal chat message, which the agent can read after its current tool call finishes.",
+      "subtitle": "Send answers from Ghostex forms and Live pages only after the agent finishes its turn. Off sends them like a normal chat message, which the agent can read after its current tool call finishes.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "chat",
@@ -495,8 +495,8 @@
     },
     {
       "key": "chatPageOpenTarget",
-      "title": "Open Ghostex pages in",
-      "subtitle": "Where a Ghostex page (gx page) an agent shows in chat, such as a mockup or a comparison, opens when you click its card: a popup over the chat, the Files view, or your default web browser. Answers you send from the page reach the agent the same way in all three. The phone always opens pages in its own viewer.",
+      "title": "Open Live pages in",
+      "subtitle": "Where a Live page an agent shows in chat, such as a mockup or a comparison, opens when you click its card: a popup over the chat, the Files view, or your default web browser. Answers you send from the page reach the agent the same way in all three. The phone always opens pages in its own viewer.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "chat",
@@ -10471,7 +10471,7 @@
     {
       "key": "agentGhostexNote",
       "title": "Tell agents about Ghostex",
-      "subtitle": "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Ghostex pages, forms and visuals in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.",
+      "subtitle": "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Live pages, Ghostex forms and visuals in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "config",

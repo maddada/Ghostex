@@ -184,7 +184,7 @@ never with your built-in question tool:
 - **Several questions, a text answer, multi-select, or choices that need a line of detail:** a
   Ghostex form, a ` ```questions ` block in your reply holding every open question
   (`ghostex visual --help` has the format).
-- **Something to look at** (mockups, layouts, a comparison): a Ghostex page (`ghostex show`, the
+- **Something to look at** (mockups, layouts, a comparison): a Live page (`ghostex show`, the
   ghostex-visuals skill), each question right under the mockups it asks about.
 
 For every question:
@@ -226,8 +226,9 @@ and send the answers back; publish a thread's page again from your own session w
 `ghostex show <file>` and paste the card in your reply, so the answers come back to you, then pass
 them on.
 
-Call these a Ghostex form (gx form), a Ghostex page (gx page) and Ghostex visuals (gx visuals:
-charts and tables).
+Call these a Ghostex form (gx form), a Live page and Ghostex visuals (gx visuals: charts and
+tables). A Live page was called a Ghostex page (gx page) or inline HTML before; the user may still
+say so.
 
 ## Work items
 

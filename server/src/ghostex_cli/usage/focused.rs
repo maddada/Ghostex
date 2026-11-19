@@ -652,16 +652,17 @@ Usage:
 Names:
   Ghostex visuals (gx visuals): charts, stats and tables, a ```visual block.
   A Ghostex form (gx form): questions as a form, a ```questions block, or
-  one-click answers. A Ghostex page (gx page): an HTML page published with
-  `ghostex show`. Older words mean the same: \"inline graphs\", \"inline
-  questions\" or \"inline q\", \"inline HTML\" or \"chat page\". Use
-  the new names when you talk to the user (\"I made a Ghostex page\").
+  one-click answers. A Live page: an HTML page published with `ghostex
+  show`. Older words mean the same: \"inline graphs\", \"inline
+  questions\" or \"inline q\", and \"Ghostex page\", \"gx page\",
+  \"inline HTML\" or \"chat page\" for a Live page. Use the new names
+  when you talk to the user (\"I made you a Live page\").
 
 Agent skill:
   Use $ghostex-visuals when the user asks for it: charts, stats and tables go
   in the reply as a ```visual block (Ghostex visuals); questions go in a
   ```questions block, which the chat shows as a Ghostex form; mockups and
-  small tools are Ghostex pages published with `ghostex show`. When a
+  small tools are Live pages published with `ghostex show`. When a
   question is about a PR, issue, file, page, commit, thread or anything else
   the user could open, link it in the question itself
   ([#407](https://github.com/owner/repo/pull/407), or a file path link) so
@@ -701,7 +702,7 @@ One-click answers:
   by the tag, the \"?\" pill counts the tag until then, and \"withdraw\" in a
   later ```questions block drops it. Anything bigger is a Ghostex form.
 
-Pages (Ghostex pages):
+Pages (Live pages):
   Ghostex paints every page's backdrop (a soft dusk in dark, dawn in light)
   and its glass cards, so a page never paints html or body. The chat's card
   previews the page's top: give it a strong header (.gx-eyebrow, a specific
@@ -711,7 +712,7 @@ Pages (Ghostex pages):
   examples/plan-review.html shows the whole shape.
 
 Exported pages:
-  Any Ghostex page can be exported: one HTML file that opens in any browser
+  Any Live page can be exported: one HTML file that opens in any browser
   without Ghostex, to send to someone who answers it there. Its Send button
   reads Export answers and gives the answers as JSON (copy or download). The
   user drops or pastes that JSON into the chat, and it reaches you as the

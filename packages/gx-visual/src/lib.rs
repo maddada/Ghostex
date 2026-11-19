@@ -26,6 +26,8 @@
 //!
 //! CDXC:SessionChat 2026-11-06 DECISION:
 //! User: "i hate saying 'inline html' and 'inline q' and inline graphs. can we have different name for those?", then "Too generic or too unspecific all these. Let's say ghostex page / gx page, ghostex form / gx form, ghostex visuals / gx visuals", everywhere. A ```visual drawing is Ghostex visuals (gx visuals), a ```questions block (`questions`) and its one-click answers are a Ghostex form (gx form), and a published HTML page ([`PageRef`]) is a Ghostex page (gx page). The app, help, docs and what agents are told use these names; the old words keep working for agents, and code, setting keys and the block grammar keep their names. Supersedes "inline HTML", "inline questions", "chat page" and "question form" as user-facing names.
+//! CDXC:SessionChat 2026-11-19 DECISION:
+//! User picked "Live page" (Q4207, Q4208) for a published HTML page, superseding "Ghostex page (gx page)" above; forms and visuals keep their names, and code, the block grammar and the `ghostex show` / `ghostex page` commands keep theirs.
 //! SEE-ALSO: skills/ghostex-visuals/SKILL.md (the names for agents), server/src/agents/ghostex_note.rs and server/src/ghostex_cli/agent_guide.rs (what agents are told), TERMS.md.
 //!
 //! CDXC:SessionChat 2026-10-06 SEE-ALSO:

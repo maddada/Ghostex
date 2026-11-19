@@ -115,7 +115,7 @@ fn page_with_state(
     let title = record
         .get("title")
         .and_then(Value::as_str)
-        .unwrap_or("Ghostex page")
+        .unwrap_or("Live page")
         .to_string();
     // The guest's viewer frames this HTML itself, so the page has no gxserver address to name.
     let page = with_page_state(
@@ -156,7 +156,7 @@ pub(crate) fn guest_page_answers_message(
     let title = record
         .get("title")
         .and_then(Value::as_str)
-        .unwrap_or("Ghostex page");
+        .unwrap_or("Live page");
     Ok(super::answers::tagged_answers_message(
         gxserver_state_dir,
         id,

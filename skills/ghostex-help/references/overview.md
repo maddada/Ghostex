@@ -106,8 +106,9 @@ hotkeys Every shortcut and its default binding
   prompt queue, transcript, tool cards, and image paste. Toggle between chat and
   terminal for the same session with one click or hotkey. Agents can draw
   **Ghostex visuals** (gx visuals: charts, stat tiles and tables), ask in a
-  **Ghostex form** (gx form: questions with choices) and show a **Ghostex
-  page** (gx page: an HTML page such as a mockup) right in the chat.
+  **Ghostex form** (gx form: questions with choices) and show a **Live
+  page** (an HTML page such as a mockup, once called a Ghostex page or gx
+  page) right in the chat.
 - **Agents**: the configured agent buttons per project (built-in CLIs plus
   custom commands), Global Actions, and the Agents Hub catalog.
 - **Coordinator**: an agent session you talk to that hands the work to

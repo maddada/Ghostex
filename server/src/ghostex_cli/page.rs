@@ -34,7 +34,7 @@ fn retire_command(args: &[String]) -> CliResult<()> {
     }
     if let Some(bad) = pages.iter().find(|page| page_id_of(page).is_none()) {
         return Err(CliError::Other(format!(
-            "{bad} is not a Ghostex page. Give the page's id (32 characters) or its address, the \"url\" in the block `ghostex show` printed."
+            "{bad} is not a Live page. Give the page's id (32 characters) or its address, the \"url\" in the block `ghostex show` printed."
         )));
     }
     let params = json!({ "pageIds": pages });

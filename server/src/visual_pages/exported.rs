@@ -62,7 +62,7 @@ pub(crate) fn exported_page(gxserver_state_dir: &Path, id: &str) -> Option<Expor
     let title = record
         .get("title")
         .and_then(Value::as_str)
-        .unwrap_or("Ghostex page")
+        .unwrap_or("Live page")
         .to_string();
     let awaits_seen = record.get("awaitsSeen").and_then(Value::as_bool) == Some(true);
     Some(export(page, id, title, awaits_seen))
@@ -240,7 +240,7 @@ fn export_url(gxserver_state_dir: &Path, url: &str) -> Result<ExportedPage, Stri
             Some("127.0.0.1") | Some("localhost") | Some("[::1]") | Some("::1")
         );
     if !loopback {
-        return Err("Only a Ghostex page's own address can be exported.".to_string());
+        return Err("Only a Live page's own address can be exported.".to_string());
     }
     let page_url = format!(
         "{}://{}{}{id}",
@@ -269,7 +269,7 @@ fn export_url(gxserver_state_dir: &Path, url: &str) -> Result<ExportedPage, Stri
         .limit(VISUAL_PAGE_MAX_BYTES as u64 * 2)
         .read_to_string()
         .map_err(|error| format!("The page could not be read: {error}"))?;
-    let title = page_title(&html).unwrap_or_else(|| "Ghostex page".to_string());
+    let title = page_title(&html).unwrap_or_else(|| "Live page".to_string());
     Ok(export(html.into_bytes(), &id, title, false))
 }
 
@@ -308,7 +308,7 @@ fn export_file(gxserver_state_dir: &Path, file: &Path) -> Result<ExportedPage, S
     let title = prepared.title.clone().unwrap_or_else(|| {
         file.file_stem()
             .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "Ghostex page".to_string())
+            .unwrap_or_else(|| "Live page".to_string())
     });
     Ok(export(
         prepared.html.into_bytes(),

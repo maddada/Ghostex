@@ -140,7 +140,7 @@ pub fn show_command(args: &[String]) -> CliResult<()> {
     } else {
         let hint = hint.map(|hint| format!("{hint}\n\n")).unwrap_or_default();
         println!(
-            "Published \"{title}\".\n{hint}Put this block in your reply where the page should appear (the chat shows it as a Ghostex page card that opens the page where the reader's Open Ghostex pages in setting says, a floating window over the chat by default):\n\n{block}"
+            "Published \"{title}\".\n{hint}Put this block in your reply where the page should appear (the chat shows it as a Live page card that opens the page where the reader's Open Live pages in setting says, a floating window over the chat by default):\n\n{block}"
         );
         if !phone.is_empty() {
             println!("\n{}", phone_note(&phone, file));
@@ -343,7 +343,7 @@ fn file_stem(path: &Path) -> String {
     path.file_stem()
         .map(|stem| stem.to_string_lossy().trim().to_string())
         .filter(|stem| !stem.is_empty())
-        .unwrap_or_else(|| "Ghostex page".to_string())
+        .unwrap_or_else(|| "Live page".to_string())
 }
 
 /// The session this runs in, from the environment every Ghostex pane exports; kept with the page

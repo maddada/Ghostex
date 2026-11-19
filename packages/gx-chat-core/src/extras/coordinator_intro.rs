@@ -19,7 +19,8 @@
 //! the user sees it, the agent's first message is unchanged (Q1473); clicking an example puts it in
 //! the chat box (Q1474); no setting (Q1476); a macOS tip names SpaceO and cua-driver (Q1477). Help
 //! has the same tips (skills/ghostex-help/references/features.md, Coordinators). The names are the
-//! user's pick on Q1480: gx page, gx form and gx visuals.
+//! user's pick on Q1480 (gx form and gx visuals) and, since 2026-11-19, Live page for what Q1480
+//! called a gx page (Q4207, Q4208).
 
 use serde_json::{json, Map, Value};
 
@@ -58,9 +59,9 @@ pub const TIPS: &[Tip] = &[
     },
     Tip {
         icon: "file-type-html",
-        title: "Ask for a gx page per topic, then pick",
+        title: "Ask for a Live page per topic, then pick",
         detail: "Options with pictures (gx visuals for numbers). Your pick comes straight back.",
-        example: "Give me a gx page for this so I can pick.",
+        example: "Give me a Live page for this so I can pick.",
     },
     Tip {
         icon: "microscope",
@@ -72,7 +73,7 @@ pub const TIPS: &[Tip] = &[
         icon: "photo",
         title: "Show, don't describe",
         detail: "Paste a screenshot and say what's wrong.",
-        example: "This looks off. Give me a gx page with better designs.",
+        example: "This looks off. Give me a Live page with better designs.",
     },
     Tip {
         icon: "users-group",

@@ -106,7 +106,7 @@ fn parse_page(page: &Value) -> Result<PageRef, String> {
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|t| !t.is_empty())
-        .unwrap_or("Ghostex page");
+        .unwrap_or("Live page");
     let file = page
         .get("file")
         .and_then(Value::as_str)

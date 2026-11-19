@@ -2286,18 +2286,18 @@ view you can zoom and pan. The web chat shows the diagram's source.
 Ghostex has three names for what agents show in the chat. **Ghostex visuals**
 (gx visuals) are charts, tables, stat tiles, and short text layouts drawn right
 in the chat, in the chat's own colors on desktop, web, and mobile. A **Ghostex
-form** (gx form) is questions asked as a form in the chat. A **Ghostex page**
-(gx page) is an HTML page the agent publishes, for things a chart can't show,
-such as a UI mockup or a small interactive tool. Ask for them by name ("give me
-a gx page for this", "ask me in a gx form", "show it as gx visuals"); agents
-still understand the older words inline HTML, inline questions and inline
-graphs. For a Ghostex page the chat shows a card with a small preview
+form** (gx form) is questions asked as a form in the chat. A **Live page**
+is an HTML page the agent publishes, for things a chart can't show, such as a
+UI mockup, a comparison or a small interactive tool. Ask for them by name
+("give me a Live page for this", "ask me in a gx form", "show it as gx
+visuals"); agents still understand the older words Ghostex page, gx page,
+inline HTML, inline questions and inline graphs. For a Live page the chat shows a card with a small preview
 picture of the page, the same on desktop, web, and mobile. Pages share one
 look: a soft dusk backdrop in dark mode (a soft dawn in light) with frosted
 glass cards and choices. The picture is taken
 the first time you open the page in the Ghostex desktop app (and again after you
 answer it); until then the card shows the page's file name. On desktop the card opens
-the page where Settings > Chat > Open Ghostex pages in says: Popup (the default), a
+the page where Settings > Chat > Open Live pages in says: Popup (the default), a
 floating window over the chat; Files, a page tab in the Files view, whose header
 can open it in your browser or close it; or System browser, your default web
 browser. The popup hides, still open, when you click outside it or press its Hide
@@ -2360,7 +2360,7 @@ it. A question you leave blank is sent to the agent as skipped, so it moves on
 without asking again, and Skip all (or Ctrl+Shift+Enter, Cmd+Shift+Enter on
 macOS) sends right away with every question marked skipped, even ones you already picked. A
 form with more than one question also ends with an optional notes box
-for anything else you want the agent to know, and every Ghostex page with questions ends
+for anything else you want the agent to know, and every Live page with questions ends
 with an "Anything else?" box just above Send, whatever the agent wrote. You
 can paste a picture (a screenshot or a copied image) into any note or text
 box, in a Ghostex form or page: it shows as an Image #1 pill (as a
@@ -2368,7 +2368,7 @@ thumbnail you can remove in a page's "Anything else?" box) and goes to the
 agent with your answers, so it can open it. Send (or Ctrl+Enter, Cmd+Enter
 on macOS, from anywhere in the form or page) delivers your answers to the agent
 as a message; the chat shows them as a card, and the form then reads Answered.
-Answers from Ghostex forms and Ghostex pages send like normal chat messages; a busy
+Answers from Ghostex forms and Live pages send like normal chat messages; a busy
 agent receives them after its current tool call when supported. Turn on **Wait
 for turn end before sending form answers** to queue them until the turn ends.
 A queued card says what it waits for, and Remove takes your answers back so the
@@ -2380,7 +2380,7 @@ them as a form. A block it truly can't read shows "These questions could not be
 shown" with the reason, and once that turn ends Ghostex asks the agent, once, to
 send those questions again in the right shape, so you never have to paste the
 error back; the broken card goes away when the new form arrives. Questions that need a picture,
-such as choosing between two mockups, come as a Ghostex page instead, where you can
+such as choosing between two mockups, come as a Live page instead, where you can
 also pick an option right at its mockup with the Pick button at the right end of its title. A
 page works the same way: its card reads Answered once you send, and opening it
 again shows what you sent. The desktop's floating page window, a form's popup (the work dock's Open, the Resources
@@ -2415,7 +2415,7 @@ card that asks a single choice question right away, without Send answers
 answers still wait for Send). Commands:
 `ghostex show <file.html>`
 publishes a page and prints the block that shows its card, which opens where
-Open Ghostex pages in says; `ghostex page retire <page>` takes back a page the
+Open Live pages in says; `ghostex page retire <page>` takes back a page the
 agent replaced. Opening a page's HTML file itself (from the Files
 view, a file link in the chat, Open in browser, or the phone) shows it styled
 the same way: it answers to the chat that published that file, or, when no
@@ -2430,7 +2430,7 @@ a screenshot of each and lists anything that overflows its box, is cut off or
 is drawn over other text, by its CSS selector (`--width N` and
 `--text-scale 130` check one size).
 
-**Exported pages.** Any Ghostex page can go to someone who doesn't use Ghostex.
+**Exported pages.** Any Live page can go to someone who doesn't use Ghostex.
 Press Export on the page's card in the chat, or Export page in the ⋯ menu at the
 top of the floating page window, and your browser downloads the exported page: one
 HTML file with the page, its mockups and its questions, in the same look (light
@@ -2809,7 +2809,7 @@ A call that is still running shows a light sweeping across its words in every lo
 
 Chat look (Settings > Chat > Advanced) has five opt-in settings for a quieter, Slack or Claude Code style chat. With all five at Default the chat looks as it always has. Message layout set to Left aligned starts every message at the same left edge instead of putting yours on the right. Your messages set to Band puts yours on a soft full-width strip and also left-aligns them. Status line in the chat shows what the agent is doing as the last line of the chat instead of above the chat box. Chat box matches transcript width makes the chat box as wide as the transcript when Transcript width is set to a percentage (computer only). Message spacing set to Compact puts messages closer together and keeps a small row under each message for its time and ⋯ menu; on the phone that row shows the time. On a tablet (an iPad, or an Android tablet) the phone's transcript uses the full width by default; with Custom Transcript Width on (Settings > Advanced on the phone), its percentage applies instead, and phones keep the standard column. The phone follows the computer's choices for all but the chat box width, and picks up a changed look the next time a chat opens or catches up after a lost connection (`chatMessageLayout`, `chatUserMessageStyle`, `chatStatusInTranscript`, `chatComposerMatchesTranscriptWidth`, `chatMessageSpacing`).
 
-Quiet View makes a chat read as the conversation: your messages, the agent's replies, Ghostex pages and forms, questions and your answers, approvals waiting on you, errors and messages that were not sent stay in view, and everything between two of them (reports from threads, messages sent to them, tool calls, the line that says which work items changed, turns that ended without a reply) folds into one quiet line that counts it, for example "3 reports · 1 message sent · 3 tool calls · 1 item updated". Click the line to see all of it in order, as the full chat shows it; an open line drops its counts and says only "Working", how long the agent worked, or "Reports", since what it holds is in view. Inside, a single turn's card says what it did ("4 tool calls") instead of repeating the time, and when the line holds several turns their tool calls sit right under it, with a small "Then · 22s" mark where the agent picked up again. Click it again to shut it. While the agent works the line counts up instead of the cards piling up. Every chat opens in Quiet View; More actions > View > Quiet View turns it on or off for any chat, and the chat remembers that choice. When a chat's view differs from its default, a small Quiet view or Full view chip at the left of the chat box's pill row switches it back in one click. Summary view, which folds more, wins while it is on, and Detailed view is Quiet View with every line open. Agent work Reduced and Quiet and the Tool call cards preview are gone: Quiet View replaced them, and a chat that used one of them opens in Quiet View. Settings > Chat > Advanced has the defaults: Coordinators open in Quiet View (on), Other chats open in Quiet View (on; turn it off to have other chats open in the full Normal view), and Expand the last turn in Quiet View (on), which shows the work after the newest reply, or the running turn, open until a newer reply comes. Quiet View is on the computer, in Ghostex in a browser and on the phone, which follows the computer's three settings and has the same Quiet View row in its chat box's More actions > View; with a computer on an older Ghostex the phone shows the full chat (`chatQuietViewCoordinators`, `chatQuietViewChats`, `chatQuietViewExpandLast`).
+Quiet View makes a chat read as the conversation: your messages, the agent's replies, Live pages and forms, questions and your answers, approvals waiting on you, errors and messages that were not sent stay in view, and everything between two of them (reports from threads, messages sent to them, tool calls, the line that says which work items changed, turns that ended without a reply) folds into one quiet line that counts it, for example "3 reports · 1 message sent · 3 tool calls · 1 item updated". Click the line to see all of it in order, as the full chat shows it; an open line drops its counts and says only "Working", how long the agent worked, or "Reports", since what it holds is in view. Inside, a single turn's card says what it did ("4 tool calls") instead of repeating the time, and when the line holds several turns their tool calls sit right under it, with a small "Then · 22s" mark where the agent picked up again. Click it again to shut it. While the agent works the line counts up instead of the cards piling up. Every chat opens in Quiet View; More actions > View > Quiet View turns it on or off for any chat, and the chat remembers that choice. When a chat's view differs from its default, a small Quiet view or Full view chip at the left of the chat box's pill row switches it back in one click. Summary view, which folds more, wins while it is on, and Detailed view is Quiet View with every line open. Agent work Reduced and Quiet and the Tool call cards preview are gone: Quiet View replaced them, and a chat that used one of them opens in Quiet View. Settings > Chat > Advanced has the defaults: Coordinators open in Quiet View (on), Other chats open in Quiet View (on; turn it off to have other chats open in the full Normal view), and Expand the last turn in Quiet View (on), which shows the work after the newest reply, or the running turn, open until a newer reply comes. Quiet View is on the computer, in Ghostex in a browser and on the phone, which follows the computer's three settings and has the same Quiet View row in its chat box's More actions > View; with a computer on an older Ghostex the phone shows the full chat (`chatQuietViewCoordinators`, `chatQuietViewChats`, `chatQuietViewExpandLast`).
 
 Marked handovers: your coordinators and their threads begin each part of the reply
 they hand back with a marker (a coordinator's work items show above the chat box and in the Work panel either way, see Coordinators). What happened comes first: ✅ Done, 🚀 Shipped,
@@ -2841,7 +2841,7 @@ Settings: `markedHandovers` (`off`, `coordinators`, `all`), `markedHandoversStyl
 
 Tell agents about Ghostex (Settings > Agents > Defaults, on by default) gives every agent
 session Ghostex starts a short note that it runs in Ghostex: Ghostex can show
-Ghostex pages, Ghostex forms and Ghostex visuals in the chat, open pages the agent
+Live pages, Ghostex forms and Ghostex visuals in the chat, open pages the agent
 builds in its own browser, run other agents and install Ghostex skills. The
 agent uses it only when you ask for one of those things, and then reads the
 details from `ghostex agent-guide`. It reaches Claude Code, Codex, ZCode, Pi
@@ -2956,7 +2956,7 @@ a running turn: the agent's words, pages, questions and approvals stay in view,
 and each run of tool calls, thinking and reports is one line that counts it
 ("Working · 3 tool calls so far"); Expand the last turn in Quiet View opens the
 newest of those lines. Work the agent does after a reply in the same turn, when a
-thread's report or a background task wakes it, shows there too. Ghostex pages and
+thread's report or a background task wakes it, shows there too. Live pages and
 Ghostex visuals stay in full under their prompt, never folded, and so does a
 Ghostex form or question until you answer it; a strip of the pictures the agent
 opened sits under the closed reply, and "Interrupted" and command output lines
@@ -4204,7 +4204,7 @@ version of the Projects features in Cursor and Claude Code.
   the first rows, and **Show fewer** folds them back (a long list scrolls inside
   the dock); on the phone it opens the Work panel at Needs you. Something
   waiting more than a day moves below newer ones. Click a row to open its ask in
-  a floating panel over the chat, drawn like a Ghostex page's window: drag its
+  a floating panel over the chat, drawn like a Live page's window: drag its
   top band to move it and its edges to resize it, and the chat stays in view
   behind it. The panel shows the ask's title, the work it belongs to, its full
   text, its links (thread, PR or issue, file) and threads, its answers (the
@@ -4413,7 +4413,7 @@ version of the Projects features in Cursor and Claude Code.
   and sessions made coordinators alike. Click or tap it for the tips, each in its
   own card with a line you can type; clicking that line puts it in the chat box
   (nothing is sent). The tips: keep one coordinator per project and give it
-  everything; ask for a gx page per topic and pick (gx visuals for numbers); ask
+  everything; ask for a Live page per topic and pick (gx visuals for numbers); ask
   it to dig deeper on a point before you pick; paste a screenshot instead of
   describing; let it start threads, on any agent or computer; answer with one
   click (a gx form or the answer links), or later from the ? pill, or by tag
@@ -6358,7 +6358,7 @@ Ghostex Collab shares one chat with someone through a link that opens it in thei
 
 Your own Create link, Show (to see a link and code again later) and turning on Send for a chat just happen. When an agent asks for one of these, an Approve card shows first, on your computer and your phone, and nothing happens until you click Approve (with Settings > Security's switch on, Touch ID, Windows Hello or your password first). Each guest message in Ask me waits for your Send. Turning Collab off, Stop sharing, Remove and Decline never ask.
 
-What their message does is up to you, per chat, under Guest messages in the Share popover: Ask me (the default) holds it as a "Message from <name>" card above your chat box, with its pictures, and Decline, Edit (puts it in your chat box to change and send yourself) and Send; Send, turned on for one chat, passes their messages straight to the agent; View only turns their chat box off. A guest's message always reaches the agent labelled with their name. A guest can answer the agent's questions (its forms, quick picks and Ghostex pages); their answers go to the chat the same way their messages do, so under Ask me they wait for you too. A guest can never answer permission prompts, stop the agent, change its model, or see any other chat, file, terminal or setting: Ghostex only lets their link reach that one chat, and only the pictures, pages and HTML files that chat shows or that they sent themselves; any other file stays on your computer.
+What their message does is up to you, per chat, under Guest messages in the Share popover: Ask me (the default) holds it as a "Message from <name>" card above your chat box, with its pictures, and Decline, Edit (puts it in your chat box to change and send yourself) and Send; Send, turned on for one chat, passes their messages straight to the agent; View only turns their chat box off. A guest's message always reaches the agent labelled with their name. A guest can answer the agent's questions (its forms, quick picks and Live pages); their answers go to the chat the same way their messages do, so under Ask me they wait for you too. A guest can never answer permission prompts, stop the agent, change its model, or see any other chat, file, terminal or setting: Ghostex only lets their link reach that one chat, and only the pictures, pages and HTML files that chat shows or that they sent themselves; any other file stays on your computer.
 
 A link ends after an hour by default (Settings > Collab, or the Link lasts chip in the Share popover, sets 1 hour, 4 hours, 24 hours or Until I stop it for new links). Until I stop it makes a link that never runs out, and the popover says it stays live until you stop it. Stop sharing ends a link at once (it asks first and names who gets disconnected), as does deleting the chat; sharing again makes a new link. When a guest's message waits for you, the popover says so and Review next to their name takes you to its card above the chat box. A guest always needs the code. Remove next to a guest's name closes their page and keeps that browser out of the chat. Settings > Collab also sets Your name (what guests see for you), what new shares start with (Ask me or View only, and how long the link lasts), lists every chat shared right now with Stop sharing and Stop all, and keeps the Guest messages log: every message guests sent and what you did with it, and who joined, left or was removed. Uninstalling Collab ends every share. The phone has the same Share sheet, cards and Settings › Collab for each computer. The chat runs on your computer, so a guest can only follow it while your computer is on and Ghostex is running.
 
@@ -6446,7 +6446,7 @@ with Esc does not, a provider error shows as a Failed notification, and a
 question or confirmation a Pi or OMP extension asks marks the session as waiting
 for you.
 While an agent has questions in its chat that you have not answered (Ghostex
-forms and Ghostex pages with questions, from any turn), the session shows the pink question dot
+forms and Live pages with questions, from any turn), the session shows the pink question dot
 in the sidebar, the phone's session list and `ghostex sessions` ("answer
 requested"), also while the agent keeps working. On the computer, a turn that
 asks new questions sends one notification, labelled Needs input with how many it
@@ -6466,7 +6466,7 @@ page leaves the list of things that need you and the unanswered counts until its
 time is up, then comes back by itself; the agent is not told. The choice is kept
 by Ghostex, so the computer, the web page and the phone agree.
 The ? pill on the chat's working row opens Chat Resources, a list of the chat's
-generated content: Ghostex forms, Ghostex pages (with or without questions) and Ghostex visuals,
+generated content: Ghostex forms, Live pages (with or without questions) and Ghostex visuals,
 each row marked by its icon. A small dropdown at the top right, on the header's
 line, picks what it shows: All, Pages, Forms or Visuals, with their counts. Questions
 sit in folding sections (Unanswered, For later, Answered, Withdrawn), pages that
@@ -8224,7 +8224,7 @@ is listening on 127.0.0.1:…"; stop that program, then start Ghostex again.
 Ghostex deletes old files it made by itself, once a day, so its data folders do not keep
 growing. It removes screenshots agents saved more than 60 days ago (folders named
 `release-*` or `youtube-*` are kept, and images you pasted into chats or board cards are
-never removed), published Ghostex pages after 90 days, log files nothing has written for
+never removed), published Live pages after 90 days, log files nothing has written for
 14 days, crash reports after 30 days, backups taken before a data migration after 30 days,
 Ghostex's copies of compressed Codex chats nobody opened for 30 days (opening the chat
 again rebuilds its copy), and closed sessions idle for 90 days from the closed sessions

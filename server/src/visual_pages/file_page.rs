@@ -75,7 +75,7 @@ pub(crate) fn page_for_file(
             title: record
                 .get("title")
                 .and_then(Value::as_str)
-                .unwrap_or("Ghostex page")
+                .unwrap_or("Live page")
                 .to_string(),
             answerable: has_session(&record),
         }));
@@ -84,7 +84,7 @@ pub(crate) fn page_for_file(
     let title = prepared.title.clone().unwrap_or_else(|| {
         file.file_name()
             .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "Ghostex page".to_string())
+            .unwrap_or_else(|| "Live page".to_string())
     });
     let id = write_page(
         gxserver_state_dir,

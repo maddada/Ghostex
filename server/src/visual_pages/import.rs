@@ -49,7 +49,7 @@ fn read_exported(value: &Value) -> Result<Imported, &'static str> {
                 return Err("The answers are too large.");
             }
             parsed = serde_json::from_str::<Value>(text.trim())
-                .map_err(|_| "This is not the answers of an exported Ghostex page.")?;
+                .map_err(|_| "This is not the answers of an exported Live page.")?;
             &parsed
         }
         other => other,
@@ -57,7 +57,7 @@ fn read_exported(value: &Value) -> Result<Imported, &'static str> {
     let object = object
         .as_object()
         .filter(|object| object.contains_key("ghostexPageAnswers"))
-        .ok_or("This is not the answers of an exported Ghostex page.")?;
+        .ok_or("This is not the answers of an exported Live page.")?;
     let answers = object
         .get("answers")
         .filter(|answers| answers.is_object())
@@ -77,7 +77,7 @@ fn read_exported(value: &Value) -> Result<Imported, &'static str> {
         .map(str::trim)
         .filter(|title| !title.is_empty())
         .map(|title| clip_chars(title, VISUAL_PAGE_TITLE_MAX_CHARS))
-        .unwrap_or_else(|| "Exported Ghostex page".to_string());
+        .unwrap_or_else(|| "Exported Live page".to_string());
     Ok(Imported {
         page,
         title,

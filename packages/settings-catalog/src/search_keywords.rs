@@ -35,6 +35,11 @@ pub fn search_keywords(key: &str) -> &'static [&'static str] {
         // CDXC:RemoteMachines 2026-11-15: people say machine and offline as often as computer and
         // not connected.
         "sidebarHideDisconnectedMachines" => &["offline", "disconnected machines", "hide offline"],
+        // CDXC:SessionChat 2026-11-19: Live pages were Ghostex pages (gx page) and inline HTML
+        // until the user renamed them (Q4207, Q4208); a search for the old names still finds them.
+        "chatPageOpenTarget" | "chatAnswersWaitForIdle" => {
+            &["ghostex page", "gx page", "inline html"]
+        }
         _ => &[],
     }
 }

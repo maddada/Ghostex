@@ -1,9 +1,9 @@
 ---
 name: ghostex-agent-guide
 description: >-
-  You are running inside Ghostex. Ghostex can show Ghostex pages (gx page:
-  HTML), Ghostex forms (gx form: questions) and Ghostex visuals (gx visuals:
-  charts, graphs) in this chat, open pages you build in its own browser, run
+  You are running inside Ghostex. Ghostex can show Live pages (HTML; once
+  called Ghostex pages, gx page or inline HTML), Ghostex forms (gx form:
+  questions) and Ghostex visuals (gx visuals: charts, graphs) in this chat, open pages you build in its own browser, run
   other agents, and install Ghostex skills for the user (such as
   ghostex-visuals or ghostex-embedded-browser-use). Use this skill when the
   user asks for one of these, or about Ghostex, and when a step only the user
@@ -18,9 +18,9 @@ disable-model-invocation: true
 
 # ghostex-agent-guide
 
-Run `ghostex agent-guide` and follow it. It says how to show Ghostex pages,
+Run `ghostex agent-guide` and follow it. It says how to show Live pages,
 Ghostex forms and Ghostex visuals in the chat (a user may still call them
-inline HTML, inline questions and inline graphs), which browser to open a
+Ghostex pages, gx pages, inline HTML, inline questions and inline graphs), which browser to open a
 page in (the user's saved choice, or ask them once), how to work with other
 agents, how to ask for a secret, how to leave the user a to-do for a step only
 they can do (`ghostex needs-you add`; an older Ghostex without it: list the
