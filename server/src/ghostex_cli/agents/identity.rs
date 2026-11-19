@@ -54,6 +54,19 @@ pub(crate) fn caller() -> CliResult<Value> {
     }
 }
 
+/// CDXC:GrokBot 2026-11-19 DECISION:
+/// User's report: Grok Bot runs `ghostex` on the Mac through its desktop app, in a plain shell outside any Ghostex session, and `ghostex agents send <ref> "<text>"` failed with "Cannot identify the caller", so the bot could not pass the user's answers on. The coordinator: a send from outside any session, with the token file (the user's own terminal), goes as the user, the same as the user typing into that chat; who may send otherwise is unchanged (gxserver checks the caller as before). Only "no session at all" counts as the user: a session variable that names no single agent session still fails rather than guessing.
+/// The calling agent session; `None` when the command runs outside any Ghostex session (the
+/// user's own terminal, Grok Bot's commands), so it acts as the user. An environment that names a
+/// session but not exactly one agent session is still an error.
+pub(crate) fn caller_or_user() -> CliResult<Option<Value>> {
+    match lookup_caller()? {
+        CallerLookup::Agent(caller) => Ok(Some(caller)),
+        CallerLookup::NoSession => Ok(None),
+        CallerLookup::NotOneAgent { .. } => caller().map(Some),
+    }
+}
+
 /// The calling agent session, or `None` when the command does not run inside one (a person's own
 /// terminal, a plain shell pane, the phone over SSH).
 pub(crate) fn agent_caller() -> CliResult<Option<Value>> {

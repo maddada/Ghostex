@@ -10,7 +10,7 @@ USAGE
   ghostex coordinator make-main <session-ref> [--computer <name>] [--json]
   ghostex coordinator options [--json]
   ghostex coordinator list [--project-id <id>] [--json]
-  ghostex coordinator status [--coordinator <ref>] [--all] [--json]
+  ghostex coordinator status [--coordinator <ref> | --project-id <id> [--computer <name>]] [--all] [--json]
   ghostex coordinator start-thread --title <title> (--task <text> | --body-file <path|->)
                               [--agent <agent-id> [--allow-hidden]] [--model <m>] [--effort <e>]
                               [--account <number|email|hub>] [--worktree [--base-branch <branch>]]

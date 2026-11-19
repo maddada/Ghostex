@@ -118,6 +118,9 @@ SENDER BLOCK
   Run from an agent session, send-session-chat-message, queue-session-chat-prompt
   and send-message to another session attach the same block, so a message
   between agents never reads as the user's own words.
+  Run from outside any Ghostex session (your own terminal, or Grok Bot running
+  ghostex on this computer), agents send goes as you, with no block: the
+  recipient sees it as your message, as if typed into its chat.
 
 THREADS AND THEIR ORCHESTRATOR
   A thread reports by ending its turn: Ghostex forwards its final message to

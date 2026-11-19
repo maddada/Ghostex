@@ -9,7 +9,9 @@ Rules
 
 See what's happening
   ghostex projects --json                        Projects and their --project-id
-  ghostex coordinator status --json              Coordinators' threads: waiting on the user, working, finished
+  ghostex coordinator list --json                 Every coordinator, its project and whether it is the main one
+  ghostex coordinator status --project-id <id> --json   A project's main coordinator's threads: waiting on the user, working, finished
+                                                 (or --coordinator <ref> for any coordinator)
   ghostex sessions --json                        Every session and what it is doing
   ghostex read-session-chat <ref> --limit 10 --json   An agent's latest messages, questions and prompts
   ghostex computers                              Other computers; add --computer <name> to the commands here
@@ -17,7 +19,7 @@ See what's happening
 Hand out work
   ghostex agents send --main-coordinator --project-id <id> --if-none create "<the user's words>"
                                                  New work for a project's coordinator (makes one if there is none)
-  ghostex agents send <ref> "<text>"             A message to one agent (--interrupt stops its current turn first)
+  ghostex agents send <ref> "<text>"             A message to one agent, sent as the user (--interrupt stops its current turn first)
   ghostex agents types --json                    Agents that can be started
   ghostex agents create <agent-id> --project-id <id> --task "<text>"   Start an agent with a task
 

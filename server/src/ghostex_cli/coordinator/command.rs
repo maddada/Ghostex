@@ -613,8 +613,62 @@ fn next_tag(parsed: &ParsedArgs) -> CliResult<()> {
     Ok(())
 }
 
+/// CDXC:GrokBot 2026-11-19 WHY: Grok Bot runs `ghostex` in a plain shell outside any session,
+/// where "the calling coordinator" means nothing. `--project-id <id>` (with `--computer <name>`
+/// for another computer's) reads that project's main coordinator, alongside `--coordinator <ref>`.
+fn status_target(parsed: &ParsedArgs) -> CliResult<(Value, Flags)> {
+    let named = ["coordinator", "orchestrator", "session"]
+        .iter()
+        .any(|key| flag_text(&parsed.flags, key).is_some());
+    let Some(project_id) = flag_text(&parsed.flags, "projectId").filter(|_| !named) else {
+        return target_coordinator(parsed).map_err(|error| match error {
+            CliError::Other(message) if message.starts_with("Cannot identify the caller") => {
+                CliError::Other("Outside an agent session, name the coordinator: --coordinator <ref>, or --project-id <id> for that project's main coordinator (ghostex projects --json lists ids).".into())
+            }
+            other => other,
+        });
+    };
+    let mut base = server_flags(&parsed.flags);
+    if let Some(computer) = flag_text(&parsed.flags, "computer") {
+        base.insert_text("computer", &computer);
+    }
+    let listed = call_gxserver_rpc(
+        "/api/listCoordinators",
+        &json!({ "projectId": project_id }),
+        &base,
+    )?;
+    let rows = listed["coordinators"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let Some(main) = rows
+        .iter()
+        .find(|row| row["isMainCoordinator"] == json!(true))
+    else {
+        let names = rows
+            .iter()
+            .map(|row| {
+                format!(
+                    "{} ({})",
+                    agents::text(row, "title"),
+                    agents::text(row, "globalRef")
+                )
+            })
+            .collect::<Vec<_>>();
+        return Err(CliError::Other(if names.is_empty() {
+            format!("Project {project_id} has no coordinator.")
+        } else {
+            format!(
+                "Project {project_id} has no main coordinator. Pass --coordinator <ref> for one of: {}.",
+                names.join(", ")
+            )
+        }));
+    };
+    resolve_session(agents::text(main, "globalRef"), &base)
+}
+
 fn status(parsed: &ParsedArgs) -> CliResult<()> {
-    let (session, flags) = target_coordinator(parsed)?;
+    let (session, flags) = status_target(parsed)?;
     let view = read_view(&session, &flags)?;
     if parsed.flags.truthy("json") {
         print_json(&view);

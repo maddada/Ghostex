@@ -45,7 +45,10 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
     if body.trim().is_empty() {
         return Err(CliError::Other("Message body must not be empty.".into()));
     }
-    let sender = identity::caller()?;
+    // `None`: run outside any Ghostex session (the user's terminal, Grok Bot's commands), so the
+    // message goes as the user's own, with no sender header and nothing that expects a reply
+    // session (CDXC:GrokBot 2026-11-19 in identity.rs).
+    let sender = identity::caller_or_user()?;
     let reference = &args.positional[0];
     let flags = identity::inventory_flags(&args.flags, reference)?;
     let recipient = selector::resolve_live_or_closed_session(reference, &flags)?;
@@ -54,14 +57,19 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
             "The recipient is not an agent session. Run ghostex agents list --all.".into(),
         ));
     }
-    super::outbound::check_agent_session_write(&sender, &recipient, &flags)?;
-    let message = identity::message(
-        &sender,
-        &match thread_title_reminder(&sender, &recipient, &flags) {
-            Some(reminder) => format!("{}\n\n{reminder}", body.trim_end()),
-            None => body.clone(),
-        },
-    );
+    let message = match &sender {
+        Some(sender) => {
+            super::outbound::check_agent_session_write(sender, &recipient, &flags)?;
+            identity::message(
+                sender,
+                &match thread_title_reminder(sender, &recipient, &flags) {
+                    Some(reminder) => format!("{}\n\n{reminder}", body.trim_end()),
+                    None => body.clone(),
+                },
+            )
+        }
+        None => body.clone(),
+    };
     if message.len() > crate::zmx::GXSERVER_ZMX_SEND_TEXT_LIMIT_BYTES {
         return Err(CliError::Other(format!(
             "Message including sender header exceeds the {}-byte send limit.",
@@ -69,7 +77,7 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         )));
     }
     if args.delivery == Delivery::WithNext {
-        return hold_with_next(&sender, &recipient, &message, &body, args, &flags);
+        return hold_with_next(sender.as_ref(), &recipient, &message, &body, args, &flags);
     }
     // A sleeping or closed recipient has nothing to interrupt; the send itself wakes it and
     // resumes its conversation.
@@ -126,8 +134,8 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
     // A repeated request id was linked by its first attempt; linking again would restart the delivery watch from now and miss the row the first attempt produced.
     // CDXC:Coordinators 2026-11-10 WHY: the reopen was silent, so a coordinator could not tell its message had put a done thread back under it, and a reply the thread finished while done was never reported (GitHub #541). The send says so in one line and prints that held reply.
     // gxserver's send route reopens the thread itself and says so in the send's answer (server/src/coordinators/reopen.rs); this link call still watches the message, reopens for `--queue`, and answers for an older gxserver, guarded on the server by `sentAtMs`.
-    let reopen = (!duplicate)
-        .then(|| call_gxserver_rpc(
+    let reopen = sender.as_ref().filter(|_| !duplicate)
+        .and_then(|sender| call_gxserver_rpc(
             "/api/linkCoordinatorThread",
             &json!({
                 "coordinatorProjectId": sender["projectId"], "coordinatorSessionId": sender["sessionId"],
@@ -136,8 +144,7 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
                 "pendingMessage": body, "sentAtMs": sent_at_ms, "sendRequestId": send_request_id,
             }),
             &flags,
-        ).ok())
-        .flatten();
+        ).ok());
     let reopened = result["reopenedThread"] == json!(true)
         || reopen
             .as_ref()
@@ -187,20 +194,22 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
     } else {
         ("accepted", "Ghostex typed and submitted the message, but the recipient's transcript does not show it yet; a busy agent takes it at its next input boundary. Read its chat before sending it again.")
     };
-    if status == "delivered" {
-        confirm_coordinator_delivery(&sender, &recipient, &send_request_id, &flags);
-    } else {
-        // The sender's chat card follows the message until it arrives (agent_message_deliveries.rs);
-        // an older gxserver without the watch refuses the call and the card keeps this status.
-        let _ = call_gxserver_rpc(
-            "/api/watchAgentMessageDelivery",
-            &json!({
-                "senderProjectId": sender["projectId"], "senderSessionId": sender["sessionId"],
-                "projectId": recipient["projectId"], "sessionId": recipient["sessionId"],
-                "sendRequestId": send_request_id, "message": body, "sentAtMs": sent_at_ms,
-            }),
-            &flags,
-        );
+    if let Some(sender) = &sender {
+        if status == "delivered" {
+            confirm_coordinator_delivery(sender, &recipient, &send_request_id, &flags);
+        } else {
+            // The sender's chat card follows the message until it arrives (agent_message_deliveries.rs);
+            // an older gxserver without the watch refuses the call and the card keeps this status.
+            let _ = call_gxserver_rpc(
+                "/api/watchAgentMessageDelivery",
+                &json!({
+                    "senderProjectId": sender["projectId"], "senderSessionId": sender["sessionId"],
+                    "projectId": recipient["projectId"], "sessionId": recipient["sessionId"],
+                    "sendRequestId": send_request_id, "message": body, "sentAtMs": sent_at_ms,
+                }),
+                &flags,
+            );
+        }
     }
     Ok(json!({
         "ok": true,
@@ -213,7 +222,7 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         "duplicate": duplicate,
         "reopenedThread": reopened,
         "heldReport": held_report,
-        "sender": identity::summary(&sender),
+        "sender": sender_summary(sender.as_ref()),
         "recipient": identity::summary(&recipient),
         "receipt": receipt,
         // CDXC:SessionChat 2026-10-10 WHY: the sender's chat card shows this text; the command line often holds only `$msg` or a `--body-file` path (gx-chat-core sent_message_script.rs).
@@ -224,8 +233,16 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
 /// `--with-next`: gxserver holds the message and types it right after the next message the
 /// recipient gets (its user's, another session's report, a queued one), so it never starts a turn
 /// by itself (server/src/session_chat_send/with_next.rs).
+/// Who sent it: the agent session, or `{"kind": "user"}` for a send from outside any session.
+fn sender_summary(sender: Option<&Value>) -> Value {
+    match sender {
+        Some(sender) => identity::summary(sender),
+        None => json!({ "kind": "user" }),
+    }
+}
+
 fn hold_with_next(
-    sender: &Value,
+    sender: Option<&Value>,
     recipient: &Value,
     message: &str,
     body: &str,
@@ -260,7 +277,7 @@ fn hold_with_next(
         ),
         "mode": "with-next",
         "sendRequestId": send_request_id,
-        "sender": identity::summary(sender),
+        "sender": sender_summary(sender),
         "recipient": identity::summary(recipient),
         "message": body,
     }))
