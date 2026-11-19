@@ -263,10 +263,11 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     // CDXC:Workspaces 2026-10-09 DECISION:
     // User: "Please make the workspaces feature as a built in extension in the app: when enabled we show the workspaces page in settings and we show the switcher and we allow enabling work mode etc." A whole-feature entry like Cloud Boxes, off by default, with a new key (`workspacesHidden`, default on = hidden) because the settings file stores every default. Off hides the workspace tile, Move to workspace and the Workspaces page; gxserver publishes no workspaces, runs no team sync and applies no workspace Claude account, so every window shows every project as before workspaces. Saved workspaces, Linear keys and team connections are kept, so turning it on restores everything. Its "we allow enabling work mode" part is superseded by the user's "Yes, no Workspaces needed" (CDXC:WorkMode 2026-10-24 below).
     // CDXC:WorkMode 2026-10-24 DECISION: User: Issues Workflow (formerly Work mode) is "On everywhere once set up", and asked whether it should still need the Workspaces extension: "Yes, no Workspaces needed". This replaces the 2026-10-09 "we allow enabling work mode" above: Link to, Create ticket, the Issues view and branch titles work with Workspaces off. Workspaces keeps what is per company: its Linear key and primary tracker (a project outside one uses the Personal workspace's), the team backend and Slack.
+    // CDXC:Workspaces 2026-11-19 DECISION: User: "move workspaces to experimental extensions so i keep working on it more". Listed in the Experimental tab like Floating Capture; its switch is still `workspacesHidden` (off by default), so whoever has Workspaces on keeps it with no migration, and while it is off nothing of it shows.
     // SEE-ALSO: server/src/workspaces/feature.rs (gxserver's gate), packages/gx-core/src/sidebar_view/inputs.rs (`workspaces_enabled`).
     J::Obj(&[
         ("description", J::Str("Keep each company's projects, Spaces, browser sign-ins, Linear key and Claude account in its own workspace, pick each one's primary tracker, and share a team backend for your team's Slack flow.")),
-        ("category", J::Str("features")),
+        ("category", J::Str("experimental")),
         ("id", J::Str("workspaces")),
         ("placement", J::Str("feature")),
         ("settingsKey", J::Str("workspacesHidden")),

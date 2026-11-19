@@ -1032,8 +1032,9 @@ sessions tagged"; when nothing matches, the list says "No sessions tagged X.
 Right-click a session > Tag As" with a Clear filter button.
 
 Workspaces keep different parts of your work apart, for example one per company
-you work for and a Personal one. Workspaces is a built-in extension, off by
-default: turn it on with its switch in Settings > Extensions > Built-in. It also
+you work for and a Personal one. Workspaces is an experimental built-in
+extension, off by default: turn it on with its switch in Settings > Extensions >
+Experimental. It also
 brings the team backend (see Git and worktrees); Issues Workflow works without it.
 While it is off there is no workspace button, every window shows every project,
 the project menu has no Move to workspace, and the `ghostex workspace`, `team`

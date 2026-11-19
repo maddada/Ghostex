@@ -12155,11 +12155,11 @@
     {
       "key": "workspacesHidden",
       "title": "Turn off Workspaces",
-      "subtitle": "Turn off Workspaces everywhere: the workspace button, Move to workspace, the Workspaces page in Settings, the team backend and Slack, and the workspace, team and slack commands. Issues Workflow stays on without it. Off by default; your workspaces, keys and team connections are kept.",
+      "subtitle": "Turn off Workspaces everywhere: the workspace button, Move to workspace, the Workspaces page in Settings, the team backend and Slack, and the workspace, team and slack commands. Issues Workflow stays on without it. Experimental, off by default; your workspaces, keys and team connections are kept.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
-      "sectionTitle": "Built-in",
+      "sectionTitle": "Experimental",
       "type": "boolean",
       "default": true,
       "agentWritable": true
