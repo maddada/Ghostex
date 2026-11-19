@@ -227,7 +227,11 @@ fn in_profile(provider: Provider, dir: &Path, base: &str) -> String {
     if cfg!(windows) {
         format!("$env:{variable} = '{}'; {base}", dir.replace('\'', "''"))
     } else {
-        format!("{variable}={} {base}", quote_shell_arg(&dir))
+        format!(
+            "{variable}={} {}",
+            quote_shell_arg(&dir),
+            crate::accounts::launch::without_shell_function(base, provider)
+        )
     }
 }
 

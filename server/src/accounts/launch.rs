@@ -61,6 +61,22 @@ pub(crate) fn with_account_command(
     Ok(format!("{}{wrapper}", &base[..start]))
 }
 
+/// `base` with a bare `claude` or `codex` run as `command claude`, which a POSIX shell starts as
+/// the program on PATH even when the user's shell defines a function or alias of that name.
+///
+/// CDXC:AgentProviders 2026-11-19 WHY: a session or job On a CLIProxyAPI hub names its profile folder before the CLI (`CLAUDE_CONFIG_DIR=… claude`, hub/launch.rs), and runs in the user's interactive shell. Proving the hub fixes on a test server found a Mac whose `.zshrc` defines `claude` as a function that unsets `CLAUDE_CONFIG_DIR` and starts Claude Swap, so the hub's command ran on a Swap account instead of the hub. `command` skips functions and aliases; a path, a wrapper or PowerShell is left as written.
+pub(crate) fn without_shell_function(base: &str, provider: Provider) -> String {
+    let Some(word) = executable_word(base, |_, _| {}) else {
+        return base.to_string();
+    };
+    let text = &base[word.start..word.end];
+    let already = base[..word.start].trim_end().ends_with("command");
+    if word.after_call_operator || already || text != provider.id() {
+        return base.to_string();
+    }
+    format!("{}command {}", &base[..word.start], &base[word.start..])
+}
+
 /// The word a command runs, found past its invocation prefixes.
 struct ExecutableWord {
     start: usize,
