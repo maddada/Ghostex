@@ -200,6 +200,7 @@ pub(in crate::server) async fn route_http(
             request_id,
             &relay_caller,
             &state.paths,
+            state.metadata.server_id.as_str(),
         )
         .await;
     }

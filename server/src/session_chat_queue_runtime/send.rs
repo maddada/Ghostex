@@ -652,7 +652,12 @@ fn settle_work_replies(
             .any(|line| line.trim() == crate::coordinators::AGENT_MESSAGE_OPENER)
         // Only text one of the user's own callers sent settles an ask, never text that merely
         // lacks the agent block (session_chat_send/sender_mark.rs).
-        || !crate::session_chat_send::sender_mark::take_user_send(project_id, session_id, text)
+        || !crate::session_chat_send::sender_mark::take_user_send(
+            &state.paths,
+            project_id,
+            session_id,
+            text,
+        )
     {
         return;
     }

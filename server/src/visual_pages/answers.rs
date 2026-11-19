@@ -179,7 +179,12 @@ pub(super) async fn deliver(
         .err()
     } else {
         // The user's own answers on a page: they settle the asks they name.
-        crate::session_chat_send::sender_mark::note_user_send(&project_id, &session_id, &message);
+        crate::session_chat_send::sender_mark::note_user_send(
+            &state.paths,
+            &project_id,
+            &session_id,
+            &message,
+        );
         let body = json!({"params": {
             "projectId": project_id,
             "sessionId": session_id,

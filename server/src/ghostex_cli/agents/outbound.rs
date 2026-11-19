@@ -23,6 +23,13 @@ pub(crate) struct AgentWrite {
 /// SEE-ALSO: server/src/ghostex_cli/agents/identity.rs `message` (the block), server/src/coordinators/thread_messages.rs.
 pub(crate) fn agent_write(selector_text: &str, flags: &Flags) -> CliResult<Option<AgentWrite>> {
     let Some(sender) = identity::agent_caller_strict()? else {
+        // CDXC:Security 2026-11-19 WHY (Fable re-review): no session variable is not proof of the
+        // user. Under a Ghostex session pane (an agent that dropped its variables), the message
+        // would read as the user's own, so it is refused, the same check `agents send --as-user`
+        // makes (identity.rs `sender`).
+        if crate::agent_hooks::caller_ancestry().in_session_pane {
+            return Err(CliError::Other("This runs inside a Ghostex session, but its session can't be identified (its GHOSTEX_* variables are missing), so the message would read as the user's own. Run it from the agent's own shell, or from your own terminal outside Ghostex.".into()));
+        }
         return Ok(None);
     };
     let flags = identity::inventory_flags(flags, selector_text)?;

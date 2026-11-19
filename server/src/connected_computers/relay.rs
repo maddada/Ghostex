@@ -60,6 +60,7 @@ pub(crate) async fn relay(
     request_id: String,
     caller: &Principal,
     paths: &GxserverPaths,
+    server_id_here: &str,
 ) -> RoutedResponse {
     let endpoint_path = Some(RELAY_ROUTE_PREFIX.to_string());
     let Some((server_id, forwarded)) = parse_relay_path(path) else {
@@ -136,6 +137,33 @@ pub(crate) async fn relay(
             request_id,
         );
     }
+    // An agent's message to another computer says who sent it before it leaves; the other
+    // computer passes it on as it came (session_chat_send/sender_mark.rs).
+    let bytes = match caller {
+        Principal::Session {
+            project_id,
+            session_id,
+            ..
+        } if crate::session_chat_send::sender_mark::MESSAGE_ROUTES.contains(&forwarded) => {
+            match serde_json::from_slice::<serde_json::Value>(&bytes) {
+                Ok(mut body) => {
+                    if let Some(params) = body.get_mut("params").and_then(|p| p.as_object_mut()) {
+                        params.remove("via");
+                        crate::session_chat_send::sender_mark::sign_agent_message(
+                            paths,
+                            server_id_here,
+                            project_id,
+                            session_id,
+                            params,
+                        );
+                    }
+                    serde_json::to_vec(&body).map(Into::into).unwrap_or(bytes)
+                }
+                Err(_) => bytes,
+            }
+        }
+        _ => bytes,
+    };
     // A message to a done thread of a coordinator here reopens it once the other computer took it
     // (coordinators/remote_threads.rs `reopen_messaged_remote_thread`).
     let reopen_target = (forwarded == "/api/sendSessionChatMessage" && is_chat_message(&bytes))
