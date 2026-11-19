@@ -280,6 +280,7 @@ pub(crate) fn rows(paths: &GxserverPaths, wait: Wait) -> Vec<Value> {
                         "provider": account.provider,
                         "name": account.name,
                         "plan": account.plan,
+                        "workspace": account.workspace,
                         "status": account.status,
                         "statusMessage": account.status_message,
                         "nextRetryAfter": account.next_retry_after.map(|at| at.to_rfc3339()),
