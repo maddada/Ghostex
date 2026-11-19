@@ -18,7 +18,10 @@ pub(crate) fn stored_project_workspace_id(project: &Value) -> Option<&str> {
 }
 
 /// Whether a project shows in every workspace: the Ghostex config folder's project, where every
-/// Help chat (and the Cloud Boxes setup chat) lives.
+/// Help chat (and the Cloud Boxes setup chat) lives, until the user moves it to a workspace.
+///
+/// CDXC:Workspaces 2026-11-20 DECISION:
+/// User: "it doesn't matter if I move it to Personal or Work, it's always shown in the Work workspace" (the config folder's project, holding Chief of Staff and a Grok Bot chat); Move to workspace must stick for it. Supersedes "always in every workspace" (2026-10-09, kept below): it shows in every workspace only while it has no stored `workspaceId`, and Move to workspace stores one even for the default workspace (`place_project_in_workspace`). Help opened from another window still never moves it; once it has a workspace, a Help chat opens in the window showing that workspace (workspace_windows/session_routing.rs). It was shown in Work as a project of its own because Main Hub lifts its chats into the home project only in a window that shows the home (gx-core `lift_into_home`).
 ///
 /// CDXC:Workspaces 2026-10-09 DECISION:
 /// User: the Help-chat project must not flip workspaces each time Help is opened from a different
@@ -26,6 +29,12 @@ pub(crate) fn stored_project_workspace_id(project: &Value) -> Option<&str> {
 /// folder the desktop roots it at), so no client has to mark it and installs that already have it
 /// need no migration; its own `workspaceId` still decides its Linear key and Claude account.
 pub(crate) fn project_in_every_workspace(project: &Value) -> bool {
+    is_config_folder_project(project) && stored_project_workspace_id(project).is_none()
+}
+
+/// Whether `project` is rooted at the Ghostex config folder (Ask Ghostex AI's project), wherever
+/// it is placed.
+pub(crate) fn is_config_folder_project(project: &Value) -> bool {
     static CONFIG_DIR: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     let config_dir = CONFIG_DIR.get_or_init(|| {
         comparable_path(
@@ -94,7 +103,9 @@ pub(crate) fn place_project_in_workspace(
         .cloned()
         .unwrap_or_default();
     let before = launch_settings.clone();
-    if workspace_id == DEFAULT_WORKSPACE_ID {
+    // The config folder's project keeps an explicit default id: without one it shows in every
+    // workspace (`project_in_every_workspace`), so a move to Personal would not stick.
+    if workspace_id == DEFAULT_WORKSPACE_ID && !is_config_folder_project(project) {
         launch_settings.remove("workspaceId");
     } else {
         launch_settings.insert("workspaceId".into(), json!(workspace_id));
