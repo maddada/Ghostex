@@ -553,7 +553,10 @@ mod tests {
         let text = session_elsewhere_text("S9l:P7:G9", &named, &found);
         assert_eq!(
             text,
-            "S9l:P7:G9 names this computer (S9l), which has no session P7:G9. That session is on Windows PC: S7a:P7:G9 (\"Coordinator\"). Use that ref, or add --computer <name>."
+            format!(
+                "S9l:P7:G9 names {} (S9l), which has no session P7:G9. That session is on Windows PC: S7a:P7:G9 (\"Coordinator\"). Use that ref, or add --computer <name>.",
+                crate::connected_computers::this_computer_name()
+            )
         );
         // A server id no connected computer has was looked up here too.
         let (_, named) =

@@ -192,6 +192,10 @@ pub(crate) async fn bootstrap() -> Result<GxserverEndpoint, String> {
             .to_string(),
     };
     CURRENT_ENDPOINT.with(|current| *current.borrow_mut() = Some(endpoint.clone()));
+    // The serving computer's name (host_name.rs); an older `ghostex web` sends its host name.
+    if let Some(name) = result["machineLabel"].as_str() {
+        crate::host_name::set_served_computer_name(name);
+    }
     // The built-in features on for this computer; an older `ghostex web` sends none (all off).
     crate::app::read_aloud::set_computer_features(
         result["builtInFeatures"]

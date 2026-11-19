@@ -265,7 +265,9 @@ async fn offer_restore(
     };
     let Some(title) = previous_session_title(&previous, &session.project_id, &session.session_id)
     else {
-        let notice = session_link_gone_notice(machine.as_deref());
+        // A session here is named by this computer's own name, as every computer is.
+        let here = crate::host_name::local_computer_name();
+        let notice = session_link_gone_notice(Some(machine.as_deref().unwrap_or(&here)));
         let _ = this.update(cx, |this, cx| this.show_session_link_notice(notice, cx));
         return;
     };

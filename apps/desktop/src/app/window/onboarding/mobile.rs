@@ -313,7 +313,16 @@ impl GpuiOnboardingWindow {
                 .child(
                     div()
                         .min_w_0()
-                        .child(nm(s, 16.0, 500.0).child(name.to_string()))
+                        .flex_1()
+                        .overflow_hidden()
+                        // A long computer name ends in an ellipsis inside the card.
+                        .child(
+                            nm(s, 16.0, 500.0)
+                                .whitespace_nowrap()
+                                .overflow_hidden()
+                                .text_ellipsis()
+                                .child(name.to_string()),
+                        )
                         .child(ss(s, 12.5).child(via.to_string())),
                 )
         };

@@ -17,7 +17,8 @@ pub(super) fn bootstrap(headers: &HeaderMap, api_url: &str) -> Response<Body> {
     let result = (|| -> anyhow::Result<_> {
         let auth = read_gxserver_auth_token(&get_gxserver_paths(None))?
             .ok_or_else(|| anyhow::anyhow!("Start gxserver before connecting Ghostex Web."))?;
-        let label = local_machine_label().map_err(anyhow::Error::msg)?;
+        // The computer's name as it goes by everywhere, which the page names it by.
+        let label = crate::connected_computers::this_computer_name();
         Ok((auth.token, label))
     })();
     let (token, label) = match result {
@@ -77,40 +78,4 @@ pub(super) fn bootstrap(headers: &HeaderMap, api_url: &str) -> Response<Body> {
         .headers_mut()
         .insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
     response
-}
-
-#[cfg(unix)]
-pub(crate) fn local_machine_label() -> std::result::Result<String, String> {
-    let mut buffer = [0_u8; 256];
-    let status = unsafe { libc::gethostname(buffer.as_mut_ptr().cast(), buffer.len()) };
-    if status != 0 {
-        return Err("Failed to read the local machine hostname.".to_string());
-    }
-    let length = buffer
-        .iter()
-        .position(|byte| *byte == 0)
-        .ok_or_else(|| "The local machine hostname is too long.".to_string())?;
-    let hostname = std::str::from_utf8(&buffer[..length])
-        .map_err(|_| "The local machine hostname is not valid UTF-8.".to_string())?;
-    if hostname.is_empty() {
-        return Err("The local machine hostname is empty.".to_string());
-    }
-    Ok(hostname.to_string())
-}
-
-#[cfg(windows)]
-pub(crate) fn local_machine_label() -> std::result::Result<String, String> {
-    use windows_sys::Win32::System::WindowsProgramming::GetComputerNameW;
-
-    let mut buffer = [0_u16; 256];
-    let mut length = buffer.len() as u32;
-    if unsafe { GetComputerNameW(buffer.as_mut_ptr(), &mut length) } == 0 {
-        return Err("Failed to read the local machine hostname.".to_string());
-    }
-    let hostname = String::from_utf16(&buffer[..length as usize])
-        .map_err(|_| "The local machine hostname is not valid UTF-16.".to_string())?;
-    if hostname.is_empty() {
-        return Err("The local machine hostname is empty.".to_string());
-    }
-    Ok(hostname)
 }

@@ -684,6 +684,7 @@ impl GhostexGpuiApp {
                     .is_some_and(|connection| connection.this_computer),
             });
         }
+        tell_apart_same_names(&mut tabs);
         tabs
     }
 
@@ -928,4 +929,49 @@ pub(crate) fn enabled_remote_machines() -> (Vec<(String, String)>, u64) {
         })
         .unwrap_or_default();
     (machines, settings.revision())
+}
+
+/// Two computers that go by the same name are told apart wherever their tabs' names show (Clone
+/// on…, the Unified filter, the sessions' computer, the chat): the computer you're on keeps its
+/// name, every other one sharing it adds its address from Settings > Remote, else the start of its
+/// id ("studio · 10.0.0.4").
+///
+/// CDXC:RemoteMachines 2026-11-19 WHY:
+/// Every computer goes by its own name since "This computer" went (packages/gx-chat-core/src/extras/where_pill.rs),
+/// so two Macs both called "MacBook Pro" would read the same in a menu that picks one of them.
+fn tell_apart_same_names(tabs: &mut [MachineTabInput]) {
+    let key = |label: &str| label.trim().to_lowercase();
+    let mut counts = std::collections::HashMap::<String, usize>::new();
+    for tab in tabs.iter() {
+        *counts.entry(key(&tab.label)).or_default() += 1;
+    }
+    if counts.values().all(|count| *count < 2) {
+        return;
+    }
+    let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
+    let saved = settings
+        .object()
+        .get("remoteMachines")
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let address = |machine_id: &str| {
+        saved
+            .iter()
+            .find(|entry| entry.get("id").and_then(serde_json::Value::as_str) == Some(machine_id))
+            .and_then(|entry| entry.get("sshHost").and_then(serde_json::Value::as_str))
+            .map(str::trim)
+            .filter(|host| !host.is_empty())
+            .map(str::to_string)
+    };
+    for tab in tabs.iter_mut() {
+        if tab.machine_id == ghostex_gx_core::LOCAL_MACHINE_ID
+            || counts.get(&key(&tab.label)).copied().unwrap_or(0) < 2
+        {
+            continue;
+        }
+        let tag = address(&tab.machine_id)
+            .unwrap_or_else(|| tab.machine_id.chars().take(4).collect::<String>());
+        tab.label = format!("{} · {tag}", tab.label.trim());
+    }
 }
