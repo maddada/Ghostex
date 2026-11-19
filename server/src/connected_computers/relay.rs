@@ -138,16 +138,20 @@ pub(crate) async fn relay(
         );
     }
     // An agent's message to another computer says who sent it before it leaves; the other
-    // computer passes it on as it came (session_chat_send/sender_mark.rs).
-    let bytes = match caller {
-        Principal::Session {
-            project_id,
-            session_id,
-            ..
-        } if crate::session_chat_send::sender_mark::MESSAGE_ROUTES.contains(&forwarded) => {
-            match serde_json::from_slice::<serde_json::Value>(&bytes) {
-                Ok(mut body) => {
-                    if let Some(params) = body.get_mut("params").and_then(|p| p.as_object_mut()) {
+    // computer passes it on as it came (session_chat_send/sender_mark.rs). One of the user's own
+    // callers' messages leaves marked as the user's (`userSend`), so the other computer records it
+    // as theirs (quotes of earlier messages, chat_message_numbers.rs); nobody else's carries it.
+    let bytes = if crate::session_chat_send::sender_mark::MESSAGE_ROUTES.contains(&forwarded) {
+        match serde_json::from_slice::<serde_json::Value>(&bytes) {
+            Ok(mut body) => {
+                if let Some(params) = body.get_mut("params").and_then(|p| p.as_object_mut()) {
+                    crate::session_chat_send::sender_mark::mark_relayed_send(caller, params);
+                    if let Principal::Session {
+                        project_id,
+                        session_id,
+                        ..
+                    } = caller
+                    {
                         params.remove("via");
                         crate::session_chat_send::sender_mark::sign_agent_message(
                             paths,
@@ -157,12 +161,13 @@ pub(crate) async fn relay(
                             params,
                         );
                     }
-                    serde_json::to_vec(&body).map(Into::into).unwrap_or(bytes)
                 }
-                Err(_) => bytes,
+                serde_json::to_vec(&body).map(Into::into).unwrap_or(bytes)
             }
+            Err(_) => bytes,
         }
-        _ => bytes,
+    } else {
+        bytes
     };
     // A message to a done thread of a coordinator here reopens it once the other computer took it
     // (coordinators/remote_threads.rs `reopen_messaged_remote_thread`).

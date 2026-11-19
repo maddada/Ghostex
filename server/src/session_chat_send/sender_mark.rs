@@ -313,8 +313,41 @@ pub(crate) fn prepare(
                 note_user_send(paths, &target_project, &target_session, &text);
             }
         }
-        // Another computer's message was marked by that computer before it came (see above).
+        // Another of the user's computers relays a message one of the user's own callers sent
+        // there with `userSend` (connected_computers/relay.rs `mark_relayed_send`); its agents'
+        // messages come signed and without it. Recorded as the user's, so the message's quotes
+        // of earlier messages work in chats on this computer too.
+        Principal::Peer { .. } => {
+            let from_user = params.remove(RELAYED_USER_SEND) == Some(Value::Bool(true));
+            let text = param(params, "text").to_string();
+            if from_user
+                && !text.trim().is_empty()
+                && !text.contains(AGENT_MESSAGE_OPENER.trim())
+                && route != "/api/sendSessionMessage"
+            {
+                note_user_send(paths, &target_project, &target_session, &text);
+            }
+        }
+        // Anything else was marked by the computer it came from before it came (see above).
         _ => {}
+    }
+}
+
+/// The flag a relay sets on a message one of the user's own callers sent through it to another
+/// computer (`mark_relayed_send`); only that computer's gxserver can set it, since only a peer's
+/// message is read for it.
+pub(crate) const RELAYED_USER_SEND: &str = "userSend";
+
+/// Marks a message route's body before this computer relays it to another: `userSend` when one of
+/// the user's own callers sent it, never for anyone else (an agent's session, which is signed
+/// instead, cannot set it either).
+pub(crate) fn mark_relayed_send(caller: &Principal, params: &mut Map<String, Value>) {
+    params.remove(RELAYED_USER_SEND);
+    if matches!(
+        caller,
+        Principal::Owner { .. } | Principal::Device { .. } | Principal::LocalAgent
+    ) {
+        params.insert(RELAYED_USER_SEND.to_string(), Value::Bool(true));
     }
 }
 
@@ -339,6 +372,59 @@ mod tests {
         assert!(!is_user_send(&paths, "P1", "G2", "like #M1"));
         assert!(take_user_send(&paths, "P1", "G1", "like #M1"));
         assert!(!is_user_send(&paths, "P1", "G1", "like #M1"));
+
+        // Relayed from another of the user's computers: theirs only when that computer marked it.
+        let peer = Principal::Peer {
+            server_id: "S2".into(),
+            name: "Laptop".into(),
+        };
+        let relayed = |caller: &Principal, text: &str| {
+            let mut params = Map::new();
+            params.insert("projectId".into(), json!("P1"));
+            params.insert("sessionId".into(), json!("G1"));
+            params.insert("text".into(), json!(text));
+            mark_relayed_send(caller, &mut params);
+            params
+        };
+        let mut body = json!({ "params": relayed(&Principal::LocalAgent, "see #M2") });
+        prepare(
+            &paths,
+            "S1",
+            "/api/sendSessionChatMessage",
+            &peer,
+            &mut body,
+        );
+        assert!(is_user_send(&paths, "P1", "G1", "see #M2"));
+        assert!(body["params"].get(RELAYED_USER_SEND).is_none());
+        // An agent's session cannot mark its own message as the user's.
+        let agent = Principal::Session {
+            project_id: "P9".into(),
+            session_id: "G9".into(),
+            role: crate::security::SessionRole::Agent,
+        };
+        let mut forged = relayed(&agent, "see #M3");
+        assert!(forged.get(RELAYED_USER_SEND).is_none());
+        forged.insert(RELAYED_USER_SEND.into(), json!(false));
+        let mut body = json!({ "params": forged });
+        prepare(
+            &paths,
+            "S1",
+            "/api/sendSessionChatMessage",
+            &peer,
+            &mut body,
+        );
+        assert!(!is_user_send(&paths, "P1", "G1", "see #M3"));
+        // Nor does a peer's message without the mark count.
+        let mut body =
+            json!({ "params": { "projectId": "P1", "sessionId": "G1", "text": "see #M4" } });
+        prepare(
+            &paths,
+            "S1",
+            "/api/sendSessionChatMessage",
+            &peer,
+            &mut body,
+        );
+        assert!(!is_user_send(&paths, "P1", "G1", "see #M4"));
     }
 
     #[test]
