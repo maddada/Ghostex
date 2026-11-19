@@ -161,16 +161,22 @@ impl GhostexGpuiApp {
         let docked = self
             .agents_column_solo_gpui_chat()
             .map_or(0.0, |chat| chat.read(cx).docked_columns_width());
-        div()
+        let fade = div()
             .absolute()
             .top(px(WORKAREA_HEADER_HEIGHT))
             .left_0()
             .right(px(docked))
-            .h(px(WORKAREA_HEADER_FADE_HEIGHT))
-            .bg(gpui::linear_gradient(
-                180.0,
-                gpui::linear_color_stop(background, 0.0),
-                gpui::linear_color_stop(background.opacity(0.0), 1.0),
-            ))
+            .h(px(WORKAREA_HEADER_FADE_HEIGHT));
+        // CDXC:Theming 2026-11-20: under window glass there is no solid colour to fade from (the
+        // chat is clear over the work area's tint), so the ramp would paint an opaque dark band
+        // under the header; it is left out, as the composer's fade is (native_chat/composer_scroll.rs).
+        if window_glass_active() {
+            return fade;
+        }
+        fade.bg(gpui::linear_gradient(
+            180.0,
+            gpui::linear_color_stop(background, 0.0),
+            gpui::linear_color_stop(background.opacity(0.0), 1.0),
+        ))
     }
 }

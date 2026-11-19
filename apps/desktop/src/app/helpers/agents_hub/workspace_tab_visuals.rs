@@ -170,6 +170,14 @@ pub(crate) fn render_agents_first_prompt_title_overlay(
     pane_id: WorkspacePaneId,
     session_id: TerminalSessionId,
 ) -> AnyElement {
+    // CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): under window glass the dimming is a
+    // veil of the work area's colour instead of black, and the text the theme's ink so it still
+    // reads on a light veil. Glass off, unchanged.
+    let ink: gpui::Hsla = if crate::app::helpers::window_glass_active() {
+        crate::app::helpers::chrome_ink().into()
+    } else {
+        rgb(0xffffff).into()
+    };
     v_flex()
         .id(format!(
             "ghostex-gpui-terminal-first-prompt-title-overlay-{}-{}",
@@ -180,12 +188,14 @@ pub(crate) fn render_agents_first_prompt_title_overlay(
         .inset_0()
         .items_center()
         .justify_center()
-        .bg(rgb(0x000000).opacity(0.58))
+        .bg(crate::app::helpers::glass_veil(
+            rgb(0x000000).opacity(0.58).into(),
+        ))
         .child(
             div()
                 .text_size(px(17.0))
                 .font_weight(FontWeight::MEDIUM)
-                .text_color(rgb(0xffffff).opacity(0.96))
+                .text_color(ink.opacity(0.96))
                 .child("Generating title"),
         )
         .child(
@@ -193,7 +203,7 @@ pub(crate) fn render_agents_first_prompt_title_overlay(
                 .mt(px(5.0))
                 .text_size(px(12.0))
                 .font_weight(FontWeight::NORMAL)
-                .text_color(rgb(0xffffff).opacity(0.58))
+                .text_color(ink.opacity(0.58))
                 .child("(ESC to Cancel)"),
         )
         .into_any_element()

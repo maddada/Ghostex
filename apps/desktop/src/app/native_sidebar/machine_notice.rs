@@ -24,8 +24,14 @@ use serde_json::json;
 const PILL_HEIGHT: f32 = 26.0;
 
 /// The raised fill the card and the pill share, a step off the sidebar's own.
+///
+/// CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): both float over the list, so under glass
+/// they are the sidebar's own chrome colour lifted toward white (`glass_lifted_from`) rather than
+/// an opaque near-black step. Glass off, unchanged.
 fn notice_fill(appearance: &SidebarAppearance) -> Hsla {
-    if appearance.light {
+    if appearance.glass {
+        glass_lifted_from(titlebar_background(), appearance.light)
+    } else if appearance.light {
         rgb(0xffffff).into()
     } else {
         titlebar_background().blend(appearance.foreground.opacity(0.07))

@@ -20,8 +20,12 @@ pub(crate) use crate::data_url_image::{
 };
 use crate::*;
 
+/// CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): the browser's toolbar, its permission and
+/// site-question bars and the browser workspace's base sit on the window, not over content, so
+/// under glass they are left clear and the work area's tint shows instead of a black row. Glass
+/// off, unchanged.
 pub(crate) fn browser_toolbar_background() -> Hsla {
-    chrome_color(0x000000, 0xffffff).into()
+    glass_clear(chrome_color(0x000000, 0xffffff).into())
 }
 
 pub(crate) fn browser_toolbar_text_color() -> Hsla {
@@ -40,8 +44,10 @@ pub(crate) fn browser_toolbar_disabled_icon_color() -> Hsla {
     chrome_color(0xcfcfcf, 0x404040).opacity(0.4).into()
 }
 
+/// CDXC:Theming 2026-11-20: the tab row's action cluster keeps a visible fill under glass as the
+/// ink wash rather than #0e0e0e.
 pub(crate) fn browser_tab_action_cluster_color() -> Hsla {
-    chrome_color(0x0e0e0e, 0xfafafa).into()
+    glass_card(chrome_color(0x0e0e0e, 0xfafafa).into(), 1.0)
 }
 
 pub(crate) fn browser_tab_separator_color() -> Hsla {
