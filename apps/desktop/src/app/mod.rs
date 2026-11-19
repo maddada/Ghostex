@@ -139,6 +139,7 @@ pub(crate) mod session_notes;
 pub(crate) mod session_pane_placement;
 pub(crate) mod session_popup;
 pub(crate) mod settings_modal_lifecycle;
+pub(crate) mod settings_open_timing;
 pub(crate) mod side_chat_panel;
 pub(crate) mod sidebar_agent_launch_placeholder;
 pub(crate) mod sidebar_direct_focus;

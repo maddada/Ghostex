@@ -112,6 +112,7 @@ impl GhostexGpuiApp {
         open_message: &serde_json::Value,
         cx: &mut gpui::Context<Self>,
     ) {
+        crate::app::settings_open_timing::start_if_idle();
         // The colours the theme roles paint while not set, which their rows show.
         crate::app::window::settings_modal::tabs::theme::role_defaults::set_role_default_resolver(
             crate::app::helpers::theme_role_defaults::theme_role_default_rgba,
@@ -145,12 +146,22 @@ impl GhostexGpuiApp {
         let host = self.native_app_modal_host(cx, move |app, command, cx| {
             app.handle_gpui_settings_modal_command(kind, command, &bridge, cx);
         });
+        crate::app::settings_open_timing::mark("openWindow");
         self.open_native_app_modal(
             kind,
             SETTINGS_MODAL_WIDTH,
             SETTINGS_MODAL_HEIGHT,
             move |window, cx| cx.new(|cx| GpuiSettingsModalWindow::new(config, host, window, cx)),
             cx,
+        );
+        crate::app::settings_open_timing::mark("windowBuilt");
+        self.update_native_app_modal(
+            kind,
+            cx,
+            |settings: &mut GpuiSettingsModalWindow, window, cx| {
+                let page = settings.store().read(cx).active_tab().id();
+                crate::app::settings_open_timing::follow_first_frames(window, Some(page));
+            },
         );
     }
 

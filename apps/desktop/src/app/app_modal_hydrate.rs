@@ -20,11 +20,13 @@ impl GhostexGpuiApp {
         let hydrate = match held {
             Some(hydrate) => {
                 self.refresh_gpui_app_modal_gxserver_hydrate(cx);
+                crate::app::settings_open_timing::mark("hydrateHeld");
                 hydrate
             }
             None => {
                 let hydrate = gpui_fetch_app_modal_gxserver_hydrate(active_project_id.as_deref());
                 self.app_modal_gxserver_hydrate = Some(hydrate.clone());
+                crate::app::settings_open_timing::mark("hydrateRead");
                 hydrate
             }
         };
