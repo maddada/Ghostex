@@ -54,6 +54,20 @@ reads the catalog fresh, so a zip is always checked against the current hash.
 */
 const RECENT_CATALOG_TTL: Duration = Duration::from_secs(5 * 60);
 
+/// The extensions already reported as skipped, by id and message: the listing runs on every panel
+/// change and sidebar read, so each one is reported once per run (again only if its error changes).
+fn log_skipped_extension_once(id: &str, message: &str) {
+    static LOGGED: std::sync::Mutex<Option<std::collections::HashSet<(String, String)>>> =
+        std::sync::Mutex::new(None);
+    let mut logged = LOGGED.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let first = logged
+        .get_or_insert_with(Default::default)
+        .insert((id.to_string(), message.to_string()));
+    if first {
+        eprintln!("[gxserver] Skipping installed extension {id}: {message}");
+    }
+}
+
 impl ExtensionRegistry {
     pub(crate) fn new_with_api_url(paths: &GxserverPaths, api_url: String) -> Self {
         let registry = Self {
@@ -558,7 +572,7 @@ impl ExtensionRegistry {
             let manifest = match read_manifest(&entry.path(), Some(&id)) {
                 Ok(manifest) => manifest,
                 Err(error) => {
-                    eprintln!("Skipping installed extension {id}: {error}");
+                    log_skipped_extension_once(&id, &error.to_string());
                     continue;
                 }
             };
