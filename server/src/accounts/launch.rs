@@ -482,6 +482,7 @@ pub(crate) fn apply_new_session(
 }
 /// CDXC:AgentProviders 2026-10-17 WHY:
 /// The one-shot jobs (Generate Commit Message, Catch me up, Generate Name and the automatic title) run the bare `claude` or `codex` through the user's interactive shell, which lets the shell's own `claude` function or alias choose the login. On one Mac that function ran `cswap run` for the personal account last remembered in a cache file, a login the user had turned off, and every job failed with "Account-3 has no stored credentials" (2026-10-17). The job now names its account itself, like a session start does: the session's own account while that login works, else the provider's new-session account (default_account.rs), never one that is turned off, disabled or signed out. With no usable account the command stays as it was, on the CLI's own login.
+/// CDXC:AgentProviders 2026-11-19 WHY: with a CLIProxyAPI hub as New sessions start on, the rule names no Swap account, so the jobs ran the bare CLI on whatever login the computer had (security review of the hub work). A job of a session on a hub, or with no account while the rule names a hub, runs on that hub in its profile folder; a hub that can't be used falls back to the rule's Auto choice.
 /// SEE-ALSO: server/src/server/title_generation/title_command.rs, server/src/server/commit_message_generation.rs, server/src/session_chat_catch_up.rs (the three one-shot launchers).
 pub(crate) fn one_shot_command(
     state: &crate::server::AppState,
@@ -520,14 +521,34 @@ fn one_shot_account_command(
                 .find(|row| super::endpoint::account_id(row) == account.id)
                 .is_none_or(|row| row.status == "ready")
     };
-    let account = session_account
+    let session_account = session_account
         .and_then(|id| registry.accounts.iter().find(|account| account.id == id))
-        .filter(|account| usable(account))
-        .or_else(|| {
-            let model = super::default_account::launch_model(provider, Some(command));
-            super::default_account::quick_launch_account(&registry, &snapshot, provider, &model)
-                .filter(|account| usable(account))
-        })?;
+        .filter(|account| usable(account));
+    // A session On a CLIProxyAPI hub, or with no account of its own while New sessions start on
+    // a hub, runs its jobs on that hub too, in the hub's profile folder (hub/launch.rs `apply`).
+    if session_account.is_none() {
+        let hub = session
+            .and_then(|session| session.pointer("/runtimeSettings/cliproxyHubId"))
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .or_else(|| super::hub::launch::default_hub(&registry, provider));
+        if let Some(hub) = hub {
+            if let Ok(command) = super::hub::launch::apply(
+                &state.paths,
+                provider,
+                &hub,
+                Some(command),
+                &mut Map::new(),
+            ) {
+                return Some(command);
+            }
+        }
+    }
+    let account = session_account.or_else(|| {
+        let model = super::default_account::launch_model(provider, Some(command));
+        super::default_account::quick_launch_account(&registry, &snapshot, provider, &model)
+            .filter(|account| usable(account))
+    })?;
     let wrapper = launch_command(&home().ok()?, account).ok()?;
     let base = reusable_account_command(command, provider.id()).ok()?;
     with_account_command(&base, provider, &wrapper)

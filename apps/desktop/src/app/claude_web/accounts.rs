@@ -130,8 +130,12 @@ fn parse_claude_accounts(state: &Value) -> ClaudeAccountList {
         .collect();
     ClaudeAccountList {
         accounts,
+        // While New sessions start on a CLIProxyAPI hub, which can't open claude.ai, the account
+        // Auto would pick instead (server/src/accounts/default_account.rs `hub_fallback_accounts`).
         default_id: state["defaultAccounts"]["claude"]
             .as_str()
+            .filter(|id| !id.starts_with("cliproxy:"))
+            .or_else(|| state["hubFallbackAccounts"]["claude"].as_str())
             .map(str::to_string),
     }
 }

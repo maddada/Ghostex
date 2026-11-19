@@ -205,6 +205,23 @@ pub(crate) fn quick_launch_accounts(
         })
         .collect()
 }
+/// For each provider whose New sessions start on names a CLIProxyAPI hub: the Swap account Auto
+/// would pick, for what can't run on a hub (a Claude cloud session needs a claude.ai login).
+pub(crate) fn hub_fallback_accounts(
+    registry: &Registry,
+    snapshot: &Snapshot,
+) -> BTreeMap<Provider, String> {
+    let mut auto = registry.clone();
+    [Provider::Claude, Provider::Codex]
+        .into_iter()
+        .filter(|provider| super::hub::launch::default_hub(registry, *provider).is_some())
+        .filter_map(|provider| {
+            auto.new_session_accounts.remove(&provider);
+            quick_launch_account(&auto, snapshot, provider, &launch_model(provider, None))
+                .map(|a| (provider, a.id.clone()))
+        })
+        .collect()
+}
 pub(crate) fn record_last_used(
     db: &rusqlite::Connection,
     registry: &Registry,

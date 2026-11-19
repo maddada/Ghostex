@@ -1194,6 +1194,9 @@ fn state_value(
     let helper_rows:Vec<_>=[Provider::Claude,Provider::Codex].into_iter().map(|p|json!({"provider":p,"installed":helpers::executable(home,p.helper()).is_some(),"cliInstalled":helpers::executable(home,p.id()).is_some(),"error":snapshot.errors.get(&p),"installCommand":p.install_command(home),"loginCommand":p.login_command(),"codexSwapNeedsUpdate":p==Provider::Codex&&super::helper_tools::codex_swap_needs_update_to_add(home)})).collect();
     let mut value = json!({"accounts":rows,"helpers":helper_rows,"defaults":{"claude":registry.defaults.get(&Provider::Claude).cloned().unwrap_or_default(),"codex":registry.defaults.get(&Provider::Codex).cloned().unwrap_or_default()},"defaultAccounts":super::default_account::quick_launch_accounts(registry,snapshot),"newSessionAccounts":registry.new_session_accounts});
     value["swapLogins"] = json!(swap_logins);
+    value["hubFallbackAccounts"] = json!(super::default_account::hub_fallback_accounts(
+        registry, snapshot
+    ));
     // CDXC:Workspaces 2026-10-09 DECISION:
     // User: the sidebar launcher's highlighted default account shows the workspace's Claude
     // account when the workspace sets one, so what it shows is what launches. A launcher list for a
