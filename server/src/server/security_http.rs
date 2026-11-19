@@ -705,7 +705,12 @@ fn handle(
             // Plain: the click of one of your devices (the route needs `DecideApprovals`). An
             // older app's `keyId` and signature are accepted and not checked (CDXC:Security
             // 2026-11-10 in security/policy.rs).
-            let ApproveApprovalParams { id, key_id, .. } = parse(params)?;
+            let ApproveApprovalParams {
+                id,
+                key_id,
+                understands,
+                ..
+            } = parse(params)?;
             // A new device, a terminal's pairing code or another owner: only the door's keepers
             // (CDXC:Security 2026-11-16 in security/policy.rs).
             // The terminal, on a computer whose own app is its only owner, for the first computer
@@ -741,7 +746,7 @@ fn handle(
                     });
             let request = security
                 .approvals
-                .approve_plain_as(&id, caller, now, own_ok)
+                .approve_plain_understanding(&id, caller, now, own_ok, &understands)
                 .map_err(|error| approval_error(&error))?;
             let key_id = if key_id.is_empty() {
                 caller.kind().to_string()

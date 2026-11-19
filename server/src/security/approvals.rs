@@ -357,6 +357,8 @@ impl ApprovalStore {
             decided_at_ms: None,
             decided_by: None,
             replaced_by: None,
+            decided_by_kind: None,
+            decided_understanding: Vec::new(),
         };
         let mut replaced = Vec::new();
         if replace_key.is_some() {
@@ -522,6 +524,19 @@ impl ApprovalStore {
         now_ms: u64,
         own_ok: bool,
     ) -> Result<ApprovalRequest, ApprovalError> {
+        self.approve_plain_understanding(id, by, now_ms, own_ok, &[])
+    }
+
+    /// [`ApprovalStore::approve_plain_as`], noting what the approving app's card worded in its own
+    /// way (`understands`, GitHub #674's review).
+    pub fn approve_plain_understanding(
+        &self,
+        id: &str,
+        by: &Principal,
+        now_ms: u64,
+        own_ok: bool,
+        understands: &[String],
+    ) -> Result<ApprovalRequest, ApprovalError> {
         let mut requests = self.lock();
         self.sweep_and_save(&mut requests, now_ms);
         let stored = requests.get_mut(id).ok_or(ApprovalError::NotFound)?;
@@ -539,6 +554,13 @@ impl ApprovalStore {
             Principal::Owner { device_id } | Principal::Device { device_id } => device_id.clone(),
             other => other.kind().to_string(),
         });
+        stored.request.decided_by_kind = Some(by.kind().to_string());
+        stored.request.decided_understanding = understands
+            .iter()
+            .filter(|word| word.len() <= 40)
+            .take(8)
+            .cloned()
+            .collect();
         stored.request.expires_at_ms = now_ms + APPROVED_TTL_MS;
         let approved = stored.request.clone();
         self.save(&requests);

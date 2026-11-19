@@ -152,7 +152,9 @@ pub(crate) fn approve_plain(
             rpc(
                 transport,
                 "/api/approveApprovalRequest",
-                json!({ "id": request.id }),
+                // This app words a server link's ask as one (CDXC:ServerLinks 2026-11-19 in
+                // server/src/remote_access/server_links.rs `link_approval`).
+                json!({ "id": request.id, "understands": [ghostex_gx_protocol::approval::UNDERSTANDS_SERVER_LINK] }),
             )
         })
         .map(|_| ())

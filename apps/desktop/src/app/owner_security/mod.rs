@@ -1315,7 +1315,7 @@ fn approve_with_shared_key_session(
     let approved = rpc(
         transport,
         "/api/approveApprovalRequest",
-        json!({ "id": request.id }),
+        json!({ "id": request.id, "understands": [ghostex_gx_protocol::approval::UNDERSTANDS_SERVER_LINK] }),
     );
     drop(held);
     approved.map_err(|(_, message)| message)?;
@@ -2049,7 +2049,7 @@ pub(crate) fn approve_request(
         rpc(
             transport,
             "/api/approveApprovalRequest",
-            json!({ "id": request.id, "keyId": key_id, "signature": signature }),
+            json!({ "id": request.id, "keyId": key_id, "signature": signature, "understands": [ghostex_gx_protocol::approval::UNDERSTANDS_SERVER_LINK] }),
         )
         .map(|_| ())
         .map_err(|(_, message)| message)

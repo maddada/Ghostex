@@ -271,7 +271,20 @@ pub struct ApprovalRequest {
     /// never send it, and older apps ignore it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replaced_by: Option<String>,
+    /// What kind of caller decided it (`owner`, `device`, `localAgent`, …), beside `decided_by`
+    /// (a device id for the owner's own devices). gxserver from 11.11 only; older apps ignore it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decided_by_kind: Option<String>,
+    /// What the app that approved said its card shows in its own words ([`UNDERSTANDS_SERVER_LINK`]).
+    /// An app that sent nothing showed gxserver's older wording.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub decided_understanding: Vec<String>,
 }
+
+/// An app that words a server link's ask as one ("Let B link its agents with A?") says so when it
+/// approves (`understands` on [`ApproveApprovalParams`]); gxserver lets a server link in only then
+/// (review of GitHub #674: an older app words it as a plain connection).
+pub const UNDERSTANDS_SERVER_LINK: &str = "serverLink";
 
 /// What a client hears for an id gxserver doesn't have (never had, or decided over 30 minutes ago).
 pub const GONE_MESSAGE: &str = "This request expired.";
@@ -326,6 +339,10 @@ pub struct ApproveApprovalParams {
     /// The signature over [`approval_signing_payload`], base64 standard with padding.
     #[serde(default)]
     pub signature: String,
+    /// What the approving app's card words in its own way ([`UNDERSTANDS_SERVER_LINK`]). Older
+    /// gxservers ignore it; older apps don't send it.
+    #[serde(default)]
+    pub understands: Vec<String>,
 }
 
 /// `/api/denyApprovalRequest`.

@@ -121,6 +121,8 @@ fn policy_approval(
         decided_at_ms: Some(now_ms),
         decided_by: Some("policy".to_string()),
         replaced_by: None,
+        decided_by_kind: Some("policy".to_string()),
+        decided_understanding: Vec::new(),
     }
 }
 
