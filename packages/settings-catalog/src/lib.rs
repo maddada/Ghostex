@@ -289,6 +289,35 @@ pub fn migrate_experimental_features_switch(
     true
 }
 
+/// The secret-folder entries that keep agents out of the CLIProxyAPI hub profiles' key files, added
+/// to the defaults with the hub (`homeSecretFolders`).
+pub const HUB_SECRET_FOLDERS: &[&str] = &[
+    "~/.claude-profiles/ghostex-*/.ghostex-hub-key",
+    "~/.codex-profiles/ghostex-*/config.toml",
+];
+
+/// Adds [`HUB_SECRET_FOLDERS`] to a saved `homeSecretFolders` list that lacks them. Returns whether
+/// it changed anything. The desktop runs it once, behind a marker file, so an entry the user
+/// removes later stays removed.
+///
+/// CDXC:Chief 2026-11-19 WHY: the settings file stores every default, so almost everyone's file holds the list as it was before the hub entries existed and the new defaults would never reach them (re-review of the hub work).
+pub fn add_hub_secret_folders(settings: &mut serde_json::Map<String, serde_json::Value>) -> bool {
+    let Some(list) = settings
+        .get_mut("homeSecretFolders")
+        .and_then(serde_json::Value::as_array_mut)
+    else {
+        return false;
+    };
+    let mut changed = false;
+    for entry in HUB_SECRET_FOLDERS {
+        if !list.iter().any(|saved| saved.as_str() == Some(*entry)) {
+            list.push(serde_json::Value::String((*entry).to_string()));
+            changed = true;
+        }
+    }
+    changed
+}
+
 /// Writes `workAreaFrame` false into the settings of someone who already had a settings file when the
 /// frame became on by default, so their work area keeps the edge-to-edge look it had. Returns whether it
 /// changed anything; a saved choice (either way) is left alone.

@@ -141,6 +141,10 @@ impl GhostexPaths {
         self.state_dir.join("work-area-frame-default-migrated")
     }
 
+    pub fn hub_secret_folders_marker_file(&self) -> PathBuf {
+        self.state_dir.join("hub-secret-folders-added")
+    }
+
     pub fn gxserver_config_dir(&self) -> PathBuf {
         self.config_dir.join("gxserver")
     }

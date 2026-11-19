@@ -42,20 +42,13 @@ pub(crate) fn home_secret_folders() -> Vec<String> {
 }
 
 /// The usable entries: `~/`-relative or absolute, without a trailing separator, once each. A `*`
-/// in an entry's folder names matches any name at that level and is expanded to what is on disk
-/// now, since a Codex permission profile takes plain paths.
+/// stays as written: Claude's deny rules take it as a pattern, and Codex gets it expanded
+/// ([`codex_paths`]).
 fn folders_in<'a>(entries: impl Iterator<Item = &'a str>) -> Vec<String> {
     let mut folders: Vec<String> = Vec::new();
     for folder in entries
         .map(|folder| folder.trim().trim_end_matches(['/', '\\']).to_string())
         .filter(|folder| folder.starts_with("~/") || std::path::Path::new(folder).is_absolute())
-        .flat_map(|folder| {
-            if folder.contains('*') {
-                expand_star(&folder)
-            } else {
-                vec![folder]
-            }
-        })
     {
         if !folders.contains(&folder) {
             folders.push(folder);
@@ -64,10 +57,48 @@ fn folders_in<'a>(entries: impl Iterator<Item = &'a str>) -> Vec<String> {
     folders
 }
 
-/// `pattern` with each `*` segment (`ghostex-*`: any name starting and ending as written) replaced
-/// by the names on disk that match it, keeping a leading `~/`.
+/// `folders` as the plain paths a Codex permission profile takes: each entry with a `*` replaced by
+/// the paths on disk it matches now.
+fn codex_paths(folders: &[String]) -> Vec<String> {
+    let mut paths: Vec<String> = Vec::new();
+    for path in folders.iter().flat_map(|folder| {
+        if folder.contains('*') {
+            expand_star(folder)
+        } else {
+            vec![folder.clone()]
+        }
+    }) {
+        if !paths.contains(&path) {
+            paths.push(path);
+        }
+    }
+    paths
+}
+
+/// Whether `name` matches `pattern`, where each `*` stands for any run of characters (none too).
+fn star_match(pattern: &str, name: &str) -> bool {
+    let parts: Vec<&str> = pattern.split('*').collect();
+    let (first, last) = (parts[0], parts[parts.len() - 1]);
+    if parts.len() == 1 {
+        return name == pattern;
+    }
+    if name.len() < first.len() + last.len() || !name.starts_with(first) || !name.ends_with(last) {
+        return false;
+    }
+    let mut rest = &name[first.len()..name.len() - last.len()];
+    for middle in &parts[1..parts.len() - 1] {
+        match rest.find(middle) {
+            Some(at) => rest = &rest[at + middle.len()..],
+            None => return false,
+        }
+    }
+    true
+}
+
+/// `pattern` with each segment holding a `*` (`ghostex-*`) replaced by the names on disk that
+/// match it, keeping a leading `~/`.
 ///
-/// CDXC:Chief 2026-11-19 WHY: the CLIProxyAPI hub profile folders (`~/.claude-profiles/ghostex-<hub>`, `~/.codex-profiles/ghostex-<hub>`) hold a hub's client key in a file of their own, so the default list names them with `ghostex-*` (security review of the hub work); the other profiles there are Claude Swap's and Codex Swap's, which their own sessions use, so the whole folders stay open.
+/// CDXC:Chief 2026-11-19 WHY: the CLIProxyAPI hub profile folders (`~/.claude-profiles/ghostex-<hub>`, `~/.codex-profiles/ghostex-<hub>`) hold a hub's client key in a file of their own, so the default list names them with `ghostex-*` (security review of the hub work): Claude's deny rules take the pattern as written, a Codex profile gets the paths it matches at launch; the other profiles there are Claude Swap's and Codex Swap's, which their own sessions use, so the whole folders stay open.
 fn expand_star(pattern: &str) -> Vec<String> {
     let (home, rest) = match pattern.strip_prefix("~/") {
         Some(rest) => match crate::accounts::launch::home() {
@@ -83,17 +114,14 @@ fn expand_star(pattern: &str) -> Vec<String> {
     {
         let mut next = Vec::new();
         for prefix in &found {
-            if let Some((start, end)) = segment.split_once('*') {
+            if segment.contains('*') {
                 let base = match &home {
                     Some(home) => home.join(prefix),
                     None => std::path::PathBuf::from(format!("/{prefix}")),
                 };
                 for entry in std::fs::read_dir(&base).into_iter().flatten().flatten() {
                     let name = entry.file_name().to_string_lossy().into_owned();
-                    if name.len() >= start.len() + end.len()
-                        && name.starts_with(start)
-                        && name.ends_with(end)
-                    {
+                    if star_match(segment, &name) {
                         next.push(join(prefix, &name));
                     }
                 }
@@ -300,7 +328,7 @@ fn toml_string(value: &str) -> String {
 /// workspace profile with the denies added.
 fn with_codex_denies(command: &str, folders: &[String]) -> String {
     let bypass = codex_bypass(command);
-    let denies: Vec<String> = folders
+    let denies: Vec<String> = codex_paths(folders)
         .iter()
         .map(|folder| format!("{}=\"deny\"", toml_string(folder)))
         .collect();
@@ -431,7 +459,7 @@ pub(crate) fn with_api_chat_sandbox(
                 filesystem.push(format!("{}=\"write\"", toml_string(cwd)));
             }
             filesystem.extend(
-                folders
+                codex_paths(&folders)
                     .iter()
                     .map(|folder| format!("{}=\"deny\"", toml_string(folder))),
             );
