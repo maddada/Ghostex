@@ -200,6 +200,7 @@ windows-sys = { version = "0.61", features = [
     # The attach control pipe of a Windows terminal viewer (terminal_model/zmx_control.rs).
     "Win32_System_Pipes",
     "Win32_System_Registry",
+    "Win32_System_SystemInformation",
     "Win32_System_Threading",
     # The native Settings colour swatch opens the system colour dialog (ChooseColorW), as the React `<input type="color">` did through CEF.
     "Win32_UI_Controls_Dialogs",
