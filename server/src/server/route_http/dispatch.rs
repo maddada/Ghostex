@@ -486,6 +486,8 @@ pub(in crate::server) async fn route_http(
     } else {
         json!({})
     };
+    let mut body_json = body_json;
+    drop_unrelayed_user_send(&caller, &parts.headers, &mut body_json);
 
     if endpoint.requires_protocol_version && token_extension_id.is_none() {
         let protocol_version = read_protocol_version(&parts.headers, &parts.uri, Some(&body_json));
@@ -723,6 +725,26 @@ pub(in crate::server) async fn route_http(
             Some(request_id),
         ),
     )
+}
+
+/// Drops `params.userSend` from a connected computer's request unless it carries the header only
+/// an up-to-date relay sets (`RELAYED_USER_SEND_HEADER`, session_chat_send/sender_mark.rs), so an
+/// older sending computer cannot pass an agent's own mark on as the user's.
+pub(in crate::server) fn drop_unrelayed_user_send(
+    caller: &Principal,
+    headers: &axum::http::HeaderMap,
+    body: &mut Value,
+) {
+    if !matches!(caller, Principal::Peer { .. })
+        || headers
+            .get(crate::session_chat_send::sender_mark::RELAYED_USER_SEND_HEADER)
+            .is_some_and(|value| value.as_bytes() == b"1")
+    {
+        return;
+    }
+    if let Some(params) = body.get_mut("params").and_then(Value::as_object_mut) {
+        params.remove(crate::session_chat_send::sender_mark::RELAYED_USER_SEND);
+    }
 }
 
 /*

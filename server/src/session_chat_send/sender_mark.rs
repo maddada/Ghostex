@@ -420,13 +420,30 @@ pub(crate) const RELAYED_USER_SEND: &str = "userSend";
 /// instead, cannot set it either).
 pub(crate) fn mark_relayed_send(caller: &Principal, params: &mut Map<String, Value>) {
     params.remove(RELAYED_USER_SEND);
-    if matches!(
-        caller,
-        Principal::Owner { .. } | Principal::Device { .. } | Principal::LocalAgent
-    ) {
+    if is_users_caller(caller) {
         params.insert(RELAYED_USER_SEND.to_string(), Value::Bool(true));
     }
 }
+
+/// Whether `caller` is one of the user's own (the owner session, a paired phone, the token file).
+pub(crate) fn is_users_caller(caller: &Principal) -> bool {
+    matches!(
+        caller,
+        Principal::Owner { .. } | Principal::Device { .. } | Principal::LocalAgent
+    )
+}
+
+/// The header this computer's relay sends with a message one of the user's own callers sent to
+/// another computer (connected_computers/relay.rs `forward`). The receiving computer honours a
+/// peer's `userSend` only with it (route_http/dispatch.rs `drop_unrelayed_user_send`).
+///
+/// CDXC:Security 2026-11-20 FIX:
+/// Fable's re-review found an older Ghostex (11.10.0 and 11.11.x) on the sending computer passes a
+/// relayed body on as it came, so an agent there could put `userSend: true` in its own message and
+/// the updated computer would take it for the user's. Those relays send only authorization, the
+/// request id, the content type and the protocol version, so a caller cannot add this header
+/// through them; only a relay that strips and sets the mark itself sends it.
+pub(crate) const RELAYED_USER_SEND_HEADER: &str = "x-ghostex-relayed-user-send";
 
 #[cfg(test)]
 mod tests {
