@@ -187,7 +187,10 @@ pub(crate) fn stdin_title_generation_command(agent: &str, command: &str) -> Opti
         "claude" => {
             let command = one_shot_text_job_command(command, "claude");
             // CDXC:SessionTitles 2026-10-08 DECISION: User: "I want you to switch from haiku 4.5 to 5.5 for anything we used haiku for in this app (auto title etc)". The explicit id keeps an older CLI, whose `haiku` alias still means 4.5, from titling with 4.5.
-            format!("{command} -p --permission-mode dontAsk --model claude-haiku-5-5 --effort low")
+            // `--no-session-persistence`: like Codex's `--ephemeral`, no transcript is written, so
+            // the job never comes back as a sidebar session (`external_sessions` imports Claude
+            // transcripts by their folder).
+            format!("{command} -p --permission-mode dontAsk --model claude-haiku-5-5 --effort low --no-session-persistence")
         }
         "empryo" => {
             format!("{command} --headless --quiet --no-genome --marionette-mode none --max-steps 1")

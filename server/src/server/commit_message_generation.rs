@@ -696,7 +696,7 @@ pub(crate) fn build_commit_message_generation_shell_command(
             let command = one_shot_text_job_command(&agent.command, "claude");
             (
                 format!(
-                    "{command} --permission-mode dontAsk --model claude-sonnet-5-5 --effort medium -p"
+                    "{command} --permission-mode dontAsk --model claude-sonnet-5-5 --effort medium --no-session-persistence -p"
                 ),
                 stdin,
             )
