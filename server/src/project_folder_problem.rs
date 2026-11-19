@@ -101,13 +101,68 @@ fn path_problem_for(path: &str, fresh: bool) -> Option<Value> {
     value
 }
 
-/// The project's `pathProblem`: why its folder is missing, or `None` while it is there.
-pub(crate) fn published_path_problem(project: &Value) -> Option<Value> {
-    match project_path_state(project) {
-        ProjectPathState::Missing | ProjectPathState::NotDirectory => {
-            path_problem_for(project_path(project)?, false)
+/// The project's `pathState` and `pathProblem` as published to clients.
+///
+/// CDXC:Projects 2026-11-20 DECISION: Security review follow-up, approved: building the project
+/// list reads a project's folder under the same mount-table rule as the folder watch
+/// (project_folder_mounts.rs), so a dead network share can't slow it and a sleeping disk isn't
+/// woken by every client that connects. A folder on the startup disk is read; one on another
+/// local disk is read only while it is marked missing; one on a network share never. A folder that
+/// isn't read is published as the watch last saw it, and as there (`available`) before the watch
+/// has seen it; a terminal or a new session refused for a missing folder has it read at once
+/// (`recheck_project_folder`), so its mark still comes.
+pub(crate) fn published_path_state(project: &Value) -> (ProjectPathState, Option<Value>) {
+    let Some(path) = project_path(project) else {
+        return (ProjectPathState::Unavailable, None);
+    };
+    let last = project
+        .get("projectId")
+        .and_then(Value::as_str)
+        .and_then(|project_id| {
+            published()
+                .lock()
+                .ok()
+                .and_then(|published| published.get(project_id).cloned())
+        });
+    let last_state = last
+        .as_ref()
+        .and_then(|last| last["state"].as_str())
+        .map(path_state_from_str);
+    let read = match crate::project_folder_mounts::watch_read(
+        path,
+        crate::project_folder_mounts::mounts().as_deref(),
+    ) {
+        WatchRead::Read => true,
+        WatchRead::WhileMissing => {
+            last_state.is_some_and(|state| state != ProjectPathState::Available)
         }
+        WatchRead::Never => false,
+    };
+    if !read {
+        return match (last_state, last) {
+            (Some(state), Some(last)) => (
+                state,
+                last.get("problem")
+                    .filter(|problem| !problem.is_null())
+                    .cloned(),
+            ),
+            _ => (ProjectPathState::Available, None),
+        };
+    }
+    let state = project_path_state(project);
+    let problem = match state {
+        ProjectPathState::Missing | ProjectPathState::NotDirectory => path_problem_for(path, false),
         _ => None,
+    };
+    (state, problem)
+}
+
+fn path_state_from_str(state: &str) -> ProjectPathState {
+    match state {
+        "available" => ProjectPathState::Available,
+        "missing" => ProjectPathState::Missing,
+        "notDirectory" => ProjectPathState::NotDirectory,
+        _ => ProjectPathState::Unavailable,
     }
 }
 
