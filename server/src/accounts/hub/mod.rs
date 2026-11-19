@@ -20,7 +20,6 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
-use rand::Rng;
 use serde_json::{json, Map, Value};
 
 use super::model::{Provider, UsageWindow};
@@ -402,6 +401,13 @@ fn io_error(error: std::io::Error) -> DomainStateError {
     super::store::error(error)
 }
 
+/// A hub's id from its address, so a hub removed and added again at the same address gets its id
+/// back, and with it its profile folders and the sessions that ran there.
+fn hub_id_for(url: &str) -> String {
+    use sha2::{Digest, Sha256};
+    format!("hub-{}", &hex::encode(Sha256::digest(url.as_bytes()))[..12])
+}
+
 /// Checks a management key against the hub before it is saved.
 fn check_management_key(url: &str, key: &str) -> Result<(), DomainStateError> {
     client::auth_files(url, key)
@@ -452,10 +458,8 @@ pub(crate) fn handle(
             if let Some(key) = management_key {
                 check_management_key(&url, key)?;
             }
-            let mut bytes = [0u8; 6];
-            rand::rng().fill_bytes(&mut bytes);
             let hub = store::Hub {
-                id: format!("hub-{}", hex::encode(bytes)),
+                id: hub_id_for(&url),
                 label: label.unwrap_or_default(),
                 url,
                 client_key: seal(paths, client_key)?,
@@ -467,10 +471,18 @@ pub(crate) fn handle(
             };
             let _lock = store::lock();
             let mut hubs = store::read(paths).map_err(io_error)?;
+            if hubs
+                .iter()
+                .any(|saved| saved.id == hub.id || saved.url == hub.url)
+            {
+                return Err(DomainStateError::bad_request(
+                    "That hub is already added. Edit it to change its keys or name.",
+                ));
+            }
             hubs.push(hub);
             store::write(paths, &hubs).map_err(io_error)?;
         }
-        "hubUpdate" | "hubRemove" => {
+        "hubRemove" => {
             let id = text_param(params, "hubId")
                 .ok_or_else(|| DomainStateError::bad_request("hubId is required"))?
                 .to_string();
@@ -480,57 +492,78 @@ pub(crate) fn handle(
                 .iter()
                 .position(|hub| hub.id == id)
                 .ok_or_else(|| DomainStateError::not_found("That hub was already removed."))?;
-            if operation == "hubRemove" {
-                hubs.remove(index);
-                store::write(paths, &hubs).map_err(io_error)?;
-                forget_reading(&id);
-                usage_reads::forget(&id);
-                launch::forget_key(paths.agent_config_home_dir(), &id);
-                return Ok(true);
-            }
-            let hub = &mut hubs[index];
+            hubs.remove(index);
+            store::write(paths, &hubs).map_err(io_error)?;
+            forget_reading(&id);
+            usage_reads::forget(&id);
+            launch::forget_key(paths.agent_config_home_dir(), &id);
+        }
+        "hubUpdate" => {
+            let id = text_param(params, "hubId")
+                .ok_or_else(|| DomainStateError::bad_request("hubId is required"))?
+                .to_string();
+            let removed = || DomainStateError::not_found("That hub was already removed.");
+            // The keys are checked against the hub without holding the hubs lock, which every
+            // read of the accounts list waits on; the change is applied to the file as it is then.
+            let current = {
+                let _lock = store::lock();
+                store::read(paths)
+                    .map_err(io_error)?
+                    .into_iter()
+                    .find(|hub| hub.id == id)
+                    .ok_or_else(removed)?
+            };
             let url = match text_param(params, "url") {
                 Some(url) => normalize_url(url)?,
-                None => hub.url.clone(),
+                None => current.url.clone(),
             };
-            let client_key = match text_param(params, "clientKey") {
-                Some(key) => Some(key.to_string()),
-                None if url != hub.url => Some(
-                    store::open_key(paths, &hub.client_key)
-                        .map_err(DomainStateError::bad_request)?,
-                ),
-                None => None,
-            };
+            let client_key = text_param(params, "clientKey").map(str::to_string);
+            let management_key = text_param(params, "managementKey").map(str::to_string);
+            let clear_management_key =
+                params.get("clearManagementKey").and_then(Value::as_bool) == Some(true);
+            // CDXC:AgentProviders 2026-11-19 WHY: saved keys are never sent to a new address (security review of the hub work): a hub that moves is given its keys again, so a typo or a look-alike host can't collect them.
+            if url != current.url
+                && (client_key.is_none()
+                    || (!current.management_key.is_empty()
+                        && management_key.is_none()
+                        && !clear_management_key))
+            {
+                return Err(DomainStateError::bad_request(
+                    if current.management_key.is_empty() {
+                        "A new address needs the hub's client key again. Enter it with the address."
+                    } else {
+                        "A new address needs the hub's keys again. Enter its client key and management key with the address, or remove the management key."
+                    },
+                ));
+            }
             if let Some(key) = &client_key {
                 client::check_client_key(&url, key).map_err(DomainStateError::bad_request)?;
             }
-            let clear_management_key =
-                params.get("clearManagementKey").and_then(Value::as_bool) == Some(true);
-            let management_key = match text_param(params, "managementKey") {
-                Some(key) => Some(key.to_string()),
-                None if url != hub.url
-                    && !hub.management_key.is_empty()
-                    && !clear_management_key =>
-                {
-                    Some(
-                        store::open_key(paths, &hub.management_key)
-                            .map_err(DomainStateError::bad_request)?,
-                    )
-                }
-                None => None,
-            };
             if let Some(key) = &management_key {
                 check_management_key(&url, key)?;
+            }
+            let client_key = client_key.map(|key| seal(paths, &key)).transpose()?;
+            let management_key = management_key.map(|key| seal(paths, &key)).transpose()?;
+            let _lock = store::lock();
+            let mut hubs = store::read(paths).map_err(io_error)?;
+            let hub = hubs
+                .iter_mut()
+                .find(|hub| hub.id == id)
+                .ok_or_else(removed)?;
+            if hub.url != current.url {
+                return Err(DomainStateError::bad_request(
+                    "The hub changed while this was being saved. Try again.",
+                ));
             }
             if let Some(label) = label {
                 hub.label = label;
             }
             hub.url = url;
             if let Some(key) = client_key {
-                hub.client_key = seal(paths, &key)?;
+                hub.client_key = key;
             }
             if let Some(key) = management_key {
-                hub.management_key = seal(paths, &key)?;
+                hub.management_key = key;
             } else if clear_management_key {
                 hub.management_key.clear();
             }
