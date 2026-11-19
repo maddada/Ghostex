@@ -798,18 +798,14 @@ fn collect_edits(
                 // A command keeps its code look: the span, backticks and all, becomes the text of a
                 // link the renderers draw as the span with its Copy and Paste in terminal buttons
                 // (`run_command.rs`).
-                if let Some(command) = commands
-                    .then(|| crate::transcript::run_command::inline_command(&code.value))
+                if let Some(href) = commands
+                    .then(|| crate::transcript::run_command::inline_command_href(&code.value))
                     .flatten()
                 {
                     edits.push(Edit {
                         start,
                         end,
-                        text: format!(
-                            "[{}]({})",
-                            &markdown[start..end],
-                            crate::transcript::run_command::command_href(&command)
-                        ),
+                        text: format!("[{}]({href})", &markdown[start..end]),
                     });
                 }
                 continue;

@@ -9,7 +9,9 @@
 //! (apps/desktop/src/app/session_chat/run_in_terminal.rs).
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
-use ghostex_gx_chat_core::transcript::run_command::{RUN_COMMAND_HREF_PREFIX, command_from_href};
+use ghostex_gx_chat_core::transcript::run_command::{
+    RUN_COMMAND_HREF_PREFIX, command_from_href, encoded_command,
+};
 use gpui::{AnyElement, ClipboardItem, WeakEntity, px};
 use gpui_component::text::{InlineLink, InlineLinkAction, InlineLinkBar, InlineLinkFrame};
 use serde_json::json;
@@ -55,7 +57,7 @@ pub(super) fn inline_presentation(
     p: &ChatAppearance,
 ) -> Option<InlineLink> {
     command_from_href(href)?;
-    let encoded = href.strip_prefix(RUN_COMMAND_HREF_PREFIX)?;
+    let encoded = encoded_command(href)?;
     let code = super::markdown_style::inline_code(p);
     Some(InlineLink {
         label: label.to_owned().into(),
@@ -83,6 +85,10 @@ pub(super) fn inline_presentation(
             },
         ],
         hover_bar: Some(hover_bar_look(p)),
+        // A command wider than its line (the floating ask panel is narrow) is cut at its start,
+        // so the end of it, where its distinct flags are, stays in sight; Copy and Paste in
+        // terminal still take it whole.
+        truncate_start: true,
         ..Default::default()
     })
 }
@@ -131,5 +137,5 @@ pub(super) fn handle_link_press(
         }
         return true;
     }
-    href.starts_with(RUN_COMMAND_HREF_PREFIX)
+    encoded_command(href).is_some()
 }

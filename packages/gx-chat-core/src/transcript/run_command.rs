@@ -11,6 +11,19 @@
 
 /// The scheme an inline command span's link carries: the command, percent-encoded, follows it.
 pub const RUN_COMMAND_HREF_PREFIX: &str = "ghostex-run:";
+/// The scheme of a span that is a command only by its shape (`CommandKind::Shape`): drawn with the
+/// same Copy and Paste in terminal, but never counted as the reply's one command for a Run
+/// (the phone's message menu, `runCommands.ts`). A renderer that does not know it shows a plain
+/// link and never a command it would type.
+pub const SHAPE_COMMAND_HREF_PREFIX: &str = "ghostex-run-shape:";
+
+/// Why a span counts as a command: a known program (or a span the author marked with `! ` or
+/// `$ `), or only the shape of its command line (an unknown program with a flag or a path).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CommandKind {
+    Known,
+    Shape,
+}
 
 /// Fence languages whose body is a shell session or script.
 const SHELL_LANGUAGES: [&str; 8] = [
@@ -234,24 +247,41 @@ pub fn fence_command(language: &str, code: &str) -> Option<String> {
     if first.starts_with("$ ") {
         return Some(console_commands(body));
     }
-    // An untagged fence of one line is the inline rule's to judge.
+    // An untagged fence of one line is the inline rule's to judge, and runs (Enter included) only
+    // for a program it knows: a command by its shape alone is left for the reader to type.
     if body.lines().count() == 1 {
-        return inline_command(body);
+        return inline_command_kind(body)
+            .filter(|(_, kind)| *kind == CommandKind::Known)
+            .map(|(command, _)| command);
     }
     None
 }
 
 /// The command an inline code span runs, when the span holds one.
 pub fn inline_command(code: &str) -> Option<String> {
+    inline_command_kind(code).map(|(command, _)| command)
+}
+
+/// The command an inline code span runs, and why it counts.
+pub fn inline_command_kind(code: &str) -> Option<(String, CommandKind)> {
     let code = code.trim();
     if code.is_empty() || code.contains(['\n', '\r']) {
         return None;
     }
     if let Some(rest) = code.strip_prefix("! ").or_else(|| code.strip_prefix("$ ")) {
         let rest = rest.trim();
-        return (!rest.is_empty()).then(|| rest.to_owned());
+        return (!rest.is_empty()).then(|| (rest.to_owned(), CommandKind::Known));
     }
-    is_command_line(code).then(|| code.to_owned())
+    command_line_kind(code).map(|kind| (code.to_owned(), kind))
+}
+
+/// The link an inline code span holding a command becomes, under the scheme its kind takes.
+pub fn inline_command_href(code: &str) -> Option<String> {
+    let (command, kind) = inline_command_kind(code)?;
+    Some(match kind {
+        CommandKind::Known => command_href(&command),
+        CommandKind::Shape => format!("{SHAPE_COMMAND_HREF_PREFIX}{}", encode_command(&command)),
+    })
 }
 
 /// A command as it travels inside the marked Markdown: percent-encoded, so it holds no space,
@@ -297,8 +327,13 @@ pub fn command_href(command: &str) -> String {
 /// one-line commands there (`inline_command`), so one holding a line break or other control
 /// character is not the core's and is refused.
 pub fn command_from_href(href: &str) -> Option<String> {
-    decode_command(href.strip_prefix(RUN_COMMAND_HREF_PREFIX)?)
-        .filter(|command| !command.chars().any(char::is_control))
+    decode_command(encoded_command(href)?).filter(|command| !command.chars().any(char::is_control))
+}
+
+/// The percent-encoded command a run link carries, under either scheme.
+pub fn encoded_command(href: &str) -> Option<&str> {
+    href.strip_prefix(RUN_COMMAND_HREF_PREFIX)
+        .or_else(|| href.strip_prefix(SHAPE_COMMAND_HREF_PREFIX))
 }
 
 /// The block as typed, without the `!` the agent's own shell prefix needs on its first line.
@@ -351,7 +386,24 @@ fn is_command_name(word: &str) -> bool {
 }
 
 /// One of the commands an agent tells a user to type: a known command with at least one argument,
-/// or a `&&` chain whose every step starts with a command name.
+/// or a `&&` chain whose every step starts with a command name (`Known`), or an unknown program
+/// written as a command line (`Shape`, `is_unknown_program_line`).
+fn command_line_kind(code: &str) -> Option<CommandKind> {
+    if is_command_line(code) {
+        return Some(CommandKind::Known);
+    }
+    let words: Vec<&str> = code.split_whitespace().collect();
+    let start = words.iter().position(|word| !is_assignment(word))?;
+    let words = &words[start..];
+    let generic = code.as_bytes().windows(2).any(|pair| {
+        matches!(pair[1], b'<' | b'>') && !matches!(pair[0], b' ' | b'>' | b'2' | b'&')
+    });
+    if code.contains(['(', ')', '{', '}']) || generic || COMMAND_WORDS.contains(&words[0]) {
+        return None;
+    }
+    is_unknown_program_line(words[0], &words[1..]).then_some(CommandKind::Shape)
+}
+
 fn is_command_line(code: &str) -> bool {
     let words: Vec<&str> = code.split_whitespace().collect();
     let Some(start) = words.iter().position(|word| !is_assignment(word)) else {
@@ -374,9 +426,6 @@ fn is_command_line(code: &str) -> bool {
     if COMMAND_WORDS.contains(first) {
         return words.len() >= 2 && command_arguments_fit(first, &words[1..]);
     }
-    if is_unknown_program_line(first, &words[1..]) {
-        return true;
-    }
     let steps: Vec<&str> = code.split("&&").map(str::trim).collect();
     steps.len() >= 2
         && words.len() >= 2
@@ -389,50 +438,87 @@ fn is_command_line(code: &str) -> bool {
 }
 
 /// A program the list above does not know, written the way a command line is: a command name
-/// followed by a flag (`-config`, `--help`) or a path from the root, home or here (`/etc/x`,
-/// `~/.config/x`, `./x`), or a path to an executable (`~/.local/opt/hub/cli-proxy-api`,
-/// `./run.sh`) with any argument. Plain words, one name, a path alone and prose stay code.
+/// followed by a flag (`-config`, `--help`) or a path from the root or home (`/etc/x`,
+/// `~/.config/x`), or a path to an executable (`~/.local/opt/hub/cli-proxy-api`, `./run.sh`)
+/// followed by a flag or such a path, or by anything for one run from here (`./run.sh build`).
+/// Plain words, one name, a path alone, a slash command (`/model opus`), a file (`main.rs --help`),
+/// a path with spaces in it, code and prose stay code.
 ///
 /// CDXC:SessionChat 2026-11-19 DECISION:
 /// User, of an ask whose `cli-proxy-api -config ~/.config/cliproxyapi/config.yaml -claude-login`
 /// had no Copy or Paste in terminal: "why dont we show the copy and the send to terminal buttons on
 /// these commands here". A command line is recognised by its shape as well as by the known
-/// programs, wherever the chat offers command buttons (replies, asks, the floating ask panel).
+/// programs, wherever the chat offers command buttons (replies, asks, the floating ask panel). Such
+/// a span gets Copy and Paste in terminal only: it never makes a fence's Run, and the phone's
+/// message menu does not count it as the reply's one command (`SHAPE_COMMAND_HREF_PREFIX`).
 fn is_unknown_program_line(first: &str, arguments: &[&str]) -> bool {
     if arguments.is_empty() {
         return false;
     }
-    let is_flag = |word: &&str| {
+    // `-config`, `--help`; not `-1` or a class name's `-top-2`, `-mt-4`.
+    let is_flag = |word: &str| {
         let name = word.trim_start_matches('-');
         word.starts_with('-')
             && word.len() - name.len() <= 2
             && name.as_bytes().first().is_some_and(u8::is_ascii_alphabetic)
+            && !name
+                .rsplit('-')
+                .next()
+                .is_some_and(|last| last.bytes().all(|byte| byte.is_ascii_digit()))
     };
-    let is_rooted_path = |word: &&str| {
+    let is_rooted_path = |word: &str| {
         let word = word.trim_matches(['"', '\'']);
-        ["/", "~/", "./", "../"]
-            .iter()
-            .any(|start| word.starts_with(start) && word.len() > start.len())
-            || word == "~"
+        word == "~"
+            || word.strip_prefix("~/").is_some_and(|rest| !rest.is_empty())
+            || word
+                .strip_prefix('/')
+                .is_some_and(|rest| !rest.is_empty() && !rest.starts_with('/'))
     };
-    if ["/", "~/", "./", "../"]
-        .iter()
-        .any(|start| first.starts_with(start))
+    let fits = |word: &&str| is_flag(word) || is_rooted_path(word);
+    if let Some(start) = ["./", "../", "~/", "/"]
+        .into_iter()
+        .find(|start| first.starts_with(start))
     {
-        // A path to an executable: its last part a command name, a script's extension at most.
+        // From the root, a second part at least: `/model opus` is a slash command.
+        if start == "/" && !first[1..].contains('/') {
+            return false;
+        }
+        // A later word with a `/` that is neither a flag nor a rooted path is the rest of a path
+        // with spaces in it (`~/Documents/my notes/todo.md`).
+        if arguments
+            .iter()
+            .any(|word| word.contains('/') && !fits(word))
+        {
+            return false;
+        }
+        // Its last part a command name, a script's extension at most.
         let name = first.rsplit('/').next().unwrap_or_default();
-        let script = name
-            .rsplit_once('.')
-            .is_none_or(|(_, extension)| {
-                matches!(extension, "sh" | "bash" | "zsh" | "py" | "js" | "mjs" | "rb" | "pl")
-            });
-        return name.len() >= 2 && is_command_name(name) && script;
+        let script = name.rsplit_once('.').is_none_or(|(_, extension)| {
+            matches!(
+                extension,
+                "sh" | "bash" | "zsh" | "py" | "js" | "mjs" | "rb" | "pl"
+            )
+        });
+        // From the root or home, a flag or a rooted path must follow (`/etc/hosts file`,
+        // `/Users/me/my project` are paths); from here, any argument.
+        let arguments_fit = start.starts_with('.') || arguments.iter().any(fits);
+        return name.len() >= 2 && is_command_name(name) && script && arguments_fit;
     }
     first.len() >= 2
         && is_command_name(first)
-        && !first.contains('/')
-        && arguments.iter().any(|word| is_flag(word) || is_rooted_path(word))
+        && !first.contains(['/', '.'])
+        && !NOT_PROGRAMS.contains(&first)
+        && arguments.iter().any(fits)
 }
+
+/// First words that are a language's keyword or an English word, never a program an agent asks
+/// the user to run (`import x from ~/y`, `see /etc/hosts`).
+const NOT_PROGRAMS: &[&str] = &[
+    "a", "an", "and", "as", "at", "by", "class", "const", "def", "else", "fetch", "fn", "for",
+    "from", "function", "if", "import", "in", "include", "is", "let", "mod", "not", "of", "on",
+    "or", "pub", "relative", "absolute", "require", "return", "root", "see", "the", "then", "to",
+    "type", "use", "var", "when", "where", "with",
+];
 
 /// Arguments that keep an English phrase written as code (`source code`, `open questions`) from
 /// passing as a command.
@@ -493,8 +579,12 @@ mod tests {
                 "~/.local/opt/cliproxyapi/8.0.78/cli-proxy-api -config ~/c.yaml",
                 "~/.local/opt/cliproxyapi/8.0.78/cli-proxy-api -config ~/c.yaml",
             ),
+            (
+                "cli-proxy-api -config ~/.config/cliproxyapi/config.yaml -codex-device-login",
+                "cli-proxy-api -config ~/.config/cliproxyapi/config.yaml -codex-device-login",
+            ),
             ("./run.sh build", "./run.sh build"),
-            ("/usr/local/bin/hub serve", "/usr/local/bin/hub serve"),
+            ("/usr/local/bin/hub --serve", "/usr/local/bin/hub --serve"),
         ] {
             assert_eq!(inline_command(span).as_deref(), Some(command), "{span}");
         }
@@ -536,9 +626,60 @@ mod tests {
             "src/main.rs --help",
             "~/notes/todo.md later",
             "Option -x",
+            // Slash commands and one-part routes.
+            "/model opus",
+            "/loop 5m /babysit-prs",
+            "/code-review ultra",
+            "/api/users GET",
+            // Paths with spaces in them.
+            "~/Documents/my notes/todo.md",
+            "/Users/madda/dev/my project",
+            "/etc/hosts file",
+            // Keywords, English words and files first.
+            "import x from ~/y",
+            "from ~/lib import x",
+            "return -value",
+            "require ~/x",
+            "use ~/crate",
+            "include /usr/include/x.h",
+            "the -flag",
+            "see /etc/hosts",
+            "fetch /api/x",
+            "relative ~/x",
+            "main.rs --help",
+            // Class names, not flags.
+            "card -top-2",
+            "box -mt-4",
         ] {
             assert_eq!(inline_command(span), None, "{span}");
         }
+    }
+
+    #[test]
+    fn a_command_by_its_shape_only_pastes() {
+        let shape = "cli-proxy-api -config ~/.config/cliproxyapi/config.yaml -claude-login";
+        assert_eq!(
+            inline_command_kind(shape).map(|(_, kind)| kind),
+            Some(CommandKind::Shape)
+        );
+        assert_eq!(
+            inline_command_kind("npm install").map(|(_, kind)| kind),
+            Some(CommandKind::Known)
+        );
+        // Its link says so, and still carries the command.
+        let href = inline_command_href(shape).unwrap();
+        assert!(href.starts_with(SHAPE_COMMAND_HREF_PREFIX), "{href}");
+        assert_eq!(command_from_href(&href).as_deref(), Some(shape));
+        assert!(inline_command_href("npm install")
+            .unwrap()
+            .starts_with(RUN_COMMAND_HREF_PREFIX));
+        // An untagged one-line fence runs only a program it knows.
+        assert_eq!(fence_command("", shape), None);
+        assert_eq!(fence_command("", "./run.sh build"), None);
+        assert_eq!(
+            fence_command("", "npm install").as_deref(),
+            Some("npm install")
+        );
     }
 
     #[test]
