@@ -44,6 +44,18 @@ impl GhostexGpuiApp {
         palette.frosted_dialog(frosted_dialog_fill(palette.surface.into()).into())
     }
 
+    /// The palette of the notice window (window/notice_modal.rs): under glass the dialogs' frost
+    /// over the lifted dialog fill of the dialogs inside Settings
+    /// (`ModalPalette::lifted_notice`, CDXC:AppModal 2026-11-20), so a notice never reads black
+    /// over a dark chat; glass off, the solid dialog palette.
+    pub(crate) fn gpui_native_notice_palette(&self) -> ModalPalette {
+        let palette = self.gpui_native_modal_solid_palette();
+        if !window_glass_active() {
+            return palette;
+        }
+        palette.lifted_notice()
+    }
+
     /// The palette of a large panel (Settings and its pages, the Agents Hub, the New Thread
     /// picker): the dialogs' frost and washes over the darker panel tint (`frosted_panel_fill`).
     pub(crate) fn gpui_native_panel_palette(&self) -> ModalPalette {

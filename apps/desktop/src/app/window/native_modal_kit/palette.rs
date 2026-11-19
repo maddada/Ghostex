@@ -377,7 +377,51 @@ impl ModalPalette {
         let ink = if self.light { 0x000000 } else { 0xffffff };
         css_mix(rgb(ink), 0.16, self.solid_surface)
     }
+
+    /// The lifted dialog fill: the theme's own colour (`solid_surface`) lifted toward white
+    /// ([`LIFTED_DIALOG_LIFT_DARK`], [`LIFTED_DIALOG_LIFT_LIGHT`]), covering
+    /// [`LIFTED_DIALOG_GLASS_ALPHA`] of what is behind it when `glass`. Every dialog inside
+    /// Settings draws on it (`SettingsPalette::dialog_surface`, CDXC:Settings 2026-11-11), and so
+    /// does the notice window under glass ([`Self::lifted_notice`]).
+    pub(crate) fn lifted_dialog_fill(&self, glass: bool) -> Rgba {
+        let base = rgba_of(self.solid_surface, 1.0);
+        let lift = if self.light {
+            LIFTED_DIALOG_LIFT_LIGHT
+        } else {
+            LIFTED_DIALOG_LIFT_DARK
+        };
+        let solid = css_mix(rgb(0xffffff), lift, base);
+        if glass {
+            rgba_of(solid, LIFTED_DIALOG_GLASS_ALPHA)
+        } else {
+            solid
+        }
+    }
+
+    /// The notice window's palette under window glass: the dialogs' frost and washes over the
+    /// lifted dialog fill rather than the thin theme tint, so a notice reads as a raised pane of
+    /// the theme and never as a black box over a dark chat.
+    ///
+    /// CDXC:AppModal 2026-11-20 DECISION:
+    /// User, of the "This terminal's folder is missing" notice drawn near-black (the theme colour
+    /// covering 60% of a blur, `#100e0e` over their dark chat), answered Q4234 "Lift it": only the
+    /// notices lift, to the fill of the dialogs inside Settings (the theme lifted 7.5% toward white
+    /// in dark mode, 55% in light, at 96%). The other frosted dialogs, menus and tooltips keep
+    /// `frosted_dialog_fill`; glass off, the notice keeps the solid dialog palette.
+    pub(crate) fn lifted_notice(self) -> Self {
+        let fill = self.lifted_dialog_fill(true);
+        self.frosted_dialog(fill)
+    }
 }
+
+/// How far the lifted dialog fill moves the theme colour toward white, dark and light
+/// ([`ModalPalette::lifted_dialog_fill`]).
+pub(crate) const LIFTED_DIALOG_LIFT_DARK: f32 = 0.075;
+pub(crate) const LIFTED_DIALOG_LIFT_LIGHT: f32 = 0.55;
+
+/// How much of what is behind it the lifted dialog fill covers under glass: nearly all of it, so
+/// text behind a dialog that cannot blur its own window never reads through.
+pub(crate) const LIFTED_DIALOG_GLASS_ALPHA: f32 = 0.96;
 
 #[cfg(test)]
 mod tests {
@@ -403,5 +447,25 @@ mod tests {
             assert_eq!(dialog.raised, washes.raised);
             assert_eq!(dialog.hairline, washes.hairline);
         }
+    }
+
+    /// A notice under glass is the theme lifted toward white at 96%: lighter than the theme in dark
+    /// mode (never the near-black tint), and keeps the dialogs' washes and solid dropdown surface.
+    #[test]
+    fn lifted_notice_raises_the_theme_toward_white() {
+        for light in [false, true] {
+            let solid = ModalPalette::resolve(light, None).tinted(rgb(0x0e0e0e));
+            let notice = solid.lifted_notice();
+            assert!(notice.glass);
+            assert_eq!(notice.surface.a, LIFTED_DIALOG_GLASS_ALPHA);
+            assert_eq!(notice.solid_surface, solid.solid_surface);
+            assert!(notice.surface.r > solid.solid_surface.r);
+            assert_eq!(notice.raised, frosted_dialog_washes(light).raised);
+        }
+        let dark = ModalPalette::resolve(false, None).tinted(rgb(0x0e0e0e));
+        let fill = dark.lifted_dialog_fill(false);
+        assert_eq!(fill.a, 1.0);
+        // 7.5% white over #0e0e0e: about #202020.
+        assert!((fill.r * 255.0 - 32.0).abs() < 1.5, "{fill:?}");
     }
 }

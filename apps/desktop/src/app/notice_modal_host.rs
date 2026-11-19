@@ -263,7 +263,7 @@ impl GhostexGpuiApp {
             }
             return;
         }
-        let palette = self.gpui_native_dialog_palette();
+        let palette = self.gpui_native_notice_palette();
         if let Some((handle, view)) = self.app_notices.window.clone() {
             let shown = handle.update(cx, |_, _, cx| {
                 view.update(cx, |view, cx| {
