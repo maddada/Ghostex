@@ -6,14 +6,58 @@
 
 use std::path::Path;
 
-/// A project path as compared: trimmed, trailing slashes removed (`/` stays `/`).
+/// A project path as compared: trimmed, trailing separators removed (`/` stays `/`, `C:\` stays
+/// `C:\`). A Windows path (`C:\…`, `\\server\…`) ends in `\` as often as `/`, and both are
+/// separators there.
 fn trimmed_path(path: &str) -> &str {
     let path = path.trim();
-    let without = path.trim_end_matches('/');
+    let windows = is_windows_path(path);
+    let without = path.trim_end_matches(|c| c == '/' || (windows && c == '\\'));
     if without.is_empty() && path.starts_with('/') {
         "/"
+    } else if windows && without.len() == 2 && path.len() > 2 {
+        // A drive root keeps its separator: `C:` alone is that drive's current folder.
+        &path[..3]
     } else {
         without
+    }
+}
+
+/// A path with a drive letter (`C:\…`, `C:/…`) or a UNC or verbatim prefix (`\\server\…`).
+fn is_windows_path(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    path.starts_with(r"\\")
+        || (bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':')
+}
+
+/// Whether the volume `folder` is on ignores letter case, asked of the folder itself while it
+/// exists: its path with the capitals of its own name swapped resolves to the same folder. Reads
+/// only; `false` when the folder is missing or its name has no letters.
+///
+/// CDXC:Worktrees 2026-11-19 WHY: a rename that moves a folder must know this before the move, because afterwards the old path names nothing and the case-insensitive match in `same_folder` (which resolves both paths on disk) can no longer tell; Rename Worktree reads it at plan time (server/src/server/worktree_ops/rename.rs `worktree_path_ignores_case`).
+pub fn volume_ignores_case(folder: &Path) -> bool {
+    let Some(name) = folder.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    let swapped: String = name
+        .chars()
+        .map(|c| {
+            if c.is_uppercase() {
+                c.to_lowercase().next().unwrap_or(c)
+            } else {
+                c.to_uppercase().next().unwrap_or(c)
+            }
+        })
+        .collect();
+    if swapped == name {
+        return false;
+    }
+    match (
+        std::fs::canonicalize(folder),
+        std::fs::canonicalize(folder.with_file_name(swapped)),
+    ) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
     }
 }
 
