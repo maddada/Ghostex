@@ -118,7 +118,7 @@ pub fn api_error_presentation(message: &ChatMessage) -> Value {
 
 /// The failed-call row nothing has answered yet: the newest user or agent row is the failure
 /// itself. A continuation, a message the user sent, or a reply closes it.
-fn open_failure(messages: &[ChatRow]) -> Option<&ChatMessage> {
+pub(crate) fn open_failure(messages: &[ChatRow]) -> Option<&ChatMessage> {
     messages
         .iter()
         .rev()
@@ -253,10 +253,58 @@ pub fn card_covers_stream_notice(state: &ChatState) -> bool {
         })
 }
 
+/// The failed call gxserver is retrying that the agent keeps no record of (Codex shows it only on
+/// its screen), as the transcript's own failed-call row, so its card is drawn at the transcript's
+/// end like a recorded one instead of over the chat box; its words are gxserver's `errorText`.
+/// `None` while a recorded failure stands for it, or nothing is being retried.
+///
+/// CDXC:SessionChat 2026-11-20 DECISION:
+/// User: "the dock/dock bar should be the only one there" (no bars between the dock and the chat box); their coordinator then had the remaining bars moved as the design page proposed, this card into the transcript.
+/// SEE-ALSO: session/composition.rs (where it joins the tail), extras/dock_stack.rs.
+pub(crate) fn unrecorded_failure(state: &ChatState, transcript: &[ChatRow]) -> Option<ChatMessage> {
+    if open_failure(transcript).is_some() {
+        return None;
+    }
+    let retry = state
+        .session
+        .api_retry
+        .value()
+        .filter(|retry| matches!(retry["status"].as_str(), Some("waiting" | "retrying")))?;
+    let text = retry["errorText"].as_str().unwrap_or_default().trim();
+    if text.is_empty() {
+        return None;
+    }
+    Some(ChatMessage {
+        id: UNRECORDED_FAILURE_ID.to_string(),
+        role: ChatRole::Assistant,
+        blocks: vec![ghostex_gx_protocol::ChatBlock::Text {
+            text: text.to_string(),
+        }],
+        async_questions: None,
+        timestamp: retry["lastAttemptAt"]
+            .as_str()
+            .and_then(crate::jstime::parse_iso_millis_utc)
+            .map(|at| at as i64),
+        source: ghostex_gx_protocol::ChatSource::Hook,
+        turn_id: None,
+        byte_offset: None,
+        queued: false,
+        deferred_work: None,
+        startup_delivery: None,
+        api_error: Some(TRANSIENT_API_ERROR_CODE.to_string()),
+        mention_paths: None,
+        custom_message: None,
+    })
+}
+
+/// The id of [`unrecorded_failure`]'s row.
+pub const UNRECORDED_FAILURE_ID: &str = "api-error:unrecorded";
+
 /// The open failure's card for the document (`apiErrorCard`), or `null`.
 ///
-/// `messageId` names the row the card replaces. It is `null` when the agent keeps no record of the
-/// failure (Codex shows it only on screen): the renderers then draw the card after the transcript.
+/// `messageId` names the row the card replaces: the failed call's own row, or the row
+/// [`unrecorded_failure`] adds when the agent keeps no record of it. It is `null` only for a
+/// retry the transcript has no row for at all, which the renderers no longer draw.
 pub fn api_error_card(state: &ChatState, context: &ChatContext) -> Value {
     let retry = state
         .session

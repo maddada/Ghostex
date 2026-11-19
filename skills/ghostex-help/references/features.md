@@ -3435,7 +3435,8 @@ its API through a local proxy shows the proxy's "last status: 429" as this same
 usage-limit card; if your proxy keeps the old limit after the reset, restart the
 proxy first.
 When a Claude or Codex turn ends on a lost connection or a server error (such as
-"API Error: Can't reach the API server"), the chat shows it as a card and
+"API Error: Can't reach the API server"), the chat shows it as a card at the
+end of the chat (also when Codex only shows the error on its screen) and
 Ghostex resumes the turn by itself once the network is back, after 5s, 15s, 1m,
 2m and 5m, then on the slower schedule; the card's Retry now and Stop retrying
 buttons override it, and Retry after temporary errors in Settings > Accounts
