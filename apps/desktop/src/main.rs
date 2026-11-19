@@ -20,6 +20,8 @@ mod component_store;
 mod crash_report;
 mod data_url_image;
 mod fold_motion;
+#[cfg(all(feature = "freeze-detector", unix))]
+mod freeze_detector;
 mod ghostty_kit;
 mod ghostty_vt;
 mod go_back;
@@ -355,6 +357,8 @@ fn main() {
     #[cfg(target_os = "macos")]
     application.on_open_urls(queue_gpui_os_integration_urls);
     application.run(move |cx| {
+        #[cfg(all(feature = "freeze-detector", unix))]
+        freeze_detector::start(cx);
         #[cfg(not(target_os = "macos"))]
         session_link_handoff::start_receiving(launch_links, cx);
         #[cfg(target_os = "windows")]

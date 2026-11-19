@@ -34,6 +34,8 @@ if [[ "${GHOSTEX_ON_DEMAND_ASSETS:-0}" == "1" ]]; then
 	cargo_args+=(--bin ghostex-gpui-cef-bootstrap)
 fi
 cargo_args+=(--config 'profile.release.package.ghostex-gpui.incremental=true')
+# CDXC:Diagnostics 2026-11-19 SEE-ALSO: the dev-build freeze detector (src/freeze_detector/heartbeat.rs); only local starts turn the feature on, never `cargo xtask build` or a release.
+cargo_args+=(--features freeze-detector)
 if [[ "${GHOSTEX_START_OPTIMIZED:-0}" != "1" ]]; then
 	cargo_args+=(--config 'profile.release.package.ghostex-gpui.opt-level=0')
 fi
