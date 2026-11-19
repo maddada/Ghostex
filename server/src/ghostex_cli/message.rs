@@ -9,10 +9,22 @@ use crate::ghostex_cli::output::print_json;
 use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
 use crate::ghostex_cli::{notify, selector, usage};
 
-/// The flags of `message show|list` that take a value; every other flag is a switch (`--json`).
+/// Every flag that takes a value in `message show|list` or in send-message (the alias
+/// `message <selector> <text>`), in both spellings, so a flag's value is never taken for the
+/// subcommand; every other flag is a switch (`--json`).
 const VALUE_FLAGS: &[&str] = &[
     "--session",
     "--session-id",
+    "--sessionId",
+    "--project",
+    "--project-id",
+    "--projectId",
+    "--selector",
+    "--session-title",
+    "--sessionTitle",
+    "--target",
+    "--agent",
+    "--text",
     "--last",
     "--grep",
     "--computer",
@@ -202,6 +214,9 @@ mod tests {
         assert!(is_message_read(&words("--last 5 list --grep accent")));
         assert!(!is_message_read(&words("X show me the logs")));
         assert!(!is_message_read(&words("--session X hello")));
+        assert!(is_message_read(&words("--sessionId G9 show M12")));
+        assert!(is_message_read(&words("--project P show M12")));
+        assert!(is_message_read(&words("--text hi --agent codex list")));
         let parsed = parse_args(&normalized(&words("--json show M12"), Some(1)));
         assert!(parsed.flags.truthy("json"));
         assert_eq!(parsed.rest, vec!["M12".to_string()]);
