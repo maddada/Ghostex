@@ -1,5 +1,5 @@
-//! A running tool call's shimmer and spinner, drawn over the cached transcript rows rather than in
-//! them. The row keeps each animated part's place (the label laid out in clear text, the spinner's
+//! A running tool call's shimmer and spinner, and Quiet View's loader on a running line or step
+//! (quiet_work.rs), drawn over the cached transcript rows rather than in them. The row keeps each animated part's place (the label laid out in clear text, the spinner's
 //! box empty) and records where it painted; the chat draws the moving part over that place after
 //! the transcript (`render_row_motion`), as the status row's spark does (status_tail.rs).
 //!
@@ -23,6 +23,7 @@ use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
     rc::Rc,
+    time::Duration,
 };
 
 thread_local! {
@@ -40,8 +41,8 @@ enum MotionKind {
         dim: Hsla,
         bright: Hsla,
     },
-    /// The spinner glyph turning.
-    Spin { color: Hsla },
+    /// The spinner glyph turning once every `period`.
+    Spin { color: Hsla, period: Duration },
 }
 
 /// Where a part's place painted: its bounds, the clip it was painted in, the text style its label
@@ -185,13 +186,13 @@ impl MotionKind {
                 })
                 .keep_phase()
                 .into_any_element(),
-            MotionKind::Spin { color } => gpui::svg()
+            MotionKind::Spin { color, period } => gpui::svg()
                 .path("titlebar/loader2.svg")
                 .w(size.width)
                 .h(size.height)
                 .text_color(color)
                 .opacity(opacity)
-                .with_throttled_animation(id, SPIN, |glyph, progress| {
+                .with_throttled_animation(id, period, |glyph, progress| {
                     glyph.with_transformation(gpui::Transformation::rotate(gpui::percentage(
                         progress,
                     )))
@@ -240,7 +241,22 @@ impl NativeChatView {
 
     /// A running call's spinner, `size` square.
     pub(super) fn running_spinner(&self, id: SharedString, size: f32, color: Hsla) -> AnyElement {
-        match self.row_motion.hold(&id, MotionKind::Spin { color }) {
+        self.turning_glyph(id, size, color, SPIN)
+    }
+
+    /// The loader glyph, `size` square, turning once every `period`: drawn over its row like a
+    /// running call's spinner, or in place where the rows draw their own motion.
+    pub(super) fn turning_glyph(
+        &self,
+        id: SharedString,
+        size: f32,
+        color: Hsla,
+        period: Duration,
+    ) -> AnyElement {
+        match self
+            .row_motion
+            .hold(&id, MotionKind::Spin { color, period })
+        {
             Some(place) => div()
                 .relative()
                 .size(px(size))
@@ -252,7 +268,7 @@ impl NativeChatView {
                 .size(px(size))
                 .flex_shrink_0()
                 .text_color(color)
-                .with_throttled_animation(id, SPIN, |glyph, progress| {
+                .with_throttled_animation(id, period, |glyph, progress| {
                     glyph.with_transformation(gpui::Transformation::rotate(gpui::percentage(
                         progress,
                     )))

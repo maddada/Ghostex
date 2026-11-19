@@ -6,7 +6,7 @@
 //! shut.
 
 use super::completed_work_row::{WorkTail, spaced_tail};
-use super::quiet_work::{QuietSegment, line_icon, loader, styled_segments};
+use super::quiet_work::{QuietSegment, line_icon, styled_segments};
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use ghostex_gx_chat_core::transcript::quiet_view::{
     QuietAnswers, QuietStretch, QuietTail, QuietTurnLook, QuietTurnTail,
@@ -637,7 +637,7 @@ impl NativeChatView {
             "titlebar/clock.svg"
         };
         let icons = if line.running {
-            vec![loader(&line.key, p, cx.reduce_motion())]
+            vec![self.quiet_loader(&line.key, p, cx.reduce_motion())]
         } else {
             vec![line_icon(lead, 13.0, p)]
         };

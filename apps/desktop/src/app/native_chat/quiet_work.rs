@@ -154,25 +154,32 @@ pub(super) fn finished_mark<'a>(messages: impl IntoIterator<Item = &'a Value>) -
     }
 }
 
-/// The turning loader of a line or step whose call still runs.
-pub(super) fn loader(key: &str, p: &ChatAppearance, reduce_motion: bool) -> AnyElement {
-    let glyph = svg()
-        .path("titlebar/loader2.svg")
-        .size(px(12.0 * p.scale))
-        .flex_shrink_0()
-        .text_color(p.muted);
-    if reduce_motion {
-        return glyph.into_any_element();
-    }
-    glyph
-        .with_throttled_animation(
+impl NativeChatView {
+    /// The turning loader of a line or step whose call still runs.
+    ///
+    /// CDXC:SessionChat 2026-11-19 WHY:
+    /// It turned inside the cached transcript, against the row_motion.rs rule that nothing in a transcript row may animate: measured on Windows in a coordinator chat in Quiet View with a call running, every visible row was built and laid out again on each of its thirty ticks a second. It is now drawn over its row like a running call's spinner, at the same size, colour and one turn a second.
+    pub(super) fn quiet_loader(
+        &self,
+        key: &str,
+        p: &ChatAppearance,
+        reduce_motion: bool,
+    ) -> AnyElement {
+        if reduce_motion {
+            return svg()
+                .path("titlebar/loader2.svg")
+                .size(px(12.0 * p.scale))
+                .flex_shrink_0()
+                .text_color(p.muted)
+                .into_any_element();
+        }
+        self.turning_glyph(
             SharedString::from(format!("{key}:loader")),
+            12.0 * p.scale,
+            p.muted,
             Duration::from_secs(1),
-            |glyph, progress| {
-                glyph.with_transformation(gpui::Transformation::rotate(gpui::percentage(progress)))
-            },
         )
-        .into_any_element()
+    }
 }
 
 impl NativeChatView {
@@ -191,7 +198,7 @@ impl NativeChatView {
     ) -> AnyElement {
         let mark = match line.mark {
             QuietMark::Done => check(p),
-            QuietMark::Running => loader(&line.key, p, cx.reduce_motion()),
+            QuietMark::Running => self.quiet_loader(&line.key, p, cx.reduce_motion()),
             QuietMark::Failed => cross(p),
         };
         let spoken = line
@@ -382,7 +389,7 @@ impl NativeChatView {
                 .flex_shrink_0()
                 .text_color(p.muted)
                 .into_any_element(),
-            "running" => loader(&key, p, cx.reduce_motion()),
+            "running" => self.quiet_loader(&key, p, cx.reduce_motion()),
             _ => check(p),
         };
         // The same text Find searches (gx-chat-core `quiet_step_text`).
