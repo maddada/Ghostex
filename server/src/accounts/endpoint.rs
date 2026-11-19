@@ -1152,6 +1152,13 @@ fn state_value(
         let id = account_id(found);
         let saved = registry.accounts.iter().find(|a| a.id == id);
         rows.push(json!({"id":id,"provider":found.provider,"selector":found.selector,"name":saved.map(|a|a.name.as_str()).unwrap_or(&found.name),"email":found.email,"indicator":saved.map(|a|a.indicator.as_str()).unwrap_or(""),"color":saved.map(|a|a.color.as_str()).unwrap_or("neutral"),"eligible":saved.is_some_and(|a|a.eligible),"registered":saved.is_some(),"showInTitlebar":saved.is_some_and(|a|a.show_in_titlebar&&!a.user_disabled),"userDisabled":saved.is_some_and(|a|a.user_disabled),"sharedHistory":saved.is_some_and(|a|a.shared_history)||found.shared_history,"disabledReason":saved.and_then(|a|a.disabled.as_ref()).map(|d|d.reason.as_str()),"status":found.status,"usage":found.usage,"resetCredits":found.reset_credits,"resetCreditDetails":found.reset_credit_details,"resetCreditsError":found.reset_credits_error,"usageUpdatedAt":found.usage_updated_at,"usageError":found.usage_error,"usageStale":found.usage_stale,"sessionCount":session_counts.get(&id).copied().unwrap_or(0)}));
+        // A Codex login's ChatGPT account (workspace), which a hub account's twin check compares.
+        if found.provider == Provider::Codex {
+            if let Some(row) = rows.last_mut() {
+                row["workspace"] =
+                    json!(super::codex_identity::codex_account_part(&found.identity));
+            }
+        }
     }
     let loading = titlebar && snapshot.fetched_at.is_none();
     for saved in &registry.accounts {
@@ -1170,6 +1177,14 @@ fn state_value(
             rows.push(row);
         }
     }
+    // The saved logins the user hasn't turned off, shown in the sidebar or not: a CLIProxyAPI hub
+    // account that is one of them never gets a meter of its own (hub/sidebar.rs).
+    let swap_logins: Vec<Value> = rows
+        .iter()
+        .filter(|row| row["registered"] == true && row["userDisabled"] != true)
+        .filter(|row| row["email"].as_str().is_some_and(|email| !email.is_empty()))
+        .map(|row| json!({"provider": row["provider"], "email": row["email"], "workspace": row["workspace"]}))
+        .collect();
     if titlebar {
         rows.retain(|row| row["registered"] == true && row["showInTitlebar"] == true);
     }
@@ -1178,6 +1193,7 @@ fn state_value(
     // Supersedes the 2026-09-06 note that Codex Swap installs through Homebrew on macOS and Linux without requiring Cargo: Homebrew stays the macOS and Linux route, but a computer without brew (the usual case inside WSL) was being handed a command it cannot run, so it now gets the source build. Windows uses codex-swap's own installer and needs neither. See Provider::install_command.
     let helper_rows:Vec<_>=[Provider::Claude,Provider::Codex].into_iter().map(|p|json!({"provider":p,"installed":helpers::executable(home,p.helper()).is_some(),"cliInstalled":helpers::executable(home,p.id()).is_some(),"error":snapshot.errors.get(&p),"installCommand":p.install_command(home),"loginCommand":p.login_command(),"codexSwapNeedsUpdate":p==Provider::Codex&&super::helper_tools::codex_swap_needs_update_to_add(home)})).collect();
     let mut value = json!({"accounts":rows,"helpers":helper_rows,"defaults":{"claude":registry.defaults.get(&Provider::Claude).cloned().unwrap_or_default(),"codex":registry.defaults.get(&Provider::Codex).cloned().unwrap_or_default()},"defaultAccounts":super::default_account::quick_launch_accounts(registry,snapshot),"newSessionAccounts":registry.new_session_accounts});
+    value["swapLogins"] = json!(swap_logins);
     // CDXC:Workspaces 2026-10-09 DECISION:
     // User: the sidebar launcher's highlighted default account shows the workspace's Claude
     // account when the workspace sets one, so what it shows is what launches. A launcher list for a

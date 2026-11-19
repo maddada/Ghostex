@@ -48,6 +48,8 @@ struct AccountReading {
     provider: String,
     name: String,
     plan: Option<String>,
+    /// A Codex login's ChatGPT account (workspace), which tells two workspaces of one email apart.
+    workspace: Option<String>,
     /// `ready`, `coolingDown`, `disabled` or `error`, from the hub's own state.
     status: &'static str,
     status_message: Option<String>,
@@ -140,6 +142,11 @@ fn account_from_file(file: &Value, now: DateTime<Utc>) -> Option<AccountReading>
         plan: file
             .pointer("/id_token/plan_type")
             .and_then(Value::as_str)
+            .map(str::to_string),
+        workspace: file
+            .pointer("/id_token/chatgpt_account_id")
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty())
             .map(str::to_string),
         status,
         status_message: text("status_message"),

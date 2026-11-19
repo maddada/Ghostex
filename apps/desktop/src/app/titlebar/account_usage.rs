@@ -41,16 +41,15 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
 /// account's actions (the coordinator's interim answer while the user's own is pending: "assume
 /// 'once, the Swap copy' for now and keep it easy to flip"). [`HUB_COPY_YIELDS_TO_SWAP`] flips it.
 fn distinct_accounts(accounts: &[Value]) -> Vec<&Value> {
+    let saved = swap_logins();
     let swap_login = |hub: &Value| {
-        let email = text(hub, "email");
         HUB_COPY_YIELDS_TO_SWAP
             && hub["hub"] == true
-            && !email.is_empty()
-            && accounts.iter().any(|other| {
-                other["hub"] != true
-                    && text(other, "provider") == text(hub, "provider")
-                    && text(other, "email").eq_ignore_ascii_case(email)
-            })
+            && (saved.iter().any(|login| same_login(login, hub))
+                // A computer whose gxserver sends no `swapLogins` yet: its shown Swap rows.
+                || accounts
+                    .iter()
+                    .any(|other| other["hub"] != true && same_login(other, hub)))
     };
     let mut shown: Vec<&Value> = Vec::with_capacity(accounts.len());
     for account in accounts.iter().filter(|account| !swap_login(account)) {
@@ -76,6 +75,42 @@ fn distinct_accounts(accounts: &[Value]) -> Vec<&Value> {
 /// Whether a hub account's meter gives way to the Swap account of the same login (see
 /// [`distinct_accounts`]); `false` shows both.
 const HUB_COPY_YIELDS_TO_SWAP: bool = true;
+
+/// Each computer's saved Claude Swap and Codex Swap logins that aren't turned off (`swapLogins`
+/// of its accounts answer), shown in the sidebar or not: hiding a Swap account's meter must not
+/// bring its hub twin's meter up instead.
+fn swap_logins_by_machine()
+-> &'static std::sync::Mutex<std::collections::BTreeMap<String, Vec<Value>>> {
+    static LOGINS: OnceLock<std::sync::Mutex<std::collections::BTreeMap<String, Vec<Value>>>> =
+        OnceLock::new();
+    LOGINS.get_or_init(Default::default)
+}
+
+fn swap_logins() -> Vec<Value> {
+    swap_logins_by_machine()
+        .lock()
+        .map(|logins| logins.values().flatten().cloned().collect())
+        .unwrap_or_default()
+}
+
+/// Keeps `machine`'s Swap logins; whether they changed.
+fn remember_swap_logins(machine: &str, logins: Vec<Value>) -> bool {
+    let Ok(mut all) = swap_logins_by_machine().lock() else {
+        return false;
+    };
+    all.insert(machine.to_string(), logins.clone()) != Some(logins)
+}
+
+/// A Swap login and a hub account are one login: same provider and email, and the same Codex
+/// workspace when both name one.
+fn same_login(login: &Value, hub: &Value) -> bool {
+    let email = text(hub, "email");
+    let (left, right) = (text(login, "workspace"), text(hub, "workspace"));
+    !email.is_empty()
+        && text(login, "provider") == text(hub, "provider")
+        && text(login, "email").eq_ignore_ascii_case(email)
+        && (left.is_empty() || right.is_empty() || left == right)
+}
 
 fn titlebar_entry(account: &Value, machine: &str) -> Value {
     let mut account = account.clone();
@@ -587,6 +622,13 @@ impl GhostexGpuiApp {
                         let previous_accounts = this.titlebar_accounts.clone();
                         match result {
                             Ok(result) => {
+                                let logins_changed = remember_swap_logins(
+                                    &machine,
+                                    result["swapLogins"].as_array().cloned().unwrap_or_default(),
+                                );
+                                if logins_changed {
+                                    cx.notify();
+                                }
                                 this.titlebar_accounts.retain(|a| text(a, "titlebarMachine") != machine);
                                 // The usage-only accounts (Cursor, Gemini, Copilot) and the CLIProxyAPI hub
                                 // accounts (server/src/accounts/hub/sidebar.rs) come under their own keys.
