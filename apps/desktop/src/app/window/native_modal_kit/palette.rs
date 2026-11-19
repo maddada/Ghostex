@@ -382,7 +382,7 @@ impl ModalPalette {
     /// ([`LIFTED_DIALOG_LIFT_DARK`], [`LIFTED_DIALOG_LIFT_LIGHT`]), covering
     /// [`LIFTED_DIALOG_GLASS_ALPHA`] of what is behind it when `glass`. Every dialog inside
     /// Settings draws on it (`SettingsPalette::dialog_surface`, CDXC:Settings 2026-11-11), and so
-    /// does the notice window under glass ([`Self::lifted_notice`]).
+    /// the notice window under glass lifts the same way a step further ([`Self::lifted_notice`]).
     pub(crate) fn lifted_dialog_fill(&self, glass: bool) -> Rgba {
         let base = rgba_of(self.solid_surface, 1.0);
         let lift = if self.light {
@@ -429,21 +429,34 @@ impl ModalPalette {
     /// notices lift, to the fill of the dialogs inside Settings (the theme lifted 7.5% toward white
     /// in dark mode, 55% in light, at 96%). The other frosted dialogs, menus and tooltips keep
     /// `frosted_dialog_fill`; glass off, the notice keeps the solid dialog palette.
+    ///
+    /// CDXC:AppModal 2026-11-20 DECISION:
+    /// User, after rebuilding: the lifted fills were "Too dark". A notice lifts further than the
+    /// dialogs inside Settings ([`LIFTED_NOTICE_LIFT_DARK`], 15%: #323232 over #0e0e0e instead of
+    /// #202020), which keep the 7.5% they were approved at; light mode keeps the dialogs' lift.
     pub(crate) fn lifted_notice(self) -> Self {
-        let fill = self.lifted_dialog_fill(true);
-        self.frosted_dialog(fill)
+        let lift = if self.light {
+            LIFTED_DIALOG_LIFT_LIGHT
+        } else {
+            LIFTED_NOTICE_LIFT_DARK
+        };
+        let solid = css_mix(rgb(0xffffff), lift, rgba_of(self.solid_surface, 1.0));
+        self.frosted_dialog(rgba_of(solid, LIFTED_DIALOG_GLASS_ALPHA))
     }
 }
 
 /// How far the lifted dialog fill moves the theme colour toward white, dark and light
 /// ([`ModalPalette::lifted_dialog_fill`]).
 pub(crate) const LIFTED_DIALOG_LIFT_DARK: f32 = 0.075;
+/// How far a notice's fill moves the theme colour toward white in dark mode
+/// ([`ModalPalette::lifted_notice`]).
+pub(crate) const LIFTED_NOTICE_LIFT_DARK: f32 = 0.15;
 pub(crate) const LIFTED_DIALOG_LIFT_LIGHT: f32 = 0.55;
 
 /// How far a menu inside a dialog or panel window lifts the theme colour toward white under glass
 /// ([`ModalPalette::lifted_menu_fill`]): a bit lighter than the dialog, as the work area's lifted
 /// surfaces (`GLASS_LIFT_DARK`, `GLASS_LIFT_LIGHT` in helpers/chrome_palette.rs).
-pub(crate) const LIFTED_MENU_LIFT_DARK: f32 = 0.10;
+pub(crate) const LIFTED_MENU_LIFT_DARK: f32 = 0.18;
 pub(crate) const LIFTED_MENU_LIFT_LIGHT: f32 = 0.6;
 
 /// How much of what is behind it the lifted dialog fill covers under glass: nearly all of it, so
@@ -509,7 +522,11 @@ mod tests {
         }
         let dark = ModalPalette::resolve(false, None).tinted(rgb(0x0e0e0e));
         let menu = dark.lifted_menu_fill();
-        // 10% white over #0e0e0e: about #262626.
-        assert!((menu.r * 255.0 - 38.0).abs() < 1.5, "{menu:?}");
+        // 18% white over #0e0e0e: about #393939.
+        assert!((menu.r * 255.0 - 57.4).abs() < 1.5, "{menu:?}");
+        // A notice: 15% white over #0e0e0e, about #323232, above the Settings dialogs' #202020.
+        let notice = dark.lifted_notice();
+        assert!((notice.surface.r * 255.0 - 50.2).abs() < 1.5, "{:?}", notice.surface);
+        assert!(notice.surface.r > dark.lifted_dialog_fill(true).r);
     }
 }

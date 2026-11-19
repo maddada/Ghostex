@@ -65,7 +65,13 @@ pub(crate) fn pane_prepaint_background_color() -> u32 {
 /// ink wash of the fenced code blocks ([`glass_wash`]). Glass off, every spot keeps its colour.
 /// SEE-ALSO: `glass_lifted_surface` and `glass_veil` in helpers/window_glass.rs (the work area's
 /// own colour), ModalPalette::lifted_dialog_fill (the same lift inside dialogs and Settings).
-pub(crate) const GLASS_LIFT_DARK: f32 = 0.10;
+///
+/// CDXC:Theming 2026-11-20 DECISION:
+/// User, after rebuilding with the first 10% lift (the chat selection bar, a dialog dropdown):
+/// "Too dark". The lift is 18%: clearly lighter (about #5a6676 over their slate glass, #393939
+/// over a neutral #0e0e0e), and the highest step that keeps the chat's #e5e5e5 body text at 4.5:1
+/// or better on their slate (20% drops it to 4.4).
+pub(crate) const GLASS_LIFT_DARK: f32 = 0.18;
 /// [`GLASS_LIFT_DARK`] in light mode, where the window colour is already light.
 pub(crate) const GLASS_LIFT_LIGHT: f32 = 0.6;
 /// How much of what is under it a lifted surface covers: nearly all of it, as Settings' inner
