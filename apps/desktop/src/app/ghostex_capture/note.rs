@@ -104,6 +104,11 @@ impl GhostexGpuiApp {
 
 impl Render for NoteView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // CDXC:Theming 2026-11-20: the theme's lifted colour, opaque, in dark mode under glass and
+        // in light mode (`SolidPalette`); dark with glass off keeps its solid colours.
+        // The note shares the picker's step (#1b1b1b with glass off).
+        let c = super::glass::SolidPalette::resolve();
+        let fill = c.menu;
         div()
             .id("ghostex-capture-sent-note")
             .size_full()
@@ -112,9 +117,9 @@ impl Render for NoteView {
             .gap(px(10.0))
             .px(px(12.0))
             .rounded(px(10.0))
-            .bg(rgb(0x1b1b1b))
+            .bg(fill)
             .border_1()
-            .border_color(rgb(0x3a3a3a))
+            .border_color(c.edge)
             .child(div().size(px(8.0)).rounded(px(1.0)).bg(rgb(0xc68a06)))
             .child(
                 div()
@@ -124,14 +129,14 @@ impl Render for NoteView {
                     .whitespace_nowrap()
                     .text_ellipsis()
                     .text_size(px(12.5))
-                    .text_color(rgb(0xe8e8e8))
+                    .text_color(c.strong)
                     .child(self.text.clone()),
             )
             .child(
                 div()
                     .id("ghostex-capture-sent-open")
                     .text_size(px(12.5))
-                    .text_color(rgb(0x86d3f8))
+                    .text_color(c.link)
                     .cursor_pointer()
                     .child("Open")
                     .on_click(cx.listener(|this, _, window, cx| {

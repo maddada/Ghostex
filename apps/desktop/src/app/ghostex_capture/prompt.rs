@@ -595,6 +595,8 @@ impl PromptView {
         current: Option<Target>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        // CDXC:Theming 2026-11-20: the picker follows the theme (`SolidPalette`, opaque).
+        let c = super::glass::SolidPalette::resolve();
         let filter = self.picker_list.filter.trim().to_lowercase();
         let mut first: Option<Target> = None;
         let mut list = div()
@@ -630,6 +632,7 @@ impl PromptView {
             any = true;
             let project_id = project.workspace_project_id.clone();
             list = list.child(picker_project_row(
+                c,
                 SharedString::from(format!("project-{}", project.workspace_project_id)),
                 heading.clone(),
                 project.sessions.len(),
@@ -654,10 +657,11 @@ impl PromptView {
                 first = Some(new_session.clone());
             }
             list = list.child(target_row(
+                c,
                 SharedString::from(format!("new-{}", project.workspace_project_id)),
                 div()
                     .w(px(9.0))
-                    .text_color(rgb(0x9a9a9a))
+                    .text_color(c.muted)
                     .child("+")
                     .into_any_element(),
                 "New session".to_string(),
@@ -677,19 +681,26 @@ impl PromptView {
                 if first.is_none() {
                     first = Some(target.clone());
                 }
-                let (color, square) = if session.question {
-                    (0xf472b6, false)
+                let (color, square): (gpui::Hsla, bool) = if session.question {
+                    (rgb(0xf472b6).into(), false)
                 } else {
                     match session.activity.as_str() {
-                        "working" => (0xc68a06, true),
-                        "attention" => (0x0093fe, false),
-                        _ => (if session.sleeping { 0x5f5f5f } else { 0xd9d9d9 }, false),
+                        "working" => (rgb(0xc68a06).into(), true),
+                        "attention" => (rgb(0x0093fe).into(), false),
+                        _ => (
+                            if session.sleeping {
+                                c.sleeping_dot
+                            } else {
+                                c.idle_dot
+                            },
+                            false,
+                        ),
                     }
                 };
                 let dot = div()
                     .flex_none()
                     .size(px(if square { 8.0 } else { 9.0 }))
-                    .bg(rgb(color));
+                    .bg(color);
                 let dot = if square {
                     dot.rounded(px(1.0))
                 } else {
@@ -697,6 +708,7 @@ impl PromptView {
                 };
                 let selected = current.as_ref() == Some(&target);
                 list = list.child(target_row(
+                    c,
                     SharedString::from(format!("session-{}", session.sidebar_session_id)),
                     dot.into_any_element(),
                     session.title.clone(),
@@ -717,7 +729,7 @@ impl PromptView {
                     .flex()
                     .justify_center()
                     .text_size(px(12.5))
-                    .text_color(rgb(0x6b6b6b))
+                    .text_color(c.faint)
                     .child("No matching projects or sessions"),
             );
         }
@@ -734,9 +746,9 @@ impl PromptView {
             .flex()
             .flex_col()
             .rounded(px(10.0))
-            .bg(rgb(0x1b1b1b))
+            .bg(c.menu)
             .border_1()
-            .border_color(rgb(0x3a3a3a))
+            .border_color(c.edge)
             .shadow_lg()
             .on_mouse_down_out(
                 cx.listener(move |this, event: &MouseDownEvent, window, cx| {
@@ -757,13 +769,13 @@ impl PromptView {
                         .px(px(9.0))
                         .rounded(px(7.0))
                         .border_1()
-                        .border_color(rgba(0xffffff14))
-                        .bg(rgb(0x141414))
+                        .border_color(c.hairline)
+                        .bg(c.search_field)
                         .child(
                             gpui::svg()
                                 .path("titlebar/search.svg")
                                 .size(px(13.0))
-                                .text_color(rgb(0x6b6b6b)),
+                                .text_color(c.faint),
                         )
                         .child(
                             Input::new(&self.picker_filter)
@@ -774,7 +786,7 @@ impl PromptView {
                                 .px(px(0.0))
                                 .py(px(0.0))
                                 .text_size(px(12.5))
-                                .text_color(rgb(0xe8e8e8)),
+                                .text_color(c.strong),
                         ),
                 ),
             )
@@ -792,6 +804,7 @@ impl PromptView {
 
 /// A project in the Send to list: a chevron, its name and its session count. A click opens it.
 fn picker_project_row(
+    c: super::glass::SolidPalette,
     id: SharedString,
     title: String,
     sessions: usize,
@@ -807,7 +820,7 @@ fn picker_project_row(
         .items_center()
         .gap(px(8.0))
         .rounded(px(6.0))
-        .hover(|row| row.bg(rgb(0x242424)))
+        .hover(move |row| row.bg(c.row_hover))
         .cursor_pointer()
         .child(
             gpui::svg()
@@ -817,7 +830,7 @@ fn picker_project_row(
                     "titlebar/chevron-right.svg"
                 })
                 .size(px(12.0))
-                .text_color(rgb(0x9a9a9a)),
+                .text_color(c.muted),
         )
         .child(
             div()
@@ -828,13 +841,13 @@ fn picker_project_row(
                 .text_ellipsis()
                 .text_size(px(12.5))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(rgb(0xcfd2d8))
+                .text_color(c.title)
                 .child(SharedString::from(title)),
         )
         .child(
             div()
                 .text_size(px(11.5))
-                .text_color(rgb(0x6b6b6b))
+                .text_color(c.faint)
                 .child(sessions.to_string()),
         )
         .on_click(on_click)
@@ -842,6 +855,7 @@ fn picker_project_row(
 }
 
 fn target_row(
+    c: super::glass::SolidPalette,
     id: SharedString,
     marker: AnyElement,
     title: String,
@@ -859,8 +873,8 @@ fn target_row(
         .items_center()
         .gap(px(8.0))
         .rounded(px(6.0))
-        .when(selected, |row| row.bg(rgb(0x2a2a2a)))
-        .hover(|row| row.bg(rgb(0x242424)))
+        .when(selected, |row| row.bg(c.row_selected))
+        .hover(move |row| row.bg(c.row_hover))
         .cursor_pointer()
         .child(marker)
         .child(
@@ -871,13 +885,13 @@ fn target_row(
                 .whitespace_nowrap()
                 .text_ellipsis()
                 .text_size(px(12.5))
-                .text_color(rgb(0xc9ccd2))
+                .text_color(c.body)
                 .child(SharedString::from(title)),
         )
         .child(
             div()
                 .text_size(px(11.5))
-                .text_color(rgb(0x5f5f5f))
+                .text_color(c.fainter)
                 .child(SharedString::from(trailing)),
         )
         .on_click(on_click)
@@ -886,6 +900,7 @@ fn target_row(
 
 /// The Send to dropdown's trigger: the chosen target and a chevron, outlined while open.
 fn dropdown_trigger(
+    c: super::glass::SolidPalette,
     label: String,
     open: bool,
     bounds: Rc<Cell<Option<Bounds<gpui::Pixels>>>>,
@@ -903,14 +918,10 @@ fn dropdown_trigger(
         .items_center()
         .gap(px(6.0))
         .rounded(px(7.0))
-        .bg(rgb(0x1d1d1d))
+        .bg(c.control)
         .border_1()
-        .border_color(if open {
-            rgba(0xffffff40)
-        } else {
-            rgba(0xffffff14)
-        })
-        .hover(|style| style.bg(rgb(0x232323)))
+        .border_color(if open { c.edge_open } else { c.hairline })
+        .hover(move |style| style.bg(c.control_hover))
         .cursor_pointer()
         .child(
             canvas(move |frame, _, _| bounds.set(Some(frame)), |_, _, _, _| {})
@@ -925,7 +936,7 @@ fn dropdown_trigger(
                 .whitespace_nowrap()
                 .text_ellipsis()
                 .text_size(px(12.0))
-                .text_color(rgb(0xe8e8e8))
+                .text_color(c.strong)
                 .child(SharedString::from(label)),
         )
         .child(
@@ -933,7 +944,7 @@ fn dropdown_trigger(
                 .flex_none()
                 .path("titlebar/chevron-down.svg")
                 .size(px(12.0))
-                .text_color(rgb(0x9a9a9a)),
+                .text_color(c.muted),
         )
 }
 
@@ -960,6 +971,10 @@ impl Render for PromptView {
             .map(|attachment| (attachment.number, attachment.thumb.clone()))
             .collect();
         let picker = picker_projects.map(|projects| self.render_picker(projects, current, cx));
+        // CDXC:Theming 2026-11-20: the box follows the theme (`SolidPalette`): the work area's
+        // colour lifted and kept opaque in dark mode under glass and in light mode, with dark text
+        // in light mode; dark with glass off keeps its solid colours.
+        let c = super::glass::SolidPalette::resolve();
         let header = div()
             .flex()
             .items_center()
@@ -967,11 +982,11 @@ impl Render for PromptView {
             .child(
                 div()
                     .text_size(px(12.0))
-                    .text_color(rgb(0x9a9a9a))
+                    .text_color(c.muted)
                     .child("Send to"),
             )
             .child(
-                dropdown_trigger(target, picker_open, self.trigger_bounds.clone())
+                dropdown_trigger(c, target, picker_open, self.trigger_bounds.clone())
                     .on_click(cx.listener(|this, _, window, cx| this.toggle_picker(window, cx))),
             )
             .child(crate::app::render::window_drag_region::window_drag_region(
@@ -982,7 +997,7 @@ impl Render for PromptView {
                     .id("ghostex-capture-prompt-close")
                     .px(px(6.0))
                     .text_size(px(14.0))
-                    .text_color(rgb(0x9a9a9a))
+                    .text_color(c.muted)
                     .cursor_pointer()
                     .child("✕")
                     .on_click(cx.listener(|this, _, _, cx| {
@@ -998,9 +1013,9 @@ impl Render for PromptView {
             .gap(px(8.0))
             .p(px(10.0))
             .rounded(px(12.0))
-            .bg(rgb(0x121212))
+            .bg(c.field)
             .border_1()
-            .border_color(rgba(0xffffff29));
+            .border_color(c.edge_strong);
         if !thumbs.is_empty() {
             let mut row = div().flex_none().flex().gap(px(8.0));
             for (number, thumb) in thumbs {
@@ -1022,7 +1037,7 @@ impl Render for PromptView {
                         .rounded(px(7.0))
                         .overflow_hidden()
                         .border_1()
-                        .border_color(rgba(0xffffff29))
+                        .border_color(c.edge_strong)
                         .child(img(ImageSource::Render(thumb)).size_full())
                         .child(
                             div()
@@ -1070,7 +1085,7 @@ impl Render for PromptView {
                     .w_full()
                     .h_full()
                     .text_size(px(13.5))
-                    .text_color(rgb(0xe8e8e8)),
+                    .text_color(c.strong),
             ),
         );
         // CDXC:GhostexCapture 2026-09-30 DECISION: User: "remove hotkeys from area app screen and instead of 3 buttons just have 3 icons instead"; each names itself in a tooltip.
@@ -1082,14 +1097,14 @@ impl Render for PromptView {
                 .items_center()
                 .justify_center()
                 .rounded(px(7.0))
-                .hover(|style| style.bg(rgb(0x262626)))
+                .hover(move |style| style.bg(c.button_hover))
                 .cursor_pointer()
                 .tooltip(move |window, cx| super::tooltip::solid_tooltip(label, window, cx))
                 .child(
                     gpui::svg()
                         .path(icon)
                         .size(px(17.0))
-                        .text_color(rgb(0x9a9a9a)),
+                        .text_color(c.muted),
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.with_app(cx, move |app, cx| {
@@ -1152,9 +1167,9 @@ impl Render for PromptView {
             .gap(px(8.0))
             .p(px(10.0))
             .rounded(px(14.0))
-            .bg(rgb(0x161616))
+            .bg(c.surface)
             .border_1()
-            .border_color(rgb(0x3a3a3a))
+            .border_color(c.edge)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                 if event.keystroke.key == "escape" {
                     cx.stop_propagation();

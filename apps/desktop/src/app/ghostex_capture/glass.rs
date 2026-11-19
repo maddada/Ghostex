@@ -19,8 +19,9 @@
 use gpui::{Bounds, Hsla, Pixels, WindowBackgroundAppearance, rgb, rgba};
 
 use crate::app::helpers::{
-    chrome_ink, chrome_uses_light_appearance, popup_window_panel_surface, titlebar_background,
-    titlebar_popup_menu_border_color, window_glass_active,
+    chrome_ink, chrome_uses_light_appearance, glass_lifted_opaque_from, popup_window_panel_surface,
+    titlebar_background, titlebar_popup_menu_border_color, window_glass_active,
+    workspace_background_color,
 };
 use crate::app::window::resources_style::resource_glass_washes;
 
@@ -154,6 +155,178 @@ impl PanelPalette {
             accent_fill: accent.opacity(0.16),
             accent_fill_hover: accent.opacity(0.26),
             accent_edge: accent.opacity(0.45),
+        }
+    }
+}
+
+/// The colours of Capture's opaque windows and bubbles: the prompt box, its Send to picker, the
+/// "sent" note and the tooltips.
+///
+/// CDXC:Theming 2026-11-20 DECISION:
+/// These were fixed near-blacks in both appearances, ignoring the theme, and read as black slabs
+/// on the glass design. Dark mode under window glass, they are the work area's colour lifted
+/// toward white (`glass_lifted_opaque_from`, CDXC:Theming 2026-11-20 in
+/// helpers/chrome_palette.rs), kept opaque per CDXC:GhostexCapture 2026-09-30 ("not transparent
+/// please even if transparency enabled"); light mode, glass on or off, the same lift of the light
+/// theme colour with dark text. Every fill on them is an opaque ink step over that surface. Dark
+/// mode with glass off keeps the original solid colours.
+#[derive(Clone, Copy)]
+pub(crate) struct SolidPalette {
+    pub(crate) light: bool,
+    /// The prompt box.
+    pub(crate) surface: Hsla,
+    /// The Send to picker over the box, and the "sent" note.
+    pub(crate) menu: Hsla,
+    /// The tooltips.
+    pub(crate) tooltip: Hsla,
+    /// The box's, the picker's, the note's and the tooltips' edge.
+    pub(crate) edge: Hsla,
+    /// The quiet hairline (the search field, the closed trigger).
+    pub(crate) hairline: Hsla,
+    /// The text field's and the thumbnails' edge.
+    pub(crate) edge_strong: Hsla,
+    /// The open trigger's edge.
+    pub(crate) edge_open: Hsla,
+    /// The text field and the picker's search field.
+    pub(crate) field: Hsla,
+    pub(crate) search_field: Hsla,
+    /// The Send to trigger at rest and under the pointer.
+    pub(crate) control: Hsla,
+    pub(crate) control_hover: Hsla,
+    /// A picker row under the pointer and the chosen one.
+    pub(crate) row_hover: Hsla,
+    pub(crate) row_selected: Hsla,
+    /// A capture icon button under the pointer.
+    pub(crate) button_hover: Hsla,
+    /// Typed text, the trigger's label, the note's text, the tooltips' text.
+    pub(crate) strong: Hsla,
+    /// Project names.
+    pub(crate) title: Hsla,
+    /// Session titles.
+    pub(crate) body: Hsla,
+    /// Labels, icons and chevrons.
+    pub(crate) muted: Hsla,
+    /// Counts and the empty message.
+    pub(crate) faint: Hsla,
+    /// A row's trailing note.
+    pub(crate) fainter: Hsla,
+    /// An idle session's dot, and a sleeping one's.
+    pub(crate) idle_dot: Hsla,
+    pub(crate) sleeping_dot: Hsla,
+    /// The note's Open link.
+    pub(crate) link: Hsla,
+}
+
+impl SolidPalette {
+    pub(crate) fn resolve() -> Self {
+        let light = chrome_uses_light_appearance();
+        if light || window_glass_active() {
+            Self::lifted(light)
+        } else {
+            Self::solid()
+        }
+    }
+
+    /// The original solid dark colours.
+    fn solid() -> Self {
+        Self {
+            light: false,
+            surface: rgb(0x161616).into(),
+            menu: rgb(0x1b1b1b).into(),
+            tooltip: rgb(0x1f1f1f).into(),
+            edge: rgb(0x3a3a3a).into(),
+            hairline: rgba(0xffffff14).into(),
+            edge_strong: rgba(0xffffff29).into(),
+            edge_open: rgba(0xffffff40).into(),
+            field: rgb(0x121212).into(),
+            search_field: rgb(0x141414).into(),
+            control: rgb(0x1d1d1d).into(),
+            control_hover: rgb(0x232323).into(),
+            row_hover: rgb(0x242424).into(),
+            row_selected: rgb(0x2a2a2a).into(),
+            button_hover: rgb(0x262626).into(),
+            strong: rgb(0xe8e8e8).into(),
+            title: rgb(0xcfd2d8).into(),
+            body: rgb(0xc9ccd2).into(),
+            muted: rgb(0x9a9a9a).into(),
+            faint: rgb(0x6b6b6b).into(),
+            fainter: rgb(0x5f5f5f).into(),
+            idle_dot: rgb(0xd9d9d9).into(),
+            sleeping_dot: rgb(0x5f5f5f).into(),
+            link: rgb(0x86d3f8).into(),
+        }
+    }
+
+    /// The theme colour lifted toward white, opaque, with opaque ink steps over it.
+    fn lifted(light: bool) -> Self {
+        let surface = glass_lifted_opaque_from(workspace_background_color(), light);
+        let ink: Hsla = if light {
+            gpui::black()
+        } else {
+            gpui::white()
+        };
+        let step = |amount: f32| surface.blend(ink.opacity(amount));
+        let (strong, title, body, muted, faint, fainter, idle_dot, sleeping_dot, link): (
+            Hsla,
+            Hsla,
+            Hsla,
+            Hsla,
+            Hsla,
+            Hsla,
+            Hsla,
+            Hsla,
+            Hsla,
+        ) = if light {
+            (
+                rgb(0x1f1f1f).into(),
+                rgb(0x262626).into(),
+                rgb(0x333333).into(),
+                rgb(0x5c5c5c).into(),
+                rgb(0x707070).into(),
+                rgb(0x7a7a7a).into(),
+                rgb(0x6b6b6b).into(),
+                rgb(0xb5b5b5).into(),
+                rgb(0x0369a1).into(),
+            )
+        } else {
+            let solid = Self::solid();
+            (
+                solid.strong,
+                solid.title,
+                solid.body,
+                solid.muted,
+                rgb(0x7a7a7a).into(),
+                rgb(0x707070).into(),
+                solid.idle_dot,
+                solid.sleeping_dot,
+                solid.link,
+            )
+        };
+        Self {
+            light,
+            surface,
+            menu: if light { step(0.0) } else { step(0.04) },
+            tooltip: surface,
+            edge: ink.opacity(if light { 0.16 } else { 0.18 }),
+            hairline: ink.opacity(0.08),
+            edge_strong: ink.opacity(0.16),
+            edge_open: ink.opacity(0.25),
+            field: step(0.04),
+            search_field: step(0.05),
+            control: step(0.07),
+            control_hover: step(0.10),
+            row_hover: step(0.08),
+            row_selected: step(0.12),
+            button_hover: step(0.10),
+            strong,
+            title,
+            body,
+            muted,
+            faint,
+            fainter,
+            idle_dot,
+            sleeping_dot,
+            link,
         }
     }
 }
