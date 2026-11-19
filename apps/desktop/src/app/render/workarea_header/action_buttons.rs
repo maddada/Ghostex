@@ -193,15 +193,6 @@ impl GhostexGpuiApp {
     }
 }
 
-/// Where a split button sits in the header's one outline round Start, Open and Commit: the
-/// first rounds its left end, the last its right, and every one after the first draws the short
-/// line before it.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct SplitJoin {
-    pub(crate) first: bool,
-    pub(crate) last: bool,
-}
-
 /// A name longer than this is cut and given an ellipsis, so one verbose Action cannot push Open
 /// and Commit out of the header.
 const WORKAREA_HEADER_QUICK_ACTION_LABEL_MAX_CHARS: usize = 9;
@@ -296,11 +287,9 @@ fn toggle_git_menu(
 }
 
 impl GhostexGpuiApp {
-    #[allow(clippy::too_many_arguments)]
     fn render_workarea_header_split_button(
         &self,
         spec: WorkareaHeaderSplitButton,
-        join: SplitJoin,
         compact: bool,
         primary: WorkareaHeaderPress,
         menu: WorkareaHeaderPress,
@@ -335,13 +324,11 @@ impl GhostexGpuiApp {
             .items_center()
             .justify_center()
             .gap(px(6.0))
-            .pl(px(if compact { 6.0 } else { 8.0 }))
-            .pr(px(if compact { 2.0 } else { 4.0 }))
-            .when(join.first, |this| {
-                this.rounded_l(titlebar_split_button_segment_radius(
-                    TITLEBAR_CONTROL_HEIGHT,
-                ))
-            })
+            .pl(px(if compact { 9.0 } else { 10.0 }))
+            .pr(px(if compact { 7.0 } else { 9.0 }))
+            .rounded_l(titlebar_split_button_segment_radius(
+                TITLEBAR_CONTROL_HEIGHT,
+            ))
             .when(cfg!(target_os = "windows"), |this| this.occlude())
             .text_color(icon_color)
             .text_size(px(12.5))
@@ -408,12 +395,11 @@ impl GhostexGpuiApp {
             .h_full()
             .items_center()
             .justify_center()
-            .w(px(18.0))
-            .when(join.last, |this| {
-                this.rounded_r(titlebar_split_button_segment_radius(
-                    TITLEBAR_CONTROL_HEIGHT,
-                ))
-            })
+            .pl(px(5.0))
+            .pr(px(6.0))
+            .rounded_r(titlebar_split_button_segment_radius(
+                TITLEBAR_CONTROL_HEIGHT,
+            ))
             .when(cfg!(target_os = "windows"), |this| this.occlude())
             .cursor_default()
             .when(open, |this| this.bg(titlebar_split_button_open_color()))
@@ -438,31 +424,19 @@ impl GhostexGpuiApp {
             )
             .child(titlebar_svg_icon(
                 TITLEBAR_ICON_CHEVRON_DOWN,
-                10.0,
-                if open {
-                    icon_color
-                } else {
-                    titlebar_inactive_text_color()
-                },
+                12.0,
+                icon_color,
             ));
 
-        h_flex()
-            .id(spec.id)
+        titlebar_split_button_frame(h_flex().id(spec.id), TITLEBAR_CONTROL_HEIGHT)
             .relative()
             .flex_shrink_0()
-            .h_full()
+            .ml(px(4.0))
             .items_center()
+            .overflow_hidden()
             .when(spec.dimmed, |this| this.opacity(0.5))
-            .when(!join.first, |this| {
-                this.child(
-                    div()
-                        .flex_shrink_0()
-                        .w(px(1.0))
-                        .h(px(15.0))
-                        .bg(titlebar_split_button_border_color()),
-                )
-            })
             .child(main)
+            .child(titlebar_split_button_divider(TITLEBAR_CONTROL_HEIGHT))
             .child(caret)
             .on_prepaint({
                 let anchor_state = anchor_state.clone();
@@ -553,22 +527,8 @@ impl GhostexGpuiApp {
                 "gitActions",
             )
             && drawn(HeaderSlot::Commit);
-        let split_count = [show_start, show_open, show_commit]
-            .into_iter()
-            .filter(|shown| *shown)
-            .count();
-        let mut split_index = 0;
-        let mut next_join = || {
-            let join = SplitJoin {
-                first: split_index == 0,
-                last: split_index + 1 == split_count,
-            };
-            split_index += 1;
-            join
-        };
         let mut segments: Vec<AnyElement> = Vec::new();
         if show_start {
-            let join = next_join();
             segments.push(self.render_workarea_header_split_button(
                 WorkareaHeaderSplitButton {
                     id: "ghostex-gpui-workarea-header-button-actions",
@@ -581,7 +541,6 @@ impl GhostexGpuiApp {
                     rich_label: None,
                     tooltip: None,
                 },
-                join,
                 compact,
                 run_quick_action,
                 toggle_quick_actions_menu,
@@ -590,7 +549,6 @@ impl GhostexGpuiApp {
             ));
         }
         if show_open {
-            let join = next_join();
             segments.push(self.render_workarea_header_split_button(
                 WorkareaHeaderSplitButton {
                     id: "ghostex-gpui-workarea-header-button-open-project",
@@ -603,7 +561,6 @@ impl GhostexGpuiApp {
                     rich_label: None,
                     tooltip: None,
                 },
-                join,
                 compact,
                 open_active_open_target,
                 toggle_open_targets_menu,
@@ -612,7 +569,6 @@ impl GhostexGpuiApp {
             ));
         }
         if show_commit {
-            let join = next_join();
             segments.push(
                 self.render_workarea_header_split_button(
                     WorkareaHeaderSplitButton {
@@ -629,7 +585,6 @@ impl GhostexGpuiApp {
                         rich_label: git_summary.render(),
                         tooltip: git_summary.tooltip().map(SharedString::from),
                     },
-                    join,
                     compact,
                     toggle_git_menu,
                     toggle_git_menu,
@@ -639,22 +594,12 @@ impl GhostexGpuiApp {
             );
         }
         /*
-        CDXC:Titlebar 2026-11-19 DECISION:
-        User (Q4196 C): Start, Open and Commit share one outline, a pill of two-part buttons, instead of
-        an outlined box each; inside it each part's arrow is its own hover area with no line before
-        it, and a short line separates one button from the next.
+        CDXC:Titlebar 2026-11-20 DECISION:
+        User: "separate these 2 please, I like them separate like they used to be, 2 buttons not one
+        wide button". Start, Open and Commit are each their own outlined split button (main half,
+        divider, arrow) with a gap between them again. Supersedes the shared outline of
+        2026-11-19 (Q4196 C); the pins, the ⋯ menu and the one icon size from that change stay.
         */
-        let split_group = (!segments.is_empty()).then(|| {
-            titlebar_split_button_frame(
-                h_flex().id("ghostex-gpui-workarea-header-project-buttons"),
-                TITLEBAR_CONTROL_HEIGHT,
-            )
-            .flex_shrink_0()
-            .ml(px(6.0))
-            .items_center()
-            .overflow_hidden()
-            .children(segments)
-        });
         let buttons = h_flex()
             .flex_shrink_0()
             .h(px(TITLEBAR_CONTROL_HEIGHT))
@@ -689,7 +634,7 @@ impl GhostexGpuiApp {
                     && drawn(HeaderSlot::Voice),
                 |this| this.child(self.render_workarea_header_voice_button(cx)),
             )
-            .children(split_group);
+            .children(segments);
         // The pinned controls and the two panel toggles never scroll out of reach: only the split buttons
         // and pinned extensions before them can, so a narrow column loses the least-needed first.
         let pinned = h_flex()
