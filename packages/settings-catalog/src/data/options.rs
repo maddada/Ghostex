@@ -2,8 +2,8 @@ use crate::json::{num_opt, opt, NumOpt, Opt};
 
 /// `agentboxDefaultLocation` choices before any remote Docker server is registered.
 pub const AGENTBOX_DEFAULT_LOCATION_OPTIONS: &[Opt] = &[
-    opt("The computer you're on", "local"),
-    opt("Docker on this computer", "agentbox:docker"),
+    opt("The computer itself", "local"),
+    opt("Docker on the computer itself", "agentbox:docker"),
     opt("Hetzner", "agentbox:hetzner"),
     opt("Vercel", "agentbox:vercel"),
     opt("Daytona", "agentbox:daytona"),

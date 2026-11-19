@@ -67,7 +67,11 @@ pub(crate) fn run_computer(rest: &[String], flags: &Flags) -> CliResult<()> {
             }
         ),
         "cloudBox" => format!("the Cloud Box {}", text(computer, "name")),
-        _ => crate::connected_computers::this_computer_name(),
+        // The computer that answered, by the name it gave (an older one gives none).
+        _ => match (text(computer, "name"), text(&answer, "thisComputer")) {
+            ("" | "This computer", "") => "the computer that answered".to_string(),
+            ("" | "This computer", name) | (name, _) => name.to_string(),
+        },
     };
     println!("{name}'s chats run on {place}.");
     if computer["computerUse"].as_bool() == Some(true) {

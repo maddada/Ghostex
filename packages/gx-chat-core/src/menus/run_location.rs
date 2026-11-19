@@ -217,17 +217,18 @@ fn row_value(state: &ChatState) -> Option<Value> {
     if locations.is_empty() && current == LOCAL_RUN_LOCATION {
         return None;
     }
-    // The computer by its name: the one gxserver answers with, else the host's.
-    let computer = text(answer, "computer")
-        .or_else(|| {
-            state
-                .session
-                .computer
-                .computer
-                .as_ref()
-                .map(|computer| computer.name.trim().to_string())
-                .filter(|name| !name.is_empty())
-        })
+    // The computer by its name: the one this app saved for another computer (as the where pill
+    // names it), else the one its gxserver answers with, else the host's.
+    let host = state.session.computer.computer.as_ref();
+    let host_name = host
+        .map(|computer| computer.name.trim().to_string())
+        .filter(|name| !name.is_empty());
+    let saved = host_name
+        .clone()
+        .filter(|_| host.is_some_and(|computer| computer.remote));
+    let computer = saved
+        .or_else(|| text(answer, "computer"))
+        .or(host_name)
         .unwrap_or_else(|| THIS_COMPUTER_LABEL.to_string());
     let mut options = vec![option(
         LOCAL_RUN_LOCATION,

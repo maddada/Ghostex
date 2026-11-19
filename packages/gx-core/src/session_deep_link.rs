@@ -255,9 +255,10 @@ pub fn session_link_not_known_notice(
     notice("Link is for another computer", description)
 }
 
-/// `machine` is the session's machine by name; `None` for this computer.
+/// `machine` is the session's machine by name (the app names this computer by its own name too);
+/// `None` when no name is known.
 pub fn session_link_gone_notice(machine: Option<&str>) -> SessionLinkNotice {
-    let place = machine.unwrap_or("this computer");
+    let place = machine.unwrap_or("its computer");
     notice(
         "This chat no longer exists",
         format!("It isn't open or in Previous Sessions on {place}."),

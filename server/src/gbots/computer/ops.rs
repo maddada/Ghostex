@@ -236,8 +236,16 @@ fn plan(
         .get("computerUse")
         .and_then(Value::as_bool)
         .unwrap_or(before.computer_use);
+    let own_name = crate::connected_computers::this_computer_name();
     let mut next = match wanted {
         "this" | "This computer" | "here" => BotComputer {
+            place: Place::This,
+            name: None,
+            folder: None,
+            computer_use,
+        },
+        // Its own name means this computer too, as `this` and `here` do.
+        wanted if wanted.trim().eq_ignore_ascii_case(own_name.trim()) => BotComputer {
             place: Place::This,
             name: None,
             folder: None,

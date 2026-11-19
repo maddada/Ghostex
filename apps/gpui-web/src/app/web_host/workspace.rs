@@ -84,7 +84,10 @@ impl GhostexGpuiApp {
 
     /// A handoff's computers: a page reaches only the computer that serves it.
     pub(crate) fn gpui_add_project_dialog_machine_options(&self) -> Value {
-        serde_json::json!([{ "label": "This computer", "machineId": "local" }])
+        serde_json::json!([{
+            "label": crate::host_name::local_computer_name(),
+            "machineId": "local"
+        }])
     }
 
     /// The page reaches one computer, so a handoff there has nothing to clone.

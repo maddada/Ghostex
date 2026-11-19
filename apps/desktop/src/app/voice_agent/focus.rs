@@ -218,6 +218,12 @@ pub(crate) fn voice_menu_rows(
 /// The question "This session" asks while a call is open on another computer than the session's:
 /// its title and its detail. `here` runs the open call; `there` runs the session.
 pub(crate) fn hang_up_and_call_question(here: &str, title: &str, there: &str) -> (String, String) {
+    // Two computers can go by one name; the question still has to tell them apart.
+    let there = if here.trim().eq_ignore_ascii_case(there.trim()) {
+        format!("the other computer named {}", there.trim())
+    } else {
+        there.to_string()
+    };
     (
         format!("A voice call is open on {here}"),
         format!(
@@ -661,11 +667,17 @@ mod tests {
 
     #[test]
     fn another_computers_session_asks_like_the_phone() {
-        let (title, detail) = hang_up_and_call_question("this computer", "Build", "studio");
-        assert_eq!(title, "A voice call is open on this computer");
+        let (title, detail) = hang_up_and_call_question("laptop", "Build", "studio");
+        assert_eq!(title, "A voice call is open on laptop");
         assert_eq!(
             detail,
             "A call stays on the computer it started on. Hang up and start a voice call about Build on studio?"
+        );
+        // Two computers with one name are still told apart.
+        let (_, detail) = hang_up_and_call_question("studio", "Build", "Studio");
+        assert!(
+            detail.ends_with("about Build on the other computer named Studio?"),
+            "{detail}"
         );
     }
 

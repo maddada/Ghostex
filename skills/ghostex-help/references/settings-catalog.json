@@ -11354,11 +11354,11 @@
       "default": "local",
       "options": [
         {
-          "label": "The computer you're on",
+          "label": "The computer itself",
           "value": "local"
         },
         {
-          "label": "Docker on this computer",
+          "label": "Docker on the computer itself",
           "value": "agentbox:docker"
         },
         {

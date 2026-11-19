@@ -541,7 +541,7 @@ How to use this file:
 - **Codex in boxes** `agentboxCodexSignIn` (Settings UI row without a settings key; use `ghostex settings open`): Boxes on this computer reuse your Codex sign-in. Sign in here for cloud boxes when Codex is not signed in. Only on macOS and Linux.
 ### New threads
 
-- **Default location** `agentboxDefaultLocation` (one of local | agentbox:docker | agentbox:hetzner | agentbox:vercel | agentbox:daytona | agentbox:e2b | agentbox:digitalocean; default local): Where new threads run unless you pick another location. Option labels: local = The computer you're on, agentbox:docker = Docker on this computer, agentbox:hetzner = Hetzner, agentbox:vercel = Vercel, agentbox:daytona = Daytona, agentbox:e2b = E2B, agentbox:digitalocean = DigitalOcean. Only on macOS and Linux.
+- **Default location** `agentboxDefaultLocation` (one of local | agentbox:docker | agentbox:hetzner | agentbox:vercel | agentbox:daytona | agentbox:e2b | agentbox:digitalocean; default local): Where new threads run unless you pick another location. Option labels: local = The computer itself, agentbox:docker = Docker on the computer itself, agentbox:hetzner = Hetzner, agentbox:vercel = Vercel, agentbox:daytona = Daytona, agentbox:e2b = E2B, agentbox:digitalocean = DigitalOcean. Only on macOS and Linux.
 ### Your agentbox boxes
 
 - **Your agentbox boxes** `agentboxBoxes` (Settings UI row without a settings key; use `ghostex settings open`): See every box, open a box's web app, stop a box, or destroy it to delete it for good. Only on macOS and Linux.

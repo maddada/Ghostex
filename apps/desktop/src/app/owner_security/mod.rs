@@ -799,20 +799,8 @@ fn text(value: &Value, key: &str) -> Option<String> {
     value.get(key).and_then(Value::as_str).map(str::to_string)
 }
 
+/// The name this computer goes by everywhere (host_name.rs), the one other computers know it by.
 fn this_computer_name() -> String {
-    #[cfg(unix)]
-    {
-        let mut buffer = [0_u8; 256];
-        if unsafe { libc::gethostname(buffer.as_mut_ptr().cast(), buffer.len()) } == 0 {
-            let end = buffer.iter().position(|byte| *byte == 0).unwrap_or(0);
-            if let Ok(name) = std::str::from_utf8(&buffer[..end]) {
-                let name = name.trim_end_matches(".local");
-                if !name.is_empty() {
-                    return name.to_string();
-                }
-            }
-        }
-    }
     crate::host_name::local_computer_name()
 }
 

@@ -189,21 +189,23 @@ pub(crate) fn handle_connected_computers_http(
     )
 }
 
-/// The name the other computer shows for this one: its host name without the `.local` suffix.
+/// The name this computer goes by everywhere (its chosen name, else its host name), the one
+/// pairing hands phones and other computers (`read_computer_name` in remote_access/identity.rs).
 pub(crate) fn this_computer_name() -> String {
     static NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     NAME.get_or_init(|| {
-        let name = std::process::Command::new("hostname")
-            .arg("-s")
-            .output()
+        crate::remote_access::cached_remote_access_identity()
             .ok()
-            .filter(|output| output.status.success())
-            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+            .map(|identity| identity.computer_name.trim().to_string())
             .filter(|name| !name.is_empty())
-            .or_else(|| std::env::var("COMPUTERNAME").ok())
-            .or_else(|| std::env::var("HOSTNAME").ok())
-            .unwrap_or_else(|| "Local".to_string());
-        name.trim_end_matches(".local").to_string()
+            .or_else(|| {
+                std::env::var("COMPUTERNAME")
+                    .or_else(|_| std::env::var("HOSTNAME"))
+                    .ok()
+                    .map(|name| crate::remote_access::identity::short_host_name(&name))
+                    .filter(|name| !name.is_empty())
+            })
+            .unwrap_or_else(|| "Local".to_string())
     })
     .clone()
 }

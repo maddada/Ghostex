@@ -42,11 +42,13 @@ pub enum NotificationFeedTab {
 impl NotificationFeedTab {
     pub const TABS: [Self; 3] = [Self::All, Self::ThisComputer, Self::Remote];
 
-    pub fn label(self) -> &'static str {
+    /// The tab's words; the computer you're on is named by `this_name`, its own name (never "This
+    /// computer", CDXC:RemoteMachines 2026-11-19 in packages/gx-chat-core/src/extras/where_pill.rs).
+    pub fn label(self, this_name: &str) -> String {
         match self {
-            Self::All => "All",
-            Self::ThisComputer => "This computer",
-            Self::Remote => "Remote",
+            Self::All => "All".to_string(),
+            Self::ThisComputer => this_name.to_string(),
+            Self::Remote => "Remote".to_string(),
         }
     }
 
