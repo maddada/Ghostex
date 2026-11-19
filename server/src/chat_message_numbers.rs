@@ -62,11 +62,12 @@ pub(crate) fn install(paths: &GxserverPaths) {
     }
 }
 
-/// What is known of one chat's numbers: message id to number, and the highest number given.
+/// What is known of one chat's numbers: message id to number.
 #[derive(Default)]
 struct Known {
+    /// Whether `by_id` holds everything the database has for the chat.
+    loaded: bool,
     by_id: HashMap<String, u32>,
-    highest: u32,
     /// Rows that will never get a number (another agent's message, a report, a note, a row sent
     /// before numbering began), so each read stops parsing them again. Queued rows are not
     /// kept here: the agent's queue releases them as the user's message.
@@ -78,16 +79,39 @@ const SKIPPED_LIMIT: usize = 4_096;
 
 type ChatKey = (String, String);
 
-/// Every chat whose numbers were read this run. One lock for all of them: numbering is rare (a
-/// new message), and two readers of the same chat must never hand out the same number.
-fn known() -> &'static Mutex<HashMap<ChatKey, Known>> {
-    static KNOWN: OnceLock<Mutex<HashMap<ChatKey, Known>>> = OnceLock::new();
-    KNOWN.get_or_init(Default::default)
+type Chats = Mutex<HashMap<ChatKey, std::sync::Arc<Mutex<Known>>>>;
+
+/// Every chat whose numbers were read this run, each behind a lock of its own: numbering one chat
+/// (a database write that may wait on SQLite) never holds up another chat's reads. The map's own
+/// lock is held only to find a chat's.
+fn chats() -> &'static Chats {
+    static CHATS: OnceLock<Chats> = OnceLock::new();
+    CHATS.get_or_init(Default::default)
 }
+
+fn chat(key: &ChatKey) -> std::sync::Arc<Mutex<Known>> {
+    let mut all = chats()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    all.entry(key.clone()).or_default().clone()
+}
+
+/// Runs `work`, which may wait on the database, without holding up the async workers: on the
+/// multi-thread runtime it hands the worker's other tasks to another thread for the duration
+/// (`block_in_place`); anywhere else (a blocking thread, a test) it simply runs.
+fn off_worker<R>(work: impl FnOnce() -> R) -> R {
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) if handle.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread => {
+            tokio::task::block_in_place(work)
+        }
+        _ => work(),
+    }
+}
+
+static SINCE: OnceLock<i64> = OnceLock::new();
 
 /// When this gxserver started numbering messages, stamped the first time it is asked.
 fn since_ms(db: &Connection) -> i64 {
-    static SINCE: OnceLock<i64> = OnceLock::new();
     if let Some(since) = SINCE.get() {
         return *since;
     }
@@ -148,7 +172,7 @@ pub(crate) fn forget(db: &Connection, project_id: &str, session_id: Option<&str>
             params![project_id],
         ),
     };
-    if let Ok(mut all) = known().lock() {
+    if let Ok(mut all) = chats().lock() {
         all.retain(|key, _| {
             key.0 != project_id || session_id.is_some_and(|session| key.1 != session)
         });
@@ -169,21 +193,75 @@ fn number_in_chat(db: &Connection, key: &ChatKey, sent_at: i64, hash: &str) -> O
     .flatten()
 }
 
-fn load_known(db: &Connection, key: &ChatKey) -> Known {
-    let mut known = Known::default();
+/// Reads the chat's numbers into `known`, keeping the rows it already knows never count.
+fn load_known(db: &Connection, key: &ChatKey, known: &mut Known) {
     let Ok(mut statement) = db.prepare_cached(
         "SELECT messageId, number FROM chat_message_numbers WHERE projectId = ?1 AND sessionId = ?2",
     ) else {
-        return known;
+        return;
     };
     let rows = statement.query_map(params![key.0, key.1], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?))
     });
     for (id, number) in rows.into_iter().flatten().flatten() {
-        known.highest = known.highest.max(number);
         known.by_id.insert(id, number);
     }
-    known
+    known.loaded = true;
+}
+
+/// Writes the message `candidate` into the chat's numbers in one statement, which takes the next
+/// number itself (or `inherited`, a fork's copy's, when this chat has not used it), so two
+/// readers, or two gxserver processes, can never give two messages one number. Answers the
+/// message's number, also when another reader stored it first.
+fn assign(db: &Connection, key: &ChatKey, candidate: &Candidate) -> Option<u32> {
+    let hash = text_hash(&candidate.text);
+    // The same message again under another id (a resumed conversation's copy).
+    if let Some(number) = number_in_chat(db, key, candidate.sent_at, &hash) {
+        return Some(number);
+    }
+    let inherited = copied_number(db, key, candidate.sent_at, &hash);
+    let (lines, chars) = quote_totals(&candidate.text);
+    let prefix = quote_prefix(&candidate.text);
+    for inherited in [inherited, None] {
+        let inserted = db
+            .query_row(
+                "INSERT INTO chat_message_numbers \
+                 (projectId, sessionId, number, messageId, sentAt, textHash, quote, lineCount, \
+                  charCount, createdAt) \
+                 VALUES (?1, ?2, COALESCE( \
+                   (SELECT ?3 WHERE ?3 IS NOT NULL AND NOT EXISTS ( \
+                      SELECT 1 FROM chat_message_numbers \
+                      WHERE projectId = ?1 AND sessionId = ?2 AND number = ?3)), \
+                   (SELECT COALESCE(MAX(number), 0) + 1 FROM chat_message_numbers \
+                    WHERE projectId = ?1 AND sessionId = ?2)), \
+                   ?4, ?5, ?6, ?7, ?8, ?9, ?10) \
+                 ON CONFLICT DO NOTHING RETURNING number",
+                params![
+                    key.0,
+                    key.1,
+                    inherited,
+                    candidate.id,
+                    candidate.sent_at,
+                    hash,
+                    prefix,
+                    lines,
+                    chars,
+                    chrono::Utc::now().to_rfc3339()
+                ],
+                |row| row.get::<_, u32>(0),
+            )
+            .optional()
+            .ok()
+            .flatten();
+        if inserted.is_some() {
+            return inserted;
+        }
+        // Nothing written: another reader stored this message, or took the number first.
+        if let Some(number) = number_in_chat(db, key, candidate.sent_at, &hash) {
+            return Some(number);
+        }
+    }
+    None
 }
 
 /// A message the user wrote that has no number yet.
@@ -215,11 +293,16 @@ fn copied_number(db: &Connection, key: &ChatKey, sent_at: i64, hash: &str) -> Op
 }
 
 /// Numbers the user's messages among `messages` that have none yet and writes `messageNumber`
-/// and `messageRef` on every one that has a number. Blocking.
+/// and `messageRef` on every one that has a number.
+///
+/// CDXC:SessionChat 2026-11-20 WHY:
+/// The review of the first build found the numbering did its database work on the async workers
+/// under one lock for every chat, so one slow write (SQLite's busy wait) held up every other
+/// chat's reads and snapshots. A chat whose rows are all known now needs no database at all;
+/// otherwise the work runs off the workers (`off_worker`, and `spawn_blocking` in the read route,
+/// `annotate_result_async`) under that chat's own lock, and each number is taken in one SQL
+/// statement (`assign`).
 pub(crate) fn annotate_messages(messages: &mut [Value], project_id: &str, session_id: &str) {
-    let Some(paths) = PATHS.get() else {
-        return;
-    };
     if project_id.is_empty() || session_id.is_empty() {
         return;
     }
@@ -229,10 +312,29 @@ pub(crate) fn annotate_messages(messages: &mut [Value], project_id: &str, sessio
     if !any_user {
         return;
     }
-    let Ok(db) = open_gxserver_database(paths) else {
+    let key: ChatKey = (project_id.to_string(), session_id.to_string());
+    let chat = chat(&key);
+    let mut known = chat.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    // Every row already known: no database.
+    if let (true, Some(since)) = (known.loaded, SINCE.get().copied()) {
+        let (stamped, candidates) = classify(&mut known, messages, since);
+        if candidates.is_empty() {
+            drop(known);
+            stamp(messages, &stamped, session_id);
+            return;
+        }
+    }
+    let Some(paths) = PATHS.get() else {
         return;
     };
-    annotate_with(&db, messages, project_id, session_id);
+    let stamped = off_worker(|| {
+        let db = open_gxserver_database(paths).ok()?;
+        Some(annotate_with(&db, &key, &mut known, messages))
+    });
+    drop(known);
+    if let Some(stamped) = stamped {
+        stamp(messages, &stamped, session_id);
+    }
 }
 
 /// [`annotate_messages`] on a read answer's or frame's `messages`.
@@ -242,15 +344,51 @@ pub(crate) fn annotate_result(result: &mut Map<String, Value>, project_id: &str,
     }
 }
 
-fn annotate_with(db: &Connection, messages: &mut [Value], project_id: &str, session_id: &str) {
-    let key: ChatKey = (project_id.to_string(), session_id.to_string());
-    let since = since_ms(db);
-    let Ok(mut all) = known().lock() else {
+/// [`annotate_result`] from an async handler: the work runs on a blocking thread. A panic in it
+/// leaves the rows as they were, unnumbered, rather than losing them.
+pub(crate) async fn annotate_result_async(
+    result: &mut Map<String, Value>,
+    project_id: &str,
+    session_id: &str,
+) {
+    let Some(Value::Array(rows)) = result.remove("messages") else {
         return;
     };
-    let known = all
-        .entry(key.clone())
-        .or_insert_with(|| load_known(db, &key));
+    let (project, session) = (project_id.to_string(), session_id.to_string());
+    let rows = std::sync::Arc::new(Mutex::new(rows));
+    let worked = rows.clone();
+    let _ = tokio::task::spawn_blocking(move || {
+        let mut rows = worked
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        annotate_messages(&mut rows, &project, &session);
+    })
+    .await;
+    let rows = std::mem::take(&mut *rows.lock().unwrap_or_else(|poisoned| poisoned.into_inner()));
+    result.insert("messages".to_string(), Value::Array(rows));
+}
+
+/// Writes `messageNumber` and `messageRef` on the rows `stamped` names.
+fn stamp(messages: &mut [Value], stamped: &[(usize, u32)], session_id: &str) {
+    for (index, number) in stamped {
+        if let Some(object) = messages[*index].as_object_mut() {
+            object.insert("messageNumber".to_string(), json!(number));
+            object.insert(
+                "messageRef".to_string(),
+                json!(message_ref(session_id, *number)),
+            );
+        }
+    }
+}
+
+/// Sorts the user rows of `messages` without the database: those with a known number
+/// (`stamped`), those that never get one (remembered in `known.skipped`), and the user's own
+/// messages still to number (`candidates`, oldest first).
+fn classify(
+    known: &mut Known,
+    messages: &[Value],
+    since: i64,
+) -> (Vec<(usize, u32)>, Vec<Candidate>) {
     let mut stamped: Vec<(usize, u32)> = Vec::new();
     let mut candidates: Vec<Candidate> = Vec::new();
     for (index, message) in messages.iter().enumerate() {
@@ -268,7 +406,7 @@ fn annotate_with(db: &Connection, messages: &mut [Value], project_id: &str, sess
             continue;
         }
         let queued = message.get("queued").and_then(Value::as_bool) == Some(true);
-        let mut skip = |known: &mut Known| {
+        let skip = |known: &mut Known| {
             if !queued {
                 if known.skipped.len() >= SKIPPED_LIMIT {
                     known.skipped.clear();
@@ -304,60 +442,29 @@ fn annotate_with(db: &Connection, messages: &mut [Value], project_id: &str, sess
     }
     // In the order they were sent, so a page read at once numbers its messages in that order.
     candidates.sort_by_key(|candidate| candidate.order);
+    (stamped, candidates)
+}
+
+/// The database part of [`annotate_messages`]: reads the chat's numbers when they are not loaded
+/// yet, then numbers its new messages. Answers the rows to stamp. Blocking.
+fn annotate_with(
+    db: &Connection,
+    key: &ChatKey,
+    known: &mut Known,
+    messages: &[Value],
+) -> Vec<(usize, u32)> {
+    let since = since_ms(db);
+    if !known.loaded {
+        load_known(db, key, known);
+    }
+    let (mut stamped, candidates) = classify(known, messages, since);
     for candidate in candidates {
-        let hash = text_hash(&candidate.text);
-        // The same message again under another id (a resumed conversation's copy).
-        if let Some(number) = number_in_chat(db, &key, candidate.sent_at, &hash) {
-            known.by_id.insert(candidate.id, number);
+        if let Some(number) = assign(db, key, &candidate) {
+            known.by_id.insert(candidate.id.clone(), number);
             stamped.push((candidate.index, number));
-            continue;
-        }
-        let taken = |number: u32| known.by_id.values().any(|given| *given == number);
-        let number = copied_number(db, &key, candidate.sent_at, &hash)
-            .filter(|number| !taken(*number))
-            .unwrap_or(known.highest + 1);
-        let (lines, chars) = quote_totals(&candidate.text);
-        let written = db.execute(
-            "INSERT INTO chat_message_numbers \
-             (projectId, sessionId, number, messageId, sentAt, textHash, quote, lineCount, \
-              charCount, createdAt) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            params![
-                key.0,
-                key.1,
-                number,
-                candidate.id,
-                candidate.sent_at,
-                hash,
-                quote_prefix(&candidate.text),
-                lines,
-                chars,
-                chrono::Utc::now().to_rfc3339()
-            ],
-        );
-        if written.is_err() {
-            // Another gxserver process, or a row this run's cache missed: read what is stored.
-            *known = load_known(db, &key);
-            if let Some(number) = number_in_chat(db, &key, candidate.sent_at, &hash) {
-                known.by_id.insert(candidate.id, number);
-                stamped.push((candidate.index, number));
-            }
-            continue;
-        }
-        known.highest = known.highest.max(number);
-        known.by_id.insert(candidate.id, number);
-        stamped.push((candidate.index, number));
-    }
-    drop(all);
-    for (index, number) in stamped {
-        if let Some(object) = messages[index].as_object_mut() {
-            object.insert("messageNumber".to_string(), json!(number));
-            object.insert(
-                "messageRef".to_string(),
-                json!(message_ref(session_id, number)),
-            );
         }
     }
+    stamped
 }
 
 /// One stored message: its number, where it is in the transcript, and the start of its words.
@@ -447,10 +554,12 @@ pub(crate) fn with_message_quotes(
     if references.is_empty() {
         return text.to_string();
     }
-    let Ok(db) = open_gxserver_database(paths) else {
-        return text.to_string();
-    };
-    quote_with(&db, project_id, session_id, text, &references)
+    off_worker(|| {
+        let Ok(db) = open_gxserver_database(paths) else {
+            return text.to_string();
+        };
+        quote_with(&db, project_id, session_id, text, &references)
+    })
 }
 
 fn quote_with(
@@ -711,6 +820,35 @@ mod tests {
         })
     }
 
+    /// [`annotate_messages`] against the test's own database.
+    fn number_rows(db: &Connection, rows: &mut [Value], project_id: &str, session_id: &str) {
+        let key: ChatKey = (project_id.to_string(), session_id.to_string());
+        let held = chat(&key);
+        let mut known = held.lock().unwrap();
+        let stamped = annotate_with(db, &key, &mut known, rows);
+        drop(known);
+        stamp(rows, &stamped, session_id);
+    }
+
+    /// Two readers numbering the same chat at once never give two messages one number.
+    #[test]
+    fn a_number_is_taken_in_one_statement() {
+        let db = db();
+        let key: ChatKey = ("P1".to_string(), "G1f".to_string());
+        let candidate = |id: &str, at: i64, text: &str| Candidate {
+            index: 0,
+            id: id.to_string(),
+            sent_at: at,
+            order: (at, 0),
+            text: text.to_string(),
+        };
+        // Neither reader has seen the other's message: each asks for the next number.
+        assert_eq!(assign(&db, &key, &candidate("a", 1_000, "one")), Some(1));
+        assert_eq!(assign(&db, &key, &candidate("b", 2_000, "two")), Some(2));
+        // The same message from a second reader gets the number already given.
+        assert_eq!(assign(&db, &key, &candidate("a", 1_000, "one")), Some(1));
+    }
+
     fn numbers(rows: &[Value]) -> Vec<Option<u64>> {
         rows.iter()
             .map(|row| row.get("messageNumber").and_then(Value::as_u64))
@@ -730,7 +868,7 @@ mod tests {
                     "blocks": [{ "type": "text", "text": "reply" }] }),
             user("a", 1_000, "first"),
         ];
-        annotate_with(&db, &mut rows, "P1", "G1a");
+        number_rows(&db, &mut rows, "P1", "G1a");
         assert_eq!(numbers(&rows), vec![Some(2), None, Some(1)]);
         assert_eq!(rows[0]["messageRef"], "G1a.M2");
         // A rewind hides "b"; the next message still gets a new number.
@@ -738,7 +876,7 @@ mod tests {
             user("a", 1_000, "first"),
             user("c", 3_000, "after the rewind"),
         ];
-        annotate_with(&db, &mut next, "P1", "G1a");
+        number_rows(&db, &mut next, "P1", "G1a");
         assert_eq!(numbers(&next), vec![Some(1), Some(3)]);
     }
 
@@ -753,13 +891,13 @@ mod tests {
             "Done.\n\nMessage from another agent\nAgent: Claude\nSession: Thread\nSession ID: G2b\nReply to: S1:P1:G2b",
         );
         let mut rows = vec![queued, report, user("u", 1_200, "mine")];
-        annotate_with(&db, &mut rows, "P1", "G1b");
+        number_rows(&db, &mut rows, "P1", "G1b");
         assert_eq!(numbers(&rows), vec![None, None, Some(1)]);
         // The report is remembered as never numbered; the queued row is looked at again.
-        let all = known().lock().unwrap();
-        let chat = &all[&("P1".to_string(), "G1b".to_string())];
-        assert!(chat.skipped.contains("x"));
-        assert!(!chat.skipped.contains("q"));
+        let held = chat(&("P1".to_string(), "G1b".to_string()));
+        let known = held.lock().unwrap();
+        assert!(known.skipped.contains("x"));
+        assert!(!known.skipped.contains("q"));
     }
 
     #[test]
@@ -775,17 +913,17 @@ mod tests {
             user("a", 1_000, "one"),
             user("b", 2_000, "two"),
         ];
-        annotate_with(&db, &mut source, "P1", "G1c");
+        number_rows(&db, &mut source, "P1", "G1c");
         let mut fork = vec![
             user("a2", 1_000, "one"),
             user("b2", 2_000, "two"),
             user("c2", 3_000, "new in the fork"),
         ];
-        annotate_with(&db, &mut fork, "P1", "G1d");
+        number_rows(&db, &mut fork, "P1", "G1d");
         assert_eq!(numbers(&fork), vec![Some(2), Some(3), Some(4)]);
         // An unrelated chat that sent the same words at the same moment is nobody's copy.
         let mut other = vec![user("a3", 2_000, "two")];
-        annotate_with(&db, &mut other, "P1", "G1y");
+        number_rows(&db, &mut other, "P1", "G1y");
         assert_eq!(numbers(&other), vec![Some(1)]);
     }
 
@@ -797,7 +935,7 @@ mod tests {
             1_000,
             "make them 30px\nand use the accent colour",
         )];
-        annotate_with(&db, &mut rows, "P1", "G1e");
+        number_rows(&db, &mut rows, "P1", "G1e");
         let text = "same as [M1](message:M1) and #M9";
         let sent = quote_with(&db, "P1", "G1e", text, &referenced_messages(text));
         assert!(sent.starts_with("same as [M1](message:M1) and #M9\n\n<ghostex-system>"));
@@ -820,7 +958,7 @@ mod tests {
         // Only the start of a long message is kept, with its size for the quote's note.
         let long = format!("{}end", "a line\n".repeat(400));
         let mut rows = vec![user("b", 2_000, &long)];
-        annotate_with(&db, &mut rows, "P1", "G1e");
+        number_rows(&db, &mut rows, "P1", "G1e");
         let (kept, lines): (String, i64) = db
             .query_row(
                 "SELECT quote, lineCount FROM chat_message_numbers WHERE sessionId = 'G1e' AND number = 2",
@@ -835,7 +973,7 @@ mod tests {
         assert!(sent.contains("(the first 6 of 401 lines;"));
         // A resumed conversation's copy of a message (new id, same time and words) keeps its number.
         let mut resumed = vec![user("b-copy", 2_000, &long)];
-        annotate_with(&db, &mut resumed, "P1", "G1e");
+        number_rows(&db, &mut resumed, "P1", "G1e");
         assert_eq!(numbers(&resumed), vec![Some(2)]);
         // The numbers go with their session.
         forget(&db, "P1", Some("G1e"));

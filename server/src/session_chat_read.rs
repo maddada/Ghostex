@@ -521,7 +521,12 @@ pub(crate) async fn handle_read_session_chat_http(
                         &project_id,
                         &session_id,
                     );
-                    crate::chat_message_numbers::annotate_result(page, &project_id, &session_id);
+                    crate::chat_message_numbers::annotate_result_async(
+                        page,
+                        &project_id,
+                        &session_id,
+                    )
+                    .await;
                 }
                 routed_json(
                     Some(endpoint_path),
@@ -1304,7 +1309,7 @@ pub(crate) async fn handle_read_session_chat_http(
         }
     }
     crate::session_chat_mention_paths::annotate_result(&mut result, &project_id, &session_id);
-    crate::chat_message_numbers::annotate_result(&mut result, &project_id, &session_id);
+    crate::chat_message_numbers::annotate_result_async(&mut result, &project_id, &session_id).await;
     routed_json(
         Some(endpoint_path),
         StatusCode::OK,
