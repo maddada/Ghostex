@@ -445,7 +445,8 @@ fn is_command_line(code: &str) -> bool {
 /// A program the list above does not know, written the way a command line is: a command name
 /// followed by a flag (`-config`, `--help`) or a path from the root or home (`/etc/x`,
 /// `~/.config/x`), or a path to an executable (`~/.local/opt/hub/cli-proxy-api`, `./run.sh`)
-/// followed by a flag or such a path (`./run.sh --fast`).
+/// followed by a flag or such a path (`./run.sh --fast`), or a script run from here followed by
+/// anything (`./run.sh build`).
 /// Plain words, one name, a path alone, a slash command (`/model opus`), a file (`main.rs --help`),
 /// a path with spaces in it, code and prose stay code.
 ///
@@ -501,12 +502,14 @@ fn is_unknown_program_line(first: &str, arguments: &[&str]) -> bool {
         let script = name.rsplit_once('.').is_none_or(|(_, extension)| {
             matches!(
                 extension,
-                "sh" | "bash" | "zsh" | "py" | "js" | "mjs" | "rb" | "pl"
+                "sh" | "bash" | "zsh" | "py" | "js" | "mjs" | "ts" | "rb" | "pl" | "ps1"
             )
         });
-        // A flag or a rooted path must follow, from wherever it starts (`/etc/hosts file`,
-        // `/Users/me/my project`, `./build output` are paths and words).
-        let arguments_fit = arguments.iter().any(fits);
+        // A flag or a rooted path must follow (`/etc/hosts file`, `/Users/me/my project`,
+        // `./build output` are paths and words), except after a script run from here, which takes
+        // any argument (`./run.sh build`).
+        let script_here = start.starts_with('.') && name.contains('.');
+        let arguments_fit = script_here || arguments.iter().any(fits);
         return name.len() >= 2 && is_command_name(name) && script && arguments_fit;
     }
     first.len() >= 2
@@ -589,6 +592,8 @@ mod tests {
                 "cli-proxy-api -config ~/.config/cliproxyapi/config.yaml -codex-device-login",
             ),
             ("./run.sh --fast", "./run.sh --fast"),
+            ("./run.sh build", "./run.sh build"),
+            ("../scripts/setup.ps1 dev", "../scripts/setup.ps1 dev"),
             ("../bin/hub -config ~/hub.yaml", "../bin/hub -config ~/hub.yaml"),
             ("bash ./install.sh", "bash ./install.sh"),
             ("sh -c 'echo hi'", "sh -c 'echo hi'"),
@@ -659,7 +664,7 @@ mod tests {
             "main.rs --help",
             // From here, a word after a path is not enough.
             "./build output",
-            "./run.sh build",
+            "./notes.md build",
             // Class names, not flags.
             "card -top-2",
             "box -mt-4",
