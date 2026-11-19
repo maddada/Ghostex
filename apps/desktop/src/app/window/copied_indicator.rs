@@ -58,6 +58,14 @@ impl Render for CopiedIndicatorView {
         let font_family = theme.font_family.clone();
         let (background, foreground, border) =
             (theme.tokens.popover, theme.popover_foreground, theme.border);
+        // CDXC:Theming 2026-11-20: the bubble's window is transparent and unblurred, floating over
+        // the main window, so under glass it is the work area's colour lifted toward white rather
+        // than the solid popover tone (near-black on a dark theme). Glass off, unchanged.
+        let background: gpui::Fill = if crate::app::helpers::window_glass_active() {
+            crate::app::helpers::glass_lifted_surface(*background).into()
+        } else {
+            background.into()
+        };
         div()
             .size_full()
             .flex()

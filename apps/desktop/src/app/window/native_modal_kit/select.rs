@@ -476,7 +476,13 @@ pub(crate) fn modal_select_menu_rows<V: 'static>(
                         .rounded(px(MODAL_RADIUS_CONTROL))
                         .border_1()
                         .border_color(hsla(p.menu_border))
-                        .bg(hsla(p.menu_background))
+                        // CDXC:Theming 2026-11-20: under glass the menu is the dialog's theme
+                        // colour lifted (`lifted_menu_fill`), never the near-black menu colour.
+                        .bg(hsla(if p.glass {
+                            p.lifted_menu_fill()
+                        } else {
+                            p.menu_background
+                        }))
                         .shadow_lg()
                         .on_mouse_down_out(cx.listener(
                             move |this, event: &MouseDownEvent, window, cx| {
@@ -684,7 +690,14 @@ pub(crate) fn modal_searchable_select_menu<V: 'static>(
                     .child(row.label.clone()),
             )
     });
-    let filter_group = modal_filter_field(p.light, p.solid_surface, filter_focused)
+    // CDXC:Theming 2026-11-20: under glass the popup is the dialog's theme colour lifted
+    // (`lifted_menu_fill`), never the near-black theme chrome; the filter composites over it.
+    let menu_fill = if p.glass {
+        p.lifted_menu_fill()
+    } else {
+        p.solid_surface
+    };
+    let filter_group = modal_filter_field(p.light, menu_fill, filter_focused)
         .child(
             div().flex_1().min_w_0().child(
                 Input::new(filter)
@@ -731,7 +744,7 @@ pub(crate) fn modal_searchable_select_menu<V: 'static>(
         .rounded(px(MODAL_RADIUS_CONTROL))
         .border_1()
         .border_color(hsla(popup_border))
-        .bg(hsla(p.solid_surface))
+        .bg(hsla(menu_fill))
         .text_color(hsla(p.foreground))
         .shadow(vec![gpui::BoxShadow {
             color: hsla(modal_rgba(0x000000, 0.35)),

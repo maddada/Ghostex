@@ -9,7 +9,10 @@
 //! for its raised fills, the recipe Quick Access and the New Thread picker use. Supersedes the fixed
 //! React greys and the lifted #2b2b2b this window first shipped with.
 use crate::app::window::native_modal_kit::MODAL_UI_FONT;
-use crate::app::window::native_modal_kit::{css_mix, frosted_dialog_washes, modal_rgba, rgba_of};
+use crate::app::window::native_modal_kit::{
+    LIFTED_DIALOG_GLASS_ALPHA, LIFTED_MENU_LIFT_DARK, LIFTED_MENU_LIFT_LIGHT, css_mix,
+    frosted_dialog_washes, modal_rgba, rgba_of,
+};
 use gpui::{Rgba, SharedString};
 
 #[derive(Clone, Copy)]
@@ -77,12 +80,19 @@ impl FindPalette {
         if !glass {
             return base;
         }
-        // Menus draw inside this window, over rows nothing blurs, so they stay solid.
-        let solid_menu = if light {
-            chrome
+        // Menus draw inside this window, over rows nothing blurs, so they cover nearly all of it.
+        // CDXC:Theming 2026-11-20: the filter menus and the full-prompt view take the window's
+        // theme colour lifted toward white (as `ModalPalette::lifted_menu_fill`: 10% dark, 60%
+        // light, at 96%) instead of the 6% opaque lift that read as a dark slab on the glass.
+        let lift = if light {
+            LIFTED_MENU_LIFT_LIGHT
         } else {
-            css_mix(modal_rgba(0xffffff, 1.0), 0.06, chrome)
+            LIFTED_MENU_LIFT_DARK
         };
+        let lifted_menu = rgba_of(
+            css_mix(modal_rgba(0xffffff, 1.0), lift, rgba_of(chrome, 1.0)),
+            LIFTED_DIALOG_GLASS_ALPHA,
+        );
         // The dialogs' washes on the popover glass (CDXC:AppModal 2026-10-29 on
         // `frosted_dialog_fill`): the selected row at the hover wash, fields and the filter
         // buttons' hover at the raised wash, the lines at the hairline.
@@ -94,7 +104,7 @@ impl FindPalette {
             field: washes.raised,
             pill: washes.raised,
             pill_outline: washes.hairline,
-            popover: solid_menu,
+            popover: lifted_menu,
             hairline: washes.hairline,
             ..base
         }

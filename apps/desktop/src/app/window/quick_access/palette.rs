@@ -7,7 +7,8 @@
 //! the modal kit's #1d1d1d, and its row text is the deliberate #b4b8bf rather than the theme
 //! foreground. Those are the two reasons this is its own palette instead of a ModalPalette call.
 use crate::app::window::native_modal_kit::{
-    ModalPalette, css_mix, dark_theme_text_colors, frosted_dialog_washes, modal_rgba, rgba_of,
+    LIFTED_DIALOG_GLASS_ALPHA, LIFTED_MENU_LIFT_DARK, LIFTED_MENU_LIFT_LIGHT, ModalPalette,
+    css_mix, dark_theme_text_colors, frosted_dialog_washes, modal_rgba, rgba_of,
 };
 use gpui::{Hsla, Rgba, rgb};
 
@@ -34,6 +35,8 @@ pub(crate) const QUICK_ACCESS_FOOTER_HEIGHT: f32 = 44.0;
 pub(crate) struct QuickAccessPalette {
     /// The light appearance, for the shared button fills (`neutral_button_fills`).
     pub(crate) light: bool,
+    /// The window is frosted under window glass ([`Self::frosted`]).
+    pub(crate) glass: bool,
     /// The child window's own fill; the React surface is transparent over it.
     pub(crate) window: Rgba,
     /// `window` as an opaque colour, for text drawn on a foreground fill. Equal to `window`
@@ -111,6 +114,7 @@ impl QuickAccessPalette {
             let hairline = modal_rgba(0x000000, 0.14);
             Self {
                 light,
+                glass: false,
                 window,
                 solid_window: window,
                 raised: rgb(0xf0f0f0),
@@ -143,6 +147,7 @@ impl QuickAccessPalette {
             let hairline = modal_rgba(0xffffff, 0.08);
             Self {
                 light,
+                glass: false,
                 window,
                 solid_window: window,
                 raised: rgb(0x161616),
@@ -211,6 +216,7 @@ impl QuickAccessPalette {
             (0xffffff, 0.08)
         };
         let washes = frosted_dialog_washes(light);
+        self.glass = true;
         self.window = fill;
         self.raised = washes.raised;
         self.raised_hover = washes.raised_hover;
@@ -226,6 +232,25 @@ impl QuickAccessPalette {
         )
         .into();
         self.with_theme_roles(light)
+    }
+
+    /// A popover drawn inside the Quick Access window itself (the tag composer): under glass the
+    /// window's own colour lifted a step toward white at 96%, as `ModalPalette::lifted_menu_fill`
+    /// (CDXC:Theming 2026-11-20: a window cannot blur its own content, so such a popover is never
+    /// the near-black menu colour on the glass); `menu_background` otherwise.
+    pub(crate) fn inline_menu_background(&self) -> Rgba {
+        if !self.glass {
+            return self.menu_background;
+        }
+        let lift = if self.light {
+            LIFTED_MENU_LIFT_LIGHT
+        } else {
+            LIFTED_MENU_LIFT_DARK
+        };
+        rgba_of(
+            css_mix(rgb(0xffffff), lift, rgba_of(self.solid_window, 1.0)),
+            LIFTED_DIALOG_GLASS_ALPHA,
+        )
     }
 
     /// `bg-border/50`: the hairline the Commands list draws between groups.

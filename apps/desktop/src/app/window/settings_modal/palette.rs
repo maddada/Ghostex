@@ -108,14 +108,11 @@ impl SettingsPalette {
             let hairline = modal.hairline;
             // CDXC:Settings 2026-11-06 DECISION:
             // The select and searchable dropdown menus drew the theme chrome (`solid_surface`, near-black on the default theme) under glass. The user does not want black fills on the glass design, so they take the lifted themed surface the dialogs inside Settings use (`dialog_surface`), still opaque so the page does not read through an open menu.
-            let popup = css_mix(
-                rgb(0xffffff),
-                0.055,
-                Rgba {
-                    a: 1.0,
-                    ..modal.solid_surface
-                },
-            );
+            // CDXC:Theming 2026-11-20: the 5.5% lift (about #1b1b1b) still read as a dark slab on
+            // the glass window, so every Settings menu takes the modal kit's menu lift (10%) at 96%,
+            // which still keeps the page from reading through an open menu (supersedes the opaque
+            // 5.5% fill of CDXC:Settings 2026-11-06 under glass).
+            let popup = modal.lifted_menu_fill();
             return Self {
                 modal,
                 light: false,

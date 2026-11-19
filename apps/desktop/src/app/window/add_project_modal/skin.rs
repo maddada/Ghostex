@@ -118,7 +118,25 @@ impl AddProjectSkin {
     ///
     /// CDXC:AddProject 2026-10-14 DECISION:
     /// User: "I want the buttons in the Add Project dialog to not be white; they should be a darker background color", then: the buttons' background should be the same colour in light and dark mode, darker still than the dark-mode fill, with a bit heavier text, and an icon on Create & Add. Every Add Project button (the path bar's actions, the clone review's footer, Setup Required / Install) is this solid #262626 with #f5f5f5 text, one font weight heavier than before. This supersedes the 2026-10-02 white bar buttons; the bar's actions still share one look.
+    ///
+    /// CDXC:Theming 2026-11-20: a near-black button is a black slab on the glass window and on the
+    /// light dialog, so under glass the buttons take the dialog's control wash (`raised`, a step
+    /// stronger on hover and press), and in light mode with glass off the app's light neutral
+    /// filled button (`neutral_button_fills`, an ink wash that reads on the white dialog and the
+    /// #f5f5f5 path bar alike), with the dialog's foreground as the label. Supersedes the #262626
+    /// of CDXC:AddProject 2026-10-14 there; dark with glass off keeps it.
     pub(super) fn button_fills(&self) -> ButtonFills {
+        if self.p.glass {
+            let ink = if self.p.light { 0x000000 } else { 0xffffff };
+            return ButtonFills {
+                rest: self.p.raised,
+                hover: self.p.raised_hover,
+                pressed: css_mix(rgb(ink), 0.06, self.p.raised_hover),
+            };
+        }
+        if self.p.light {
+            return neutral_button_fills(true);
+        }
         ButtonFills {
             rest: rgb(0x262626),
             hover: rgb(0x303030),
@@ -126,9 +144,14 @@ impl AddProjectSkin {
         }
     }
 
-    /// The label colour on `button_fills`.
+    /// The label colour on `button_fills`: the dialog's foreground in light mode (on the light
+    /// wash, CDXC:Theming 2026-11-20), #f5f5f5 in dark.
     pub(super) fn button_text(&self) -> Rgba {
-        rgb(0xf5f5f5)
+        if self.p.light {
+            self.p.foreground
+        } else {
+            rgb(0xf5f5f5)
+        }
     }
 
     /// A fill for a control that can carry a ring, on the clone-options panel. gpui paints a box
