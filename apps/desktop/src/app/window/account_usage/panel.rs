@@ -394,7 +394,7 @@ impl AccountUsagePanel {
                 let (app, account) = (app.clone(), account.clone());
                 cx.defer(move |cx| {
                     let _ = app.update(cx, |app, cx| {
-                        app.open_accounts_from_usage_popup(id, Some(account), cx);
+                        app.open_accounts_from_usage_popup(id, Some(account), None, cx);
                     });
                 });
             });
@@ -559,7 +559,7 @@ impl AccountUsagePanel {
                         let (reconnect, app) = (reconnect.clone(), app.clone());
                         cx.defer(move |cx| {
                             let _ = app.update(cx, |app, cx| {
-                                app.open_accounts_from_usage_popup(id, reconnect, cx);
+                                app.open_accounts_from_usage_popup(id, reconnect, None, cx);
                             });
                         });
                     })
@@ -581,6 +581,76 @@ impl AccountUsagePanel {
                         })
                         .child(button.label),
                 )
+            })
+            .into_any_element()
+    }
+
+    /// The sign-in banner at the top: a row per computer the account is signed out on, each with
+    /// its Sign in again, then where it is fine.
+    fn render_sign_in_banner(&self, banner: SignInBanner) -> AnyElement {
+        let color = amber();
+        let p = self.palette;
+        let rows = banner.signed_out.into_iter().map(|row| {
+            let run = {
+                let (id, app) = (self.id, self.main_app.clone());
+                let (account, machine) = (row.account, row.machine);
+                std::rc::Rc::new(move |cx: &mut App| {
+                    let (app, account, machine) = (app.clone(), account.clone(), machine.clone());
+                    cx.defer(move |cx| {
+                        let _ = app.update(cx, |app, cx| {
+                            app.open_accounts_from_usage_popup(id, account, machine, cx);
+                        });
+                    });
+                })
+            };
+            let key_run = run.clone();
+            h_flex()
+                .w_full()
+                .gap(px(8.0))
+                .items_center()
+                .child(
+                    div()
+                        .min_w_0()
+                        .flex_1()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(color)
+                        .child(row.message),
+                )
+                .child(
+                    p.control(SharedString::from(format!(
+                        "account-usage-sign-in-{}",
+                        row.key
+                    )))
+                    .tab_index(0)
+                    .focus_visible(|this| this.shadow(focus_ring()))
+                    .on_click(move |_, _, cx| {
+                        cx.stop_propagation();
+                        run(cx);
+                    })
+                    .on_key_down(move |event, _, cx| {
+                        if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                            cx.stop_propagation();
+                            key_run(cx);
+                        }
+                    })
+                    .child("Sign in again"),
+                )
+        });
+        v_flex()
+            .w_full()
+            .mb(px(NOTICE_GAP))
+            .px(px(9.0))
+            .py(px(7.0))
+            .gap(px(5.0))
+            .rounded(px(RESOURCE_CONTROL_RADIUS))
+            .border_1()
+            .border_color(color.opacity(0.30))
+            .bg(color.opacity(0.10))
+            .text_size(px(12.0))
+            .line_height(px(NOTICE_LINE))
+            .children(rows)
+            .when_some(banner.fine, |this, fine| {
+                this.child(div().text_color(chrome_ink().opacity(0.70)).child(fine))
             })
             .into_any_element()
     }
@@ -694,8 +764,9 @@ impl Render for AccountUsagePanel {
             }
             window.request_animation_frame();
         }
-        let notice =
-            account_notice(&self.account, self.now).map(|notice| self.render_notice(notice));
+        let notice = shown_notice(&self.account, self.now).map(|notice| self.render_notice(notice));
+        let sign_in =
+            sign_in_banner(&self.account).map(|banner| self.render_sign_in_banner(banner));
         let panel = cx.entity().downgrade();
         let reported = self.reported_height.clone();
         let body_height = self.body_height.clone();
@@ -704,6 +775,7 @@ impl Render for AccountUsagePanel {
             .w_full()
             .p(px(BODY_PADDING))
             .pt(px(BODY_PADDING_TOP))
+            .children(sign_in)
             .child(self.render_account_label(cx))
             .child(self.render_limits(cx))
             .children(notice)
@@ -862,6 +934,137 @@ fn account_notice(account: &Value, now: i64) -> Option<AccountNotice> {
     })
 }
 
+/// The banner at the top of the popup while the account is signed out on some computer.
+#[derive(Debug, PartialEq)]
+pub(super) struct SignInBanner {
+    signed_out: Vec<SignedOutRow>,
+    /// Where the account is fine, and any computer that can't be reached.
+    fine: Option<String>,
+    /// The card's own copy is one of the signed-out ones, so the notice under the card would
+    /// only say it again.
+    covers_shown: bool,
+}
+
+#[derive(Debug, PartialEq)]
+struct SignedOutRow {
+    /// "Signed out here", "Signed out on Mac Studio".
+    message: String,
+    /// The account to sign in again, and the remote computer it is on (`None` here).
+    account: Option<String>,
+    machine: Option<String>,
+    /// Unique per row, for the button's element id.
+    key: String,
+}
+
+/// CDXC:AgentProviders 2026-11-20 DECISION:
+/// User, of an amber card whose popup said nothing about it: "I see it's yellow so it's not
+/// connected, but when I open it it doesn't say anything about this so I can fix it with 1 click".
+/// While the account is signed out on any computer the popup opens with a banner: one line per
+/// computer it is signed out on ("Signed out here", "Signed out on Mac Studio") with Sign in
+/// again, which opens Settings > Accounts on that account with its sign-in started, on that
+/// computer through the page's machine picker for another computer (the chat's Reconnect does the
+/// same), then where it is still signed in and any computer that can't be reached. The computers
+/// come from `signInComputers` (`usage_popup_account`).
+fn sign_in_banner(account: &Value) -> Option<SignInBanner> {
+    let computers = array(account, "signInComputers");
+    let state = |computer: &Value| text(computer, "state").to_string();
+    if !computers
+        .iter()
+        .any(|computer| state(computer) == "signedOut")
+    {
+        return None;
+    }
+    let here = |computer: &Value| computer["here"] == true;
+    let id = text(account, "id");
+    let signed_out = computers
+        .iter()
+        .filter(|computer| state(computer) == "signedOut")
+        .map(|computer| SignedOutRow {
+            message: if here(computer) {
+                "Signed out here".to_string()
+            } else {
+                format!("Signed out on {}", text(computer, "name"))
+            },
+            account: (!id.is_empty()).then(|| id.to_string()),
+            machine: (!here(computer)).then(|| text(computer, "machine").to_string()),
+            key: text(computer, "machine").to_string(),
+        })
+        .collect();
+    let place = |computer: &&Value| {
+        if here(computer) {
+            "here".to_string()
+        } else {
+            format!("on {}", text(computer, "name"))
+        }
+    };
+    let list = |state_name: &str| -> Vec<String> {
+        computers
+            .iter()
+            .filter(|computer| state(computer) == state_name)
+            .map(|computer| place(&computer))
+            .collect()
+    };
+    let mut fine = Vec::new();
+    let signed_in = list("signedIn");
+    if !signed_in.is_empty() {
+        fine.push(format!("Signed in {}.", spoken_list(&signed_in)));
+    }
+    let unreachable = list("unreachable");
+    if !unreachable.is_empty() {
+        let names: Vec<String> = unreachable
+            .iter()
+            .map(|place| place.trim_start_matches("on ").to_string())
+            .map(|name| {
+                if name == "here" {
+                    "this computer".into()
+                } else {
+                    name
+                }
+            })
+            .collect();
+        fine.push(format!("Can't reach {} right now.", spoken_list(&names)));
+    }
+    Some(SignInBanner {
+        signed_out,
+        fine: (!fine.is_empty()).then(|| fine.join(" ")),
+        covers_shown: computers
+            .iter()
+            .any(|computer| computer["shown"] == true && state(computer) == "signedOut"),
+    })
+}
+
+/// The notice under the card, unless the sign-in banner already says the card's copy is signed
+/// out and offers its sign-in.
+fn shown_notice(account: &Value, now: i64) -> Option<AccountNotice> {
+    if sign_in_banner(account).is_some_and(|banner| banner.covers_shown) {
+        return None;
+    }
+    account_notice(account, now)
+}
+
+/// The sign-in banner's height with the gap under it, 0 without one.
+fn sign_in_banner_height(account: &Value) -> f32 {
+    let Some(banner) = sign_in_banner(account) else {
+        return 0.0;
+    };
+    let rows = banner.signed_out.len() as f32;
+    let fine = if banner.fine.is_some() {
+        NOTICE_LINE + 5.0
+    } else {
+        0.0
+    };
+    NOTICE_GAP + 14.0 + 2.0 + rows * CONTROL_HEIGHT + (rows - 1.0) * 5.0 + fine
+}
+
+/// "a", "a and b", "a, b and c".
+fn spoken_list(items: &[String]) -> String {
+    match items {
+        [] => String::new(),
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
 const NOTICE_GAP: f32 = 8.0;
 const NOTICE_LINE: f32 = 17.0;
 
@@ -893,9 +1096,10 @@ pub(crate) fn estimated_height(account: &Value) -> f32 {
         if rows > 0 {
             limits += 1.0 + SEPARATOR_MARGIN * 2.0 + rows as f32 * KV_ROW_HEIGHT;
         }
-        let notice = account_notice(&account, now()).is_some();
+        let notice = shown_notice(&account, now()).is_some();
         return TITLEBAR_POPUP_READING_HEADER_HEIGHT
             + 2.0
+            + sign_in_banner_height(&account)
             + BODY_PADDING_TOP
             + BODY_PADDING
             + SECTION_LABEL_HEIGHT
@@ -919,7 +1123,7 @@ pub(crate) fn estimated_height(account: &Value) -> f32 {
     if rows > 0 {
         limits += 1.0 + SEPARATOR_MARGIN * 2.0 + rows as f32 * KV_ROW_HEIGHT;
     }
-    let notice = account_notice(&account, now()).is_some();
+    let notice = shown_notice(&account, now()).is_some();
     let history = &account["usageHistory"];
     // The same cases `render_history` writes its notice for.
     let history_notice = history.is_null()
@@ -941,6 +1145,7 @@ pub(crate) fn estimated_height(account: &Value) -> f32 {
         };
     TITLEBAR_POPUP_READING_HEADER_HEIGHT
         + 2.0
+        + sign_in_banner_height(&account)
         + BODY_PADDING_TOP
         + BODY_PADDING
         + SECTION_LABEL_HEIGHT
@@ -1058,6 +1263,62 @@ mod tests {
         let notice = account_notice(&account("loading", None, "local"), 0).unwrap();
         assert_eq!(notice.button, None);
         assert_eq!(account_notice(&account("ready", None, "local"), 0), None);
+    }
+
+    #[test]
+    fn the_popup_says_where_the_account_is_signed_out_and_offers_the_sign_in_there() {
+        let computer = |machine: &str, name: &str, state: &str, shown: bool| json!({"machine": machine, "name": name, "here": machine == "local", "shown": shown, "state": state});
+        let account = |computers: Vec<Value>| {
+            json!({
+                "id": "claude-sp", "status": "ready", "titlebarMachine": "local",
+                "signInComputers": computers,
+            })
+        };
+        // Signed out on another computer only: its row signs in there, and here is fine.
+        let elsewhere = account(vec![
+            computer("local", "MacBook", "signedIn", true),
+            computer("remote-1", "Mac Studio", "signedOut", false),
+        ]);
+        let banner = sign_in_banner(&elsewhere).unwrap();
+        assert_eq!(
+            banner.signed_out,
+            vec![SignedOutRow {
+                message: "Signed out on Mac Studio".into(),
+                account: Some("claude-sp".into()),
+                machine: Some("remote-1".into()),
+                key: "remote-1".into(),
+            }]
+        );
+        assert_eq!(banner.fine.as_deref(), Some("Signed in here."));
+        assert!(!banner.covers_shown);
+        // Signed out here: the banner replaces the notice under the card.
+        let mut here = account(vec![
+            computer("local", "MacBook", "signedOut", true),
+            computer("remote-1", "Mac Studio", "signedIn", false),
+            computer("remote-2", "Work PC", "unreachable", false),
+        ]);
+        here["status"] = json!("loginRequired");
+        let banner = sign_in_banner(&here).unwrap();
+        assert_eq!(banner.signed_out[0].message, "Signed out here");
+        assert_eq!(banner.signed_out[0].machine, None);
+        assert_eq!(
+            banner.fine.as_deref(),
+            Some("Signed in on Mac Studio. Can't reach Work PC right now.")
+        );
+        assert!(banner.covers_shown);
+        assert_eq!(shown_notice(&here, 0), None);
+        assert!(account_notice(&here, 0).is_some());
+        assert!(estimated_height(&here) > estimated_height(&elsewhere) - 1.0);
+        // Signed in everywhere: no banner.
+        let fine = account(vec![
+            computer("local", "MacBook", "signedIn", true),
+            computer("remote-1", "Mac Studio", "unreachable", false),
+        ]);
+        assert_eq!(sign_in_banner(&fine), None);
+        assert_eq!(
+            spoken_list(&["a".into(), "b".into(), "c".into()]),
+            "a, b and c"
+        );
     }
 
     /// Codex has two limits and no Extra usage row, so it opens shorter than Claude instead of

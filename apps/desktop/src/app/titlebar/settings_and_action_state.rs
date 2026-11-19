@@ -88,6 +88,7 @@ impl GhostexGpuiApp {
     pub(crate) fn open_gpui_settings_accounts_reconnect(
         &mut self,
         account_id: Option<&str>,
+        machine: Option<&str>,
         window: Option<&mut Window>,
         cx: &mut gpui::Context<Self>,
     ) {
@@ -100,6 +101,11 @@ impl GhostexGpuiApp {
         });
         if let Some(account_id) = account_id {
             open_message["initialAccountsReconnect"] = serde_json::json!(account_id);
+        }
+        // Another computer's account signs in there, from the page's machine picker (the chat's
+        // Reconnect does the same: CDXC:AgentProviders 2026-11-13 in native_chat/actions.rs).
+        if let Some(machine) = machine.filter(|machine| *machine != "local") {
+            open_message["initialMachineId"] = serde_json::json!(machine);
         }
         open_message["latestSidebarStateMessage"] = sidebar_state_message.clone();
         self.open_gpui_app_modal_window(modal, open_message, sidebar_state_message, window, cx);

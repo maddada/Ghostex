@@ -246,15 +246,59 @@ fn meter_state(label: &str, copies: &[&Value]) -> (MeterSignIn, bool, Option<Str
         match sign_in {
             // The card's popup has the account's Reconnect.
             MeterSignIn::SignedOut if shown_here => lines.push("Click to reconnect it.".into()),
-            // Another computer's login is signed in on that computer (the popup says the same).
+            // The popup signs it in on that computer, from Settings > Accounts' machine picker.
             MeterSignIn::SignedOut | MeterSignIn::SignedOutElsewhere => {
-                lines.push("Sign in again on that computer.".into())
+                lines.push("Click to sign it in again there.".into())
             }
             MeterSignIn::SignedIn => {}
         }
         lines.join("\n")
     });
     (sign_in, unreachable(copies[0]), tooltip)
+}
+
+/// The account the usage popup `key` opens on, with every computer's copy of it listed in
+/// `signInComputers`: `{machine, name, here, shown, state}`, `state` being `signedOut`,
+/// `unreachable` or `signedIn`, the card's first.
+///
+/// CDXC:AgentProviders 2026-11-20 DECISION:
+/// User, of an amber card whose popup said nothing about it: "I see it's yellow so it's not
+/// connected, but when I open it it doesn't say anything about this so I can fix it with 1 click".
+/// The popup opens on the card's copy, so it has to be told how the account stands on every
+/// computer to say where it is signed out, offer the sign-in there, and say where it is fine.
+pub(crate) fn usage_popup_account(accounts: &[Value], key: &str) -> Option<Value> {
+    let is_key = |account: &&Value| text(account, "titlebarKey") == key;
+    let shown = accounts.iter().find(is_key)?;
+    let copies = distinct_account_copies(accounts)
+        .into_iter()
+        .find(|copies| copies.iter().any(is_key))
+        .unwrap_or_else(|| vec![shown]);
+    let computers: Vec<Value> = copies
+        .iter()
+        .map(|copy| {
+            let machine = match text(copy, "titlebarMachine") {
+                "" => "local",
+                machine => machine,
+            };
+            let state = if signed_out(copy) {
+                "signedOut"
+            } else if copy["machineUnreachable"] == true {
+                "unreachable"
+            } else {
+                "signedIn"
+            };
+            json!({
+                "machine": machine,
+                "name": machine_label(machine),
+                "here": machine == "local",
+                "shown": is_key(copy),
+                "state": state,
+            })
+        })
+        .collect();
+    let mut account = shown.clone();
+    account["signInComputers"] = json!(computers);
+    Some(account)
 }
 
 /// Whether a hub account's meter gives way to the Swap account of the same login (see
@@ -654,11 +698,12 @@ impl GhostexGpuiApp {
     }
 
     /// A usage notice's button: the popup closes and Settings > Accounts opens, on `reconnect`'s
-    /// sign-in when it names an account.
+    /// sign-in when it names an account, on `machine` (a remote computer's id) when it names one.
     pub(crate) fn open_accounts_from_usage_popup(
         &mut self,
         id: ExtensionId,
         reconnect: Option<String>,
+        machine: Option<String>,
         cx: &mut gpui::Context<Self>,
     ) {
         let popup = self.titlebar_popup_window;
@@ -666,7 +711,12 @@ impl GhostexGpuiApp {
         if let Some(popup) = popup {
             let _ = popup.update(cx, |_, window, _| window.remove_window());
         }
-        self.open_gpui_settings_accounts_reconnect(reconnect.as_deref(), None, cx);
+        self.open_gpui_settings_accounts_reconnect(
+            reconnect.as_deref(),
+            machine.as_deref(),
+            None,
+            cx,
+        );
     }
 
     pub(crate) fn sync_titlebar_account_privacy(&self, cx: &mut gpui::Context<Self>) {
@@ -675,13 +725,10 @@ impl GhostexGpuiApp {
         else {
             return;
         };
-        if let Some(account) = self
-            .titlebar_accounts
-            .iter()
-            .find(|account| text(account, "titlebarKey") == id.as_str())
+        if let Some(account) = usage_popup_account(&self.titlebar_accounts, id.as_str())
             && let Some(popup) = self.titlebar_popup_window
         {
-            let account = popup_account(account);
+            let account = popup_account(&account);
             let _ = popup.update(cx, |popup, _, cx| popup.update_account_usage(account, cx));
         }
     }
@@ -1364,7 +1411,7 @@ mod tests {
             "{tooltip}"
         );
         assert!(
-            tooltip.contains(": signed out\nSign in again on that computer."),
+            tooltip.contains(": signed out\nClick to sign it in again there."),
             "{tooltip}"
         );
     }
@@ -1470,6 +1517,51 @@ mod tests {
     }
 
     /// A card without a problem keeps no tooltip (2026-09-21).
+    #[test]
+    fn the_usage_popup_learns_every_computers_state() {
+        let accounts = vec![
+            account("local", "claude", "claude-a", "SP"),
+            with(
+                with(
+                    account("remote-1", "claude", "claude-a", "SP"),
+                    "status",
+                    json!("loginRequired"),
+                ),
+                "titlebarKey",
+                json!("remote-1:claude-a"),
+            ),
+            with(
+                account("remote-2", "claude", "claude-a", "SP"),
+                "machineUnreachable",
+                json!(true),
+            ),
+        ];
+        let key = text(&accounts[0], "titlebarKey").to_string();
+        let popup = usage_popup_account(&accounts, &key).unwrap();
+        let states: Vec<(&str, bool, bool, &str)> = popup["signInComputers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| {
+                (
+                    text(c, "machine"),
+                    c["here"] == true,
+                    c["shown"] == true,
+                    text(c, "state"),
+                )
+            })
+            .collect();
+        assert_eq!(
+            states,
+            vec![
+                ("local", true, true, "signedIn"),
+                ("remote-1", false, false, "signedOut"),
+                ("remote-2", false, false, "unreachable"),
+            ]
+        );
+        assert_eq!(usage_popup_account(&accounts, "nope"), None);
+    }
+
     #[test]
     fn a_signed_in_account_has_no_tooltip() {
         let accounts = vec![
