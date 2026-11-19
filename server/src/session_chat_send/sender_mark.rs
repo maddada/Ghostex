@@ -118,14 +118,14 @@ pub(crate) fn signed_by(text: &str, own_ref: &str) -> bool {
     split_agent_message(text).is_some_and(|parts| parts.reply_to == own_ref)
 }
 
-/// gxserver's block for the agent session `project_id`/`session_id` of this computer.
-fn session_block(
+/// This computer's record of the session `project_id`/`session_id` (`Null` when it has none).
+fn read_session(
     paths: &GxserverPaths,
     server_id: &str,
     project_id: &str,
     session_id: &str,
-) -> String {
-    let session = crate::storage::open_gxserver_database(paths)
+) -> Value {
+    crate::storage::open_gxserver_database(paths)
         .ok()
         .and_then(|db| {
             crate::domain::DomainRepository::new(&db, server_id)
@@ -133,7 +133,11 @@ fn session_block(
                 .ok()
                 .flatten()
         })
-        .unwrap_or(Value::Null);
+        .unwrap_or(Value::Null)
+}
+
+/// gxserver's block for the agent session `session` of this computer.
+fn session_block(session: &Value, server_id: &str, project_id: &str, session_id: &str) -> String {
     let field = |key: &str| {
         session
             .get(key)
@@ -184,8 +188,18 @@ pub(crate) fn sign_agent_message(
     if signed_by(&text, &own_ref) {
         return;
     }
+    let session = read_session(paths, server_id, project_id, session_id);
+    // A plain (non-agent) terminal pane holds a session token too: the person at it sends as the
+    // user, as the raw verbs always did there (CDXC:Coordinators 2026-10-24 in outbound.rs).
+    if session
+        .get("agentId")
+        .and_then(Value::as_str)
+        .is_none_or(|agent| agent.trim().is_empty())
+    {
+        return;
+    }
     params.remove("draftVersion");
-    let block = session_block(paths, server_id, project_id, session_id);
+    let block = session_block(&session, server_id, project_id, session_id);
     params.insert(
         "text".to_string(),
         json!(place_agent_message_block(&block, &text)),

@@ -50,7 +50,7 @@ pub(crate) fn caller() -> CliResult<Value> {
     match lookup_caller()? {
         CallerLookup::Agent(caller) => Ok(caller),
         CallerLookup::NoSession => Err(CliError::Other("Cannot identify the caller. Run inside a Ghostex agent session with GHOSTEX_GLOBAL_SESSION_REF or GHOSTEX_SESSION_ID set.".into())),
-        CallerLookup::NotOneAgent { key, reference } => Err(CliError::Other(format!("Cannot identify one agent session from {key}={reference}. Run ghostex sessions --json to inspect the session; identity was not guessed."))),
+        CallerLookup::NotOneAgent { key, reference } | CallerLookup::PlainSession { key, reference } => Err(CliError::Other(format!("Cannot identify one agent session from {key}={reference}. Run ghostex sessions --json to inspect the session; identity was not guessed."))),
     }
 }
 
@@ -103,13 +103,25 @@ const SESSION_VARIABLES: [&str; 4] = [
     "ZMX_SESSION",
 ];
 
-/// The calling agent session; `None` only when no session variable is set at all. A variable that
-/// names no single agent session is an error, never "the user" (the raw verbs' sender block).
-pub(crate) fn agent_caller_strict() -> CliResult<Option<Value>> {
+/// Who runs a raw verb (the raw verbs' sender block).
+pub(crate) enum RawCaller {
+    /// An agent session: its block goes with the message.
+    Agent(Value),
+    /// A plain (non-agent) Ghostex terminal pane, named by its variable: the user, as before.
+    PlainPane,
+    /// No session variable at all: the user's own terminal, or an agent that dropped its
+    /// variables, which outbound.rs tells apart by the pane above.
+    NoSession,
+}
+
+/// The raw verbs' caller. A variable that names no session, or several, is an error, never "the
+/// user"; one that names a single plain terminal pane is the person at it.
+pub(crate) fn raw_caller() -> CliResult<RawCaller> {
     match lookup_caller()? {
-        CallerLookup::Agent(caller) => Ok(Some(caller)),
-        CallerLookup::NoSession => Ok(None),
-        CallerLookup::NotOneAgent { .. } => caller().map(Some),
+        CallerLookup::Agent(caller) => Ok(RawCaller::Agent(caller)),
+        CallerLookup::PlainSession { .. } => Ok(RawCaller::PlainPane),
+        CallerLookup::NoSession => Ok(RawCaller::NoSession),
+        CallerLookup::NotOneAgent { .. } => caller().map(RawCaller::Agent),
     }
 }
 
@@ -118,12 +130,21 @@ pub(crate) fn agent_caller_strict() -> CliResult<Option<Value>> {
 pub(crate) fn agent_caller() -> CliResult<Option<Value>> {
     Ok(match lookup_caller()? {
         CallerLookup::Agent(caller) => Some(caller),
-        CallerLookup::NoSession | CallerLookup::NotOneAgent { .. } => None,
+        CallerLookup::NoSession
+        | CallerLookup::NotOneAgent { .. }
+        | CallerLookup::PlainSession { .. } => None,
     })
 }
 
 enum CallerLookup {
     NoSession,
+    /// The variable names exactly one live session, a plain terminal pane rather than an agent:
+    /// the person at that pane, who sends as the user (CDXC:Coordinators 2026-10-24 in
+    /// outbound.rs).
+    PlainSession {
+        key: &'static str,
+        reference: String,
+    },
     NotOneAgent {
         key: &'static str,
         reference: String,
@@ -178,7 +199,10 @@ fn lookup_caller() -> CliResult<CallerLookup> {
             }
         })
         .collect();
-    if matches.len() != 1 || !is_agent(matches[0]) || text(matches[0], "globalRef").is_empty() {
+    if matches.len() == 1 && !is_agent(matches[0]) {
+        return Ok(CallerLookup::PlainSession { key, reference });
+    }
+    if matches.len() != 1 || text(matches[0], "globalRef").is_empty() {
         return Ok(CallerLookup::NotOneAgent { key, reference });
     }
     let mut caller = matches[0].clone();

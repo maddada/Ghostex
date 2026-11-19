@@ -210,7 +210,9 @@ pub fn run_resolved_session_bridge_action(
         .as_ref()
         .filter(|_| matches!(action, "sendText" | "sendEnter" | "sendKey"))
     {
-        if let Some(sender) = crate::ghostex_cli::agents::identity::agent_caller_strict()? {
+        if let crate::ghostex_cli::agents::identity::RawCaller::Agent(sender) =
+            crate::ghostex_cli::agents::identity::raw_caller()?
+        {
             crate::ghostex_cli::agents::outbound::check_agent_session_write(
                 &sender,
                 session,
