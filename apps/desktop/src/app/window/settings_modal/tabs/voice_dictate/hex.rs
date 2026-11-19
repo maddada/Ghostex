@@ -147,9 +147,9 @@ impl VoiceAgentTab {
     /// The status line and help for the Hex row's state.
     fn hex_status(&self, hex: &Value, state: &str, installing: bool) -> HexStatus {
         let here = if self.dictate.machine.is_none() {
-            "this computer"
+            crate::host_name::local_computer_name()
         } else {
-            "that computer"
+            "that computer".to_string()
         };
         let none = |title: &str, help: Option<String>| HexStatus {
             title: title.to_string(),
@@ -202,7 +202,7 @@ impl VoiceAgentTab {
                     help: Some(match older {
                         Some(version) => format!(
                             "{} has Hex {version}, which Ghostex can't dictate with. Hex 3 is a free app that turns your speech into text on your computer.",
-                            if self.dictate.machine.is_none() { "This computer" } else { "That computer" }
+                            if self.dictate.machine.is_none() { crate::host_name::local_computer_name() } else { "That computer".to_string() }
                         ),
                         None => "Dictation runs on Hex, a free app that turns your speech into text on your computer.".to_string(),
                     }),
@@ -405,9 +405,9 @@ impl VoiceAgentTab {
         let version = hex["version"].as_str().unwrap_or_default();
         let tooltip = (state == "ready").then(|| {
             let place = if local {
-                "this computer"
+                crate::host_name::local_computer_name()
             } else {
-                "that computer"
+                "that computer".to_string()
             };
             format!("Hex {version}. Recordings stay on {place}.")
         });

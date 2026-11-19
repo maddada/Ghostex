@@ -129,7 +129,7 @@ fn status(args: &[String]) -> CliResult<()> {
         .as_ref()
         .map(|answer| text(answer, "name").to_string())
         .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| "This computer".to_string());
+        .unwrap_or_else(crate::connected_computers::this_computer_name);
     let this_server_id = super::rpc::local_gxserver_server_id();
     let connected = connected_computers(&local);
     let known = crate::connected_computers::read_known_computers(
@@ -354,7 +354,10 @@ fn read_computer(local: &Target, computer: &ConnectedComputer, origin: Option<&s
                 let message = error.to_string();
                 // This computer's relay predates the read: it refuses it before asking.
                 if message.contains("Agents can't use") {
-                    return row.not_checked("needsNewerGhostex", newer_on("this computer"));
+                    return row.not_checked(
+                        "needsNewerGhostex",
+                        newer_on(&crate::connected_computers::this_computer_name()),
+                    );
                 }
                 // The other computer's gxserver predates it.
                 if message.contains("not available to another computer")

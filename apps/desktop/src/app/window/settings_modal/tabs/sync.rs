@@ -194,7 +194,10 @@ impl SyncTab {
                 .and_then(Value::as_str)
                 .map(str::to_string);
             let (dot, detail) = if this_computer {
-                (ListItemStatus::Neutral, "This computer".to_string())
+                (
+                    ListItemStatus::Neutral,
+                    "The computer you're on".to_string(),
+                )
             } else if removed {
                 (
                     ListItemStatus::Warning,

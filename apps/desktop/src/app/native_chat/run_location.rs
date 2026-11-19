@@ -1,4 +1,4 @@
-//! The Run on row above a new thread's composer: This computer or an agentbox box, drawn from the
+//! The Run on row above a new thread's composer: the computer (its icon and name) or an agentbox box, drawn from the
 //! document's `runLocation` key. gx-chat-core decides when it shows and what it offers
 //! (`packages/gx-chat-core/src/menus/run_location.rs`); this file only lays it out and reports the
 //! pick. The phone draws the same row in `apps/mobile/app/src/chat/native/RunLocationRow.tsx`.
@@ -77,7 +77,13 @@ impl NativeChatView {
                     .when(busy && on, |chip| chip.opacity(0.6))
                     .child(
                         svg()
-                            .path(icon_path(option["icon"].as_str().unwrap_or("box")))
+                            .path(match option["icon"].as_str().unwrap_or("box") {
+                                // The computer wears its own icon, the one its computer tab draws.
+                                "computer" => crate::app::gx_chat::session_directory::machine_icon(
+                                    &self.config.machine_id,
+                                ),
+                                icon => icon_path(icon),
+                            })
                             .size(px(13.0 * s))
                             .flex_shrink_0()
                             .text_color(if on { p.primary } else { p.muted }),

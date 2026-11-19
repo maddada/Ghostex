@@ -138,7 +138,7 @@ impl RemoteFold {
 
     fn title(self) -> &'static str {
         match self {
-            Self::ThisComputer => "This computer",
+            Self::ThisComputer => "The computer you're on",
             Self::Tailscale => "Tailscale",
             Self::Advanced => "Advanced",
         }
@@ -1310,10 +1310,16 @@ impl RemoteTab {
                     "Relay, ports, allowed keys, the pairing address, raw status".to_string()
                 }
             };
+            // The computer you're on is titled by its name (CDXC:RemoteMachines 2026-11-19 in
+            // packages/gx-chat-core/src/extras/where_pill.rs: never "This computer").
+            let title: SharedString = match fold {
+                RemoteFold::ThisComputer => current_machine::computer_name(self).into(),
+                _ => fold.title().into(),
+            };
             let header = style::fold_row(
                 t,
                 fold.anchor(),
-                fold.title(),
+                title,
                 line,
                 open,
                 move |tab: &mut Self, _window, cx| tab.toggle_fold(fold, cx),

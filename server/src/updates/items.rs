@@ -1234,7 +1234,7 @@ async fn app_item(state: &AppState) -> Value {
         "ghostex",
         "Ghostex".to_string(),
         "ghostex",
-        "This computer".to_string(),
+        crate::connected_computers::this_computer_name(),
         text("appVersion").or_else(|| text("version")),
         text("availableVersion"),
     );

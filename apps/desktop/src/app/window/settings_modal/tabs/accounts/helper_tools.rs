@@ -510,10 +510,10 @@ impl AccountsTab {
         (waiting > 0).then_some((tool, waiting))
     }
 
-    /// "this computer", or the remote machine the page shows.
+    /// This computer's name, or the remote machine the page shows.
     pub(crate) fn helper_place(&self, cx: &gpui::App) -> String {
         self.shown_machine_name(cx)
-            .unwrap_or_else(|| "this computer".to_string())
+            .unwrap_or_else(crate::host_name::local_computer_name)
     }
 
     /// What an account's sign-in box (and a sign-in that failed) says while its helper is

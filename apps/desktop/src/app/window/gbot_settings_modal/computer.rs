@@ -211,8 +211,8 @@ impl GpuiGbotSettingsModalWindow {
         let current = &answer["computer"];
         let wire = text(current, "computer");
         let this_name = match text(answer, "thisComputer") {
-            "" => "This computer".to_string(),
-            name => format!("This computer ({name})"),
+            "" => crate::host_name::local_computer_name(),
+            name => name.to_string(),
         };
         let mut choices = vec![self.computer_choice(
             "this".to_string(),

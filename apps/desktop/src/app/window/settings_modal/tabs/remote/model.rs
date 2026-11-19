@@ -1246,7 +1246,7 @@ pub(super) struct TileStatus {
 pub(super) fn machine_tile_status(state: Option<&str>, this_computer: bool) -> Option<TileStatus> {
     if this_computer && state == Some("connected") {
         return Some(TileStatus {
-            text: "This computer",
+            text: "You're on it",
             failed: false,
         });
     }
@@ -1269,7 +1269,7 @@ mod machine_tile_status_tests {
         assert_eq!(text("sshFailed", false), Some("Can't reach"));
         assert_eq!(text("authFailed", false), Some("Sign-in refused"));
         assert_eq!(text("installFailed", false), Some("Setup failed"));
-        assert_eq!(text("connected", true), Some("This computer"));
+        assert_eq!(text("connected", true), Some("You're on it"));
         assert_eq!(text("connected", false), None);
         assert_eq!(text("connecting", false), None);
         assert_eq!(machine_tile_status(None, false), None);

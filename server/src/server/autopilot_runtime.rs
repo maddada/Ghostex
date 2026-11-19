@@ -171,7 +171,8 @@ fn log_network(state: &AppState, gate: &NetworkGate, now: i64) {
             started: Some(since),
         } => (
             format!(
-                "This computer went offline at {}.",
+                "{} went offline at {}.",
+                crate::connected_computers::this_computer_name(),
                 crate::network_status::local_clock(*since)
             ),
             "Waiting for the network: no carry-ons, reloads or supervisor calls until it's back."
@@ -194,7 +195,7 @@ fn log_network(state: &AppState, gate: &NetworkGate, now: i64) {
             project_id: String::new(),
             session_id: String::new(),
             title: "Network".to_string(),
-            project: "This computer".to_string(),
+            project: crate::connected_computers::this_computer_name(),
             saw,
             did,
             rule: "offline".to_string(),

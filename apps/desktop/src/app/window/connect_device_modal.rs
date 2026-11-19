@@ -1103,14 +1103,15 @@ impl GpuiConnectDeviceWindow {
         let missing = self.ssh_server_missing();
         // Install needs the package manager gxserver found (it names its command).
         let can_install = missing && self.ssh_server.install_command.is_some();
+        let here = crate::host_name::local_computer_name();
         let heading = if failed.is_some() {
-            "SSH didn't turn on"
+            "SSH didn't turn on".to_string()
         } else if missing {
-            "The OpenSSH server isn't installed"
+            "The OpenSSH server isn't installed".to_string()
         } else if computer {
-            "This computer's code needs SSH"
+            format!("{here}'s code needs SSH")
         } else {
-            "The code needs SSH on this computer"
+            format!("The code needs SSH on {here}")
         };
         let explanation: SharedString = match failed.clone() {
             Some(message) => message.into(),

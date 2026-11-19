@@ -25,7 +25,7 @@ impl MachineGroup {
         Self {
             id: String::new(),
             local: true,
-            name: "This computer".into(),
+            name: crate::host_name::local_computer_name(),
             transport: "Local",
             connected: true,
             loading: false,

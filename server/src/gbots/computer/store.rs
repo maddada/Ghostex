@@ -78,10 +78,10 @@ impl BotComputer {
         }
     }
 
-    /// The name to show: "This computer", else the stored name, else the id.
+    /// The name to show: this computer's own name, else the stored name, else the id.
     pub(crate) fn label(&self) -> String {
         match &self.place {
-            Place::This => "This computer".to_string(),
+            Place::This => crate::connected_computers::this_computer_name(),
             Place::Computer(id) | Place::CloudBox(id) => self
                 .name
                 .clone()

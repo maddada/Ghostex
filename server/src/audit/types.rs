@@ -86,7 +86,10 @@ impl Actor {
                 "sharedToken",
                 match claimed_session {
                     Some(session) => format!("An agent or the app (says session {session})"),
-                    None => "This computer's app or an agent on it".to_string(),
+                    None => format!(
+                        "{}'s app or an agent on it",
+                        crate::connected_computers::this_computer_name()
+                    ),
                 },
                 claimed_session.clone(),
             ),

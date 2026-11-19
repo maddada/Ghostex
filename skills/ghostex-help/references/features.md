@@ -1446,13 +1446,16 @@ where they are while you open, change and close views.
   right-click it for its menu, and click a computer that isn't connected to
   connect it. When the row is too narrow, the computers fold into one button
   that lists them.
+- Every computer goes by its icon and its own name, the one you're on too:
+  Ghostex never calls it "This computer" (the where pill's card, Session
+  details, Run on, menus, usage cards and Settings all name it).
 - Every computer has an icon. While more than one computer is in the
   sidebar, every session row ends with its computer's icon, this computer's
   sessions included (a Unified card shows it after the branch), and a
   project's header shows the icons of the computers that have it. Hover a row
   or a project's name for the computer's full name. Pick an icon (a laptop, a
   desktop, a server, a cloud, a house, a rocket and more) in Settings > Remote
-  > This computer for this computer, and in a saved computer's dialog under
+  under the row titled with the computer's name for the computer you're on, and in a saved computer's dialog under
   Computers this machine connects to for that one (it must be connected).
   The icon is kept on that computer, so your phone and your other computers
   show the same one: the phone draws it on the computer's tab and, while more
@@ -2081,15 +2084,16 @@ Empryo, Copilot and Grok Build). From the CLI: `ghostex side-chat start
 "<question>" --session <session>`, `ghostex side-chat list`, `ghostex side-chat
 bring-back --session <side chat>` and `ghostex side-chat delete --session <side chat>`.
 On the desktop, the left end of that strip shows where a running chat's session
-runs: one pill with the computer's icon, the project and the computer (This
-computer, the other computer's name, or Cloud Box) on its left and the branch on
-its right (a fork icon in a worktree). Hover it for the details: the Cloud Box,
-the worktree, the branch with its lines changed, uncommitted files, commits ahead
-and behind, the pull request, the folder, the agent and its account, and the
-terminal backend (zmx, tmux or zellij). Click it for the same details with
-**Copy branch** and **Open folder**. When the strip is crowded, the other pills
-drop their labels first, then this pill drops the computer's name and then the
-project. A new chat shows its worktree tray instead, and the phone does not show
+runs: one pill with the computer's icon and the project on its left and the
+branch on its right (a fork icon in a worktree). Hover it for the details, headed
+by the project and the computer's icon and name (every computer goes by its own
+name, the one you're on too, or Cloud Box): the Cloud Box, the worktree, the
+branch with its lines changed, uncommitted files, commits ahead and behind, the
+pull request, the folder, the agent and its account, and the terminal backend
+(zmx, tmux or zellij). Click it for the same details, where clicking a value
+copies it and the Folder row has Copy path and Open folder. When the strip is
+crowded, the other pills drop their labels first, then this pill shortens its
+texts and then drops the project. A new chat shows its worktree tray instead, and the phone does not show
 this pill yet.
 Claude panels such as `/status` and `/usage` show as clickable tabs, tables and
 usage meters instead of terminal text.
@@ -2900,7 +2904,7 @@ phone. The chat box's context ring opens it too, on Overview at the Context
 card, so there is no separate Context window popover any more (a chat without
 the panel keeps it).
 
-Overview holds Environment (this computer or the
+Overview holds Environment (the computer, by its icon and name, or the
 box the session runs in, its folder, branch and account, the agent's version, and how much memory
 the session's processes use while it runs on this computer); Changes (lines changed on the
 branch against main, uncommitted edits included, with Commit, Create PR or View

@@ -107,7 +107,7 @@ pub fn machine_state_short_word(state: &str) -> &'static str {
     }
 }
 
-/// The state word a "This is this computer" notice is shrunk against.
+/// The state word a "This is the computer you're on" notice is shrunk against.
 pub const THIS_COMPUTER_NOTICE_STATE: &str = "thisComputer";
 
 /// CDXC:RemoteMachines 2026-10-28 WHY: a saved machine that points back at this computer (SSH to
@@ -119,9 +119,10 @@ pub const THIS_COMPUTER_NOTICE_STATE: &str = "thisComputer";
 fn this_computer_notice(machine: &MachineTabInput, ui: &SidebarUiState) -> MachineNotice {
     MachineNotice {
         machine_id: machine.machine_id.clone(),
-        title: "This is this computer".to_string(),
+        title: "This is the computer you're on".to_string(),
         detail: Some(
-            "It runs the same gxserver as Local, so this tab shows the same projects.".to_string(),
+            "It runs the same gxserver as this app, so this tab shows the same projects."
+                .to_string(),
         ),
         busy: false,
         failed: false,
@@ -193,7 +194,7 @@ mod this_computer_tests {
         let ui = SidebarUiState::default();
         let notice = machine_notice(Some(&machine(MACHINE_STATE_CONNECTED, true)), &ui)
             .expect("the list explains the mirror");
-        assert_eq!(notice.title, "This is this computer");
+        assert_eq!(notice.title, "This is the computer you're on");
         assert!(!notice.failed && !notice.busy);
         assert!(machine_notice(Some(&machine(MACHINE_STATE_CONNECTED, false)), &ui).is_none());
         // A failure still explains the failure.

@@ -1273,7 +1273,7 @@ pub(super) fn machine_dialog(
                 .line_height(px(18.2))
                 .text_color(hsla(colors.muted))
                 .child(
-                    "This is this computer. Its gxserver is the one this app runs, so it is not installed or updated from here.",
+                    "This is the computer you're on. Its gxserver is the one this app runs, so it is not installed or updated from here.",
                 ),
         );
     }

@@ -331,7 +331,7 @@ fn hostname() -> String {
         .ok()
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
         .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| "this computer".to_string())
+        .unwrap_or_else(crate::connected_computers::this_computer_name)
 }
 
 /// Waits for the one request Instabox's redirect makes to `/callback`, answers the browser with a

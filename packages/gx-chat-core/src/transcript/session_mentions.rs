@@ -365,16 +365,13 @@ pub fn mention_card(
     })
 }
 
-/// The card's second line: agent, project and computer (`This computer` for one at home).
+/// The card's second line: agent, project and computer, by its name wherever it is (CDXC:RemoteMachines
+/// 2026-11-19 in extras/where_pill.rs: never "This computer").
 pub fn mention_card_meta(card: &MentionCard) -> String {
-    let computer = if card.elsewhere {
-        if card.computer.is_empty() {
-            "Another computer"
-        } else {
-            card.computer.as_str()
-        }
+    let computer = if card.elsewhere && card.computer.is_empty() {
+        "Another computer"
     } else {
-        "This computer"
+        card.computer.as_str()
     };
     [
         card.agent_name.as_str(),

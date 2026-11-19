@@ -412,7 +412,10 @@ fn locate_session_elsewhere<'a>(
         return None;
     }
     let named = if Some(server_id) == this_server_id {
-        format!("this computer ({server_id})")
+        format!(
+            "{} ({server_id})",
+            crate::connected_computers::this_computer_name()
+        )
     } else {
         format!(
             "{server_id}, which is not a computer connected to this one, so it was looked up here"

@@ -377,7 +377,7 @@ impl GhostexGpuiApp {
                 if status != Some("installed") {
                     let computer = remote_name
                         .clone()
-                        .unwrap_or_else(|| "this computer".to_string());
+                        .unwrap_or_else(crate::host_name::local_computer_name);
                     let reason = match status {
                         Some("cliMissing") => {
                             format!("Ghostex could not find the {agent_name} CLI on {computer}.")

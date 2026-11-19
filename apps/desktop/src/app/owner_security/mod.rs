@@ -288,7 +288,7 @@ fn owner_refusal(transport: &Transport) -> Option<String> {
     let local = matches!(transport, Transport::Local);
     // The card's own question names the computer plainly (the approval cards page, 2026-11-17).
     let there = match transport {
-        Transport::Local => "this computer".to_string(),
+        Transport::Local => me.clone(),
         Transport::Remote(_) => machine_and_host(transport).0,
     };
     // Only the cases that name where to approve look the owners up (one `securityStatus` call).
@@ -813,7 +813,7 @@ fn this_computer_name() -> String {
             }
         }
     }
-    std::env::var("COMPUTERNAME").unwrap_or_else(|_| "This computer".to_string())
+    crate::host_name::local_computer_name()
 }
 
 /// The wire form of one of this computer's keys; `device_public_key` (the owner key's) names the
@@ -1097,7 +1097,7 @@ User, on the Touch ID prompt "Ghostex is trying to let this Mac in on m7-arch (E
 /// when that is a plain name (never an address, never an Easy Connect code).
 fn machine_and_host(transport: &Transport) -> (String, Option<String>) {
     let Transport::Remote(target) = transport else {
-        return ("this computer".to_string(), None);
+        return (this_computer_name(), None);
     };
     let computer = crate::app::helpers::gpui_remote_machine_name_from_settings(&target.machine_id)
         .unwrap_or_else(|| "that computer".to_string());
@@ -1711,7 +1711,7 @@ fn enroll_owner_key(transport: &Transport, params: Value) -> Result<Value, Strin
 /// server id it gave when this app asked there (review round 3, R3-4).
 fn expected_computer(transport: &Transport) -> String {
     match transport {
-        Transport::Local => "this computer".to_string(),
+        Transport::Local => this_computer_name(),
         Transport::Remote(target) => {
             let name =
                 crate::app::helpers::gpui_remote_machine_name_from_settings(&target.machine_id)

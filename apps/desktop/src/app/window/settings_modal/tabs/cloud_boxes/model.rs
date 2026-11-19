@@ -159,13 +159,14 @@ pub(super) fn provider_rows(status: Option<&Value>) -> Vec<ProviderRow> {
 /// The `agentboxDefaultLocation` choices: this computer, every provider, each registered server,
 /// and the saved value when it names a server this status does not list.
 pub(super) fn location_options(rows: &[ProviderRow], saved: &str) -> Vec<(String, String)> {
-    let mut options = vec![("This computer".to_string(), "local".to_string())];
+    let computer = crate::host_name::local_computer_name();
+    let mut options = vec![(computer.clone(), "local".to_string())];
     for row in rows {
         let Some(location) = row.location() else {
             continue;
         };
         let label = match (row.kind, row.ready) {
-            (ProviderKind::Local, _) => "Docker on this computer".to_string(),
+            (ProviderKind::Local, _) => format!("Docker on {computer}"),
             (ProviderKind::RemoteDocker, _) => format!("{} (your server)", row.label),
             _ => row.label.clone(),
         };

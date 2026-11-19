@@ -178,15 +178,23 @@ fn ram_label(bytes: f64) -> String {
 
 /// CDXC:SessionDetails 2026-11-02 DECISION:
 /// User: show the session's RAM usage in the Environment card ("1.2 GB RAM"), the Resources panel's number for the session's whole process tree, kept current with the panel's poll. The row is left out when no number is known (the session isn't running, or it runs on a Cloud Box or another computer that can't report it), never shown as 0 or a dash.
-fn environment(data: &Value, hide_emails: bool) -> Option<Value> {
+fn environment(data: &Value, hide_emails: bool, computer_name: Option<String>) -> Option<Value> {
     let environment = data.get("environment")?;
     let mut rows = Vec::new();
-    let location = text(environment, "/location/label").unwrap_or_else(|| "This computer".into());
     let boxed = environment
         .pointer("/location/kind")
         .and_then(Value::as_str)
         == Some("box");
-    rows.push(json!({"icon": if boxed { "box" } else { "laptop" }, "text": location}));
+    // A box by its provider; a computer by the name the host gave it (its computer tab's), else
+    // the one it answers with, beside its own icon (`computer`). Never "This computer"
+    // (CDXC:RemoteMachines 2026-11-19 in extras/where_pill.rs); an older gxserver still says it.
+    let answered = text(environment, "/location/label").filter(|label| label != "This computer");
+    let location = if boxed {
+        answered.unwrap_or_else(|| "A box".into())
+    } else {
+        computer_name.or(answered).unwrap_or_else(|| "Local".into())
+    };
+    rows.push(json!({"icon": if boxed { "box" } else { "computer" }, "text": location}));
     if let Some(folder) = text(environment, "/folderLabel") {
         let project = text(environment, "/project");
         // Main Hub's session wears its flower and reads "Main Hub · ~/.config/ghostex" (CDXC:Chief
@@ -965,7 +973,15 @@ pub fn document(state: &ChatState, context: &ChatContext, meter: Option<&Value>)
     let sketch = |id: &str| waiting && (claude || matches!(id, "environment" | "changes"));
     let mut sections = Vec::new();
     let items = detail_items(meter);
-    if let Some(mut body) = data.and_then(|data| environment(data, state.core.hide_account_emails))
+    let computer_name = state
+        .session
+        .computer
+        .computer
+        .as_ref()
+        .map(|computer| computer.name.trim().to_string())
+        .filter(|name| !name.is_empty());
+    if let Some(mut body) =
+        data.and_then(|data| environment(data, state.core.hide_account_emails, computer_name))
     {
         if let (Some(rows), Some(row)) = (body["rows"].as_array_mut(), version_row(&items)) {
             rows.push(row);
@@ -1091,7 +1107,7 @@ mod tests {
     }
 
     fn rows(environment: Value) -> Vec<Value> {
-        let body = super::environment(&json!({ "environment": environment }), false).unwrap();
+        let body = super::environment(&json!({ "environment": environment }), false, None).unwrap();
         body["rows"].as_array().unwrap().clone()
     }
 
@@ -1105,6 +1121,7 @@ mod tests {
         let rows = super::environment(
             &json!({"environment": {"memoryBytes": 640.0 * 1024.0 * 1024.0}}),
             false,
+            None,
         )
         .unwrap();
         assert_eq!(rows["rows"][1]["text"], "640 MB RAM");

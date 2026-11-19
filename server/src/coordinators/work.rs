@@ -697,7 +697,10 @@ impl<'a> WorkContext<'a> {
                 .filter(|at| parse_time(at).is_some_and(|at| at > since))
                 .map(|at| Delivery {
                     at,
-                    name: "this computer's Ghostex".to_string(),
+                    name: format!(
+                        "{}'s Ghostex",
+                        crate::connected_computers::this_computer_name()
+                    ),
                 });
         }
         best

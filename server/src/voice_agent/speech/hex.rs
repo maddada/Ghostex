@@ -549,7 +549,7 @@ pub(crate) fn problem(state: &State, saved: Option<&str>) -> Option<(&'static st
         State::Unsupported(reason) => Some(("hexUnsupported", reason.clone())),
         State::NotInstalled { older: Some(version) } => Some((
             "hexNotInstalled",
-            format!("This computer has Hex {version}, which has no local API. Install Hex 3 to transcribe with it."),
+            format!("{} has Hex {version}, which has no local API. Install Hex 3 to transcribe with it.", crate::connected_computers::this_computer_name()),
         )),
         State::NotInstalled { older: None } => Some((
             "hexNotInstalled",

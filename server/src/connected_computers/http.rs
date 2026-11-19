@@ -202,7 +202,7 @@ pub(crate) fn this_computer_name() -> String {
             .filter(|name| !name.is_empty())
             .or_else(|| std::env::var("COMPUTERNAME").ok())
             .or_else(|| std::env::var("HOSTNAME").ok())
-            .unwrap_or_else(|| "This computer".to_string());
+            .unwrap_or_else(|| "Local".to_string());
         name.trim_end_matches(".local").to_string()
     })
     .clone()

@@ -768,17 +768,18 @@ const FOLD_BODY_INDENT: f32 = 16.0;
 pub(super) fn fold_row<V: 'static>(
     t: &RemoteTokens,
     id: &'static str,
-    title: &'static str,
+    title: impl Into<SharedString>,
     line: String,
     open: bool,
     on_press: impl Fn(&mut V, &mut Window, &mut Context<V>) + 'static,
     cx: &mut Context<V>,
 ) -> AnyElement {
     let wash = switch_row_wash(t.foreground);
+    let title: SharedString = title.into();
     h_flex()
         .id(SharedString::from(format!("remote-fold-{id}")))
         .role(gpui::Role::Button)
-        .aria_label(title)
+        .aria_label(title.clone())
         .aria_expanded(open)
         .w_full()
         .min_w_0()

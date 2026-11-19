@@ -45,7 +45,10 @@ pub(crate) fn read_environment(
             "kind": "box",
             "label": crate::agentbox::provider_label(&agentbox.provider),
         }),
-        None => json!({"kind": "local", "label": "This computer"}),
+        None => json!({
+            "kind": "local",
+            "label": crate::connected_computers::this_computer_name(),
+        }),
     };
     // CDXC:Chief 2026-11-19 DECISION:
     // User, of an Ask Ghostex chat's where pill reading "ghostex", "Not a git repository",

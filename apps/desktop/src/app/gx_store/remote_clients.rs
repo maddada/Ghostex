@@ -632,9 +632,11 @@ impl GhostexGpuiApp {
         let short_names = super::machine_short_names::machine_short_names_by_id();
         let short_name =
             |machine_id: &str| short_names.get(machine_id).cloned().unwrap_or_default();
+        // This computer goes by its own name like every other (CDXC:RemoteMachines 2026-11-19 in
+        // packages/gx-chat-core/src/extras/where_pill.rs: never "This computer" or "Local").
         let mut tabs = vec![MachineTabInput {
             machine_id: ghostex_gx_core::LOCAL_MACHINE_ID.to_string(),
-            label: "Local".to_string(),
+            label: super::machine_short_names::local_computer_name(),
             short_name: short_name(ghostex_gx_core::LOCAL_MACHINE_ID),
             state: MACHINE_STATE_CONNECTED.to_string(),
             message: None,

@@ -35,7 +35,7 @@ pub(crate) fn machine_icons_room(shown: usize) -> f32 {
 /// A computer's state, in the words its tooltip uses.
 fn machine_state_words(machine: &NativeSidebarMachine) -> &'static str {
     if machine.id == ghostex_gx_core::LOCAL_MACHINE_ID {
-        return "this computer";
+        return "the computer you're on";
     }
     match machine.state.as_str() {
         ghostex_gx_core::MACHINE_STATE_CONNECTED => "connected",

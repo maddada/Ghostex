@@ -62,7 +62,7 @@ fn unavailable_reason(disabled: bool, state: Option<&str>) -> Option<String> {
 pub(crate) fn machine_choices(machines: &Value, states: Option<&Value>) -> Vec<MachineChoice> {
     let mut choices = vec![MachineChoice {
         machine_id: None,
-        name: "This computer".to_string(),
+        name: crate::host_name::local_computer_name(),
         unavailable: None,
     }];
     for machine in machines.as_array().into_iter().flatten() {
@@ -279,7 +279,7 @@ fn picker_card<V: SettingsPage>(
         .iter()
         .find(|choice| choice.machine_id == picked)
         .map(|choice| choice.name.clone())
-        .unwrap_or_else(|| "This computer".to_string());
+        .unwrap_or_else(crate::host_name::local_computer_name);
     let description = describe(picked.is_some().then_some(shown.as_str()));
     let row = setting_row::<V>(
         p,
@@ -325,7 +325,7 @@ mod tests {
         assert_eq!(
             summary,
             vec![
-                (None, "This computer", None),
+                (None, crate::host_name::local_computer_name().as_str(), None),
                 (Some("remote-a"), "Kubuntu VM", None),
                 (Some("remote-b"), "10.0.0.3", Some("Turned off")),
                 (Some("remote-c"), "M5", Some("Can't connect")),

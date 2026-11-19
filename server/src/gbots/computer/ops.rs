@@ -215,10 +215,7 @@ fn set(
         format!(
             "{}'s new chats run on {}; chats already open stay where they are.",
             bot.name,
-            match next.place {
-                Place::This => "this computer".to_string(),
-                _ => next.label(),
-            }
+            next.label()
         )
     });
     Ok(answer)

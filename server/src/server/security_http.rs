@@ -76,7 +76,7 @@ pub(crate) fn presence_outcome(
             "A terminal on {}",
             crate::remote_access::cached_remote_access_identity()
                 .map(|identity| identity.computer_name)
-                .unwrap_or_else(|_| "this computer".to_string())
+                .unwrap_or_else(|_| crate::connected_computers::this_computer_name())
         ),
         other => other.kind().to_string(),
     };
@@ -315,7 +315,7 @@ fn enroll_owner_key_on_approval(
 fn this_computer_label(state: &AppState) -> String {
     let name = crate::remote_access::cached_remote_access_identity()
         .map(|identity| identity.computer_name)
-        .unwrap_or_else(|_| "this computer".to_string());
+        .unwrap_or_else(|_| crate::connected_computers::this_computer_name());
     format!("{name} (Ghostex server {})", &*state.security.server_id)
 }
 
@@ -493,8 +493,10 @@ fn enroll_key(
         if !ask_owner {
             return Err(EnrollRefusal::Reply(
                 OWNER_APPROVAL_NEEDED,
-                "This computer already has an owner: approve this app in Ghostex there or on your phone first."
-                    .to_string(),
+                format!(
+                    "{} already has an owner: approve this app in Ghostex there or on your phone first.",
+                    crate::connected_computers::this_computer_name()
+                ),
             ));
         }
         /*
@@ -1120,7 +1122,7 @@ fn note_terminal_handover(
     let security = &state.security;
     let here = crate::remote_access::cached_remote_access_identity()
         .map(|identity| identity.computer_name)
-        .unwrap_or_else(|_| "this computer".to_string());
+        .unwrap_or_else(|_| crate::connected_computers::this_computer_name());
     match request.action {
         ghostex_gx_protocol::approval::SensitiveAction::PairingApproveDevice => {
             let name = request

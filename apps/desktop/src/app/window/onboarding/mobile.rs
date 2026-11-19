@@ -366,7 +366,7 @@ impl GpuiOnboardingWindow {
                     220.0,
                     76.0,
                     "monitor",
-                    "This computer",
+                    &crate::host_name::local_computer_name(),
                     "Holds your sessions",
                 ))
                 .shadow(vec![shadow(
