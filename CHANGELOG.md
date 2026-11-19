@@ -2,6 +2,76 @@
 
 ## Unreleased
 
+## 11.11.0 - 2026-11-19
+
+**Ghostex 11.11.0 is out.** Work items and a Work button for any session, two computers' servers linked with no desktop app, Grok Bot driving your agents, your own update-check times, a focused Interface settings group, and a big round of speed fixes for Windows with many agents.
+
+### 📋 Work items
+
+- **Any session can keep its own work items,** not only coordinators: while Work items is on, a session's to-dos, waits and finished work fill its Work panel, dock rows and cards under a Topic you can rewrite with a click ([#670](https://github.com/maddada/Ghostex/issues/670)).
+- **A Work button in the header** opens the Work panel beside the chat, with a count of what waits on you. It shares the spot with Session details, one at a time.
+- **Needs you cards look like their dock rows:** the title wraps over as many lines as it needs with the answers under it, and a click on a card opens what it points to. A page opens at once.
+- **`ghostex agents send --with-next` holds a note for the other session's next message,** so a note that needs nothing now never starts a turn by itself ([#670](https://github.com/maddada/Ghostex/issues/670)).
+- **The Thread brief extension is now Work items (0.3.0):** turn it on in Settings > Extensions for the Work button and a Work list of every session with work items. Your old briefs move into work items once, the objective becoming the Topic, and an extension's skill is in place only while the extension is on.
+- **The floating ask panel's text can be selected and copied** with Cmd+C, Edit > Copy or a right-click Copy, and a web address in a to-do's title is a link again.
+
+### 🧭 Coordinators
+
+- **A new coordinator starts on the model and effort you last used for a coordinator with that agent,** so you pick it once; Opus 5.5 High is only the very first default, thanks to @sebastianarena ([#658](https://github.com/maddada/Ghostex/pull/658)).
+- **A low-end model asks you to confirm** on the first-message card before Start, on the computer and the phone.
+- **Grok Bot can drive your agents:** `ghostex grokbot connect` links a Ghostex bot in xAI's Grok Bot, so you can ask what your agents are doing and hand out work from its chat, and your agents send you notes through it. Help > Grok Bot has the steps.
+
+### 🌐 Remote computers
+
+- **Link two computers' servers with no desktop app:** `ghostex computers add <code>` pairs two gxserver computers so their agents can work across them, with each owner approving on the app or a phone ([#674](https://github.com/maddada/Ghostex/issues/674)).
+- **Paired computers in Settings > Remote** lists a computer's server links with an Agent access switch and Remove, which ends the link both ways. A connected computer's Edit dialog and the phone have the same ([#674](https://github.com/maddada/Ghostex/issues/674)).
+- **A remote session's merged-PR Clean up and Keep chips answer on its own computer,** and the where pill offers Open folder only for a session on this computer.
+
+### 🪟 Windows
+
+- **Many agents no longer bog Windows down:** far fewer wmx.exe processes (about 20 a minute instead of 47 with six agents), session lists keep working when Windows' session list stops answering, and Git reads, paste checks, status line refreshes and the server's database share the work instead of piling up ([#666](https://github.com/maddada/Ghostex/issues/666)).
+- **Fixed a crash when a window closed while other work was queued,** and a Windows crash report now names the panic that started it ([#675](https://github.com/maddada/Ghostex/issues/675)).
+- **Restored agent terminals no longer start Windows PowerShell 5.1,** and a restored agent whose exact resume fails runs its saved fallback ([#666](https://github.com/maddada/Ghostex/issues/666)).
+- **An inline page's ⋯ menu shows over its page window.**
+- **A cua-driver update refreshes the skill your WSL agents read.**
+
+### 💬 Chat
+
+- **A Codex model or effort pick waits for Codex's turn to end,** so the message behind it is never typed into the running turn, and a pick that meets a busy agent backs off instead of retrying over and over ([#666](https://github.com/maddada/Ghostex/issues/666)).
+- **Claude rewinds work again on Claude Code 2.1.326 and later,** instead of timing out at the confirmation step.
+- **An idle coordinator no longer keeps gxserver busy re-reading its transcript** ([#668](https://github.com/maddada/Ghostex/issues/668)), and renaming or closing a session rebuilds only the chat history that names it.
+- **`ghostex` commands find their session from a sandboxed Codex,** so Needs you and private secret cards work there, and saving an automation refuses a model its agent doesn't have ([#669](https://github.com/maddada/Ghostex/issues/669)).
+- **A question tag pill opens its page at once,** like the page card's Open.
+
+### ⚙️ Settings
+
+- **Choose how often Ghostex checks for updates:** a Checking for updates fold on Settings > Updates sets Ghostex, Agents, Tools and Extensions to every 15 minutes, 30 minutes, hour (the default) or day, or Only on Check now. Agents you turned off are never probed ([#673](https://github.com/maddada/Ghostex/issues/673)).
+- **Interface is four focused pages** under a new Interface group in the Settings sidebar: Themes, Text & Fonts, Size & Zoom, and Window & Layout. Every setting keeps its value.
+- **A theme colour row you haven't set shows the colour it paints now,** ready to adjust from there.
+- **Read live status from Claude Code and Cursor** is a switch under Settings > Agents > Advanced, on by default, and Use agent hooks moves there too. Claude's status row stays clean, and outside Ghostex the helper only runs your own status line.
+- **Floating Capture is an experimental extension:** turn it on in Settings > Extensions > Experimental. If you had the floating button on, it stays on.
+- **Ghostex never overwrites an agent's config it can't read,** keeps its links and file permissions, and Uninstall all carries on past one it can't change.
+
+### 📂 Sidebar
+
+- **A sessions group's menu has Ungroup,** which removes the group and keeps its sessions open, and a new group opens its name for renaming.
+- **Close Group, Remove GBot, Remove Department and Destroy Box ask in Ghostex's own dialog.**
+
+### 📱 On the phone
+
+- **The Work sheet shows its Topic,** and a tap rewrites it.
+- **Paired computers** in a computer's settings, with each server link's Agent access switch and Remove ([#674](https://github.com/maddada/Ghostex/issues/674)).
+
+### 🩹 Fixes and polish
+
+- **Linux: the picture, wallpaper, Live or video behind the glass draws again** on X11 and Wayland ([#667](https://github.com/maddada/Ghostex/issues/667)).
+- **Linux: quitting Ghostex with a web page open no longer leaves a "process crashed" notice** from its graphics helper.
+- **Live glass shows its default animation** (Aurora in dark mode, Drift in light) when you never picked a style, instead of nothing.
+- **Files: Cmd+click or Option+click on a link in a Markdown table cell opens it,** and a plain click still edits the cell ([#671](https://github.com/maddada/Ghostex/issues/671)).
+- **Settings and the window stay responsive while Ghostex checks for updates,** and windows redraw only when what the Updates status shows changed.
+- **macOS: writes into ignored folders no longer make Ghostex re-read a project's Git state** ([#666](https://github.com/maddada/Ghostex/issues/666)).
+- **The dictation waveform follows how loudly you speak,** on the computer and the phone.
+
 ## 11.10.0 - 2026-11-18
 
 **Ghostex 11.10.0 is out.** Pick any model and effort before a new coordinator starts, a where pill above the chat box, colour pickers and sliders for every theme colour, popups with tabs in their title bar, a calmer Workers list, and a long list of fixes from your reports.
