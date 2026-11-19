@@ -82,7 +82,7 @@ impl FindPalette {
         }
         // Menus draw inside this window, over rows nothing blurs, so they cover nearly all of it.
         // CDXC:Theming 2026-11-20: the filter menus and the full-prompt view take the window's
-        // theme colour lifted toward white (as `ModalPalette::lifted_menu_fill`: 10% dark, 60%
+        // theme colour lifted toward white (as `ModalPalette::lifted_menu_fill`: 18% dark, 60%
         // light, at 96%) instead of the 6% opaque lift that read as a dark slab on the glass.
         let lift = if light {
             LIFTED_MENU_LIFT_LIGHT
