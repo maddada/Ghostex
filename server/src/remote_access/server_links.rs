@@ -754,6 +754,9 @@ pub fn answer_ask(context: &DoorContext<'_>, ask: ServerLinkAsk) -> Result<Value
                 ask.rotate,
                 crate::connected_computers::DEFAULT_REGISTRATION_TTL,
                 false,
+                // A server link the user approved, asked for with its pinned key: the desktop
+                // app's grant, so a renewal here never clears what the app said of it.
+                true,
             ) {
                 Ok(Some(token)) => {
                     if !had_grant {

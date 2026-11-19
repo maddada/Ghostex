@@ -18,8 +18,8 @@ pub(crate) use http::{
 pub(crate) use peer_listener::{peer_listener_port, set_peer_listener_port};
 pub(crate) use registry::{
     authorize_peer_token, find, has_grant, is_server_id, issue_grant, list, owner_issued, register,
-    revoke_grant, set_owner_issued, unregister, ConnectedComputer, Direction, PeerAuthorization,
-    Registration, DEFAULT_REGISTRATION_TTL,
+    revoke_grant, unregister, ConnectedComputer, Direction, PeerAuthorization, Registration,
+    DEFAULT_REGISTRATION_TTL,
 };
 pub(crate) use relay::{
     access_off_message, parse_relay_path, peer_refusal, relay, relay_base_url, RELAY_ROUTE_PREFIX,

@@ -141,11 +141,9 @@ pub(crate) fn handle_connected_computers_http(
                 .map(std::time::Duration::from_millis)
                 .unwrap_or(registry::DEFAULT_REGISTRATION_TTL);
             let had_grant = registry::has_grant(server_id);
-            let grant = registry::issue_grant(server_id, name, agent_access, rotate, ttl, owner);
-            // Only owner-level callers get this far (above).
-            if matches!(grant, Ok(Some(_))) {
-                registry::set_owner_issued(server_id);
-            }
+            // Only owner-level callers get this far (above): the desktop app issued it.
+            let grant =
+                registry::issue_grant(server_id, name, agent_access, rotate, ttl, owner, true);
             if matches!(grant, Ok(Some(_))) && (!had_grant || rotate) {
                 crate::audit::record(
                     crate::audit::Action::new(
