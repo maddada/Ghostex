@@ -14,6 +14,7 @@ mod images;
 mod import;
 mod kit;
 mod notice;
+mod pick_markdown;
 mod prepare;
 mod publish;
 mod questions;

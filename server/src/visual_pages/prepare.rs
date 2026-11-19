@@ -46,7 +46,9 @@ pub(crate) struct PreparedPage {
 /// `base_dir` is the HTML file's own folder, which relative image paths resolve against.
 pub(crate) fn prepare_page(source: &str, base_dir: &Path) -> Result<PreparedPage, String> {
     let scan = scan_document(source);
-    let with_images = inline_local_images(source, base_dir)?;
+    // Rows' Markdown first, so the images it names are embedded with the rest.
+    let rows = super::pick_markdown::render_pick_markdown(source);
+    let with_images = inline_local_images(&rows, base_dir)?;
     let html = inject_head(&with_images, &scan);
     if html.len() > VISUAL_PAGE_MAX_BYTES {
         return Err(page_too_large(html.len()));

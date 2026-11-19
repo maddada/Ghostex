@@ -157,7 +157,165 @@ fn parse_questions(html: &str) -> Vec<PageQuestion> {
             },
         });
     }
+    add_row_choices(&mut questions, &page_rows(html));
     questions
+}
+
+/// One pickable row of a page (`<gx-pick value>` or an element with `data-pick`), as the kit's
+/// `rowNodes` / `rowAsks` / `rowValue` / `rowLabel` read it.
+#[derive(Debug)]
+struct PageRow {
+    asked: String,
+    value: String,
+    label: String,
+    recommended: bool,
+}
+
+/// Each row becomes a choice of the question it names (by key, title or tag) unless the question
+/// lists it already, and the question's choices go in the rows' order with the others after them,
+/// as the kit's `addRowChoices` and `inVariantOrder` do in the browser.
+fn add_row_choices(questions: &mut [PageQuestion], rows: &[PageRow]) {
+    for question in questions.iter_mut().filter(|question| !question.text) {
+        let mine: Vec<&PageRow> = rows
+            .iter()
+            .filter(|row| {
+                row.asked == question.key
+                    || row.asked == question.title
+                    || (!question.tag.is_empty() && row.asked == question.tag)
+            })
+            .collect();
+        if mine.is_empty() {
+            continue;
+        }
+        let mut ordered = Vec::with_capacity(question.choices.len() + mine.len());
+        for row in &mine {
+            let written = question.choices.iter().position(|choice| {
+                choice.value == row.value || choice.label == row.label || choice.label == row.value
+            });
+            ordered.push(match written {
+                Some(index) => question.choices.remove(index),
+                None => PageChoice {
+                    label: row.label.clone(),
+                    value: row.value.clone(),
+                    recommended: row.recommended,
+                },
+            });
+        }
+        ordered.append(&mut question.choices);
+        question.choices = ordered;
+    }
+}
+
+/// The page's rows, read with a small tag scanner that follows which `data-question` each row sits
+/// under; rows inside a `<gx-question>`, inside another row, or in raw-text elements are skipped.
+fn page_rows(html: &str) -> Vec<PageRow> {
+    const VOID: &[&str] = &[
+        "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source",
+        "track", "wbr",
+    ];
+    const RAW: &[&str] = &["script", "style", "textarea", "pre", "template", "title"];
+    let lower = html.to_ascii_lowercase();
+    // Open elements: tag name, the data-question they carry, and whether they are a row.
+    let mut open: Vec<(String, Option<String>, bool)> = Vec::new();
+    let mut rows = Vec::new();
+    let mut at = 0;
+    while let Some(lt) = html[at..].find('<').map(|found| at + found) {
+        if lower[lt..].starts_with("<!--") {
+            at = lower[lt..]
+                .find("-->")
+                .map_or(html.len(), |end| lt + end + 3);
+            continue;
+        }
+        let Some(gt) = html[lt..].find('>').map(|found| lt + found) else {
+            break;
+        };
+        let tag = &html[lt + 1..gt];
+        at = gt + 1;
+        if let Some(name) = tag.strip_prefix('/') {
+            let name = name.trim().to_ascii_lowercase();
+            if let Some(index) = open.iter().rposition(|(open_name, ..)| *open_name == name) {
+                open.truncate(index);
+            }
+            continue;
+        }
+        let name: String = tag
+            .chars()
+            .take_while(|character| character.is_ascii_alphanumeric() || *character == '-')
+            .collect::<String>()
+            .to_ascii_lowercase();
+        if name.is_empty() {
+            continue;
+        }
+        if RAW.contains(&name.as_str()) {
+            at = lower[at..]
+                .find(&format!("</{name}"))
+                .map_or(html.len(), |end| at + end);
+            continue;
+        }
+        let head = &tag[name.len()..];
+        let is_row = name == "gx-pick" || has_attribute(head, "data-pick");
+        let inside = open
+            .iter()
+            .any(|(open_name, _, row)| *row || open_name == "gx-question");
+        if is_row && !inside {
+            let asked = attribute(head, "question")
+                .or_else(|| attribute(head, "data-question"))
+                .or_else(|| open.iter().rev().find_map(|(_, asked, _)| asked.clone()))
+                .map(|asked| decode(asked.trim()))
+                .unwrap_or_default();
+            let label = row_label(&html[at..]);
+            let value = decode(
+                if name == "gx-pick" {
+                    attribute(head, "value")
+                } else {
+                    attribute(head, "data-pick")
+                }
+                .unwrap_or_default()
+                .trim(),
+            );
+            if !asked.is_empty() {
+                rows.push(PageRow {
+                    asked,
+                    value: if value.is_empty() {
+                        label.clone()
+                    } else {
+                        value
+                    },
+                    label,
+                    recommended: has_attribute(head, "recommended")
+                        || has_attribute(head, "data-recommended"),
+                });
+            }
+        }
+        if !VOID.contains(&name.as_str()) && !tag.trim_end().ends_with('/') {
+            open.push((name, attribute(head, "data-question"), is_row));
+        }
+    }
+    rows
+}
+
+/// A row's label: its first heading when the row starts with one, else its text (80 characters).
+fn row_label(after_start: &str) -> String {
+    let trimmed = after_start.trim_start();
+    let heading = trimmed.len() > 3
+        && trimmed.as_bytes()[0] == b'<'
+        && matches!(trimmed.as_bytes()[1], b'h' | b'H')
+        && (b'1'..=b'6').contains(&trimmed.as_bytes()[2]);
+    if heading {
+        let level = &trimmed[1..3].to_ascii_lowercase();
+        if let Some(end) = trimmed.to_ascii_lowercase().find(&format!("</{level}")) {
+            let inner = trimmed[..end]
+                .find('>')
+                .map_or("", |gt| &trimmed[gt + 1..end]);
+            return label_text(inner);
+        }
+    }
+    let text = label_text(&after_start[..after_start.len().min(4000)]);
+    if text.chars().count() > 80 {
+        text.chars().take(79).collect::<String>() + "\u{2026}"
+    } else {
+        text
+    }
 }
 
 fn parse_choices(body: &str) -> Vec<PageChoice> {

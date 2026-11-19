@@ -182,6 +182,7 @@ pub(crate) fn check_page_command(
         }
     }
     // The Pick buttons do not depend on the width, so they are said once.
+    let mut repeated = 0;
     if let Some(result) = results.first() {
         let picks = pick_findings(&result.report);
         if !picks.is_empty() {
@@ -190,8 +191,24 @@ pub(crate) fn check_page_command(
                 println!("  - {finding}");
             }
         }
+        let lists = repeated_findings(&result.report);
+        repeated = lists.len();
+        if !lists.is_empty() {
+            println!("Repeated lists:");
+            for finding in lists {
+                println!("  - {finding}");
+            }
+        }
     }
     println!("Look at each screenshot before sending the page.");
+    if repeated > 0 {
+        return Err(CliError::Other(format!(
+            "{repeated} question{} {} the items listed above {}; put the picks on the rows and check again.",
+            if repeated == 1 { "" } else { "s" },
+            if repeated == 1 { "repeats" } else { "repeat" },
+            if repeated == 1 { "it" } else { "them" },
+        )));
+    }
     if broken > 0 {
         return Err(CliError::Other(format!(
             "The page overflows or overlaps at {broken} of {} sizes; fix what is listed above and check again.",
@@ -235,7 +252,11 @@ pub(crate) fn findings_for_show(path: &Path) -> ShowFindings {
                 .collect(),
             picks: results
                 .first()
-                .map(|result| pick_findings(&result.report))
+                .map(|result| {
+                    let mut picks = pick_findings(&result.report);
+                    picks.extend(repeated_findings(&result.report));
+                    picks
+                })
                 .unwrap_or_default(),
         },
         Err(_) => ShowFindings::default(),
@@ -495,7 +516,7 @@ function problems(){
   var boxes=[],walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT),t;
   while((t=walker.nextNode())&&boxes.length<6000){
     if(!t.data.trim())continue;var p=t.parentElement;
-    if(!p||p.closest("script,style,textarea,svg,noscript,template,select,.gx-tally")||!visible(p))continue;
+    if(!p||p.closest("script,style,textarea,svg,noscript,template,select,.gx-tally,.gx-rowbar")||!visible(p))continue;
     var c=clipOf(p),fixed=fixedOf(p);
     textRects(t).forEach(function(r){
       var b={l:Math.max(r.left,c.l),t:Math.max(r.top,c.t),r:Math.min(r.right,c.r),b:Math.min(r.bottom,c.b)};
@@ -518,8 +539,8 @@ function problems(){
       if(out.overlap.length>=SHOWN)break;
     }
   }
-  /* The answered pill floats over the page on purpose, wherever it is scrolled; what must hold is that at the page's end, in its own room, it covers no text or control. */
-  var pill=document.querySelector(".gx-tally");
+  /* The answered pill, and the bar that takes its place while a list's rows are on screen, float over the page on purpose, wherever it is scrolled; what must hold is that at the page's end, in their own room, they cover no text or control. */
+  Array.prototype.forEach.call(document.querySelectorAll(".gx-tally,.gx-rowbar"),function(pill){
   if(pill&&visible(pill)){
     var se=document.scrollingElement||document.documentElement,was=se.scrollTop;se.scrollTop=se.scrollHeight;
     var q=pill.getBoundingClientRect(),hit=null;
@@ -532,6 +553,7 @@ function problems(){
     se.scrollTop=was;
     if(hit&&out.overlap.length<SHOWN)out.overlap.push({element:selector(pill),text:pill.textContent.trim(),fixed:true,other:selector(hit),otherText:hit.textContent.trim().slice(0,60),end:true});
   }
+  });
   return out;
 }
 });
@@ -768,6 +790,53 @@ pub(crate) fn pick_findings(report: &Value) -> Vec<String> {
                     let asked = tag.unwrap_or(key);
                     format!(
                         "{name} sits under mockups but none of them got a Pick button, so the reader has to scroll down to the question to choose. Put data-question=\"{asked}\" and data-choice=\"<the choice's letter or label>\" on each variant's section (the element holding its heading and mockup), or start each variant's heading with its choice's letter (\"A. Tabs\") or exactly its label."
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The questions that list again, as their choices, the items the page shows above them, from the
+/// kit's report (`window.__ghostexKit.repeated`, visual_pages/kit.rs `repeatedLists`): the reader
+/// would read a row, scroll down to find it in the question, pick, and scroll back. `ghostex visual
+/// check` fails on them; `ghostex show` warns.
+///
+/// CDXC:SessionChat 2026-11-20 DECISION:
+/// User: "I want ALWAYS to add the pick buttons there on the same row instead of having to scroll down to pick from there, that makes no sense at all." So the check refuses a page whose question repeats its rows, and says how to put the picks on them (`data-pick`, `<gx-pick>`; the kit's `bindRows`).
+pub(crate) fn repeated_findings(report: &Value) -> Vec<String> {
+    report
+        .pointer("/kit/repeated")
+        .and_then(Value::as_array)
+        .map(|questions| {
+            questions
+                .iter()
+                .map(|question| {
+                    let text = |key: &str| {
+                        question
+                            .get(key)
+                            .and_then(Value::as_str)
+                            .map(str::trim)
+                            .filter(|text| !text.is_empty())
+                    };
+                    let tag = text("tag");
+                    let asked = tag.or(text("question")).unwrap_or("Q1");
+                    let name = match (tag, text("title")) {
+                        (Some(tag), Some(title)) => format!("{tag} \"{title}\""),
+                        (_, Some(title)) => format!("\"{title}\""),
+                        (Some(tag), None) => tag.to_string(),
+                        (None, None) => "A question".to_string(),
+                    };
+                    let items: Vec<&str> = question
+                        .get("items")
+                        .and_then(Value::as_array)
+                        .map(|items| items.iter().filter_map(Value::as_str).collect())
+                        .unwrap_or_default();
+                    let first = items.first().copied().unwrap_or("FB-1");
+                    format!(
+                        "{name} repeats {} items listed above it ({}), so the reader scrolls between a row and its pick. Put the picks on the rows: data-question=\"{asked}\" on the list and data-pick=\"{first}\" on each row (or write each item as <gx-pick value=\"{first}\"> with Markdown inside), and drop the question's <gx-choice> lines: the kit makes them from the rows.",
+                        items.len(),
+                        items.join(", ")
                     )
                 })
                 .collect()
@@ -1448,10 +1517,11 @@ mod tests {
             question("Q1", "Which layout?", &["Tabs", "One long page"])
         );
         let expression = r#"(function(){
-          var picks=document.querySelectorAll(".gx-pick"),radios=document.querySelectorAll(".gx-choice"),log=[];
+          var picks=document.querySelectorAll(".gx-pick"),radios=Array.prototype.slice.call(document.querySelectorAll(".gx-choices .gx-choice")).concat(Array.prototype.slice.call(document.querySelectorAll(".gx-picked .gx-other"))),log=[];
           function state(){return Array.prototype.map.call(picks,function(p){return p.getAttribute("aria-pressed")+":"+p.textContent;}).concat(Array.prototype.map.call(radios,function(r){return r.getAttribute("aria-checked");}));}
           log.push(state());picks[1].click();log.push(state());picks[1].click();log.push(state());
           radios[0].click();log.push(state());picks[1].click();log.push(state());radios[1].click();log.push(state());
+          log.push([String(!!document.querySelector("gx-question.gx-q-tied"))]);
           return JSON.stringify(log);})()"#;
         let Some(log) = eval_in_page(&body, expression) else {
             return;
@@ -1500,6 +1570,8 @@ mod tests {
             log[5],
             ["false:Pick", "false:Pick", "false", "false", "false"]
         );
+        // Every choice has its Pick, so the card shows what was picked instead of its list.
+        assert_eq!(log[6], ["true"]);
     }
 
     /// Pages whose variants are tied by their author behave as before: the kit ties nothing more

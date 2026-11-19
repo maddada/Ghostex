@@ -30,6 +30,14 @@
 //! matches nothing or is ambiguous stays untouched, and a question under mockups that gets no Pick is
 //! listed in `window.__ghostexKit.untied` for `ghostex show` / `ghostex visual check` to warn about.
 //!
+//! A list of items asked about carries its picks on its rows (`bindRows`): a `<gx-pick value>` (its
+//! Markdown already rendered by prepare.rs) or any element with `data-pick`, tied to the question
+//! named by its own `question` / `data-question` or the nearest `data-question` around it. Each row
+//! becomes a choice of its question when the question doesn't list it, gets a checkbox (a radio for
+//! pick one), a Note and, when long, a fold; `[data-pick-group]` groups rows under a checkbox. A
+//! question whose every choice has its row or picture shows the picks as chips instead of its list,
+//! and a question that repeats items listed above it is reported in `window.__ghostexKit.repeated`.
+//!
 //! The page template (v2, pages that carry `<meta name="ghostex-page" content="v2">`, version.rs):
 //! `<gx-page>` and `<gx-questions>` lay their children out in one centred column
 //! (`--gx-text-width`, 720px, with a `--gx-gutter` on each side). A `<gx-wide>` child is a centred
@@ -64,7 +72,7 @@
 //! User picked from the looks page: a question's tag is a filled chip ("make it show like eyebrow"), and a choice keeps its radio or checkbox with the letter as a muted keycap on the right; the in-chat form (apps/desktop/src/app/native_chat/question_form.rs, the phone's QuestionForm.tsx) matches. User (2026-10-19): "please move the Q294 to be right aligned same row as the question", so the chip sits at the right end of the title's first line and a long title wraps beside it, superseding the chip above the title.
 //! User: Ctrl+Enter (Cmd+Enter on macOS) presses the page's send button from anywhere on it, a note box included; the in-chat form does the same.
 //! User: a reader picks an option right at its mockup (a Pick button by the mockup's title that picks that choice in its question, shown picked on both and cleared from either), and (first version) wrote a note under each mockup, keyed to that question and choice.
-//! User 2026-10-30: no note box under each option in pages, for every page and for customers. The kit no longer makes the box (its collect, restore, lock and CSS are gone); the Pick button, each question's own "Note (optional)" box and the form's closing notes box stay. Answers to pages sent earlier with a `"<question> · <choice> (note)"` key still show in the answers card (packages/gx-chat-core/src/transcript/page_answers.rs reads them), but the kit sends no new ones.
+//! User 2026-10-30: no note box under each option in pages, for every page and for customers. The kit no longer makes the box (its collect, restore, lock and CSS are gone); the Pick button, each question's own "Note (optional)" box and the form's closing notes box stay. Answers to pages sent earlier with a `"<question> · <choice> (note)"` key still show in the answers card (packages/gx-chat-core/src/transcript/page_answers.rs reads them), but the kit sends no new ones. Superseded for rows on 2026-11-20 (Q4235): every row of a list has a Note again (`bindRows`, KIT_SCRIPT); pictures still have none.
 //! User: "question cards in the html having different width is an absolute NO GO … all take up the width as they should": every question card fills the column, even when a page's own CSS centres it with auto margins (which shrink a grid item to its content).
 //! User: the picked mockup's outline must never be cut off and needs more padding so it is not tight on the design: a tagged option gets 14px of room and a 2px ring inside its own box (content-box, so a fixed-width mockup keeps its width), because an outline drawn outside the box is clipped by a scrolling wrapper such as an `overflow-x:auto` frame.
 //! User: every question page offers "Other / none of these" with a note box, consistently, instead of each agent hand-rolling it, and the reader may leave a question unanswered. No choice is ever preselected; an agent marks the one it recommends with a Recommended mark and the reader picks. Mockups can use the full width of the page between or above the questions, and the Answered note is as wide as the question cards.
@@ -287,6 +295,80 @@ html[data-gx-theme=light] .gx-ref{color:#5f9878}
 .gx-mic.gx-mic-on,.gx-mic.gx-mic-on:hover:not(:disabled){color:var(--destructive);background:color-mix(in srgb,var(--destructive) 14%,transparent)}
 .gx-mic.gx-mic-busy svg{animation:gx-mic-spin 1s linear infinite}
 @keyframes gx-mic-spin{to{transform:rotate(360deg)}}
+/* Picks on rows (CDXC:SessionChat 2026-11-20 DECISION on KIT_SCRIPT `bindRows`): a checkbox (a radio for pick one) leading every row, the row's own content beside it, a Note on every row, long rows folded. */
+gx-pick{display:block}
+.gx-row:not(tr){display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:12px;align-items:start;padding:12px 10px;border-radius:12px;border:1px solid transparent;list-style:none}
+.gx-row{cursor:pointer;outline:none;transition:background-color .15s,border-color .15s}
+.gx-row:not(tr)+.gx-row:not(tr){margin-top:2px}
+.gx-row:not(tr):hover:not(.gx-row-off){background:color-mix(in srgb,var(--gx-fg) 3%,transparent)}
+.gx-row:not(tr)[aria-checked=true]{background:color-mix(in srgb,var(--gx-pick) 7%,transparent);border-color:color-mix(in srgb,var(--gx-pick) 35%,transparent)}
+tr.gx-row[aria-checked=true]>td{background:color-mix(in srgb,var(--gx-pick) 7%,transparent)}
+.gx-row:focus-visible,.gx-row-group:focus-visible{box-shadow:0 0 0 2px color-mix(in srgb,var(--ring) 55%,transparent)}
+.gx-row.gx-row-off{cursor:default}
+.gx-row-cell{width:18px;padding-right:0}
+.gx-row-ctl{display:grid;place-items:center;width:18px;height:18px;margin-top:2px;box-sizing:border-box;border-radius:5px;border:1.5px solid color-mix(in srgb,var(--gx-muted) 75%,transparent);color:var(--gx-bg);font:700 12px/1 var(--font-sans)}
+.gx-row[role=radio] .gx-row-ctl{border-radius:50%}
+.gx-row[aria-checked=true] .gx-row-ctl,.gx-row-ctl.gx-all{background:var(--gx-pick);border-color:var(--gx-pick)}
+.gx-row[role=checkbox][aria-checked=true] .gx-row-ctl::before,.gx-row-ctl.gx-all::before{content:"\2713"}
+.gx-row[role=radio][aria-checked=true] .gx-row-ctl{background:radial-gradient(circle,var(--gx-pick) 0 4px,transparent 4.5px)}
+.gx-row-ctl.gx-some{border-color:var(--gx-pick)}
+.gx-row-ctl.gx-some::before{content:"";width:8px;height:2px;border-radius:2px;background:var(--gx-pick)}
+.gx-row-main{min-width:0;color:var(--gx-text);font-size:14px;line-height:1.55}
+.gx-row-main>*{margin-top:0;margin-bottom:0}
+.gx-row-main>*+*{margin-top:8px}
+.gx-row-title{display:flex;flex-wrap:wrap;align-items:flex-start;gap:4px 10px;margin:0;color:var(--gx-fg);font-size:15px;line-height:22px;font-weight:600;letter-spacing:0;text-transform:none}
+.gx-row-label{flex:1 1 200px;min-width:0}
+.gx-row-label code{font-size:12px;margin-right:2px;padding:0;background:none;color:var(--gx-muted)}
+.gx-row-side{display:flex;flex:none;align-items:center;gap:8px;margin-left:auto;font-weight:400}
+.gx-options>.gx-row .gx-row-label{flex-basis:140px}
+.gx-row-note-btn{flex:none;height:24px;padding:0 8px;border-radius:7px;border:1px solid transparent;background:none;color:var(--gx-muted);font:400 12px/22px var(--font-sans);cursor:pointer;white-space:nowrap}
+.gx-row:hover .gx-row-note-btn,.gx-row:focus-within .gx-row-note-btn,.gx-row-note-btn.gx-has{border-color:var(--gx-line-strong)}
+.gx-row-note-btn.gx-has{color:var(--gx-fg)}
+.gx-row-note-btn[hidden]{display:none}
+@media (hover:none){.gx-row-note-btn{border-color:var(--gx-line-strong)}}
+.gx-row-note>.gx-note,.gx-row-note .gx-field{margin-top:0}
+.gx-row-note[hidden],.gx-row-note-tr[hidden],.gx-folded,.gx-row-filtered{display:none!important}
+.gx-row-scroll{max-width:100%;overflow-x:auto}
+.gx-more{display:inline-block;max-width:100%;box-sizing:border-box;padding:4px 11px;border-radius:13px;border:1px solid var(--gx-line-strong);background:var(--gx-surface);color:var(--gx-fg);font:500 12px/16px var(--font-sans);text-align:left;cursor:pointer}
+.gx-more>span{color:var(--gx-muted);font-weight:400}
+.gx-row-group{display:flex;align-items:center;gap:10px;margin:12px 0 2px;padding:6px 10px;border-radius:8px;color:var(--gx-muted);font:650 11.5px/1.4 var(--font-sans);letter-spacing:.07em;text-transform:uppercase;outline:none}
+.gx-row-group[role=checkbox]{cursor:pointer}
+.gx-row-group[role=checkbox]:hover{background:var(--gx-surface)}
+.gx-row-glabel{flex:1;min-width:0}
+.gx-row-group>small{flex:none;font-size:12px;font-weight:400;letter-spacing:0;text-transform:none;font-variant-numeric:tabular-nums;white-space:nowrap}
+.gx-row-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.gx-row-tools[hidden],.gx-row-tool[hidden]{display:none}
+.gx-row-filter{flex:1 1 170px;min-width:0;height:30px;box-sizing:border-box;padding:0 10px;border-radius:8px;border:1px solid var(--gx-line-strong);background:var(--gx-surface);color:var(--gx-fg);font:inherit;font-size:13px}
+.gx-row-filter:focus{outline:none;border-color:var(--ring)}
+.gx-row-filter::placeholder{color:var(--gx-muted)}
+.gx-row-tool{flex:none;height:30px;padding:0 11px;border-radius:8px;border:1px solid var(--gx-line-strong);background:transparent;color:var(--gx-text);font:500 12.5px/1 var(--font-sans);cursor:pointer;white-space:nowrap}
+.gx-row-tool:hover{background:var(--gx-surface);color:var(--gx-fg)}
+.gx-row-tool[aria-pressed=true]{background:color-mix(in srgb,var(--gx-pick) 12%,transparent);border-color:color-mix(in srgb,var(--gx-pick) 50%,transparent);color:var(--gx-fg)}
+.gx-options>.gx-row:not(tr){padding:14px 12px;border:1px solid var(--gx-card-border);background:var(--gx-card);box-shadow:var(--gx-glass-shadow);-webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15)}
+.gx-options>.gx-row:not(tr)[aria-checked=true]{border-color:color-mix(in srgb,var(--gx-pick) 70%,transparent);box-shadow:0 0 0 4px color-mix(in srgb,var(--gx-pick) 10%,transparent),var(--gx-glass-shadow)}
+/* The question card under picks shows what was picked, not the list again. */
+gx-question.gx-q-tied>.gx-choices{display:none}
+.gx-picked{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;min-height:32px;box-sizing:border-box;padding:4px 4px 4px 10px;border-radius:10px;background:var(--gx-option);border:1px solid var(--gx-option-border)}
+.gx-picked-label{flex:none;font-size:12.5px;color:var(--gx-muted);white-space:nowrap}
+.gx-picked-chips{display:flex;flex:1 1 140px;flex-wrap:wrap;gap:4px;min-width:0}
+.gx-picked-chip{display:inline-flex;flex:none;align-items:center;max-width:100%;height:22px;box-sizing:border-box;padding:0 2px 0 8px;border-radius:999px;border:1px solid color-mix(in srgb,var(--gx-pick) 40%,transparent);background:color-mix(in srgb,var(--gx-pick) 9%,transparent);color:var(--gx-fg);font:500 11.5px/20px var(--font-sans);white-space:nowrap}
+.gx-picked-chip>button{border:0;background:none;color:var(--gx-muted);font:inherit;padding:0 5px;cursor:pointer}
+.gx-picked-chip>.gx-picked-go{min-width:0;max-width:240px;overflow:hidden;text-overflow:ellipsis;padding:0;color:var(--gx-fg)}
+.gx-picked-chip>.gx-picked-go:only-child{padding-right:6px}
+.gx-picked-none{font-size:12.5px;color:var(--gx-muted)}
+.gx-picked-none>button{border:0;background:none;padding:0;color:var(--gx-fg);font:inherit;text-decoration:underline dotted;text-underline-offset:3px;cursor:pointer}
+.gx-picked>.gx-other{width:auto;flex:none;margin-left:auto;padding:2px 9px;gap:6px;border-radius:7px;font-size:12px;line-height:20px}
+.gx-picked>.gx-other .gx-mark{width:12px;height:12px;margin-top:4px}
+.gx-picked>.gx-other .gx-letter{display:none}
+/* The bar at the bottom while a list's rows are on screen: what is picked there, the page's count, Send. It takes the answered pill's place. */
+.gx-rowbar{position:fixed;left:50%;bottom:max(var(--gx-gutter,16px),env(safe-area-inset-bottom,0px));z-index:21;transform:translateX(-50%);box-sizing:border-box;width:min(var(--gx-text-width,720px),calc(100% - 2*var(--gx-gutter,16px)));display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:7px 7px 7px 14px;border-radius:14px;border:1px solid var(--gx-card-border);background:var(--gx-footer);box-shadow:var(--gx-glass-shadow);-webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15);color:var(--gx-muted);font:13px/18px var(--font-sans);opacity:0;visibility:hidden;transition:opacity .15s,visibility .15s}
+.gx-rowbar.gx-on{opacity:1;visibility:visible}
+.gx-rowbar-now{flex:1 1 150px;min-width:0}
+.gx-rowbar-now b{color:var(--gx-fg);font-weight:600}
+.gx-rowbar-tag{margin-right:6px;padding:0 7px;border-radius:999px;background:color-mix(in srgb,var(--gx-muted) 18%,transparent);font:500 10.5px/18px var(--font-mono);white-space:nowrap}
+.gx-rowbar-all{flex:none;font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.gx-rowbar>.gx-send-button{margin-left:0}
+.gx-tally.gx-tally-off{visibility:hidden}
 </style>"#;
 
 /// The kit's behaviour: turns the first `<gx-questions>` into a working form once the page has
@@ -528,15 +610,16 @@ function labelText(node){var c=node.cloneNode(true);c.querySelectorAll("small").
 /* The choices of a question that has mockups tied to it, in the order those mockups appear on the page, so the list below always reads like the variants above it. A mockup matches a choice by its value or label (a bare letter is only known once the choices are lettered, so it cannot rank); choices no mockup names keep their order after the matched ones. */
 function inVariantOrder(els,key,tag){
   var wanted=[];
-  Array.prototype.forEach.call(document.querySelectorAll("[data-question][data-choice]"),function(node){
+  Array.prototype.forEach.call(document.querySelectorAll("[data-question][data-choice],"+ROW_SEL),function(node){
     if(node.closest("gx-question"))return;
+    if(node.matches(ROW_SEL)){if(node.parentElement&&node.parentElement.closest(ROW_SEL))return;var a=rowAsks(node);if(a&&(a===key||(tag&&a===tag)))wanted.push([rowValue(node),rowLabel(node)]);return;}
     var asked=(node.getAttribute("data-question")||"").trim();
-    if(asked===key||(tag&&asked===tag))wanted.push((node.getAttribute("data-choice")||"").trim());
+    if(asked===key||(tag&&asked===tag))wanted.push([(node.getAttribute("data-choice")||"").trim()]);
   });
   if(!wanted.length)return els;
   var ranked=els.map(function(ce,i){
     var label=labelText(ce),value=(ce.getAttribute("value")||"").trim()||label,rank=Infinity;
-    for(var w=0;w<wanted.length;w++)if(wanted[w]===value||wanted[w]===label){rank=w;break;}
+    for(var w=0;w<wanted.length;w++)if(wanted[w].indexOf(value)>=0||wanted[w].indexOf(label)>=0){rank=w;break;}
     return{ce:ce,i:i,rank:rank};
   });
   ranked.sort(function(a,b){return a.rank===b.rank?a.i-b.i:a.rank<b.rank?-1:1;});
@@ -580,7 +663,7 @@ function question(qe,index,used,changed){
     nodes.forEach(function(node){body.append(node);});
     if(recommended)body.insertBefore(el("span","gx-rec","Recommended"),body.querySelector(":scope>small"));
     button.append(el("span","gx-mark"),body,el("span","gx-letter",letter));list.append(button);
-    var c={button:button,value:value,label:label,letter:letter,on:function(){return button.getAttribute("aria-checked")==="true";},set:function(v){button.setAttribute("aria-checked",v?"true":"false");}};
+    var c={button:button,value:value,label:label,letter:letter,recommended:!!recommended,on:function(){return button.getAttribute("aria-checked")==="true";},set:function(v){button.setAttribute("aria-checked",v?"true":"false");}};
     /* A pick toggles; one of N replaces the pick. */
     button.addEventListener("click",function(){var on=!c.on();if(on)choices.forEach(function(o){if(!multiple||o.exclusive||c.exclusive)o.set(false);});c.set(on);sync();notify();if(on&&c===other)note.focus();});
     choices.push(c);return c;
@@ -589,7 +672,7 @@ function question(qe,index,used,changed){
   var other=choice([document.createTextNode(OTHER)],OTHER,false,OTHER);other.button.classList.add("gx-other");
   has=function(){return choices.some(function(c){return c.on();})||!!note.value.trim();};
   sync();qe.append(list,note);
-  return{el:qe,title:title,key:key,tag:(tag||"").trim(),choices:choices,collect:function(out){var on=choices.filter(function(c){return c.on();}).map(function(c){return c.value;});
+  return{el:qe,title:title,key:key,tag:(tag||"").trim(),multiple:multiple,choices:choices,collect:function(out){var on=choices.filter(function(c){return c.on();}).map(function(c){return c.value;});
       var written=note.value.trim();out[key]=on.length?(multiple?on:on[0]):written?null:SKIPPED;if(written)out[key+" (note)"]=written;},
     restore:function(answers){var v=answers[key],picked=Array.isArray(v)?v:v==null?[]:[v];
       choices.forEach(function(c){c.set(picked.indexOf(c.value)>=0);});
@@ -597,12 +680,12 @@ function question(qe,index,used,changed){
     lock:function(){answered(choices.some(function(c){return c.on();})||!!note.value.trim());choices.forEach(function(c){c.button.disabled=true;});note.readOnly=true;if(!note.value)note.hidden=true;}};
 }
 /* The Pick button of one variant: at the right end of its heading's row (or a small head the kit adds when the variant has no heading), it clicks that choice, and shows it picked, here and in the question. `node` carries the picked ring. */
-function attachPick(node,heading,c){
+function attachPick(node,heading,c,q){
   var pick=el("button","gx-pick");pick.type="button";
   if(heading){heading.classList.add("gx-has-pick");heading.append(pick);}
   else{var head=el("div","gx-option-head");head.append(el("span","gx-option-label",c.label),pick);node.insertBefore(head,node.firstChild);}
   pick.addEventListener("click",function(){c.button.click();});
-  return{
+  return{q:q,c:c,node:node,
     sync:function(){var on=c.on();node.classList.toggle("gx-picked",on);pick.setAttribute("aria-pressed",on?"true":"false");pick.textContent=on?"\u2713 Picked":"Pick";pick.setAttribute("data-gx-tip",on?"Click again to clear":"Pick \u201c"+c.label+"\u201d");pick.disabled=c.button.disabled;}};
 }
 /* A mockup tied to a choice (`data-question` + `data-choice`): a Pick button by its title that
@@ -616,7 +699,7 @@ function bindOptions(questions){
     var c=q&&q.choices.filter(function(x){return x.value===wanted||x.label===wanted||x.letter===wanted.toLowerCase();})[0];
     if(!c){if(window.console)console.warn("ghostex: no choice \""+wanted+"\" in question \""+asked+"\"");return;}
     var heading=/^H[1-6]$/.test(node.tagName)?node:node.querySelector("h1,h2,h3,h4,h5,h6");
-    var option=attachPick(node,heading,c);option.q=q;found.push(option);
+    var option=attachPick(node,heading,c,q);found.push(option);
   });
   return found;
 }
@@ -631,7 +714,7 @@ function byLetterAny(m,real){return !!m&&real.some(function(c){return c.letter==
 function autoTie(questions,explicit){
   var tied=explicit.map(function(o){return o.q;}),options=[],report={auto:[],untied:[]},prev=null;
   var heads=Array.prototype.filter.call(document.querySelectorAll("h2,h3,h4,h5,h6"),function(h){
-    return !h.closest("gx-question,gx-page>header,gx-questions>header,.gx-theme-switch,[data-question][data-choice]")&&!h.classList.contains("gx-has-pick")&&!h.querySelector(".gx-pick");
+    return !h.closest("gx-question,gx-page>header,gx-questions>header,.gx-theme-switch,[data-question][data-choice],gx-pick,[data-pick],[data-pick-group]")&&!h.classList.contains("gx-has-pick")&&!h.querySelector(".gx-pick");
   });
   questions.forEach(function(q){
     var qe=q.el,before=prev;prev=qe;
@@ -649,15 +732,199 @@ function autoTie(questions,explicit){
       if(c)hits.push({h:h,c:c,text:text});
     });
     var good=hits.filter(function(x){return hits.filter(function(y){return y.c===x.c;}).length===1;});
-    good.forEach(function(x){options.push(attachPick(x.h,x.h,x.c));report.auto.push({question:q.key,heading:x.text,choice:x.c.letter});});
+    good.forEach(function(x){options.push(attachPick(x.h,x.h,x.c,q));report.auto.push({question:q.key,heading:x.text,choice:x.c.letter});});
     if(good.length)return;
     /* Variants to pick from: at least two mockup-sized blocks above the question (counted innermost, so a band holding two frames counts as two). An icon, a logo or one picture is not a choice between variants. */
-    var shown=Array.prototype.filter.call(document.querySelectorAll(MOCKUP),function(n){if(n.closest("gx-question,gx-questions>.gx-send,.gx-seg,.gx-theme-switch,#gx-tip")||!above(n))return false;var r=n.getBoundingClientRect();return r.width>=MOCKUP_MIN_WIDTH&&r.height>=MOCKUP_MIN_HEIGHT;});
+    var shown=Array.prototype.filter.call(document.querySelectorAll(MOCKUP),function(n){if(n.closest("gx-question,gx-questions>.gx-send,.gx-seg,.gx-theme-switch,#gx-tip,gx-pick,[data-pick]")||!above(n))return false;var r=n.getBoundingClientRect();return r.width>=MOCKUP_MIN_WIDTH&&r.height>=MOCKUP_MIN_HEIGHT;});
     var inner=shown.filter(function(n){return !shown.some(function(o){return o!==n&&n.contains(o);});});
     var under=lettered||inner.length>=2;
     if(under)report.untied.push({question:q.key,tag:q.tag,title:q.title});
   });
   return{options:options,report:report};
+}
+/* CDXC:SessionChat 2026-11-20 DECISION:
+   Picks on rows. User, after a page listed feature requests as rows and asked about them in a question far below that listed them again: "why not add pick buttons on the rows themselves always?? I want ALWAYS to add the pick buttons there on the same row instead of having to scroll down to pick from there". Then, from the design pages: design A (Q4230), a checkbox at the start of every row (a radio for pick one) with the whole row as the button, groups with a checkbox, a filter, Picked only and Pick recommended from eight rows, a bar at the bottom of the screen, the keys; "do it for single choice also"; "stop showing the duplicate selections area at the bottom when it's not necessary, cuz we now pick on the graphic/row/choice ... but we should keep the notes area I can write/voice in" (a question whose every choice has its row or picture shows only what was picked, Other and its note box); a Note with the microphone on every row of every list (Q4235, which lifts the 2026-10-30 "no note box under each option" for rows only; pictures keep it); "we need to allow writing any markdown as part of those choices" (a `<gx-pick>` holds Markdown, prepare.rs renders it; `data-pick` goes on any element); long rows fold (Q4245): a row over about 16 lines shows whole blocks up to about ten and hides the rest whole behind a Show more that says what it hides.
+   A row is a `<gx-pick value>` or any element with `data-pick`; its question is its own `question` / `data-question` or the nearest `data-question` around it. Its label is its first heading (the first element), else its text. */
+var ROW_SEL="gx-pick,[data-pick]",FOLD_FROM=340,FOLD_SHOW=210,FOLD_HIDE_MIN=100;
+function rowNodes(){return Array.prototype.filter.call(document.querySelectorAll(ROW_SEL),function(n){return !n.closest("gx-question")&&!(n.parentElement&&n.parentElement.closest(ROW_SEL));});}
+function rowAsks(n){var a=n.getAttribute("question")||n.getAttribute("data-question");if(a)return a.trim();var p=n.parentElement&&n.parentElement.closest("[data-question]");return p?(p.getAttribute("data-question")||"").trim():"";}
+function rowHeading(n){var f=n.firstElementChild;return f&&/^H[1-6]$/.test(f.tagName)?f:null;}
+function rowLabel(n){var h=rowHeading(n);if(h)return h.textContent.replace(/\s+/g," ").trim();var t=n.textContent.replace(/\s+/g," ").trim();return t.length>80?t.slice(0,79)+"…":t;}
+function rowValue(n){var v=(n.tagName==="GX-PICK"?n.getAttribute("value"):n.getAttribute("data-pick"))||"";return v.trim()||rowLabel(n);}
+function rowRecommended(n){return n.hasAttribute("recommended")||n.hasAttribute("data-recommended");}
+function asksFor(asked,q){return !!asked&&(asked===q.key||asked===q.title||(!!q.tag&&asked===q.tag));}
+/* Before the questions are built: each row becomes a choice of its question unless the question already lists it, so the agent writes the items once. */
+function addRowChoices(root){
+  var rows=rowNodes();if(!rows.length)return;
+  Array.prototype.forEach.call(root.querySelectorAll("gx-question"),function(qe){
+    var title=(qe.getAttribute("title")||"").trim(),q={key:(qe.getAttribute("name")||"").trim()||title,title:title,tag:(qe.getAttribute("tag")||"").trim()};
+    if((qe.getAttribute("type")||"").toLowerCase()==="text")return;
+    var have=Array.prototype.filter.call(qe.children,function(c){return c.nodeName==="GX-CHOICE";});
+    rows.forEach(function(n){
+      if(!asksFor(rowAsks(n),q))return;
+      var v=rowValue(n),l=rowLabel(n);
+      if(have.some(function(c){var cl=labelText(c),cv=(c.getAttribute("value")||"").trim()||cl;return cv===v||cl===l||cl===v;}))return;
+      var c=document.createElement("gx-choice");c.setAttribute("value",v);if(rowRecommended(n))c.setAttribute("recommended","");c.textContent=l;qe.append(c);have.push(c);
+    });
+  });
+}
+function idToken(text){var m=(text||"").match(/^\s*(#\d+|[A-Za-z][A-Za-z0-9]*-\d+)\b/);return m?m[1]:"";}
+/* What Show more hides, in words: "a list, a quote and 2 paragraphs". */
+function foldSummary(nodes){
+  var names={P:["a paragraph","paragraphs"],UL:["a list","lists"],OL:["a list","lists"],BLOCKQUOTE:["a quote","quotes"],PRE:["a code block","code blocks"],TABLE:["a table","tables"],FIGURE:["a picture","pictures"],IMG:["a picture","pictures"],FRAME:["a mockup","mockups"],H:["a heading","headings"],X:["a block","blocks"]},n={},order=[];
+  nodes.forEach(function(k){var t=k.tagName;if(/^H[1-6]$/.test(t))t="H";else if(t==="OL")t="UL";else if(k.classList.contains("gx-row-scroll"))t="TABLE";else if(k.classList.contains("gx-frame"))t="FRAME";else if(!names[t])t=k.querySelector("img,svg,picture")?"FIGURE":"X";if(!n[t]){n[t]=0;order.push(t);}n[t]++;});
+  var parts=order.map(function(t){return n[t]===1?names[t][0]:n[t]+" "+names[t][1];});
+  return parts.length>1?parts.slice(0,-1).join(", ")+" and "+parts[parts.length-1]:parts[0]||"";
+}
+/* One row: the control, the row's own content beside it, its Note, its fold. */
+function attachRow(n,c,q,changed){
+  var tr=n.tagName==="TR",ctl=el("span","gx-row-ctl"),side=el("span","gx-row-side"),noteBtn=el("button","gx-row-note-btn","Note"),noteWrap=el("div","gx-row-note"),note=el("textarea","gx-note"),noteRow=null,main=null,title=null;
+  n.classList.add("gx-row");n.setAttribute("role",q.multiple?"checkbox":"radio");n.setAttribute("aria-checked","false");n.tabIndex=-1;ctl.setAttribute("aria-hidden","true");
+  if(c.recommended)side.append(el("span","gx-rec","Recommended"));
+  noteBtn.type="button";noteBtn.tabIndex=-1;side.append(noteBtn);
+  var short=idToken(c.label)||c.label;note.rows=1;note.placeholder="Note on "+short+" (optional)";note.setAttribute("aria-label","Note on "+c.label);noteWrap.append(note);noteWrap.hidden=true;
+  if(tr){
+    var cell=el("td","gx-row-cell");cell.append(ctl);n.insertBefore(cell,n.firstChild);(n.lastElementChild||cell).append(side);
+    noteRow=el("tr","gx-row-note-tr");var td=el("td");td.colSpan=n.children.length;td.append(noteWrap);noteRow.append(td);n.after(noteRow);noteRow.hidden=true;
+  }else{
+    title=rowHeading(n);main=el("div","gx-row-main");kids(n).forEach(function(k){main.append(k);});n.append(ctl,main);
+    var label=el("span","gx-row-label");
+    if(title){kids(title).forEach(function(k){label.append(k);});}else{title=el("div");main.insertBefore(title,main.firstChild);}
+    title.classList.add("gx-row-title");title.append(label,side);main.append(noteWrap);
+    /* A wide table in a row scrolls sideways in its own box instead of squeezing the row (code blocks already scroll). */
+    Array.prototype.forEach.call(main.querySelectorAll("table"),function(t){if(t.closest(".gx-frame,.gx-row-scroll"))return;var s=el("div","gx-row-scroll");t.before(s);s.append(t);});
+  }
+  var o={q:q,c:c,node:n,note:note,value:c.value,open:false,long:false,more:null,shown:false};
+  o.openNote=function(){if(c.button.disabled)return;o.shown=true;o.sync();var box=note.__gxBox||note;box.focus();};
+  o.sync=function(){
+    var on=c.on(),off=c.button.disabled,has=!!note.value.trim();
+    n.setAttribute("aria-checked",on?"true":"false");n.classList.toggle("gx-row-off",off);if(off)n.setAttribute("aria-disabled","true");else n.removeAttribute("aria-disabled");
+    noteBtn.textContent=has?"Note ✓":"Note";noteBtn.classList.toggle("gx-has",has);noteBtn.hidden=off;
+    noteWrap.hidden=!(has||(o.shown&&!off));if(noteRow)noteRow.hidden=noteWrap.hidden;
+  };
+  noteBtn.addEventListener("click",function(e){e.stopPropagation();o.openNote();});
+  note.addEventListener("input",function(){changed();});
+  noteWrap.addEventListener("keydown",function(e){if(e.key==="Escape"&&!e.defaultPrevented){e.preventDefault();if(!note.value.trim())o.shown=false;o.sync();n.focus();}});
+  /* A click on the control, the title or plain text picks; a link, picture, code, table, mockup or control does its own thing, and selecting text never picks. */
+  n.addEventListener("click",function(e){
+    if(c.button.disabled)return;var t=e.target;
+    if(t.closest(".gx-row-note,.gx-row-note-tr,.gx-row-note-btn,.gx-more,a,button,input,textarea,select,label,summary,[contenteditable]"))return;
+    if(!t.closest(".gx-row-title,.gx-row-ctl,.gx-row-cell")&&t.closest("img,svg,video,audio,canvas,iframe,pre,code,table,figure,.gx-frame,gx-tabs,details"))return;
+    var s=window.getSelection&&getSelection();if(s&&!s.isCollapsed&&n.contains(s.anchorNode))return;
+    c.button.click();n.focus({preventScroll:true});
+  });
+  /* The fold: only a row over FOLD_FROM folds, showing whole blocks up to FOLD_SHOW and hiding the rest whole, and only when at least FOLD_HIDE_MIN would hide. Rows side by side never fold. */
+  o.refold=function(){
+    if(!main||(n.parentElement&&n.parentElement.classList.contains("gx-options")))return;
+    var blocks=Array.prototype.filter.call(main.children,function(k){return k!==title&&k!==noteWrap&&!k.classList.contains("gx-more");});
+    blocks.forEach(function(k){k.classList.remove("gx-folded");});if(o.more){o.more.remove();o.more=null;}
+    if(!blocks.length||!main.getClientRects().length)return;
+    var top=blocks[0].getBoundingClientRect().top,total=blocks[blocks.length-1].getBoundingClientRect().bottom-top,cut=-1;
+    o.long=total>=FOLD_FROM;if(!o.long)return;
+    if(!o.open){for(var i=1;i<blocks.length;i++)if(blocks[i].getBoundingClientRect().bottom-top>FOLD_SHOW){cut=i;break;}
+      if(cut<0||total-(blocks[cut].getBoundingClientRect().top-top)<FOLD_HIDE_MIN){o.long=false;return;}}
+    var hidden=o.open?[]:blocks.slice(cut);hidden.forEach(function(k){k.classList.add("gx-folded");});
+    var more=el("button","gx-more");more.type="button";
+    if(o.open)more.textContent="Show less";else more.append("Show more",el("span",null," · "+foldSummary(hidden)));
+    more.addEventListener("click",function(e){e.stopPropagation();o.open=!o.open;o.refold();if(o.list)o.list.sync();});
+    (o.open?blocks[blocks.length-1]:blocks[cut-1]).after(more);o.more=more;
+  };
+  o.folded=function(){return o.long&&!o.open;};
+  n.__gxRow=o;return o;
+}
+/* Rows tied to their questions. */
+function bindRows(questions,changed){
+  var found=[];
+  rowNodes().forEach(function(n){
+    var asked=rowAsks(n),q=questions.filter(function(x){return asksFor(asked,x)&&x.choices.length;})[0];if(!q)return;
+    var v=rowValue(n),l=rowLabel(n);
+    var c=q.choices.filter(function(x){return x.value===v;})[0]||q.choices.filter(function(x){return x.label===l||x.label===v;})[0];
+    if(!c){if(window.console)console.warn("ghostex: no choice \""+v+"\" in question \""+asked+"\"");return;}
+    found.push(attachRow(n,c,q,changed));
+  });
+  return found;
+}
+/* A question that lists again, as its choices, items the page shows above it (three or more ids such as FB-30 or #412), with no rows tied: reported for `ghostex visual check` to refuse. The kit adds nothing to such a page: wrapping rows it only guessed at would break the page's own layout of them, and the question still works. */
+function repeatedLists(questions,tiedQs){
+  var report=[],prev=null;
+  questions.forEach(function(q){
+    var qe=q.el,before=prev;prev=qe;if(tiedQs.indexOf(q)>=0)return;
+    var real=q.choices.filter(function(c){return !c.button.classList.contains("gx-other");});if(real.length<3)return;
+    function above(nd){return(!before||(before.compareDocumentPosition(nd)&Node.DOCUMENT_POSITION_FOLLOWING))&&(qe.compareDocumentPosition(nd)&Node.DOCUMENT_POSITION_PRECEDING)&&!nd.contains(qe);}
+    var tokens=real.map(function(c){return idToken(c.label)||idToken(c.value);}),texts=[],walk=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT),t;
+    while((t=walk.nextNode())){var p=t.parentElement;if(!p||!t.data.trim()||p.closest("gx-question,script,style,textarea,.gx-tally,.gx-rowbar")||!above(t))continue;texts.push(t);}
+    function hits(tok){var re=new RegExp("(^|[^A-Za-z0-9-])"+tok.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"(?![A-Za-z0-9-])");return texts.filter(function(x){return re.test(x.data);});}
+    var named=[];
+    real.forEach(function(c,i){var tok=tokens[i];if(tok&&hits(tok).length)named.push(tok);});
+    if(named.length>=3)report.push({question:q.key,tag:q.tag,title:q.title,items:named});
+  });
+  return report;
+}
+/* The rows of one question as a list: group checkboxes, the tools (filter, Picked only, Pick recommended from eight rows; Open all when a row folds), the keys' stops, and what the bottom bar says. */
+function rowList(q,rows,changed){
+  var L={q:q,rows:rows,groups:[]};rows.forEach(function(o){o.list=L;});
+  rows.forEach(function(o){var g=o.node.parentElement&&o.node.parentElement.closest("[data-pick-group]");if(!g)return;var G=L.groups.filter(function(x){return x.el===g;})[0];if(!G){G={el:g,rows:[]};L.groups.push(G);}G.rows.push(o);});
+  L.groups.forEach(function(G){
+    var head=Array.prototype.filter.call(G.el.querySelectorAll("h1,h2,h3,h4,h5,h6"),function(x){return !x.closest(".gx-row");})[0];
+    if(!head){var name=(G.el.getAttribute("data-pick-group")||"").trim();if(!name)return;head=el("div",null,name);G.el.insertBefore(head,G.el.firstChild);}
+    var lab=el("span","gx-row-glabel");kids(head).forEach(function(k){lab.append(k);});head.classList.add("gx-row-group");G.count=el("small");
+    if(q.multiple){G.ctl=el("span","gx-row-ctl");G.ctl.setAttribute("aria-hidden","true");head.append(G.ctl);head.setAttribute("role","checkbox");head.tabIndex=-1;head.__gxList=L;
+      head.addEventListener("click",function(){if(G.rows.some(function(o){return o.c.button.disabled;}))return;var full=G.rows.every(function(o){return o.c.on();});G.rows.forEach(function(o){if(o.c.on()===full)o.c.button.click();});});}
+    head.append(lab,G.count);G.head=head;
+  });
+  var tools=el("div","gx-row-tools"),filter=null,only=null,recs=null,term="",onlyOn=false;
+  function tool(text,toggle){var b=el("button","gx-row-tool",text);b.type="button";if(toggle)b.setAttribute("aria-pressed","false");tools.append(b);return b;}
+  if(rows.length>=8){
+    filter=el("input","gx-row-filter");filter.type="search";filter.placeholder="Filter "+rows.length+" items";filter.setAttribute("aria-label","Filter the items");tools.append(filter);
+    filter.addEventListener("input",function(){term=filter.value.trim().toLowerCase();L.sync();});
+    only=tool("Picked only",true);only.addEventListener("click",function(){onlyOn=!onlyOn;only.setAttribute("aria-pressed",onlyOn?"true":"false");L.sync();});
+    if(q.multiple&&rows.some(function(o){return o.c.recommended;})){recs=tool("Pick recommended");recs.addEventListener("click",function(){rows.forEach(function(o){if(o.c.recommended&&!o.c.on()&&!o.c.button.disabled)o.c.button.click();});});}
+  }
+  var openAll=tool("Open all");openAll.hidden=true;
+  openAll.addEventListener("click",function(){var fold=!rows.some(function(o){return o.folded();});rows.forEach(function(o){if(o.long||o.open){o.open=!fold;o.refold();}});L.sync();});
+  /* The tools go just above the rows: before the element that holds them all (or its table). */
+  var first=rows[0].node,anc=first.parentElement;while(anc&&!rows.every(function(o){return anc.contains(o.node);}))anc=anc.parentElement;
+  var spot=!anc||/^(GX-QUESTIONS|GX-PAGE|BODY)$/.test(anc.tagName)?first:anc;spot=spot.closest("table")||spot;
+  if(spot.parentElement&&spot.parentElement.closest("[data-pick-group]")&&spot===first)spot=spot.parentElement.closest("[data-pick-group]");
+  spot.before(tools);L.filter=filter;
+  L.stops=function(){var s=[];L.groups.forEach(function(G){if(G.ctl&&!G.head.classList.contains("gx-row-filtered"))s.push(G.head);});rows.forEach(function(o){if(!o.node.classList.contains("gx-row-filtered"))s.push(o.node);});
+    s.sort(function(a,b){return a.compareDocumentPosition(b)&Node.DOCUMENT_POSITION_FOLLOWING?-1:1;});return s;};
+  L.range=function(){var top=Infinity,bottom=-Infinity;rows.forEach(function(o){if(o.node.classList.contains("gx-row-filtered"))return;var r=o.node.getBoundingClientRect();if(!r.height)return;top=Math.min(top,r.top);bottom=Math.max(bottom,r.bottom);});var t=tools.getBoundingClientRect();if(t.height)top=Math.min(top,t.top);return{top:top,bottom:bottom};};
+  L.now=function(){var on=rows.filter(function(o){return o.c.on();});return q.multiple?"<b>"+on.length+"</b> of "+rows.length+" picked":on.length?"<b>"+esc(idToken(on[0].c.label)||on[0].c.label)+"</b> picked":"Nothing picked";};
+  L.sync=function(){
+    rows.forEach(function(o){var hide=(onlyOn&&!o.c.on())||(!!term&&o.node.textContent.toLowerCase().indexOf(term)<0);o.node.classList.toggle("gx-row-filtered",hide);});
+    L.groups.forEach(function(G){if(!G.head)return;var on=G.rows.filter(function(o){return o.c.on();}).length;G.count.textContent=q.multiple?on+" of "+G.rows.length:on?"Picked here":"";
+      if(G.ctl){G.ctl.className="gx-row-ctl"+(on===G.rows.length?" gx-all":on?" gx-some":"");G.head.setAttribute("aria-checked",on===G.rows.length?"true":on?"mixed":"false");}
+      G.head.classList.toggle("gx-row-filtered",G.rows.every(function(o){return o.node.classList.contains("gx-row-filtered");}));});
+    var locked=rows.some(function(o){return o.c.button.disabled;});if(recs)recs.hidden=locked;
+    var anyLong=rows.some(function(o){return o.long;});openAll.hidden=!anyLong;openAll.textContent=rows.some(function(o){return o.folded();})?"Open all":"Fold long rows";
+    tools.hidden=!filter&&!anyLong;
+    var s=L.stops();if(s.length&&!s.some(function(x){return x.tabIndex===0;}))s[0].tabIndex=0;
+  };
+  rows.forEach(function(o){o.node.__gxList=L;});
+  return L;
+}
+function esc(t){return String(t).replace(/[&<>"]/g,function(ch){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[ch];});}
+/* A question whose every choice has its row or picture shows what was picked as chips (a click goes back to it, × clears it), Other and its note box, not its choices again. A question with any choice that has neither keeps its list, in sync with the rows. */
+function tidyCards(questions,ties){
+  var cards=[];
+  questions.forEach(function(q){
+    var real=q.choices.filter(function(c){return !c.button.classList.contains("gx-other");}),mine=ties.filter(function(t){return t.q===q;});
+    if(!real.length||!real.every(function(c){return mine.some(function(t){return t.c===c;});}))return;
+    var qe=q.el,list=qe.querySelector(".gx-choices"),other=q.choices.filter(function(c){return c.button.classList.contains("gx-other");})[0];
+    var bar=el("div","gx-picked"),chips=el("span","gx-picked-chips"),rowsOf=mine.some(function(t){return t.node.classList.contains("gx-row");});
+    bar.append(el("span","gx-picked-label",rowsOf?"Picked above":"Picked"),chips);if(other)bar.append(other.button);
+    list.before(bar);qe.classList.add("gx-q-tied");
+    function nodeOf(c){var t=mine.filter(function(t){return t.c===c;})[0];return t&&t.node;}
+    function show(node){if(!node)return;node.scrollIntoView({block:"center",behavior:"smooth"});if(node.classList.contains("gx-row"))node.focus({preventScroll:true});}
+    cards.push({sync:function(){
+      var locked=real.some(function(c){return c.button.disabled;}),on=real.filter(function(c){return c.on();});chips.textContent="";
+      if(!on.length){var none=el("span","gx-picked-none");if(locked||(other&&other.on()))none.textContent="Nothing picked";else{none.append("Nothing yet. ");var go=el("button",null,rowsOf?"Pick on the rows above":"Pick on the designs above");go.type="button";go.addEventListener("click",function(){show(nodeOf(real[0]));});none.append(go);}chips.append(none);}
+      on.forEach(function(c){var chip=el("span","gx-picked-chip"),tok=idToken(c.label),text=tok&&c.label.indexOf(tok)===0?tok:c.label,go=el("button","gx-picked-go",text);go.type="button";go.title=c.label;go.addEventListener("click",function(){show(nodeOf(c));});chip.append(go);
+        if(!locked){var x=el("button",null,"×");x.type="button";x.setAttribute("aria-label","Clear "+c.label);x.addEventListener("click",function(){c.button.click();});chip.append(x);}chips.append(chip);});
+    }});
+  });
+  return cards;
 }
 function setup(root){
   /* A page that asks nothing and waits to be seen (SEEN_FOOTER below): the same footer with no questions, a reply box and Mark as seen. */
@@ -668,9 +935,36 @@ function setup(root){
   function syncOptions(){options.forEach(function(o){o.sync();});}
   /* The reader's picks so far are kept on the host (PAGE_API's draft), so closing and reopening the page loses nothing. */
   function changed(){syncOptions();if(window.ghostex&&ghostex.__saveDraft)ghostex.__saveDraft("kit",collect());}
+  addRowChoices(root);
   questions=Array.prototype.map.call(root.querySelectorAll("gx-question"),function(qe,index){return question(qe,index,used,changed);});
-  var explicit=bindOptions(questions),auto=autoTie(questions,explicit);
-  options=explicit.concat(auto.options);window.__ghostexKit={tied:explicit.length,auto:auto.report.auto,untied:auto.report.untied};syncOptions();
+  var explicit=bindOptions(questions),rowTies=bindRows(questions,changed),auto=autoTie(questions,explicit.concat(rowTies));
+  var repeated=repeatedLists(questions,explicit.concat(rowTies,auto.options).map(function(o){return o.q;})),allRows=rowTies,lists=[];
+  allRows.forEach(function(o){if(!lists.some(function(L){return L.q===o.q;}))lists.push(rowList(o.q,allRows.filter(function(x){return x.q===o.q;}),changed));});
+  /* A row's note goes with its question's answer as "<key> · <value> (note)", the key the answers card already folds into the question's row (packages/gx-chat-core/src/transcript/page_answers.rs). */
+  allRows.forEach(function(o){var q=o.q,k=q.key+" \u00b7 "+o.value+" (note)",c0=q.collect,r0=q.restore,l0=q.lock;
+    q.collect=function(out){c0(out);var t=o.note.value.trim();if(t)out[k]=t;};
+    q.restore=function(a){r0(a);o.note.value=typeof a[k]==="string"?a[k]:"";};
+    q.lock=function(){l0();o.note.readOnly=true;};});
+  var cards=tidyCards(questions,explicit.concat(auto.options,rowTies));
+  options=explicit.concat(auto.options,allRows,lists,cards);window.__ghostexKit={tied:explicit.length,auto:auto.report.auto,untied:auto.report.untied,rows:rowTies.length,repeated:repeated};syncOptions();
+  function refoldAll(){allRows.forEach(function(o){o.refold();});lists.forEach(function(L){L.sync();});}
+  if(allRows.length){
+    refoldAll();addEventListener("load",refoldAll);if(document.fonts&&document.fonts.ready)document.fonts.ready.then(refoldAll);
+    var foldWidth=root.clientWidth;if(window.ResizeObserver)new ResizeObserver(function(){if(root.clientWidth!==foldWidth){foldWidth=root.clientWidth;refoldAll();}}).observe(root);
+    /* The keys in a list: arrows or J and K move between rows and group headers, Space or X picks, O opens or folds a long row, N writes its note; / goes to the filter of the list on screen. */
+    document.addEventListener("keydown",function(e){
+      var t=e.target;if(!t||!t.classList||e.metaKey||e.ctrlKey||e.altKey||e.isComposing)return;
+      if(e.key==="/"&&!t.closest("input,textarea,select,[contenteditable]")){var vis=lists.filter(function(L){var r=L.range();return L.filter&&r.bottom>0&&r.top<innerHeight;})[0];if(vis){e.preventDefault();vis.filter.focus();}return;}
+      var L=t.__gxList;if(!L||!(t.classList.contains("gx-row")||t.classList.contains("gx-row-group")))return;
+      var s=L.stops(),i=s.indexOf(t),k=e.key;
+      function go(j){if(j<0||j>=s.length)return;s.forEach(function(x){x.tabIndex=-1;});s[j].tabIndex=0;s[j].focus();}
+      if(k==="ArrowDown"||k==="j"||k==="J"){e.preventDefault();go(i+1);}
+      else if(k==="ArrowUp"||k==="k"||k==="K"){e.preventDefault();go(i-1);}
+      else if(k===" "||k==="x"||k==="X"){e.preventDefault();t.click();}
+      else if((k==="o"||k==="O")&&t.__gxRow&&(t.__gxRow.long||t.__gxRow.open)){e.preventDefault();t.__gxRow.open=!t.__gxRow.open;t.__gxRow.refold();L.sync();}
+      else if((k==="n"||k==="N")&&t.__gxRow){e.preventDefault();t.__gxRow.openNote();}
+    });
+  }
   /* An exported page's answers name each question as well as its key (theme.rs PAGE_API, exported.rs): its tag, its text, the value and label of what was picked, and its note. */
   window.__ghostexKit.describe=function(a){a=a||{};var rows=questions.map(function(q){var v=a[q.key],r={tag:q.tag||null,question:q.title,key:q.key,value:v===undefined?null:v};
     if(q.choices.length){var lab=function(x){var c=q.choices.filter(function(c){return c.value===x;})[0];return c?c.label:x;};r.label=Array.isArray(v)?v.map(lab):v==null||v===SKIPPED?null:lab(v);}
@@ -706,7 +1000,16 @@ function setup(root){
      CDXC:SessionChat 2026-11-15 DECISION: User, with a screenshot of a page on their Android foldable where the "1 of 2 answered" pill sat over an option card, among cards that overflowed and overlapped: "Please also make sure inline htmls don't look like this where stuff is over flowing and overlapping." Asked whether the pill should fade whenever content is under it or always show, the user answered "Always show", so the "always" above stands: the pill never hides. It cannot hide a control: clicks and taps go through it (`pointer-events:none`), and the page's room at its end is measured from the pill itself (its margin, its height at the current text size and a 12px gap), so scrolled to the end every card, the send bar and its buttons sit clear above it. Supersedes the fading pill tried the same day. */
   if(questions.length&&!seen){
     var tally=el("div","gx-tally");tally.setAttribute("role","status");tally.setAttribute("aria-live","polite");
-    var tallied=function(){var n=questions.filter(function(q){return q.el.classList.contains("gx-has-answer");}).length,text=n+" of "+questions.length+" answered";if(tally.textContent!==text){tally.textContent=text;place();}tally.classList.toggle("gx-all",n===questions.length);};
+    /* While a list's rows are on screen, a bar takes the pill's place: that list's picks, the page's count and Send (the SessionChat 2026-11-20 DECISION on `bindRows`). `ghostex visual check` treats it as it does the pill. */
+    var rowbar=null,barNow=null,barAll=null;
+    if(lists.length){rowbar=el("div","gx-rowbar");rowbar.setAttribute("role","region");rowbar.setAttribute("aria-label","Picks");barNow=el("span","gx-rowbar-now");barAll=el("span","gx-rowbar-all");
+      var barSend=el("button","gx-send-button");barSend.type="button";barSend.append(el("span",null,root.getAttribute("submit")||"Send answers"));barSend.addEventListener("click",function(){button.click();});rowbar.append(barNow,barAll,barSend);}
+    var barSync=function(){if(!rowbar)return;var vh=innerHeight,best=null,most=0;
+      if(!button.disabled)lists.forEach(function(L){var r=L.range();if(!isFinite(r.top))return;var vis=Math.min(r.bottom,vh*0.85)-Math.max(r.top,vh*0.15);if(vis>most){most=vis;best=L;}});
+      rowbar.classList.toggle("gx-on",!!best);tally.classList.toggle("gx-tally-off",!!best);
+      if(best){var n=questions.filter(function(q){return q.el.classList.contains("gx-has-answer");}).length;barNow.innerHTML=(best.q.tag?'<span class="gx-rowbar-tag">'+esc(best.q.tag)+"</span>":"")+best.now();barAll.textContent=n+" of "+questions.length+" answered";}};
+    var barQueued=false,barLater=function(){if(barQueued)return;barQueued=true;requestAnimationFrame(function(){barQueued=false;barSync();});};
+    var tallied=function(){var n=questions.filter(function(q){return q.el.classList.contains("gx-has-answer");}).length,text=n+" of "+questions.length+" answered";if(tally.textContent!==text){tally.textContent=text;place();}tally.classList.toggle("gx-all",n===questions.length);barLater();};
     /* The pill must sit fully on the screen the reader sees. A fixed box is placed against the layout viewport, which a phone's web view (overview mode, a wider layout than the screen, a pinch zoom) can make wider than the screen, so the stylesheet's offsets are only a first guess: this measures where the pill landed against the visual viewport and moves it by the difference, with the same margin from the right and bottom edges as the stylesheet gives. */
     var place=function(){
       var vv=window.visualViewport,de=document.documentElement;
@@ -716,10 +1019,11 @@ function setup(root){
       if(Math.abs(dx)>0.5)tally.style.right=(gr-dx)+"px";
       if(Math.abs(dy)>0.5)tally.style.bottom=(gb-dy)+"px";
       /* The room at the page's end is the pill's own height plus its margin and a gap, measured, so a larger text size (Android's font size setting) or a wider gutter still leaves the last content clear of it. */
-      room.style.height=Math.ceil(gb+tally.getBoundingClientRect().height+ROOM_GAP)+"px";
+      if(rowbar)rowbar.style.bottom=tally.style.bottom;
+      room.style.height=Math.ceil(gb+Math.max(tally.getBoundingClientRect().height,rowbar?rowbar.offsetHeight:0)+ROOM_GAP)+"px";
     };
     var room=el("div","gx-tally-room"),ROOM_GAP=12;
-    document.body.append(room,tally);tallied();place();
+    document.body.append(room,tally);if(rowbar){document.body.append(rowbar);addEventListener("scroll",barLater,{passive:true});addEventListener("resize",barLater);}tallied();place();
     window.addEventListener("resize",place);
     window.addEventListener("load",place);
     if(window.visualViewport){visualViewport.addEventListener("resize",place);visualViewport.addEventListener("scroll",place);}
