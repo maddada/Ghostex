@@ -11,7 +11,7 @@ use std::{
 const API: &str = "https://api.anthropic.com";
 /// CDXC:AgentProviders 2026-09-24 WHY:
 /// Anthropic decides reset eligibility by client surface: a request that does not identify as Claude Code answers `eligible: false, ineligible_reason: "surface"` with no grants. The version is the Claude Code release whose protocol this mirrors.
-const USER_AGENT: &str = "claude-cli/2.1.281 (external, cli)";
+pub(crate) const USER_AGENT: &str = "claude-cli/2.1.281 (external, cli)";
 const PROGRAM: &str = "cedar_ember";
 
 /// One cswap slot as its own `sequence.json` records it.

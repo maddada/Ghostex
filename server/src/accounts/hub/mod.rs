@@ -363,7 +363,7 @@ pub(crate) fn pool_free_at(hub_id: &str, provider: Provider) -> Option<DateTime<
 }
 
 /// A hub address as saved: `http(s)://host[:port]`, without a path the user may have copied
-/// (`/v1`, `/v0/management`) or a trailing slash.
+/// (`/v1`, `/v0/management`, `/management.html`) or a trailing slash.
 fn normalize_url(text: &str) -> Result<String, DomainStateError> {
     let invalid =
         || DomainStateError::bad_request("Enter the hub's address, like http://127.0.0.1:8317.");
@@ -378,7 +378,8 @@ fn normalize_url(text: &str) -> Result<String, DomainStateError> {
         return Err(invalid());
     }
     let mut path = url.path().trim_end_matches('/').to_string();
-    for suffix in ["/v0/management", "/v1"] {
+    // The address of the hub's own management page (`…/management.html`) works too.
+    for suffix in ["/management.html", "/v0/management", "/v1"] {
         if let Some(stripped) = path.strip_suffix(suffix) {
             path = stripped.to_string();
         }

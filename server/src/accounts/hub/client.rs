@@ -51,12 +51,30 @@ fn answer(result: Result<ureq::http::Response<ureq::Body>, ureq::Error>) -> Resu
 }
 
 /// The hub's own error text (`{"error": "…"}`), trimmed for a sentence.
+///
+/// CDXC:AgentProviders 2026-11-19 WHY:
+/// A message shows only the `error` field of a JSON answer, never a raw body (a proxy's page, or an answer that repeats a request), and any long unbroken run of letters and digits in it is cut out, so a key or token a hub or a proxy in front of it echoes never reaches Settings, the CLI or a log.
 fn hub_error(body: &Value) -> Option<String> {
     let text = body
         .get("error")
-        .and_then(|error| error.as_str().or_else(|| error.get("message")?.as_str()))
-        .or_else(|| body.as_str())?
+        .and_then(|error| error.as_str().or_else(|| error.get("message")?.as_str()))?
         .trim();
+    let masked: Vec<String> = text
+        .split(' ')
+        .map(|word| {
+            let run = word
+                .split(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.'))
+                .map(str::len)
+                .max()
+                .unwrap_or(0);
+            if run >= 24 {
+                "…".to_string()
+            } else {
+                word.to_string()
+            }
+        })
+        .collect();
+    let text = masked.join(" ");
     (!text.is_empty()).then(|| text.chars().take(200).collect())
 }
 
@@ -171,6 +189,11 @@ pub(crate) fn usage(
     let (target, provider_name) = match provider.as_str() {
         "claude" => {
             header.insert("anthropic-beta".into(), json!("oauth-2025-04-20"));
+            // Anthropic answers usage reads without Claude Code's agent with 429s.
+            header.insert(
+                "User-Agent".into(),
+                json!(crate::accounts::claude_resets::USER_AGENT),
+            );
             ("https://api.anthropic.com/api/oauth/usage", "Anthropic")
         }
         "codex" => {
@@ -181,6 +204,8 @@ pub(crate) fn usage(
                 header.insert("ChatGPT-Account-Id".into(), json!(account));
             }
             header.insert("OpenAI-Beta".into(), json!("codex-1"));
+            // The same headers Codex Swap usage reads send (helpers.rs `codex_get`).
+            header.insert("originator".into(), json!("Codex Desktop"));
             ("https://chatgpt.com/backend-api/wham/usage", "ChatGPT")
         }
         _ => return Ok(None),
