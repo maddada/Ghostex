@@ -277,6 +277,7 @@ export type GxserverEndpointPath =
   | '/api/mergeWorktreeIntoMain'
   | '/api/checkoutProjectNewBranch'
   | '/api/removeProject'
+  | '/api/renameProject'
   | '/api/deleteWorktreeProject'
   | '/api/renameWorktreeProject'
   | '/api/updateSession'

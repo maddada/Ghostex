@@ -388,6 +388,7 @@ fn is_known_command(name: &str) -> bool {
         "lookup-repository",
         "clone-repository",
         "remove-project",
+        "rename-project",
         "restore-recent-project",
         "read-sidebar-project-collections",
         "update-sidebar-project-collections",
@@ -689,6 +690,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "remove-project" => {
             run_bridge_action("removeProject", Parser::Project, fail_on_not_ok, args)
         }
+        "rename-project" => actions::run_rename_project(args),
         "restore-recent-project" => run_bridge_action(
             "restoreRecentProject",
             Parser::Project,

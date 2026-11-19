@@ -283,6 +283,54 @@ pub(super) async fn route_projects_http(
                 Ok(json!({ "project": project }))
             },
         ),
+        /*
+        CDXC:Projects 2026-11-19 WHY:
+        `ghostex rename-project` and the sidebar's Rename row change the project's display name only: the id, folder, sessions, history, groups, board and settings stay, where remove-project + add-project lost every session record. The selector (`projectId`, `path` or `name`, as remove-project takes) and the new name (`newName`) are separate fields because `name` is a selector here. A worktree project is renamed with Rename Worktree (/api/renameWorktreeProject), which also moves its folder and branch, so this refuses one.
+        */
+        "/api/renameProject" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |repository, db, params, _| {
+                let new_name = params
+                    .get("newName")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|name| !name.is_empty())
+                    .ok_or_else(|| DomainStateError::bad_request("Give the project's new name."))?
+                    .to_string();
+                let project_id = resolve_sidebar_collection_project_id(repository, params)?;
+                let current = repository.get_project(&project_id)?.ok_or_else(|| {
+                    DomainStateError::not_found(format!("Project {project_id} does not exist."))
+                })?;
+                if current
+                    .get("worktree")
+                    .is_some_and(|worktree| !worktree.is_null())
+                {
+                    return Err(DomainStateError::bad_request(
+                        "This project is a worktree. Rename it with Rename Worktree in the sidebar, which also renames its folder and branch.",
+                    ));
+                }
+                let previous_name = current
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                let mut update = serde_json::Map::new();
+                update.insert("projectId".to_string(), json!(project_id));
+                update.insert("name".to_string(), json!(new_name));
+                let project = repository.update_project(&update)?;
+                schedule_presentation_project_delta(
+                    &state,
+                    db,
+                    repository,
+                    &project_id,
+                    "projectUpdated",
+                )?;
+                Ok(json!({ "project": project, "previousName": previous_name }))
+            },
+        ),
         "/api/deleteWorktreeProject" => {
             handle_delete_worktree_project_http(&state, endpoint.path, request_id, &body_json).await
         }

@@ -140,6 +140,17 @@ impl MenuCommand {
         Self(json!({ "type": "renameGroup", "groupId": group_id }))
     }
 
+    /// `{ type: 'renameProject', groupId }`: opens the name field on the project's header, which
+    /// saves through gxserver's `/api/renameProject`.
+    pub(crate) fn rename_project(group_id: &str) -> Self {
+        Self(json!({ "type": "renameProject", "groupId": group_id }))
+    }
+
+    /// Whether this is the project header's Rename (`rename_project`).
+    pub fn is_rename_project(&self) -> bool {
+        self.0.get("type").and_then(Value::as_str) == Some("renameProject")
+    }
+
     pub(crate) fn confirm_close_group(group_id: &str) -> Self {
         Self(json!({ "type": "confirmCloseGroup", "groupId": group_id }))
     }

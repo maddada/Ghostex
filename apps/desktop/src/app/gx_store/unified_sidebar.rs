@@ -19,7 +19,7 @@ use ghostex_gx_core::unified_sidebar::{
 use ghostex_gx_core::{
     ChangeSummary, Core, HoverAction, LOCAL_MACHINE_ID, MachineId, MenuHost, MenuItem, ProjectKey,
     RowNesting, SessionKey, SidebarInputs, SidebarMenus, SidebarViewModel,
-    unified_delete_worktree_menu,
+    unified_delete_worktree_menu, without_project_rename,
 };
 use serde_json::Value;
 
@@ -263,6 +263,8 @@ impl UnifiedSidebarHost {
             let inputs = unified_lane_menu_inputs(&lane.inputs);
             let menus = SidebarMenus::new(core, lane.model.view(), &inputs, menu_host, now_ms);
             let mut menu = menus.project_menu(group);
+            // A row here is named by its repository, not the project's name.
+            without_project_rename(&mut menu);
             // A worktree's own menu already ends with its Delete Worktree.
             if group
                 .core

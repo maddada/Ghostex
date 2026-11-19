@@ -26,6 +26,8 @@ pub enum Parser {
     ProjectMove,
     ProjectPath,
     ProjectCollection,
+    /// A project selector (`--project-id`, `--path` or `--name`) plus the new display name.
+    ProjectRename,
     BrowseDirectories,
     LookupRepository,
     CloneRepository,
@@ -118,6 +120,42 @@ pub fn run_bridge_action(
     let parsed = parse_args(args);
     let payload = evaluate_parser(parser, &parsed.rest, &parsed.flags)?;
     finish_bridge_action(action, payload, &parsed.flags, options)
+}
+
+/// `ghostex rename-project`: the gxserver answer with `--json`, else one line saying what changed.
+pub fn run_rename_project(args: &[String]) -> CliResult<()> {
+    let parsed = parse_args(args);
+    let payload = evaluate_parser(Parser::ProjectRename, &parsed.rest, &parsed.flags)?;
+    if parsed.flags.truthy("json") {
+        return finish_bridge_action(
+            "renameProject",
+            payload,
+            &parsed.flags,
+            BridgeOptions {
+                fail_on_not_ok: true,
+                assert_ok: false,
+            },
+        );
+    }
+    let result = send_gxserver_cli_action("renameProject", &payload, &parsed.flags)?;
+    if is_failed_cli_result(&result) {
+        print_json(&result);
+        crate::ghostex_cli::set_exit_code(1);
+        return Ok(());
+    }
+    let text = |pointer: &str| {
+        result
+            .pointer(pointer)
+            .and_then(Value::as_str)
+            .unwrap_or("")
+    };
+    println!(
+        "Renamed {} to {} ({}).",
+        text("/previousName"),
+        text("/project/name"),
+        text("/project/projectId")
+    );
+    Ok(())
 }
 
 /// `run_bridge_action` for a verb that hands another session a message

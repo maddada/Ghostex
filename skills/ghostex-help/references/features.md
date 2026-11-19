@@ -981,6 +981,14 @@ Close Project parks the project in Recent Projects (a remote machine's project
 goes to that machine's Recent Projects, which Quick Access lists); when it held
 the active session, Ghostex stays in the current Space and switches to an awake
 session of the next project in the list.
+To change a project's name, choose Rename in its right-click menu and type the
+new name, or run `ghostex rename-project` with `--project-id`, `--path` or
+`--name` and the new name (`--computer <name>` renames a project on a connected
+computer). Only the name changes: the folder on disk, the project's sessions,
+history, groups, board and settings stay. Each computer keeps its own name for
+a project, and the Unified sidebar shows the repository's name instead. A
+worktree is renamed with Rename Worktree, which also renames its folder and
+branch.
 To remove a project for good (the folder on your computer stays), use Remove in
 Settings > Projects or, from the command line, `ghostex remove-project` with
 `--project-id`, `--path` or `--name`; a name two projects share fails and lists

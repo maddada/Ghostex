@@ -226,11 +226,12 @@ pub use crate::sidebar_menu::{
     agent_launcher_items, agent_launcher_items_with_accounts, agent_logo_icons, agent_logo_svg,
     colored_agent_logo, hover_slots, hover_strip, machine_workspace_menu, menu_to_json,
     project_header_actions, unified_default_hover_buttons, unified_delete_worktree_menu,
-    unified_hover_buttons, workspace_menu, workspace_switch_target, HeaderCommand, HoverAction,
-    HoverSlot, HoverStrip, LauncherAgent, MenuCommand, MenuGroup, MenuHost, MenuItem,
-    MenuOpenTarget, MenuSecondary, MenuSplit, SessionActions, SidebarMenus, ADD_PROJECT_ACTION,
-    CLONE_PROJECT_ON_MACHINE, COMMANDS_ACTION, MENU_PANEL_DEV_SERVERS, MENU_PANEL_EXTENSIONS,
-    MENU_PANEL_HELP, MENU_PANEL_MESSAGE_TYPE, MENU_PANEL_RESOURCES, UNIFIED_TOGGLE_GROUPS_ACTION,
+    unified_hover_buttons, without_project_rename, workspace_menu, workspace_switch_target,
+    HeaderCommand, HoverAction, HoverSlot, HoverStrip, LauncherAgent, MenuCommand, MenuGroup,
+    MenuHost, MenuItem, MenuOpenTarget, MenuSecondary, MenuSplit, SessionActions, SidebarMenus,
+    ADD_PROJECT_ACTION, CLONE_PROJECT_ON_MACHINE, COMMANDS_ACTION, MENU_PANEL_DEV_SERVERS,
+    MENU_PANEL_EXTENSIONS, MENU_PANEL_HELP, MENU_PANEL_MESSAGE_TYPE, MENU_PANEL_RESOURCES,
+    UNIFIED_TOGGLE_GROUPS_ACTION,
 };
 pub use crate::sidebar_menu::{
     AgentChoicePlace, AgentChoiceScope, AgentChoices, AGENT_CHOICES_STORAGE_KEY,
