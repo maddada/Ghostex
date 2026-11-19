@@ -415,12 +415,11 @@ impl GhostexGpuiApp {
                 }))
             }
             GpuiTitlebarPopupKind::AccountUsage(id) => {
-                let account = self
-                    .titlebar_accounts
-                    .iter()
-                    .find(|account| account["titlebarKey"] == id.as_str())
-                    .expect("account checked before opening usage popup")
-                    .clone();
+                let account = crate::app::titlebar::account_usage::usage_popup_account(
+                    &self.titlebar_accounts,
+                    id.as_str(),
+                )
+                .expect("account checked before opening usage popup");
                 GpuiTitlebarPopupContent::AccountUsage(cx.new(|cx| {
                     crate::app::window::account_usage::AccountUsagePanel::new(
                         main_app, id, account, cx,

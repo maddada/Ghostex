@@ -266,8 +266,13 @@ impl AccountsTab {
             .into_iter()
             .find(|account| account.id() == *id && account.needs_sign_in());
         self.pending_reconnect = None;
-        if let Some(account) = account {
-            self.start_reconnect(&account, cx);
+        match account {
+            // A Cursor, Gemini or Copilot account signs in through its own flow (its Sign in again).
+            Some(account) if account.usage_only() => {
+                self.start_usage_sign_in(&account.provider(), Some(account.id()), cx)
+            }
+            Some(account) => self.start_reconnect(&account, cx),
+            None => {}
         }
     }
 
