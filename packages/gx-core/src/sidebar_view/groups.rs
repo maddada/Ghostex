@@ -63,6 +63,8 @@ pub(crate) struct ProjectContextInput {
     /// The GBot this project is the folder of (`PresentationProject::gbots_bot`), drawn as the
     /// bot's row in Main Hub's GBots section (gbots.rs).
     pub(crate) gbot: Option<ghostex_gx_protocol::presentation::PresentationGbotsBot>,
+    /// The project's folder is missing: the header's mark and its popover (folder_problem.rs).
+    pub(crate) folder_problem: Option<super::folder_problem::FolderProblemView>,
 }
 
 /// Who is focused right now, in the vocabulary the rows compare against.
@@ -290,6 +292,7 @@ fn project_context_view(project: &ProjectContextInput) -> ProjectContextView {
         work_tracker_github: project.work_tracker_github,
         is_home: project.is_home,
         gbot: project.gbot.clone(),
+        folder_problem: project.folder_problem.clone(),
     }
 }
 

@@ -1118,6 +1118,13 @@ impl NativeChatView {
         // An approval: when it first appeared (its answers wait a moment before taking clicks,
         // work_actions.rs `approval_armed`), and its answers on their own line under the title, so
         // the agent's full words fit before they fold into a dropdown.
+        if text(row, "kind") == "collab" {
+            self.board
+                .approval_seen
+                .borrow_mut()
+                .entry(text(row, "key"))
+                .or_insert_with(web_time::Instant::now);
+        }
         if text(row, "kind") == "approval" {
             self.board
                 .approval_seen
@@ -1579,10 +1586,17 @@ impl NativeChatView {
         };
         let cut = text(row, "commandCut");
         let copied = command.clone();
+        // A Collab message's words are drawn in the chat's own type and copied as a message.
+        let plain = row["commandPlain"] == true;
+        let copy_label = if plain {
+            "Copy message"
+        } else {
+            "Copy command"
+        };
         let block = div()
             .id(gpui::SharedString::from(format!("dock-row-command:{key}")))
             .role(gpui::Role::Button)
-            .aria_label("Copy command")
+            .aria_label(copy_label)
             .chat_cursor_pointer()
             .w_full()
             .min_w_0()
@@ -1594,8 +1608,8 @@ impl NativeChatView {
             .rounded(px(6.0 * s))
             .bg(p.foreground.opacity(0.05))
             .hover(|style| style.bg(p.foreground.opacity(0.09)))
-            .font_family(super::fonts::CHAT_MONO)
-            .text_size(px(PROSE_SIZE * 0.9 * s))
+            .when(!plain, |block| block.font_family(super::fonts::CHAT_MONO))
+            .text_size(px(PROSE_SIZE * if plain { 1.0 } else { 0.9 } * s))
             .text_color(p.strengthened(p.prose))
             .children(shown.lines().map(|line| {
                 div()
@@ -1607,11 +1621,13 @@ impl NativeChatView {
                         line.to_string()
                     })
             }))
-            .when(more > 0 && !open, |block| {
-                block.child(div().text_color(p.card_muted).child("\u{2026}"))
-            })
-            .tooltip(|window, cx| {
-                gpui_component::tooltip::Tooltip::new("Copy command").build(window, cx)
+            // Cut whole lines say so with "…" (a line cut short already ends with one).
+            .when(
+                more > 0 && !open && !shown.trim_end().ends_with('\u{2026}'),
+                |block| block.child(div().text_color(p.card_muted).child("\u{2026}")),
+            )
+            .tooltip(move |window, cx| {
+                gpui_component::tooltip::Tooltip::new(copy_label).build(window, cx)
             })
             .on_click(cx.listener(move |_, _, _, cx| {
                 cx.stop_propagation();

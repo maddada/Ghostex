@@ -240,6 +240,11 @@ fn cli_session_list_from(
         "workTracker",
         "gbotsBot",
         "gbotsProject",
+        // CDXC:Projects 2026-11-20 WHY: whether the project's folder is missing and why are read by
+        // gxserver's folder watch (project_folder_problem.rs); the phone draws the header's mark and
+        // its sheet from them.
+        "pathState",
+        "pathProblem",
     ]
     .into_iter()
     .map(|field| {

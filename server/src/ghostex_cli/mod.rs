@@ -389,6 +389,7 @@ fn is_known_command(name: &str) -> bool {
         "clone-repository",
         "remove-project",
         "rename-project",
+        "relocate-project",
         "restore-recent-project",
         "read-sidebar-project-collections",
         "update-sidebar-project-collections",
@@ -691,6 +692,11 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             run_bridge_action("removeProject", Parser::Project, fail_on_not_ok, args)
         }
         "rename-project" => actions::run_rename_project(args),
+        // A project whose folder is missing pointed at where it is now, its sessions moved with it
+        // (the phone's Use on a missing folder's sheet; server/src/project_folder_problem.rs).
+        "relocate-project" => {
+            run_bridge_action("relocateProject", Parser::Project, fail_on_not_ok, args)
+        }
         "restore-recent-project" => run_bridge_action(
             "restoreRecentProject",
             Parser::Project,

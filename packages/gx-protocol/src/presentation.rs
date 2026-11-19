@@ -126,6 +126,33 @@ open_string_enum! {
     }
 }
 
+/// Why a project's folder is missing, as gxserver read it from the disk
+/// (ghostex_paths::missing_folder).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PathProblem {
+    /// `renamed`, `link`, `drive` or `gone`.
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub cause: String,
+    /// The folder most likely to be the missing one now (offered as Use <found>).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub found: Option<String>,
+    /// The folder along the path that is gone, when `found` replaces it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub missing: Option<String>,
+    /// The folder that took `missing`'s place under a close name (`found` is it or inside it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub renamed_to: Option<String>,
+    /// The link along the path whose target is gone, and that target.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_target: Option<String>,
+    /// The drive that isn't connected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drive: Option<String>,
+}
+
 open_string_enum! {
     GitPrimaryAction {
         Commit => "commit",
@@ -243,6 +270,10 @@ pub struct PresentationProject {
     pub path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path_state: Option<PathState>,
+    /// Why the folder is missing (server/src/project_folder_problem.rs): what the header's mark
+    /// and its popover say. Absent while the folder is there and from an older daemon.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path_problem: Option<PathProblem>,
     /// Copied from the domain row; `null` on a corrupt row reads as `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,

@@ -100,6 +100,10 @@ pub(crate) struct NativeSidebarState {
     /// The card's window on the desktop.
     #[cfg_attr(ghostex_web, allow(dead_code))]
     pub(crate) main_hub_card_window: Option<gpui::AnyWindowHandle>,
+    /// The project whose missing-folder popover is open under its header (folder_mark.rs), and
+    /// the last one a click outside closed, with when.
+    pub(crate) folder_popover: Option<super::folder_mark::FolderPopover>,
+    pub(crate) folder_popover_closed: Option<(String, web_time::Instant)>,
     /// The session whose links list is open in the header dropdown (native_sidebar/links_list.rs).
     pub(crate) links_list_session: Option<ghostex_gx_core::SessionKey>,
     /// The pointer is on the Commands row's account-usage pin (usage.rs); the unpinned strip peeks while it is.

@@ -342,6 +342,10 @@ pub fn usage() -> String {
             "Remove a project from Ghostex and delete its session records; the folder on disk is kept. The endpoint only deletes records and does not close running terminals, so close-session them first. A name shared by two projects fails with the matches listed",
         ),
         format_help_command(
+            "relocate-project --project-id id --path <folder> [--json]",
+            "Point a project whose folder is missing at the folder it is in now; its sessions move with it. Nothing on disk changes",
+        ),
+        format_help_command(
             "rename-project (--project-id id|--path path|--name name) <new name> [--computer name] [--json]",
             "Change a project's name in Ghostex; its id, folder, sessions, history, groups, board and settings stay. The folder on disk keeps its name. A worktree is renamed with Rename Worktree in the sidebar instead",
         ),

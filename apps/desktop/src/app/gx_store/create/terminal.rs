@@ -306,49 +306,22 @@ impl GhostexGpuiApp {
         )
     }
 
-    /// `presentMissingProjectFolder(projectId)`: the dialog, or a toast when the project has no
-    /// saved folder to name.
+    /// `presentMissingProjectFolder(projectId)`: the popover under the project's header, beside
+    /// its slashed computer (native_sidebar/folder_mark.rs).
+    ///
+    /// CDXC:Projects 2026-11-20 DECISION: User (Q4242, Q4244): a missing project folder never pops
+    /// up a dialog; the project's header wears a mark whose popover fixes it. A new terminal or
+    /// agent in such a project opens that popover, which shows as soon as the mark is drawn (a
+    /// refused create's fresh snapshot brings it). This replaces the Missing Project Folder dialog.
     pub(super) fn gx_store_present_missing_project_folder(
         &mut self,
         project_id: &str,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        let key = ProjectKey::local(project_id);
-        let project = self.gx_store.core.presentation().project(&key).cloned();
-        let path = project
-            .as_ref()
-            .and_then(|project| project.path.clone())
-            .filter(|path| !path.trim().is_empty());
-        let (Some(project), Some(path)) = (project, path) else {
-            self.gx_store_create_toast(
-                "warning",
-                "Project folder unavailable",
-                Some("Ghostex could not resolve this project's saved folder."),
-                cx,
-            );
-            return false;
-        };
-        let title = self
-            .gx_store
-            .sidebar_list
-            .view()
-            .group(&key.to_sidebar_group_id())
-            .map(|group| group.core.title.clone())
-            .unwrap_or(project.title);
-        self.open_app_modal_from_bridge(
-            json!({
-                "modal": "missingProjectFolder",
-                "projectId": project_id,
-                "projectName": title,
-                "projectPath": path,
-                "type": "open",
-            }),
-            cx,
-        );
-        true
+        self.open_folder_popover_for_local_project(project_id, cx)
     }
 
-    /// A create the daemon refused with `projectPathUnavailable`: the dialog, and a fresh snapshot so
+    /// A create the daemon refused with `projectPathUnavailable`: the popover, and a fresh snapshot so
     /// the row shows the missing folder (the runtime's `refreshDomainPresentationSnapshotFromClient`).
     pub(super) fn gx_store_answer_project_path_unavailable(
         &mut self,

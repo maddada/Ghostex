@@ -12,6 +12,7 @@ pub mod folder_below;
 pub mod loopback_owner;
 #[cfg(target_os = "macos")]
 pub mod macos_launch_agent;
+pub mod missing_folder;
 pub mod portable;
 pub mod powershell;
 pub mod same_folder;
