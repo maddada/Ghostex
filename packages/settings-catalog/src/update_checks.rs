@@ -1,7 +1,8 @@
 //! Settings > Updates > Checking for updates: how often Ghostex looks for updates on its own, one
 //! setting per kind (Ghostex itself, agents, tools, extensions), each a time or Only on Check now.
 //! gxserver reads them for the Updates list (server/src/updates/items.rs, per group), the desktop
-//! for its own release check and Sparkle (apps/desktop/src/app/os_integration/updater.rs).
+//! for its own release check (apps/desktop/src/app/os_integration/updater.rs; Sparkle's own schedule
+//! stays off there).
 //!
 //! CDXC:Updates 2026-11-19 DECISION:
 //! User (issue #673, Q4180 picked C with changes): "make it a collapsed area by default that can be expanded to show these settings / we always skip agents that are turned off fam / also we need to split agents and tools and extensions each one by itself with a dropdown for each / ghostex every 1h check and others every 1h check by default". Four dropdowns (every 15 minutes, 30 minutes, hour, day, or Only on Check now), every hour by default, replacing the app's 15-minute and the list's 30-minute checks. Check now always checks everything. Agents turned off in Settings > Agents are never checked, with no setting for it.
@@ -11,7 +12,7 @@ use serde_json::Value;
 
 use crate::json::{opt, Opt};
 
-/// Ghostex's own releases (the desktop's check, and Sparkle's schedule on macOS).
+/// Ghostex's own releases (the desktop's quiet check).
 pub const UPDATES_CHECK_GHOSTEX: &str = "updatesCheckGhostex";
 /// The agents turned on in Settings > Agents.
 pub const UPDATES_CHECK_AGENTS: &str = "updatesCheckAgents";

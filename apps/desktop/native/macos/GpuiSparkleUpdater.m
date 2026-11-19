@@ -564,11 +564,10 @@ void GhostexGpuiSparkleProbeForUpdateInformation(void) {
 }
 
 /*
- CDXC:Updates 2026-11-19 DECISION: Settings > Updates > Checking for updates >
- Ghostex drives Sparkle's own schedule (issue #673): Only on Check now turns
- its automatic checks off, any other choice turns them on at that interval
- (Sparkle keeps its own minimum of an hour; the app's quiet probe in
- os_integration/updater.rs keeps the shorter times). Info.plist's
+ Sparkle's own scheduled checks: the app turns them off at start
+ (os_integration/updater.rs `turn_off_sparkle_schedule`) and checks quietly
+ itself as often as Settings > Updates > Checking for updates > Ghostex says,
+ so Sparkle never holds a hidden update session of its own. Info.plist's
  SUEnableAutomaticChecks stays on so Sparkle never asks on second launch.
 */
 void GhostexGpuiSparkleSetAutomaticChecks(int32_t enabled,

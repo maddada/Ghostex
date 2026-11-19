@@ -7708,8 +7708,8 @@ whatever Checking for updates says.
 
 **Checking for updates**, a part closed by default under Up to date (its row
 shows the time when all four are the same), sets how often Ghostex checks on its
-own, each with its own dropdown: Ghostex (new versions of Ghostex itself; on a
-Mac it also sets Sparkle's own automatic checks), Agents, Tools (Claude Swap,
+own, each with its own dropdown: Ghostex (new versions of Ghostex itself),
+Agents, Tools (Claude Swap,
 Codex Swap, the tools Ghostex installed, the Easy Connect helper) and
 Extensions. Each is Every 15 minutes, Every 30 minutes, Every hour (the
 default), Every day or Only on Check now, which never checks that kind until you

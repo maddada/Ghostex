@@ -459,7 +459,12 @@ impl GhostexGpuiApp {
             // Check now checks everything, whatever Checking for updates says: Ghostex's own
             // release too.
             Some("check") => {
-                self.probe_gpui_app_update(cx);
+                // The updater lives in the lead window.
+                if !self
+                    .forward_to_lead_window(cx, |app, _window, cx| app.probe_gpui_app_update(cx))
+                {
+                    self.probe_gpui_app_update(cx);
+                }
                 self.refresh_updates(true, cx);
                 self.refresh_remote_updates(true, Duration::ZERO, cx);
                 self.refresh_stale_remote_app_updates(cx);
