@@ -32,26 +32,36 @@ cat "$(cua-driver skills path)/SKILL.md" "$(cua-driver skills path)/BROWSER.md"
 From WSL (Ghostex on Windows), the driver lives on the Windows side:
 
 ```bash
-cat "$(wslpath -u "$(powershell.exe -NoProfile -Command 'cua-driver skills path' | tr -d '\r')")/BROWSER.md"
+dir="$(wslpath -u "$(powershell.exe -NoProfile -Command 'cua-driver skills path' | tr -d '\r')")"
+cat "$dir/SKILL.md" "$dir/BROWSER.md"
 ```
 
-If `cua-driver` or its skill is missing, run `cua-driver skills install`
-(through `powershell.exe` from WSL), or install Fast Computer & Browser Use
-from Ghostex Settings > Integrations, which installs both.
+If the skill is missing, run `cua-driver skills install` (through
+`powershell.exe` from WSL). If the `cua-driver` driver itself is missing,
+install Fast Computer & Browser Use from Ghostex Settings > Integrations,
+which installs the driver and its skill.
 
 ## What Ghostex adds
 
 - Use the `cua-driver` CLI (`cua-driver <tool> '<JSON>'`) with one named
   `session` on every call, not MCP. Do not register or start a Trycua MCP
   server for this workflow.
+- If the daemon is not running (macOS), start it with `open -n -g -a
+  CuaDriver --args serve`. Do not use `cua-driver permissions grant`: it
+  walks through the macOS permission prompts.
 - From WSL, call every tool as `powershell.exe -NoProfile -Command
   "cua-driver <tool> '<JSON>'"` (escape the JSON's double quotes as `\"`), and
   pass Windows paths for uploads and downloads (`wslpath -w`, `wslpath -u`).
 - Browser panes built into Ghostex: `$ghostex-embedded-browser-use`. Browser
   chrome, native dialogs, Safari and Firefox: `$ghostex-computer-use`.
-- If the task needs the user's logins, say so in your first reply and ask for
-  the existing-profile grant before any browser work, so they are at the
-  computer for the prompts; never start isolated and ask at a login wall.
+- Attach to the user's own signed-in browser profile only after the user
+  says yes: it exposes their live pages, cookies and storage. Restart the
+  driver with the grant (`cua-driver stop`, then `open -n -g -a CuaDriver
+  --args serve --grant existing-profile`) only after that yes, never on your
+  own, even where BROWSER.md says to.
+- If the task needs the user's logins, say so in your first reply and ask
+  before any browser work, so they are at the computer for the prompts;
+  never start isolated and ask at a login wall.
 - macOS "no vendor-signed system Chromium executable is available": a
   drag-installed Chrome often carries Finder info that fails `codesign --verify
   --strict`. Strip it with `xattr -r -d com.apple.FinderInfo "/Applications/Google

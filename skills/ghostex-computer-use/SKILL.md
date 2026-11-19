@@ -35,9 +35,10 @@ From WSL (Ghostex on Windows), the driver lives on the Windows side:
 cat "$(wslpath -u "$(powershell.exe -NoProfile -Command 'cua-driver skills path' | tr -d '\r')")/SKILL.md"
 ```
 
-If `cua-driver` or its skill is missing, run `cua-driver skills install`
-(through `powershell.exe` from WSL), or install Fast Computer & Browser Use
-from Ghostex Settings > Integrations, which installs both.
+If the skill is missing, run `cua-driver skills install` (through
+`powershell.exe` from WSL). If the `cua-driver` driver itself is missing,
+install Fast Computer & Browser Use from Ghostex Settings > Integrations,
+which installs the driver and its skill.
 
 ## What Ghostex adds
 
@@ -45,6 +46,9 @@ from Ghostex Settings > Integrations, which installs both.
   register or start a Trycua MCP server for this workflow.
 - Check permissions read-only: `cua-driver check_permissions
   '{"prompt":false}'`.
+- If the daemon is not running (macOS), start it with `open -n -g -a
+  CuaDriver --args serve`. Do not use `cua-driver permissions grant`: it
+  walks through the macOS permission prompts.
 - From WSL, call every tool as `powershell.exe -NoProfile -Command
   "cua-driver <tool> '<JSON>'"` (escape the JSON's double quotes as `\"`), and
   pass Windows paths (`wslpath -w`, `wslpath -u`). A failing `which
