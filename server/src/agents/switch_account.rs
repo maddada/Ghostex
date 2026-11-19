@@ -246,6 +246,7 @@ pub(crate) fn switch_session_agent(
         "accountRecovery",
         "accountRecoverySuppressed",
         "accountPolicyOverride",
+        crate::accounts::hub::launch::RUNTIME_KEY,
     ] {
         runtime_settings.remove(key);
     }

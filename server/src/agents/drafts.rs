@@ -508,6 +508,8 @@ pub(crate) fn switch_draft_agent(
         "launchAgentId",
         "agentName",
         crate::session_chat_model_selection_alert::MODEL_SELECTION_FAILURE_KEY,
+        // A draft that leaves a CLIProxyAPI hub no longer waits on that hub at a limit.
+        crate::accounts::hub::launch::RUNTIME_KEY,
     ] {
         runtime_settings.remove(key);
     }

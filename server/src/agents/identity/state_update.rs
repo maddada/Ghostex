@@ -218,6 +218,7 @@ pub(crate) fn apply_session_state_update(
             "accountRecoverySuppressed",
             "accountPolicyOverride",
             "accountPolicyDefault",
+            crate::accounts::hub::launch::RUNTIME_KEY,
         ] {
             runtime_settings.remove(key);
         }

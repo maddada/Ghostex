@@ -52,6 +52,7 @@ const REBUILT_RUNTIME_KEYS: &[&str] = &[
     "launchAgentId",
     "agentName",
     "agentbox",
+    crate::accounts::hub::launch::RUNTIME_KEY,
 ];
 const REBUILT_LAUNCH_KEYS: &[&str] = &[
     "acceptAllMode",
