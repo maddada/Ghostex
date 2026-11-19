@@ -504,10 +504,12 @@ impl NativeChatView {
         true
     }
 
-    /// While a secret request card is open, a keystroke bound for the chat box (it has focus, or
-    /// no other field of this chat does) is typed into the oldest open card's masked field
-    /// instead, so a secret can never land in the chat box and be sent (#648). Escape keeps its
-    /// meaning (interrupt) and chords the field does not edit with pass through.
+    /// While a secret request card is open, a keystroke bound for the chat box that the user did
+    /// not click into it for (no field of this chat has focus, or the box got it from a hotkey or
+    /// handoff and has not handed it on yet) is typed into the oldest open card's masked field
+    /// instead, so a secret can never land in the chat box and be sent (#648). The chat box the
+    /// user clicked into keeps its typing (CDXC:Secrets 2026-11-19 in secret_request.rs). Escape
+    /// keeps its meaning (interrupt) and chords the field does not edit with pass through.
     pub(super) fn secret_card_key(
         &mut self,
         keystroke: &gpui::Keystroke,
@@ -524,6 +526,9 @@ impl NativeChatView {
             .input
             .as_ref()
             .is_some_and(|input| input.read(cx).focus_handle(cx).is_focused(window));
+        if composer_focused && self.secret_request_inputs.composer_chosen {
+            return false;
+        }
         if !composer_focused && self.chat_text_field_focused(window, cx) {
             return false;
         }

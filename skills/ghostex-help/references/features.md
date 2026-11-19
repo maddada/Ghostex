@@ -6345,7 +6345,11 @@ writes it to a private file that only that agent's commands can read, and
 deletes the file after 24 hours. This works for every agent Ghostex runs
 (Claude, Codex, OpenCode and the rest), in the chat on the computer and on the
 phone, and covers a sudo password too. The card closes on its own when the
-agent stops waiting (10 minutes unless it asked for longer). Agents ask with
+agent stops waiting (10 minutes unless it asked for longer). While a card is
+open the chat box still works: typing goes to the card until you click into the
+chat box, and from then on to the chat. If something you send from the chat box
+looks like a key or password, Ghostex warns you above the box and sends it only
+when you press Send again. Agents ask with
 `ghostex secret request`; the bundled `$ghostex-secrets` skill teaches them
 when and how, so tell an agent "ask me for the token privately" if it asks in
 the chat instead.

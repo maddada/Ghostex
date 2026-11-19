@@ -117,7 +117,7 @@ pub(crate) struct NativeChatView {
     /// A sidebar session row is held over the chat box, which rings it (composer_drop.rs).
     pub(super) composer_drop_hover: bool,
     pub(super) suggestion_selection: Option<(String, usize)>,
-    input_window: Option<gpui::WindowId>,
+    pub(super) input_window: Option<gpui::WindowId>,
     /// The composer's focus and blur listeners, bound to `input_window`.
     input_focus_listeners: Vec<Subscription>,
     pub(super) option_menu: Option<Entity<super::option_menu::ChatOptionMenu>>,
@@ -303,6 +303,7 @@ pub(crate) struct NativeChatView {
     pub(crate) answer_subscription: Option<Subscription>,
     pub(super) terminal_dialog_input: Option<super::terminal_dialog::TerminalDialogInput>,
     pub(super) secret_request_inputs: super::secret_request::SecretRequestInputs,
+    pub(super) secret_send_warning: super::secret_send_warning::SecretSendWarning,
     pub(super) terminal_dialog_key_focus: gpui::FocusHandle,
     pub(super) terminal_picker_input: Option<super::terminal_picker::TerminalPickerInput>,
     /// The pass-through card's screen region, kept scrolled to its end (terminal_picker.rs).
@@ -698,6 +699,7 @@ impl NativeChatView {
             answer_subscription: None,
             terminal_dialog_input: None,
             secret_request_inputs: Default::default(),
+            secret_send_warning: Default::default(),
             terminal_dialog_key_focus: cx.focus_handle(),
             terminal_picker_input: None,
             passthrough_screen_scroll: Default::default(),
@@ -801,13 +803,9 @@ impl NativeChatView {
             });
             self.input = Some(input);
         }
-        let placeholder = if self.secret_request_open() {
-            "Type the secret in the private card above"
-        } else {
-            self.snapshot["composerPlaceholder"]
-                .as_str()
-                .unwrap_or_default()
-        };
+        let placeholder = self.snapshot["composerPlaceholder"]
+            .as_str()
+            .unwrap_or_default();
         if self.input_placeholder != placeholder {
             self.input_placeholder = placeholder.to_owned();
             self.input.as_ref().unwrap().update(cx, |input, cx| {
@@ -816,6 +814,7 @@ impl NativeChatView {
         }
         if self.input_window != Some(window.window_handle().window_id()) {
             self.input_window = Some(window.window_handle().window_id());
+            self.watch_window_for_secret_cards(window, cx);
             let input = self.input.as_ref().unwrap().clone();
             self.input_observer = Some(cx.observe_in(&input, window, |this, input, window, cx| {
                 // GPUI calls this in the window that last drew the chat, and the chat's own popups
@@ -917,12 +916,35 @@ impl NativeChatView {
         CDXC:SessionChat 2026-10-01 DECISION:
         User: typing in the chat's search field must never be moved to the chat box when they did not click it. A queued composer focus (a keyboard handoff, a draft the core put back, a send's reset) lands only while no other field of this chat holds the keyboard; the find bar, the note and the answer fields keep it until the user leaves them (Escape, a click, the close button).
         */
+        // The chat box counts as chosen over a secret card only while it holds the keyboard: a
+        // blur its listeners missed (the keyboard handed to a card in the same frame) still ends it.
+        // And while a card is open, a chat box that holds the keyboard without having been clicked
+        // into hands it to the card at every draw: GPUI runs the field's own shortcuts (Paste)
+        // before the chat's key handler (`secret_card_key`) can send them to the card.
+        if self.input_window == Some(window.window_handle().window_id()) {
+            let composer_focused = self
+                .input
+                .as_ref()
+                .is_some_and(|input| input.read(cx).focus_handle(cx).is_focused(window));
+            if !composer_focused {
+                self.secret_request_inputs.composer_chosen = false;
+            } else if !self.secret_request_inputs.composer_chosen
+                && let Some(secret) = self.open_secret_field()
+            {
+                secret.update(cx, |secret, cx| secret.focus(window, cx));
+            }
+        }
         if self.focus_requested {
             self.focus_requested = false;
             if let Some(input) = &self.input {
                 let composer = input.read(cx).focus_handle(cx);
-                if composer.is_focused(window) || !self.chat_text_field_focused(window, cx) {
-                    // An open secret request card takes the chat box's keyboard (#648).
+                // An open secret request card takes a chat box focus the user did not click into
+                // the box for (#648, CDXC:Secrets 2026-11-19 in secret_request.rs).
+                let chosen = composer.is_focused(window)
+                    && (self.secret_request_inputs.composer_chosen || !self.secret_request_open());
+                if chosen {
+                    composer.focus(window, cx);
+                } else if composer.is_focused(window) || !self.chat_text_field_focused(window, cx) {
                     match self.open_secret_field() {
                         Some(secret) => secret.update(cx, |secret, cx| secret.focus(window, cx)),
                         None => composer.focus(window, cx),
@@ -938,9 +960,10 @@ impl NativeChatView {
             return;
         }
         super::focus::reclaim_keyboard_focus(window);
-        // While a secret request card is open the chat box takes no typing: a click, hotkey or
-        // handoff that focused it moves on to the card at the next draw (#648).
-        if self.secret_request_open() {
+        // While a secret request card is open the chat box keeps only a focus the user clicked
+        // into it for; a hotkey, handoff or other move hands it on to the card at the next draw
+        // (#648, CDXC:Secrets 2026-11-19 in secret_request.rs).
+        if !self.composer_focus_chosen() {
             self.focus_requested = true;
         }
         self.composer_focused = true;
@@ -956,6 +979,7 @@ impl NativeChatView {
             return;
         }
         self.composer_focused = false;
+        self.composer_focus_released();
         self.short_pane_composer_open = false;
         self.sync_suggestion_window(cx);
         self.save_draft(cx);

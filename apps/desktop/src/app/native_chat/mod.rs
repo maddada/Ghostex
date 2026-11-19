@@ -101,6 +101,7 @@ mod scroll_bottom;
 mod scrollbar;
 mod search;
 mod secret_request;
+mod secret_send_warning;
 mod side_chats;
 mod side_question;
 mod startup_delivery;

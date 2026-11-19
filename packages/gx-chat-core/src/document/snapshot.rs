@@ -140,6 +140,11 @@ pub struct Document {
     pub attaching_messages: Vec<crate::composer::attaching::AttachingMessage>,
     pub draft: Draft,
     pub composer_placeholder: String,
+    /// The chat box's text holds a key or a piece of one, so its draft is not saved to gxserver
+    /// and does not follow to other devices (`composer::draft_sync::keeps_out_of_drafts`): the
+    /// chat box says so in a small note.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub draft_kept_on_device: bool,
     /// Why sending is blocked, or `null` when it is not.
     pub send_blocked_reason: Option<String>,
     /// Why a message sent now would wait in the chat instead of going at once (an account or mode

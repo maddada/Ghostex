@@ -127,6 +127,8 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.send_held = crate::composer::delivery::held_words(state);
     into.submissions_received = state.composer.submissions_received;
     into.sends_taken = state.composer.taken_send_ids.clone();
+    into.draft_kept_on_device = state.composer.transport.set_draft
+        && crate::composer::draft_sync::keeps_out_of_drafts(&state.composer.text);
     into.composer_placeholder = composer_placeholder(
         true,
         choice_pending,

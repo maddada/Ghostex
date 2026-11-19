@@ -97,6 +97,10 @@ impl NativeChatView {
             self.ensure_input(window, cx);
             return;
         }
+        // Text that looks like a key waits for a second Send (secret_send_warning.rs).
+        if self.hold_secret_like_send(cx) {
+            return;
+        }
         let next_id = match crate::app::helpers::gpui_random_uuid_string() {
             Ok(id) => id,
             Err(error) => {
@@ -141,6 +145,8 @@ impl NativeChatView {
         cx.emit(super::state::NativeChatEvent::DraftState(true));
         self.follow_tail_for_send(mode);
         self.invoke(submission.clone(), cx);
+        // A message left the chat box: an open secret card takes the keyboard back (secret_request.rs).
+        self.return_keyboard_to_card(window, cx);
         // The sidebar's star request counts sent prompts (native_sidebar/github_star.rs).
         crate::app::native_sidebar::github_star::note_prompt_sent();
         // The box is empty now: the view watches the message until the core has it.
@@ -559,6 +565,12 @@ impl NativeChatView {
         if let Some(card) = self.render_catch_up(p, window, cx) {
             waiting.push(card.into_any_element());
         }
+        if let Some(warning) = self.render_secret_send_warning(p) {
+            waiting.push(warning);
+        }
+        if let Some(note) = self.render_draft_kept_note(p) {
+            waiting.push(note);
+        }
         // A coordinator's dock (work_cards.rs) sits above the working card, which says how long
         // the turn took and what it changed, so the order over the box is the transcript, the
         // dock, that card, then the box. With no dock (none, stepped aside for a long message, or
@@ -681,6 +693,16 @@ impl NativeChatView {
                                 .overflow_hidden()
                         })
                         .when(maximized, |this| this.flex_1().h_full().min_h_0())
+                        // A click into the box is the user choosing it over an open secret card
+                        // (CDXC:Secrets 2026-11-19 in secret_request.rs); seen before the field's
+                        // own press focuses it.
+                        .capture_any_mouse_down(cx.listener(
+                            |this, event: &gpui::MouseDownEvent, _, _| {
+                                if event.button == gpui::MouseButton::Left {
+                                    this.note_composer_press();
+                                }
+                            },
+                        ))
                         .on_mouse_down(
                             gpui::MouseButton::Left,
                             cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {

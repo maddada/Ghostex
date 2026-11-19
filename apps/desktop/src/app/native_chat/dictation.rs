@@ -422,8 +422,25 @@ impl NativeChatView {
             .is_some_and(|control| control.dictate.read(cx).recording())
     }
 
+    /// A new recording is refused while a secret card's field has the keyboard, with a note that
+    /// says why (CDXC:Secrets 2026-11-19 on `secret_field_focused` in secret_request.rs).
+    fn refuse_dictation_in_secret_card(&mut self, window: &Window, cx: &mut Context<Self>) -> bool {
+        if !self.secret_field_focused(window, cx) {
+            return false;
+        }
+        cx.emit(super::state::NativeChatEvent::Host(serde_json::json!({
+            "type": "toast",
+            "level": "info",
+            "title": "Dictate is off while you type in a private card. Type or paste the secret instead.",
+        })));
+        true
+    }
+
     /// Start recording, or stop and transcribe.
     pub(super) fn toggle_dictation(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.dictating(cx) && self.refuse_dictation_in_secret_card(window, cx) {
+            return;
+        }
         let dictate = self.dictate(window, cx);
         self.aim_dictation(&dictate, self.focused_form_box(window, cx), cx);
         dictate.update(cx, |dictate, cx| dictate.toggle(cx));
@@ -444,6 +461,9 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if start && self.refuse_dictation_in_secret_card(window, cx) {
+            return;
+        }
         let dictate = self.dictate(window, cx);
         if start {
             self.aim_dictation(&dictate, self.focused_form_box(window, cx), cx);

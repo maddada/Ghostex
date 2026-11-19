@@ -195,7 +195,13 @@ impl GhostexGpuiApp {
         if let Some(view) = self.native_chat_views.get(&session_id).cloned()
             && !view.read(cx).draft.is_empty()
         {
-            self.pending_session_chat_draft_handoffs.insert(session_id);
+            // Text holding a key stays in the chat box: the chat core refuses to hand it to the
+            // terminal and says so, so no handoff waits here (CDXC:Secrets 2026-11-19 in
+            // packages/gx-chat-core/src/composer/draft_sync.rs).
+            if !ghostex_gx_chat_core::composer::secret_like::has_key_fragment(&view.read(cx).draft)
+            {
+                self.pending_session_chat_draft_handoffs.insert(session_id);
+            }
             view.update(cx, |view, cx| view.invoke(serde_json::json!({"type":"handoff","text":view.draft,"draftVersion":{"draftId":view.draft_id,"revision":view.draft_revision}}), cx));
         }
         self.toggle_agents_session_chat_mode(session_id, cx);

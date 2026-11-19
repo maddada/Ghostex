@@ -319,6 +319,18 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
             crate::menus::draft_worktree::note_first_message(state, !refused, &[]);
             effects
         }
+        // Text holding a key is not handed to the terminal's input, where the agent's screen,
+        // its scrollback and the Terminal View would show it: it stays in the chat box
+        // (`secret_like.rs`; the desktop's Terminal View button checks first,
+        // session_chat/drafts_and_attachments.rs).
+        ActionKind::Handoff
+            if crate::composer::secret_like::has_key_fragment(text_param(action)) =>
+        {
+            vec![Effect::Toast {
+                level: "warning".to_string(),
+                message: SECRET_HANDOFF_KEPT.to_string(),
+            }]
+        }
         ActionKind::Handoff => crate::composer::send::handoff(
             state,
             context,
@@ -336,6 +348,10 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         _ => Vec::new(),
     }
 }
+
+/// Why a draft stayed in the chat box when the chat switched to its terminal.
+pub const SECRET_HANDOFF_KEPT: &str =
+    "Your message stayed in the chat box because it looks like it holds a key or token.";
 
 /// The revision the composer's field is on, which every send and transfer carries.
 fn draft_version(action: &UserAction) -> Option<crate::composer::queue::DraftVersion> {
@@ -593,9 +609,18 @@ fn edit_draft(state: &mut ChatState, action: &UserAction, context: &ChatContext)
     if !state.core.cleared_error && !history_changed {
         state.core.skip_closing_publish = true;
     }
+    // Anything that could be part of a key is stored masked, so a long message survives a restart
+    // without it (`secret_like::mask_key_fragments`).
+    let stored = match crate::composer::secret_like::mask_key_fragments(text) {
+        Some(masked) => crate::composer::storage::StoredDraftRecord {
+            text: masked,
+            ..record.clone()
+        },
+        None => record,
+    };
     let mut effects = vec![Effect::WriteStorage {
         key: draft_key(state),
-        value: Some(crate::composer::storage::encode_stored_draft(&record)),
+        value: Some(crate::composer::storage::encode_stored_draft(&stored)),
         durable: false,
     }];
     // A shared chat shows who is typing (Ghostex Collab).
@@ -606,6 +631,11 @@ fn edit_draft(state: &mut ChatState, action: &UserAction, context: &ChatContext)
 fn save_draft(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     let content = string_param(action, "content");
     track_draft_attachments(state, content);
+    // Text that looks like a key is never saved as a draft (`draft_sync::keeps_out_of_drafts`).
+    if crate::composer::draft_sync::keeps_out_of_drafts(content) {
+        crate::composer::draft_sync::cancel_pending_push(state);
+        return Vec::new();
+    }
     // `pushDraft` folds `result.draft` back onto the synced draft, so the write needs an id of its
     // own to be settled by.
     let version = action.param("draftVersion").cloned().unwrap_or(Value::Null);

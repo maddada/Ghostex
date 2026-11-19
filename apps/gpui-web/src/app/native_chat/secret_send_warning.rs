@@ -1,0 +1,1 @@
+../../../../desktop/src/app/native_chat/secret_send_warning.rs

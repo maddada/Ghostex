@@ -213,6 +213,21 @@ impl NativeChatView {
             window.prevent_default();
             return;
         }
+        // A held Enter's repeats never send text the key warning is holding (secret_send_warning.rs).
+        // A held Tab's repeats never queue either: Tab is Queue's key, and its repeats came faster
+        // than the second press the warning waits for.
+        let composer_focused = self
+            .input
+            .as_ref()
+            .is_some_and(|input| input.read(cx).focus_handle(cx).is_focused(window));
+        if event.is_held
+            && ((event.keystroke.key == "enter" && self.secret_send_warned())
+                || (event.keystroke.key == "tab" && composer_focused))
+        {
+            cx.stop_propagation();
+            window.prevent_default();
+            return;
+        }
         // An open secret request card owns every keystroke bound for the chat box (#648).
         if self.secret_card_key(&event.keystroke, window, cx) {
             cx.stop_propagation();

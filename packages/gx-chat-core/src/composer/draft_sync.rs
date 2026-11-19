@@ -67,11 +67,27 @@ pub fn edited(state: &mut ChatState, text: &str, version: Option<&Value>, contex
     if !state.composer.boot_read || !state.composer.transport.set_draft {
         return;
     }
+    // Text that looks like a key is never saved as a draft (`keeps_out_of_drafts`).
+    if keeps_out_of_drafts(text) {
+        cancel_pending_push(state);
+        return;
+    }
     state.composer.draft_sync.pending_push = Some((text.to_string(), version.clone()));
     state
         .core
         .timers
         .arm(DRAFT_PUSH_TIMER, context.now_ms, DRAFT_PUSH_IDLE_MS);
+}
+
+/// Whether `text` stays out of the draft gxserver keeps (for other devices and its Recovered list,
+/// and the desktop's recovery checkpoint and save outbox row, which it writes only for that save,
+/// `gx_chat/saves.rs`): while it holds a key or what is left of one (`has_key_fragment`). This
+/// client's own stored draft keeps the text with those parts masked instead (`edit_draft`).
+///
+/// CDXC:Secrets 2026-11-19 WHY:
+/// A key pasted into the chat box by mistake was saved as the session's draft a second after typing paused, before the warning at Send (`secret_like.rs`) could stop it, so it reached gxserver, every other device's draft offer and the local recovery records. While the text holds a key, or a piece of one left while it is deleted, it is not saved to gxserver; a masked copy is not saved there either, because gxserver keeps each draft revision's text and refuses a send (and files a conflict in Recovered with the new text) when that revision is saved again with different text. A Send the user confirms carries the text itself.
+pub fn keeps_out_of_drafts(text: &str) -> bool {
+    crate::composer::secret_like::has_key_fragment(text)
 }
 
 /// Drops the push waiting for the pause: a blur save, a send or a handoff carries the text itself.
