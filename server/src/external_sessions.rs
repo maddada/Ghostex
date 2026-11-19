@@ -337,6 +337,9 @@ fn scan(
                 if let Some(mut conversation) = cache.read(&path, || {
                     read_conversation(agent, path.clone(), root.clone())
                 })? {
+                    if is_ghostex_job_prompt(&conversation.title) {
+                        continue;
+                    }
                     if let Some(title) = titles
                         .get(&conversation.id)
                         .filter(|title| !title.trim().is_empty())
@@ -485,6 +488,25 @@ fn collect_files(root: &Path, depth: usize, files: &mut Vec<PathBuf>) {
             files.push(path);
         }
     }
+}
+
+/// How the prompts of Ghostex's own one-shot jobs start: session titles
+/// (`build_first_prompt_title_generation_prompt`) and commit messages
+/// (`commit_message_generation.rs`).
+const GHOSTEX_JOB_PROMPTS: [&str; 2] = [
+    "Write a concise session title that summarizes the user's text.",
+    "You write concise git commit messages.",
+];
+
+/// Whether a conversation's first prompt (its title until it has one of its own) is one of
+/// Ghostex's own background jobs.
+///
+/// CDXC:Sessions 2026-11-20 DECISION:
+/// User: Ghostex's background helpers (title generation and the like) never register visible sidebar sessions. A Claude title job run before `--no-session-persistence` (title_command.rs) left a transcript in the folder it ran in, and this scan imported it as a session ("Write a concise session title…" in the Ghostex config folder's project). The jobs no longer write one; this keeps the transcripts already on disk out too. Sessions already imported stay.
+fn is_ghostex_job_prompt(title: &str) -> bool {
+    GHOSTEX_JOB_PROMPTS
+        .iter()
+        .any(|prompt| title.trim_start().starts_with(prompt))
 }
 
 fn read_conversation(
