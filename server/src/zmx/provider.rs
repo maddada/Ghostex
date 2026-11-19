@@ -230,6 +230,12 @@ pub(crate) fn start_session_provider_with_observed_state(
     {
         return Err(DomainStateError::bad_request(message).into());
     }
+    // Never in a folder that is moving (project_folder_move/registry.rs).
+    let session_cwd = require_session(repository, &lifecycle)?
+        .get("cwd")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    crate::project_folder_move::refuse_if_moving(&lifecycle.project_id, session_cwd.as_deref())?;
     crate::worktree_sessions::move_session_out_of_removed_worktree(
         repository,
         &project,

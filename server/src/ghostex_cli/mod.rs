@@ -51,6 +51,7 @@ mod hookless_activity;
 pub mod launchers;
 mod mcp_stdio;
 mod message;
+mod move_project_folder;
 mod needs_you;
 pub mod notify;
 pub mod output;
@@ -395,6 +396,7 @@ fn is_known_command(name: &str) -> bool {
         "remove-project",
         "rename-project",
         "relocate-project",
+        "move-project-folder",
         "restore-recent-project",
         "read-sidebar-project-collections",
         "update-sidebar-project-collections",
@@ -704,6 +706,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "relocate-project" => {
             run_bridge_action("relocateProject", Parser::Project, fail_on_not_ok, args)
         }
+        "move-project-folder" => move_project_folder::run(args),
         "restore-recent-project" => run_bridge_action(
             "restoreRecentProject",
             Parser::Project,

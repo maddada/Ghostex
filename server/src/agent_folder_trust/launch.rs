@@ -94,6 +94,43 @@ pub(crate) fn carry_claude_folder_trust_for_switch(session: &Value, cwd: &str) {
     }
 }
 
+/// The agents whose folder trust a moved folder carries, and whether any of their profiles trusted
+/// `folder` (read before a folder move, while the folder exists): Claude and Codex.
+pub(crate) fn folder_trusted_by(folder: &Path) -> Vec<String> {
+    let home = crate::resume_lookup::home_dir();
+    let mut agents = Vec::new();
+    if super::stores::claude_folder_trusted_in_any_profile(&home, folder) {
+        agents.push("claude".to_string());
+    }
+    if super::stores::codex_folder_trusted_in_any_profile(&home, folder) {
+        agents.push("codex".to_string());
+    }
+    agents
+}
+
+/// CDXC:Projects 2026-11-19 WHY: a moved project folder keeps the user's yes to the agent's "Trust this folder?" (risk 11 of docs/2026-11-19/project-move-folder/PLAN.md): when Claude or Codex trusted the old folder in some profile, every profile of that agent trusts the new one, written through the same per-agent step as a launch rather than by editing its settings by hand. Their other per-folder records (Claude's allowed tools and MCP servers) stay under the old path, and the move's result says so. Returns the warnings.
+pub(crate) fn carry_folder_trust_for_move(agents: &[String], new_folder: &Path) -> Vec<String> {
+    let home = crate::resume_lookup::home_dir();
+    let Some(folder) = trustable_folder(&new_folder.to_string_lossy(), &home) else {
+        return Vec::new();
+    };
+    agents
+        .iter()
+        .filter_map(|agent| match agent.as_str() {
+            "claude" => Some(TrustingAgent::Claude),
+            "codex" => Some(TrustingAgent::Codex),
+            _ => None,
+        })
+        .flat_map(|agent| trust_folder(agent, &home, &folder))
+        .map(|warning| {
+            format!(
+                "Could not mark {} as a trusted folder for {warning}",
+                folder.display()
+            )
+        })
+        .collect()
+}
+
 /// CDXC:AgentProviders 2026-11-11 DECISION:
 /// User, on the first-run page (step 16, trust the folder): "from now on always trust folders added automatically i hate this trust thing". With "Trust project folders automatically" on (confirmed on this computer, see above), a session in a folder the user added to Ghostex (the project's own folder, a folder inside it, or a worktree Ghostex made for it) gets its agent's folder-trust question answered for it, like a coordinator's thread already did (CDXC:Coordinators 2026-09-30 in coordinators/state.rs). The record written before launch (`trust_session_folder_before_launch`) usually stops the question, but an agent that had never run on the computer has no record to write to yet, and some agents ask anyway; those sessions now go on without the user. Never the home folder or anything above it, which a project at `~` would be (Main Hub has its own rule). The agent's first approval of a command or an edit stays the agent's own question.
 /// SEE-ALSO: server/src/session_chat_trust_memory.rs (`session_folders_remembered`, the funnel that answers), server/src/coordinators/state.rs (`coordinator_thread_folder_trusted`).
