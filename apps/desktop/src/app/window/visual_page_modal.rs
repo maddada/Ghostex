@@ -560,10 +560,13 @@ impl GpuiVisualPageModalWindow {
     /// saved once the window has been still for a moment. A drag that ended where the window cannot
     /// stay reachable (another display it cannot be shown on, off the top of the screen) puts it
     /// back first (`frame::settle`, GitHub issue #560).
+    ///
+    /// CDXC:SessionChat 2026-11-19 WHY:
+    /// User: "im not able to close the inline html that's on top of ghostex pls fix". A window hidden while it was still settling (a click away right after a drag or a minimise) was shown again by the move back: Windows' move (`set_window_frame`) shows the window it moves. The app still counted the page as hidden, so its ×, – and ⋯ were ignored (`handle_gpui_visual_page_modal_command` acts only for the shown page) and it stayed over Ghostex until a restart. A hidden window is neither kept nor moved back; only the app shows it again (`show_hidden_visual_page`).
     fn keep_frame(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // A minimised window (Windows) reports where Windows parks it, far off every display;
         // keeping that or "putting it back" would move the window it is restored to.
-        if minimized(window) {
+        if self.hidden || minimized(window) {
             return;
         }
         let frame = frame::shared_frame(window);
@@ -584,8 +587,8 @@ impl GpuiVisualPageModalWindow {
                 }
             }
             let back = this
-                .update_in(cx, |_, window, cx| {
-                    if minimized(window) {
+                .update_in(cx, |this, window, cx| {
+                    if this.hidden || minimized(window) {
                         return None;
                     }
                     let main = main_window_frame(cx)?;
