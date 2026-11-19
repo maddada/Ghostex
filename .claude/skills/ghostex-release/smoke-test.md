@@ -116,12 +116,53 @@ after-release commit (see "Keeping the list").
      untouched and foreground pixel clicks pressed nothing. Don't spend time
      on it. If the user is active (`HIDIdleTime` resets while you are idle),
      stay in the background.
-   - Frosted sidebar menus (session and project right-click menus) expose
-     only Rename, Pin and Open in a Popup to accessibility; the other rows
-     (Snooze, Park, Advanced, Move to New Group…) can't be pressed in the
-     background (a pixel click on the menu window falls through). Press
-     Escape on the main window (`press_key` pid + its window_id) to dismiss
-     a menu; a background click elsewhere does not.
+   - **What reaches Ghostex from cua-driver, and why (2026-11-19 study).**
+     GPUI publishes accessibility through AccessKit
+     (`.dependencies/zed/crates/gpui/src/_accessibility.rs`): an element is
+     in the tree only if it sets `.role(...)` (a `div` without one is
+     filtered out even with `on_click`); it gets AXPress only from
+     `.on_click(...)` or `.on_a11y_action(AccessibleAction::Click, …)`
+     (`on_mouse_down` alone gives none); Focus is answered for focusable
+     elements; SetValue isn't handled, so `set_value` never fills a GPUI
+     field. A background `click` with x,y is often turned into an AX press
+     of whatever the hit-test finds ("PX hit-test pressed the background
+     element via AX") and then misses controls that have no press.
+   - **Real pointer events: a zero-length background `drag`.** `drag` is
+     pixel-only (no AX substitute), so it delivers a real mouse down/up to
+     the window in the background, and it takes `modifier`:
+     `run_steps({steps:[{tool:"drag",args:{pid,window_id,from_x:X,from_y:Y,
+     to_x:X,to_y:Y,duration_ms:60,steps:1}}]})`, coordinates in the last
+     `get_window_state` screenshot of that window. Seen working on the
+     11.11.0 follow-up: it collapsed the chat's Needs you dock (a GPUI
+     control) and pressed the native red close button of a second window.
+     Use it for controls with no press: the header Work button
+     (`work_button.rs`, `on_mouse_down` only), the frosted sidebar menu rows,
+     and a Cmd+click (`modifier:["cmd"]`, the Files table link). Not yet
+     confirmed on screen for those three: the run's window went to another
+     Space mid-test (see the next bullet). Read the result from the
+     accessibility tree too: the Work panel shows as an element labelled
+     `Work` about 380 wide at the chat's right edge, and the button carries
+     `aria_expanded`.
+   - **Check the window is on screen before trusting a screenshot**:
+     `list_windows({pid})` `is_on_screen` and `on_current_space` for the
+     main window. If the user moves to another Space, the window keeps
+     taking events but its screenshots are the last frame drawn, so a
+     change looks like nothing happened. Don't switch Spaces for them; a
+     File > New Window opens on Ghostex's own Space too (close it with a
+     zero-length `drag` on its red button, about x 21, y 13 at 900 wide).
+     Don't loop waiting; report the GUI parts as not yet run.
+   - Frosted sidebar menus (session and project right-click menus, window
+     id `ghostex.frostedSidebarMenu`) expose only Rename, Pin and Open in a
+     Popup to accessibility: the other rows (`native-menu-item-*`,
+     native_sidebar/menus.rs) have `on_click` but no `.role`. Its
+     `get_window_state` screenshot is a scaled copy of the whole display,
+     but it is still twice the window's point size, so a row at screen
+     point (sx, sy) is window pixel ((sx − wx)·2, (sy − wy)·2) with the
+     menu window's origin (wx, wy) from `list_windows`; take the row's
+     screen point from `get_desktop_state` and press it with the
+     zero-length `drag` above (untried on screen). Press Escape on the main
+     window (`press_key` pid + its window_id) to dismiss a menu; a
+     background click elsewhere does not.
    - In `run_script`, `cua.listWindows()` returns `{windows:[…]}`, not an
      array.
    - Codex sessions can open on Codex's own "Update available" picker
@@ -291,8 +332,16 @@ by accessibility opens the palette and it closes again at once; Cmd+P
 into it (`window_not_key`: macOS still reports the main window as key), and
 pid-targeted `press_key` letters close it and land in the open chat's box
 as stray text (clear them and check `read-session-chat-queue` `.draft`).
-Mark that half NOT RUN (tool route) and say so; Settings' search, the
-chat box (5.4) and the terminal (4.1) still cover native typing.
+`set_value` on its `Search sessions...` field does nothing (GPUI doesn't
+handle SetValue). Next to try, on screen: open it with Cmd+P, press its
+box with the zero-length background `drag` (a pixel press makes the
+target window key for event routing), then `type_text` on the box's
+element token and read the value back. If that is still refused with
+`window_not_key`, the app needs the palette to accept input while Ghostex
+is in the background (it closes when a key event goes to the main window).
+Until then mark that half NOT RUN (tool route) and say so; Settings'
+search, the chat box (5.4) and the terminal (4.1) still cover native
+typing.
 
 **5.3 An inline HTML page with inputs.**
 1. Write a throwaway page to `$W/smoke-page.html` from the `ghostex-visuals`
