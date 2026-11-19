@@ -1442,7 +1442,19 @@ fn reply_name(words: &str) -> String {
 
 /// `{type: "loadPageQuestionCounts", pageId}`: asks the page's gxserver how many of its questions
 /// the reader's draft answers (`readVisualPageSource`), unless a read is already out.
-pub fn load_page_counts(state: &mut ChatState, page_id: &str) -> Vec<crate::effect::Effect> {
+///
+/// CDXC:Coordinators 2026-11-20 WHY:
+/// The dock showed "0/5" on a page that asks one question (Q4262) and on the five-question page
+/// published beside it. Its id came from `state.core.allocate_request_id()` while the actions
+/// family (`extras::actions::handle`) holds the counter out and writes it back after, so that
+/// write-back undid it and the next page's load took the same id: the second request replaced the
+/// first in `page_count_requests`, and the first page's answer was kept under the second. The id
+/// now comes from the family's own `next_request_id`, like every other action's.
+pub fn load_page_counts(
+    state: &mut ChatState,
+    page_id: &str,
+    next_request_id: impl FnOnce() -> u64,
+) -> Vec<crate::effect::Effect> {
     let page_id = page_id.to_ascii_lowercase();
     let panels = &state.extras.panels;
     if page_id.is_empty()
@@ -1453,7 +1465,7 @@ pub fn load_page_counts(state: &mut ChatState, page_id: &str) -> Vec<crate::effe
     {
         return Vec::new();
     }
-    let request_id = state.core.allocate_request_id();
+    let request_id = next_request_id();
     state
         .extras
         .panels
