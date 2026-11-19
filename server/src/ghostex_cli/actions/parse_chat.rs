@@ -28,6 +28,7 @@ pub(super) fn evaluate_parser(parser: Parser, rest: &[String], flags: &Flags) ->
         Parser::ProjectMove => parse_project_move(rest, flags),
         Parser::ProjectPath => parse_project_path(rest, flags),
         Parser::ProjectCollection => parse_project_collection(rest, flags),
+        Parser::ProjectRename => parse_project_rename(rest, flags),
         Parser::BrowseDirectories => parse_browse_directories(rest, flags),
         Parser::LookupRepository => parse_lookup_repository(rest, flags),
         Parser::CloneRepository => parse_clone_repository(rest, flags),

@@ -55,6 +55,11 @@ impl GhostexGpuiApp {
             if let Some(id) = action.command["groupId"].as_str() {
                 self.begin_native_sidebar_rename("group", id, window, cx);
             }
+        } else if action.command["type"] == "renameProject" {
+            // The project header's own name field; saving goes to gxserver (rename.rs).
+            if let Some(id) = action.command["groupId"].as_str() {
+                self.begin_native_sidebar_rename("project", id, window, cx);
+            }
         } else if action.command["type"] == "confirmCloseGroup" {
             if let Some(id) = action.command["groupId"].as_str() {
                 let id = id.to_owned();

@@ -748,6 +748,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/mergeWorktreeIntoMain"
         | "/api/checkoutProjectNewBranch"
         | "/api/removeProject"
+        // Like updateProject: a sidebar showing another computer's projects renames one there, and `ghostex rename-project --computer` relays it. Display name only; the caller names a project, never a folder.
+        | "/api/renameProject"
         | "/api/deleteWorktreeProject"
         /*
         CDXC:Worktrees 2026-08-09-18:40:

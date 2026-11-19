@@ -160,6 +160,15 @@ pub fn project_menu(input: &ProjectMenuInput<'_>) -> Vec<MenuItem> {
         );
         return menu;
     }
+    // CDXC:Projects 2026-11-19 WHY: a project had no way to change its name but remove + add, which lost its session records. Rename edits the name in place on the header (native_sidebar/rename.rs) and changes the name only. A bot's name comes from its profile and a stale machine's project can't be reached, so neither gets the row; a worktree has Rename Worktree above.
+    if project.bot_profile.is_none() && !group.is_stale {
+        menu.push(MenuItem {
+            label: Some("Rename".to_string()),
+            icon: Some("pencil".to_string()),
+            command: Some(MenuCommand::rename_project(group_id)),
+            ..MenuItem::default()
+        });
+    }
     if let Some(remote_url) = group.git_remote_origin_url.filter(|url| !url.is_empty()) {
         menu.push(MenuItem::row(
             "Copy Remote URL",
@@ -289,6 +298,18 @@ pub fn project_menu(input: &ProjectMenuInput<'_>) -> Vec<MenuItem> {
         .with_danger(),
     );
     menu
+}
+
+/// `menu` without the Rename row, for a project menu shown away from the project's header (the
+/// Unified sidebar names a row by its repository, and an extension panel draws no header), where
+/// the name field it opens has nowhere to show.
+pub fn without_project_rename(menu: &mut Vec<MenuItem>) {
+    menu.retain(|item| {
+        !item
+            .command
+            .as_ref()
+            .is_some_and(MenuCommand::is_rename_project)
+    });
 }
 
 /// The Delete Worktree row: it opens the Delete Worktree dialog for the worktree project

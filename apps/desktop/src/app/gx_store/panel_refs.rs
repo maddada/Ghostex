@@ -7,7 +7,7 @@
 use std::collections::BTreeMap;
 
 use ghostex_gx_core::extension_panel::{panel_ref_hover_texts, unfiltered_local_view};
-use ghostex_gx_core::{MachineId, ProjectKey, SidebarMenus, menu_to_json};
+use ghostex_gx_core::{MachineId, ProjectKey, SidebarMenus, menu_to_json, without_project_rename};
 use serde_json::Value;
 
 use crate::GhostexGpuiApp;
@@ -71,7 +71,10 @@ impl GhostexGpuiApp {
                 .groups
                 .iter()
                 .find(|group| group.core.group_id == group_id)?;
-            Some(menu_to_json(&menus.project_menu(group)))
+            // The panel draws no project header for Rename's name field.
+            let mut menu = menus.project_menu(group);
+            without_project_rename(&mut menu);
+            Some(menu_to_json(&menu))
         })
     }
 

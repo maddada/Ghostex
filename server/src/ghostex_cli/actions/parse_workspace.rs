@@ -350,6 +350,24 @@ pub(super) fn parse_project_collection(rest: &[String], flags: &Flags) -> Value 
     Value::Object(map)
 }
 
+/// `rename-project (--project-id id|--path path|--name name) <new name>`: the selector stays in
+/// its flags (a bare positional is the new name, never a path or id, so a name with spaces needs
+/// no quoting) and the new name rides as `newName`, since `name` is a selector here.
+pub(super) fn parse_project_rename(rest: &[String], flags: &Flags) -> Value {
+    let mut map = Map::new();
+    set_or_remove(&mut map, "name", flag_json(flags, "name"));
+    set_or_remove(&mut map, "path", flag_json(flags, "path"));
+    set_or_remove(&mut map, "projectId", flag_json(flags, "projectId"));
+    let positional = join_rest(rest, 0);
+    set_or_remove(
+        &mut map,
+        "newName",
+        flag_json(flags, "newName")
+            .or_else(|| (!positional.trim().is_empty()).then(|| Value::String(positional))),
+    );
+    Value::Object(map)
+}
+
 pub(super) fn parse_browse_directories(rest: &[String], flags: &Flags) -> Value {
     let mut map = Map::new();
     set_or_remove(&mut map, "cwd", flag_json(flags, "cwd"));

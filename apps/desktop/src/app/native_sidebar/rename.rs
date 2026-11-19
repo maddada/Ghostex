@@ -158,6 +158,8 @@ impl GhostexGpuiApp {
                 self.finish_native_panel_item_editor(editor.kind, &editor.id, &title, cx);
             } else if editor.kind == "collection" {
                 self.dispatch_native_sidebar_ui(json!({"type": "collectionAction", "action": "rename", "collectionId": editor.id, "value": title}), cx);
+            } else if editor.kind == "project" {
+                self.rename_native_sidebar_project(&editor.id, title, cx);
             } else {
                 self.dispatch_native_sidebar_command(
                     json!({"type": "renameGroup", "groupId": editor.id, "title": title}),
@@ -166,6 +168,55 @@ impl GhostexGpuiApp {
             }
         }
         cx.notify();
+    }
+
+    /// Saves a project's new name through gxserver (`/api/renameProject`, on the computer the
+    /// project is on), which publishes the renamed project to every client; only the name changes.
+    fn rename_native_sidebar_project(
+        &mut self,
+        group_id: &str,
+        title: String,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Ok(scope) = self.git_scope_for_group(group_id) else {
+            return self.gx_store_create_toast(
+                "error",
+                "Could not rename project",
+                Some("Its computer isn't connected right now. Try again once it is."),
+                cx,
+            );
+        };
+        if scope.title == title {
+            return;
+        }
+        let params = json!({ "projectId": scope.project_id(), "newName": title });
+        let remote = scope.remote.clone();
+        cx.spawn(async move |this, cx| {
+            let result = crate::app::gx_store::git::calls::call(
+                remote,
+                "/api/renameProject",
+                params,
+                None,
+            )
+            .await;
+            let _ = this.update(cx, |this, cx| {
+                if let Err(error) = result {
+                    // An older gxserver there answers "No gxserver endpoint for POST /api/renameProject".
+                    let description = if error.message.contains("/api/renameProject") {
+                        "That computer's Ghostex is too old to rename projects. Update it, then try again.".to_string()
+                    } else {
+                        error.message
+                    };
+                    this.gx_store_create_toast(
+                        "error",
+                        "Could not rename project",
+                        Some(&description),
+                        cx,
+                    );
+                }
+            });
+        })
+        .detach();
     }
 
     pub(crate) fn native_sidebar_input_owns_focus(&self, window: &Window, cx: &gpui::App) -> bool {

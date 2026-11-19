@@ -136,12 +136,10 @@ impl GhostexGpuiApp {
                 None => format!("{}\n\n{computers}", group.title),
             })
         };
-        let title = if let Some(editor) = self
-            .native_sidebar
-            .name_editor
-            .as_ref()
-            .filter(|editor| home.is_none() && editor.kind == "group" && editor.id == id)
-        {
+        let title = if let Some(editor) =
+            self.native_sidebar.name_editor.as_ref().filter(|editor| {
+                home.is_none() && matches!(editor.kind, "group" | "project") && editor.id == id
+            }) {
             div()
                 .flex_1()
                 .min_w_0()
