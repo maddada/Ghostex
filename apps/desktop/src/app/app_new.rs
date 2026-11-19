@@ -643,6 +643,7 @@ impl GhostexGpuiApp {
             this.start_prompt_editor_daemon_polling(cx);
             this.start_gpui_remote_gxserver_watchdog(cx);
             this.start_updates_watch(cx);
+            this.start_redraw_census(cx);
             this.sync_gx_store_transport(cx);
             this.refresh_titlebar_actions_in_background(cx);
             this.refresh_extensions_in_background(cx);

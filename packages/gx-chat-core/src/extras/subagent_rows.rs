@@ -58,6 +58,7 @@ fn scope<'a>(
         approval_wait: None,
         agent_fleet: None,
         session_directory: &view.session_directory,
+        session_directory_revision: view.session_directory_revision,
         // A subagent's transcript draws no forms, so its words link to nothing.
         askers: Vec::new(),
         question_tags: Vec::new(),

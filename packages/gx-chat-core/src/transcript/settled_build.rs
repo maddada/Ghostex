@@ -178,6 +178,7 @@ fn build_after(
         approval_wait: approval_wait.clone(),
         agent_fleet: state.session.agent_fleet.as_ref(),
         session_directory: &view.session_directory,
+        session_directory_revision: view.session_directory_revision,
         question_tags,
         askers,
         agent_message_deliveries: state.session.agent_message_deliveries.as_ref(),

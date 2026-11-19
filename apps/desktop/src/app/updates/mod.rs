@@ -61,6 +61,8 @@ struct UpdatesSnapshot {
     /// Items dismissed from the top bar's notification: item id to the version it was dismissed at
     /// (notification.rs; kept on this computer).
     notification_dismissed: HashMap<String, String>,
+    /// What `publish_updates` last showed: the message, the badge and whether an update ran.
+    published: Option<Value>,
 }
 
 /// Every workspace window and the Settings window read the same list.
@@ -366,17 +368,35 @@ impl GhostexGpuiApp {
             // Settings > Updates > Go back (go_back.rs).
             "goBack": go_back::offer_payload(),
         });
-        self.dispatch_open_gpui_app_modal_message(message.clone(), cx);
-        self.defer_in_main_window(cx, |app, window, cx| {
-            app.refresh_open_updates_popup(window, cx);
+        // CDXC:Updates 2026-11-19 WHY: the watch publishes whenever a computer's list comes back,
+        // and each publish redrew every workspace window whole even when nothing it shows had
+        // moved. A Settings window is still handed the list every time (one that just opened asked
+        // for it), but the windows redraw only when the list, the badge or the spinner changed.
+        let published = json!([
+            message,
+            with_snapshot(|s| s.badge.clone()),
+            self.updates_running()
+        ]);
+        let changed = with_snapshot(|snapshot| {
+            let changed = snapshot.published.as_ref() != Some(&published);
+            snapshot.published = Some(published);
+            changed
         });
-        cx.notify();
-        self.update_other_workspace_windows(cx, move |app, cx| {
-            app.dispatch_open_gpui_app_modal_message(message.clone(), cx);
-            app.defer_in_main_window(cx, |app, window, cx| {
+        self.dispatch_open_gpui_app_modal_message(message.clone(), cx);
+        if changed {
+            self.defer_in_main_window(cx, |app, window, cx| {
                 app.refresh_open_updates_popup(window, cx);
             });
             cx.notify();
+        }
+        self.update_other_workspace_windows(cx, move |app, cx| {
+            app.dispatch_open_gpui_app_modal_message(message.clone(), cx);
+            if changed {
+                app.defer_in_main_window(cx, |app, window, cx| {
+                    app.refresh_open_updates_popup(window, cx);
+                });
+                cx.notify();
+            }
         });
     }
 

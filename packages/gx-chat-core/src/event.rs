@@ -153,8 +153,9 @@ impl KnownSession {
     ///
     /// CDXC:SessionChat 2026-11-06 WHY: User: "bro why is the app laggy now??". The list comes in
     /// the sidebar's order, which moves whenever a session becomes the newest, and comparing it in
-    /// order bumped `session_directory_revision` on every such move. That revision is part of the
-    /// settled prefix's key, so each open chat settled its whole transcript again: 20 seconds of
+    /// order bumped `session_directory_revision` on every such move. That revision was then part of
+    /// the settled prefix's key (since 2026-11-19 it only makes the settled chunks check the
+    /// sessions they name, `NameCheck::holds`), so each open chat settled its whole transcript again: 20 seconds of
     /// the chat host thread on a 14,828-row coordinator chat, over and over while its threads
     /// worked, and every paste waited behind it. A reordered list names every session as before
     /// (`host_lists_name_alike`), so it rebuilds nothing.

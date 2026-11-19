@@ -623,6 +623,10 @@ pub struct LearnedNames(Directory);
 pub struct RecipientLookups {
     names: HashMap<String, Option<Known>>,
     deliveries: HashMap<String, Option<Value>>,
+    /// Each reference looked up in the host's session list, with the session it found.
+    hosts: HashMap<String, Option<KnownSession>>,
+    /// Whether the host's list was loaded, when a row read it to draw a session as gone.
+    hosts_loaded: Option<bool>,
 }
 
 /// The names a resolution reads: the Subagents roster first, then what each stretch of rows taught,
@@ -647,6 +651,27 @@ impl Names<'_> {
         found
     }
 
+    /// The session `reference` names in the host's list ([`HostDirectory::find`]), noted for the
+    /// check that tells whether a later list would name it alike ([`NameCheck::holds`]).
+    fn host<'h>(&self, hosts: &HostDirectory<'h>, reference: &str) -> Option<&'h KnownSession> {
+        let found = hosts.find(reference);
+        if let Some(log) = &self.log {
+            log.borrow_mut()
+                .hosts
+                .entry(directory_key(reference))
+                .or_insert_with(|| found.map(names_of));
+        }
+        found
+    }
+
+    /// Whether the host's list is loaded, noted like [`Self::host`].
+    fn hosts_loaded(&self, hosts: &HostDirectory) -> bool {
+        if let Some(log) = &self.log {
+            log.borrow_mut().hosts_loaded = Some(hosts.loaded);
+        }
+        hosts.loaded
+    }
+
     fn note_delivery(&self, recipient: &Value, deliveries: Option<&Value>) {
         let (Some(log), Some(key)) = (&self.log, live_delivery_key(recipient)) else {
             return;
@@ -655,6 +680,21 @@ impl Names<'_> {
             .deliveries
             .entry(key.clone())
             .or_insert_with(|| delivery_lookup(deliveries, &key));
+    }
+}
+
+/// The fields of `session` the transcript names it by ([`KnownSession::named_alike`]), without the
+/// `+` picker's live ones, so a lookup kept in a chunk does not read as changed when only those move.
+fn names_of(session: &KnownSession) -> KnownSession {
+    KnownSession {
+        global_ref: session.global_ref.clone(),
+        project_id: session.project_id.clone(),
+        session_id: session.session_id.clone(),
+        title: session.title.clone(),
+        agent_id: session.agent_id.clone(),
+        agent_name: session.agent_name.clone(),
+        coordinator: session.coordinator,
+        ..KnownSession::default()
     }
 }
 
@@ -859,12 +899,12 @@ fn complete_received(directory: &Names, hosts: &HostDirectory, message: &mut Val
         }
         return;
     }
-    let Some(session) = hosts
-        .find(text(inter, "replyTo"))
-        .or_else(|| hosts.find(text(inter, "sessionId")))
+    let Some(session) = directory
+        .host(hosts, text(inter, "replyTo"))
+        .or_else(|| directory.host(hosts, text(inter, "sessionId")))
     else {
         // A sender the loaded list no longer has: its card's pill draws muted.
-        if hosts.loaded && inter["gone"] != true {
+        if directory.hosts_loaded(hosts) && inter["gone"] != true {
             inter["gone"] = true.into();
             dress_received(message);
         }
@@ -887,7 +927,11 @@ fn complete_received(directory: &Names, hosts: &HostDirectory, message: &mut Val
 
 /// Names every mention pill of a row (`session` references, `session_mentions.rs`) from the host's
 /// list, copying the row only when one of them reads differently.
-fn dress_session_references(hosts: &HostDirectory, message: &mut ProjectedMessage) {
+fn dress_session_references(
+    directory: &Names,
+    hosts: &HostDirectory,
+    message: &mut ProjectedMessage,
+) {
     for key in ["markdownReferences", "collapsedReferences"] {
         let Some(references) = message.get(key).and_then(Value::as_array) else {
             continue;
@@ -903,8 +947,8 @@ fn dress_session_references(hosts: &HostDirectory, message: &mut ProjectedMessag
             .iter_mut()
             .filter(|reference| reference["kind"] == SESSION_REFERENCE_KIND)
         {
-            let found = hosts.find(text(reference, "href"));
-            dress_session_reference(reference, found, hosts.loaded);
+            let found = directory.host(hosts, text(reference, "href"));
+            dress_session_reference(reference, found, directory.hosts_loaded(hosts));
         }
         if dressed != *references {
             if let Value::Object(fields) = Arc::make_mut(message) {
@@ -926,7 +970,9 @@ fn name_recipient(directory: &Names, hosts: &HostDirectory, recipient: &mut Valu
         .or_else(|| directory.get(&directory_key(target)))
         .cloned()
         .unwrap_or_default();
-    let host = hosts.find(global_ref).or_else(|| hosts.find(target));
+    let host = directory
+        .host(hosts, global_ref)
+        .or_else(|| directory.host(hosts, target));
     if known.subagent && host.is_none() {
         recipient["name"] = subagent_label(&known.agent).into();
         recipient["titled"] = false.into();
@@ -936,7 +982,7 @@ fn name_recipient(directory: &Names, hosts: &HostDirectory, recipient: &mut Valu
     let mut agent_name = text(recipient, "agentName").to_string();
     let mut title = String::new();
     recipient["coordinator"] = host.is_some_and(|session| session.coordinator).into();
-    recipient["gone"] = (hosts.loaded && host.is_none()).into();
+    recipient["gone"] = (host.is_none() && directory.hosts_loaded(hosts)).into();
     if let Some(session) = host {
         title = session.title.clone();
         // A send addressed by bare session id still opens that session.
@@ -1168,7 +1214,7 @@ fn resolve_message(
         None => complete_received(directory, hosts, Arc::make_mut(message)),
         Some(false) => {}
     }
-    dress_session_references(hosts, message);
+    dress_session_references(directory, hosts, message);
     let cards = message
         .get("sentMessages")
         .and_then(Value::as_array)
@@ -1200,6 +1246,7 @@ impl LearnedNames {
 pub struct NameCheck<'a> {
     names: Names<'a>,
     deliveries: Option<&'a Value>,
+    hosts: HostDirectory<'a>,
 }
 
 impl<'a> NameCheck<'a> {
@@ -1207,6 +1254,7 @@ impl<'a> NameCheck<'a> {
         agent_fleet: Option<&Value>,
         learned: &'a [&'a LearnedNames],
         deliveries: Option<&'a Value>,
+        sessions: &'a [KnownSession],
     ) -> Self {
         let mut fleet = Directory::new();
         learn_fleet(&mut fleet, agent_fleet);
@@ -1217,11 +1265,23 @@ impl<'a> NameCheck<'a> {
                 log: None,
             },
             deliveries,
+            hosts: HostDirectory::new(sessions),
         }
     }
 
     /// Whether rows resolved with `lookups` recorded would resolve the same now: every name they
-    /// looked up still finds what it found, and every delivery they read is still what it was.
+    /// looked up still finds what it found, every delivery they read is still what it was, and
+    /// every session they named from the host's list is still named alike there.
+    ///
+    /// CDXC:SessionChat 2026-11-19 WHY: the host's session list moves its names whenever any
+    /// session anywhere is created, closed or renamed, which is many times an hour while
+    /// coordinators start threads. It was part of the settled prefix's key, so each such move
+    /// settled every retained chat's whole transcript again, hidden ones included: on the user's
+    /// Windows computer a sleeping 4,476-row coordinator chat cost 200 to 670 ms of the chat host
+    /// thread over and over, and turns of 0.5 to 1.8 s with 24 chats retained. A chunk now keeps the
+    /// references it looked up, and only a chunk whose sessions read differently is built again: on
+    /// that chat's export (`tests/long_transcript_refresh_timing.rs`) a rename went from 624 ms to
+    /// 16 ms, with the same rows as a whole build.
     pub fn holds(&self, lookups: &RecipientLookups) -> bool {
         lookups
             .names
@@ -1231,6 +1291,16 @@ impl<'a> NameCheck<'a> {
                 .deliveries
                 .iter()
                 .all(|(key, found)| delivery_lookup(self.deliveries, key) == *found)
+            && lookups
+                .hosts_loaded
+                .is_none_or(|loaded| loaded == self.hosts.loaded)
+            && lookups.hosts.iter().all(|(reference, found)| {
+                match (self.hosts.find(reference), found) {
+                    (None, None) => true,
+                    (Some(now), Some(then)) => KnownSession::named_alike(now, then),
+                    _ => false,
+                }
+            })
     }
 }
 
