@@ -1206,9 +1206,9 @@ fn question_rows_of(
                     row["seenOnly"] = json!(asker.seen_only);
                 }
                 row["buttons"] = json!([]);
-                // A page that asks nothing waits to be marked seen (`Asker::seen_only`).
+                // A page that asks nothing waits to be marked seen (`Asker::seen_only`), unlabelled.
                 let detail = if asker.seen_only {
-                    "Page, not seen yet".to_string()
+                    "Page".to_string()
                 } else {
                     format!("{open} {noun} open \u{b7} {}", if form { "Form" } else { "Page" })
                 };
@@ -1383,8 +1383,8 @@ pub fn settle_page_counts(
 
 /// How much a page still asks, after its name in the quieter colour: "(14 questions)" while none
 /// is answered, "(10/16 answered)" once some are (a pick or words in the page's saved draft
-/// counts, sent or not), "(not seen yet)" for a page that asks nothing and waits to be marked
-/// seen. Before its gxserver has said, the questions its block lists, none answered.
+/// counts, sent or not), nothing for a page that asks nothing and waits to be marked seen.
+/// Before its gxserver has said, the questions its block lists, none answered.
 ///
 /// CDXC:Coordinators 2026-11-11 DECISION:
 /// User, of a page row in the dock: "also show (10/16 answered) or (14 questions) next to the
@@ -1393,8 +1393,11 @@ pub(crate) fn page_count(
     state: &ChatState,
     asker: &crate::transcript::open_questions::Asker,
 ) -> String {
+    // A page that asks nothing says nothing after its name: a page it was just kept in the dock
+    // for read as unread when it was not (CDXC:Coordinators 2026-11-19 DECISION in
+    // questions/later.rs `seen_on_open`).
     if asker.seen_only {
-        return "(not seen yet)".to_string();
+        return String::new();
     }
     let (answered, total) = state
         .extras

@@ -1004,10 +1004,13 @@ pub fn previous(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
 pub fn show(state: &mut ChatState, context: &ChatContext, id: &str) -> Vec<Effect> {
     let _ = context;
     if let Some(url) = page_url(state, id) {
-        return vec![Effect::Open(crate::effect::OpenTarget::Url {
+        // Opening a page that waits only to be looked at marks it seen (`later::seen_on_open`).
+        let mut effects = crate::questions::later::seen_on_open(state, id);
+        effects.push(Effect::Open(crate::effect::OpenTarget::Url {
             url,
             external: false,
-        })];
+        }));
+        return effects;
     }
     let effects = crate::questions::resource_modal::open(state, id);
     if state

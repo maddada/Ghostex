@@ -321,10 +321,16 @@ fn handle_action(state: &mut ChatState, action: &UserAction, context: &ChatConte
             match classify_link_href(&href) {
                 LinkTarget::File(path) => vec![position_effect(&href, path)],
                 // CDXC:SessionChat 2026-10-26 WHY: Shift+click on a chat link opens it in the system browser (the 2026-08-03 SessionChat comment in the desktop's session_chat/host_actions.rs). The TypeScript brain passed the click's `external` on to the host; the Rust port dropped it, so Shift+click opened the app's Browser like a plain click.
-                LinkTarget::Url(url) => vec![Effect::Open(OpenTarget::Url {
-                    url,
-                    external: param(action, "external").and_then(Value::as_bool) == Some(true),
-                })],
+                LinkTarget::Url(url) => {
+                    // A link to a page that waits only to be looked at (its card's Open, a link in
+                    // a reply) marks it seen as it opens (`questions::later::seen_on_open`).
+                    let mut effects = crate::questions::later::seen_on_open(state, &url);
+                    effects.push(Effect::Open(OpenTarget::Url {
+                        url,
+                        external: param(action, "external").and_then(Value::as_bool) == Some(true),
+                    }));
+                    effects
+                }
                 LinkTarget::Inert => Vec::new(),
             }
         }

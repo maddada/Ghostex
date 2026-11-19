@@ -189,7 +189,7 @@ impl NativeChatView {
         let floating = super::visual_popup::FLOATING_PAGES;
         // The floating window pictures a page that has no picture yet once it has loaded
         // (app/visual_page_thumbnails.rs); ask for it again a moment after opening.
-        if let (true, Some(page_id)) = (floating, page_id) {
+        if let (true, Some(page_id)) = (floating, page_id.clone()) {
             let timer = cx.background_executor().timer(PICTURE_AFTER_OPEN);
             cx.spawn(async move |this, cx| {
                 timer.await;
@@ -203,6 +203,12 @@ impl NativeChatView {
             .detach();
         }
         if floating {
+            // Floated from the view, so the core never sees the open: tell it, and a page that
+            // waits only to be looked at counts as seen (gx-chat-core `questions/later.rs`
+            // `seen_on_open`; the core leaves any other page alone).
+            if let Some(page_id) = page_id.as_deref().filter(|id| !id.is_empty()) {
+                self.invoke(json!({"type": "markPagesSeen", "ids": [page_id]}), cx);
+            }
             cx.emit(super::state::NativeChatEvent::Host(json!({
                 "type": "open",
                 "modal": "visualPage",

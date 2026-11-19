@@ -175,7 +175,7 @@ pub struct BoardRow {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub replied: String,
     /// How much a Ghostex page still asks, drawn after its title in the quieter colour
-    /// ("(14 questions)", "(10/16 answered)", "(not seen yet)"; work_cards.rs `page_count`); ""
+    /// ("(14 questions)", "(10/16 answered)"; work_cards.rs `page_count`); ""
     /// for anything else.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub count: String,

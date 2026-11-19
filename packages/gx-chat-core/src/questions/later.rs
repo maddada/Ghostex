@@ -384,8 +384,46 @@ pub fn mark_answered(state: &mut ChatState, id: &str) -> Vec<Effect> {
 /// User picked "reply and build" on issue #626 (a dock with 16 page cards "not seen yet", most of
 /// them already read): the dock gets Mark all seen, on the desktop and the phone. A page cleared
 /// this way reads Seen on its card, as one marked seen on the page does.
+///
+/// Only a page still waiting to be seen is cleared, so a client may send any page it opens
+/// ([`seen_on_open`]): one that asks questions keeps waiting for its answers.
 pub fn mark_seen(state: &mut ChatState, ids: &[&str]) -> Vec<Effect> {
-    ids.iter().flat_map(|id| remove(state, id)).collect()
+    let unseen: Vec<String> = crate::questions::open_questions::waiting(state)
+        .into_iter()
+        .filter(|asker| asker.seen_only)
+        .filter(|asker| {
+            ids.iter()
+                .any(|id| asker.id.eq_ignore_ascii_case(id.trim()))
+        })
+        .map(|asker| asker.id.clone())
+        .collect();
+    unseen.iter().flat_map(|id| remove(state, id)).collect()
+}
+
+/// Opening a page that waits only to be looked at marks it seen, as the dock's Mark all seen does
+/// (silently, on every client): the dock, the Work panel, a Q-tag link, a chat link to it or its
+/// card, on the desktop or the phone. `target` is the page's id or any address that names it.
+///
+/// CDXC:Coordinators 2026-11-19 DECISION:
+/// User, of a dock row "ClickHouse demo notes: what we record and ask (not seen yet)": "i see
+/// "(not seen)" here but i actually opened and went thro this, just want to keep it here. we
+/// shouldn't show "(not seen)" like this". Only the page's own Mark as seen (at its very end)
+/// counted, so a page read but not pressed at its end kept counting as not seen on the bell and
+/// badges. Opening it now counts; the row reads no "(not seen yet)" any more.
+pub fn seen_on_open(state: &mut ChatState, target: &str) -> Vec<Effect> {
+    let target = target.trim();
+    if target.is_empty() {
+        return Vec::new();
+    }
+    let lower = target.to_ascii_lowercase();
+    let ids: Vec<String> = crate::questions::open_questions::waiting(state)
+        .into_iter()
+        .filter(|asker| asker.seen_only && !asker.id.is_empty())
+        .filter(|asker| lower.contains(&asker.id.to_ascii_lowercase()))
+        .map(|asker| asker.id.clone())
+        .collect();
+    let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+    mark_seen(state, &ids)
 }
 
 /// `questionsReply {id, text}`: the reader's own words on a whole form or page, from its dock
@@ -610,5 +648,58 @@ mod tests {
         );
         assert!(matches!(effects.as_deref(), Some([Effect::Toast { .. }])));
         assert!(!removed_ids(&state).contains("form-a"));
+    }
+
+    /// Opening a page that waits only to be looked at marks it seen, by its id or any address
+    /// naming it; a page that asks questions, or one already seen, is left alone.
+    #[test]
+    fn opening_a_page_that_waits_to_be_seen_marks_it_seen() {
+        use crate::transcript::open_questions::{Asker, AskerKind};
+        let page = |id: &str, seen_only: bool, tags: Vec<String>| Asker {
+            id: id.to_string(),
+            kind: AskerKind::Page,
+            message_id: format!("m-{id}"),
+            tags,
+            answered: false,
+            obsolete: false,
+            withdrawn: Vec::new(),
+            keys: Vec::new(),
+            skipped: Vec::new(),
+            superseded: Vec::new(),
+            inherited: false,
+            seen_only,
+            source: None,
+            replaced: false,
+            prints: Vec::new(),
+            rounds: Vec::new(),
+            said: Vec::new(),
+            title: id.to_string(),
+            at: Some(1),
+        };
+        let unseen = "0123456789abcdef0123456789abcdef";
+        let asks = "fedcba9876543210fedcba9876543210";
+        let mut state = ChatState::default();
+        *state.transcript_view.askers = vec![
+            page(unseen, true, Vec::new()),
+            page(asks, false, vec!["Q1".to_string()]),
+        ];
+
+        assert!(
+            seen_on_open(&mut state, &format!("http://127.0.0.1:1/visual/{asks}")).is_empty(),
+            "a page that asks questions keeps waiting for its answers"
+        );
+        assert!(mark_seen(&mut state, &[asks]).is_empty());
+        assert!(!removed_ids(&state).contains(asks));
+
+        let effects = seen_on_open(
+            &mut state,
+            &format!(
+                "http://127.0.0.1:1/visual/{}?gx-readonly=1",
+                unseen.to_uppercase()
+            ),
+        );
+        assert_eq!(effects.len(), 1, "one call to gxserver");
+        assert!(removed_ids(&state).contains(unseen));
+        assert!(seen_on_open(&mut state, unseen).is_empty(), "already seen");
     }
 }
