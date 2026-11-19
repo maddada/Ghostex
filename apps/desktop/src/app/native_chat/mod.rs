@@ -20,6 +20,7 @@ mod attachment_previews;
 mod attachments;
 mod background_tasks;
 mod binding;
+mod box_notes;
 mod box_picker;
 mod cards;
 mod carry_attachments;

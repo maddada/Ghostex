@@ -1,6 +1,8 @@
 //! The cards that used to stack between the dock and the chat box and are rows of the dock now:
-//! the session's computer being offline (Retry) and messages held behind a failed model change
-//! (Pick model). Added to `workDock` after the document's other families ran, since the held
+//! the session's computer being offline (Retry), messages held behind a failed model change
+//! (Pick model), and Ghostex Collab's held messages (the owner's "Message from <guest>" with
+//! Decline, Edit and Send; a guest's own "Waiting for <owner>"), whose pictures and form answers
+//! are in the panel the row opens. Added to `workDock` after the document's other families ran, since the held
 //! messages' card is the menus family's (`menus/picker/hold_card.rs`).
 //!
 //! CDXC:SessionChat 2026-11-20 DECISION:
@@ -16,7 +18,128 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or_default()
 }
 
-/// The computer's row and the held messages' row, from what the document already says.
+/// The first line of a held message's words, cut, for its row's title.
+fn first_line(words: &str) -> String {
+    let line = words
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or_default();
+    let mut cut: String = line.chars().take(120).collect();
+    if cut.len() < line.len() || words.trim().lines().count() > 1 {
+        cut.push('\u{2026}');
+    }
+    cut
+}
+
+/// What a held Collab message says, for its row's title: its words, or the form it answers.
+fn held_gist(entry: &Value) -> String {
+    let words = text(entry, "text");
+    if !words.trim().is_empty() {
+        return format!("\u{201c}{}\u{201d}", first_line(words));
+    }
+    match text(&entry["answers"], "title") {
+        "" => "a picture".to_string(),
+        title => format!("answers to {title}"),
+    }
+}
+
+/// A held Collab message whole, for the panel its row opens: the words, the pictures and each
+/// form's answers, as the chat's Markdown (its pictures drawn as the chat draws them).
+fn held_body(entry: &Value) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    let words = text(entry, "text").trim();
+    if !words.is_empty() {
+        parts.push(words.to_string());
+    }
+    let pictures: Vec<String> = entry["images"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|image| {
+            [text(image, "path"), text(image, "url")]
+                .into_iter()
+                .find(|source| !source.is_empty())
+                .map(|source| format!("![]({source})"))
+        })
+        .collect();
+    if !pictures.is_empty() {
+        parts.push(pictures.join("\n"));
+    }
+    let answers = entry["answers"]
+        .is_object()
+        .then_some(&entry["answers"])
+        .into_iter()
+        .chain(entry["extraAnswers"].as_array().into_iter().flatten());
+    for card in answers.filter(|card| card.is_object()) {
+        let mut lines = vec![format!("**{}**", text(card, "title"))];
+        for row in card["rows"].as_array().into_iter().flatten() {
+            let label = text(row, "label");
+            let value = if row["skipped"] == true {
+                "Skipped"
+            } else {
+                text(row, "value")
+            };
+            lines.push(if label.is_empty() {
+                format!("- {value}")
+            } else {
+                format!("- {label}: {value}")
+            });
+        }
+        parts.push(lines.join("\n"));
+    }
+    crate::transcript::native_markdown::native_markdown(&parts.join("\n\n"), false)
+}
+
+/// Ghostex Collab's rows: the owner's "Message from <guest>" with Decline, Edit and Send, and a
+/// guest's own messages waiting for the owner.
+fn collab_rows(collab: &Value) -> Vec<Value> {
+    if collab["shared"] != true {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for card in collab["cards"].as_array().into_iter().flatten() {
+        let id = text(card, "id");
+        let button = |label: &str, action: &str| {
+            json!({
+                "label": label,
+                "recommended": false,
+                "command": { "type": "resolveCollabMessage", "heldId": id, "action": action },
+            })
+        };
+        out.push(json!({
+            "key": format!("collab:{id}"),
+            "kind": "collab",
+            "status": "needs",
+            "title": format!("{}: {}", text(card, "title"), held_gist(card)),
+            "body": held_body(card),
+            "detail": [],
+            "age": "",
+            "buttons": [button("Decline", "decline"), button("Edit", "edit"), button("Send", "send")],
+            "busy": card["busy"] == true,
+            "needs": true,
+            "stays": true,
+        }));
+    }
+    for row in collab["waiting"].as_array().into_iter().flatten() {
+        out.push(json!({
+            "key": format!("collab-waiting:{}", text(row, "id")),
+            "kind": "collabWaiting",
+            "status": "waiting",
+            "title": format!("{}: {}", text(collab, "waitingForOwner"), held_gist(row)),
+            "body": held_body(row),
+            "detail": [],
+            "age": "",
+            "buttons": [],
+            "needs": false,
+            "stays": true,
+        }));
+    }
+    out
+}
+
+/// The computer's row, the held messages' row and Collab's rows, from what the document already
+/// says.
 fn rows(document: &Document) -> Vec<Value> {
     let mut out = Vec::new();
     if let Some(notice) = document.computer_notice.as_ref() {
@@ -61,6 +184,9 @@ fn rows(document: &Document) -> Vec<Value> {
             "stays": true,
         }));
     }
+    if let ghostex_gx_protocol::Tri::Value(collab) = &document.collab {
+        out.extend(collab_rows(collab));
+    }
     out
 }
 
@@ -74,6 +200,12 @@ pub fn keys(state: &ChatState, context: &crate::state::ChatContext) -> Vec<Strin
     if crate::menus::picker::hold_card::messages_held(state) {
         keys.push("model-hold".to_string());
     }
+    let collab = crate::extras::collab::project(state);
+    keys.extend(
+        collab_rows(&collab)
+            .iter()
+            .map(|row| text(row, "key").to_string()),
+    );
     keys
 }
 
