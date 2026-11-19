@@ -413,7 +413,18 @@ pub(crate) fn modal_corner_close_button<V: 'static>(
     on_press: impl Fn(&mut V, &mut Window, &mut Context<V>) + 'static,
     cx: &mut Context<V>,
 ) -> Stateful<Div> {
-    let hover = css_mix(p.foreground, 0.16, p.solid_surface);
+    // CDXC:Theming 2026-11-20: under glass the X is the dialog's theme colour lifted
+    // (`lifted_menu_fill`, nearly opaque since half of it sits outside the card), not a dark disc
+    // of the theme chrome. Glass off, unchanged.
+    let (rest, hover) = if p.glass {
+        let lifted = p.lifted_menu_fill();
+        (lifted, css_mix(p.foreground, 0.08, lifted))
+    } else {
+        (
+            css_mix(p.foreground, 0.08, p.solid_surface),
+            css_mix(p.foreground, 0.16, p.solid_surface),
+        )
+    };
     let close = div()
         .id(id)
         .role(gpui::Role::Button)
@@ -424,7 +435,7 @@ pub(crate) fn modal_corner_close_button<V: 'static>(
         .rounded_full()
         .border_1()
         .border_color(hsla(p.hairline))
-        .bg(hsla(css_mix(p.foreground, 0.08, p.solid_surface)))
+        .bg(hsla(rest))
         .cursor_pointer()
         .on_press(cx, on_press)
         .child(modal_icon(MODAL_CORNER_CLOSE_ICON, 14.0, p.foreground));

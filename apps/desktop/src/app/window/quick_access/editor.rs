@@ -315,7 +315,9 @@ where
                     .rounded(px(QUICK_ACCESS_RADIUS_CONTROL))
                     .border_1()
                     .border_color(hsla(p.menu_border))
-                    .bg(hsla(p.menu_background))
+                    // CDXC:Theming 2026-11-20: under glass the popover is the window's theme colour
+                    // lifted (`inline_menu_background`), never the near-black menu colour.
+                    .bg(hsla(p.inline_menu_background()))
                     .shadow_lg()
                     .on_mouse_down_out(cx.listener(|this, _: &MouseDownEvent, _window, cx| {
                         this.post_editor(json!({ "type": "tagComposerCancel" }), cx);

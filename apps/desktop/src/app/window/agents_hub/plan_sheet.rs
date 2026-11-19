@@ -2,7 +2,7 @@
 //! switchable groups of operations over a scrim, then the apply result.
 use super::super::native_modal_kit::{
     MODAL_MONO_FONT, MODAL_UI_FONT, SwitchRowExt as _, a11y_toggled, bind_press, hsla, modal_rgba,
-    modal_switch, switch_row_wash,
+    modal_switch, rgba_of, switch_row_wash,
 };
 use super::palette::HubPalette;
 use super::sync_model::*;
@@ -406,12 +406,27 @@ impl GpuiAgentsHubModalWindow {
         } else {
             modal_rgba(0x000000, 0.6)
         };
+        // CDXC:Theming 2026-11-20: the sheet draws inside the hub's window, which cannot blur its
+        // own content, so under glass it is the lifted dialog fill (the theme colour lifted toward
+        // white at 96%, as the dialogs inside Settings) and the scrim behind it a veil of the theme
+        // colour instead of black. Glass off, the opaque theme chrome and the black dim stay.
+        let (sheet_fill, scrim) = if hp.modal.glass {
+            (
+                hp.modal.lifted_dialog_fill(true),
+                rgba_of(hp.modal.solid_surface, 0.6),
+            )
+        } else {
+            (
+                hp.modal.solid_surface,
+                modal_rgba(0x000000, if hp.light { 0.16 } else { 0.3 }),
+            )
+        };
         let sheet_box = v_flex()
             .id("agents-hub-sync-sheet")
             .w_full()
             .max_w(px(896.0))
             .max_h_full()
-            .bg(hsla(hp.modal.solid_surface))
+            .bg(hsla(sheet_fill))
             .border_1()
             .border_color(hsla(hp.ink(0.14)))
             .rounded(px(12.0))
@@ -438,10 +453,7 @@ impl GpuiAgentsHubModalWindow {
             .p(px(20.0))
             // A light dim, so the hub stays in view behind the sheet (CDXC:AppModal 2026-11-09 on
             // `pane_dialog_scrim` in native_chat/child_window.rs: never black out what's behind).
-            .bg(hsla(modal_rgba(
-                0x000000,
-                if hp.light { 0.16 } else { 0.3 },
-            )))
+            .bg(hsla(scrim))
             .child(sheet_box)
             .into_any_element()
     }

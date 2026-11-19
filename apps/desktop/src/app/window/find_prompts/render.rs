@@ -1146,7 +1146,7 @@ impl GpuiFindPromptsModalWindow {
                 .left_0()
                 .size_full()
                 .occlude()
-                // React drew background/95 over a backdrop blur; nothing in a window can blur what it drew, so the full-prompt view sits on the solid menu colour (the window colour, or its lifted solid twin under glass, where the window fill is see-through).
+                // React drew background/95 over a backdrop blur; nothing in a window can blur what it drew, so the full-prompt view sits on the menu colour (the window colour, or under glass the window's theme colour lifted at 96%, CDXC:Theming 2026-11-20, where the window fill is see-through).
                 .bg(hsla(p.popover))
                 .child(
                     h_flex()

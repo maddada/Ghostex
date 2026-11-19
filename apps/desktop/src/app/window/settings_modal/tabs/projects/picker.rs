@@ -44,6 +44,10 @@ fn app_background(p: &SettingsPalette) -> Rgba {
 fn popover_background(p: &SettingsPalette) -> Rgba {
     if p.light {
         rgb(0xffffff)
+    } else if p.glass {
+        // CDXC:Theming 2026-11-20: under glass the popover is the Settings menus' lifted theme
+        // colour (`popup_background`, the modal kit's menu lift), never the fixed near-black.
+        p.popup_background
     } else {
         rgb(0x0e0e0e)
     }

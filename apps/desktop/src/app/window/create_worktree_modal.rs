@@ -1411,7 +1411,12 @@ impl GpuiCreateWorktreeModalWindow {
                             .rounded(px(MODAL_RADIUS_CONTROL))
                             .border_1()
                             .border_color(hsla(popup_border))
-                            .bg(hsla(p.solid_surface))
+                            // CDXC:Theming 2026-11-20: lifted theme colour under glass.
+                            .bg(hsla(if p.glass {
+                                p.lifted_menu_fill()
+                            } else {
+                                p.solid_surface
+                            }))
                             .shadow_lg()
                             .on_mouse_down_out(cx.listener(
                                 move |this, event: &gpui::MouseDownEvent, window, cx| {

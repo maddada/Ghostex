@@ -398,6 +398,27 @@ impl ModalPalette {
         }
     }
 
+    /// The fill of a menu, dropdown or popover drawn inside a dialog or panel window under glass:
+    /// the theme's own colour (`solid_surface`) lifted toward white a step past the dialog
+    /// ([`LIFTED_MENU_LIFT_DARK`], [`LIFTED_MENU_LIFT_LIGHT`]) at [`LIFTED_DIALOG_GLASS_ALPHA`], so
+    /// the open menu reads as a raised pane over the dialog and the page never reads through it.
+    ///
+    /// CDXC:Theming 2026-11-20: such a window cannot blur its own content, so under glass its
+    /// menus take this lifted fill, never `menu_background` (#161616), `solid_surface` (#0e0e0e) or
+    /// a fixed near-black. Glass off, every menu keeps its colour.
+    pub(crate) fn lifted_menu_fill(&self) -> Rgba {
+        let base = rgba_of(self.solid_surface, 1.0);
+        let lift = if self.light {
+            LIFTED_MENU_LIFT_LIGHT
+        } else {
+            LIFTED_MENU_LIFT_DARK
+        };
+        rgba_of(
+            css_mix(rgb(0xffffff), lift, base),
+            LIFTED_DIALOG_GLASS_ALPHA,
+        )
+    }
+
     /// The notice window's palette under window glass: the dialogs' frost and washes over the
     /// lifted dialog fill rather than the thin theme tint, so a notice reads as a raised pane of
     /// the theme and never as a black box over a dark chat.
@@ -418,6 +439,12 @@ impl ModalPalette {
 /// ([`ModalPalette::lifted_dialog_fill`]).
 pub(crate) const LIFTED_DIALOG_LIFT_DARK: f32 = 0.075;
 pub(crate) const LIFTED_DIALOG_LIFT_LIGHT: f32 = 0.55;
+
+/// How far a menu inside a dialog or panel window lifts the theme colour toward white under glass
+/// ([`ModalPalette::lifted_menu_fill`]): a bit lighter than the dialog, as the work area's lifted
+/// surfaces (`GLASS_LIFT_DARK`, `GLASS_LIFT_LIGHT` in helpers/chrome_palette.rs).
+pub(crate) const LIFTED_MENU_LIFT_DARK: f32 = 0.10;
+pub(crate) const LIFTED_MENU_LIFT_LIGHT: f32 = 0.6;
 
 /// How much of what is behind it the lifted dialog fill covers under glass: nearly all of it, so
 /// text behind a dialog that cannot blur its own window never reads through.
@@ -467,5 +494,22 @@ mod tests {
         assert_eq!(fill.a, 1.0);
         // 7.5% white over #0e0e0e: about #202020.
         assert!((fill.r * 255.0 - 32.0).abs() < 1.5, "{fill:?}");
+    }
+
+    /// A menu inside a dialog under glass is the theme lifted a step past the dialog, at 96%:
+    /// never the near-black menu colour or the theme chrome.
+    #[test]
+    fn lifted_menu_fill_sits_above_the_dialog() {
+        for light in [false, true] {
+            let solid = ModalPalette::resolve(light, None).tinted(rgb(0x0e0e0e));
+            let menu = solid.lifted_menu_fill();
+            assert_eq!(menu.a, LIFTED_DIALOG_GLASS_ALPHA);
+            assert!(menu.r > solid.lifted_dialog_fill(true).r);
+            assert!(menu.r >= solid.solid_surface.r);
+        }
+        let dark = ModalPalette::resolve(false, None).tinted(rgb(0x0e0e0e));
+        let menu = dark.lifted_menu_fill();
+        // 10% white over #0e0e0e: about #262626.
+        assert!((menu.r * 255.0 - 38.0).abs() < 1.5, "{menu:?}");
     }
 }
