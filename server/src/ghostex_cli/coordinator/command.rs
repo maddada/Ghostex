@@ -74,7 +74,7 @@ pub(super) fn flag_text(flags: &Flags, key: &str) -> Option<String> {
 
 pub(super) fn text_or_file(parsed: &ParsedArgs, text_key: &str) -> CliResult<Option<String>> {
     if let Some(path) = flag_text(&parsed.flags, "bodyFile") {
-        return std::fs::read_to_string(&path)
+        return crate::ghostex_cli::args::read_body_file(&path)
             .map(Some)
             .map_err(|error| CliError::Other(format!("Could not read {path}: {error}")));
     }

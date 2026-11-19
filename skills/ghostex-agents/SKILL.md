@@ -164,9 +164,13 @@ step 7 below). Do not poll or sleep to watch it; end your turn and wait.
    checking, so read the thread's chat. None of these means the agent has read it.
    Newer CLIs print a `sendRequestId` with every send (and in a failed send's
    error); to retry that same message, add `--request-id <that id>` and Ghostex
-   delivers it at most once. Older CLIs reject the flag; read the chat instead. In
-   PowerShell, send text containing backticks with `--body-file` or single
-   quotes: inside double quotes a backtick is an escape character.
+   delivers it at most once. Older CLIs reject the flag; read the chat instead.
+   Send text that holds code, backticks, `$` or quotes through a quoted heredoc,
+   `ghostex agents send <ref> --body-file - <<'EOF'` (an older CLI needs a file
+   path), never inside double quotes: in bash and zsh a backtick-quoted command
+   or `$(...)` there runs before ghostex starts, so the send waits on it (one
+   that reads input waits forever) and the message never leaves. In PowerShell
+   a backtick there is an escape character.
 7. **Wait on a signal, not a guess.** Ask the agent to send its result back to
    you with `ghostex agents send <the Reply to ref from its sender block>` when it
    finishes, and to end its final message with a unique last line (for example

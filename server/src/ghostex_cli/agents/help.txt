@@ -4,16 +4,16 @@ USAGE
   ghostex agents whoami [--json]
   ghostex agents types [--json]
   ghostex agents create <agent-id> [--title <name>] [--project-id <id> | --path <folder>]
-                       [--task <text> | --body-file <path>] [--allow-hidden]
+                       [--task <text> | --body-file <path|->] [--allow-hidden]
                        [--standalone] [--computer <name>]
   ghostex agents list [--all] [--json]
   ghostex agents send <session-ref> <text> [--interrupt | --queue | --with-next]
                      [--request-id <id>]
-  ghostex agents send <session-ref> --body-file <path> [--interrupt | --queue | --with-next]
+  ghostex agents send <session-ref> --body-file <path|-> [--interrupt | --queue | --with-next]
                      [--request-id <id>]
   ghostex agents send --main-coordinator (--project-id <id> | --path <folder>)
                      [--computer <name>] [--if-none create | session] [--title <name>]
-                     (<text> | --body-file <path>) [--interrupt | --queue | --with-next]
+                     (<text> | --body-file <path|->) [--interrupt | --queue | --with-next]
   ghostex agents close <session-ref>
   ghostex agents switch-account <session-ref> --account <number|email>
                                [--force] [--json]
@@ -198,9 +198,20 @@ DELIVERY
   saying the message did not reach it.
 
   Control characters in the text (other than newline and tab) are sent as
-  visible signs such as ␌, never as keys. In PowerShell a backtick inside
-  double quotes is an escape (`f is a form feed): use --body-file or single
-  quotes for text that contains backticks.
+  visible signs such as ␌, never as keys.
+
+  Text that holds code, backticks, $ or quotes goes through a quoted heredoc,
+  never inside double quotes. In bash and zsh a `command` or $(command) inside
+  double quotes runs before ghostex starts: the send waits on it (a command
+  that reads input can wait forever) and the message never leaves. In
+  PowerShell a backtick there is an escape (`f is a form feed).
+    ghostex agents send <session-ref> --body-file - <<'EOF'
+    Run `npm test` and report $FAILURES.
+    EOF
+  In PowerShell, pipe a here-string (@' and '@ each on a line of their own)
+  into ghostex agents send <session-ref> --body-file -.
+  --body-file - reads the text from standard input, for every command here
+  and for ghostex coordinator start-thread.
 
 READ AND REPLY
   ghostex read-session-chat <session-ref> --last 2 --format text

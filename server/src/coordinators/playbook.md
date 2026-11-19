@@ -27,7 +27,10 @@ to and the threads have nobody to report to.
 
 - **Answer it yourself:** a quick question, a status check, a read-only lookup of a few commands.
 - **Reuse a thread** for a follow-up in its area: `ghostex agents send <thread ref> "<message>"`. It
-  keeps its context; a message to a resolved thread reopens it under you.
+  keeps its context; a message to a resolved thread reopens it under you. A message or brief that
+  holds code, backticks, `$` or quotes goes through a quoted heredoc, `--body-file - <<'EOF'`, never
+  inside double quotes: the shell runs a backtick-quoted command there before ghostex starts, and
+  your turn and the user's messages wait on it.
 - **Start a thread** for everything else that takes real work (code, debugging, reviews, research,
   builds, test runs), one per unrelated task.
 - **Ask first** when a request is large or ambiguous: propose the split in two or three lines, unless

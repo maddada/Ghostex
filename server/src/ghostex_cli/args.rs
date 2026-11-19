@@ -231,6 +231,30 @@ pub fn parse_json_value(value: &str) -> Option<Value> {
     serde_json::from_str(value).ok()
 }
 
+/// The text a message or task `--body-file` names; `-` reads standard input to its end.
+///
+/// CDXC:AgentMessaging 2026-11-19 WHY: on m7-arch a coordinator put a backtick-quoted command
+/// inside the double-quoted text of `ghostex agents send <ref> "..."`; bash ran it as a command
+/// substitution before ghostex started (`ops.sh --stdin`, which read the Bash tool's stdin that
+/// never closes), so the call hung 80 seconds and the user's messages waited behind it. A quoted
+/// heredoc (`--body-file - <<'EOF'`) is the one form no shell expands, and it needs no file. An
+/// interactive terminal is refused rather than waited on.
+pub fn read_body_file(path: &str) -> std::io::Result<String> {
+    use std::io::{IsTerminal, Read};
+    if path != "-" {
+        return std::fs::read_to_string(path);
+    }
+    let mut stdin = std::io::stdin();
+    if stdin.is_terminal() {
+        return Err(std::io::Error::other(
+            "--body-file - reads the text from standard input; pipe it in or use a heredoc (<<'EOF' ... EOF)",
+        ));
+    }
+    let mut text = String::new();
+    stdin.read_to_string(&mut text)?;
+    Ok(text)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

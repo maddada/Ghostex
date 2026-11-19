@@ -37,7 +37,7 @@ pub(super) fn thread_title_reminder(
 /// WHY: the old refusal for a sleeping recipient told the sender to use `--queue`, and agents kept reaching for `--queue` afterwards, even for running recipients, so their messages waited behind whole turns.
 pub(super) fn send(args: &Arguments) -> CliResult<Value> {
     let body = match &args.body_file {
-        Some(path) => std::fs::read_to_string(path).map_err(|error| {
+        Some(path) => crate::ghostex_cli::args::read_body_file(path).map_err(|error| {
             CliError::Other(format!("Could not read message file {path}: {error}"))
         })?,
         None => args.positional[1].clone(),
