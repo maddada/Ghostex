@@ -1,8 +1,7 @@
-<p align="center">
-  <a href="https://ghostex.dev"><img src="media/ghostex-marketplace-icon.png" alt="Ghostex" width="72" /></a>
-</p>
-
-<h1 align="center">Ghostex</h1>
+<h1 align="center">
+  <a href="https://ghostex.dev"><img src="media/ghostex-marketplace-icon.png" alt="Ghostex" width="72" /></a> <br/>
+  Ghostex
+</h1>
 
 <h3 align="center">The best native workspace for your coding agents.</h3>
 
