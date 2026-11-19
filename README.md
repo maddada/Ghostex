@@ -214,10 +214,7 @@ Pair the phone app with Ghostex on your computer using Easy Connect, or use your
 
 [Discord](https://discord.gg/df7b3G92CS) for help and feature talk · [Issues](https://github.com/maddada/Ghostex/issues) for bugs and ideas · [Contributing](CONTRIBUTING.md) to help with ports, agents, docs and polish.
 
-<details>
-<summary>Credits: the open source Ghostex builds on</summary>
-
-Ghostex builds on open source work from these projects and communities:
+## Ghostex builds on open source work from these projects and communities:
 
 - [Ghostty](https://github.com/ghostty-org/ghostty) and [Zed / GPUI](https://github.com/zed-industries/zed) for the terminal and native shell
 - [CEF](https://github.com/chromiumembedded/cef) for embedded Chromium panes
@@ -231,6 +228,14 @@ Ghostex builds on open source work from these projects and communities:
 - [vvterm](https://github.com/vivy-company/vvterm) and [Termux](https://github.com/termux/termux-app) for mobile terminal components
 - [Pierre](https://github.com/pierrecomputer/pierre) for diff and file rendering components
 
-</details>
+## More screenshots:
+
+<img width="3456" height="2158" alt="image" src="https://github.com/user-attachments/assets/947b0bc2-c058-4f31-8aaa-0c60c59f5941" />
+
+<img width="3456" height="2079" alt="2026-11-19_Ghostex_08-01-09@2x" src="https://github.com/user-attachments/assets/5881a55a-5906-411b-ac43-84c82373984d" />
+
+<img width="2048" height="1291" alt="2026-11-19_CleanShot_08-08-12" src="https://github.com/user-attachments/assets/0b481abd-87a8-4575-bff8-1605b570c089" />
+
+<img width="3456" height="2077" alt="2026-11-19_Ghostex_08-01-50@2x" src="https://github.com/user-attachments/assets/e307d1b2-807d-4ee0-a124-94d8ff175b70" />
 
 Free and open source under the [MIT License](LICENSE).
