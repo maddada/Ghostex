@@ -385,6 +385,55 @@ pub(crate) fn pinned_label(paths: &GxserverPaths, id: &str) -> Option<String> {
     })
 }
 
+/// A launch whose rule's hub can't be reached starts on the account Auto would pick instead (or,
+/// with none, on the computer's own login), and the session's switch card says so.
+pub(crate) fn start_elsewhere(
+    paths: &GxserverPaths,
+    registry: &Registry,
+    provider: Provider,
+    hub_id: &str,
+    runtime: &mut Map<String, Value>,
+) {
+    let snapshot = crate::accounts::runtime::current_snapshot();
+    let account = crate::accounts::default_account::hub_fallback_accounts(registry, &snapshot)
+        .remove(&provider)
+        .and_then(|id| registry.accounts.iter().find(|a| a.id == id));
+    let hub = pinned_label(paths, &format!("{ACCOUNT_PREFIX}{hub_id}"))
+        .unwrap_or_else(|| "The hub".to_string());
+    // The card shows the account itself (masked like every account name there), so the note
+    // names none.
+    let (to, note) = match account {
+        Some(account) => {
+            runtime.insert("accountId".into(), json!(account.id));
+            (
+                Some(account.id.clone()),
+                format!("{hub} can't be reached, so this started on the account below."),
+            )
+        }
+        None => {
+            runtime.remove("accountId");
+            (
+                None,
+                format!("{hub} can't be reached, so this started on this computer's own login."),
+            )
+        }
+    };
+    let now = chrono::Utc::now().to_rfc3339();
+    runtime.insert(
+        "accountSwitch".into(),
+        json!({
+            "id": uuid::Uuid::new_v4().to_string(),
+            "provider": provider,
+            "source": "automatic",
+            "phase": "success",
+            "accountReady": true,
+            "toAccountId": to,
+            "note": note,
+            "updatedAt": now,
+        }),
+    );
+}
+
 /// The address of hub `hub_id`, while it is saved.
 pub(crate) fn hub_url(paths: &GxserverPaths, hub_id: &str) -> Option<String> {
     super::store::find(paths, hub_id).map(|hub| hub.url)

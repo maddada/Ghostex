@@ -292,6 +292,9 @@ pub struct SwitchProgress {
     /// ("Fable 5.2"), when no account had room for that one (server/src/accounts/model_fallback.rs).
     pub model: Option<String>,
     pub from_model: Option<String>,
+    /// Why a new session started on this account instead of where it was set to start: its
+    /// CLIProxyAPI hub couldn't be reached (server/src/agents/launch_plan.rs).
+    pub note: Option<String>,
 }
 
 impl SwitchProgress {
@@ -319,6 +322,7 @@ impl SwitchProgress {
             reloaded: object.get("reloaded").and_then(serde_json::Value::as_bool) == Some(true),
             model: text("model").filter(|model| !model.is_empty()),
             from_model: text("fromModel").filter(|model| !model.is_empty()),
+            note: text("note").filter(|note| !note.is_empty()),
         })
     }
 }
@@ -482,6 +486,8 @@ pub fn switch_card_presentation(
         .to_string()
     } else if let Some(model) = progress.model.as_deref() {
         format!("Continuing on {model}")
+    } else if progress.note.is_some() {
+        "Started on another account".to_string()
     } else if settled {
         "Account switched".to_string()
     } else {
@@ -540,6 +546,8 @@ pub fn switch_card_presentation(
         }
     } else if let Some(note) = model_note {
         note
+    } else if let Some(note) = progress.note.clone() {
+        note
     } else if settled {
         if progress.source == "automatic" {
             "Your task is continuing on the new account."
@@ -554,7 +562,8 @@ pub fn switch_card_presentation(
     } else {
         "Your conversation will be ready for your next message.".to_string()
     };
-    let steps = if phase == "failed" {
+    // A session that started on another account switched nothing: no steps.
+    let steps = if phase == "failed" || progress.note.is_some() {
         None
     } else {
         Some(

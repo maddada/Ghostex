@@ -418,13 +418,11 @@ fn check_management_key(url: &str, key: &str) -> Result<(), DomainStateError> {
         .map_err(DomainStateError::bad_request)
 }
 
-/// The hub operations Settings sends (`hubAdd`, `hubUpdate`, `hubRemove`). `Ok(false)` when the
-/// operation is not one of them; `Ok(true)` when a hub changed and the caller answers with the
-/// accounts list.
+/// The hub operations Settings sends (`hubAdd`, `hubUpdate`, `hubRemove`, `hubAccountSidebar`).
 pub(crate) fn handle(
     paths: &GxserverPaths,
     params: &Map<String, Value>,
-) -> Result<bool, DomainStateError> {
+) -> Result<Handled, DomainStateError> {
     let operation = params
         .get("operation")
         .and_then(Value::as_str)
@@ -433,14 +431,15 @@ pub(crate) fn handle(
         operation,
         "hubAdd" | "hubUpdate" | "hubRemove" | "hubAccountSidebar"
     ) {
-        return Ok(false);
+        return Ok(Handled::NotMine);
     }
     if !enabled(paths) {
         return Err(turned_off());
     }
     if operation == "hubAccountSidebar" {
-        sidebar::set_shown(paths, params)?;
-        return Ok(true);
+        let hub = sidebar::set_shown(paths, params)?;
+        refresh_soon(paths, &hub);
+        return Ok(Handled::Changed);
     }
     let label = params
         .get("label")
@@ -549,15 +548,33 @@ pub(crate) fn handle(
             let management_key = management_key.map(|key| seal(paths, &key)).transpose()?;
             let _lock = store::lock();
             let mut hubs = store::read(paths).map_err(io_error)?;
-            let hub = hubs
-                .iter_mut()
+            if hubs
+                .iter()
                 .find(|hub| hub.id == id)
-                .ok_or_else(removed)?;
-            if hub.url != current.url {
+                .ok_or_else(removed)?
+                .url
+                != current.url
+            {
                 return Err(DomainStateError::bad_request(
                     "The hub changed while this was being saved. Try again.",
                 ));
             }
+            // CDXC:AgentProviders 2026-11-19 WHY: a hub's id comes from its address (`hub_id_for`), so a hub that moves takes the id it would get if added at the new address (re-review of the hub work); the old id's readings and profile key go, and its New sessions start on pins follow (accounts/endpoint.rs).
+            let moved = (current.url != url).then(|| hub_id_for(&url));
+            if let Some(next) = &moved {
+                if hubs
+                    .iter()
+                    .any(|other| other.id == *next || other.url == url)
+                {
+                    return Err(DomainStateError::bad_request(
+                        "Another hub is already added at that address.",
+                    ));
+                }
+            }
+            let hub = hubs
+                .iter_mut()
+                .find(|hub| hub.id == id)
+                .ok_or_else(removed)?;
             if let Some(label) = label {
                 hub.label = label;
             }
@@ -570,12 +587,43 @@ pub(crate) fn handle(
             } else if clear_management_key {
                 hub.management_key.clear();
             }
+            if let Some(next) = &moved {
+                hub.id = next.clone();
+            }
+            let saved = hub.clone();
             store::write(paths, &hubs).map_err(io_error)?;
-            forget_reading(&id);
+            if let Some(next) = moved {
+                forget_reading(&id);
+                usage_reads::forget(&id);
+                launch::forget_key(paths.agent_config_home_dir(), &id);
+                refresh_soon(paths, &saved);
+                return Ok(Handled::Moved { from: id, to: next });
+            }
+            // The last reading stays on screen until the new one lands, so no meter blinks.
+            refresh_soon(paths, &saved);
         }
         _ => unreachable!(),
     }
-    Ok(true)
+    Ok(Handled::Changed)
+}
+
+/// What [`handle`] did with an accounts operation.
+pub(crate) enum Handled {
+    /// Not a hub operation.
+    NotMine,
+    /// A hub was added, changed or removed; the caller answers with the accounts list.
+    Changed,
+    /// A hub moved to another address and so to another id.
+    Moved { from: String, to: String },
+}
+
+/// Reads `hub` again in the background, keeping its last reading meanwhile.
+fn refresh_soon(paths: &GxserverPaths, hub: &store::Hub) {
+    if hub.management_key.is_empty() {
+        return;
+    }
+    let (paths, hub) = (paths.clone(), hub.clone());
+    std::thread::spawn(move || refresh(&paths, &hub));
 }
 
 #[cfg(test)]

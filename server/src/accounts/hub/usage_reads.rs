@@ -59,6 +59,8 @@ fn swap_twin(paths: &GxserverPaths, account: &AccountReading) -> Option<Vec<Usag
         .accounts
         .iter()
         .filter(|found| found.provider.id() == account.provider)
+        // Only a signed-in Swap login's reading stands in for the hub's.
+        .filter(|found| found.status == "ready" && found.usage_error.is_none())
         .filter(|found| found.email.eq_ignore_ascii_case(&account.name))
         .filter(|found| {
             account.workspace.as_deref().is_none_or(|workspace| {

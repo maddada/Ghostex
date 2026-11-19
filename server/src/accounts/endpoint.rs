@@ -76,7 +76,29 @@ pub(crate) fn dispatch(
     if operation == "switchSession" {
         return super::cli::switch_session(state, params);
     }
-    if super::hub::handle(&state.paths, params)? {
+    let hub_change = super::hub::handle(&state.paths, params)?;
+    // A hub that moved to another address (and so another id) keeps its New sessions start on pins.
+    if let super::hub::Handled::Moved { from, to } = &hub_change {
+        let (from, to) = (
+            format!("{}{from}", super::hub::launch::ACCOUNT_PREFIX),
+            format!("{}{to}", super::hub::launch::ACCOUNT_PREFIX),
+        );
+        let db = crate::storage::open_gxserver_database(&state.paths).map_err(store::error)?;
+        let mut registry = store::read(&db)?;
+        let mut changed = false;
+        for choice in registry.new_session_accounts.values_mut() {
+            if let NewSessionAccount::Pinned { id } = choice {
+                if *id == from {
+                    *id = to.clone();
+                    changed = true;
+                }
+            }
+        }
+        if changed {
+            store::write(&db, &registry)?;
+        }
+    }
+    if !matches!(hub_change, super::hub::Handled::NotMine) {
         // A removed hub no longer starts new sessions: its New sessions start on pins go back to Auto.
         if operation == "hubRemove" {
             if let Some(hub_id) = params.get("hubId").and_then(Value::as_str) {
@@ -1177,11 +1199,14 @@ fn state_value(
             rows.push(row);
         }
     }
-    // The saved logins the user hasn't turned off, shown in the sidebar or not: a CLIProxyAPI hub
-    // account that is one of them never gets a meter of its own (hub/sidebar.rs).
+    // The saved logins the user hasn't turned off and that are signed in, shown in the sidebar or
+    // not: a CLIProxyAPI hub account that is one of them gets no meter of its own (hub/sidebar.rs).
     let swap_logins: Vec<Value> = rows
         .iter()
-        .filter(|row| row["registered"] == true && row["userDisabled"] != true)
+        // Signed in: a signed-out Swap login leaves its hub twin's meter showing.
+        .filter(|row| {
+            row["registered"] == true && row["userDisabled"] != true && row["status"] == "ready"
+        })
         .filter(|row| row["email"].as_str().is_some_and(|email| !email.is_empty()))
         .map(|row| json!({"provider": row["provider"], "email": row["email"], "workspace": row["workspace"]}))
         .collect();

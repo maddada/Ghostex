@@ -101,11 +101,11 @@ pub(crate) fn titlebar_rows(paths: &GxserverPaths) -> Vec<Value> {
 }
 
 /// `hubAccountSidebar`: shows (`shown: true`) or hides hub account `accountId`
-/// (`<hub id>:<auth_index>`) in the sidebar's usage meters.
+/// (`<hub id>:<auth_index>`) in the sidebar's usage meters; the hub as saved.
 pub(crate) fn set_shown(
     paths: &GxserverPaths,
     params: &Map<String, Value>,
-) -> Result<(), DomainStateError> {
+) -> Result<store::Hub, DomainStateError> {
     let id = params
         .get("accountId")
         .and_then(Value::as_str)
@@ -128,8 +128,7 @@ pub(crate) fn set_shown(
     } else {
         hub.hidden_in_sidebar.insert(auth_index.to_string());
     }
+    let saved = hub.clone();
     store::write(paths, &hubs).map_err(super::io_error)?;
-    // The next read lists the account with (or without) its usage again.
-    super::forget_reading(hub_id);
-    Ok(())
+    Ok(saved)
 }

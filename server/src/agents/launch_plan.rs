@@ -174,6 +174,7 @@ pub(crate) fn create_agent_session_params_for_project(
         configured_command
     };
     // `coordinator start-thread --account`: the account is checked here, where the agent and its command are known, and stored as the picked account `apply_new_session` honours (or, for a hub, the hub below starts on).
+    let account_named = read_text(params, "account").is_some();
     if let Some(wanted) = read_text(params, "account") {
         if agentbox_provider.is_some() {
             return Err(DomainStateError::bad_request(
@@ -247,18 +248,35 @@ pub(crate) fn create_agent_session_params_for_project(
             let base = configured_command
                 .clone()
                 .or_else(|| default_agent_command(&agent_id).map(str::to_string));
-            // CDXC:AgentProviders 2026-11-19 WHY: a hub that is down, or refuses the key, is said at the start (security review of the hub work), not as a failed first message the user has to decode.
-            crate::accounts::hub::launch::check_reachable(
-                &crate::paths::get_gxserver_paths(None),
-                &hub_id,
-            )?;
-            Some(crate::accounts::hub::launch::apply(
-                &crate::paths::get_gxserver_paths(None),
-                provider,
-                &hub_id,
-                base.as_deref(),
-                &mut runtime_settings,
-            )?)
+            // CDXC:AgentProviders 2026-11-19 WHY: a hub that is down, or refuses the key, is said at the start (security review of the hub work), not as a failed first message the user has to decode. A launch that only follows New sessions start on (the launchers send the rule's hub as the account; phones, automations, Chief, GBots and threads without --account send none) starts on the account Auto would pick and says so; only a hub named on purpose (--account, or a hub other than the rule's) refuses.
+            let paths = crate::paths::get_gxserver_paths(None);
+            match crate::accounts::hub::launch::check_reachable(&paths, &hub_id) {
+                Ok(()) => Some(crate::accounts::hub::launch::apply(
+                    &paths,
+                    provider,
+                    &hub_id,
+                    base.as_deref(),
+                    &mut runtime_settings,
+                )?),
+                Err(error) => {
+                    let registry = crate::accounts::store::read(db)?;
+                    let from_rule = !account_named
+                        && crate::accounts::hub::launch::default_hub(&registry, provider)
+                            .as_deref()
+                            == Some(hub_id.as_str());
+                    if !from_rule {
+                        return Err(error);
+                    }
+                    crate::accounts::hub::launch::start_elsewhere(
+                        &paths,
+                        &registry,
+                        provider,
+                        &hub_id,
+                        &mut runtime_settings,
+                    );
+                    configured_command
+                }
+            }
         }
         None => configured_command,
     };
