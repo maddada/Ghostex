@@ -974,3 +974,72 @@ async fn a_session_on_a_connected_computer_is_made_a_coordinator_there() {
     assert!(skill(&remote).is_file(), "installed on the other computer");
     assert!(!skill(&local).is_file(), "not on this one");
 }
+
+/// Only the desktop app (the owner session or the token file) may issue, register, unregister or
+/// revoke a connected computer's grant: an agent's session token and a paired phone are refused
+/// for any server id (Fable's review of 809e881f4).
+#[tokio::test]
+async fn only_the_desktop_app_changes_connected_computers() {
+    let _serial = crate::connected_computers::tests::serial();
+    let (_temp, state) = temp_state("S1a");
+    let session =
+        state
+            .security
+            .session_tokens
+            .mint_session("P1", "G1", crate::security::SessionRole::Agent);
+    let phone = crate::auth::mint_device_api_token();
+    state
+        .device_api_tokens
+        .replace([crate::auth::hash_device_api_token(&phone)]);
+    let owner = state.security.session_tokens.mint_owner("test-desktop");
+    for path in [
+        "/api/issueComputerGrant",
+        "/api/registerConnectedComputer",
+        "/api/unregisterConnectedComputer",
+        "/api/revokeComputerGrant",
+    ] {
+        for token in [&session, &phone] {
+            let (status, body) = post(
+                &state,
+                path,
+                token,
+                json!({ "serverId": "S9q", "name": "Made up" }),
+            )
+            .await;
+            assert_eq!(status, StatusCode::FORBIDDEN, "{path}: {body}");
+            assert!(body["result"]["peerToken"].is_null(), "{path}: {body}");
+        }
+    }
+    let (status, body) = post(
+        &state,
+        "/api/issueComputerGrant",
+        &owner,
+        json!({ "serverId": "S9q", "name": "Made up" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(crate::connected_computers::owner_issued("S9q"));
+    crate::connected_computers::revoke_grant("S9q", false, std::time::Duration::from_secs(60));
+}
+
+/// A connected computer's `userSend` counts only with the header an up-to-date relay sets; an
+/// older sending computer passes bodies on as they came, so without it the mark is dropped.
+#[test]
+fn a_peers_user_send_needs_the_relays_header() {
+    let peer = crate::security::Principal::Peer {
+        server_id: "S2b".into(),
+        name: "Laptop".into(),
+    };
+    let body = || json!({ "params": { "text": "see #M1", "userSend": true } });
+    let mut headers = axum::http::HeaderMap::new();
+    let mut without = body();
+    super::route_http::drop_unrelayed_user_send(&peer, &headers, &mut without);
+    assert!(without["params"].get("userSend").is_none());
+    headers.insert(
+        crate::session_chat_send::sender_mark::RELAYED_USER_SEND_HEADER,
+        axum::http::HeaderValue::from_static("1"),
+    );
+    let mut with = body();
+    super::route_http::drop_unrelayed_user_send(&peer, &headers, &mut with);
+    assert_eq!(with["params"]["userSend"], true);
+}

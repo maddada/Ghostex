@@ -167,6 +167,9 @@ pub(crate) async fn relay(
                 crate::coordinators::now_iso(),
             )
         });
+    // The mark rides in a header only this relay sets, so an older sender's body can't pass it.
+    let user_send = crate::session_chat_send::sender_mark::MESSAGE_ROUTES.contains(&forwarded)
+        && crate::session_chat_send::sender_mark::is_users_caller(caller);
     let protocol = header_text(&headers, GXSERVER_PROTOCOL_HEADER);
     let content_type = header_text(&headers, header::CONTENT_TYPE.as_str());
     let url = format!("{}{forwarded}", computer.base_url);
@@ -184,6 +187,7 @@ pub(crate) async fn relay(
                 protocol.as_deref(),
                 content_type.as_deref(),
                 &forwarded_request_id,
+                user_send,
                 bytes.to_vec(),
             )
         })
@@ -259,6 +263,7 @@ fn forward(
     protocol: Option<&str>,
     content_type: Option<&str>,
     request_id: &str,
+    user_send: bool,
     body: Vec<u8>,
 ) -> Result<(u16, Option<String>, Vec<u8>), ureq::Error> {
     let agent = crate::http_agent::answering_agent();
@@ -284,6 +289,12 @@ fn forward(
             .header("content-type", content_type.unwrap_or("application/json"));
         if let Some(protocol) = protocol {
             request = request.header(GXSERVER_PROTOCOL_HEADER, protocol);
+        }
+        if user_send {
+            request = request.header(
+                crate::session_chat_send::sender_mark::RELAYED_USER_SEND_HEADER,
+                "1",
+            );
         }
         // Long polls (`read-session-chat --wait-ms`) wait on the other computer, so the relay
         // leaves the time limit to the CLI that asked.
