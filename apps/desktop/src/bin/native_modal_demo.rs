@@ -94,8 +94,6 @@ mod delete_worktree_demo;
 mod delete_worktree_modal;
 #[path = "native_modal_demo/extension_menu.rs"]
 mod extension_menu_demo;
-#[path = "native_modal_demo/header_more.rs"]
-mod header_more_demo;
 #[path = "native_modal_demo/gbot_settings.rs"]
 mod gbot_settings_demo;
 #[path = "../app/window/gbot_settings_modal/mod.rs"]
@@ -104,6 +102,8 @@ mod gbot_settings_modal;
 mod gbot_team_demo;
 #[path = "../app/window/gbot_team_modal/mod.rs"]
 mod gbot_team_modal;
+#[path = "native_modal_demo/header_more.rs"]
+mod header_more_demo;
 #[path = "native_modal_demo/missing_project_folder.rs"]
 mod missing_project_folder_demo;
 #[path = "../app/window/missing_project_folder_modal.rs"]

@@ -1,10 +1,11 @@
 //! Which of the header's controls are pinned, and the ⋯ menu that holds the rest.
 //!
 //! CDXC:Titlebar 2026-11-19 DECISION:
-//! User (header page, Q4196 C): "too many buttons here, and some of the icons visually look bigger than others". The header keeps the chat's and project's own controls (Start, Open, Commit, Work, the context ring, the two panel toggles) and a ⋯ menu holds the rest (Grok Bot, Claude, Voice, Share, Open in a popup). Then: "when i hover on one of these pls show the pin icon and i should be able to pin some of these", "please allow unpinning any of the buttons that exist now by right clicking on it", "pleas make the 3 dots dropdown organized well". So every control here can be pinned from its ⋯ row (the pin shows on hover) and unpinned by right-clicking it in the header; the choice is the shared setting `workareaHeaderPins` (control key → pinned), so it follows the user like the other header settings. A control that is in use (its bot page on, a voice call open, the chat shared) stays in the header while it is, pinned or not, so it can be turned off where it is seen. The ⋯ menu groups its rows under This chat, Project, Agents and Panels, each with what it is doing now. The trailing ⋯ removed on 2026-11-11 (CDXC:Titlebar 2026-11-11 in titlebar/menu_panels.rs) held app menus that stay in the sidebar's menu; this one holds only the header's own controls. This supersedes the 2026-11-10 placement of the bot buttons left of Voice and the 2026-10-20 Voice-first rule while those controls are unpinned; pinned, they keep those places, and Voice keeps its outlined split look ("please keep the voice as it is now when it's pinned").
+//! User (header page, Q4196 C): "too many buttons here, and some of the icons visually look bigger than others". The header keeps the chat's and project's own controls (Start, Open, Commit, Work, the context ring, the two panel toggles) and a ⋯ menu holds the rest (Grok Bot, Claude, Voice, Share, Open in a popup). Then: "when i hover on one of these pls show the pin icon and i should be able to pin some of these", "please allow unpinning any of the buttons that exist now by right clicking on it", "pleas make the 3 dots dropdown organized well". So every control here can be pinned from its ⋯ row (the pin shows on hover) and unpinned by right-clicking it in the header; the choice is `workareaHeaderPins` (control key → pinned) in this computer's settings file, beside the other header settings, so it stays on this computer. A control that is in use (its bot page on, a voice call open, the chat shared) stays in the header while it is, pinned or not, so it can be turned off where it is seen. The ⋯ menu groups its rows under This chat, Project, Agents and Panels, each with what it is doing now. The trailing ⋯ removed on 2026-11-11 (CDXC:Titlebar 2026-11-11 in titlebar/menu_panels.rs) held app menus that stay in the sidebar's menu; this one holds only the header's own controls. This supersedes the 2026-11-10 placement of the bot buttons left of Voice and the 2026-10-20 Voice-first rule while those controls are unpinned; pinned, they keep those places, and Voice keeps its outlined split look ("please keep the voice as it is now when it's pinned").
 //! SEE-ALSO: action_buttons.rs (what each slot gates), titlebar/popup_lifecycle.rs (the popup).
 
 use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
 use gpui::AnyElement;
 use gpui::Bounds;
@@ -26,8 +27,8 @@ use gpui_component::menu::{PopupMenu, PopupMenuItem};
 use serde_json::{Map, Value};
 
 use crate::app::claude_web::{HeaderControl, WebPlace};
-use crate::app::context_menu::GpuiContextMenu;
 use crate::app::consts::*;
+use crate::app::context_menu::GpuiContextMenu;
 use crate::app::helpers::*;
 use crate::app::window::*;
 use crate::*;
@@ -81,12 +82,35 @@ pub(crate) struct HeaderSlotState {
     pub(crate) live: bool,
 }
 
-thread_local! {
+/// This window's ⋯ menu: kept on the window's app, so two windows never share rows or anchors.
+#[derive(Default)]
+pub(crate) struct HeaderPinsState {
     /// The ⋯ menu's rows by section, as the header last drew them (the menu is built and measured
     /// outside a render, where the chats cannot be read).
-    static MORE_ROWS: RefCell<Vec<(&'static str, Vec<HeaderMoreRow>)>> = const { RefCell::new(Vec::new()) };
+    more_rows: RefCell<Vec<(&'static str, Vec<HeaderMoreRow>)>>,
     /// Where the ⋯ button was last painted: its menu, and the popovers a row opens, hang from it.
-    static MORE_ANCHOR: Cell<Option<Bounds<Pixels>>> = const { Cell::new(None) };
+    more_anchor: Rc<Cell<Option<Bounds<Pixels>>>>,
+    /// The Start, Open or Commit menu was opened by right-clicking its button, so it ends with
+    /// "Unpin from header".
+    pub(crate) unpin_row_in: Cell<Option<GpuiTitlebarPopupKind>>,
+    /// The Voice arrow's menu was opened by right-clicking the headset: it ends with the pin row.
+    pub(crate) voice_unpin_row: Cell<bool>,
+}
+
+impl HeaderPinsState {
+    fn anchor(&self) -> Option<Bounds<Pixels>> {
+        self.more_anchor.get()
+    }
+}
+
+/// The slot whose button opens `kind`'s menu.
+fn menu_slot(kind: GpuiTitlebarPopupKind) -> Option<HeaderSlot> {
+    match kind {
+        GpuiTitlebarPopupKind::Actions => Some(HeaderSlot::Start),
+        GpuiTitlebarPopupKind::OpenTargets => Some(HeaderSlot::Open),
+        GpuiTitlebarPopupKind::Git => Some(HeaderSlot::Commit),
+        _ => None,
+    }
 }
 
 impl GhostexGpuiApp {
@@ -277,12 +301,17 @@ impl GhostexGpuiApp {
             }
         }
         let empty = sections.is_empty();
-        MORE_ROWS.with(|cell| *cell.borrow_mut() = sections);
+        *self.header_pins.more_rows.borrow_mut() = sections;
         if empty {
             return None;
         }
         let open = self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::HeaderMore);
         let text = titlebar_icon_color();
+        let anchor = self.header_pins.more_anchor.clone();
+        let work_drawn = self.header_slot_drawn(HeaderSlot::Work, cx);
+        let details_drawn = self.header_slot_drawn(HeaderSlot::SessionDetails, cx);
+        let work_bounds = self.session_details.work_button_bounds.clone();
+        let details_bounds = self.session_details.button_bounds.clone();
         Some(
             header_icon_button("ghostex-gpui-workarea-header-more", open)
                 .role(gpui::Role::Button)
@@ -312,7 +341,7 @@ impl GhostexGpuiApp {
                         this.set_gpui_titlebar_popup_open(
                             GpuiTitlebarPopupKind::HeaderMore,
                             !open,
-                            MORE_ANCHOR.with(Cell::get),
+                            this.header_pins.anchor(),
                             window,
                             cx,
                         );
@@ -327,14 +356,24 @@ impl GhostexGpuiApp {
                             this.set_gpui_titlebar_popup_open(
                                 GpuiTitlebarPopupKind::HeaderMore,
                                 !open,
-                                MORE_ANCHOR.with(Cell::get),
+                                this.header_pins.anchor(),
                                 window,
                                 cx,
                             );
                         });
                     }
                 })
-                .on_prepaint(|bounds, _, _| MORE_ANCHOR.with(|anchor| anchor.set(Some(bounds))))
+                // A Work or Session details card opened from the chat hangs from ⋯ while its own
+                // button is in here.
+                .on_prepaint(move |bounds, _, _| {
+                    anchor.set(Some(bounds));
+                    if !work_drawn {
+                        work_bounds.set(bounds);
+                    }
+                    if !details_drawn {
+                        details_bounds.set(bounds);
+                    }
+                })
                 .into_any_element(),
         )
     }
@@ -344,18 +383,16 @@ impl GhostexGpuiApp {
         let label =
             TITLEBAR_POPUP_GIT_SECTION_LABEL_HEIGHT.max(TITLEBAR_POPUP_MENU_MIN_ITEM_HEIGHT);
         let mut heights = Vec::new();
-        MORE_ROWS.with(|cell| {
-            for (index, (_, rows)) in cell.borrow().iter().enumerate() {
-                if index > 0 {
-                    heights.push(TITLEBAR_POPUP_MENU_SEPARATOR_HEIGHT);
-                }
-                heights.push(label);
-                heights.extend(std::iter::repeat_n(
-                    TITLEBAR_POPUP_MENU_ROW_HEIGHT,
-                    rows.len(),
-                ));
+        for (index, (_, rows)) in self.header_pins.more_rows.borrow().iter().enumerate() {
+            if index > 0 {
+                heights.push(TITLEBAR_POPUP_MENU_SEPARATOR_HEIGHT);
             }
-        });
+            heights.push(label);
+            heights.extend(std::iter::repeat_n(
+                TITLEBAR_POPUP_MENU_ROW_HEIGHT,
+                rows.len(),
+            ));
+        }
         titlebar_popup_menu_height_for_rows(&heights)
     }
 
@@ -371,7 +408,7 @@ impl GhostexGpuiApp {
                 menu, width, max_height, scrollable,
             )
             .check_side(Side::Right);
-        let sections = MORE_ROWS.with(|cell| cell.borrow().clone());
+        let sections = self.header_pins.more_rows.borrow().clone();
         for (index, (title, rows)) in sections.into_iter().enumerate() {
             if index > 0 {
                 menu = menu.separator();
@@ -384,13 +421,16 @@ impl GhostexGpuiApp {
                 let action = RunWorkareaHeaderSlot {
                     slot: row.slot.key().to_string(),
                 };
-                menu = menu.menu_element(Box::new(action), move |_, _| header_more_row(row.clone()));
+                menu =
+                    menu.menu_element(Box::new(action), move |_, _| header_more_row(row.clone()));
             }
         }
         menu
     }
 
-    /// Re-reads the open ⋯ menu after a pin, or closes it once nothing is left in it.
+    /// Re-reads the open ⋯ menu after a pin, or closes it once nothing is left in it. Called
+    /// deferred from the pin's click (`pin_header_slot_from_menu`): that click runs inside the
+    /// menu's own window, which can't be updated again until its event is done.
     pub(crate) fn refresh_open_header_more_popup(
         &mut self,
         window: &mut Window,
@@ -400,14 +440,14 @@ impl GhostexGpuiApp {
             return;
         }
         // The pin just moved a row to the header; drop it from the kept rows before measuring.
-        MORE_ROWS.with(|cell| {
-            let mut sections = cell.borrow_mut();
+        {
+            let mut sections = self.header_pins.more_rows.borrow_mut();
             for (_, rows) in sections.iter_mut() {
                 rows.retain(|row| !self.header_slot_pinned(row.slot));
             }
             sections.retain(|(_, rows)| !rows.is_empty());
-        });
-        if MORE_ROWS.with(|cell| cell.borrow().is_empty()) {
+        }
+        if self.header_pins.more_rows.borrow().is_empty() {
             self.close_gpui_titlebar_popup(Some(GpuiTitlebarPopupKind::HeaderMore), window, cx);
             return;
         }
@@ -428,15 +468,32 @@ impl GhostexGpuiApp {
         });
     }
 
+    /// A pin or unpin from a menu window: saved now, the ⋯ menu re-read once the menu's own event
+    /// is over.
+    pub(crate) fn pin_header_slot_from_menu(
+        &mut self,
+        slot: HeaderSlot,
+        pinned: bool,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.set_header_slot_pinned(slot, pinned, cx);
+        cx.defer_in(window, |this, window, cx| {
+            this.refresh_open_header_more_popup(window, cx);
+        });
+    }
+
     /// A ⋯ row: what the control's own button does, hung from the ⋯ button where it opens a
-    /// popover.
+    /// popover. Start, Open and Voice open the choices their arrows offer (Actions, Open In
+    /// targets, All sessions / This session / the GBot call), so none is out of reach unpinned.
     pub(crate) fn run_header_slot(
         &mut self,
         slot: HeaderSlot,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        let anchor = MORE_ANCHOR.with(Cell::get);
+        let anchor = self.header_pins.anchor();
+        self.header_pins.unpin_row_in.set(None);
         match slot {
             HeaderSlot::Work => {
                 if let Some(anchor) = anchor
@@ -465,12 +522,30 @@ impl GhostexGpuiApp {
                     self.open_session_popup_for_shell(session_id, cx);
                 }
             }
-            HeaderSlot::Start => self.run_active_gpui_titlebar_action(window, cx),
-            HeaderSlot::Open => self.open_active_project_with_active_open_target(window, cx),
+            HeaderSlot::Start => self.set_gpui_titlebar_popup_open(
+                GpuiTitlebarPopupKind::Actions,
+                true,
+                anchor,
+                window,
+                cx,
+            ),
+            HeaderSlot::Open => self.set_gpui_titlebar_popup_open(
+                GpuiTitlebarPopupKind::OpenTargets,
+                true,
+                anchor,
+                window,
+                cx,
+            ),
             HeaderSlot::Commit => self.show_gpui_titlebar_git_menu(anchor, window, cx),
             HeaderSlot::Claude => self.toggle_web_place(WebPlace::Claude, window, cx),
             HeaderSlot::GrokBot => self.toggle_web_place(WebPlace::Grok, window, cx),
-            HeaderSlot::Voice => self.toggle_voice_agent_conversation(cx),
+            HeaderSlot::Voice => {
+                if !self.header_slot_drawn(slot, cx) {
+                    self.voice_agent.menu_anchor.set(anchor);
+                }
+                self.header_pins.voice_unpin_row.set(false);
+                self.toggle_voice_agent_menu(cx);
+            }
             HeaderSlot::BottomPanel => self.handle_command_pane_control_action(
                 CommandPaneControlAction::ToggleExpanded,
                 None,
@@ -482,7 +557,66 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    /// Right-click on a header control: Unpin moves it into ⋯.
+    /// The pin row a control's right-click offers: Unpin, saying the control stays while it is in
+    /// use, or Pin for one shown only because it is in use.
+    pub(crate) fn header_slot_pin_row(
+        &self,
+        slot: HeaderSlot,
+        cx: &gpui::App,
+    ) -> (&'static str, PinWorkareaHeaderSlot) {
+        let pinned = self.header_slot_pinned(slot);
+        let in_use = self.header_slot_state(slot, cx).in_use;
+        let label = match (pinned, in_use) {
+            (true, true) => "Unpin (stays while in use)",
+            (true, false) => "Unpin from header",
+            (false, _) => "Pin to header",
+        };
+        (
+            label,
+            PinWorkareaHeaderSlot {
+                slot: slot.key().to_string(),
+                pinned: !pinned,
+            },
+        )
+    }
+
+    /// The last rows of a Start, Open or Commit menu opened by right-clicking its button.
+    pub(crate) fn header_menu_unpin_rows(
+        &self,
+        kind: GpuiTitlebarPopupKind,
+        menu: PopupMenu,
+    ) -> PopupMenu {
+        let Some(slot) =
+            menu_slot(kind).filter(|_| self.header_pins.unpin_row_in.get() == Some(kind))
+        else {
+            return menu;
+        };
+        let action = PinWorkareaHeaderSlot {
+            slot: slot.key().to_string(),
+            pinned: false,
+        };
+        menu.separator().menu_element(Box::new(action), |_, _| {
+            titlebar_popup_standard_menu_row(
+                "titlebar/pin-outline.svg",
+                TITLEBAR_POPUP_MENU_ROW_ICON_SIZE,
+                "Unpin from header".to_string(),
+                false,
+            )
+        })
+    }
+
+    /// The height `header_menu_unpin_rows` adds to `kind`'s menu.
+    pub(crate) fn header_menu_unpin_rows_height(&self, kind: GpuiTitlebarPopupKind) -> f32 {
+        if menu_slot(kind).is_some() && self.header_pins.unpin_row_in.get() == Some(kind) {
+            TITLEBAR_POPUP_MENU_SEPARATOR_HEIGHT
+                + TITLEBAR_POPUP_MENU_ROW_HEIGHT
+                + 2.0 * TITLEBAR_POPUP_MENU_ITEM_GAP
+        } else {
+            0.0
+        }
+    }
+
+    /// Right-click on a header control without a menu of its own: its pin row.
     pub(crate) fn show_header_slot_context_menu(
         &self,
         slot: HeaderSlot,
@@ -490,14 +624,9 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
+        let (label, action) = self.header_slot_pin_row(slot, cx);
         GpuiContextMenu::new()
-            .menu(
-                "Unpin from header",
-                Box::new(PinWorkareaHeaderSlot {
-                    slot: slot.key().to_string(),
-                    pinned: false,
-                }),
-            )
+            .menu(label, Box::new(action))
             .show(position, window, cx);
     }
 }
@@ -563,9 +692,20 @@ mod tests {
     }
 
     #[test]
+    fn only_start_open_and_commit_menus_carry_the_unpin_row() {
+        assert_eq!(menu_slot(GpuiTitlebarPopupKind::Actions), Some(HeaderSlot::Start));
+        assert_eq!(menu_slot(GpuiTitlebarPopupKind::OpenTargets), Some(HeaderSlot::Open));
+        assert_eq!(menu_slot(GpuiTitlebarPopupKind::Git), Some(HeaderSlot::Commit));
+        assert_eq!(menu_slot(GpuiTitlebarPopupKind::HeaderMore), None);
+    }
+
+    #[test]
     fn solid_logos_are_drawn_smaller_than_outline_icons() {
         assert_eq!(header_icon_size(WebPlace::Claude.icon()), 11.0);
-        assert_eq!(WebPlace::Claude.icon(), crate::app::helpers::HEADER_CLAUDE_ICON);
+        assert_eq!(
+            WebPlace::Claude.icon(),
+            crate::app::helpers::HEADER_CLAUDE_ICON
+        );
         assert_eq!(WebPlace::Grok.icon(), crate::app::helpers::HEADER_GROK_ICON);
         assert_eq!(header_icon_size(WebPlace::Grok.icon()), 12.0);
         assert_eq!(header_icon_size("titlebar/users.svg"), HEADER_ICON_BOX);

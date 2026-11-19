@@ -19,8 +19,8 @@ use gpui::px;
 use gpui_component::ElementExt as _;
 use gpui_component::h_flex;
 
+use super::header_pins::{HEADER_ICON_BOX, HeaderSlot};
 use crate::app::claude_web::HeaderControl;
-use super::header_pins::{HEADER_ICON_BOX, HeaderSlot, header_slot_right_click};
 use crate::app::consts::*;
 use crate::app::helpers::*;
 use crate::app::window::*;
@@ -300,7 +300,6 @@ impl GhostexGpuiApp {
     fn render_workarea_header_split_button(
         &self,
         spec: WorkareaHeaderSplitButton,
-        slot: HeaderSlot,
         join: SplitJoin,
         compact: bool,
         primary: WorkareaHeaderPress,
@@ -356,11 +355,22 @@ impl GhostexGpuiApp {
                 cx.listener(move |this, _: &MouseDownEvent, window, cx| {
                     window.prevent_default();
                     cx.stop_propagation();
+                    this.header_pins.unpin_row_in.set(None);
                     primary(this, trigger_bounds, window, cx);
                 }),
             )
             // Right-click unpins (header_pins.rs); the arrow still opens the menu.
-            .on_mouse_down(MouseButton::Right, header_slot_right_click(slot, cx))
+            // Right-click opens the menu as the arrow does, ending in "Unpin from header"
+            // (header_pins.rs `header_menu_unpin_rows`).
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |this, _: &MouseDownEvent, window, cx| {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    this.header_pins.unpin_row_in.set(Some(kind));
+                    menu(this, trigger_bounds, window, cx);
+                }),
+            )
             .map(|this| {
                 if spec.busy {
                     this.child(
@@ -413,6 +423,7 @@ impl GhostexGpuiApp {
                 cx.listener(move |this, _: &MouseDownEvent, window, cx| {
                     window.prevent_default();
                     cx.stop_propagation();
+                    this.header_pins.unpin_row_in.set(None);
                     menu(this, trigger_bounds, window, cx);
                 }),
             )
@@ -421,6 +432,7 @@ impl GhostexGpuiApp {
                 cx.listener(move |this, _: &MouseDownEvent, window, cx| {
                     window.prevent_default();
                     cx.stop_propagation();
+                    this.header_pins.unpin_row_in.set(None);
                     menu(this, trigger_bounds, window, cx);
                 }),
             )
@@ -531,11 +543,15 @@ impl GhostexGpuiApp {
             )
             && drawn(HeaderSlot::Start);
         let show_open = shown(HeaderControl::OpenIn)
-            && !self
-                .built_in_feature_button_hidden(ghostex_settings_catalog::built_in_extensions::OPEN_IN)
+            && !self.built_in_feature_button_hidden(
+                ghostex_settings_catalog::built_in_extensions::OPEN_IN,
+            )
             && drawn(HeaderSlot::Open);
         let show_commit = shown(HeaderControl::Commit)
-            && !self.titlebar_button_hidden(GIT_ACTIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY, "gitActions")
+            && !self.titlebar_button_hidden(
+                GIT_ACTIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY,
+                "gitActions",
+            )
             && drawn(HeaderSlot::Commit);
         let split_count = [show_start, show_open, show_commit]
             .into_iter()
@@ -565,7 +581,6 @@ impl GhostexGpuiApp {
                     rich_label: None,
                     tooltip: None,
                 },
-                HeaderSlot::Start,
                 join,
                 compact,
                 run_quick_action,
@@ -588,7 +603,6 @@ impl GhostexGpuiApp {
                     rich_label: None,
                     tooltip: None,
                 },
-                HeaderSlot::Open,
                 join,
                 compact,
                 open_active_open_target,
@@ -599,29 +613,30 @@ impl GhostexGpuiApp {
         }
         if show_commit {
             let join = next_join();
-            segments.push(self.render_workarea_header_split_button(
-                WorkareaHeaderSplitButton {
-                    id: "ghostex-gpui-workarea-header-button-git",
-                    kind: GpuiTitlebarPopupKind::Git,
-                    icon: git_icon_path,
-                    icon_size: 16.0,
-                    label: "Commit".into(),
-                    dimmed: false,
-                    busy: self
-                        .titlebar_git_menu_state
-                        .as_ref()
-                        .is_some_and(|state| state.is_busy),
-                    rich_label: git_summary.render(),
-                    tooltip: git_summary.tooltip().map(SharedString::from),
-                },
-                HeaderSlot::Commit,
-                join,
-                compact,
-                toggle_git_menu,
-                toggle_git_menu,
-                window,
-                cx,
-            ));
+            segments.push(
+                self.render_workarea_header_split_button(
+                    WorkareaHeaderSplitButton {
+                        id: "ghostex-gpui-workarea-header-button-git",
+                        kind: GpuiTitlebarPopupKind::Git,
+                        icon: git_icon_path,
+                        icon_size: 16.0,
+                        label: "Commit".into(),
+                        dimmed: false,
+                        busy: self
+                            .titlebar_git_menu_state
+                            .as_ref()
+                            .is_some_and(|state| state.is_busy),
+                        rich_label: git_summary.render(),
+                        tooltip: git_summary.tooltip().map(SharedString::from),
+                    },
+                    join,
+                    compact,
+                    toggle_git_menu,
+                    toggle_git_menu,
+                    window,
+                    cx,
+                ),
+            );
         }
         /*
         CDXC:Titlebar 2026-11-19 DECISION:

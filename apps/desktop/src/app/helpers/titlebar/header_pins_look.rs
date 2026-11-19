@@ -206,7 +206,6 @@ pub(crate) struct RunWorkareaHeaderSlot {
     pub(crate) slot: String,
 }
 
-
 /// One ⋯ row, as the menu and its height read it.
 #[derive(Clone, Debug)]
 pub(crate) struct HeaderMoreRow {
@@ -214,7 +213,6 @@ pub(crate) struct HeaderMoreRow {
     pub(crate) status: Option<String>,
     pub(crate) live: bool,
 }
-
 
 /// One ⋯ row: the control's icon and name, what it is doing now, and the pin, shown while the
 /// pointer is on the row.

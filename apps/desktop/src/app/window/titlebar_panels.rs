@@ -377,8 +377,7 @@ impl Render for GpuiTitlebarPopupWindow {
                     };
                     let pinned = action.pinned;
                     this.update_main_window(cx, move |app, main_window, cx| {
-                        app.set_header_slot_pinned(slot, pinned, cx);
-                        app.refresh_open_header_more_popup(main_window, cx);
+                        app.pin_header_slot_from_menu(slot, pinned, main_window, cx);
                     });
                 },
             ))

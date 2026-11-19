@@ -90,7 +90,10 @@ impl GhostexGpuiApp {
                 .context_menu
                 .as_ref()
                 .map_or(0.0, |menu| menu.content_height()),
-            GpuiTitlebarPopupKind::Actions => self.titlebar_actions_popup_content_height(),
+            GpuiTitlebarPopupKind::Actions => {
+                self.titlebar_actions_popup_content_height()
+                    + self.header_menu_unpin_rows_height(kind)
+            }
             GpuiTitlebarPopupKind::BrowserActions(_) => self.browser_actions_popup_content_height(),
             GpuiTitlebarPopupKind::BrowserDeviceView(_) => {
                 self.browser_device_view_popup_content_height()
@@ -116,7 +119,9 @@ impl GhostexGpuiApp {
                 rows.push(TITLEBAR_POPUP_MENU_ROW_HEIGHT);
                 titlebar_popup_menu_height_for_rows(&rows)
             }
-            GpuiTitlebarPopupKind::Git => self.titlebar_git_popup_content_height(),
+            GpuiTitlebarPopupKind::Git => {
+                self.titlebar_git_popup_content_height() + self.header_menu_unpin_rows_height(kind)
+            }
             GpuiTitlebarPopupKind::HeaderMore => self.header_more_popup_content_height(),
             GpuiTitlebarPopupKind::Help => super::help_menu::titlebar_help_popup_content_height(),
             GpuiTitlebarPopupKind::Updates => {
@@ -124,7 +129,10 @@ impl GhostexGpuiApp {
                     self.updates_badge_items().len(),
                 )
             }
-            GpuiTitlebarPopupKind::OpenTargets => self.titlebar_open_targets_popup_content_height(),
+            GpuiTitlebarPopupKind::OpenTargets => {
+                self.titlebar_open_targets_popup_content_height()
+                    + self.header_menu_unpin_rows_height(kind)
+            }
             GpuiTitlebarPopupKind::Notifications => TITLEBAR_POPUP_NOTIFICATIONS_MAX_HEIGHT,
             GpuiTitlebarPopupKind::Jobs => crate::app::window::jobs_popover::jobs_popover_height(
                 self.background_jobs.jobs.len(),

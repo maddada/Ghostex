@@ -209,7 +209,10 @@ impl GhostexGpuiApp {
             "ghostex-gpui-workarea-header-command-terminal-toggle",
             expanded,
         )
-        .child(header_icon(TITLEBAR_ICON_PANEL_BOTTOM, titlebar_active_text_color()))
+        .child(header_icon(
+            TITLEBAR_ICON_PANEL_BOTTOM,
+            titlebar_active_text_color(),
+        ))
         .on_mouse_down(
             MouseButton::Right,
             header_slot_right_click(HeaderSlot::BottomPanel, cx),
@@ -244,21 +247,24 @@ impl GhostexGpuiApp {
         let open = self.view_panel_open();
         let tooltip = titlebar_tooltip_label("Toggle side panel", "toggleViewPanel");
         header_icon_button("ghostex-gpui-workarea-header-view-panel-toggle", open)
-            .child(header_icon(TITLEBAR_ICON_PANEL_RIGHT, titlebar_active_text_color()))
+            .child(header_icon(
+                TITLEBAR_ICON_PANEL_RIGHT,
+                titlebar_active_text_color(),
+            ))
             .on_mouse_down(
                 MouseButton::Right,
                 header_slot_right_click(HeaderSlot::SidePanel, cx),
             )
             .on_mouse_down(
-            MouseButton::Left,
-            cx.listener(|this, _, window, cx| {
-                window.prevent_default();
-                cx.stop_propagation();
-                this.toggle_view_panel(window, cx);
-            }),
-        )
-        .managed_tooltip_with_placement(ManagedTooltipPlacement::Left, move |window, cx| {
-            titlebar_tooltip(tooltip.clone(), window, cx)
-        })
+                MouseButton::Left,
+                cx.listener(|this, _, window, cx| {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    this.toggle_view_panel(window, cx);
+                }),
+            )
+            .managed_tooltip_with_placement(ManagedTooltipPlacement::Left, move |window, cx| {
+                titlebar_tooltip(tooltip.clone(), window, cx)
+            })
     }
 }

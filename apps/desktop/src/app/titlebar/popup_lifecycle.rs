@@ -347,7 +347,8 @@ impl GhostexGpuiApp {
         let Some(popup) = self.titlebar_popup_window else {
             return;
         };
-        let content_height = self.titlebar_git_popup_content_height();
+        let content_height = self.titlebar_git_popup_content_height()
+            + self.header_menu_unpin_rows_height(GpuiTitlebarPopupKind::Git);
         let bottom_limit = window.bounds().bottom() - px(8.0);
         let _ = popup.update(cx, |popup, window, cx| {
             let bounds = window.bounds();
@@ -356,11 +357,14 @@ impl GhostexGpuiApp {
             let width = (bounds.size.width.as_f32() - TITLEBAR_POPUP_MENU_BORDER_CHROME).max(0.0);
             let max_height = (height.as_f32() - TITLEBAR_POPUP_MENU_BORDER_CHROME).max(0.0);
             let menu = PopupMenu::build(window, cx, |menu, _, _| {
-                self.build_gpui_titlebar_git_popup_menu(
-                    menu,
-                    width,
-                    max_height,
-                    content_height > height.as_f32(),
+                self.header_menu_unpin_rows(
+                    GpuiTitlebarPopupKind::Git,
+                    self.build_gpui_titlebar_git_popup_menu(
+                        menu,
+                        width,
+                        max_height,
+                        content_height > height.as_f32(),
+                    ),
                 )
             });
             window.resize(size(bounds.size.width, height));
@@ -467,21 +471,27 @@ impl GhostexGpuiApp {
             }
             GpuiTitlebarPopupKind::Actions => {
                 GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
-                    self.build_gpui_titlebar_actions_popup_menu(
-                        menu,
-                        menu_width,
-                        menu_max_height,
-                        menu_scrollable,
+                    self.header_menu_unpin_rows(
+                        GpuiTitlebarPopupKind::Actions,
+                        self.build_gpui_titlebar_actions_popup_menu(
+                            menu,
+                            menu_width,
+                            menu_max_height,
+                            menu_scrollable,
+                        ),
                     )
                 }))
             }
             GpuiTitlebarPopupKind::Git => {
                 GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
-                    self.build_gpui_titlebar_git_popup_menu(
-                        menu,
-                        menu_width,
-                        menu_max_height,
-                        menu_scrollable,
+                    self.header_menu_unpin_rows(
+                        GpuiTitlebarPopupKind::Git,
+                        self.build_gpui_titlebar_git_popup_menu(
+                            menu,
+                            menu_width,
+                            menu_max_height,
+                            menu_scrollable,
+                        ),
                     )
                 }))
             }
@@ -509,11 +519,14 @@ impl GhostexGpuiApp {
             }
             GpuiTitlebarPopupKind::OpenTargets => {
                 GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
-                    self.build_gpui_open_targets_popup_menu(
-                        menu,
-                        menu_width,
-                        menu_max_height,
-                        menu_scrollable,
+                    self.header_menu_unpin_rows(
+                        GpuiTitlebarPopupKind::OpenTargets,
+                        self.build_gpui_open_targets_popup_menu(
+                            menu,
+                            menu_width,
+                            menu_max_height,
+                            menu_scrollable,
+                        ),
                     )
                 }))
             }

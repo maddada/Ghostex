@@ -71,13 +71,16 @@ impl GhostexGpuiApp {
                     this.toggle_voice_agent_conversation(cx);
                 }),
             )
-            // Right-click unpins it (render/workarea_header/header_pins.rs); the arrow keeps its menu.
+            // Right-click opens the arrow's menu, ending in the pin row
+            // (render/workarea_header/header_pins.rs).
             .on_mouse_down(
                 MouseButton::Right,
-                crate::app::render::workarea_header::header_pins::header_slot_right_click(
-                    crate::app::render::workarea_header::header_pins::HeaderSlot::Voice,
-                    cx,
-                ),
+                cx.listener(|this, _: &MouseDownEvent, window, cx| {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    this.header_pins.voice_unpin_row.set(true);
+                    this.toggle_voice_agent_menu(cx);
+                }),
             )
             .on_a11y_action(gpui::AccessibleAction::Click, {
                 let app = cx.entity().downgrade();
@@ -144,6 +147,8 @@ impl GhostexGpuiApp {
 
     /// Opens (or closes) the headset arrow's menu under the Voice button.
     pub(crate) fn toggle_voice_agent_menu(&mut self, cx: &mut gpui::Context<Self>) {
+        // Opened by right-clicking the headset: its pin row last.
+        let pin_row = self.header_pins.voice_unpin_row.replace(false);
         let (Some(main), Some(trigger)) =
             (self.main_window_handle, self.voice_agent.menu_anchor.get())
         else {
@@ -191,6 +196,13 @@ impl GhostexGpuiApp {
                     gbot: true,
                 }),
             );
+        }
+        if pin_row {
+            let (label, action) = self.header_slot_pin_row(
+                crate::app::render::workarea_header::header_pins::HeaderSlot::Voice,
+                cx,
+            );
+            menu = menu.separator().menu(label, Box::new(action));
         }
         let app = cx.entity();
         cx.defer(move |cx| {

@@ -6,7 +6,7 @@
 //! popup under This chat, and Claude (on), Grok Bot and Voice under Agents. Point at a row
 //! (`GHOSTEX_NATIVE_MODAL_DEMO_HOVER`) to see its pin. Dark theme only.
 use gpui::{
-    App, AppContext as _, Context, Entity, Focusable as _, Hsla, IntoElement, ParentElement as _,
+    App, AppContext as _, Context, Entity, Focusable as _, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
     Render, Styled as _, Window, canvas, div, point, px, rgb, svg,
 };
 use gpui_component::Side;
@@ -176,6 +176,37 @@ use gpui::prelude::FluentBuilder as _;
 
 struct HeaderMoreDemo {
     menu: Entity<PopupMenu>,
+    sections: Vec<(&'static str, Vec<HeaderMoreRow>)>,
+    /// Controls pinned from the menu, drawn in the header before Start.
+    pinned: Vec<HeaderSlot>,
+}
+
+fn build_menu(
+    sections: Vec<(&'static str, Vec<HeaderMoreRow>)>,
+    window: &mut Window,
+    cx: &mut App,
+) -> Entity<PopupMenu> {
+    PopupMenu::build(window, cx, move |menu, _, _| {
+        let mut menu = menu
+            .appearance(menu_appearance())
+            .min_w(px(MENU_WIDTH))
+            .max_w(px(MENU_WIDTH))
+            .check_side(Side::Right);
+        for (index, (title, rows)) in sections.iter().cloned().enumerate() {
+            if index > 0 {
+                menu = menu.separator();
+            }
+            menu = menu.item(section_label(title));
+            for row in rows {
+                let action = RunWorkareaHeaderSlot {
+                    slot: row.slot.key().to_string(),
+                };
+                menu =
+                    menu.menu_element(Box::new(action), move |_, _| header_more_row(row.clone()));
+            }
+        }
+        menu
+    })
 }
 
 impl HeaderMoreDemo {
@@ -202,35 +233,45 @@ impl HeaderMoreDemo {
                 ],
             ),
         ];
-        let menu = PopupMenu::build(window, cx, move |menu, _, _| {
-            let mut menu = menu
-                .appearance(menu_appearance())
-                .min_w(px(MENU_WIDTH))
-                .max_w(px(MENU_WIDTH))
-                .check_side(Side::Right);
-            for (index, (title, rows)) in sections.iter().cloned().enumerate() {
-                if index > 0 {
-                    menu = menu.separator();
-                }
-                menu = menu.item(section_label(title));
-                for row in rows {
-                    let action = RunWorkareaHeaderSlot {
-                        slot: row.slot.key().to_string(),
-                    };
-                    menu = menu
-                        .menu_element(Box::new(action), move |_, _| header_more_row(row.clone()));
-                }
-            }
-            menu
-        });
+        let menu = build_menu(sections.clone(), window, cx);
         menu.focus_handle(cx).focus(window, cx);
-        Self { menu }
+        Self {
+            menu,
+            sections,
+            pinned: Vec::new(),
+        }
+    }
+
+    /// A row's pin, as the app does it: the control moves to the header and the menu is re-read
+    /// once the click is over (render/workarea_header/header_pins.rs `pin_header_slot_from_menu`).
+    fn pin(&mut self, action: &PinWorkareaHeaderSlot, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(slot) = HeaderSlot::from_key(&action.slot) else {
+            return;
+        };
+        self.pinned.push(slot);
+        for (_, rows) in self.sections.iter_mut() {
+            rows.retain(|row| row.slot != slot);
+        }
+        self.sections.retain(|(_, rows)| !rows.is_empty());
+        cx.defer_in(window, |this, window, cx| {
+            this.menu = build_menu(this.sections.clone(), window, cx);
+            this.menu.focus_handle(cx).focus(window, cx);
+            cx.notify();
+        });
     }
 }
 
 impl Render for HeaderMoreDemo {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let text = titlebar_active_text_color();
+        let pinned: Vec<_> = self
+            .pinned
+            .iter()
+            .map(|slot| {
+                header_icon_button(slot.key(), false)
+                    .child(header_icon(slot.icon(), titlebar_icon_color()))
+            })
+            .collect();
         let header = h_flex()
             .w(px(HEADER_WIDTH))
             .h(px(36.0))
@@ -245,6 +286,14 @@ impl Render for HeaderMoreDemo {
                     .text_size(px(13.0))
                     .text_color(text.opacity(0.92))
                     .child("Ghostex  \u{203a}  Calmer chat header"),
+            )
+            .children(pinned)
+            // Claude's page is on, so its button shows though it is not pinned (after Grok Bot,
+            // as the app orders them).
+            .child(
+                header_icon_button("demo-claude", true)
+                    .mr(px(6.0))
+                    .child(header_icon(HEADER_CLAUDE_ICON, text)),
             )
             // Start and Commit in one outline.
             .child(
@@ -300,11 +349,6 @@ impl Render for HeaderMoreDemo {
                             )
                             .child("40%"),
                     )
-                    // Claude's page is on, so its button shows though it is not pinned.
-                    .child(
-                        header_icon_button("demo-claude", true)
-                            .child(header_icon(HEADER_CLAUDE_ICON, text)),
-                    )
                     .child(
                         header_icon_button("demo-more", true)
                             .child(header_icon(TITLEBAR_ICON_DOTS, titlebar_icon_color())),
@@ -327,6 +371,7 @@ impl Render for HeaderMoreDemo {
             );
         div()
             .size_full()
+            .on_action(cx.listener(Self::pin))
             .bg(rgb(0x18151a))
             .flex()
             .flex_col()

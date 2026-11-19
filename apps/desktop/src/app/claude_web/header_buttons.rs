@@ -15,8 +15,10 @@ use gpui_component::tooltip::ManagedTooltipExt as _;
 use gpui_component::tooltip::ManagedTooltipPlacement;
 
 use super::place::WebPlace;
-use crate::app::render::workarea_header::header_pins::{HeaderSlot, header_icon, header_slot_right_click};
 use crate::app::helpers::*;
+use crate::app::render::workarea_header::header_pins::{
+    HeaderSlot, header_icon, header_slot_right_click,
+};
 use crate::*;
 
 /// One of the header's bot buttons.

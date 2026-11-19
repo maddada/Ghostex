@@ -827,10 +827,12 @@ impl GhostexGpuiApp {
                 .cursor_default()
                 .when(cfg!(target_os = "windows"), |this| this.occlude())
                 .hover(|this| this.bg(titlebar_button_hover_color()))
-                .child(crate::app::render::workarea_header::header_pins::header_icon(
-                    "titlebar/external-link.svg",
-                    color,
-                ))
+                .child(
+                    crate::app::render::workarea_header::header_pins::header_icon(
+                        "titlebar/external-link.svg",
+                        color,
+                    ),
+                )
                 .on_mouse_down(
                     MouseButton::Right,
                     crate::app::render::workarea_header::header_pins::header_slot_right_click(

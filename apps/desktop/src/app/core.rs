@@ -580,6 +580,8 @@ pub struct GhostexGpuiApp {
         HashMap<TerminalSessionId, Entity<super::native_chat::state::NativeChatView>>,
     /// The header's Session details button (session_chat/session_details.rs).
     pub(crate) session_details: super::session_chat::session_details::SessionDetailsSwitch,
+    /// The header's ⋯ menu for this window (render/workarea_header/header_pins.rs).
+    pub(crate) header_pins: super::render::workarea_header::header_pins::HeaderPinsState,
     /// Long jobs that outlive their dialog, behind the header's jobs button (background_jobs/).
     pub(crate) background_jobs: super::background_jobs::BackgroundJobs,
     /// The gxserver endpoint each machine's chat socket was last given.

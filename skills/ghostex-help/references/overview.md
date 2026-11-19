@@ -19,11 +19,19 @@ hotkeys Every shortcut and its default binding
 - **Work area header**: the window has no separate title bar. The first row of
   the work area shows Hide sidebar, Back/Forward, and the project icon, project
   name and current session title as one breadcrumb. On the right are the
-  **Voice** (headset) button that starts and ends a spoken conversation with the voice
-  agent, the **Start**, **Open** and **Commit** buttons (Quick Actions, Open In and Git
-  actions, each with a caret for its menu; Start and Open show only while the
-  Actions and Open In extensions are on, and Actions is off by default), and the command terminal
-  and view panel toggles. The header covers your sessions only: when a view panel
+  **Start**, **Open** and **Commit** buttons in one outline (Quick Actions, Open In and Git
+  actions, each with an arrow for its menu; Start and Open show only while the
+  Actions and Open In extensions are on, and Actions is off by default), the chat's
+  **Work** button and context ring, a **⋯** button, and the command terminal and view
+  panel toggles. The ⋯ menu holds the header's other controls, grouped under This chat
+  (Share, Open in a popup), Project, Agents (Claude, Grok Bot, Voice call) and Panels,
+  each row saying what it is doing now (On, Live, In a call). Point at a row and click
+  its pin to put that control back in the header. Right-click a control in the header
+  to unpin it into ⋯ (for Start, Open, Commit and the Voice headset, Unpin from header
+  is the last row of the menu the right-click opens). Every control can be pinned or
+  unpinned, the choice stays on this computer, and a control in use (Claude or Grok
+  Bot on, a voice call open, the chat shared) stays in the header until you turn it
+  off. The header covers your sessions only: when a view panel
   is open, the panel's own tabs take the rest of that same row, so the tabs sit
   over the view and the header's buttons over your sessions. Narrow the Agents
   Panel and the buttons drop their labels and the breadcrumb drops the project

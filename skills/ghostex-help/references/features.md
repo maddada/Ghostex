@@ -4939,7 +4939,8 @@ you turn them back on.
   could have, and `ghostex gbots computer <bot> --use this` brings it back.
 - **Calling it**: right-click a GBot and choose Call (on the phone, long-press
   it) to talk to it out loud through the Voice agent; on one of its chats, the
-  arrow beside the work area header's headset offers Call <GBot> (on the phone,
+  Voice menu (the arrow beside the work area header's headset, or Voice call in the
+  header's ⋯ menu) offers Call <GBot> (on the phone,
   the chat's ⋯ menu). It answers as itself in its own voice and passes what you
   say to its chat, so the call's messages are in that chat (your standing chat
   with it, or the chat you called from) and the call is in its daily log. While
@@ -5125,9 +5126,14 @@ CLI: `ghostex grokbot` (status), `connect [<url>] [--key-stdin]`,
 ## Voice agent
 
 Talk to your agents out loud. On a Mac, Windows or Linux, the headset button in
-the work area header (left of the Start, Open and Commit buttons) starts a spoken conversation with Ghostex's voice
-agent, and pressing it again hangs up; Option+Ctrl+V (Ctrl+Alt+Shift+V on Windows
-and Linux) does the same from anywhere in the window. Ask what your sessions are doing or
+the work area header starts a spoken conversation with Ghostex's voice
+agent, and pressing it again hangs up. The headset is in the header's ⋯ menu (Voice
+call, under Agents) until you pin it there with the pin that shows when you point at
+the row; pinned, it sits left of the Start, Open and Commit buttons, and right-clicking
+it opens its menu with Unpin from header last. Voice call in ⋯ opens the same choices
+as the headset's arrow. A call that is open keeps the headset in the header until it
+ends. Option+Ctrl+V (Ctrl+Alt+Shift+V on Windows
+and Linux) starts and ends a call from anywhere in the window. Ask what your sessions are doing or
 which ones are waiting on you, have it read you the last messages of a session,
 tell it to send a prompt to a session (it sends right away and says what it
 sent, but for anything risky or destructive, like deleting files or removing a
@@ -5211,7 +5217,7 @@ call holding the talk button, Space or the hotkey unmutes you for as long as
 you hold. It hangs up by itself after 5 minutes with nobody talking.
 
 A call can also be about just one session. Click the small arrow on the
-headset button and pick "This session: <title>" (the session you are looking
+headset button (or Voice call in the header's ⋯ menu) and pick "This session: <title>" (the session you are looking
 at), or press the "Voice Call About This Session" hotkey (no key is set; give it
 one in Settings > Hotkeys). The agent starts by saying where that session
 stands, tells you when it finishes its turn with the gist of its reply in a
