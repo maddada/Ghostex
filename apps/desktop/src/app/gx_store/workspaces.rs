@@ -19,10 +19,11 @@ const MAX_RECENT_WINDOW_WORKSPACES: usize = 8;
 /// What the workspace tile draws.
 pub(crate) struct WorkspaceTile {
     pub(crate) name: String,
-    pub(crate) letter: String,
     pub(crate) color: String,
-    /// The workspace a click on the letter switches to; `None` with a single workspace.
+    /// The workspace a click on the name switches to; `None` with a single workspace.
     pub(crate) switch_to: Option<(String, String)>,
+    /// The Go to Workspace hotkey of `switch_to`, as the settings bind it now.
+    pub(crate) switch_hotkey: Option<String>,
 }
 
 impl GhostexGpuiApp {
@@ -195,9 +196,14 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    /// The tile left of the Spaces row, when this computer's daemon has workspaces.
+    /// The workspace switcher at the sidebar's bottom left, when this computer's daemon has more
+    /// than one workspace: with a single one there is nothing to switch to, so nothing is drawn
+    /// (CDXC:Workspaces 2026-11-20 in native_sidebar/workspace_tile.rs).
     pub(crate) fn gx_store_workspace_tile(&self) -> Option<WorkspaceTile> {
         let state = self.gx_store_workspaces_state()?;
+        if state.workspaces.len() < 2 {
+            return None;
+        }
         let workspace = self.gx_store_window_workspace()?;
         let switch_to = ghostex_gx_core::workspace_switch_target(
             state,
@@ -205,11 +211,25 @@ impl GhostexGpuiApp {
             self.gx_store_window_recent_workspace_ids(),
         )
         .map(|target| (target.workspace_id.clone(), target.name.clone()));
+        let switch_hotkey = switch_to.as_ref().and_then(|(target, _)| {
+            let position = state
+                .ordered()
+                .position(|workspace| &workspace.workspace_id == target)?;
+            (position < 9)
+                .then(|| {
+                    crate::app::hotkeys::gpui_configured_hotkey_label(&format!(
+                        "goToWorkspace{}",
+                        position + 1
+                    ))
+                })
+                .flatten()
+                .filter(|label| !label.is_empty())
+        });
         Some(WorkspaceTile {
             name: workspace.name.clone(),
-            letter: workspace.letter.clone(),
             color: workspace.color.clone(),
             switch_to,
+            switch_hotkey,
         })
     }
 
@@ -229,14 +249,46 @@ impl GhostexGpuiApp {
     }
 
     /// The tile's menu, as the sidebar menu JSON. Built when it opens, because its new-window
-    /// buttons depend on which workspaces the other windows show at that moment.
+    /// buttons depend on which workspaces the other windows show at that moment; each workspace
+    /// row names its Go to Workspace hotkey as the settings bind it now.
     pub(crate) fn gx_store_workspace_menu(&self, cx: &gpui::Context<Self>) -> Option<Value> {
         let state = self.gx_store_workspaces_state()?;
         let workspace = self.gx_store_window_workspace()?;
         let in_windows = self.workspaces_shown_in_other_windows(cx);
-        Some(ghostex_gx_core::menu_to_json(
-            &ghostex_gx_core::workspace_menu(state, &workspace.workspace_id, &in_windows),
-        ))
+        let mut menu = ghostex_gx_core::menu_to_json(&ghostex_gx_core::workspace_menu(
+            state,
+            &workspace.workspace_id,
+            &in_windows,
+        ));
+        for row in menu.as_array_mut().into_iter().flatten() {
+            let Some(label) = row["hotkey"]
+                .as_str()
+                .and_then(crate::app::hotkeys::gpui_configured_hotkey_label)
+                .filter(|label| !label.is_empty())
+            else {
+                continue;
+            };
+            row["suffix"] = Value::from(label);
+        }
+        Some(menu)
+    }
+
+    /// Go to Workspace `position` (1 to 9): shows the workspace at that place in the menu's order
+    /// the way the switcher's click does; a position with no workspace does nothing.
+    pub(crate) fn gx_store_go_to_workspace(
+        &mut self,
+        position: usize,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(workspace_id) = self.gx_store_workspaces_state().and_then(|state| {
+            state
+                .ordered()
+                .nth(position.checked_sub(1)?)
+                .map(|workspace| workspace.workspace_id.clone())
+        }) else {
+            return;
+        };
+        self.gx_store_select_workspace(workspace_id, cx);
     }
 
     /// The workspace tile's menu commands and a project's Move to workspace rows.

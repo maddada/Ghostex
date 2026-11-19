@@ -9732,6 +9732,15 @@
         "goToSpace7": "cmd+alt+shift+7",
         "goToSpace8": "cmd+alt+shift+8",
         "goToSpace9": "cmd+alt+shift+9",
+        "goToWorkspace1": "ctrl+alt+1",
+        "goToWorkspace2": "ctrl+alt+2",
+        "goToWorkspace3": "ctrl+alt+3",
+        "goToWorkspace4": "ctrl+alt+4",
+        "goToWorkspace5": "ctrl+alt+5",
+        "goToWorkspace6": "ctrl+alt+6",
+        "goToWorkspace7": "ctrl+alt+7",
+        "goToWorkspace8": "ctrl+alt+8",
+        "goToWorkspace9": "ctrl+alt+9",
         "focusSessionSlot1": "cmd+1",
         "focusSessionSlot2": "cmd+2",
         "focusSessionSlot3": "cmd+3",
@@ -13504,7 +13513,7 @@
     {
       "key": "workspaceName",
       "title": "Workspace name",
-      "subtitle": "The name and letter shown on the workspace button left of your Spaces.",
+      "subtitle": "The name shown on the workspace switcher at the bottom left of the sidebar.",
       "tab": "workspaces",
       "tabTitle": "Workspaces",
       "section": "workspaces",
@@ -13515,7 +13524,7 @@
     {
       "key": "workspaceColor",
       "title": "Workspace color",
-      "subtitle": "The color of the workspace button.",
+      "subtitle": "The color of the workspace's dot in the switcher and its menu.",
       "tab": "workspaces",
       "tabTitle": "Workspaces",
       "section": "workspaces",
@@ -15234,6 +15243,87 @@
       "description": "Switch to Space 9 as shown in the sidebar.",
       "defaultKey": "cmd+alt+shift+9",
       "terminalDefaultKey": "cmd+alt+shift+9"
+    },
+    {
+      "id": "goToWorkspace1",
+      "title": "Go to Workspace 1",
+      "description": "Show workspace 1, in the order of the workspace menu.",
+      "defaultKey": "ctrl+alt+1",
+      "windowsLinuxDefaultKey": "alt+shift+1",
+      "terminalDefaultKey": "ctrl+alt+1",
+      "windowsLinuxTerminalDefaultKey": "alt+shift+1"
+    },
+    {
+      "id": "goToWorkspace2",
+      "title": "Go to Workspace 2",
+      "description": "Show workspace 2, in the order of the workspace menu.",
+      "defaultKey": "ctrl+alt+2",
+      "windowsLinuxDefaultKey": "alt+shift+2",
+      "terminalDefaultKey": "ctrl+alt+2",
+      "windowsLinuxTerminalDefaultKey": "alt+shift+2"
+    },
+    {
+      "id": "goToWorkspace3",
+      "title": "Go to Workspace 3",
+      "description": "Show workspace 3, in the order of the workspace menu.",
+      "defaultKey": "ctrl+alt+3",
+      "windowsLinuxDefaultKey": "alt+shift+3",
+      "terminalDefaultKey": "ctrl+alt+3",
+      "windowsLinuxTerminalDefaultKey": "alt+shift+3"
+    },
+    {
+      "id": "goToWorkspace4",
+      "title": "Go to Workspace 4",
+      "description": "Show workspace 4, in the order of the workspace menu.",
+      "defaultKey": "ctrl+alt+4",
+      "windowsLinuxDefaultKey": "alt+shift+4",
+      "terminalDefaultKey": "ctrl+alt+4",
+      "windowsLinuxTerminalDefaultKey": "alt+shift+4"
+    },
+    {
+      "id": "goToWorkspace5",
+      "title": "Go to Workspace 5",
+      "description": "Show workspace 5, in the order of the workspace menu.",
+      "defaultKey": "ctrl+alt+5",
+      "windowsLinuxDefaultKey": "alt+shift+5",
+      "terminalDefaultKey": "ctrl+alt+5",
+      "windowsLinuxTerminalDefaultKey": "alt+shift+5"
+    },
+    {
+      "id": "goToWorkspace6",
+      "title": "Go to Workspace 6",
+      "description": "Show workspace 6, in the order of the workspace menu.",
+      "defaultKey": "ctrl+alt+6",
+      "windowsLinuxDefaultKey": "alt+shift+6",
+      "terminalDefaultKey": "ctrl+alt+6",
+      "windowsLinuxTerminalDefaultKey": "alt+shift+6"
+    },
+    {
+      "id": "goToWorkspace7",
+      "title": "Go to Workspace 7",
+      "description": "Show workspace 7, in the order of the workspace menu.",
+      "defaultKey": "ctrl+alt+7",
+      "windowsLinuxDefaultKey": "alt+shift+7",
+      "terminalDefaultKey": "ctrl+alt+7",
+      "windowsLinuxTerminalDefaultKey": "alt+shift+7"
+    },
+    {
+      "id": "goToWorkspace8",
+      "title": "Go to Workspace 8",
+      "description": "Show workspace 8, in the order of the workspace menu.",
+      "defaultKey": "ctrl+alt+8",
+      "windowsLinuxDefaultKey": "alt+shift+8",
+      "terminalDefaultKey": "ctrl+alt+8",
+      "windowsLinuxTerminalDefaultKey": "alt+shift+8"
+    },
+    {
+      "id": "goToWorkspace9",
+      "title": "Go to Workspace 9",
+      "description": "Show workspace 9, in the order of the workspace menu.",
+      "defaultKey": "ctrl+alt+9",
+      "windowsLinuxDefaultKey": "alt+shift+9",
+      "terminalDefaultKey": "ctrl+alt+9",
+      "windowsLinuxTerminalDefaultKey": "alt+shift+9"
     },
     {
       "id": "focusSessionSlot1",

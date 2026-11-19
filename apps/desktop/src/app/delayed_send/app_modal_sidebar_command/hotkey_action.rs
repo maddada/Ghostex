@@ -401,6 +401,10 @@ impl GhostexGpuiApp {
                     self.go_to_native_space(position, cx);
                     return;
                 }
+                if let Some(position) = gpui_workspace_slot_hotkey_number(action_id) {
+                    self.gx_store_go_to_workspace(position, cx);
+                    return;
+                }
                 let Some(modal) = gpui_app_modal_kind_for_hotkey_action_id(action_id) else {
                     return;
                 };

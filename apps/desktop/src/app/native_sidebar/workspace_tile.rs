@@ -1,13 +1,16 @@
-//! The workspace tile at the left end of the sidebar's bottom bar: a split button. The left part is the
-//! window's workspace as its letter on the workspace's color, and a click switches to the other
-//! workspace (gx-core `workspace_switch_target`); the slim chevron on the right opens the
+//! The workspace switcher at the left end of the sidebar's bottom bar: a split button. The left part is
+//! the window's workspace as a small dot in its colour and its name, and a click switches to the
+//! other workspace (gx-core `workspace_switch_target`); the slim chevron on the right opens the
 //! workspace menu.
 //!
 //! CDXC:Workspaces 2026-10-11 DECISION:
 //! User: move the workspace picker out of the Spaces row to the bottom left of the app, in the sidebar's bottom bar. It shows whenever this computer's section is shown and the Workspaces feature is on, with or without Spaces. This supersedes the 2026-10-09 tile to the left of the Spaces row. The menu comes from gx-core (`sidebar_menu/workspace.rs`).
 //!
 //! CDXC:Workspaces 2026-10-10 DECISION:
-//! User picked option A of the one-click switch mockup (the switch rule is gx-core `workspace_switch_target`) and asked to "make the look of the profile switcher match the size etc of the space buttons and don't add a | there between them". So the split button has the Space buttons' height, radius, hairline border and hover, its letter block is sized like a Space icon, and the hairline that followed the tile is gone (this supersedes the 2026-10-09 hairline).
+//! User picked option A of the one-click switch mockup (the switch rule is gx-core `workspace_switch_target`) and asked to "make the look of the profile switcher match the size etc of the space buttons and don't add a | there between them". So the split button has the Space buttons' height, radius and hover, and the hairline that followed the tile is gone (this supersedes the 2026-10-09 hairline).
+//!
+//! CDXC:Workspaces 2026-11-20 DECISION:
+//! User: "I figured out just clicking on the P or W button in the bottom left is enough, but I don't like the P or W icon in the bottom left", then picked "A. The name, quietly" (Q4254): the letter on a coloured square becomes an 8px dot in the workspace's colour and the workspace's name in the sidebar's own text, in the same place with the same one click; with a single workspace nothing is drawn (`gx_store_workspace_tile`). Supersedes the letter block of the 2026-10-10 decision.
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -21,10 +24,11 @@ use super::appearance::SidebarAppearance;
 use crate::GhostexGpuiApp;
 use crate::app::helpers::*;
 
-/// The letter part's width: a Space button's 28px face less the split button's left border.
-const LETTER_PART_WIDTH: f32 = 27.0;
 /// The chevron part's width, its right border included.
-const CHEVRON_PART_WIDTH: f32 = 15.0;
+const CHEVRON_PART_WIDTH: f32 = 18.0;
+/// The name part's widest, so a long workspace name ends in an ellipsis instead of pushing the
+/// line.
+const NAME_PART_MAX_WIDTH: f32 = 180.0;
 
 impl GhostexGpuiApp {
     /// Whether the sidebar's bottom has the workspace button now
@@ -64,14 +68,21 @@ impl GhostexGpuiApp {
             .map(rgb)
             .map(gpui::Hsla::from)
             .unwrap_or(appearance.muted);
-        let border = appearance.foreground.opacity(0.08);
+        // The name part's quiet fill at rest; the hover fill on top of it while pointed at.
+        let rest = appearance.foreground.opacity(0.06);
         let tooltips = self.native_sidebar.pointer_inside
             && self.native_sidebar.menu.is_none()
             && !cx.has_active_drag();
         let tooltip_span = super::tooltips::SidebarTooltipSpan::sidebar(self.sidebar_width, scale);
         let tooltip_delay = appearance.tooltip_delay;
         let (switch_to, letter_tooltip) = match tile.switch_to {
-            Some((workspace_id, name)) => (Some(workspace_id), format!("Switch to {name}")),
+            Some((workspace_id, name)) => {
+                let tooltip = match tile.switch_hotkey.as_deref() {
+                    Some(hotkey) => format!("Switch to {name} {hotkey}"),
+                    None => format!("Switch to {name}"),
+                };
+                (Some(workspace_id), tooltip)
+            }
             None => (None, tile.name.clone()),
         };
         let menu_tooltip = tile.name.clone();
@@ -105,26 +116,34 @@ impl GhostexGpuiApp {
             .id("native-sidebar-workspace-switch")
             .role(gpui::Role::Button)
             .aria_label(letter_tooltip.clone())
-            .w(px(LETTER_PART_WIDTH * scale))
+            .max_w(px(NAME_PART_MAX_WIDTH * scale))
+            .min_w_0()
             .h_full()
             .flex()
             .items_center()
-            .justify_center()
-            .rounded_l(px(5.0 * scale))
+            .gap(px(7.0 * scale))
+            .pl(px(8.0 * scale))
+            .pr(px(6.0 * scale))
+            .rounded_l(px(6.0 * scale))
+            .bg(rest)
             .cursor_pointer()
             .hover(|part| part.bg(appearance.hover))
             .child(
                 div()
-                    .size(px(18.0 * scale))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded(px(4.0 * scale))
-                    .bg(color)
-                    .text_size(px(11.0 * scale))
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(gpui::white())
-                    .child(tile.letter.clone()),
+                    .size(px(8.0 * scale))
+                    .flex_shrink_0()
+                    .rounded_full()
+                    .bg(color),
+            )
+            .child(
+                div()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .text_size(px(13.0 * scale))
+                    .text_color(appearance.foreground)
+                    .child(tile.name.clone()),
             )
             .when(tooltips, |part| {
                 part.managed_discrete_tooltip_with_placement(
@@ -163,14 +182,12 @@ impl GhostexGpuiApp {
             .id("native-sidebar-workspace-menu")
             .role(gpui::Role::Button)
             .aria_label(format!("Workspace {} menu", tile.name))
-            .w(px((CHEVRON_PART_WIDTH - 1.0) * scale))
+            .w(px(CHEVRON_PART_WIDTH * scale))
             .h_full()
             .flex()
             .items_center()
             .justify_center()
-            .border_l_1()
-            .border_color(border)
-            .rounded_r(px(5.0 * scale))
+            .rounded_r(px(6.0 * scale))
             .cursor_pointer()
             .hover(|part| part.bg(appearance.hover))
             .child(titlebar_svg_icon(
@@ -211,11 +228,9 @@ impl GhostexGpuiApp {
                 .id("native-sidebar-workspace-tile")
                 .on_prepaint(super::menus::record_menu_owner(&owner))
                 .flex()
-                .flex_shrink_0()
+                .min_w_0()
                 .h(px(28.0 * scale))
                 .rounded(px(6.0 * scale))
-                .border_1()
-                .border_color(border)
                 .child(letter)
                 .child(chevron)
                 .into_any_element(),

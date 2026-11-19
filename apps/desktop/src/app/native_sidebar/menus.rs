@@ -1309,7 +1309,22 @@ impl GhostexGpuiApp {
                             row.child(gpui::img(image).size(px(16.0 * scale)).flex_shrink_0())
                         })
                         .when_some(color, |row, color| {
-                            row.child(div().size(px(14.0 * scale)).rounded_full().bg(color))
+                            if item["dot"] == true {
+                                // The workspace menu's colour dot, in the 14px icon box.
+                                row.child(
+                                    div()
+                                        .size(px(14.0 * scale))
+                                        .flex_shrink_0()
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .child(
+                                            div().size(px(8.0 * scale)).rounded_full().bg(color),
+                                        ),
+                                )
+                            } else {
+                                row.child(div().size(px(14.0 * scale)).rounded_full().bg(color))
+                            }
                         })
                         .child(
                             v_flex()

@@ -51,6 +51,9 @@ pub struct MenuItem {
     pub icon_color: Option<String>,
     /// A colour swatch drawn instead of an icon (the collection colour page).
     pub color: Option<String>,
+    /// `color` is drawn as a small dot in the icon's place rather than a full swatch (the
+    /// workspace menu's rows).
+    pub dot: bool,
     /// The second line of an agent launcher account row.
     pub detail: Option<String>,
     pub suffix: Option<String>,
@@ -211,6 +214,7 @@ impl MenuItem {
         flag("danger", self.danger);
         flag("separator", self.separator);
         flag("primary", self.primary);
+        flag("dot", self.dot);
         // Always present: see the type's comment. A refresh of an open panel reads these two and
         // the label, and can only copy a key it finds.
         object.insert("checked".to_string(), Value::Bool(self.checked));
