@@ -4,9 +4,11 @@
 
 <h1 align="center">Ghostex</h1>
 
-<h3 align="center">The native workspace for your coding agents.</h3>
+<h3 align="center">The best native workspace for your coding agents.</h3>
 
-<p align="center">Every agent in one sidebar, as chat or CLI.<br />Keep working from your computer or your phone.</p>
+<p align="center">Every agent in one sidebar, as chat or CLI. Keep working from your computer or your phone.</p>
+
+<p align="center">Includes powerful Coordinators that can orchestrate across machines and manage full projects in 1 thread</p>
 
 <p align="center">
   <a href="#install">Download</a> ·
