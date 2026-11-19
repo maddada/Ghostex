@@ -46,6 +46,8 @@ const SEND_TIMEOUT: Duration = Duration::from_secs(45);
 const REFRESH_EVERY: Duration = Duration::from_secs(3);
 const SWITCH_KEY: &str = "grokBotHidden";
 const DOWNLOAD_URL: &str = "https://x.ai/bot";
+/// The published Ghostex bot, ready to add to Grok Bot.
+const TEMPLATE_URL: &str = "https://grok-bot.directory/bots/ghostex";
 
 pub(crate) fn grok_bot_tab_view(
     store: &Entity<SettingsStore>,
@@ -698,20 +700,21 @@ impl GrokBotTab {
                 p,
                 Some(ListItemStatus::Success),
                 None,
-                "2. Make the Ghostex bot",
+                "2. Add the Ghostex bot",
                 Self::detail("The bot reached this computer"),
                 None,
             ));
         } else {
+            // CDXC:GrokBot 2026-11-19 DECISION: User: "Please add the link to the Ghostex Grok Bot template into the page", then "actually this is even better link" (grok-bot.directory). Adding the published Ghostex bot is step 2's main way; Copy instructions stays for building your own.
             let mut buttons = h_flex().gap(px(8.0)).child(settings_button(
                 p,
-                "grok-bot-copy-instructions",
-                copy_label,
-                Some("modals/settings/copy.svg"),
-                ButtonVariant::Outline,
+                "grok-bot-add-template",
+                "Add the Ghostex bot to Grok Bot",
+                Some("modals/settings/external-link.svg"),
+                ButtonVariant::Default,
                 false,
                 None,
-                |page: &mut Self, _window, cx| page.copy_instructions(cx),
+                |page: &mut Self, _window, cx| page.open_url(TEMPLATE_URL, cx),
                 cx,
             ));
             if setup.app == "running" || setup.app == "found" {
@@ -727,11 +730,33 @@ impl GrokBotTab {
                     cx,
                 ));
             }
+            let own = h_flex()
+                .gap(px(8.0))
+                .items_center()
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .text_size(px(12.5))
+                        .text_color(hsla(p.muted))
+                        .child("Building your own instead? Make a new bot named Ghostex and paste these instructions."),
+                )
+                .child(settings_button(
+                    p,
+                    "grok-bot-copy-instructions",
+                    copy_label,
+                    Some("modals/settings/copy.svg"),
+                    ButtonVariant::Outline,
+                    false,
+                    None,
+                    |page: &mut Self, _window, cx| page.copy_instructions(cx),
+                    cx,
+                ));
             rows.push(settings_list_item(
                 p,
                 Some(ListItemStatus::Neutral),
                 None,
-                "2. Make the Ghostex bot",
+                "2. Add the Ghostex bot",
                 Self::detail("Waiting for the bot's first command…"),
                 None,
             ));
@@ -739,8 +764,9 @@ impl GrokBotTab {
                 v_flex()
                     .w_full()
                     .gap(px(8.0))
-                    .child(div().text_size(px(13.0)).child("In Grok Bot, make a new bot named Ghostex and paste the instructions. Send it any message: it makes its Ghostex reports routine and asks to run ghostex grokbot brief on this computer. Choose Allow once."))
+                    .child(div().text_size(px(13.0)).child("Add the ready-made Ghostex bot to Grok Bot, then send it any message: it makes its Ghostex reports routine and asks to run ghostex grokbot brief on this computer. Choose Allow once."))
                     .child(buttons)
+                    .child(own)
                     .child(div().text_size(px(12.5)).text_color(hsla(p.muted)).child("Nothing happening? In Grok Bot, Settings > Computer > Execution on this computer must be Ask every time (not Never allow).")),
             ));
         }
@@ -786,7 +812,7 @@ impl GrokBotTab {
                 p,
                 Some(ListItemStatus::Success),
                 None,
-                "2. Make the Ghostex bot",
+                "2. Add the Ghostex bot",
                 Self::detail("Done"),
                 None,
             ),

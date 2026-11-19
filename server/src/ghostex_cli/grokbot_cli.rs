@@ -13,6 +13,8 @@ use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
 use crate::ghostex_cli::{notify, secret, set_exit_code};
 
 const ENDPOINT: &str = "/api/grokbot";
+/// The published Ghostex bot (CDXC:GrokBot 2026-11-19 in tabs/grok_bot.rs).
+const TEMPLATE_URL: &str = "https://grok-bot.directory/bots/ghostex";
 /// `connect` and `test` wait for Grok Bot's answer (up to 20 seconds) inside the call.
 const SLOW_CALL_TIMEOUT_MS: &str = "45000";
 
@@ -30,7 +32,8 @@ pub(crate) fn usage() -> String {
   ghostex grokbot test [--json]              Send a test note now
   ghostex grokbot disconnect [--json]        Forget the address and key, and drop notes not sent yet
   ghostex grokbot brief                      The Grok Bot bot's current commands and rules (it runs this)
-  ghostex grokbot instructions               The instructions to paste into the Ghostex bot in Grok Bot
+  ghostex grokbot instructions               The instructions to paste into a Ghostex bot of your own
+                                             (or add the ready-made one: https://grok-bot.directory/bots/ghostex)
 
 The key never leaves this computer except to Grok Bot, and no command prints it. Stop the bot
 reaching this computer in Grok Bot: Settings > Computer > Execution on this computer: Never allow.
@@ -70,6 +73,8 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         ),
         "brief" => brief_command(&parsed),
         "instructions" => {
+            // stderr, so what's printed on stdout stays exactly the text to paste.
+            eprintln!("The ready-made Ghostex bot: {TEMPLATE_URL} (add it to Grok Bot). To build your own, paste the text below into a new bot named Ghostex.\n");
             print!("{}", crate::grokbot::INSTRUCTIONS);
             Ok(())
         }

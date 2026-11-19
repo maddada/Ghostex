@@ -5106,8 +5106,10 @@ ticks each step off as Ghostex sees it happen:
    Ghostex, sign in, and leave it running (the computer has to be on and
    awake). On a Mac, Ghostex finds it by itself; elsewhere, click It's
    installed.
-2. Make the Ghostex bot: in Grok Bot, make a new bot named Ghostex and paste
-   the instructions (Copy instructions). Send it any message. In its first
+2. Add the Ghostex bot: click Add the Ghostex bot to Grok Bot, which opens
+   the ready-made bot at https://grok-bot.directory/bots/ghostex, and add it.
+   (To build your own instead, make a new bot named Ghostex and paste the
+   instructions: Copy instructions.) Send it any message. In its first
    reply it makes its "Ghostex reports" routine with a webhook trigger and
    tells you where to click. When it asks to run `ghostex grokbot brief` on
    your computer, choose Allow once; Ghostex ticks the step off. Keep
@@ -5125,8 +5127,9 @@ Then try it: ask the bot "What are my agents doing?" Once connected, the page
 shows the notes sent, Send a test note, Change (a new address and key), Copy
 instructions (paste them again when an update changes them) and Disconnect.
 
-From a terminal instead: `ghostex grokbot instructions` prints the text to
-paste, and `ghostex grokbot connect <the POST to address>` asks for the key
+From a terminal instead: add the bot from
+https://grok-bot.directory/bots/ghostex, or `ghostex grokbot instructions`
+prints the text to paste into a bot of your own, and `ghostex grokbot connect <the POST to address>` asks for the key
 without showing it, then sends the test note.
 
 What the bot may do: anything the `ghostex` command can, including answering

@@ -2,6 +2,7 @@
 //!
 //! States: `grokbot` (mid-checklist: the app running and the bot's first brief seen, so step 3,
 //! the webhook form, is next), `grokbot-start` (nothing done yet: no app, no brief),
+//! `grokbot-step2` (the app running, waiting for the bot: step 2's Add the Ghostex bot),
 //! `grokbot-connected` (the Connected view, 14 notes sent), `grokbot-said-no` (connected, and the
 //! user said the test note didn't show up: step 4 with Send it again, Change and Disconnect).
 use serde_json::{Value, json};
@@ -39,6 +40,9 @@ pub(super) fn rpc(state: &str, path: &str, params: &Value) -> Option<Result<Valu
             "url": "https://api2.cursor.sh/automations/webhook/aut_7Qm2xLr9Vt4Kp8Hn3k3f9",
             "connectedAt": now - 60_000, "lastSentAt": now - 60_000, "sent": 1, "queued": 0,
             "app": "running", "briefSeenAt": now - 600_000, "testArrived": false
+        }),
+        "setup" if state == "grokbot-step2" => json!({
+            "enabled": true, "connected": false, "queued": 0, "app": "running"
         }),
         "setup" if state == "grokbot-start" => json!({
             "enabled": true, "connected": false, "queued": 0, "app": "missing"

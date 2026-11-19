@@ -29,7 +29,7 @@ pub(crate) fn setup() -> Section {
         "Set up",
         vec![
             row("grokBotDesktopApp", "Grok Bot desktop app", "Install the Grok Bot desktop app from x.ai/bot, sign in and leave it running: the bot runs Ghostex's commands on this computer through it. Ghostex ticks this off when it finds the app."),
-            row("grokBotMakeBot", "Make the Ghostex bot", "Make a bot named Ghostex in Grok Bot and paste the instructions (Copy instructions). Send it any message; when it asks to run ghostex grokbot brief, choose Allow once. Ghostex ticks this off when the bot reaches this computer."),
+            row("grokBotMakeBot", "Add the Ghostex bot", "Add the ready-made Ghostex bot to Grok Bot (Add the Ghostex bot to Grok Bot opens grok-bot.directory/bots/ghostex), or make a bot named Ghostex and paste the instructions (Copy instructions). Send it any message; when it asks to run ghostex grokbot brief, choose Allow once. Ghostex ticks this off when the bot reaches this computer."),
             row("grokBotWebhook", "Paste the webhook", "The bot makes a routine called Ghostex reports in its first reply. Open it in the Grok Bot desktop app and paste its POST to address and its key here. Ghostex keeps the key in an owner-only file and never shows it again."),
             row("grokBotTestNote", "Check the test note", "Ghostex sends the bot a test note; say whether it showed up in the bot's chat."),
         ],

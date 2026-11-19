@@ -11004,8 +11004,8 @@
     },
     {
       "key": "grokBotMakeBot",
-      "title": "Make the Ghostex bot",
-      "subtitle": "Make a bot named Ghostex in Grok Bot and paste the instructions (Copy instructions). Send it any message; when it asks to run ghostex grokbot brief, choose Allow once. Ghostex ticks this off when the bot reaches this computer.",
+      "title": "Add the Ghostex bot",
+      "subtitle": "Add the ready-made Ghostex bot to Grok Bot (Add the Ghostex bot to Grok Bot opens grok-bot.directory/bots/ghostex), or make a bot named Ghostex and paste the instructions (Copy instructions). Send it any message; when it asks to run ghostex grokbot brief, choose Allow once. Ghostex ticks this off when the bot reaches this computer.",
       "tab": "grokBot",
       "tabTitle": "Grok Bot",
       "section": "setup",
