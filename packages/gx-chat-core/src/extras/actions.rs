@@ -108,7 +108,7 @@ pub fn handle_with_ids(
         // where it is (`open_questions::show`).
         // A page row in the dock asks how many of the page's questions are answered.
         ActionKind::LoadPageQuestionCounts => {
-            crate::extras::work_cards::load_page_counts(state, text(action, "pageId"))
+            crate::extras::work_cards::load_page_counts(state, text(action, "pageId"), next_request_id)
         }
         ActionKind::JumpToWorkCard => {
             crate::extras::coordinator_board::focus_row(state, text(action, "key"))
