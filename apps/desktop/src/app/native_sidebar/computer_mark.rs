@@ -16,38 +16,39 @@ use super::{appearance::SidebarAppearance, model::NativeSidebarSession};
 use crate::GhostexGpuiApp;
 use crate::app::helpers::*;
 
-/// The line's width (a share of the icon's), its height, and the gap between the icon's bottom
-/// edge and the line, before the zoom: the drawing on the Q4248 page.
-const LINE_WIDTH: f32 = 0.62;
-const LINE_HEIGHT: f32 = 1.5;
-const LINE_GAP: f32 = 2.0;
+/// The dot's diameter, its gap under the icon, and how much of the muted text colour it takes,
+/// before the zoom.
+const DOT_SIZE: f32 = 3.0;
+pub(crate) const DOT_GAP: f32 = 2.0;
+const DOT_OPACITY: f32 = 0.55;
 
-/// A computer's icon (`size` px, zoomed), with a short line of `ink` centred under it when `here`:
-/// the computer you're on, while there is another computer to tell it from.
+/// A computer's icon (`size` px, zoomed), with a small faint dot centred `gap` (unzoomed) under it
+/// when `here`: the computer you're on, while there is another computer to tell it from. `muted`
+/// is the row's muted text colour, which the dot takes faintly.
 ///
 /// CDXC:RemoteMachines 2026-11-20 DECISION:
-/// User, on the "marking the computer you're on" page (Q4248), picked D, the baseline, after the
-/// corner pip of the same day (Q4241) showed on a project header's Mac icon and they did not like
-/// it. A short line under this computer's icon, the way a picked tab is underlined: 62% of the
-/// icon's width, 1.5px tall with round ends, 2px under it, in the row's foreground. It shows
-/// wherever a computer's icon does, on the desktop and in the web build: the sidebar's computer
-/// tiles and the folded computers button, session rows and Unified cards, a project header's
-/// computer icons, the chat's where pill and its card, Session details and Settings > Remote's row
-/// for this computer. With one computer nothing is marked, and the phone marks nothing (it is not
-/// one of the computers, so none is the one you're on). On a tile the status dots sit at the
-/// bottom centre too, so this computer's tile lifts its icon and line clear of them while it shows
-/// dots (machines.rs). This supersedes the corner pip.
-pub(crate) fn with_here_line(
+/// User, of the line under this computer's icon (Q4248, D): "make it a faint dot instead, like the
+/// dock on macOS has". A 3px round dot centred 2px under the icon of the computer you're on, in the
+/// row's muted text colour at 55%, wherever a computer's icon shows on the desktop and in the web
+/// build: the sidebar's computer tiles and the folded computers button, session rows and Unified
+/// cards, a project header's computer icons, the chat's where pill and its card, Session details
+/// and Settings > Remote's row for this computer. With one computer nothing is marked, and the
+/// phone marks nothing (it is not one of the computers, so none is the one you're on). On a tile
+/// the status dots sit at the bottom centre too, so this computer's tile lifts its icon and the dot
+/// clear of them while it shows status dots (machines.rs). This supersedes the corner pip (Q4241)
+/// and the line (Q4248) of the same day.
+pub(crate) fn with_here_dot_at(
     icon: impl IntoElement,
     size: f32,
     scale: f32,
     here: bool,
-    ink: Hsla,
+    muted: Hsla,
+    gap: f32,
 ) -> AnyElement {
     if !here {
         return icon.into_any_element();
     }
-    let width = size * LINE_WIDTH;
+    let dot = DOT_SIZE * scale;
     div()
         .relative()
         .flex_shrink_0()
@@ -59,14 +60,24 @@ pub(crate) fn with_here_line(
         .child(
             div()
                 .absolute()
-                .left(px((size - width) / 2.0))
-                .top(px(size + LINE_GAP * scale))
-                .w(px(width))
-                .h(px(LINE_HEIGHT * scale))
-                .rounded(px(1.0 * scale))
-                .bg(ink),
+                .left(px((size - dot) / 2.0))
+                .top(px(size + gap * scale))
+                .size(px(dot))
+                .rounded_full()
+                .bg(muted.opacity(DOT_OPACITY)),
         )
         .into_any_element()
+}
+
+/// [`with_here_dot_at`] at its usual gap.
+pub(crate) fn with_here_dot(
+    icon: impl IntoElement,
+    size: f32,
+    scale: f32,
+    here: bool,
+    muted: Hsla,
+) -> AnyElement {
+    with_here_dot_at(icon, size, scale, here, muted, DOT_GAP)
 }
 
 /// The session's computer is one this computer knows is offline.
@@ -118,7 +129,7 @@ impl GhostexGpuiApp {
                 ("titlebar/device-desktop.svg", false)
             }
         };
-        // The computer you're on is underlined (`with_here_line`); a mark is only drawn while there
+        // The computer you're on has its dot (`with_here_dot`); a mark is only drawn while there
         // is another computer.
         let here = marked
             && ghostex_gx_core::SessionKey::parse_sidebar_session_id(&session.session_id)
@@ -134,12 +145,12 @@ impl GhostexGpuiApp {
                 .flex_shrink_0()
                 .flex()
                 .items_center()
-                .child(with_here_line(
+                .child(with_here_dot(
                     titlebar_svg_icon(asset, 12.0 * scale, color),
                     12.0 * scale,
                     scale,
                     here,
-                    appearance.foreground,
+                    appearance.muted,
                 ))
                 .into_any_element(),
         )
