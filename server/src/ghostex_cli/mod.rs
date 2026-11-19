@@ -66,6 +66,7 @@ pub mod saved_prompts;
 mod secret;
 mod security;
 pub mod selector;
+mod server_links_cli;
 mod session_chat_model;
 mod session_chat_rpc;
 pub(crate) mod session_chat_transcript;

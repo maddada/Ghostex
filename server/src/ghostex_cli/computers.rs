@@ -15,6 +15,12 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         println!("{}", HELP);
         return Ok(());
     }
+    match args.first().map(String::as_str) {
+        Some("add") => return super::server_links_cli::add(&args[1..]),
+        Some("remove") => return super::server_links_cli::remove(&args[1..]),
+        Some("access") => return super::server_links_cli::access(&args[1..]),
+        _ => {}
+    }
     let json = args.iter().any(|arg| arg == "--json");
     let local = super::rpc::resolve_local_gxserver_target()?;
     let computers = connected_computers(&local);
@@ -56,15 +62,26 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
     {
         println!("\n{waiting}");
     }
+    super::server_links_cli::print_summary();
     Ok(())
 }
 
 const HELP: &str = "Usage: ghostex computers [--json]
+       ghostex computers add <code>
+       ghostex computers remove <name>
+       ghostex computers access <name> on|off
 
 Lists the computers this one is connected to (Settings > Remote > Remote machines on either
-computer, while the desktop app keeps the connection). Agents on this computer can start, message
-and read sessions on each one, and its agents can do the same here, unless its Agent access switch
-is off.
+computer, while the desktop app keeps the connection, or a server link). Agents on this computer
+can start, message and read sessions on each one, and its agents can do the same here, unless its
+Agent access switch is off.
+
+Server links connect two computers without the desktop app, for example two servers that run only
+gxserver. Run ghostex computer-code on one, then ghostex computers add <its code> on the other, in
+your own terminal. You approve twice, in Ghostex or on your phone: once for each computer to let
+the other's agents in. The link stays up while both computers run gxserver. It gives no sign-in to
+either computer. ghostex computers remove <name> ends it on both, and so does removing the
+computer from either one's paired devices (Settings > Remote, or your phone).
 
   ghostex sessions --computer <name>                     Its sessions and projects (with ids)
   ghostex agents create <agent> --computer <name> --project-id <id> --task \"...\"
@@ -223,6 +240,12 @@ fn require_agent_access(computer: &ConnectedComputer) -> CliResult<()> {
     }
     if computer.agent_access {
         return Ok(());
+    }
+    if super::server_links_cli::is_server_link(&computer.server_id) {
+        return Err(CliError::Other(format!(
+            "Agent access between this computer and {name} is off, so agents can't use its sessions. It is turned back on, on the computer that turned it off, with ghostex computers access {name} on there, or in Settings > Remote > Paired computers.",
+            name = computer.name
+        )));
     }
     Err(CliError::Other(format!(
         "Agent access between this computer and {name} is off, so agents can't use its sessions. It is turned back on with the Agent access switch in {name}'s Edit dialog (Settings > Remote > Remote machines) on the computer that connected to the other.",
