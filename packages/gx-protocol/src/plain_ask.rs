@@ -15,6 +15,12 @@
 
 use crate::approval::{ApprovalRequest, SensitiveAction};
 
+/// How gxserver ends the summary of a computer asking for a server link (GitHub #674): after the
+/// computer's own quoted name, so a name can't make a plain pairing read as a link or the other
+/// way round.
+pub const SERVER_LINK_SUMMARY_TAIL: &str =
+    "\" link its agents with this computer through Easy Connect";
+
 /// A request worded for a person.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PlainAsk {
@@ -68,6 +74,17 @@ pub fn plain_ask(request: &ApprovalRequest, computer: &str) -> Option<PlainAsk> 
                     body: Some(body),
                     check: (!words.is_empty())
                         .then(|| "Approve only if your phone shows the same words.".to_string()),
+                    words,
+                });
+            }
+            if summary.ends_with(SERVER_LINK_SUMMARY_TAIL) {
+                return Some(PlainAsk {
+                    question: format!("Let {name} link its agents with {computer}?"),
+                    body: Some(format!(
+                        "Agents on {name} can then start, message and read agents on {computer}. It gets no sign-in to {computer}."
+                    )),
+                    check: (!words.is_empty())
+                        .then(|| format!("Approve only if {name} shows the same words.")),
                     words,
                 });
             }

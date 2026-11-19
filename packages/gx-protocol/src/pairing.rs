@@ -88,6 +88,49 @@ pub fn easy_connect_client_keys_payload(
     payload.into_bytes()
 }
 
+/// First line of [`server_link_payload`].
+pub const SERVER_LINK_DOMAIN: &str = "ghostex-server-link-v1";
+
+/// The payload a computer signs with its pairing device key to ask the computer it is linked to
+/// (`/api/serverLink`, a server link between two gxservers, GitHub #674):
+///
+/// ```text
+/// ghostex-server-link-v1
+/// <op: grant | connectBack | unlink>
+/// <the receiver's server id>
+/// <the asker's server id>
+/// <the asker's device public key, base64 as sent>
+/// <timestampMs>
+/// <rotate: 0 | 1>
+/// <one line per extra field, `key=value`, sorted by key>
+/// ```
+///
+/// The receiver's server id is signed so an ask meant for one computer can't be replayed to
+/// another the asker is also linked with (both hold the same device key).
+pub fn server_link_payload(
+    op: &str,
+    to_server_id: &str,
+    from_server_id: &str,
+    device_public_key: &str,
+    timestamp_ms: u64,
+    rotate: bool,
+    extra: &[(String, String)],
+) -> Vec<u8> {
+    let mut sorted: Vec<&(String, String)> = extra.iter().collect();
+    sorted.sort();
+    let mut payload = format!(
+        "{SERVER_LINK_DOMAIN}\n{op}\n{to_server_id}\n{from_server_id}\n{device_public_key}\n{timestamp_ms}\n{}",
+        u8::from(rotate)
+    );
+    for (key, value) in sorted {
+        payload.push('\n');
+        payload.push_str(key);
+        payload.push('=');
+        payload.push_str(value);
+    }
+    payload.into_bytes()
+}
+
 /// The device key a phone sends with `/api/pairDevice`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
