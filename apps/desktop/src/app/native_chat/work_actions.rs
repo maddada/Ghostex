@@ -28,6 +28,8 @@ pub(super) const CHOOSE_ANSWER: &str = "Choices";
 /// The one icon of a Needs you row's Details, whatever it opens (a question's panel, a form, a
 /// Live page).
 pub(super) const DETAILS_ICON: &str = "titlebar/file-text.svg";
+/// A Needs you row's Jump to context: the icon Show in chat has in the row's panel.
+pub(super) const CONTEXT_ICON: &str = "titlebar/focus-2.svg";
 /// Its dropdown grows to its longest answer up to this (unscaled), and the window's edge.
 const ANSWERS_MENU_MAX: f32 = 560.0;
 
@@ -351,6 +353,37 @@ impl NativeChatView {
             p,
             cx,
         ))
+    }
+
+    /// Jump to context as an icon button beside Details and Reply: opens the chat that asked the row's
+    /// question, scrolled to the message that did (gx-chat-core `work_cards::context_of`). `None`
+    /// for a row that came from no chat.
+    pub(super) fn dock_context_icon(
+        &self,
+        key: &str,
+        row: &Value,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> Option<AnyElement> {
+        let context = row["context"].clone();
+        if !context.is_object() {
+            return None;
+        }
+        Some(
+            self.tone_square_icon_button(
+                gpui::SharedString::from(format!("work-row-context:{key}")),
+                "Jump to context",
+                CONTEXT_ICON,
+                false,
+                p,
+            )
+            .on_click(cx.listener(move |this, _, window, cx| {
+                cx.stop_propagation();
+                this.close_board_card_menu(cx);
+                this.open_work_target(context.clone(), window, cx);
+            }))
+            .into_any_element(),
+        )
     }
 
     /// Reply as an icon button (`reply_answer`'s answer): the reply box at the press; once sent from

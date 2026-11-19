@@ -975,6 +975,11 @@ fn ask_value(ask: &WorkAsk) -> Value {
     if let Some(at) = &ask.settled_at {
         out["settledAt"] = json!(at);
     }
+    // The thread whose to-do it is: its row's Jump to context opens that thread's chat
+    // (gx-chat-core extras/work_cards.rs `context_of`).
+    if let Some(thread) = &ask.from_thread {
+        out["fromThread"] = json!(thread);
+    }
     if ask.withdrawn {
         out["withdrawn"] = json!(true);
     }

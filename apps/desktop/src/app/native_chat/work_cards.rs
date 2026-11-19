@@ -1251,6 +1251,14 @@ impl NativeChatView {
         // Reply always shows: it is the one answer that takes anything, so a row keeps it one
         // click away.
         let reply_width = reply_answer.as_ref().map_or(0.0, |_| icon_width + 6.0);
+        // Jump to context after Reply, on every row that came from a chat (gx-chat-core
+        // `work_cards::context_of`).
+        let context_button = if look.buttons.is_some() || settled {
+            None
+        } else {
+            self.dock_context_icon(&key, row, p, cx)
+        };
+        let reply_width = reply_width + context_button.as_ref().map_or(0.0, |_| icon_width + 6.0);
         let all_width = buttons_width(&widths) + reply_width;
         // The answers and Reply are one line, never wrapped: when they do not all fit beside the
         // title, the answers fold into one Choose an answer dropdown in their place. Measured, with
@@ -1283,6 +1291,7 @@ impl NativeChatView {
         if let Some(answer) = &reply_answer {
             buttons.push(self.dock_reply_icon(&format!("{key}:reply"), answer, busy, p, cx));
         }
+        buttons.extend(context_button);
         // A page or form's answered/total ("0/1"), quiet, at the row's right end just before
         // its buttons and age.
         //
@@ -1383,9 +1392,10 @@ impl NativeChatView {
         let line = head.child(age_menu);
         // Wrapped (a Work panel card), a question with details shows their first line under its
         // title, cut at one line, so the card says what Details holds (gx-chat-core
-        // `details_fields`).
+        // `details_fields`). A short description that is not Details is the row's second line
+        // everywhere, its answers still on the row (`details_fields`' 2026-11-20 decision).
         let preview = text(row, "preview");
-        let preview = (wrap && row["details"] == true && !preview.is_empty()).then(|| {
+        let preview = ((wrap || row["details"] != true) && !preview.is_empty()).then(|| {
             div()
                 .min_w_0()
                 .pl(px(DOCK_LEAD * s))

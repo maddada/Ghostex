@@ -719,6 +719,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 "needs": true,
             });
             row["showInChat"] = show_in_chat(&turns, asked_in, &key);
+            row["context"] = context_of(ask, &row["showInChat"]);
             if is_snoozed {
                 let back = snooze_end(ask, &key, state);
                 row["snooze"] = Value::Null;
@@ -985,12 +986,15 @@ pub fn panel_actions_with(
             .filter_map(|event| at_ms(text(event, "at")))
             .next_back()
             .unwrap_or(at);
+        let show = show_in_chat(&turns, asked_in, &key);
         return json!({
             "reply": { "item": reference, "key": key, "tag": tag, "name": reply_name(text(ask, "text")) },
             "dismiss": card["cancel"],
             "markAnswered": card["markAnswered"],
             "snooze": card["snooze"],
-            "showInChat": show_in_chat(&turns, asked_in, &key),
+            // Jump to context on its Work panel card (`context_of`).
+            "context": context_of(ask, &show),
+            "showInChat": show,
         });
     }
     let changed_at = item["history"]
@@ -1031,6 +1035,7 @@ pub fn question_actions(state: &ChatState, context: &ChatContext, id: &str) -> V
                 "markAnswered": row["markAnswered"],
                 "snooze": row["snooze"],
                 "showInChat": row["showInChat"],
+                "context": row["context"],
             })
         })
 }
@@ -1065,6 +1070,29 @@ fn show_in_chat(turns: &[Turn], at: i64, target: &str) -> Value {
         Some(anchor) => json!({ "type": "showInChat", "messageId": anchor, "target": target }),
         None => Value::Null,
     }
+}
+
+/// A Needs you row's Jump to context: what opens the chat that asked it, scrolled to the message
+/// that did. A thread's to-do (`ghostex needs-you add` in a coordinator's thread, gxserver's
+/// `fromThread`) opens that thread's chat, at its newest messages where it asked; anything else
+/// shows the reply that asked it in this chat (`showInChat`). `null` when neither is known.
+///
+/// CDXC:Coordinators 2026-11-20 DECISION:
+/// User, picking the clear-questions page's bundle A (Q4255) with a note: "At least when we have
+/// such questions on regular threads we should have a button to jump to context." Every Needs you
+/// row that came from a chat (answer links, forms, pages, item asks, a thread's questions) has a
+/// Jump to context icon button beside Details and Reply, in the dock, the Work panel and the phone.
+pub(crate) fn context_of(ask: &Value, show_in_chat: &Value) -> Value {
+    let thread = &ask["fromThread"];
+    if !text(thread, "sessionId").is_empty() {
+        return json!({
+            "type": "openCoordinatorThread",
+            "serverId": text(thread, "serverId"),
+            "projectId": text(thread, "projectId"),
+            "sessionId": text(thread, "sessionId"),
+        });
+    }
+    show_in_chat.clone()
 }
 
 /// A blocked or just-finished line of work's dock row (`done_key`: the finished row's, with the x
@@ -1114,10 +1142,28 @@ fn work_row(item: &Value, turns: &[Turn], now_ms: i64, done_key: Option<String>)
 /// phone does the same, over the air.
 /// SEE-ALSO: apps/desktop/src/app/native_chat/work_cards.rs (`dock_row_look`),
 /// apps/mobile/app/src/chat/native/cards/WorkCards.tsx (`DockRow`).
+///
+/// CDXC:Coordinators 2026-11-20 DECISION:
+/// Every question now carries a description (the clear-questions page, Q4255 "A"), so a quick
+/// question would lose its one click to Details. A description of one short line
+/// ([`SHORT_DESCRIPTION`] characters at most) is not Details: it shows under the title as the
+/// row's second line, and the answers stay on the row. A longer one shows Details, as Q4232 chose.
+pub(crate) const SHORT_DESCRIPTION: usize = 90;
+
 pub(crate) fn details_fields(detail: &str) -> (bool, String) {
     let detail = detail.trim();
     if detail.is_empty() {
         return (false, String::new());
+    }
+    let listed = ["- ", "* ", "+ ", "#", ">", "|", "```"]
+        .iter()
+        .any(|marker| detail.starts_with(marker));
+    if !detail.contains('\n') && !listed {
+        let plain = crate::questions::form_links::plain_words(detail).replace(['*', '`'], "");
+        let plain = plain.split_whitespace().collect::<Vec<_>>().join(" ");
+        if plain.chars().count() <= SHORT_DESCRIPTION {
+            return (false, plain);
+        }
     }
     let line = detail
         .lines()
@@ -1213,6 +1259,8 @@ fn question_rows_of(
                 "markAnswered": if asker.seen_only { Value::Null } else { json!({ "type": "markQuestionAnswered", "id": asker.id }) },
                 "snooze": snooze,
                 "showInChat": { "type": "showInChat", "messageId": asker.message_id, "target": asker.id },
+                // Jump to context: the reply that asked it (`context_of`).
+                "context": { "type": "showInChat", "messageId": asker.message_id, "target": asker.id },
                 "mention": "",
                 "needs": true,
             });
@@ -1237,6 +1285,15 @@ fn question_rows_of(
                     "name": reply_name(&question.question),
                 });
                 row["detail"] = json!([]);
+                // What it is about: the lines between it and its links, else the lines above it
+                // (transcript/inline_answers.rs `context_above`), as an ask's `--detail` reads.
+                let description = question.description();
+                if !description.trim().is_empty() {
+                    row["body"] = json!(crate::transcript::native_markdown::ask_markdown(description));
+                    let (details, preview) = details_fields(description);
+                    row["details"] = json!(details);
+                    row["preview"] = json!(preview);
+                }
             } else {
                 row["kind"] = json!("form");
                 // A Ghostex page (not a form): its mark is a page (desktop `row_mark`), a click

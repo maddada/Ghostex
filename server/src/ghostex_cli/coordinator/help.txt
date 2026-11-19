@@ -31,7 +31,7 @@ USAGE
                               [--release <name>] [--json]
   ghostex coordinator item now <W7> "<where it stands>" [--thread <thread-ref>]... [--json]
   ghostex coordinator item step <W7> "<step>" [--done] [--chore] [--json]
-  ghostex coordinator item ask <W7> "<title>" [--detail "<the rest>"]
+  ghostex coordinator item ask <W7> "<title>" --detail "<what and why>"
                               [--answers "A,B" | --answer "A" --answer "B"] [--recommended B]
                               [--holds] [--steps <file|url>] [--tag Q12] [--json]
   ghostex coordinator item ask <W7> (--done <Q12> | --withdraw <Q12>) [--json]
@@ -294,16 +294,18 @@ WORK ITEMS
   chat's, or --tag Q12 for one the chat asked and still waits on; a tag already
   answered is refused). next-tag prints the next free tag, one past the highest
   the chat or an ask used: take it after a context compaction, never reuse a
-  tag. Its title is one
-  short plain question or instruction a person understands at a glance, about
-  ten words, with no item names or code names ("Ship the new pairing screen
-  today?"); everything else (why, what to check, where) goes in --detail, which
-  shows under the title when the user opens the row. --detail takes Markdown
-  and line breaks (bold, code, links, lists; #562 links to the PR): write it as
-  a few short lines or bullets, not one long paragraph. Give --detail only when
-  the user needs it to decide: the row then shows Details, its answers in the
-  panel under the detail; a yes/no the title answers alone gets no --detail, so
-  its answers stay one click on the row. One-click answers
+  tag. The user reads the row with
+  nothing else on screen, so its title is one short plain question or
+  instruction that names its subject, about ten words ("Move the
+  settings-folder project out of Work?", "Delete the branch fix/tab-drag?"):
+  never "it", "this" or "that" without the thing, and no Q tag in it. Every
+  ask has --detail: what it is about and why you ask, in Markdown with line
+  breaks (bold, code, links, lists; #562 links to the PR), a few short lines
+  or bullets, not one long paragraph. A one-line --detail (about 90
+  characters) shows under the title with the answers still one click on the
+  row; a longer one shows Details, its answers in the panel under it. Ask the
+  user only this way, with a ```questions form or with a page: never with
+  answer links (ghostex-answer:) in your reply. One-click answers
   with --answers (commas split them; write \, for a comma inside an answer,
   or give each with --answer "Too small to read, simplify it"), the steps to
   follow with --steps, and --holds when the work

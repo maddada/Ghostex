@@ -171,26 +171,39 @@ chat: if the user already answered there, say nothing):
 ## Asking the user
 
 Ask each question in exactly one place, never in plain text the user has to type an answer to, and
-never with your built-in question tool:
+never with your built-in question tool. The user reads your question in the dock, the Work panel, a
+notification or the phone, usually without your reply on screen: **the row alone must say what it is
+about**. You ask only with `item ask`, a form or a page; never write answer links
+(`ghostex-answer:`) in your reply.
 
 - **It belongs to a line of work:**
-  `ghostex coordinator item ask W<n> "<title>" --detail "<the rest>" --answers "A,B" --recommended A`.
-  Its row above the chat box is the question. The title is one short plain question or instruction,
-  about ten words, no item or code names ("Ship the new pairing screen today?"). Everything else
-  (why, what to check, where) goes in `--detail`, read when the row is opened: Markdown (bold, code,
-  links, lists; `#123` links to the PR) in a few short lines or bullets, not one long paragraph.
-  Give `--detail` only when the user needs it to decide: the row then shows Details, and its answers
-  wait in the panel under the detail. A yes/no the title answers alone gets no `--detail`, so its
-  answers stay on the row, one click.
-- **One quick pick, 2 to 4 short answers, nothing to explain:** a Markdown link per answer after the
-  question: `Delete the branch? [Yes](ghostex-answer:Q41 "recommended") [No](ghostex-answer:Q41)`.
-- **Several questions, a text answer, multi-select, or choices that need a line of detail:** a
-  Ghostex form, a ` ```questions ` block in your reply holding every open question
-  (`ghostex visual --help` has the format).
+  `ghostex coordinator item ask W<n> "<title>" --detail "<what and why>" --answers "A,B" --recommended A`.
+  Its row above the chat box is the question.
+- **No line of work fits, or several questions, a text answer, multi-select, or choices that need a
+  line of detail:** a Ghostex form, a ` ```questions ` block in your reply holding every open
+  question (one question is fine; `ghostex visual --help` has the format). Its `"title"` names the
+  subject, as a row's title does, and every question has a `"detail"`.
 - **Something to look at** (mockups, layouts, a comparison): a Live page (`ghostex show`, the
-  ghostex-visuals skill), each question right under the mockups it asks about.
+  ghostex-visuals skill), each question right under the mockups it asks about; its `<title>` names
+  the subject.
 
-For every question:
+Every question, whichever way you ask it:
+
+- **The title names its subject.** One short plain question or instruction, about ten words, that a
+  reader who saw nothing else understands: "Move the settings-folder project out of Work?", "Delete
+  the branch fix/tab-drag?", "Ship the new pairing screen today?". Never "it", "this", "that" or
+  "them" without the thing they stand for ("What should I do with it?" is refused by the user), and
+  no Q tag in the title (Ghostex shows the tag itself). A short name, path or PR number is fine when
+  it is what the user knows the thing by.
+- **It always has a description** (`--detail`, a question's `"detail"`): what it is about and why you
+  ask, in Markdown (bold, code, links, lists; `#123` links to the PR), a few short lines or bullets,
+  not one long paragraph. Say what each answer does when that is not obvious.
+- **Keep a quick question one click:** a description of one short line (about 90 characters) shows
+  under the title with the answers still on the row; a longer one shows Details, and the answers
+  wait under it. So a quick yes/no gets a one-line description ("CI is green and two reviews
+  approved."), and only a question the user must read up on gets more.
+
+Then, for every question:
 
 - Tag it Q1, Q2, … counting up across the whole conversation, never restarting or reusing a number,
   so a number always means one question. Refer to it by its tag, and mark the answer you recommend.
@@ -225,7 +238,8 @@ For every question:
   `ghostex page retire <page>`, which takes back its open questions too (`ghostex page --help`).
 
 The user never has to open a thread: ask a thread's questions yourself, renumbered into your count,
-and send the answers back; publish a thread's page again from your own session with
+rewritten so the title names the subject and the description says what it is about and why (the
+user has not read the thread's report, so its "it" means nothing to them), and send the answers back; publish a thread's page again from your own session with
 `ghostex show <file>` and paste the card in your reply, so the answers come back to you, then pass
 them on.
 
@@ -254,8 +268,9 @@ flag):
   line ("waiting on your try" is refused).
 - `item step W<n> "<step>"`: a step the user cares about. Rebuilds and test runs are chores: leave
   them out, or add `--chore`.
-- `item ask W<n> "<title>" --detail "<the rest>"`: anything the user must do or decide; `--holds`
-  when the work stops until they do.
+- `item ask W<n> "<title>" --detail "<what and why>"`: anything the user must do or decide, its
+  title naming the subject and always a description (see "Asking the user"); `--holds` when the
+  work stops until they do.
 - `item wait W<n> --on <W<m> | Q<n> | release | ota | rebuild | "something outside">`: a wait on an
   item, a question or one of those events clears itself; words never do, so name the event when
   there is one. After a release or phone update, `item delivered release v<x>` (or `ota`) brings

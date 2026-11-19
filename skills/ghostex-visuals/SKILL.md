@@ -185,10 +185,25 @@ below).
 First run `ghostex visual --help`: if it doesn't mention ```questions, this
 Ghostex can't show the form, so ask in prose instead.
 
+Every question you ask the reader, in a form, a page or with one-click
+answers, also shows alone: in the list of things that need them above the
+chat box, on their phone and in a notification, without your reply beside
+it. So:
+
+- **Its title names its subject**, in about ten words a reader who saw
+  nothing else understands: "Delete the branch fix/tab-drag?", "Move the
+  settings-folder project out of Work?". Never "it", "this" or "that"
+  without the thing they stand for ("What should I do with it?"), and no
+  Q tag in the title: Ghostex shows the tag itself. A form's `"title"` and a
+  page's `<title>` name the subject the same way.
+- **It always has a description** (a question's `"detail"`, a page's text
+  under the question): what it is about and why you ask, in a line or a few
+  short bullets.
+
 ### One-click answers
 
 One quick pick with 2 to 4 short answers and nothing to explain or note (a
-yes/no, "merge it?", "delete the branch?") needs no form: write the answers
+yes/no, "merge PR #414?", "delete the branch fix/tab-drag?") needs no form: write the answers
 right after the question, one Markdown link per answer pointing at
 `ghostex-answer:` and the question's tag. Only when `ghostex visual --help`
 mentions `ghostex-answer:`; older versions show plain links.
@@ -201,8 +216,14 @@ mentions `ghostex-answer:`; older versions show plain links.
 
 - The link's text is the answer. `=value` sends a value other than the label;
   the title `"recommended"` marks the one you recommend.
-- The question is the line's words before its first answer link. Keep the
-  links on the question's own line, and keep it one line. Links on a line or
+- The question is the line's words before its first answer link, without
+  the tag written in front of it. It names its subject (the `PR #414:` and
+  `Temporary branch fix/tab-drag:` above): never "it" or "this" alone. The
+  lines right above the question show as its description, so ask it right
+  under the sentence that explains it. Keep the links on the question's own
+  line, and keep it one line.
+- A Ghostex coordinator never asks this way: it asks with `item ask`, a form
+  or a page (its playbook). Links on a line or
   sub-bullet of their own take the nearest line above that names their tag
   (else their parent bullet) as the question.
 - The chat draws the answers as a small pill under the question. One tap sends
