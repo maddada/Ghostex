@@ -321,20 +321,28 @@ pub(crate) fn annotate_messages(messages: &mut [Value], project_id: &str, sessio
     }
     let key: ChatKey = (project_id.to_string(), session_id.to_string());
     let chat = chat(&key);
-    let mut known = chat.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    // Every row already known: no database.
-    if let (true, Some(since)) = (known.loaded, SINCE.get().copied()) {
-        let (stamped, candidates) = classify(&mut known, messages, since);
-        if candidates.is_empty() {
-            drop(known);
-            stamp(messages, &stamped, session_id);
-            return;
+    // Every row already known: no database. The lock is only tried here, on the caller's thread
+    // (an async worker for the follower); waiting for it happens off the workers, below.
+    let free = match chat.try_lock() {
+        Ok(known) => Some(known),
+        Err(std::sync::TryLockError::Poisoned(poisoned)) => Some(poisoned.into_inner()),
+        Err(std::sync::TryLockError::WouldBlock) => None,
+    };
+    if let Some(mut known) = free {
+        if let (true, Some(since)) = (known.loaded, SINCE.get().copied()) {
+            let (stamped, candidates) = classify(&mut known, messages, since);
+            if candidates.is_empty() {
+                drop(known);
+                stamp(messages, &stamped, session_id);
+                return;
+            }
         }
     }
     let Some(paths) = PATHS.get() else {
         return;
     };
     let stamped = off_worker(|| {
+        let mut known = chat.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let db = open_gxserver_database(paths).ok()?;
         // The transcript is looked up only when older pages are needed.
         let mut pages: Option<Option<Box<PageReader<'static>>>> = None;
@@ -344,7 +352,6 @@ pub(crate) fn annotate_messages(messages: &mut [Value], project_id: &str, sessio
         };
         Some(annotate_with(&db, &key, &mut known, messages, &mut older))
     });
-    drop(known);
     if let Some(stamped) = stamped {
         stamp(messages, &stamped, session_id);
     }
