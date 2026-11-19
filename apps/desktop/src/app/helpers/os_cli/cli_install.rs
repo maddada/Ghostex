@@ -10,7 +10,7 @@ use std::os::unix::fs::PermissionsExt as _;
 
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::Security::Cryptography::{
-    BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG,
+    BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom,
 };
 
 use anyhow::Result;
@@ -56,8 +56,15 @@ pub(crate) fn gpui_finish_desktop_control_setup(
     // The cua-driver skill follows the driver it describes; a failure here only adds a note.
     // An update refreshes the skill while an agent links it and never adds it; Install and
     // Reinstall (`was_update` false) always do (CDXC:AgentSkills 2026-11-19 in
-    // server/src/managed_tools/desktop_control.rs).
-    let skill_note = if was_update && !gpui_cua_driver_skill_linked() {
+    // server/src/managed_tools/desktop_control.rs). On Windows the pack is the sign instead:
+    // `cua-driver skills install` links only Windows-side agent folders, while Ghostex's agents
+    // run in WSL and read the pack itself through `cua-driver skills path`.
+    let wanted = if cfg!(windows) {
+        gpui_cua_driver_skill_pack_installed()
+    } else {
+        gpui_cua_driver_skill_linked()
+    };
+    let skill_note = if was_update && !wanted {
         ""
     } else {
         match gpui_install_cua_driver_skill() {
