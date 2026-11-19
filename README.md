@@ -28,9 +28,13 @@
 
 ![A coordinator with a visual page](media/readme/gx-hero-9.webp)
 
-**Pick a design and send your choices.**
+**Pick a design and send your choices in Live HTML Pages.**
 
-<img width="2048" height="1291" alt="2026-11-19_CleanShot_08-08-12" src="https://github.com/user-attachments/assets/0b481abd-87a8-4575-bff8-1605b570c089" />
+Ask the agent to create one for you at any time! This and Coordinators are the 2 best features of Ghostex.
+
+<img width="3456" height="2074" alt="2026-11-19_Ghostex_09-53-09@2x" src="https://github.com/user-attachments/assets/9f834d23-f3cc-45a1-84cc-30b2885019b1" />
+
+<img width="3456" height="2074" alt="2026-11-19_Ghostex_09-53-09@2x" src="https://github.com/user-attachments/assets/17c43cd6-697d-4304-b300-990fb74e0ff8" />
 
 **A full editor, with annotations.**
 
@@ -240,6 +244,8 @@ Pair the phone app with Ghostex on your computer using Easy Connect, or use your
 ![Design options with feedback controls](media/readme/gx-hero-10.webp)
 
 <img width="3456" height="2158" alt="image" src="https://github.com/user-attachments/assets/947b0bc2-c058-4f31-8aaa-0c60c59f5941" />
+
+<img width="2048" height="1291" alt="2026-11-19_CleanShot_08-08-12" src="https://github.com/user-attachments/assets/0b481abd-87a8-4575-bff8-1605b570c089" />
 
 <img width="3456" height="2079" alt="2026-11-19_Ghostex_08-01-09@2x" src="https://github.com/user-attachments/assets/5881a55a-5906-411b-ac43-84c82373984d" />
 
