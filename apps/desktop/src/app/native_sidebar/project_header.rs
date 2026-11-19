@@ -578,7 +578,15 @@ impl GhostexGpuiApp {
             .child(
                 div()
                     .when(chip.hidden, |icon| icon.opacity(0.35))
-                    .child(titlebar_svg_icon(asset, 12.0 * scale, appearance.muted)),
+                    // The computer you're on is underlined (computer_mark.rs `with_here_line`).
+                    .child(super::computer_mark::with_here_line(
+                        titlebar_svg_icon(asset, 12.0 * scale, appearance.muted),
+                        12.0 * scale,
+                        scale,
+                        chip.machine_id == ghostex_gx_core::LOCAL_MACHINE_ID
+                            && crate::app::gx_chat::session_directory::several_computers(),
+                        appearance.foreground,
+                    )),
             )
             .when_some(dot, |chip, color| {
                 chip.child(

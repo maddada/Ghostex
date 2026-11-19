@@ -32,6 +32,20 @@ pub(crate) fn machine_icons_room(shown: usize) -> f32 {
     shown as f32 * (MACHINE_ICON_SIZE + MACHINE_ICON_GAP) + MACHINE_DIVIDER_ROOM
 }
 
+/// How far this computer's tile lifts its icon while it shows status dots, before the zoom, so the
+/// line under the icon (computer_mark.rs `with_here_line`) clears the dots at the bottom centre.
+const HERE_LINE_LIFT: f32 = 4.0;
+
+/// A computer's icon in its tile, lifted while `lift` (this computer's, over its status dots).
+fn tile_face(icon: AnyElement, lift: bool, scale: f32) -> gpui::Div {
+    div()
+        .flex()
+        .when(lift, |face| {
+            face.relative().top(px(-HERE_LINE_LIFT * scale))
+        })
+        .child(icon)
+}
+
 /// A computer's state, in the words its tooltip uses.
 fn machine_state_words(machine: &NativeSidebarMachine) -> &'static str {
     if machine.id == ghostex_gx_core::LOCAL_MACHINE_ID {
@@ -136,7 +150,17 @@ impl GhostexGpuiApp {
             } else {
                 appearance.chrome_icon
             });
-        if busy && !local {
+        if local {
+            // The computer you're on is underlined; its tile only shows beside another computer's
+            // (computer_mark.rs `with_here_line`).
+            super::computer_mark::with_here_line(
+                icon,
+                size,
+                appearance.scale,
+                true,
+                appearance.foreground,
+            )
+        } else if busy {
             icon.with_throttled_animation(
                 format!("native-machine-busy-{}", machine.id),
                 std::time::Duration::from_millis(900),
@@ -192,7 +216,8 @@ impl GhostexGpuiApp {
         let tooltip = self.native_machine_tooltip(machine);
         let tooltip_span = super::tooltips::SidebarTooltipSpan::sidebar(self.sidebar_width, scale);
         // An update waiting there: the tab's arrow, small on the tile's top-right corner, clear of
-        // the dots at its bottom centre.
+        // the dots at its bottom centre. Only another computer's tile shows one, so it never meets
+        // the line under this computer's icon (computer_mark.rs `with_here_line`).
         let update = (!local)
             .then(|| self.remote_app_update_tab_badge(&id))
             .flatten()
@@ -241,7 +266,11 @@ impl GhostexGpuiApp {
                     })
             })
             .hover(|tile| tile.bg(appearance.hover))
-            .child(self.native_machine_icon(machine, systems, appearance, 15.0 * scale))
+            .child(tile_face(
+                self.native_machine_icon(machine, systems, appearance, 15.0 * scale),
+                local && has_status,
+                scale,
+            ))
             /*
             CDXC:Sidebar 2026-09-25 DECISION:
             User: stop showing the status on the machine we're on and show it on the other machines as dots, not numbers, exactly like the Spaces. The picked computer's sessions are already listed below.
@@ -399,7 +428,11 @@ impl GhostexGpuiApp {
             .border_color(appearance.foreground.opacity(0.08))
             .cursor_pointer()
             .hover(|tile| tile.bg(appearance.hover))
-            .child(self.native_machine_icon(picked, systems, appearance, 15.0 * scale))
+            .child(tile_face(
+                self.native_machine_icon(picked, systems, appearance, 15.0 * scale),
+                picked.id == ghostex_gx_core::LOCAL_MACHINE_ID && has_status,
+                scale,
+            ))
             .when(has_status, |tile| {
                 tile.child(machine_dots(scale).child(super::status::status_dot_stack(
                     working,

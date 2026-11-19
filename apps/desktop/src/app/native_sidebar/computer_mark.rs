@@ -9,12 +9,65 @@
 //! CDXC:RemoteMachines 2026-11-08 DECISION:
 //! User, on the offline-notice page (Q1837): "just show WN with redish color in sidebar to indicate, that's enough". The computer's mark takes the soft red the computer's tile icon turns when it fails (machines.rs) while that computer is offline (gx_chat/computers.rs); nothing else on the row changes. Since 2026-11-12 the mark is the icon, not the short name.
 
-use gpui::{AnyElement, IntoElement, ParentElement, Styled, div};
+use gpui::{AnyElement, Hsla, IntoElement, ParentElement, Styled, div, px};
 use serde_json::Value;
 
 use super::{appearance::SidebarAppearance, model::NativeSidebarSession};
 use crate::GhostexGpuiApp;
 use crate::app::helpers::*;
+
+/// The line's width (a share of the icon's), its height, and the gap between the icon's bottom
+/// edge and the line, before the zoom: the drawing on the Q4248 page.
+const LINE_WIDTH: f32 = 0.62;
+const LINE_HEIGHT: f32 = 1.5;
+const LINE_GAP: f32 = 2.0;
+
+/// A computer's icon (`size` px, zoomed), with a short line of `ink` centred under it when `here`:
+/// the computer you're on, while there is another computer to tell it from.
+///
+/// CDXC:RemoteMachines 2026-11-20 DECISION:
+/// User, on the "marking the computer you're on" page (Q4248), picked D, the baseline, after the
+/// corner pip of the same day (Q4241) showed on a project header's Mac icon and they did not like
+/// it. A short line under this computer's icon, the way a picked tab is underlined: 62% of the
+/// icon's width, 1.5px tall with round ends, 2px under it, in the row's foreground. It shows
+/// wherever a computer's icon does, on the desktop and in the web build: the sidebar's computer
+/// tiles and the folded computers button, session rows and Unified cards, a project header's
+/// computer icons, the chat's where pill and its card, Session details and Settings > Remote's row
+/// for this computer. With one computer nothing is marked, and the phone marks nothing (it is not
+/// one of the computers, so none is the one you're on). On a tile the status dots sit at the
+/// bottom centre too, so this computer's tile lifts its icon and line clear of them while it shows
+/// dots (machines.rs). This supersedes the corner pip.
+pub(crate) fn with_here_line(
+    icon: impl IntoElement,
+    size: f32,
+    scale: f32,
+    here: bool,
+    ink: Hsla,
+) -> AnyElement {
+    if !here {
+        return icon.into_any_element();
+    }
+    let width = size * LINE_WIDTH;
+    div()
+        .relative()
+        .flex_shrink_0()
+        .size(px(size))
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(icon)
+        .child(
+            div()
+                .absolute()
+                .left(px((size - width) / 2.0))
+                .top(px(size + LINE_GAP * scale))
+                .w(px(width))
+                .h(px(LINE_HEIGHT * scale))
+                .rounded(px(1.0 * scale))
+                .bg(ink),
+        )
+        .into_any_element()
+}
 
 /// The session's computer is one this computer knows is offline.
 fn computer_offline(session: &NativeSidebarSession) -> bool {
@@ -58,13 +111,18 @@ impl GhostexGpuiApp {
         session: &NativeSidebarSession,
         appearance: &SidebarAppearance,
     ) -> Option<AnyElement> {
-        let asset = match self.sidebar_computer_mark(&session.session_id) {
-            Some((asset, _)) => asset,
+        let (asset, marked) = match self.sidebar_computer_mark(&session.session_id) {
+            Some((asset, _)) => (asset, true),
             None => {
                 other_computer_name(session)?;
-                "titlebar/device-desktop.svg"
+                ("titlebar/device-desktop.svg", false)
             }
         };
+        // The computer you're on is underlined (`with_here_line`); a mark is only drawn while there
+        // is another computer.
+        let here = marked
+            && ghostex_gx_core::SessionKey::parse_sidebar_session_id(&session.session_id)
+                .is_some_and(|key| key.machine.is_local());
         let color = if computer_offline(session) {
             gpui::rgb(0xff9494).into()
         } else {
@@ -76,7 +134,13 @@ impl GhostexGpuiApp {
                 .flex_shrink_0()
                 .flex()
                 .items_center()
-                .child(titlebar_svg_icon(asset, 12.0 * scale, color))
+                .child(with_here_line(
+                    titlebar_svg_icon(asset, 12.0 * scale, color),
+                    12.0 * scale,
+                    scale,
+                    here,
+                    appearance.foreground,
+                ))
                 .into_any_element(),
         )
     }

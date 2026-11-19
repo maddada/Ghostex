@@ -145,6 +145,16 @@ fn machine_icon(pill: &Value) -> String {
     }
 }
 
+/// The session runs on the computer you're on, beside another computer the sidebar lists: its icon
+/// is underlined (native_sidebar/computer_mark.rs `with_here_line`). A Cloud Box or a box is not the
+/// computer, so it wears none.
+fn here(pill: &Value) -> bool {
+    !matches!(
+        pill["machine"]["kind"].as_str(),
+        Some("cloudBox" | "box" | "remote")
+    ) && crate::app::gx_chat::session_directory::several_computers()
+}
+
 fn branch_icon(pill: &Value) -> String {
     icon_path(if pill["worktree"].as_bool() == Some(true) {
         "git-fork"
@@ -195,13 +205,17 @@ fn card_header(pill: &Value, ink: CardInk, s: f32) -> gpui::Div {
                 .child(text(card, "title")),
         )
         .child(div().flex_1())
-        .child(
+        .child(crate::app::native_sidebar::computer_mark::with_here_line(
             svg()
                 .path(machine_icon(pill))
                 .size(px(14.0 * s))
                 .flex_shrink_0()
                 .text_color(ink.secondary),
-        )
+            14.0 * s,
+            s,
+            here(pill),
+            ink.foreground,
+        ))
         .child(
             // The computer's name gets most of the row (a chosen name such as "Mohamad's MacBook
             // Pro (2)" fits whole); the project shortens first.
@@ -380,13 +394,20 @@ impl NativeChatView {
                 .text_color(p.card_muted)
         };
         // Main Hub's flower stands for the session's place (its card names the computer).
-        let place_icon = if pill["mainHub"] == Value::Bool(true) {
+        let main_hub = pill["mainHub"] == Value::Bool(true);
+        let place_icon = if main_hub {
             crate::app::native_sidebar::chief_row_view::FLOWER_ICON.to_string()
         } else {
             machine_icon(&pill)
         };
         let left = half()
-            .child(icon(place_icon))
+            .child(crate::app::native_sidebar::computer_mark::with_here_line(
+                icon(place_icon),
+                ICON * s,
+                s,
+                !main_hub && here(&pill),
+                p.foreground,
+            ))
             .when(project_w > 0.0, |half| {
                 half.child(label(project.clone(), project_w, p.foreground))
             });
