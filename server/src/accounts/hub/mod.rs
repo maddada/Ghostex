@@ -149,7 +149,9 @@ fn account_from_file(file: &Value, now: DateTime<Utc>) -> Option<AccountReading>
             .filter(|id| !id.is_empty())
             .map(str::to_string),
         status,
-        status_message: text("status_message"),
+        status_message: text("status_message")
+            .map(|message| client::masked(&message))
+            .filter(|message| !message.is_empty()),
         next_retry_after,
         usage: Vec::new(),
         usage_error: None,

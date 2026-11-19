@@ -51,31 +51,37 @@ fn answer(result: Result<ureq::http::Response<ureq::Body>, ureq::Error>) -> Resu
 }
 
 /// The hub's own error text (`{"error": "…"}`), trimmed for a sentence.
-///
-/// CDXC:AgentProviders 2026-11-19 WHY:
-/// A message shows only the `error` field of a JSON answer, never a raw body (a proxy's page, or an answer that repeats a request), and any long unbroken run of letters and digits in it is cut out, so a key or token a hub or a proxy in front of it echoes never reaches Settings, the CLI or a log.
 fn hub_error(body: &Value) -> Option<String> {
     let text = body
         .get("error")
-        .and_then(|error| error.as_str().or_else(|| error.get("message")?.as_str()))?
-        .trim();
+        .and_then(|error| error.as_str().or_else(|| error.get("message")?.as_str()))?;
+    let text = masked(text);
+    (!text.is_empty()).then_some(text)
+}
+
+/// Text a hub wrote (an error, an account's status message), trimmed for a sentence with every
+/// long unbroken run of letters and digits cut out.
+///
+/// CDXC:AgentProviders 2026-11-19 WHY:
+/// A message shows only the `error` field of a JSON answer, never a raw body (a proxy's page, or an answer that repeats a request), and any run of 16 or more letters, digits, dashes or underscores is cut out (CLIProxyAPI client keys, OAuth tokens and each part of a JWT are longer; a host name's dots keep it readable), so a key or token a hub or a proxy in front of it echoes never reaches Settings, the CLI or a log. The same goes for an account's `status_message`, which repeats what the provider answered.
+pub(crate) fn masked(text: &str) -> String {
     let masked: Vec<String> = text
+        .trim()
         .split(' ')
         .map(|word| {
             let run = word
-                .split(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.'))
+                .split(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '-' | '_')))
                 .map(str::len)
                 .max()
                 .unwrap_or(0);
-            if run >= 24 {
+            if run >= 16 {
                 "…".to_string()
             } else {
                 word.to_string()
             }
         })
         .collect();
-    let text = masked.join(" ");
-    (!text.is_empty()).then(|| text.chars().take(200).collect())
+    masked.join(" ").chars().take(200).collect()
 }
 
 /// Checks that the hub answers its client API with `client_key` (`GET /v1/models`).
