@@ -110,7 +110,7 @@ impl Render for SuggestionPanel {
             .aria_label(match data["kind"].as_str() {
                 Some("slash") => "Slash commands",
                 Some("skill") => "Available skills",
-                Some("session") => "Agents in this project",
+                Some("session") => "Agents",
                 _ => "Project files",
             })
             .size_full()

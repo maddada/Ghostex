@@ -1,8 +1,8 @@
 //! Another session named in a chat: a mention link (`[<title>](<Global Ref>)`, from Copy ID or the
 //! composer's `+` picker) and the other session of a message between agents, both drawn as that
 //! session's agent pill: its logo and `+<title>`, a click switches to it, muted when it is gone.
-//! Also the `+` picker's list of the project's agent sessions and those on the other connected
-//! computers.
+//! Also the `+` picker's list: the project's agent sessions, then every other reachable one by
+//! computer.
 //!
 //! CDXC:SessionChat 2026-10-28 DECISION:
 //! User: "we need to be able to do + to mention agents in the same project", the mention "Rendered like new Agent Pill look", and then "we should use this + thing to show agent pills in all of the messages from and to different agents. clicking on this +xyz in the chat transcript should switch me to that thread please". So a link whose destination is a Global Ref is a `session` reference, and the one-line cards of messages between agents (a message from another agent or a thread report, a message sent with `ghostex agents send`, `agents create --task` or `orchestrator start-thread`) carry a `pill` for the other session: the agent's logo and `+<session title>`, the title the host's session list shows now, else the text the link or the message carried. A click switches to that session as its sidebar row would (`openAgentSession`); a session the list no longer has draws the pill muted and the click does nothing. What the agents read is unchanged: this is only how the chat draws it. Typing `+` at the start of the draft or after a space opens a picker of the agent sessions in this chat's project, newest first and filtered as you type, the chat's own session left out, and a pick writes the same mention plus a space.
@@ -117,14 +117,24 @@ pub struct SessionChoice {
     /// `Working`, `Needs you`, `Idle` or `Sleeping`.
     pub state: String,
     pub active_at: String,
-    /// The computer's name, for a session on another computer than the chat's; empty for one on
-    /// the chat's own.
+    /// The computer's name, for a session outside the chat's project; empty for one in it. The
+    /// query matches it; the row's section heading shows it.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub computer: String,
-    /// The project's name, for a session on another computer than the chat's.
+    /// The project's name, for a session outside the chat's project.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub project_name: String,
+    /// The heading of the part of the list the row sits in: [`HERE_SECTION`], a computer's name,
+    /// or [`OTHER_SECTION`].
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub section: String,
 }
+
+/// The `+` list's first part: the other agents of the chat's own project on its computer.
+pub const HERE_SECTION: &str = "Agents in this project";
+
+/// The `+` list's part for sessions whose computer the host does not name.
+pub const OTHER_SECTION: &str = "Other agents";
 
 /// The server part of a Global Ref (`S90` of `S90:P3lv0:G7hgi`); empty for anything else.
 fn server_of(global_ref: &str) -> &str {
@@ -154,12 +164,17 @@ pub(crate) fn chat_server<'a>(
         .unwrap_or_default()
 }
 
-/// The agent sessions the `+` picker offers: the other sessions of `project_id` on the chat's own
-/// computer, then every agent session on the other connected computers, each part newest first.
-/// `session_id` (the chat's own) and a computer that is not connected now are left out.
+/// The agent sessions the `+` picker offers, in sections: the other sessions of `project_id` on the
+/// chat's own computer ([`HERE_SECTION`]), then the chat's computer's other projects under its
+/// name, then each other connected computer under its name (by name), then the sessions of a
+/// computer the host does not name ([`OTHER_SECTION`]); each section newest first. `session_id`
+/// (the chat's own) and a computer that is not connected now are left out. Nothing is capped: the
+/// popup scrolls.
 ///
+/// CDXC:SessionChat 2026-11-19 DECISION:
+/// User, in a chat of another project whose `+` list lacked their Ghostex coordinator on the same computer: "why this session can't mention you ( +Big Chungus )??". Every agent session the user can reach is offered: this computer's other projects too (the 2026-11-05 rule below had left them out), and every connected computer's, whatever the project. The list is honest about where each one is: this project's agents first under "Agents in this project", then one section per computer headed by its name (the chat's own computer first; CDXC:RemoteMachines 2026-11-19: never "This computer"), each row saying its project; "Other agents" when the host does not name the computer. Typing filters every section by title, project and computer, and keeps the sections. Supersedes the 2026-11-05 "this computer's other projects stay out" and the single "Agents in this project" heading over sessions of other projects.
 /// CDXC:SessionChat 2026-11-05 DECISION:
-/// User: "also please let me mention threads from other machines that are connected when i use + thingy". A computer's project ids are its own gxserver's, so the project filter dropped every session on another computer, though the host's list already held them. Now a session whose Global Ref names another gxserver than the chat's is offered whatever its project, as long as its computer is connected (the sidebar's test: `offline` comes from the host), and its row says the computer and the project (`suggestions.rs`), which the query also matches. The pick writes the same mention with the full ref, which `ghostex agents send` and `read-session-chat` route to that computer (server/src/ghostex_cli/computers.rs `ref_target`). This computer's other projects stay out, as before. When the list does not say which gxserver the chat is on, only its project's sessions are offered, as before.
+/// User: "also please let me mention threads from other machines that are connected when i use + thingy". A computer's project ids are its own gxserver's, so the project filter dropped every session on another computer, though the host's list already held them. Now a session whose Global Ref names another gxserver than the chat's is offered whatever its project, as long as its computer is connected (the sidebar's test: `offline` comes from the host), and its row says its project (`suggestions.rs`); the query also matches the computer and the project. The pick writes the same mention with the full ref, which `ghostex agents send` and `read-session-chat` route to that computer (server/src/ghostex_cli/computers.rs `ref_target`).
 pub fn session_choices(
     sessions: &[KnownSession],
     project_id: &str,
@@ -167,30 +182,50 @@ pub fn session_choices(
 ) -> Vec<SessionChoice> {
     let own_server = chat_server(sessions, project_id, session_id);
     let mut seen = std::collections::HashSet::new();
-    let mut choices: Vec<(bool, SessionChoice)> = sessions
+    // (section rank, computer name for ordering, choice)
+    let mut choices: Vec<((u8, String), SessionChoice)> = sessions
         .iter()
         .filter_map(|session| {
             let server = server_of(&session.global_ref);
             let elsewhere = !own_server.is_empty() && !server.is_empty() && server != own_server;
+            let here = !elsewhere && session.project_id == project_id;
             let offered = !session.global_ref.is_empty()
                 && !session.agent_id.is_empty()
                 && !matches!(session.agent_id.as_str(), "browser" | "terminal")
                 && session.lifecycle_state != "stopped"
-                && if elsewhere {
-                    !session.offline
-                } else {
-                    session.project_id == project_id && session.session_id != session_id
-                };
+                && !session.offline
+                && !(here && session.session_id == session_id);
             // A computer the host lists twice (a saved machine that is this one) offers each once.
-            (offered && seen.insert(session.global_ref.as_str()))
-                .then(|| (elsewhere, session_choice(session, elsewhere)))
+            if !(offered && seen.insert(session.global_ref.as_str())) {
+                return None;
+            }
+            let mut choice = session_choice(session, elsewhere);
+            let computer = js_trim(&session.computer);
+            let rank = if here {
+                choice.project_name.clear();
+                choice.section = HERE_SECTION.to_string();
+                0
+            } else {
+                choice.project_name = js_trim(&session.project_name).to_string();
+                choice.computer = computer.to_string();
+                choice.section = if computer.is_empty() {
+                    OTHER_SECTION
+                } else {
+                    computer
+                }
+                .to_string();
+                match (computer.is_empty(), elsewhere) {
+                    (true, _) => 3,
+                    (false, false) => 1,
+                    (false, true) => 2,
+                }
+            };
+            Some(((rank, computer.to_lowercase()), choice))
         })
         .collect();
-    // This project's first; ISO times sort as text, the newest first, ties in the list's order.
-    choices.sort_by(|(a_elsewhere, a), (b_elsewhere, b)| {
-        a_elsewhere
-            .cmp(b_elsewhere)
-            .then_with(|| b.active_at.cmp(&a.active_at))
+    // Section by section; ISO times sort as text, the newest first, ties in the list's order.
+    choices.sort_by(|(a_key, a), (b_key, b)| {
+        a_key.cmp(b_key).then_with(|| b.active_at.cmp(&a.active_at))
     });
     choices.into_iter().map(|(_, choice)| choice).collect()
 }
@@ -248,6 +283,7 @@ fn session_choice(session: &KnownSession, elsewhere: bool) -> SessionChoice {
         active_at: session.active_at.clone(),
         computer,
         project_name,
+        section: String::new(),
     }
 }
 
@@ -351,15 +387,16 @@ pub fn mention_card_meta(card: &MentionCard) -> String {
     .join(" \u{b7} ")
 }
 
-/// The choices that have every word of the query in their title, project or computer, titles that
-/// start with it first.
+/// The choices that have every word of the query in their title, project or computer, section by
+/// section in the list's order, titles that start with the query first within each.
 pub fn filter_session_choices(choices: &[SessionChoice], query: &str) -> Vec<SessionChoice> {
     let query = query.trim().to_lowercase();
     if query.is_empty() {
         return choices.to_vec();
     }
     let words: Vec<&str> = query.split_whitespace().collect();
-    let mut matched: Vec<(bool, &SessionChoice)> = choices
+    let mut sections: Vec<&str> = Vec::new();
+    let mut matched: Vec<(usize, bool, &SessionChoice)> = choices
         .iter()
         .filter_map(|choice| {
             let title = choice.title.to_lowercase();
@@ -368,27 +405,33 @@ pub fn filter_session_choices(choices: &[SessionChoice], query: &str) -> Vec<Ses
                 choice.project_name.to_lowercase(),
                 choice.computer.to_lowercase()
             );
-            words
-                .iter()
-                .all(|word| haystack.contains(word))
-                .then(|| (title.starts_with(&query), choice))
+            if !words.iter().all(|word| haystack.contains(word)) {
+                return None;
+            }
+            let section = match sections.iter().position(|seen| *seen == choice.section) {
+                Some(index) => index,
+                None => {
+                    sections.push(&choice.section);
+                    sections.len() - 1
+                }
+            };
+            Some((section, !title.starts_with(&query), choice))
         })
         .collect();
-    matched.sort_by_key(|(prefix, _)| !*prefix);
+    matched.sort_by_key(|(section, later, _)| (*section, *later));
     matched
         .into_iter()
-        .map(|(_, choice)| choice.clone())
+        .map(|(_, _, choice)| choice.clone())
         .collect()
 }
 
-/// What a `+` row says under its title: the computer and project of a session on another computer,
-/// then its agent and state.
+/// What a `+` row says under its title: its project when outside the chat's, then its agent and
+/// state. The computer is its section's heading, so the row does not repeat it.
 ///
 /// CDXC:Coordinators 2026-11-12 DECISION:
 /// User: "please dont' show Main for main coordinators, instead make the color of their icon gold", then "Yes, both" to the chat's `+` list following the sidebar. A main coordinator's row no longer starts its detail with "Main"; the row's `mainCoordinator` draws its crown gold instead (desktop native_chat/suggestions/render.rs, phone composer/Suggestions.tsx), in the sidebar's golds. This supersedes the "Main" word of 2026-11-10.
 pub fn choice_detail(choice: &SessionChoice) -> String {
     [
-        choice.computer.as_str(),
         choice.project_name.as_str(),
         choice.agent_name.as_str(),
         choice.state.as_str(),
@@ -458,8 +501,6 @@ mod tests {
 
     #[test]
     fn the_picker_lists_this_projects_agents_newest_first_without_this_chat() {
-        let mut other_project = known("G9", "Elsewhere", "2026-10-28T09:00:00Z");
-        other_project.project_id = "P2".to_string();
         let mut terminal = known("G8", "Shell", "2026-10-28T09:00:00Z");
         terminal.agent_id = "terminal".to_string();
         let mut working = known("G2", "Fix login", "2026-10-28T08:00:00Z");
@@ -468,12 +509,12 @@ mod tests {
             known("G1", "Older", "2026-10-27T08:00:00Z"),
             working,
             known("Gme", "This chat", "2026-10-28T10:00:00Z"),
-            other_project,
             terminal,
         ];
         let choices = session_choices(&sessions, "P3lv0", "Gme");
         let titles: Vec<&str> = choices.iter().map(|choice| choice.title.as_str()).collect();
         assert_eq!(titles, vec!["Fix login", "Older"]);
+        assert_eq!(choices[0].section, HERE_SECTION);
         assert_eq!(
             (choices[0].state.as_str(), choices[0].working),
             ("Working", true)
@@ -492,57 +533,134 @@ mod tests {
         }
     }
 
+    /// A session on the chat's own computer (`S90`, named `Studio`) in `project`.
+    fn local(project: &str, name: &str, session_id: &str, title: &str, at: &str) -> KnownSession {
+        KnownSession {
+            global_ref: format!("S90:{project}:{session_id}"),
+            project_id: project.to_string(),
+            computer: "Studio".to_string(),
+            project_name: name.to_string(),
+            ..known(session_id, title, at)
+        }
+    }
+
     #[test]
-    fn the_picker_adds_sessions_on_connected_computers_after_this_project() {
+    fn the_picker_offers_every_reachable_agent_by_computer_after_this_project() {
         let mut offline = remote("G5off", "Offline one", "2026-10-28T11:00:00Z");
         offline.offline = true;
         offline.global_ref = "S7a:P2:G5off".to_string();
         let mut stopped = remote("G5stp", "Stopped one", "2026-10-28T11:00:00Z");
         stopped.lifecycle_state = "stopped".to_string();
-        let mut other_local_project = known("G9", "Elsewhere here", "2026-10-28T12:00:00Z");
-        other_local_project.project_id = "P2".to_string();
-        other_local_project.global_ref = "S90:P2:G9".to_string();
+        // The chat is "SP Coordinator" in shortpoint; Big Chungus coordinates Ghostex on the
+        // same computer, the case the 2026-11-05 list left out.
+        let mut chungus = local(
+            "P3lv0",
+            "Ghostex",
+            "G9jt7",
+            "Big Chungus",
+            "2026-10-28T12:00:00Z",
+        );
+        chungus.coordinator = true;
+        chungus.main_coordinator = true;
+        let mut windows = remote("G7win", "Win Chungus", "2026-10-28T13:00:00Z");
+        windows.global_ref = "S3w:P1:G7win".to_string();
+        windows.computer = "Win".to_string();
+        windows.project_name = "Ghostex".to_string();
         let sessions = vec![
-            known("Gme", "This chat", "2026-10-28T10:00:00Z"),
-            known("G1", "Local work", "2026-10-27T08:00:00Z"),
+            local(
+                "P5umy",
+                "shortpoint",
+                "Gme",
+                "SP Coordinator",
+                "2026-10-28T10:00:00Z",
+            ),
+            local(
+                "P5umy",
+                "shortpoint",
+                "G1",
+                "Local work",
+                "2026-10-27T08:00:00Z",
+            ),
+            windows,
             remote("G4snt", "Remote build", "2026-10-28T11:30:00Z"),
             // The same computer saved as a machine of its own lists its rows twice.
             remote("G4snt", "Remote build", "2026-10-28T11:30:00Z"),
             offline,
             stopped,
-            other_local_project,
+            chungus,
         ];
-        let choices = session_choices(&sessions, "P3lv0", "Gme");
-        let titles: Vec<&str> = choices.iter().map(|choice| choice.title.as_str()).collect();
-        assert_eq!(titles, vec!["Local work", "Remote build"]);
-        assert_eq!(choices[0].computer, "");
-        assert_eq!(choice_detail(&choices[0]), "Claude \u{b7} Idle");
+        let choices = session_choices(&sessions, "P5umy", "Gme");
+        let rows: Vec<(&str, &str, String)> = choices
+            .iter()
+            .map(|choice| {
+                (
+                    choice.section.as_str(),
+                    choice.title.as_str(),
+                    choice_detail(choice),
+                )
+            })
+            .collect();
         assert_eq!(
-            choice_detail(&choices[1]),
-            "Omarchy \u{b7} dotfiles \u{b7} Claude \u{b7} Idle"
+            rows,
+            vec![
+                (HERE_SECTION, "Local work", "Claude \u{b7} Idle".to_string()),
+                (
+                    "Studio",
+                    "Big Chungus",
+                    "Ghostex \u{b7} Claude \u{b7} Idle".to_string()
+                ),
+                (
+                    "Omarchy",
+                    "Remote build",
+                    "dotfiles \u{b7} Claude \u{b7} Idle".to_string()
+                ),
+                (
+                    "Win",
+                    "Win Chungus",
+                    "Ghostex \u{b7} Claude \u{b7} Idle".to_string()
+                ),
+            ]
         );
+        assert!(choices[1].coordinator && choices[1].main_coordinator);
         // What the agent reads names the other computer's session by its full ref.
         assert_eq!(
-            choice_mention(&choices[1]),
+            choice_mention(&choices[2]),
             "[Remote build](S8g:P5zq6:G4snt)"
         );
-        // The query matches the computer and the project too.
+        // The query reaches every section by title, project and computer, and keeps the sections.
         let titles = |query: &str| -> Vec<String> {
             filter_session_choices(&choices, query)
                 .into_iter()
                 .map(|choice| choice.title)
                 .collect()
         };
+        assert_eq!(titles("Big"), vec!["Big Chungus"]);
+        assert_eq!(titles("big chungus"), vec!["Big Chungus"]);
+        assert_eq!(titles("chungus"), vec!["Big Chungus", "Win Chungus"]);
         assert_eq!(titles("omarchy"), vec!["Remote build"]);
         assert_eq!(titles("dotfiles build"), vec!["Remote build"]);
+        assert_eq!(titles("ghostex"), vec!["Big Chungus", "Win Chungus"]);
         assert!(titles("omarchy local").is_empty());
     }
 
     #[test]
-    fn without_the_chats_own_server_the_picker_keeps_to_its_project() {
+    fn without_the_chats_own_server_the_picker_still_offers_every_agent() {
         // A host whose list does not have the chat's row nor any row of its project.
         let sessions = vec![remote("G4snt", "Remote build", "2026-10-28T11:30:00Z")];
-        assert!(session_choices(&sessions, "P3lv0", "Gme").is_empty());
+        let choices = session_choices(&sessions, "P3lv0", "Gme");
+        assert_eq!(
+            choices
+                .iter()
+                .map(|choice| (choice.section.as_str(), choice.title.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("Omarchy", "Remote build")]
+        );
+        let mut unnamed = remote("G4snt", "Remote build", "2026-10-28T11:30:00Z");
+        unnamed.computer = String::new();
+        assert_eq!(
+            session_choices(&[unnamed], "P3lv0", "Gme")[0].section,
+            OTHER_SECTION
+        );
     }
 
     #[test]

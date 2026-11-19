@@ -19,14 +19,15 @@ use crate::composer::trigger::{
     TriggerKind,
 };
 use crate::transcript::session_mentions::{
-    choice_detail, choice_mention, filter_session_choices, SessionChoice,
+    choice_detail, choice_mention, filter_session_choices, SessionChoice, HERE_SECTION,
 };
 
 /// The heading above the composer's `@` file list.
 pub const FILE_SUGGESTION_HEADING: &str = "Project files";
 
-/// The heading above the composer's `+` session list.
-pub const SESSION_SUGGESTION_HEADING: &str = "Agents in this project";
+/// The heading above the composer's `+` session list when it starts with this project's agents;
+/// the other sections are headed by their computer's name (`session_choices`).
+pub const SESSION_SUGGESTION_HEADING: &str = HERE_SECTION;
 
 /// The heading above the custom and plugin commands (`commands/<name>.md`) in the `/` and `$` lists.
 pub const CUSTOM_COMMANDS_HEADING: &str = "Custom commands";
@@ -38,7 +39,7 @@ pub enum SuggestionKind {
     Slash,
     Skill,
     File,
-    /// The `+` list of the project's agent sessions.
+    /// The `+` list of agent sessions: this project's, then every other one by computer.
     Session,
 }
 
@@ -65,7 +66,7 @@ pub struct SuggestionRow {
     pub working: bool,
     /// A section heading drawn above this row, on the first row of every section after the first
     /// (whose heading is the popup's own `heading`): the `/` list's skills, custom commands and
-    /// built-in commands.
+    /// built-in commands; the `+` list's computers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub section: Option<String>,
 }
@@ -112,8 +113,8 @@ pub struct SuggestionSources {
     /// `None` until a read has answered.
     pub files: Option<Vec<String>>,
     pub files_loading: bool,
-    /// The `+` list: this project's other agent sessions, then those on the other connected
-    /// computers, newest first (`session_choices`).
+    /// The `+` list: this project's other agent sessions, then every other reachable one, by
+    /// computer, newest first (`session_choices`).
     pub sessions: Vec<SessionChoice>,
     /// The agent the skills list was read for, so a switch re-reads it.
     pub skills_agent: Option<String>,
@@ -582,7 +583,8 @@ pub fn suggestion_popup(
     let (section_heading, row_sections) = match kind {
         SuggestionKind::Slash => sections(&slash, sources),
         SuggestionKind::Skill => sections(&skill_rows, sources),
-        _ => (None, Vec::new()),
+        SuggestionKind::Session => session_sections(&matches.session_matches),
+        SuggestionKind::File => (None, Vec::new()),
     };
     let row_label = |row: &SlashRow| match row {
         SlashRow::Skill(skill) => (format!("/{}", skill.name), skill_detail(skill)),
@@ -654,7 +656,9 @@ pub fn suggestion_popup(
                 section_heading.unwrap_or_else(|| skills_heading(sources))
             }
             SuggestionKind::File => FILE_SUGGESTION_HEADING.to_string(),
-            SuggestionKind::Session => SESSION_SUGGESTION_HEADING.to_string(),
+            SuggestionKind::Session => {
+                section_heading.unwrap_or_else(|| SESSION_SUGGESTION_HEADING.to_string())
+            }
         },
         status: match kind {
             SuggestionKind::Skill => {
@@ -688,6 +692,26 @@ pub fn suggestion_popup(
             SuggestionKind::Slash | SuggestionKind::Session => false,
         },
     })
+}
+
+/// The `+` list's heading (its first row's section) and the heading each later section's first row
+/// carries.
+fn session_sections(choices: &[SessionChoice]) -> (Option<String>, Vec<Option<String>>) {
+    let heading = choices
+        .first()
+        .map(|choice| choice.section.clone())
+        .filter(|section| !section.is_empty());
+    let rows = choices
+        .iter()
+        .enumerate()
+        .map(|(index, choice)| {
+            (index > 0
+                && choices[index - 1].section != choice.section
+                && !choice.section.is_empty())
+            .then(|| choice.section.clone())
+        })
+        .collect();
+    (heading, rows)
 }
 
 /// The replacement a pick writes, or `None` when the row cannot complete.
@@ -775,6 +799,48 @@ mod session_picker_tests {
         assert!(popup("ask +fix it later please").is_none());
         assert!(popup("a + fix").is_none());
         assert!(popup("+fix\nlog").is_none());
+    }
+
+    #[test]
+    fn the_session_list_heads_each_computer_after_this_project() {
+        let row = |title: &str, section: &str| SessionChoice {
+            title: title.to_string(),
+            global_ref: format!("S1:P1:{title}"),
+            section: section.to_string(),
+            ..SessionChoice::default()
+        };
+        let sources = SuggestionSources {
+            sessions: vec![
+                row("Fix login", SESSION_SUGGESTION_HEADING),
+                row("Big Chungus", "Studio"),
+                row("Arch Chungus", "Omarchy"),
+                row("Win Chungus", "Omarchy"),
+            ],
+            ..SuggestionSources::default()
+        };
+        let open = |draft: &str| {
+            let matches = composer_suggestions(
+                draft,
+                draft.encode_utf16().count(),
+                &sources,
+                SuggestionDismissals::default(),
+                true,
+            );
+            suggestion_popup(&matches, &sources, draft, 0).expect("the list")
+        };
+        let sections = |popup: &SuggestionPopup| -> Vec<Option<String>> {
+            popup.rows.iter().map(|row| row.section.clone()).collect()
+        };
+        let all = open("+");
+        assert_eq!(all.heading, SESSION_SUGGESTION_HEADING);
+        assert_eq!(
+            sections(&all),
+            vec![None, Some("Studio".into()), Some("Omarchy".into()), None]
+        );
+        // A query whose matches are all elsewhere heads the list with their computer.
+        let chungus = open("+chungus");
+        assert_eq!(chungus.heading, "Studio");
+        assert_eq!(sections(&chungus), vec![None, Some("Omarchy".into()), None]);
     }
 
     #[test]
