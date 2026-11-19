@@ -159,6 +159,14 @@ pub(crate) fn relay_target(local: &Target, server_id: &str) -> Target {
 
 /// Picks the computer `--computer` names: its server id, or its name (exactly, then the one
 /// whose name starts with or contains it). `None` means this computer.
+/// A computer's name as `--computer` compares it: lower case, with a typographic apostrophe
+/// (macOS writes "Mohamad’s MacBook Pro") the same as the one a keyboard types ("Mohamad's").
+fn name_key(name: &str) -> String {
+    name.trim()
+        .to_lowercase()
+        .replace(['\u{2019}', '\u{2018}', '\u{02bc}', '`'], "'")
+}
+
 pub(crate) fn pick_computer<'a>(
     computers: &'a [ConnectedComputer],
     wanted: &str,
@@ -171,20 +179,26 @@ pub(crate) fn pick_computer<'a>(
     if let Some(computer) = computers.iter().find(|c| c.server_id == wanted) {
         return Ok(Some(computer));
     }
-    let lower = wanted.to_lowercase();
+    let lower = name_key(wanted);
+    // This computer's own name means this computer, as `this` does.
+    if lower == name_key(&crate::connected_computers::this_computer_name())
+        && !computers.iter().any(|c| name_key(&c.name) == lower)
+    {
+        return Ok(None);
+    }
     let exact: Vec<_> = computers
         .iter()
-        .filter(|c| c.name.to_lowercase() == lower)
+        .filter(|c| name_key(&c.name) == lower)
         .collect();
     let matches = if exact.is_empty() {
         let starts: Vec<_> = computers
             .iter()
-            .filter(|c| c.name.to_lowercase().starts_with(&lower))
+            .filter(|c| name_key(&c.name).starts_with(&lower))
             .collect();
         if starts.is_empty() {
             computers
                 .iter()
-                .filter(|c| c.name.to_lowercase().contains(&lower))
+                .filter(|c| name_key(&c.name).contains(&lower))
                 .collect()
         } else {
             starts
@@ -478,6 +492,24 @@ pub(crate) fn ref_target(local: &Target, server_id: &str) -> CliResult<Option<Ta
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_name_matches_with_either_apostrophe() {
+        let computers = vec![ConnectedComputer {
+            server_id: "S5m".into(),
+            name: "Mohamad\u{2019}s MacBook Pro (2)".into(),
+            agent_access: true,
+            waiting: None,
+        }];
+        for typed in [
+            "Mohamad's MacBook Pro (2)",
+            "mohamad\u{2019}s macbook",
+            "Mohamad's",
+        ] {
+            let picked = pick_computer(&computers, typed, Some("S9l")).unwrap();
+            assert_eq!(picked.map(|c| c.server_id.as_str()), Some("S5m"), "{typed}");
+        }
+    }
 
     fn computers() -> Vec<ConnectedComputer> {
         vec![

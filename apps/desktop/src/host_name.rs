@@ -92,7 +92,7 @@ fn chosen_name() -> Option<String> {
     }
 }
 
-/// The host name (Windows: `COMPUTERNAME`).
+/// The host name (Windows: its DNS host name, else `COMPUTERNAME`).
 #[cfg(not(ghostex_web))]
 fn host_name() -> Option<String> {
     #[cfg(unix)]
@@ -109,10 +109,48 @@ fn host_name() -> Option<String> {
     }
     #[cfg(windows)]
     {
-        std::env::var("COMPUTERNAME").ok()
+        windows_host_name().or_else(|| std::env::var("COMPUTERNAME").ok())
     }
     #[cfg(not(any(unix, windows)))]
     {
         None
     }
+}
+
+/// Windows' host name as the user typed it (its DNS host name: their capitals and its full length,
+/// which `COMPUTERNAME`'s 15 upper-case letters are not). gxserver and the app read it the same way
+/// (server/src/remote_access/identity.rs, apps/desktop/src/host_name.rs).
+#[cfg(all(windows, not(ghostex_web)))]
+fn windows_host_name() -> Option<String> {
+    use windows_sys::Win32::System::SystemInformation::{
+        ComputerNamePhysicalDnsHostname, GetComputerNameExW,
+    };
+    let mut size: u32 = 0;
+    // SAFETY: a null buffer with size 0 only asks for the needed size.
+    unsafe {
+        GetComputerNameExW(
+            ComputerNamePhysicalDnsHostname,
+            std::ptr::null_mut(),
+            &mut size,
+        )
+    };
+    if size == 0 {
+        return None;
+    }
+    let mut buffer = vec![0u16; size as usize];
+    // SAFETY: the buffer holds `size` UTF-16 units and stays alive for the call.
+    if unsafe {
+        GetComputerNameExW(
+            ComputerNamePhysicalDnsHostname,
+            buffer.as_mut_ptr(),
+            &mut size,
+        )
+    } == 0
+    {
+        return None;
+    }
+    let name = String::from_utf16_lossy(&buffer[..size as usize])
+        .trim()
+        .to_string();
+    (!name.is_empty()).then_some(name)
 }
