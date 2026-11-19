@@ -1,5 +1,5 @@
 //! The Size & Zoom page's Size group: one Scale for the sidebar, the chat, Files and the terminal
-//! text, the link to the sidebar's size, and under More size options Scale areas separately, which
+//! text, and under More size options Scale areas separately, which
 //! swaps Scale for a slider per area (CDXC:Settings 2026-11-05 DECISION in the settings catalog's
 //! `interface_scale.rs`), and on Linux the Display scale (Q4153, CDXC:Settings 2026-11-18 in
 //! model.rs).
@@ -7,11 +7,10 @@ use super::super::super::catalog::{module, settings_catalog};
 use super::super::super::fields::{
     SliderBinding, reset_key, settings_section, slider_number_field, toggle_field_with,
 };
-use super::super::super::model::SettingsTabId;
 #[cfg(target_os = "linux")]
 use super::super::super::{catalog::SettingOption, fields::select_field};
-use super::controls::{ICON_SIDEBAR, more_options_button};
-use super::{MoreGroup, ThemeCx, ThemeTab, related_link_row};
+use super::controls::more_options_button;
+use super::{MoreGroup, ThemeCx, ThemeTab};
 use ghostex_settings_catalog::interface_scale::{
     INTERFACE_SCALE_SETTING, MAX_INTERFACE_SCALE_PERCENT, MIN_INTERFACE_SCALE_PERCENT,
     SCALE_AREAS_SEPARATELY_SETTING, SCALED_AREA_SETTINGS, SIDEBAR_ZOOM_RANGE,
@@ -73,17 +72,6 @@ impl ThemeTab {
                 },
                 interface_scale_percent(t.values.map()),
                 window,
-                cx,
-            ));
-        }
-        if !t.searching {
-            rows.push(related_link_row(
-                &p,
-                0,
-                "Sidebar size",
-                "Sidebar Interface Size",
-                ICON_SIDEBAR,
-                SettingsTabId::Sidebar,
                 cx,
             ));
         }

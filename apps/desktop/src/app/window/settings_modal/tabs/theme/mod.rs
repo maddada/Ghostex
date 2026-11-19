@@ -5,7 +5,7 @@
 //! search finds them.
 //!
 //! CDXC:Theming 2026-10-16 DECISION:
-//! User: "doesn't look so good … can we please make this look nicer? … don't copy everything", then picked direction A (Calm rows) of the mockups in docs/2026-10-16/theme-page. Supersedes the 2026-09-25 layout. The Theme page's rows carry an icon tile (this page only; other pages keep their rows). Appearance is three preview cards (System, Light, Dark). Each group is one card whose rare rows fold under a More row: Colours (Dark mode colour and Light mode colour as two rows of squares, Colourfulness; More: the sidebar and work area set apart, the active pane outline), Transparency (one Off / Dark only / Always control replacing Enable transparency and Use transparency, Strength, Blur, Behind the glass with its pictures or Live gallery; More: picture position, Live speed and brightness, play only when plugged in, the four tints, menu blur) and Chat and terminal (the two themes; More: the terminal palettes), then Related on General. The three-way choices keep the existing row control ("same as what we have now dont change this") and Blur stays as it was ("dont change this"). Custom colour is a "+" square after the squares that opens the Pick Color dialog right at it; no rows open under the colour row (2026-10-17, User: "very bad to have the same colors twice here why??? pls fix no need for these 2 rows that appear when i click on the + option in the colors pls"). The custom colour's depth has no control of its own: Colourfulness sets it (2026-10-17, the user's pick: "Remove it: Colourfulness alone sets how deep the custom colour is"). The squares are "smaller and simpler": 20px, one flat colour, today's ring drawn thinner. A search hit inside a group's More opens it. The page itself is split into four since 2026-11-18 (CDXC:Settings in model.rs): Appearance and the presets lead Themes, the active pane outline moved to Window & Layout, the terminal palettes show without a More row, Theme colours is Fine-tune colours with every row under its More row, and Related on General is gone (its two links sit in Size & Zoom and Terminal colours).
+//! User: "doesn't look so good … can we please make this look nicer? … don't copy everything", then picked direction A (Calm rows) of the mockups in docs/2026-10-16/theme-page. Supersedes the 2026-09-25 layout. The Theme page's rows carry an icon tile (this page only; other pages keep their rows). Appearance is three preview cards (System, Light, Dark). Each group is one card whose rare rows fold under a More row: Colours (Dark mode colour and Light mode colour as two rows of squares, Colourfulness; More: the sidebar and work area set apart, the active pane outline), Transparency (one Off / Dark only / Always control replacing Enable transparency and Use transparency, Strength, Blur, Behind the glass with its pictures or Live gallery; More: picture position, Live speed and brightness, play only when plugged in, the four tints, menu blur) and Chat and terminal (the two themes; More: the terminal palettes), then Related on General. The three-way choices keep the existing row control ("same as what we have now dont change this") and Blur stays as it was ("dont change this"). Custom colour is a "+" square after the squares that opens the Pick Color dialog right at it; no rows open under the colour row (2026-10-17, User: "very bad to have the same colors twice here why??? pls fix no need for these 2 rows that appear when i click on the + option in the colors pls"). The custom colour's depth has no control of its own: Colourfulness sets it (2026-10-17, the user's pick: "Remove it: Colourfulness alone sets how deep the custom colour is"). The squares are "smaller and simpler": 20px, one flat colour, today's ring drawn thinner. A search hit inside a group's More opens it. The page itself is split into four since 2026-11-18 (CDXC:Settings in model.rs): Appearance and the presets lead Themes, the active pane outline moved to Window & Layout, the terminal palettes show without a More row, Theme colours is Fine-tune colours with every row under its More row, and Related on General is gone (its two links sat in Size & Zoom and Terminal colours until 2026-11-19, when the settings they opened moved onto these pages: CDXC:Settings in the settings catalog's general/theme.rs).
 mod art;
 mod chat_colours;
 mod chat_preview;
@@ -14,19 +14,22 @@ mod controls;
 mod font;
 mod gallery;
 mod interface_scale;
+mod panels;
 pub(crate) mod presets;
 mod prompt_gallery;
 pub(crate) mod role_defaults;
 mod roles;
 mod swatches;
+mod terminal_background;
+mod terminal_text;
 pub(super) mod transparency;
 
 use super::super::super::native_modal_kit::*;
 use super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::fields::{
-    ButtonVariant, DropdownState, FieldStates, RowSpec, SettingsPage, SliderSaver,
-    open_tint_picker, reset_key, searchable_select_field, select_field, setting_row,
-    settings_button, settings_section, toggle_field, toggle_field_with, trigger_tint_picker,
+    DropdownState, FieldStates, RowSpec, SettingsPage, SliderSaver, open_tint_picker, reset_key,
+    searchable_select_field, select_field, setting_row, settings_section, toggle_field,
+    toggle_field_with, trigger_tint_picker,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -1018,8 +1021,8 @@ impl ThemeTab {
         ))
     }
 
-    /// Terminal colours: Terminal theme, the two terminal palettes, and the link to Terminal
-    /// background on the Terminal page.
+    /// Terminal colours: Terminal theme, the two terminal palettes, then the terminal's background
+    /// (terminal_background.rs).
     fn terminal_colours_section(
         &mut self,
         t: &ThemeCx,
@@ -1106,58 +1109,10 @@ impl ThemeTab {
                 cx,
             ));
         }
-        if !t.searching {
-            rows.push(related_link_row(
-                &p,
-                1,
-                "Terminal background colour and image",
-                "Terminal background",
-                ICON_TERMINAL,
-                SettingsTabId::Terminal,
-                cx,
-            ));
-        }
+        rows.extend(self.terminal_background_rows(t, window, cx));
         settings_section(&p, "Terminal colours", None, None, rows)
             .map(IntoElement::into_any_element)
     }
-}
-
-/// A row whose Open searches another page for a setting that lives there (the Related on
-/// General card until 2026-11-18): `index` keeps the element ids that card gave it.
-fn related_link_row(
-    p: &SettingsPalette,
-    index: usize,
-    label: &'static str,
-    query: &'static str,
-    icon: &'static str,
-    tab: SettingsTabId,
-    cx: &mut Context<ThemeTab>,
-) -> AnyElement {
-    let button = settings_button(
-        p,
-        SharedString::from(format!("theme-related-{index}")),
-        "Open",
-        None,
-        ButtonVariant::Outline,
-        false,
-        None,
-        move |page: &mut ThemeTab, _window, cx| {
-            let store = page.store.clone();
-            store.update(cx, |store, cx| {
-                store.set_search_query(query.to_string(), cx);
-                store.set_active_tab(tab, cx);
-            });
-        },
-        cx,
-    );
-    setting_row(
-        p,
-        format!("theme-related-row-{index}"),
-        RowSpec::new(label).icon(icon),
-        None,
-        button,
-        cx,
-    )
 }
 
 /// The catalog section an Interface page renders (CDXC:Settings 2026-11-18 in the settings
@@ -1227,12 +1182,20 @@ impl Render for ThemeTab {
             SettingsTabId::TextFonts => {
                 let (fonts, text) = self.font_sections(&t, window, cx);
                 blocks.extend(fonts.map(|section| PageBlock::section("fonts", section)));
+                blocks.extend(
+                    self.terminal_text_section(&t, window, cx)
+                        .map(|section| PageBlock::section("terminalText", section)),
+                );
                 blocks.extend(text.map(|section| PageBlock::section("text", section)));
             }
             SettingsTabId::SizeZoom => {
                 blocks.extend(
                     self.interface_scale_section(&t, window, cx)
                         .map(|section| PageBlock::section("size", section)),
+                );
+                blocks.extend(
+                    self.panel_sizes_section(&t, window, cx)
+                        .map(|section| PageBlock::section("panelSizes", section)),
                 );
             }
             SettingsTabId::WindowLayout => {
@@ -1243,6 +1206,10 @@ impl Render for ThemeTab {
                 blocks.extend(
                     self.panes_section(&t, window, cx)
                         .map(|section| PageBlock::section("panes", section)),
+                );
+                blocks.extend(
+                    self.panels_section(&t, window, cx)
+                        .map(|section| PageBlock::section("panels", section)),
                 );
             }
             _ => {
@@ -1279,6 +1246,22 @@ impl Render for ThemeTab {
                         .map(|section| PageBlock::section("terminalColours", section)),
                 );
             }
+        }
+        // The preview binary's `pick-color` state (and a host without a system colour panel) opens
+        // the terminal background's Pick Color dialog, once its row has drawn (terminal_background.rs).
+        if tab == SettingsTabId::Theme
+            && self.store.read(cx).request().open_color_picker.as_deref()
+                == Some("workspaceBackgroundColor")
+        {
+            self.store
+                .update(cx, |store, _| store.request_mut().open_color_picker = None);
+            super::super::fields::open_picker(
+                self,
+                "workspaceBackgroundColor",
+                "#121212",
+                window,
+                cx,
+            );
         }
         if blocks.is_empty() && t.searching {
             let store = self.store.clone();

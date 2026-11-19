@@ -33,7 +33,6 @@ pub(super) const ICON_BEHIND_GLASS: &str = "modals/settings/photo.svg";
 pub(super) const ICON_CHAT: &str = "modals/settings/message-circle.svg";
 pub(super) const ICON_TERMINAL: &str = "modals/settings/terminal-2.svg";
 pub(super) const ICON_FONT: &str = "modals/settings/typography.svg";
-pub(super) const ICON_SIDEBAR: &str = "modals/settings/layout-sidebar.svg";
 const ICON_PLUS: &str = "modals/settings/plus.svg";
 
 /// A colour square's side, and the room between squares.

@@ -99,9 +99,18 @@ fn story_settings(state: &str) -> serde_json::Map<String, Value> {
             } }),
         );
     }
-    if state == "pick-color" {
+    if state == "pick-color" || state == "theme-terminal-colours" {
         settings.insert("terminalBackgroundMode".into(), json!("custom"));
         settings.insert("workspaceBackgroundColor".into(), json!("#1d3b53"));
+    }
+    // Themes' Terminal colours with every terminal background row showing: transparency on and a
+    // background image picked.
+    if state == "theme-terminal-colours" {
+        settings.insert("windowGlass".into(), json!("always"));
+        settings.insert(
+            "terminalBackgroundImage".into(),
+            json!("/Users/you/Pictures/background.png"),
+        );
     }
     settings_f2::story_settings(state, &mut settings);
     settings_f1::story_settings(state, &mut settings);
@@ -368,7 +377,11 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         state if state.starts_with("orchestrator-playbook") => {
             json!({ "initialSection": "chat" })
         }
-        "terminal" | "pick-color" => json!({ "initialSection": "terminal" }),
+        "terminal" | "select" => json!({ "initialSection": "terminal" }),
+        // Themes' Terminal colours with the terminal background's Pick Color dialog open.
+        "pick-color" | "theme-terminal-colours" => {
+            json!({ "initialTab": "theme", "initialSection": "terminalColours" })
+        }
         // Settings > Security scrolled to its log (with `{"securityLogsEnabled":true}`).
         "security-log" => json!({ "initialTab": "security", "initialSection": "log" }),
         // Settings > About with its Reset all settings? confirmation open.
@@ -425,7 +438,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         request.open_color_picker = Some("workspaceBackgroundColor".to_string());
     }
     if state == "select" {
-        request.open_select = Some("commandsPanelSide".to_string());
+        request.open_select = Some("terminalCursorStyle".to_string());
     }
     if state == "updates-computers-open" {
         request.open_select = Some("settings-machine-picker".to_string());
