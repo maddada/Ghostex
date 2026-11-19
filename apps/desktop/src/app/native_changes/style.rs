@@ -90,9 +90,19 @@ impl ChangesStyle {
     /// apps/desktop/src/app/native_sidebar/tooltips.rs.
     ///
     /// CDXC:Changes 2026-10-30 DECISION: User, of the Commit button's menu over a diff: "wtf this is broken please fix!!". Under window glass the bubble's fill is 90% opaque, and the diff's code text read through it and collided with the menu's own lines. Nothing can blur what is under a menu drawn inside the window, so a menu over the diff takes the bubble's colour fully opaque, glass or not.
+    ///
+    /// CDXC:Theming 2026-11-20 (decision in helpers/chrome_palette.rs): under glass the fill is the
+    /// work area's colour lifted toward white and kept opaque, not the near-black bubble. It keeps
+    /// CDXC:Changes 2026-10-30's rule that nothing reads through a menu over the diff, just not black.
     pub(crate) fn menu_bubble(&self) -> (gpui::Hsla, gpui::Hsla) {
         let bubble = crate::app::native_sidebar::link_chips::in_window_bubble(self.p.glass);
-        (opaque_fill(bubble.fill), bubble.border)
+        let fill = opaque_fill(bubble.fill);
+        let fill = if self.p.glass {
+            crate::app::helpers::glass_lifted_opaque_surface(fill)
+        } else {
+            fill
+        };
+        (fill, bubble.border)
     }
 
     pub(crate) fn resolve(p: ModalPalette) -> Self {
