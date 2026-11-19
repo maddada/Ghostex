@@ -78,7 +78,10 @@ pub(super) async fn route_projects_http(
             request_id,
             &body_json,
             |repository, db, params, _| {
-                let relocated = repository.relocate_project_moving_sessions(params)?;
+                // Only the owner's own app may re-root a project whose folder is still there
+                // (`relocate_project_moving_sessions`).
+                let owner_app = matches!(caller, crate::security::Principal::Owner { .. });
+                let relocated = repository.relocate_project_moving_sessions(params, owner_app)?;
                 let project_id = value_text(&relocated.project, "projectId")?;
                 schedule_presentation_project_delta(
                     &state,
