@@ -16,6 +16,33 @@ fn gpui_cua_driver_skill_pack_path() -> PathBuf {
         .join("cua-driver")
 }
 
+/// Agent skills folders `cua-driver skills install` links, relative to home. Keep in step with
+/// `TRYCUA_SKILL_LINK_DIRS` in server/src/managed_tools/desktop_control.rs.
+const GPUI_CUA_DRIVER_SKILL_LINK_DIRS: &[&str] = &[
+    ".agents/skills",
+    ".claude/skills",
+    ".config/opencode/skills",
+    ".factory/skills",
+    ".gemini/skills",
+    ".gemini/antigravity/skills",
+    ".gemini/antigravity-cli/skills",
+    ".gemini/config/skills",
+    ".hermes/skills",
+    ".kiro/skills",
+    ".openclaw/skills",
+    ".prime/agent/skills",
+];
+
+/// Whether any agent links the cua-driver skill, the user's sign that they want it. A dangling
+/// link counts: a failed `skills update` deletes the pack and leaves the links (CDXC:AgentSkills
+/// 2026-11-19 in server/src/managed_tools/desktop_control.rs).
+pub(crate) fn gpui_cua_driver_skill_linked() -> bool {
+    let home = gpui_home_dir();
+    GPUI_CUA_DRIVER_SKILL_LINK_DIRS
+        .iter()
+        .any(|dir| std::fs::symlink_metadata(home.join(dir).join("cua-driver")).is_ok())
+}
+
 /// Whether `cua-driver skills install` has fetched the pack on this computer.
 pub(crate) fn gpui_cua_driver_skill_pack_installed() -> bool {
     gpui_is_file(&gpui_cua_driver_skill_pack_path().join("SKILL.md"))

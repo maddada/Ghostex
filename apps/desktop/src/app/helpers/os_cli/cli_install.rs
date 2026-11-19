@@ -10,7 +10,7 @@ use std::os::unix::fs::PermissionsExt as _;
 
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::Security::Cryptography::{
-    BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom,
+    BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG,
 };
 
 use anyhow::Result;
@@ -54,9 +54,10 @@ pub(crate) fn gpui_finish_desktop_control_setup(
     }
 
     // The cua-driver skill follows the driver it describes; a failure here only adds a note.
-    // An update refreshes an installed pack but never adds one (CDXC:AgentSkills 2026-11-19 in
+    // An update refreshes the skill while an agent links it and never adds it; Install and
+    // Reinstall (`was_update` false) always do (CDXC:AgentSkills 2026-11-19 in
     // server/src/managed_tools/desktop_control.rs).
-    let skill_note = if was_update && !gpui_cua_driver_skill_pack_installed() {
+    let skill_note = if was_update && !gpui_cua_driver_skill_linked() {
         ""
     } else {
         match gpui_install_cua_driver_skill() {

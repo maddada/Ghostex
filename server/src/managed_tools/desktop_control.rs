@@ -360,9 +360,8 @@ pub(crate) fn run_operation(
         let pack = home
             .join(".cua-driver/skills/cua-driver/SKILL.md")
             .is_file();
-        if let (Some(verb), Some(executable)) =
-            (trycua_skills_verb(operation, pack), trycua_executable(home))
-        {
+        let verb = trycua_skills_verb(operation, trycua_skill_linked(home), pack);
+        if let (Some(verb), Some(executable)) = (verb, trycua_executable(home)) {
             if run::run(
                 &executable,
                 &["skills", verb],
@@ -383,14 +382,40 @@ pub(crate) fn run_operation(
     Ok(())
 }
 
+/// Agent skills folders `cua-driver skills install` links (`cua-driver skills status` lists them),
+/// relative to home. Keep in step with `GPUI_CUA_DRIVER_SKILL_LINK_DIRS` in
+/// apps/desktop/src/app/helpers/os_cli/cua_driver_skill.rs.
+pub(crate) const TRYCUA_SKILL_LINK_DIRS: &[&str] = &[
+    ".agents/skills",
+    ".claude/skills",
+    ".config/opencode/skills",
+    ".factory/skills",
+    ".gemini/skills",
+    ".gemini/antigravity/skills",
+    ".gemini/antigravity-cli/skills",
+    ".gemini/config/skills",
+    ".hermes/skills",
+    ".kiro/skills",
+    ".openclaw/skills",
+    ".prime/agent/skills",
+];
+
+/// Whether any agent links the cua-driver skill. A dangling link counts: `skills update` deletes
+/// the pack before re-fetching it, so a failed update leaves links to nothing.
+fn trycua_skill_linked(home: &Path) -> bool {
+    TRYCUA_SKILL_LINK_DIRS
+        .iter()
+        .any(|dir| std::fs::symlink_metadata(home.join(dir).join("cua-driver")).is_ok())
+}
+
 /// CDXC:AgentSkills 2026-11-19 DECISION:
-/// Every successful driver update (Settings, the Updates page, Update all, automatic updates) refreshes an installed cua-driver skill pack with `skills update`, so agents never read a skill written for an older driver. Only an Install adds a pack: an update never installs one the user didn't have.
-fn trycua_skills_verb(operation: &str, pack_installed: bool) -> Option<&'static str> {
+/// Every successful driver update (Settings, the Updates page, Update all, automatic updates) refreshes the cua-driver skill when an agent still links it, so agents never read a skill written for an older driver; an update never adds the skill when no agent links it (`skills uninstall` keeps the pack, so the pack alone does not say the user wants it). Install and Reinstall are explicit clicks and always add it. The verb comes from the pack: `update` re-fetches one that exists, `install` fetches a missing one.
+fn trycua_skills_verb(operation: &str, linked: bool, pack: bool) -> Option<&'static str> {
     match operation {
         "uninstall" => None,
-        _ if pack_installed => Some("update"),
-        "install" => Some("install"),
-        _ => None,
+        "update" if !linked => None,
+        _ if pack => Some("update"),
+        _ => Some("install"),
     }
 }
 
@@ -409,12 +434,31 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn a_driver_update_refreshes_only_a_skill_pack_already_installed() {
-        assert_eq!(trycua_skills_verb("update", true), Some("update"));
-        assert_eq!(trycua_skills_verb("update", false), None);
-        assert_eq!(trycua_skills_verb("install", true), Some("update"));
-        assert_eq!(trycua_skills_verb("install", false), Some("install"));
-        assert_eq!(trycua_skills_verb("uninstall", true), None);
+    fn a_driver_update_refreshes_the_skill_only_while_an_agent_links_it() {
+        // (operation, linked, pack)
+        assert_eq!(trycua_skills_verb("update", true, true), Some("update"));
+        // A failed earlier `skills update` left links but no pack: fetch it again.
+        assert_eq!(trycua_skills_verb("update", true, false), Some("install"));
+        // `skills uninstall` keeps the pack but removes the links: leave it alone.
+        assert_eq!(trycua_skills_verb("update", false, true), None);
+        assert_eq!(trycua_skills_verb("update", false, false), None);
+        for operation in ["install", "reinstall"] {
+            assert_eq!(trycua_skills_verb(operation, false, true), Some("update"));
+            assert_eq!(trycua_skills_verb(operation, false, false), Some("install"));
+            assert_eq!(trycua_skills_verb(operation, true, true), Some("update"));
+        }
+        assert_eq!(trycua_skills_verb("uninstall", true, true), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_dangling_agent_link_still_counts_as_linked() {
+        let home = tempfile::tempdir().expect("home");
+        assert!(!trycua_skill_linked(home.path()));
+        let dir = home.path().join(".claude/skills");
+        std::fs::create_dir_all(&dir).expect("dir");
+        std::os::unix::fs::symlink(home.path().join("gone"), dir.join("cua-driver")).expect("link");
+        assert!(trycua_skill_linked(home.path()));
     }
 
     #[test]
