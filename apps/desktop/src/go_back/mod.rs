@@ -212,8 +212,10 @@ pub(crate) fn release_install() -> bool {
     }
     #[cfg(target_os = "linux")]
     {
-        crate::linux_updater::appimage_install().is_some()
-            || crate::linux_updater::is_packaged_install()
+        // A Linux `cargo xtask start` installs into the packaged path too (build-linux-rust.sh).
+        !cfg!(feature = "local-start")
+            && (crate::linux_updater::appimage_install().is_some()
+                || crate::linux_updater::is_packaged_install())
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {

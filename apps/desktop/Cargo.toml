@@ -248,3 +248,6 @@ modal-demo-snapshot = ["gpui/test-support", "gpui_platform/test-support"]
 # (scripts/build-macos-rust.sh with GHOSTEX_LOCAL_START=1, scripts/build-linux-rust.sh) turn it
 # on; `cargo xtask build` and every release build leave it off, so it is not in published apps.
 freeze-detector = ["dep:backtrace"]
+# Marks a Linux `cargo xtask start` build, which installs into the packaged path (/opt/ghostex)
+# but is not a release: scripts/build-linux-rust.sh turns it on, release packaging never does.
+local-start = []

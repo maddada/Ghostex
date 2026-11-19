@@ -36,6 +36,8 @@ fi
 cargo_args+=(--config 'profile.release.package.ghostex-gpui.incremental=true')
 # CDXC:Diagnostics 2026-11-19 SEE-ALSO: the dev-build freeze detector (src/freeze_detector/heartbeat.rs); only local starts turn the feature on, never `cargo xtask build` or a release.
 cargo_args+=(--features freeze-detector)
+# CDXC:Release 2026-11-19 WHY: this build installs into /opt/ghostex like a package, and every rebuild ends the running app without a clean quit, so the go-back check (src/go_back/mod.rs, release_install) counted each rebuild as a crash of the new version and showed "isn't working on this computer" at launch. The feature tells it this is not a release.
+cargo_args+=(--features local-start)
 if [[ "${GHOSTEX_START_OPTIMIZED:-0}" != "1" ]]; then
 	cargo_args+=(--config 'profile.release.package.ghostex-gpui.opt-level=0')
 fi
