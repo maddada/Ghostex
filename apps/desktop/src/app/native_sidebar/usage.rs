@@ -400,6 +400,7 @@ impl GhostexGpuiApp {
             open_background: card_open,
             scale,
             route,
+            tooltip_delay: appearance.tooltip_delay,
         };
 
         align_badge_columns(

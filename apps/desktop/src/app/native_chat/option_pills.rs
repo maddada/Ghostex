@@ -79,6 +79,11 @@ fn pill(
         .as_str()
         .filter(|_| merged && !loading)
         .map(str::to_owned);
+    let sign_in_note = values["accountSignInNote"]
+        .as_str()
+        .filter(|_| kind == "model" && !loading)
+        .map(str::to_owned);
+    let signed_out = sign_in_note.is_some();
     let mut item = div()
         .id(format!("chat-{kind}-picker"))
         .relative()
@@ -101,8 +106,16 @@ fn pill(
         // React's ghost Button carried `aria-expanded:bg-muted`, so an open menu keeps its pill lit.
         .when(open, |item| item.bg(appearance.border))
         .hover(|style| style.bg(appearance.border))
-        .tooltip(move |window, cx| {
-            gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
+        .tooltip(move |window, cx| match &sign_in_note {
+            // The account is signed out on the session's computer (Q4198 A): the pill's own
+            // line, then why sending won't work, on the sidebar's small card.
+            Some(note) => crate::app::native_sidebar::tooltips::compact_card_tooltip(
+                format!("{tooltip}\n{note}"),
+                260.0,
+                window,
+                cx,
+            ),
+            None => gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx),
         });
     if kind == "model"
         && let Some(icon) = values["agentIcon"].as_str()
@@ -136,7 +149,14 @@ fn pill(
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_size(px(9.9 * scale))
                         .line_height(px(9.9 * scale))
-                        .text_color(if icon == "codex" {
+                        .text_color(if signed_out {
+                            // Settings > Accounts' Needs sign-in amber, as on the sidebar's cards.
+                            gpui::Hsla::from(gpui::rgb(if appearance.light {
+                                0xb45309
+                            } else {
+                                0xfcd34d
+                            }))
+                        } else if icon == "codex" {
                             gpui::Hsla::from(gpui::rgb(0x7db8fb))
                         } else {
                             appearance.muted

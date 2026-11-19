@@ -40,6 +40,53 @@ pub fn account_indicator(accounts: Option<&AccountsState>) -> Option<String> {
     }
 }
 
+/// The model pill's tooltip line while the account this session is bound to needs signing in on
+/// the session's computer (gxserver reads it `loginRequired` or `identityChanged`, the states
+/// `ghostex accounts` calls `needsSignIn`). `computer` is the session's computer's name, `None`
+/// for this computer. `None` while the account is signed in, or the session has none.
+///
+/// CDXC:AgentProviders 2026-11-19 DECISION:
+/// User (Q4198 A, the signed-out accounts page): "i need to know (per machine) if the session is
+/// active or not and if i send will it work or not". The chat box says it on hover: the model
+/// pill's account mark turns amber and its tooltip names the computer the account is signed out
+/// on and that sending won't work until it signs in there. The accounts the chat reads are the
+/// session's own computer's (its gxserver answers `agentAccounts`), so this is that computer's
+/// state, not this one's.
+pub fn account_sign_in_note(
+    accounts: Option<&AccountsState>,
+    computer: Option<&str>,
+) -> Option<String> {
+    let accounts = accounts?;
+    let session_account_id = accounts
+        .session
+        .as_ref()
+        .and_then(|session| session.account_id.as_deref())?;
+    let active = accounts
+        .accounts
+        .iter()
+        .find(|account| account.id.as_deref() == Some(session_account_id))?;
+    if !matches!(
+        active.status.as_deref(),
+        Some("loginRequired" | "identityChanged")
+    ) {
+        return None;
+    }
+    let label = account_indicator(Some(accounts)).unwrap_or_else(|| {
+        if active.name.trim().is_empty() {
+            "This account".to_string()
+        } else {
+            active.name.trim().to_string()
+        }
+    });
+    let place = match computer.map(str::trim).filter(|name| !name.is_empty()) {
+        Some(name) => format!("on {name}"),
+        None => "on this computer".to_string(),
+    };
+    Some(format!(
+        "{label} is signed out {place}. Sending won't work until it signs in there."
+    ))
+}
+
 /// `sessionChatOptionsTitle`: the options pill's tooltip, one section name per configured group.
 pub fn options_title(
     sections: &[OptionSection],
@@ -127,5 +174,42 @@ pub fn option_pill_values(
         agent_icon: icon,
         fast: codex && state.get("fastMode").map(|entry| entry.value.as_str()) == Some("on"),
         plan: codex && state.get("mode").map(|entry| entry.value.as_str()) == Some("plan"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn accounts(status: &str) -> AccountsState {
+        AccountsState::from_value(&json!({
+            "accounts": [
+                {"id": "claude-ms", "provider": "claude", "indicator": "MS", "name": "MS", "registered": true, "status": "ready"},
+                {"id": "claude-st", "provider": "claude", "indicator": "ST", "name": "ST", "registered": true, "status": status},
+            ],
+            "session": {"provider": "claude", "accountId": "claude-st"},
+        }))
+    }
+
+    #[test]
+    fn a_signed_out_account_on_a_remote_computer_names_it() {
+        assert_eq!(
+            account_sign_in_note(Some(&accounts("loginRequired")), Some("Windows PC")).as_deref(),
+            Some("ST is signed out on Windows PC. Sending won't work until it signs in there.")
+        );
+        assert_eq!(
+            account_sign_in_note(Some(&accounts("identityChanged")), None).as_deref(),
+            Some("ST is signed out on this computer. Sending won't work until it signs in there.")
+        );
+    }
+
+    #[test]
+    fn a_signed_in_or_unbound_session_has_no_note() {
+        assert_eq!(account_sign_in_note(Some(&accounts("ready")), None), None);
+        let mut unbound = accounts("loginRequired");
+        unbound.session = None;
+        assert_eq!(account_sign_in_note(Some(&unbound), None), None);
+        assert_eq!(account_sign_in_note(None, None), None);
     }
 }

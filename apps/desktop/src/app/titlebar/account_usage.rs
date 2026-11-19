@@ -12,6 +12,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::px;
 use gpui_component::ElementExt as _;
 use gpui_component::h_flex;
+use gpui_component::tooltip::{ManagedTooltipExt as _, ManagedTooltipPlacement};
 use gpui_component::v_flex;
 use serde_json::{Value, json};
 use std::{
@@ -41,6 +42,20 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
 /// account's actions (the coordinator's interim answer while the user's own is pending: "assume
 /// 'once, the Swap copy' for now and keep it easy to flip"). [`HUB_COPY_YIELDS_TO_SWAP`] flips it.
 fn distinct_accounts(accounts: &[Value]) -> Vec<&Value> {
+    distinct_account_copies(accounts)
+        .into_iter()
+        .map(|copies| copies[0])
+        .collect()
+}
+
+/// [`distinct_accounts`] with every computer's copy of each account: the shown copy first, then
+/// the other computers' copies in the published order.
+///
+/// CDXC:AgentProviders 2026-11-19 DECISION:
+/// User (Q4198 A, the signed-out accounts page): a signed-out account's card turns its letters and
+/// numbers amber, and only its letters while it is signed out on another computer only, so the
+/// card has to know every computer's copy, not only the one it shows.
+fn distinct_account_copies(accounts: &[Value]) -> Vec<Vec<&Value>> {
     let saved = swap_logins();
     let swap_login = |hub: &Value| {
         HUB_COPY_YIELDS_TO_SWAP
@@ -51,25 +66,128 @@ fn distinct_accounts(accounts: &[Value]) -> Vec<&Value> {
                     .iter()
                     .any(|other| other["hub"] != true && same_login(other, hub)))
     };
-    let mut shown: Vec<&Value> = Vec::with_capacity(accounts.len());
+    let mut shown: Vec<Vec<&Value>> = Vec::with_capacity(accounts.len());
     for account in accounts.iter().filter(|account| !swap_login(account)) {
-        let same = shown.iter().position(|seen| {
+        let same = shown.iter().position(|copies| {
+            let seen = copies[0];
             text(seen, "provider") == text(account, "provider")
                 && !text(account, "id").is_empty()
                 && text(seen, "id") == text(account, "id")
         });
         match same {
-            None => shown.push(account),
+            None => shown.push(vec![account]),
             Some(index)
                 if text(account, "titlebarMachine") == "local"
-                    && text(shown[index], "titlebarMachine") != "local" =>
+                    && text(shown[index][0], "titlebarMachine") != "local" =>
             {
-                shown[index] = account;
+                shown[index].insert(0, account);
             }
-            Some(_) => {}
+            Some(index) => shown[index].push(account),
         }
     }
     shown
+}
+
+/// Whether gxserver reads this copy of an account as needing a sign-in: its saved login is dead,
+/// or a session on it reported "Login expired" (server/src/accounts/login_expired.rs), or the
+/// login now belongs to someone else. The states `ghostex accounts` calls `needsSignIn`.
+fn signed_out(account: &Value) -> bool {
+    matches!(text(account, "status"), "loginRequired" | "identityChanged")
+}
+
+/// A computer's name as the user saved it in Settings > Remote, or "This computer".
+fn machine_label(machine: &str) -> String {
+    if matches!(machine, "" | "local") {
+        return "This computer".to_string();
+    }
+    shared_settings::shared_sidebar_settings_snapshot()
+        .object()
+        .get("remoteMachines")
+        .and_then(Value::as_array)
+        .and_then(|machines| machines.iter().find(|entry| text(entry, "id") == machine))
+        .map(|entry| text(entry, "name").trim().to_string())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| "Another computer".to_string())
+}
+
+fn provider_label(provider: &str) -> &'static str {
+    match provider {
+        "codex" => "Codex",
+        "cursor" => "Cursor",
+        "gemini" => "Gemini",
+        "copilot" => "Copilot",
+        _ => "Claude",
+    }
+}
+
+/// The amber Settings > Accounts gives "Needs sign-in" (settings_modal/tabs/accounts/widgets.rs
+/// `TagTone::Warning`): the account's letters and numbers on a signed-out card.
+pub(crate) fn needs_sign_in_amber() -> gpui::Rgba {
+    chrome_color(0xfcd34d, 0xb45309)
+}
+
+/// How a card shows that its account needs signing in somewhere.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum MeterSignIn {
+    #[default]
+    SignedIn,
+    /// The copy the card shows (this computer's, when it has one) is signed out: letters and
+    /// numbers turn amber.
+    SignedOut,
+    /// The shown copy is signed in, another computer's is not: only the letters turn amber.
+    SignedOutElsewhere,
+}
+
+/// A card's sign-in state, whether its shown copy's computer could not be reached, and the
+/// tooltip that lists every computer's copy, for a card with a problem only (signed out on a
+/// computer, or a computer that did not answer).
+///
+/// CDXC:AgentProviders 2026-11-19 DECISION:
+/// User (Q4198 A): a card with a problem gets a tooltip naming each computer and the account's
+/// state there; a card without one keeps no tooltip (the 2026-09-21 "please don't show tooltips
+/// for the account usage cards" still holds for them). A card whose computer did not answer fades
+/// its numbers, which are that computer's last reading.
+fn meter_state(label: &str, copies: &[&Value]) -> (MeterSignIn, bool, Option<String>) {
+    let unreachable = |account: &Value| account["machineUnreachable"] == true;
+    let sign_in = if signed_out(copies[0]) {
+        MeterSignIn::SignedOut
+    } else if copies[1..].iter().any(|copy| signed_out(copy)) {
+        MeterSignIn::SignedOutElsewhere
+    } else {
+        MeterSignIn::SignedIn
+    };
+    let problem = sign_in != MeterSignIn::SignedIn || copies.iter().any(|copy| unreachable(copy));
+    let tooltip = problem.then(|| {
+        let mut lines = vec![format!(
+            "{label} · {}",
+            provider_label(text(copies[0], "provider"))
+        )];
+        for copy in copies {
+            let state = if signed_out(copy) {
+                "signed out"
+            } else if unreachable(copy) {
+                "can't reach it, showing its last reading"
+            } else {
+                "signed in"
+            };
+            lines.push(format!(
+                "{}: {state}",
+                machine_label(text(copy, "titlebarMachine"))
+            ));
+        }
+        let shown_here = matches!(text(copies[0], "titlebarMachine"), "" | "local");
+        match sign_in {
+            // The card's popup has the account's Reconnect.
+            MeterSignIn::SignedOut if shown_here => lines.push("Click to reconnect it.".into()),
+            // Another computer's login is signed in on that computer (the popup says the same).
+            MeterSignIn::SignedOut | MeterSignIn::SignedOutElsewhere => {
+                lines.push("Sign in again on that computer.".into())
+            }
+            MeterSignIn::SignedIn => {}
+        }
+        lines.join("\n")
+    });
+    (sign_in, unreachable(copies[0]), tooltip)
 }
 
 /// Whether a hub account's meter gives way to the Swap account of the same login (see
@@ -355,6 +473,11 @@ pub(crate) struct GpuiAccountUsageMeter {
     pub(crate) provider: String,
     pub(crate) indicator: Option<String>,
     pub(crate) badge_lines: Vec<String>,
+    pub(crate) sign_in: MeterSignIn,
+    /// The shown copy's computer did not answer: its numbers are its last reading, faded.
+    pub(crate) unreachable: bool,
+    /// Only on a card with a problem ([`meter_state`]).
+    pub(crate) tooltip: Option<String>,
 }
 
 /// The badge text size beside a meter's glyph. A host that lines its meters up in columns
@@ -387,6 +510,8 @@ pub(crate) struct GpuiAccountUsageMeterHost {
     /// Set when the meters are drawn in a window other than the one their popup and menu belong
     /// to (the sidebar's frosted usage strip): presses are handed to that window.
     pub(crate) route: Option<GpuiAccountUsageMeterRoute>,
+    /// The host's tooltip delay, for a card that has a tooltip.
+    pub(crate) tooltip_delay: Duration,
 }
 
 /// Where a meter drawn in a frosted host window sends its presses: the window the account's usage
@@ -649,6 +774,7 @@ impl GhostexGpuiApp {
                                 for account in this.titlebar_accounts.iter_mut().filter(|a| text(a, "titlebarMachine") == machine) {
                                     account["usageError"] = json!("Could not refresh account usage. Showing the last received snapshot.");
                                     account["usageStale"] = json!(true);
+                                    account["machineUnreachable"] = json!(true);
                                 }
                             }
                         }
@@ -681,9 +807,10 @@ impl GhostexGpuiApp {
 
     /// Every account the user asked to see, in the order gxserver publishes them, once each.
     pub(crate) fn account_usage_meters(&self) -> Vec<GpuiAccountUsageMeter> {
-        distinct_accounts(&self.titlebar_accounts)
+        distinct_account_copies(&self.titlebar_accounts)
             .into_iter()
-            .filter_map(|account| {
+            .filter_map(|copies| {
+                let account = copies[0];
                 let id = ExtensionId::new(text(account, "titlebarKey"))?;
                 let provider = text(account, "provider");
                 let codex = provider == "codex";
@@ -691,13 +818,21 @@ impl GhostexGpuiApp {
                     "" => text(account, "selector"),
                     value => value,
                 };
+                let indicator =
+                    (!indicator.is_empty() && indicator != "-").then(|| indicator.to_string());
+                let label = indicator
+                    .clone()
+                    .unwrap_or_else(|| account_display_name(account));
+                let (sign_in, unreachable, tooltip) = meter_state(&label, &copies);
                 Some(GpuiAccountUsageMeter {
                     id,
                     codex,
                     provider: provider.to_string(),
-                    indicator: (!indicator.is_empty() && indicator != "-")
-                        .then(|| indicator.to_string()),
+                    indicator,
                     badge_lines: badge_lines(account),
+                    sign_in,
+                    unreachable,
+                    tooltip,
                 })
             })
             .collect()
@@ -743,11 +878,21 @@ impl GhostexGpuiApp {
             icon(meter.codex)
         };
         let indicator = meter.indicator.clone();
-        let indicator_color = if meter.codex {
+        let indicator_color = if meter.sign_in != MeterSignIn::SignedIn {
+            needs_sign_in_amber()
+        } else if meter.codex {
             chrome_color(0x7db8fb, 0x285b8c)
         } else {
             chrome_color(0xa4a8af, 0x9c4328)
         };
+        let badge_color = if meter.sign_in == MeterSignIn::SignedOut {
+            needs_sign_in_amber()
+        } else {
+            chrome_color(0xb9b9b9, 0x404040)
+        };
+        let unreachable = meter.unreachable;
+        let tooltip = meter.tooltip.clone();
+        let tooltip_delay = host.tooltip_delay;
         let hover_background = host.hover_background;
         let open_background = host.open_background;
         let route = host.route;
@@ -868,6 +1013,21 @@ impl GhostexGpuiApp {
             */
             .on_click(cx.listener(|_, _: &gpui::ClickEvent, _, cx| cx.stop_propagation()))
             // CDXC:AgentProviders 2026-09-21 DECISION: "please don't show tooltips for the account usage cards at the bottom of the gpui sidebar". A press opens the account's usage popup, which says everything the tooltip did.
+            // Since 2026-11-19 a card with a problem has one (`meter_state`): which computer its account is signed out on, or can't reach.
+            .when_some(tooltip, |this, tooltip| {
+                this.managed_discrete_tooltip_with_placement(
+                    ManagedTooltipPlacement::Auto,
+                    tooltip_delay,
+                    move |window, cx| {
+                        crate::app::native_sidebar::tooltips::compact_card_tooltip(
+                            tooltip.clone(),
+                            260.0,
+                            window,
+                            cx,
+                        )
+                    },
+                )
+            })
             .on_prepaint({
                 let anchor_state = anchor_state.clone();
                 move |bounds, window, cx| {
@@ -894,7 +1054,8 @@ impl GhostexGpuiApp {
                                     .line_height(px(ACCOUNT_USAGE_BADGE_TEXT_SIZE * scale))
                                     .font_family(ACCOUNT_INDICATOR_FONT_FAMILY)
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(chrome_color(0xb9b9b9, 0x404040))
+                                    .text_color(badge_color)
+                                    .when(unreachable, |this| this.opacity(0.45))
                                     .children(badge_lines),
                             ),
                     )
@@ -1033,6 +1194,89 @@ mod tests {
             ]
             .map(|(machine, name)| (machine.to_string(), name.to_string()))
         );
+    }
+
+    fn with(mut account: Value, key: &str, value: Value) -> Value {
+        account[key] = value;
+        account
+    }
+
+    fn state(accounts: &[Value]) -> (MeterSignIn, bool, Option<String>) {
+        let copies = distinct_account_copies(accounts).remove(0);
+        meter_state("ST", &copies)
+    }
+
+    /// Q4198 A: signed out on this computer turns letters and numbers amber.
+    #[test]
+    fn a_signed_out_copy_shown_here_is_signed_out() {
+        let here = with(
+            account("local", "claude", "claude-st", "ST"),
+            "status",
+            json!("loginRequired"),
+        );
+        let (sign_in, unreachable, tooltip) = state(&[here]);
+        assert_eq!(sign_in, MeterSignIn::SignedOut);
+        assert!(!unreachable);
+        assert_eq!(
+            tooltip.as_deref(),
+            Some("ST · Claude\nThis computer: signed out\nClick to reconnect it.")
+        );
+    }
+
+    /// Signed in here, signed out on the Windows machine: only the letters turn amber, and the
+    /// card shows this computer's copy whatever the order.
+    #[test]
+    fn signed_out_on_another_computer_only_is_elsewhere() {
+        let windows = "remote-mvb5laq3-4aol2";
+        let accounts = vec![
+            with(
+                account(windows, "claude", "claude-st", "ST"),
+                "status",
+                json!("loginRequired"),
+            ),
+            with(
+                account("local", "claude", "claude-st", "ST"),
+                "status",
+                json!("ready"),
+            ),
+        ];
+        let copies = distinct_account_copies(&accounts);
+        assert_eq!(copies.len(), 1);
+        assert_eq!(text(copies[0][0], "titlebarMachine"), "local");
+        let (sign_in, _, tooltip) = state(&accounts);
+        assert_eq!(sign_in, MeterSignIn::SignedOutElsewhere);
+        let tooltip = tooltip.unwrap();
+        assert!(tooltip.contains("This computer: signed in"), "{tooltip}");
+        assert!(
+            tooltip.contains(": signed out\nSign in again on that computer."),
+            "{tooltip}"
+        );
+    }
+
+    #[test]
+    fn a_computer_that_did_not_answer_fades_and_explains() {
+        let stale = with(
+            account("local", "gemini", "gemini-1", "G"),
+            "machineUnreachable",
+            json!(true),
+        );
+        let (sign_in, unreachable, tooltip) = state(&[stale]);
+        assert_eq!(sign_in, MeterSignIn::SignedIn);
+        assert!(unreachable);
+        assert_eq!(
+            tooltip.as_deref(),
+            Some("ST · Gemini\nThis computer: can't reach it, showing its last reading")
+        );
+    }
+
+    /// A card without a problem keeps no tooltip (2026-09-21).
+    #[test]
+    fn a_signed_in_account_has_no_tooltip() {
+        let accounts = vec![
+            account("local", "claude", "claude-ms", "MS"),
+            account("remote-a", "claude", "claude-ms", "MS"),
+        ];
+        assert_eq!(state(&accounts), (MeterSignIn::SignedIn, false, None));
     }
 
     #[test]

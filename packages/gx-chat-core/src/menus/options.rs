@@ -19,7 +19,9 @@ use crate::menus::option_menu::{
 use crate::menus::option_menus::{
     native_option_menus, DraftAgent, NativeOptionMenus, OptionMenuParams,
 };
-use crate::menus::option_pills::{account_indicator, option_pill_values, options_title};
+use crate::menus::option_pills::{
+    account_indicator, account_sign_in_note, option_pill_values, options_title,
+};
 use crate::menus::option_values::{current_model_value, OptionState};
 use crate::state::{ChatContext, ChatState};
 
@@ -60,6 +62,10 @@ pub struct OptionLabels {
     pub plan: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub account_indicator: Option<String>,
+    /// The bound account needs signing in on the session's computer: the model pill's tooltip line
+    /// (`option_pills::account_sign_in_note`), and the account mark draws amber.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_sign_in_note: Option<String>,
     pub options_title: String,
     pub options_tooltip: String,
     pub show_model: bool,
@@ -248,6 +254,26 @@ pub fn compute_native_chat_options(state: &ChatState, _context: &ChatContext) ->
         fast: pill_values.fast,
         plan: pill_values.plan,
         account_indicator: account_indicator(accounts.as_ref()),
+        account_sign_in_note: account_sign_in_note(
+            accounts.as_ref(),
+            state
+                .session
+                .computer
+                .computer
+                .as_ref()
+                .filter(|computer| computer.remote)
+                .map(|computer| computer.name.as_str())
+                .filter(|name| !name.trim().is_empty())
+                .or_else(|| {
+                    state
+                        .session
+                        .computer
+                        .computer
+                        .as_ref()
+                        .filter(|computer| computer.remote)
+                        .map(|_| "another computer")
+                }),
+        ),
         options_title: options_title(&sections, pill_values.fast, pill_values.plan, ""),
         options_tooltip: options_title(
             &sections,
