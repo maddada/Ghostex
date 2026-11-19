@@ -81,6 +81,22 @@ pub(crate) fn for_chat(project_id: &str, session_id: &str) -> Option<ShareScope>
         .map(|entry| entry.scope.clone())
 }
 
+/// Adds a picture a guest of `share_id` just uploaded to that share's pictures at once.
+///
+/// CDXC:Collab 2026-11-20 WHY:
+/// gxserver learned of a guest's upload only from the component's next share sync, which waits a moment before it calls over, so a picture pasted and sent at once (Send mode) was refused by `Deliver`'s check that a message carries only the share's own uploads (security review of the dock rows, T3). The save goes through gxserver, so gxserver records it itself; the next sync replaces the list as before.
+pub(crate) fn add_image(share_id: &str, path: &str) {
+    let mut entries = entries().write().unwrap_or_else(PoisonError::into_inner);
+    if let Some(entry) = entries
+        .iter_mut()
+        .find(|entry| entry.scope.share_id == share_id)
+    {
+        if !entry.scope.images.iter().any(|image| image == path) {
+            entry.scope.images.push(path.to_string());
+        }
+    }
+}
+
 /// The share as it is now (its guests and pictures change while a token is in use).
 pub(crate) fn current(share_id: &str) -> Option<ShareScope> {
     entries()

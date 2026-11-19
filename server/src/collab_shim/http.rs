@@ -888,7 +888,7 @@ pub(crate) async fn host_call(state: &Arc<AppState>, call: HostCall) -> Result<V
             session_id,
             mut params,
         } => {
-            shared(&project_id, &session_id)?;
+            let scope = shared(&project_id, &session_id)?;
             params.insert("projectId".to_string(), json!(project_id));
             params.insert("sessionId".to_string(), json!(session_id));
             let routed = crate::session_chat_files::handle_save_session_chat_image_http(
@@ -899,6 +899,10 @@ pub(crate) async fn host_call(state: &Arc<AppState>, call: HostCall) -> Result<V
             );
             let (status, answer) = read_routed(routed).await;
             if status.is_success() {
+                // The share may carry it from now on (`registry::add_image`).
+                if let Some(path) = answer["result"]["path"].as_str() {
+                    super::registry::add_image(&scope.share_id, path);
+                }
                 Ok(answer["result"].clone())
             } else {
                 Err(answer["message"]
