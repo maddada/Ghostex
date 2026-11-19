@@ -129,8 +129,13 @@ impl GhostexGpuiApp {
         else {
             return false;
         };
-        let project_path = Path::new(project_path.trim());
-        !project_path.is_dir()
-            && folder.is_none_or(|folder| Path::new(folder).starts_with(project_path))
+        let project_path = project_path.trim();
+        if Path::new(project_path).is_dir() {
+            return false;
+        }
+        // Matched as gxserver's Locate Folder… matches (packages/paths/src/folder_below.rs): by
+        // part, in the volume's letter case, and through a link to the folder.
+        let project_folder = ghostex_paths::folder_below::MissingFolderRoot::new(project_path);
+        folder.is_none_or(|folder| project_folder.contains(folder))
     }
 }

@@ -824,9 +824,11 @@ pub(crate) fn rebase_renamed_worktree_path(
     let roots =
         std::iter::once(plan.worktree_path.as_str()).chain(plan.worktree_path_resolved.as_deref());
     for root in roots {
-        let windows = cfg!(windows) || is_windows_path(root);
+        let windows = cfg!(windows) || ghostex_paths::folder_below::is_windows_path(root);
         let ignore_case = windows || plan.worktree_path_ignores_case;
-        let Some(rest) = path_parts_below(&normalized, root, windows, ignore_case) else {
+        let Some(rest) =
+            ghostex_paths::folder_below::path_parts_below(&normalized, root, windows, ignore_case)
+        else {
             continue;
         };
         if rest.is_empty() {
@@ -839,51 +841,6 @@ pub(crate) fn rebase_renamed_worktree_path(
         return Some(format!("{destination}{separator}{}", rest.join(separator)));
     }
     None
-}
-
-/// A path with a drive letter (`C:\…`, `C:/…`) or a UNC or verbatim prefix (`\\server\…`).
-fn is_windows_path(path: &str) -> bool {
-    let bytes = path.as_bytes();
-    path.starts_with("\\\\")
-        || (bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':')
-}
-
-/// The parts of `path` after the parts of `root`, or `None` when `path` is not `root` or inside it.
-fn path_parts_below<'a>(
-    path: &'a str,
-    root: &str,
-    windows: bool,
-    ignore_case: bool,
-) -> Option<Vec<&'a str>> {
-    let path_parts = split_path_parts(path, windows);
-    let root_parts = split_path_parts(root, windows);
-    if root_parts.is_empty() || path_parts.len() < root_parts.len() {
-        return None;
-    }
-    let same = |a: &str, b: &str| {
-        if ignore_case {
-            a.to_lowercase() == b.to_lowercase()
-        } else {
-            a == b
-        }
-    };
-    path_parts
-        .iter()
-        .zip(&root_parts)
-        .all(|(a, b)| same(a, b))
-        .then(|| path_parts[root_parts.len()..].to_vec())
-}
-
-/// A path's parts: split on `/`, and on `\` too in a Windows path, whose `\\?\` prefix is dropped.
-fn split_path_parts(path: &str, windows: bool) -> Vec<&str> {
-    let path = if windows {
-        path.strip_prefix(r"\\?\").unwrap_or(path)
-    } else {
-        path
-    };
-    path.split(|c| c == '/' || (windows && c == '\\'))
-        .filter(|part| !part.is_empty() && *part != ".")
-        .collect()
 }
 
 pub(crate) fn rename_worktree_project_error_response(

@@ -78,8 +78,8 @@ pub(super) async fn route_projects_http(
             request_id,
             &body_json,
             |repository, db, params, _| {
-                let project = repository.relocate_project_moving_sessions(params)?;
-                let project_id = value_text(&project, "projectId")?;
+                let relocated = repository.relocate_project_moving_sessions(params)?;
+                let project_id = value_text(&relocated.project, "projectId")?;
                 schedule_presentation_project_delta(
                     &state,
                     db,
@@ -87,7 +87,18 @@ pub(super) async fn route_projects_http(
                     &project_id,
                     "projectUpdated",
                 )?;
-                Ok(json!({ "project": project }))
+                // The sessions that moved with the folder: every client (phones too) sees their
+                // new folder, and their observers restart on it.
+                for session_id in &relocated.moved_session_ids {
+                    schedule_presentation_session_delta(
+                        &state,
+                        db,
+                        repository,
+                        &project_id,
+                        session_id,
+                    )?;
+                }
+                Ok(json!({ "project": relocated.project }))
             },
         ),
         "/api/listProjects" => handle_domain_http_as(
