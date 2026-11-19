@@ -191,6 +191,9 @@ impl Render for DockAskPanel {
         let focus = self.focus.clone();
         let panel = div()
             .id("dock-ask-panel")
+            // Its copy keys beyond Ctrl+C / Cmd+C (main.rs: Ctrl+Insert, and Ctrl+Shift+C on
+            // Linux, which Omarchy's Super+C sends), answered by `Root`'s copy.
+            .key_context("DockAskPanel")
             .track_focus(&self.focus)
             .capture_any_mouse_down(move |_, window, cx| {
                 // Every press starts as one on no control (`closes_panel` marks its own after this).
@@ -958,7 +961,45 @@ impl NativeChatView {
 /// there instead of dotted. A press that ends on an answer or a link closes the panel only when it
 /// began there, so a drag to select never does.
 fn title_markdown(title: &str, runs: &Value) -> String {
+    /// `words` with every Markdown character escaped, except its code spans (`` `npm test` ``),
+    /// kept whole so the chat's view draws them as code, a command among them with its Copy and
+    /// Paste in terminal (`ask_markdown` below).
     fn escape(words: &str, out: &mut String) {
+        let mut rest = words;
+        while let Some(start) = rest.find('`') {
+            escape_plain(&rest[..start], out);
+            let ticks = rest[start..].len() - rest[start..].trim_start_matches('`').len();
+            let after = start + ticks;
+            match closing_ticks(&rest[after..], ticks) {
+                Some(close) => {
+                    let end = after + close + ticks;
+                    out.push_str(&rest[start..end].replace('\n', " "));
+                    rest = &rest[end..];
+                }
+                None => {
+                    for _ in 0..ticks {
+                        out.push_str("\\`");
+                    }
+                    rest = &rest[after..];
+                }
+            }
+        }
+        escape_plain(rest, out);
+    }
+    /// Where a run of exactly `ticks` backticks starts in `text`.
+    fn closing_ticks(text: &str, ticks: usize) -> Option<usize> {
+        let mut at = 0;
+        while let Some(found) = text[at..].find('`') {
+            let start = at + found;
+            let run = text[start..].len() - text[start..].trim_start_matches('`').len();
+            if run == ticks {
+                return Some(start);
+            }
+            at = start + run;
+        }
+        None
+    }
+    fn escape_plain(words: &str, out: &mut String) {
         for c in words.chars() {
             // `:` too, so words the core left plain never become an address the view links
             // itself with the escapes kept in it.
@@ -1004,7 +1045,9 @@ fn title_markdown(title: &str, runs: &Value) -> String {
     if out.starts_with('#') && !out[1..].starts_with(|c: char| c.is_ascii_digit()) {
         out.insert(0, '\\');
     }
-    out
+    // The core's marks for an ask's text, as its description gets them: a command in a code span
+    // becomes the chat's command chip, a file in one its pill.
+    ghostex_gx_chat_core::transcript::native_markdown::ask_markdown(&out)
 }
 
 #[cfg(test)]
@@ -1053,6 +1096,14 @@ mod tests {
             r"Open [http\://192\.168\.1\.177\:8080/admin](<http://192.168.1.177:8080/admin>) now"
         );
         assert_eq!(title_markdown("note: done", &Value::Null), r"note\: done");
+        // A code span stays code, unescaped; a command in one is the chat's command chip.
+        assert_eq!(
+            title_markdown("Set `a.b` to 1.", &Value::Null),
+            r"Set `a.b` to 1\."
+        );
+        let command = title_markdown("Run `npm install` then", &Value::Null);
+        assert!(command.contains("](ghostex-run:"), "{command}");
+        assert_eq!(title_markdown("a ` tick", &Value::Null), r"a \` tick");
         let runs = json!([
             { "text": "see " },
             { "text": "the [docs]", "href": "https://example.com/a>b" },

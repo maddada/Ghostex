@@ -394,6 +394,23 @@ fn main() {
             KeyBinding::new("ctrl-shift-c", gpui_component::input::Copy, Some("Input")),
             KeyBinding::new("ctrl-shift-v", gpui_component::input::Paste, Some("Input")),
         ]);
+        // CDXC:Clipboard 2026-11-19 WHY: the same copy keys copy a selection in the floating ask
+        // panel (native_chat/dock_ask_modal.rs, key context `DockAskPanel`): its `Root` copies
+        // the window's selection on `Copy`, but gpui-component binds only Ctrl+C there, so on
+        // Omarchy, whose Super+C sends Ctrl+Shift+C (or Ctrl+Insert) to Ghostex's
+        // `terminal`-tagged windows, a selection in the panel never reached the clipboard.
+        #[cfg(not(target_os = "macos"))]
+        cx.bind_keys([KeyBinding::new(
+            "ctrl-insert",
+            gpui_component::input::Copy,
+            Some("DockAskPanel"),
+        )]);
+        #[cfg(target_os = "linux")]
+        cx.bind_keys([KeyBinding::new(
+            "ctrl-shift-c",
+            gpui_component::input::Copy,
+            Some("DockAskPanel"),
+        )]);
         ui_fonts::register(cx);
         crate::app::window::frosted_host::register_frosted_tooltip_root_plugin(cx);
         crate::app::window::modal_popover_host::install_frosted_modal_popover_host();
