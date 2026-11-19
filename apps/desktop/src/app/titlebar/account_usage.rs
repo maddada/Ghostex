@@ -34,9 +34,26 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
 /// copy carries its own `titlebarKey`, so the sidebar drew it twice. The limits belong to the
 /// provider account, so it shows once: this computer's copy when it has one, else the first
 /// machine's in the published order. An account only another machine has still shows.
+///
+/// CDXC:AgentProviders 2026-11-19 DECISION:
+/// A CLIProxyAPI hub account (`hub: true`, server/src/accounts/hub/sidebar.rs) whose login is also
+/// a Claude Swap or Codex Swap account on any computer shows once, as the Swap copy, which has the
+/// account's actions (the coordinator's interim answer while the user's own is pending: "assume
+/// 'once, the Swap copy' for now and keep it easy to flip"). [`HUB_COPY_YIELDS_TO_SWAP`] flips it.
 fn distinct_accounts(accounts: &[Value]) -> Vec<&Value> {
+    let swap_login = |hub: &Value| {
+        let email = text(hub, "email");
+        HUB_COPY_YIELDS_TO_SWAP
+            && hub["hub"] == true
+            && !email.is_empty()
+            && accounts.iter().any(|other| {
+                other["hub"] != true
+                    && text(other, "provider") == text(hub, "provider")
+                    && text(other, "email").eq_ignore_ascii_case(email)
+            })
+    };
     let mut shown: Vec<&Value> = Vec::with_capacity(accounts.len());
-    for account in accounts {
+    for account in accounts.iter().filter(|account| !swap_login(account)) {
         let same = shown.iter().position(|seen| {
             text(seen, "provider") == text(account, "provider")
                 && !text(account, "id").is_empty()
@@ -55,6 +72,10 @@ fn distinct_accounts(accounts: &[Value]) -> Vec<&Value> {
     }
     shown
 }
+
+/// Whether a hub account's meter gives way to the Swap account of the same login (see
+/// [`distinct_accounts`]); `false` shows both.
+const HUB_COPY_YIELDS_TO_SWAP: bool = true;
 
 fn titlebar_entry(account: &Value, machine: &str) -> Value {
     let mut account = account.clone();
@@ -567,12 +588,15 @@ impl GhostexGpuiApp {
                         match result {
                             Ok(result) => {
                                 this.titlebar_accounts.retain(|a| text(a, "titlebarMachine") != machine);
-                                // The usage-only accounts (Cursor, Gemini, Copilot) come under their own key.
-                                for account in ["accounts", "usageAccounts"].into_iter()
+                                // The usage-only accounts (Cursor, Gemini, Copilot) and the CLIProxyAPI hub
+                                // accounts (server/src/accounts/hub/sidebar.rs) come under their own keys.
+                                for account in ["accounts", "usageAccounts", "hubAccounts"].into_iter()
                                     .flat_map(|key| result[key].as_array().into_iter().flatten())
                                     .filter(|a| a["registered"] == true && a["showInTitlebar"] == true) {
                                     let mut entry = titlebar_entry(account, &machine);
+                                    // A hub account's usage history is the hub's, which Ghostex doesn't keep.
                                     entry["usageHistory"] = result.get("usageHistory")
+                                        .filter(|_| account["hub"] != true)
                                         .map(|history| history[text(account, "provider")].clone())
                                         .unwrap_or_else(|| json!({"status":"unavailable"}));
                                     entry["providerAccountCount"] = result["accountCounts"][text(account, "provider")].clone();
@@ -588,6 +612,7 @@ impl GhostexGpuiApp {
                         }
                         this.titlebar_accounts.sort_by(|a, b| text(a,"titlebarMachine").cmp(text(b,"titlebarMachine"))
                             .then(text(a,"provider").cmp(text(b,"provider")))
+                            .then((a["hub"] == true).cmp(&(b["hub"] == true)))
                             .then(text(a,"selector").parse::<u64>().unwrap_or(0).cmp(&text(b,"selector").parse::<u64>().unwrap_or(0))));
                         if this.titlebar_accounts == previous_accounts {
                             return;

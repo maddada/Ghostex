@@ -3245,7 +3245,11 @@ management key and a name. Ghostex never installs or runs CLIProxyAPI, never
 copies your Claude Swap or Codex Swap logins into it, and never changes its
 accounts. Both keys stay sealed on the computer and are never synced. With the
 management key, the hub's accounts show under it with read-only usage bars
-(sign accounts in or out on the hub itself). New Claude and Codex sessions can
+(sign accounts in or out on the hub itself), and each one gets a usage meter at
+the bottom of the sidebar (Show usage in the sidebar in its pane turns it off);
+a login that is also a Claude Swap or Codex Swap account shows one meter. Add
+the management key only on the computer the hub runs on: other computers
+connected to it show its hub meters too. New Claude and Codex sessions can
 start On the hub from the New Thread picker's account list, or every new
 session can: pick the hub under New sessions start on (Claude rules or Codex
 rules) and the hub balances its own accounts. `ghostex coordinator

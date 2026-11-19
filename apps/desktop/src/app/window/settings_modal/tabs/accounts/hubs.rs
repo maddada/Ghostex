@@ -11,7 +11,7 @@
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
     FieldStates, RowSpec, SizedButtonSize, SizedButtonVariant, setting_row, settings_icon,
-    settings_sized_button, settings_text_input,
+    settings_sized_button, settings_text_input, switch_control,
 };
 use super::super::super::palette::SettingsPalette;
 use super::data::{Account, AccountsState, provider_label};
@@ -819,6 +819,47 @@ impl AccountsTab {
                     .into_any_element(),
             );
         }
+        // Show usage in the sidebar (CDXC:AgentProviders 2026-11-19 in
+        // server/src/accounts/hub/sidebar.rs), like a Claude Swap or Codex Swap account's.
+        let busy = self.client.read(cx).busy;
+        let shown = account.raw["showInSidebar"].as_bool() != Some(false);
+        let account_id = account.id();
+        blocks.push(
+            div()
+                .px(px(DETAIL_INSET))
+                .child(setting_row(
+                    p,
+                    SharedString::from(format!("accounts-hub-account-{account_id}-sidebar")),
+                    RowSpec::new("Show usage in the sidebar")
+                        .description("Keeps this account's usage at the bottom of the sidebar.")
+                        .inset_x(0.0),
+                    None,
+                    switch_control(
+                        p,
+                        SharedString::from(format!(
+                            "accounts-hub-account-{account_id}-sidebar-switch"
+                        )),
+                        "Show usage in the sidebar",
+                        shown,
+                        busy,
+                        Some("Accounts are being updated.".into()),
+                        move |page: &mut Self, next, _window, cx| {
+                            page.account_request(
+                                json!({
+                                    "operation": "hubAccountSidebar",
+                                    "accountId": account_id.clone(),
+                                    "shown": next,
+                                }),
+                                None,
+                                cx,
+                            );
+                        },
+                        cx,
+                    ),
+                    cx,
+                ))
+                .into_any_element(),
+        );
         blocks.push(
             div()
                 .px(px(DETAIL_INSET))

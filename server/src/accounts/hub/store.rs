@@ -5,6 +5,7 @@
 //! CDXC:AgentProviders 2026-11-18 WHY:
 //! A hub's management key can download every token the hub holds (`/v0/management/auth-files/download`), so both keys are treated like a Connectors sign-in: sealed in the vault, kept out of the shared (synced) settings file, and the file itself is written 0600 through a rename.
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -31,6 +32,10 @@ pub(crate) struct Hub {
     /// The management key, sealed; empty when the user gave none (no accounts or usage then).
     #[serde(default)]
     pub management_key: String,
+    /// The hub accounts (`auth_index`) the user took out of the sidebar's usage meters; every
+    /// other account shows there.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub hidden_in_sidebar: BTreeSet<String>,
 }
 
 #[derive(Default, Deserialize, Serialize)]

@@ -478,7 +478,9 @@ impl AccountUsagePanel {
         // Refresh now (CDXC:AgentProviders 2026-11-13 in server/src/accounts/usage_screen.rs): a
         // Claude account's limits are read off Claude Code's own usage screen, a Codex account's
         // from its usage service.
+        // A hub account is read by the hub's computer every two minutes; it has no Refresh now.
         let refreshable = !self.palette.provider.usage_only()
+            && self.account["hub"] != true
             && self.account["registered"] == true
             && self.account["status"] != "disabled";
         let reading = if refreshable && !self.refreshing {
@@ -705,9 +707,10 @@ impl Render for AccountUsagePanel {
             .child(self.render_account_label(cx))
             .child(self.render_limits(cx))
             .children(notice)
-            .when(!self.palette.provider.usage_only(), |body| {
-                body.child(self.render_history())
-            })
+            .when(
+                !self.palette.provider.usage_only() && self.account["hub"] != true,
+                |body| body.child(self.render_history()),
+            )
             // CDXC:AgentProviders 2026-10-30 DECISION:
             // User: the panel's height fits its content, up to what fits on screen, then it
             // scrolls: no empty gap under Codex, no cut-off buttons on Claude. The body reports

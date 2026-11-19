@@ -720,6 +720,10 @@ pub(crate) fn dispatch(
         if operation == "list" && super::hub::enabled(&state.paths) {
             value["cliproxyHubs"] = json!(super::hub::rows(&state.paths, wait));
         }
+        // Their accounts' meters at the bottom of the sidebar (hub/sidebar.rs).
+        if operation == "titlebar" && super::hub::enabled(&state.paths) {
+            value["hubAccounts"] = json!(super::hub::sidebar::titlebar_rows(&state.paths));
+        }
     }
     if usage_history.is_some() {
         value["usageHistory"] = state.accounts.history.snapshot();

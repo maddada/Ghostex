@@ -11,6 +11,7 @@
 mod client;
 pub(crate) mod cooldown;
 pub(crate) mod launch;
+pub(crate) mod sidebar;
 mod store;
 
 use std::collections::{HashMap, HashSet};
@@ -290,6 +291,7 @@ pub(crate) fn rows(paths: &GxserverPaths, wait: Wait) -> Vec<Value> {
                         "nextRetryAfter": account.next_retry_after.map(|at| at.to_rfc3339()),
                         "usage": account.usage,
                         "usageError": account.usage_error,
+                        "showInSidebar": !hub.hidden_in_sidebar.contains(&account.auth_index),
                     })
                 })
                 .collect();
@@ -425,11 +427,18 @@ pub(crate) fn handle(
         .get("operation")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    if !matches!(operation, "hubAdd" | "hubUpdate" | "hubRemove") {
+    if !matches!(
+        operation,
+        "hubAdd" | "hubUpdate" | "hubRemove" | "hubAccountSidebar"
+    ) {
         return Ok(false);
     }
     if !enabled(paths) {
         return Err(turned_off());
+    }
+    if operation == "hubAccountSidebar" {
+        sidebar::set_shown(paths, params)?;
+        return Ok(true);
     }
     let label = params
         .get("label")
@@ -461,6 +470,7 @@ pub(crate) fn handle(
                     .map(|key| seal(paths, key))
                     .transpose()?
                     .unwrap_or_default(),
+                hidden_in_sidebar: Default::default(),
             };
             let _lock = store::lock();
             let mut hubs = store::read(paths).map_err(io_error)?;
