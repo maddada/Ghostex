@@ -231,28 +231,38 @@ pub fn parse_json_value(value: &str) -> Option<Value> {
     serde_json::from_str(value).ok()
 }
 
-/// The text a message or task `--body-file` names; `-` reads standard input to its end.
+/// The text a message or task `--body-file` names, `what` saying what it is in an error ("message",
+/// "task"); `-` reads standard input to its end. A leading byte order mark is dropped.
 ///
 /// CDXC:AgentMessaging 2026-11-19 WHY: on m7-arch a coordinator put a backtick-quoted command
 /// inside the double-quoted text of `ghostex agents send <ref> "..."`; bash ran it as a command
 /// substitution before ghostex started (`ops.sh --stdin`, which read the Bash tool's stdin that
 /// never closes), so the call hung 80 seconds and the user's messages waited behind it. A quoted
 /// heredoc (`--body-file - <<'EOF'`) is the one form no shell expands, and it needs no file. An
-/// interactive terminal is refused rather than waited on.
-pub fn read_body_file(path: &str) -> std::io::Result<String> {
+/// interactive terminal is refused rather than waited on. Windows PowerShell 5.1 writes a byte
+/// order mark at the start of a UTF-8 file or pipe, which would otherwise open the message.
+pub fn read_body_file(path: &str, what: &str) -> Result<String, String> {
     use std::io::{IsTerminal, Read};
-    if path != "-" {
-        return std::fs::read_to_string(path);
-    }
-    let mut stdin = std::io::stdin();
-    if stdin.is_terminal() {
-        return Err(std::io::Error::other(
-            "--body-file - reads the text from standard input; pipe it in or use a heredoc (<<'EOF' ... EOF)",
-        ));
-    }
-    let mut text = String::new();
-    stdin.read_to_string(&mut text)?;
-    Ok(text)
+    let text = if path == "-" {
+        let mut stdin = std::io::stdin();
+        if stdin.is_terminal() {
+            return Err(format!(
+                "--body-file - reads the {what} from standard input, and nothing was piped in. Use a heredoc (<<'EOF' ... EOF), a pipe, or --body-file <path>."
+            ));
+        }
+        let mut text = String::new();
+        stdin
+            .read_to_string(&mut text)
+            .map_err(|error| format!("Could not read the {what} from standard input: {error}"))?;
+        text
+    } else {
+        std::fs::read_to_string(path)
+            .map_err(|error| format!("Could not read {what} file {path}: {error}"))?
+    };
+    Ok(match text.strip_prefix('\u{feff}') {
+        Some(rest) => rest.to_string(),
+        None => text,
+    })
 }
 
 #[cfg(test)]

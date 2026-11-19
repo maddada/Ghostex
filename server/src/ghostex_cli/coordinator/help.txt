@@ -11,7 +11,7 @@ USAGE
   ghostex coordinator options [--json]
   ghostex coordinator list [--project-id <id>] [--json]
   ghostex coordinator status [--coordinator <ref>] [--all] [--json]
-  ghostex coordinator start-thread --title <title> (--task <text> | --body-file <path>)
+  ghostex coordinator start-thread --title <title> (--task <text> | --body-file <path|->)
                               [--agent <agent-id> [--allow-hidden]] [--model <m>] [--effort <e>]
                               [--account <number|email>] [--worktree [--base-branch <branch>]]
                               [--project-id <id> | --path <folder>] [--computer <name>]
@@ -55,17 +55,17 @@ USAGE
   ghostex coordinator remember <note> [--coordinator <ref>]
   ghostex coordinator forget <number> [--coordinator <ref>]
   ghostex coordinator set-goal <text> [--coordinator <ref>]
-  ghostex coordinator set-instructions (<text> | --body-file <path>) [--coordinator <ref>]
+  ghostex coordinator set-instructions (<text> | --body-file <path|->) [--coordinator <ref>]
   ghostex coordinator edit [--goal=<text>] [--instructions=<text>] [--notes-json=<json>]
                               [--coordinator <ref>] [--json]
   ghostex coordinator guide [--project-id <id>] [--changes]
   ghostex coordinator playbook [--project-id <id> | --this-project]
                               [--overrides | --text | --default] [--json]
-  ghostex coordinator playbook --set-overrides (<text> | --body-file <path>) [--json]
+  ghostex coordinator playbook --set-overrides (<text> | --body-file <path|->) [--json]
   ghostex coordinator playbook --clear-overrides [--json]
   ghostex coordinator playbook --list-overrides
-  ghostex coordinator playbook --add-override (<rule> | --body-file <path>)
-  ghostex coordinator playbook --replace-override <n> (<rule> | --body-file <path>)
+  ghostex coordinator playbook --add-override (<rule> | --body-file <path|->)
+  ghostex coordinator playbook --replace-override <n> (<rule> | --body-file <path|->)
   ghostex coordinator playbook --remove-override <n>
   ghostex coordinator set-playbook (--use-ghostex | --reset | --off | --on)
                               [--project-id <id> | --this-project] [--json]
@@ -187,6 +187,10 @@ THREADS
   leave the mode, that is an approval card for the user, never for you. An
   agent with no read-only mode is refused, and so is another computer whose
   Ghostex is too old to start one (nothing is left running there).
+  A brief that holds code, backticks, $ or quotes goes in a quoted heredoc,
+  --body-file - <<'EOF', never in --task "...": the shell runs a `command` or
+  $(command) inside double quotes first, and start-thread waits for it.
+  --body-file - reads standard input (ghostex agents --help, DELIVERY).
   start-thread then waits up to a minute for the thread's transcript to show
   the brief and answers `started`, or `pending: <reason>` (still starting, or
   its screen shows a question only a person can answer). A brief whose send
@@ -397,7 +401,7 @@ COORDINATOR PLAYBOOK
   project unless --project-id names another) and whether there are overrides;
   --overrides prints them, --text prints the playbook in effect without them,
   --default prints Ghostex's playbook. --set-overrides saves the overrides
-  (text, or --body-file <path>) and --clear-overrides removes them.
+  (text, or --body-file <path|->) and --clear-overrides removes them.
   One override at a time: the overrides are paragraphs, one rule each.
   --list-overrides numbers them; --add-override "<rule>" adds one at the end,
   --replace-override <n> "<rule>" rewrites rule n and --remove-override <n>

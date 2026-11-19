@@ -201,17 +201,20 @@ DELIVERY
   visible signs such as ␌, never as keys.
 
   Text that holds code, backticks, $ or quotes goes through a quoted heredoc,
-  never inside double quotes. In bash and zsh a `command` or $(command) inside
-  double quotes runs before ghostex starts: the send waits on it (a command
-  that reads input can wait forever) and the message never leaves. In
-  PowerShell a backtick there is an escape (`f is a form feed).
-    ghostex agents send <session-ref> --body-file - <<'EOF'
-    Run `npm test` and report $FAILURES.
-    EOF
-  In PowerShell, pipe a here-string (@' and '@ each on a line of their own)
-  into ghostex agents send <session-ref> --body-file -.
+  never inside double quotes. In bash and zsh the shell runs a `command` or
+  $(command) inside double quotes before ghostex starts, and the send waits for
+  it to finish (a command that reads input waits forever). In PowerShell a
+  backtick there is an escape (`f is a form feed).
+
+ghostex agents send <session-ref> --body-file - <<'EOF'
+Run `npm test` and report $FAILURES.
+EOF
+
   --body-file - reads the text from standard input, for every command here
-  and for ghostex coordinator start-thread.
+  and for ghostex coordinator start-thread. Windows PowerShell 5.1 pipes text
+  to programs as ASCII (other characters become ?), so there save the text to
+  a file and use --body-file <path>. PowerShell 7 can pipe a here-string (@'
+  and '@ each on a line of their own) into --body-file -.
 
 READ AND REPLY
   ghostex read-session-chat <session-ref> --last 2 --format text

@@ -88,9 +88,9 @@ fn find_main(args: &Arguments, project_id: &str) -> CliResult<Option<Value>> {
 
 fn message_body(args: &Arguments) -> CliResult<String> {
     let body = match &args.body_file {
-        Some(path) => crate::ghostex_cli::args::read_body_file(path).map_err(|error| {
-            CliError::Other(format!("Could not read message file {path}: {error}"))
-        })?,
+        Some(path) => {
+            crate::ghostex_cli::args::read_body_file(path, "message").map_err(CliError::Other)?
+        }
         None => args.positional.first().cloned().unwrap_or_default(),
     };
     if body.trim().is_empty() {

@@ -24,13 +24,12 @@ pub(super) fn types(args: &Arguments) -> CliResult<Value> {
 /// CDXC:Cli 2026-09-17 DECISION:
 /// User: agents help must explain how to choose and create agents and close other sessions. Reuse configured launcher types and the existing provider startup and close operations.
 pub(super) fn create(args: &Arguments) -> CliResult<Value> {
-    let body =
-        match &args.body_file {
-            Some(path) => Some(crate::ghostex_cli::args::read_body_file(path).map_err(
-                |error| CliError::Other(format!("Could not read task file {path}: {error}")),
-            )?),
-            None => args.task.clone(),
-        };
+    let body = match &args.body_file {
+        Some(path) => {
+            Some(crate::ghostex_cli::args::read_body_file(path, "task").map_err(CliError::Other)?)
+        }
+        None => args.task.clone(),
+    };
     if body.as_ref().is_some_and(|body| body.trim().is_empty()) {
         return Err(CliError::Other("Task must not be empty.".into()));
     }

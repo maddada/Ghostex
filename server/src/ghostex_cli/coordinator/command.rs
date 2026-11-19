@@ -72,11 +72,21 @@ pub(super) fn flag_text(flags: &Flags, key: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+/// `--body-file <path|->` or the `text_key` flag's text.
+///
+/// CDXC:Coordinators 2026-11-19 WHY: an empty `-` is refused, not passed on: `set-instructions
+/// --body-file -` with a forgotten heredoc (or `--set-overrides`) would otherwise save nothing over
+/// the coordinator's instructions or the project's overrides.
 pub(super) fn text_or_file(parsed: &ParsedArgs, text_key: &str) -> CliResult<Option<String>> {
     if let Some(path) = flag_text(&parsed.flags, "bodyFile") {
-        return crate::ghostex_cli::args::read_body_file(&path)
-            .map(Some)
-            .map_err(|error| CliError::Other(format!("Could not read {path}: {error}")));
+        let text =
+            crate::ghostex_cli::args::read_body_file(&path, "text").map_err(CliError::Other)?;
+        if path == "-" && text.trim().is_empty() {
+            return Err(CliError::Other(
+                "--body-file - got no text on standard input, so nothing was changed. Put the text in a heredoc (<<'EOF' ... EOF) or a file.".into(),
+            ));
+        }
+        return Ok(Some(text));
     }
     Ok(flag_text(&parsed.flags, text_key))
 }
