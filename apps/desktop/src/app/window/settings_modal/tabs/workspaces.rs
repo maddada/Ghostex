@@ -399,7 +399,8 @@ impl WorkspacesTab {
         rows.push(setting_row(
             p,
             name_id.clone(),
-            RowSpec::new("Name").description("Shown on the workspace button left of your Spaces."),
+            RowSpec::new("Name")
+                .description("Shown on the workspace switcher at the bottom left of the sidebar."),
             None,
             settings_text_input(p, &name_input, Some(220.0), false, window, cx),
             cx,

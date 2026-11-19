@@ -119,6 +119,15 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Go to Space 7 | `cmd+alt+shift+7` |  | `cmd+alt+shift+7` |  | Switch to Space 7 as shown in the sidebar. | `goToSpace7` |
 | Go to Space 8 | `cmd+alt+shift+8` |  | `cmd+alt+shift+8` |  | Switch to Space 8 as shown in the sidebar. | `goToSpace8` |
 | Go to Space 9 | `cmd+alt+shift+9` |  | `cmd+alt+shift+9` |  | Switch to Space 9 as shown in the sidebar. | `goToSpace9` |
+| Go to Workspace 1 | `ctrl+alt+1` | `alt+shift+1` | `ctrl+alt+1` | `alt+shift+1` | Show workspace 1, in the order of the workspace menu. | `goToWorkspace1` |
+| Go to Workspace 2 | `ctrl+alt+2` | `alt+shift+2` | `ctrl+alt+2` | `alt+shift+2` | Show workspace 2, in the order of the workspace menu. | `goToWorkspace2` |
+| Go to Workspace 3 | `ctrl+alt+3` | `alt+shift+3` | `ctrl+alt+3` | `alt+shift+3` | Show workspace 3, in the order of the workspace menu. | `goToWorkspace3` |
+| Go to Workspace 4 | `ctrl+alt+4` | `alt+shift+4` | `ctrl+alt+4` | `alt+shift+4` | Show workspace 4, in the order of the workspace menu. | `goToWorkspace4` |
+| Go to Workspace 5 | `ctrl+alt+5` | `alt+shift+5` | `ctrl+alt+5` | `alt+shift+5` | Show workspace 5, in the order of the workspace menu. | `goToWorkspace5` |
+| Go to Workspace 6 | `ctrl+alt+6` | `alt+shift+6` | `ctrl+alt+6` | `alt+shift+6` | Show workspace 6, in the order of the workspace menu. | `goToWorkspace6` |
+| Go to Workspace 7 | `ctrl+alt+7` | `alt+shift+7` | `ctrl+alt+7` | `alt+shift+7` | Show workspace 7, in the order of the workspace menu. | `goToWorkspace7` |
+| Go to Workspace 8 | `ctrl+alt+8` | `alt+shift+8` | `ctrl+alt+8` | `alt+shift+8` | Show workspace 8, in the order of the workspace menu. | `goToWorkspace8` |
+| Go to Workspace 9 | `ctrl+alt+9` | `alt+shift+9` | `ctrl+alt+9` | `alt+shift+9` | Show workspace 9, in the order of the workspace menu. | `goToWorkspace9` |
 | Focus Session 1 | `cmd+1` |  | `cmd+1` |  | Focus session slot 1. | `focusSessionSlot1` |
 | Focus Session 2 | `cmd+2` |  | `cmd+2` |  | Focus session slot 2. | `focusSessionSlot2` |
 | Focus Session 3 | `cmd+3` |  | `cmd+3` |  | Focus session slot 3. | `focusSessionSlot3` |

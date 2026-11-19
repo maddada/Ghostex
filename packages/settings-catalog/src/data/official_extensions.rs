@@ -274,6 +274,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("appWide", J::Bool(true)),
         ("title", J::Str("Workspaces")),
         ("settingsPages", J::Arr(&[J::Str("workspaces")])),
+        ("hotkeys", J::Arr(&[J::Str("goToWorkspace1"), J::Str("goToWorkspace2"), J::Str("goToWorkspace3"), J::Str("goToWorkspace4"), J::Str("goToWorkspace5"), J::Str("goToWorkspace6"), J::Str("goToWorkspace7"), J::Str("goToWorkspace8"), J::Str("goToWorkspace9")])),
     ]),
     // CDXC:VoiceMode 2026-10-25 DECISION:
     // User: "voice agent should be an extension so ppl can disable it's button and not see it top of the app if they want". This supersedes the 2026-10-20 decision that the voice agent is built in and not an extension (pages/voice_agent.rs). A whole-feature entry like Read aloud, on by default with a new key (`voiceAgentHidden`, default false, like `connectorsHidden`) and not behind Enable Experimental Features, so nothing changes for anyone who has not touched it. Off hides the header's headset and its arrow menu, the voice call rows and the three hotkeys, ends a call that is running, and gxserver refuses new calls (server/src/voice_agent/feature.rs); the phone follows through `builtInFeaturesOff`. Saved voice settings and the remembered conversation are kept.

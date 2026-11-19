@@ -8,6 +8,11 @@
 //! of workspaces that aren't currently the selected one AND don't already have a window open. When
 //! that one is clicked then we open that in a new window". This supersedes the "Open <name> in a
 //! new window" row.
+//!
+//! CDXC:Workspaces 2026-11-20 DECISION:
+//! User picked "A. The name, quietly" (Q4254): the menu's workspace rows show the workspace's
+//! colour as a small dot instead of the person and briefcase icons, and each row names its Go to
+//! Workspace hotkey (⌃⌥1, ⌃⌥2…); the new-window button stays.
 
 use ghostex_gx_protocol::{SidebarWorkspace, SidebarWorkspacesState};
 use serde_json::json;
@@ -23,21 +28,23 @@ pub fn workspace_menu(
     in_windows: &[String],
 ) -> Vec<MenuItem> {
     let mut menu = vec![MenuItem::heading("Workspaces")];
-    for workspace in state.ordered() {
-        let mut row = MenuItem::row(
-            &workspace.name,
-            if workspace.is_work() {
-                "briefcase"
-            } else {
-                "user"
-            },
-            MenuCommand::host(json!({
+    for (index, workspace) in state.ordered().enumerate() {
+        let mut row = MenuItem {
+            label: Some(workspace.name.clone()),
+            color: Some(workspace.color.clone()),
+            dot: true,
+            command: Some(MenuCommand::host(json!({
                 "type": "selectWorkspace",
                 "workspaceId": workspace.workspace_id,
-            })),
-        )
+            }))),
+            ..MenuItem::default()
+        }
         .with_checked(workspace.workspace_id == current);
-        row.icon_color = Some(workspace.color.clone());
+        // Go to Workspace 1 to 9 (packages/settings-catalog hotkey_definitions.rs); the desktop
+        // writes the binding as the row's hint when the menu opens.
+        if index < 9 {
+            row = row.with_hotkey(&format!("goToWorkspace{}", index + 1));
+        }
         if workspace.workspace_id != current && !in_windows.contains(&workspace.workspace_id) {
             row.secondary = Some(MenuSecondary {
                 icon: "external-link".to_string(),

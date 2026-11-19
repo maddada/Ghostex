@@ -1063,16 +1063,19 @@ and team connections are kept and come back when you turn it on (`workspacesHidd
 Each workspace has its own projects, Spaces,
 Linear API key, Claude account and Browser sign-ins (cookies), and a window
 shows one workspace at a time. Every install starts with one workspace,
-Personal, holding all your projects and Spaces. The workspace button sits at
-the bottom left of the sidebar, on a line of its own above the account usage
-meters: the workspace's letter with a small arrow beside it.
-Click the letter to switch this window to your other workspace in one click
-(with more than two, it goes back to the one this window showed last; hover it
-to see where it goes). If another window already shows that workspace, that
+Personal, holding all your projects and Spaces. Once you have two or more, the
+workspace switcher sits at the bottom left of the sidebar, on a line of its own
+above the account usage meters: a small dot in the workspace's colour, its name
+and a small arrow. Click the name to switch this window to your other workspace
+in one click (with more than two, it goes back to the one this window showed
+last; hover it to see where it goes and its hotkey). Ctrl+Option+1 to 9 (Alt+Shift+1 to 9
+on Windows and Linux) go to the first to ninth workspace of the menu (Go to
+Workspace in Settings > Hotkeys). If another window already shows that workspace, that
 window comes forward instead. Click the arrow for the workspace menu: pick any
-workspace, open Workspace settings, or make a New workspace. In the menu, a
+workspace (each row shows its colour and hotkey), open Workspace settings, or make a New workspace. In the menu, a
 workspace that no window shows yet has a new-window button at the right end of
-its row, which opens it in a new window. Switching reopens the session this window
+its row, which opens it in a new window. With a single workspace nothing is
+shown; make another in Settings > Workspaces. Switching reopens the session this window
 last had open in that workspace (or its first project with no session, or
 nothing if it is empty), and puts to sleep the open views of projects outside
 it; their tabs stay and reload when you come back (with Keep views loaded on,
@@ -1094,9 +1097,9 @@ Move to workspace. To place one of its projects in another workspace, right-clic
 the project and choose Move to workspace: it shows there, and the machine's tab
 shows in every workspace that holds one of its projects. This placement is this
 computer's own; on the remote machine the project keeps its workspace there. On the
-phone, the Sessions list shows the same letter tile at the left of the Space
-row for each computer: tap it to choose which of that computer's workspaces the
-list shows. The phone remembers the choice, a session opened from a
+phone, when a computer has two or more workspaces, the one its Sessions list shows is
+named after the Ghostex title (a coloured dot, the name and an arrow): tap it to
+choose which of that computer's workspaces the list shows. The phone remembers the choice, a session opened from a
 notification, the session search or Search Prompts switches the list to that
 session's workspace, and a project added from the phone joins the workspace it
 shows. Settings >
