@@ -691,8 +691,17 @@ async fn send_session_chat_message_locked(
     let expanded = ghostex_gx_chat_core::composer::review_comments::expand_review_comments(text);
     // A message that points at earlier ones (`[M12](message:M12)`, `#M12`, `G9jt7.M12`) carries
     // the start of each, quoted at its bottom (CDXC:SessionChat 2026-11-20 in
-    // chat_message_numbers.rs). Never under a slash or shell command, which the agent runs.
-    let expanded = if expanded.trim_start().starts_with(['/', '!']) {
+    // chat_message_numbers.rs). Never under a slash or shell command, which the agent runs, and
+    // only when the user's own caller sent it (the app, the web build, a phone, `--as-user`): a
+    // Collab guest could otherwise pull words from the owner's other chats into the prompt, and
+    // another agent's `#M3` means its own chat, not this one.
+    let expanded = if expanded.trim_start().starts_with(['/', '!'])
+        || !crate::session_chat_send::sender_mark::is_user_send(
+            &state.paths,
+            project_id,
+            session_id,
+            text,
+        ) {
         expanded
     } else {
         crate::chat_message_numbers::with_message_quotes(

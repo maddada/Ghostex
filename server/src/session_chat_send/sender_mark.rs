@@ -82,6 +82,30 @@ pub(crate) fn note_user_send(
     });
 }
 
+/// Whether one of the user's own callers sent `text` to the session, without forgetting it: a
+/// message's quotes of earlier messages go only with the user's own sends
+/// (chat_message_numbers.rs), never a Collab guest's or another agent's.
+pub(crate) fn is_user_send(
+    paths: &GxserverPaths,
+    project_id: &str,
+    session_id: &str,
+    text: &str,
+) -> bool {
+    let Ok(db) = crate::storage::open_gxserver_database(paths) else {
+        return false;
+    };
+    let now = chrono::Utc::now().timestamp_millis();
+    user_sends_table(&db).is_ok()
+        && db
+            .query_row(
+                "SELECT 1 FROM session_chat_user_sends
+                 WHERE projectId = ?1 AND sessionId = ?2 AND text = ?3 AND atMs >= ?4 LIMIT 1",
+                rusqlite::params![project_id, session_id, text.trim(), now - USER_SEND_TTL_MS],
+                |_| Ok(()),
+            )
+            .is_ok()
+}
+
 /// Whether one of the user's own callers sent `text` to the session (and forgets that one send).
 pub(crate) fn take_user_send(
     paths: &GxserverPaths,
@@ -300,6 +324,21 @@ mod tests {
 
     fn block(reply_to: &str) -> String {
         format!("{AGENT_MESSAGE_OPENER}\nAgent: codex\nSession: T\nSession ID: G1\nAgent ID: codex\nAgent Session ID: x\nReply to: {reply_to}")
+    }
+
+    /// Quotes of earlier messages go only with the user's own sends, and checking for one leaves
+    /// it there for the ask it may settle.
+    #[test]
+    fn a_user_send_is_seen_without_being_taken() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
+        crate::storage::initialize_gxserver_storage(&paths).unwrap();
+        assert!(!is_user_send(&paths, "P1", "G1", "like #M1"));
+        note_user_send(&paths, "P1", "G1", "like #M1");
+        assert!(is_user_send(&paths, "P1", "G1", "like #M1 "));
+        assert!(!is_user_send(&paths, "P1", "G2", "like #M1"));
+        assert!(take_user_send(&paths, "P1", "G1", "like #M1"));
+        assert!(!is_user_send(&paths, "P1", "G1", "like #M1"));
     }
 
     #[test]
