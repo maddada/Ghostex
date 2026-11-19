@@ -519,9 +519,6 @@ impl NativeChatView {
         if let Some(requests) = self.render_secret_requests(p, window, cx) {
             waiting.push(requests);
         }
-        if let Some(card) = self.render_unrecorded_api_error(p, cx) {
-            waiting.push(card.into_any_element());
-        }
         if let Some(questions) = self.render_async_questions(p, window, cx) {
             waiting.push(questions.into_any_element());
         }

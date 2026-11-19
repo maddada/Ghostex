@@ -201,6 +201,8 @@ pub struct ComposeKey {
     pub held: Option<(String, ghostex_gx_protocol::StartupDelivery)>,
     /// The rows of the messages that were not sent (`composer::delivery::unsent_rows`).
     pub unsent: Vec<crate::state::PendingSend>,
+    /// The words of a failed call only gxserver knows of (`transcript::api_errors::unrecorded_failure`).
+    pub unrecorded_failure: Option<String>,
 }
 
 /// Rebuilds `state.messages.boundaried` when the transcript or the markers changed, and keeps it
@@ -281,6 +283,12 @@ pub fn compose_cached(state: &mut ChatState, preview_text: Option<&str>, working
         shell: state.pending.terminal_shell.clone(),
         held: crate::composer::delivery::echo_note(state),
         unsent: crate::composer::delivery::unsent_rows(state),
+        unrecorded_failure: state
+            .session
+            .api_retry
+            .value()
+            .filter(|retry| matches!(retry["status"].as_str(), Some("waiting" | "retrying")))
+            .map(|retry| format!("{}|{}", retry["errorText"], retry["lastAttemptAt"])),
     };
     if state.messages.compose_key.as_ref() == Some(&key) {
         return;
@@ -516,6 +524,11 @@ fn compose_after(
         &app_commands_as_messages(&state.session.app_commands, transcript),
     ));
     tail.extend(marker_messages);
+    // A failed call the agent kept no record of, at the transcript's end like a recorded one.
+    tail.extend(
+        crate::transcript::api_errors::unrecorded_failure(state, transcript)
+            .map(std::sync::Arc::new),
+    );
 
     let visible_tool = visible_terminal_tool(state, working);
     // The terminal's live message wins over the hook preview: it is the same bubble, read from the

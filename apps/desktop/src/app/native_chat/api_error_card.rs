@@ -47,17 +47,6 @@ impl NativeChatView {
         self.api_error_note(&message["apiError"], &message["time"], p)
     }
 
-    /// The card for a failure the agent keeps no record of (Codex shows it only on screen), drawn
-    /// above the composer where its screen notice would have been.
-    pub(super) fn render_unrecorded_api_error(
-        &mut self,
-        p: &ChatAppearance,
-        cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
-        let card = self.snapshot["apiErrorCard"].clone();
-        (card.is_object() && card["messageId"].is_null()).then(|| self.api_error_card(&card, p, cx))
-    }
-
     fn api_error_note(&self, error: &Value, time: &Value, p: &ChatAppearance) -> AnyElement {
         let s = p.scale;
         div()
