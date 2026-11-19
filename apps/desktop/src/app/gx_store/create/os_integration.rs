@@ -330,8 +330,8 @@ impl GhostexGpuiApp {
             None,
             Some(&draft),
         );
-        // The config folder's project shows in every workspace (gxserver
-        // `project_in_every_workspace`), so it is not placed in this window's.
+        // The config folder's project follows the home project's workspace (gxserver
+        // `is_config_folder_project`), so it is not placed in this window's.
         let add_params = json!({ "name": "Ghostex", "path": project_path.clone() });
         cx.spawn(async move |this, cx| {
             let project_id = match known_project {
@@ -463,8 +463,8 @@ impl GhostexGpuiApp {
             Some(AGENTBOX_SETUP_PROMPT),
             None,
         );
-        // The config folder's project shows in every workspace (gxserver
-        // `project_in_every_workspace`), so it is not placed in this window's.
+        // The config folder's project follows the home project's workspace (gxserver
+        // `is_config_folder_project`), so it is not placed in this window's.
         let add_params = json!({ "name": "Ghostex", "path": project_path.clone() });
         cx.spawn(async move |this, cx| {
             let project_id = match known_project {

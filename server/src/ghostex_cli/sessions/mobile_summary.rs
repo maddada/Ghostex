@@ -392,9 +392,6 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
                             {
                                 project_map.insert("workspaceId".to_string(), json!(workspace_id));
                             }
-                            if crate::workspaces::project_in_every_workspace(project) {
-                                project_map.insert("everyWorkspace".to_string(), json!(true));
-                            }
                         }
                         Value::Object(project_map)
                     })
