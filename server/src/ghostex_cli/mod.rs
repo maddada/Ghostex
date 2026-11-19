@@ -889,11 +889,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "send-key" => run_resolved_session_bridge_action("sendKey", Parser::SendKey, plain, args),
         // `message show|list` reads the user's numbered messages (message.rs); any other
         // `message <selector> <text>` stays the older alias of send-message.
-        "message" | "messages"
-            if matches!(args.first().map(String::as_str), Some("show" | "list")) =>
-        {
-            message::message_command(args)
-        }
+        "message" | "messages" if message::is_message_read(args) => message::message_command(args),
         "messages" => message::message_command(args),
         "send-message" | "message" | "msg" => wait::send_message_command(args),
         "read-text" | "read-messages" | "read-thread" => wait::read_session_text_command(args),
