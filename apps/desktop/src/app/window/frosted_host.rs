@@ -679,15 +679,20 @@ fn set_visible(
     }
 }
 
+/// A host shown again first takes its owner's band (`own_popup_hwnd`): its owner may have become
+/// topmost while it was hidden, and a non-topmost host would then show behind it.
 #[cfg(all(target_os = "windows", not(ghostex_web)))]
 fn set_visible(
     handle: AnyWindowHandle,
-    _parent: Option<AnyWindowHandle>,
+    parent: Option<AnyWindowHandle>,
     visible: bool,
     cx: &mut App,
 ) {
     use windows_sys::Win32::UI::WindowsAndMessaging::{SW_HIDE, SW_SHOWNOACTIVATE, ShowWindow};
     if let Some(hwnd) = native_view_of(handle, cx) {
+        if visible && let Some(owner) = parent.and_then(|parent| native_view_of(parent, cx)) {
+            super::own_popup_hwnd(hwnd, owner);
+        }
         unsafe {
             ShowWindow(hwnd, if visible { SW_SHOWNOACTIVATE } else { SW_HIDE });
         }
