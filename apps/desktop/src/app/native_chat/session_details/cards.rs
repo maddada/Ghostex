@@ -877,6 +877,7 @@ impl NativeChatView {
                 Some("laptop") => Some("titlebar/device-laptop.svg"),
                 Some("box") => Some("titlebar/box.svg"),
                 Some("folder") => Some("titlebar/folder.svg"),
+                Some("mainHub") => Some(crate::app::native_sidebar::chief_row_view::FLOWER_ICON),
                 Some("branch") => Some("titlebar/git-branch.svg"),
                 Some("user") => Some("titlebar/user.svg"),
                 Some("memory") => Some("titlebar/cpu.svg"),

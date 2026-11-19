@@ -265,6 +265,12 @@ pub fn document(state: &ChatState) -> Value {
     let git = data.get("git").filter(|git| git.is_object());
     let branch = git.and_then(|git| text(git, "/branch"));
     let worktree = data.get("worktree").filter(|worktree| worktree.is_object());
+    // CDXC:Chief 2026-11-19 DECISION:
+    // User, of an Ask Ghostex chat's pill and card reading "ghostex", "Not a git repository",
+    // "~/.config/ghostex": a Main Hub session shows as Main Hub with its icon (gxserver names it,
+    // server/src/session_details/environment.rs), with no Branch row when its folder is not a git
+    // repository; the folder keeps its row for Copy path.
+    let main_hub = data["mainHub"] == Value::Bool(true);
 
     // The card's header names the project and the computer, so no row repeats them.
     let mut rows = Vec::new();
@@ -349,6 +355,7 @@ pub fn document(state: &ChatState) -> Value {
                 }
             }
         }
+        None if main_hub => {}
         None => rows.push(no_copy(row(
             "branch",
             "git-branch",
@@ -419,11 +426,14 @@ pub fn document(state: &ChatState) -> Value {
     };
     json!({
         "project": project,
+        "mainHub": main_hub,
         "machine": machine,
         "branch": branch,
         "worktree": worktree.is_some(),
         "ariaLabel": aria,
         "card": {
+            // Main Hub's flower, else a folder.
+            "icon": if main_hub { "mainHub" } else { "folder" },
             "title": project,
             "subtitle": if machine["offline"] == Value::Bool(true) {
                 format!("{machine_name} \u{b7} offline")

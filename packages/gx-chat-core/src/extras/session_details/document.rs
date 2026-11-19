@@ -189,8 +189,11 @@ fn environment(data: &Value, hide_emails: bool) -> Option<Value> {
     rows.push(json!({"icon": if boxed { "box" } else { "laptop" }, "text": location}));
     if let Some(folder) = text(environment, "/folderLabel") {
         let project = text(environment, "/project");
+        // Main Hub's session wears its flower and reads "Main Hub · ~/.config/ghostex" (CDXC:Chief
+        // 2026-11-19 in extras/where_pill.rs).
+        let main_hub = environment.get("mainHub") == Some(&Value::Bool(true));
         rows.push(json!({
-            "icon": "folder",
+            "icon": if main_hub { "mainHub" } else { "folder" },
             "text": match project { Some(project) => format!("{project} · {folder}"), None => folder },
             "tooltip": text(environment, "/folder"),
             "badge": (environment.get("worktree") == Some(&Value::Bool(true))).then_some("worktree"),
