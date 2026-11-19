@@ -18,7 +18,10 @@ use super::endpoint::local_voice_endpoint;
 use crate::*;
 
 /// What a row reads in place of a computer's name for this one.
-pub(crate) const THIS_COMPUTER: &str = "this computer";
+/// The computer the app runs on, by its name (never "this computer").
+pub(crate) fn this_computer() -> String {
+    crate::host_name::local_computer_name()
+}
 /// A title longer than this is cut in the arrow menu, so one long name cannot widen the menu.
 const MENU_TITLE_MAX_CHARS: usize = 40;
 
@@ -134,7 +137,7 @@ pub(crate) fn focus_ref(key: &SessionKey) -> String {
 pub(crate) fn outdated_sentence(machine_name: Option<&str>) -> String {
     format!(
         "Update Ghostex on {} to have a voice call about one session.",
-        machine_name.unwrap_or(THIS_COMPUTER)
+        machine_name.map_or_else(this_computer, str::to_string)
     )
 }
 
@@ -420,9 +423,9 @@ impl GhostexGpuiApp {
             .voice_agent
             .machine_name
             .clone()
-            .unwrap_or_else(|| THIS_COMPUTER.to_string());
-        let there = target.machine_name.as_deref().unwrap_or(THIS_COMPUTER);
-        let (title, detail) = hang_up_and_call_question(&here, &target.title, there);
+            .unwrap_or_else(this_computer);
+        let there = target.machine_name.clone().unwrap_or_else(this_computer);
+        let (title, detail) = hang_up_and_call_question(&here, &target.title, &there);
         // Keep the call is the cancel choice (Escape keeps the call), as on the phone.
         let answer = window.prompt(
             gpui::PromptLevel::Info,
@@ -736,7 +739,10 @@ mod tests {
         );
         assert_eq!(
             outdated_sentence(None),
-            "Update Ghostex on this computer to have a voice call about one session."
+            format!(
+                "Update Ghostex on {} to have a voice call about one session.",
+                crate::host_name::local_computer_name()
+            )
         );
         assert!(
             remote_key_sentence("noKey", Some("studio"))

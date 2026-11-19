@@ -139,7 +139,7 @@ fn machine_label(inputs: &SidebarInputs, machine_id: &str) -> String {
         .machine(machine_id)
         .map(|tab| tab.label.trim().to_string())
         .filter(|label| !label.is_empty())
-        .unwrap_or_else(|| "This computer".to_string())
+        .unwrap_or_else(|| "Local".to_string())
 }
 
 /// `machine`'s Chief, when it has one.

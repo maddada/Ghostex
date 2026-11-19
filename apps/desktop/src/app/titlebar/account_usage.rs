@@ -154,10 +154,10 @@ fn note_failed_read(account: &mut Value, counted: bool, now: f64) {
     }
 }
 
-/// A computer's name as the user saved it in Settings > Remote, or "This computer".
+/// A computer's name as the user saved it in Settings > Remote, or this computer's own name.
 fn machine_label(machine: &str) -> String {
     if matches!(machine, "" | "local") {
-        return "This computer".to_string();
+        return crate::host_name::local_computer_name();
     }
     shared_settings::shared_sidebar_settings_snapshot()
         .object()
@@ -1325,8 +1325,11 @@ mod tests {
         assert_eq!(sign_in, MeterSignIn::SignedOut);
         assert!(!unreachable);
         assert_eq!(
-            tooltip.as_deref(),
-            Some("ST · Claude\nThis computer: signed out\nClick to reconnect it.")
+            tooltip,
+            Some(format!(
+                "ST · Claude\n{}: signed out\nClick to reconnect it.",
+                crate::host_name::local_computer_name()
+            ))
         );
     }
 
@@ -1353,7 +1356,13 @@ mod tests {
         let (sign_in, _, tooltip) = state(&accounts);
         assert_eq!(sign_in, MeterSignIn::SignedOutElsewhere);
         let tooltip = tooltip.unwrap();
-        assert!(tooltip.contains("This computer: signed in"), "{tooltip}");
+        assert!(
+            tooltip.contains(&format!(
+                "{}: signed in",
+                crate::host_name::local_computer_name()
+            )),
+            "{tooltip}"
+        );
         assert!(
             tooltip.contains(": signed out\nSign in again on that computer."),
             "{tooltip}"
@@ -1371,8 +1380,11 @@ mod tests {
         assert_eq!(sign_in, MeterSignIn::SignedIn);
         assert!(unreachable);
         assert_eq!(
-            tooltip.as_deref(),
-            Some("ST · Gemini\nThis computer: can't reach it, showing its last reading")
+            tooltip,
+            Some(format!(
+                "ST · Gemini\n{}: can't reach it, showing its last reading",
+                crate::host_name::local_computer_name()
+            ))
         );
     }
 

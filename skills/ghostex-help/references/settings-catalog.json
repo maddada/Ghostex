@@ -11354,7 +11354,7 @@
       "default": "local",
       "options": [
         {
-          "label": "This computer",
+          "label": "The computer you're on",
           "value": "local"
         },
         {
@@ -12964,22 +12964,22 @@
     {
       "key": "computerName",
       "title": "Name",
-      "subtitle": "This computer's name, set by the system; your phone and other computers show it.",
+      "subtitle": "The computer's name, set by the system; Ghostex, your phone and other computers show it, and it titles this row.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "currentMachine",
-      "sectionTitle": "This computer",
+      "sectionTitle": "The computer you're on",
       "type": "ui",
       "agentWritable": false
     },
     {
       "key": "computerIcon",
       "title": "Icon",
-      "subtitle": "This computer's icon in the sidebar while more than one computer is there; kept on this computer, so your phone and other computers show it too.",
+      "subtitle": "The computer's icon beside its name in the sidebar and the chat; kept on the computer, so your phone and other computers show it too.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "currentMachine",
-      "sectionTitle": "This computer",
+      "sectionTitle": "The computer you're on",
       "type": "ui",
       "agentWritable": false
     },
@@ -12990,7 +12990,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "currentMachine",
-      "sectionTitle": "This computer",
+      "sectionTitle": "The computer you're on",
       "type": "ui",
       "agentWritable": false
     },

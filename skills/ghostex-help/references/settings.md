@@ -541,7 +541,7 @@ How to use this file:
 - **Codex in boxes** `agentboxCodexSignIn` (Settings UI row without a settings key; use `ghostex settings open`): Boxes on this computer reuse your Codex sign-in. Sign in here for cloud boxes when Codex is not signed in. Only on macOS and Linux.
 ### New threads
 
-- **Default location** `agentboxDefaultLocation` (one of local | agentbox:docker | agentbox:hetzner | agentbox:vercel | agentbox:daytona | agentbox:e2b | agentbox:digitalocean; default local): Where new threads run unless you pick another location. Option labels: local = This computer, agentbox:docker = Docker on this computer, agentbox:hetzner = Hetzner, agentbox:vercel = Vercel, agentbox:daytona = Daytona, agentbox:e2b = E2B, agentbox:digitalocean = DigitalOcean. Only on macOS and Linux.
+- **Default location** `agentboxDefaultLocation` (one of local | agentbox:docker | agentbox:hetzner | agentbox:vercel | agentbox:daytona | agentbox:e2b | agentbox:digitalocean; default local): Where new threads run unless you pick another location. Option labels: local = The computer you're on, agentbox:docker = Docker on this computer, agentbox:hetzner = Hetzner, agentbox:vercel = Vercel, agentbox:daytona = Daytona, agentbox:e2b = E2B, agentbox:digitalocean = DigitalOcean. Only on macOS and Linux.
 ### Your agentbox boxes
 
 - **Your agentbox boxes** `agentboxBoxes` (Settings UI row without a settings key; use `ghostex settings open`): See every box, open a box's web app, stop a box, or destroy it to delete it for good. Only on macOS and Linux.
@@ -722,10 +722,10 @@ How to use this file:
 - **Send to the box** `projectCloudBoxSecrets` (Settings UI row without a settings key; use `ghostex settings open`): Tick the project's .env files and name the variables a Cloud Box gets at start. Their values are read from this computer each time and never saved in a snapshot.
 ## Remote (tab `remote`)
 
-### This computer
+### The computer you're on
 
-- **Name** `computerName` (Settings UI row without a settings key; use `ghostex settings open`): This computer's name, set by the system; your phone and other computers show it.
-- **Icon** `computerIcon` (Settings UI row without a settings key; use `ghostex settings open`): This computer's icon in the sidebar while more than one computer is there; kept on this computer, so your phone and other computers show it too.
+- **Name** `computerName` (Settings UI row without a settings key; use `ghostex settings open`): The computer's name, set by the system; Ghostex, your phone and other computers show it, and it titles this row.
+- **Icon** `computerIcon` (Settings UI row without a settings key; use `ghostex settings open`): The computer's icon beside its name in the sidebar and the chat; kept on the computer, so your phone and other computers show it too.
 - **SSH access** `sshAccess` (Settings UI row without a settings key; use `ghostex settings open`): Lets your phone and other computers sign in to this machine; Easy Connect and Tailscale need it. Ghostex can turn it on with one admin prompt.
 ### Phones and computers that can reach this machine
 

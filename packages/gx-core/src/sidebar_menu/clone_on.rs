@@ -68,11 +68,9 @@ pub(super) fn clone_on_menu(group: &GroupView, inputs: &SidebarInputs) -> Option
     let rows = missing
         .into_iter()
         .map(|tab| {
-            let label = if tab.is_local() {
-                "This computer".to_string()
-            } else {
-                tab.label.clone()
-            };
+            // Every computer by its name, this one too (CDXC:RemoteMachines 2026-11-19 in
+            // packages/gx-chat-core/src/extras/where_pill.rs: never "This computer").
+            let label = tab.label.clone();
             let connected = tab.is_local() || tab.is_connected();
             MenuItem {
                 label: Some(label.clone()),

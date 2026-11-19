@@ -54,7 +54,7 @@ pub(super) fn local_row(home: &std::path::Path) -> CloudProvider {
         connect_methods: vec![CloudConnectMethod::NotNeeded],
         available: readiness.is_ok(),
         unavailable_reason: readiness.err(),
-        account_label: Some("This computer".to_string()),
+        account_label: Some(crate::connected_computers::this_computer_name()),
         account_email: None,
         org_id: None,
         plan: Some("free".to_string()),

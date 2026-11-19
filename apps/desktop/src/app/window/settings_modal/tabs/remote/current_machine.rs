@@ -1,4 +1,4 @@
-//! "This computer": what belongs to the computer you're on (its name, its icon, its SSH
+//! The computer you're on, titled by its name: what belongs to it (its name, its icon, its SSH
 //! access), behind its row on the Remote page, and the one-line SSH status the Tailscale steps show
 //! instead of their own SSH controls.
 //!
@@ -54,7 +54,7 @@ fn row_value(t: &RemoteTokens) -> gpui::Div {
 
 /// The computer's name: the one gxserver reports (the one phones and computers pair with), else
 /// this app's.
-fn computer_name(tab: &RemoteTab) -> String {
+pub(super) fn computer_name(tab: &RemoteTab) -> String {
     tab.access
         .as_ref()
         .map(|access| access.computer_name.clone())
@@ -62,9 +62,9 @@ fn computer_name(tab: &RemoteTab) -> String {
         .unwrap_or_else(crate::host_name::local_computer_name)
 }
 
-/// The row's one line: "Mohamad's Laptop · SSH access on".
+/// The row's one line under its title, the computer's name: "Name, icon · SSH access on".
 pub(super) fn this_computer_summary(tab: &RemoteTab, _cx: &gpui::App) -> String {
-    let mut parts = vec![computer_name(tab)];
+    let mut parts = vec!["The computer you're on".to_string()];
     match tab.access.as_ref().map(|access| access.ssh.enabled) {
         Some(true) => parts.push("SSH access on".to_string()),
         Some(false) => parts.push("SSH access off".to_string()),

@@ -157,7 +157,12 @@ fn text(value: &Value, key: &str) -> String {
     value[key].as_str().unwrap_or_default().to_string()
 }
 
-/// The card's header: the project in bold, the computer after it, muted.
+/// The card's header: the project in bold, the computer's icon and name after it, muted.
+///
+/// CDXC:RemoteMachines 2026-11-19 DECISION:
+/// User, of this header reading "This computer": "show the icon of the machine and also say its
+/// actual name. Do not say 'this computer' ever." The computer is its icon (the pill's, the one its
+/// computer tab draws) and its name, whichever computer it is.
 fn card_header(pill: &Value, ink: CardInk, s: f32) -> gpui::Div {
     let card = &pill["card"];
     div()
@@ -185,6 +190,13 @@ fn card_header(pill: &Value, ink: CardInk, s: f32) -> gpui::Div {
                 .child(text(card, "title")),
         )
         .child(div().flex_1())
+        .child(
+            svg()
+                .path(machine_icon(pill))
+                .size(px(14.0 * s))
+                .flex_shrink_0()
+                .text_color(ink.secondary),
+        )
         .child(
             div()
                 .flex_shrink_0()

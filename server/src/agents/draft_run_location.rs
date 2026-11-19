@@ -131,6 +131,8 @@ fn answer(project: &Value, session: &Value, home_dir: &Path) -> Value {
         })),
         "boxStarted": started_box.is_some(),
         "boxAgent": box_agent,
+        // This machine's own name, for the Run on row's chip of it (never "This computer").
+        "computer": crate::connected_computers::this_computer_name(),
         "agentbox": status.as_ref().map(|status| json!({
             "supported": status.get("supported").cloned().unwrap_or(Value::Bool(false)),
             "installed": status.get("installed").cloned().unwrap_or(Value::Bool(false)),

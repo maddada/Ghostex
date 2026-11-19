@@ -4,8 +4,9 @@
 //! that opens the same details, where a click on a value copies it and the Folder row opens it.
 //!
 //! gxserver on the session's machine reads the facts (`/api/readSessionWhere`,
-//! server/src/session_where.rs); the computer's name comes from the host
-//! ([`crate::Event::ComputerChanged`]), since that machine calls itself "This computer". This
+//! server/src/session_where.rs); the computer's name is the one the host gave it
+//! ([`crate::Event::ComputerChanged`], the name its computer tab shows), else the one that machine
+//! answers with (`location.computer`, its host name). This
 //! module reads once when the chat starts, again every [`POLL_MS`] while the chat is on screen,
 //! and words the pill, the card (the project and computer as its header, then a row per other
 //! fact) and its copy and folder buttons into the `wherePill` document key. A draft has none: its worktree tray
@@ -227,6 +228,11 @@ fn machine(state: &ChatState, data: &Value) -> Value {
         .map(|computer| computer.name.trim().to_string())
         .filter(|name| !name.is_empty());
     let label = text(data, "/location/label");
+    // The machine's own name for itself, and the one this app gave it.
+    let answered = text(data, "/location/computer");
+    let named = computer
+        .map(|computer| computer.name.trim().to_string())
+        .filter(|name| !name.is_empty());
     let (kind, name) = match data.pointer("/location/kind").and_then(Value::as_str) {
         Some("cloudBox") => ("cloudBox", "Cloud Box".to_string()),
         Some("box") => (
@@ -237,9 +243,18 @@ fn machine(state: &ChatState, data: &Value) -> Value {
         ),
         _ if remote.is_some() => (
             "remote",
-            remote_name.unwrap_or_else(|| "Another computer".to_string()),
+            remote_name
+                .or(answered)
+                .unwrap_or_else(|| "Another computer".to_string()),
         ),
-        _ => ("this", "This computer".to_string()),
+        // CDXC:RemoteMachines 2026-11-19 DECISION:
+        // User: "Do not say 'this computer' ever ... We need to say the name of the machine
+        // always." The computer the app runs on is named like every other: its name (the host
+        // name its computer tab shows) beside its icon, never "This computer".
+        _ => (
+            "this",
+            answered.or(named).unwrap_or_else(|| "Local".to_string()),
+        ),
     };
     json!({
         "kind": kind,

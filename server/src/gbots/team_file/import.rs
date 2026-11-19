@@ -136,7 +136,8 @@ pub(crate) fn plan(
     }
     if existing.len() + read.file.bots.len() > crate::gbots::record::MAX_BOTS {
         read.problems.push(format!(
-            "This computer can have {} GBots and has {}, so the {} in this file don't fit.",
+            "{} can have {} GBots and has {}, so the {} in this file don't fit.",
+            crate::connected_computers::this_computer_name(),
             crate::gbots::record::MAX_BOTS,
             existing.len(),
             read.file.bots.len()
@@ -144,7 +145,8 @@ pub(crate) fn plan(
     }
     if taken_departments.len() > departments::MAX_DEPARTMENTS {
         read.problems.push(format!(
-            "This computer can have {} departments, so the file's don't fit.",
+            "{} can have {} departments, so the file's don't fit.",
+            crate::connected_computers::this_computer_name(),
             departments::MAX_DEPARTMENTS
         ));
     }

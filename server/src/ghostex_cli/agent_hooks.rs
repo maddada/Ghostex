@@ -52,7 +52,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
     let computer = flags
         .string_value("computer")
         .map(str::to_string)
-        .unwrap_or_else(|| "this computer".to_string());
+        .unwrap_or_else(crate::connected_computers::this_computer_name);
     let status = |params: Value| call_gxserver_rpc("/api/readAgentHookStatus", &params, flags);
     let endpoint = match command {
         "status" => None,

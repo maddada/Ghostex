@@ -419,7 +419,7 @@ fn grant_from(result: &Value) -> Option<Grant> {
         name: result
             .get("name")
             .and_then(Value::as_str)
-            .unwrap_or("This computer")
+            .unwrap_or("Another computer")
             .to_string(),
     })
 }
@@ -544,10 +544,11 @@ fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
                 .get("serverId")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
+            let fallback = crate::host_name::local_computer_name();
             let local_name = local
                 .get("name")
                 .and_then(Value::as_str)
-                .unwrap_or("This computer");
+                .unwrap_or(fallback.as_str());
             let _ = post_remote(
                 &job.target,
                 "/api/revokeComputerGrant",

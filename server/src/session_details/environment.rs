@@ -45,7 +45,10 @@ pub(crate) fn read_environment(
             "kind": "box",
             "label": crate::agentbox::provider_label(&agentbox.provider),
         }),
-        None => json!({"kind": "local", "label": "This computer"}),
+        None => json!({
+            "kind": "local",
+            "label": crate::connected_computers::this_computer_name(),
+        }),
     };
     let project_name = project
         .and_then(|project| project.get("name"))

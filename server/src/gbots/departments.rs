@@ -402,7 +402,8 @@ pub(crate) fn create(
         return Err(DomainStateError {
             code: "conflict",
             message: format!(
-                "This computer has {MAX_DEPARTMENTS} departments, the most it can have. Remove one first."
+                "{} has {MAX_DEPARTMENTS} departments, the most it can have. Remove one first.",
+                crate::connected_computers::this_computer_name()
             ),
         });
     }

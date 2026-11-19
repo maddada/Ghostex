@@ -1140,7 +1140,7 @@ fn foreign_session_row(
         .map(|tab| tab.label.trim())
         .filter(|label| !label.is_empty())
         .unwrap_or(if key.machine.is_local() {
-            "This computer"
+            "Local"
         } else {
             machine_id
         })

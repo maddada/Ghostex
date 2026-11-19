@@ -17,10 +17,10 @@ pub(crate) fn page() -> Page {
 pub(crate) fn current_machine() -> Section {
     section(
         "currentMachine",
-        "This computer",
+        "The computer you're on",
         vec![
-            row("computerName", "Name", "This computer's name, set by the system; your phone and other computers show it."),
-            row("computerIcon", "Icon", "This computer's icon in the sidebar while more than one computer is there; kept on this computer, so your phone and other computers show it too."),
+            row("computerName", "Name", "The computer's name, set by the system; Ghostex, your phone and other computers show it, and it titles this row."),
+            row("computerIcon", "Icon", "The computer's icon beside its name in the sidebar and the chat; kept on the computer, so your phone and other computers show it too."),
             row("sshAccess", "SSH access", "Lets your phone and other computers sign in to this machine; Easy Connect and Tailscale need it. Ghostex can turn it on with one admin prompt."),
         ],
     )

@@ -88,6 +88,21 @@ pub(crate) fn computer_icon(server_id: &str) -> &'static str {
         .unwrap_or(PLAIN)
 }
 
+/// The icon of the computer a chat on `machine_id` runs on (this computer's for
+/// [`ghostex_gx_core::LOCAL_MACHINE_ID`]), the one its computer tab draws, else the plain computer.
+pub(crate) fn machine_icon(machine_id: &str) -> &'static str {
+    const PLAIN: &str = "titlebar/device-desktop.svg";
+    if machine_id == ghostex_gx_core::LOCAL_MACHINE_ID {
+        return this_computer_icon().unwrap_or(PLAIN);
+    }
+    COMPUTER_ICONS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .as_ref()
+        .and_then(|icons| icons.get(machine_id).copied())
+        .unwrap_or(PLAIN)
+}
+
 /// The id the computer tabs and marks key a machine by.
 fn machine_key(machine: &MachineId) -> &str {
     match machine {

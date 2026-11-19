@@ -11,7 +11,7 @@ use ghostex_gx_core::MachineId;
 use serde_json::{Value, json};
 
 use super::conversation::voice_agent_on;
-use super::focus::{THIS_COMPUTER, VoiceCallTarget};
+use super::focus::{VoiceCallTarget, this_computer};
 use crate::*;
 
 /// The GBot a call is with, as gxserver's `focus.gbot` names it.
@@ -157,7 +157,7 @@ impl GhostexGpuiApp {
             .voice_agent
             .machine_name
             .clone()
-            .unwrap_or_else(|| THIS_COMPUTER.to_string());
+            .unwrap_or_else(this_computer);
         let answer = window.prompt(
             gpui::PromptLevel::Info,
             &format!("A voice call is open on {here}"),

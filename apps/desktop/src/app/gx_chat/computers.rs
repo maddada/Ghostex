@@ -48,13 +48,18 @@ pub(crate) fn current() -> (u64, Arc<BTreeMap<String, SessionComputer>>) {
         .unwrap_or_default()
 }
 
-/// What a chat on `machine_id` (`None` for this computer) is told.
+/// What a chat on `machine_id` (`None` for this computer) is told. A chat here is told this
+/// computer's name, the one its computer tab shows (CDXC:RemoteMachines 2026-11-19 in
+/// packages/gx-chat-core/src/extras/where_pill.rs: never "This computer").
 pub(super) fn for_machine(
     computers: &BTreeMap<String, SessionComputer>,
     machine_id: Option<&str>,
 ) -> SessionComputer {
-    machine_id
-        .and_then(|machine_id| computers.get(machine_id))
-        .cloned()
-        .unwrap_or_default()
+    match machine_id {
+        Some(machine_id) => computers.get(machine_id).cloned().unwrap_or_default(),
+        None => SessionComputer {
+            name: crate::host_name::local_computer_name(),
+            ..SessionComputer::default()
+        },
+    }
 }

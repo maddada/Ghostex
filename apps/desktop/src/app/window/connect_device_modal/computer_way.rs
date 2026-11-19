@@ -713,13 +713,13 @@ impl GpuiConnectDeviceWindow {
         })
     }
 
-    pub(super) fn label(&self, text: &'static str) -> Div {
+    pub(super) fn label(&self, text: impl Into<SharedString>) -> Div {
         div()
             .text_size(px(13.0))
             .line_height(px(18.0))
             .font_weight(FontWeight::MEDIUM)
             .text_color(hsla(self.palette.foreground))
-            .child(text)
+            .child(text.into())
     }
 
     fn or_divider(&self) -> AnyElement {
@@ -844,7 +844,10 @@ impl GpuiConnectDeviceWindow {
             v_flex()
                 .w_full()
                 .gap(px(6.0))
-                .child(self.label("This computer's code"))
+                .child(self.label(format!(
+                    "{}'s code",
+                    crate::host_name::local_computer_name()
+                )))
                 .child(
                     h_flex()
                         .w_full()
@@ -1085,7 +1088,10 @@ impl GpuiConnectDeviceWindow {
         let tunnel_only = flow.tunnel_only;
         let step = flow.step.clone();
         let approved = "Approved".to_string();
-        let opens = format!("This computer can open {name}");
+        let opens = format!(
+            "{} can open {name}",
+            crate::host_name::local_computer_name()
+        );
         match step {
             JoinStep::Asking => v_flex()
                 .w_full()

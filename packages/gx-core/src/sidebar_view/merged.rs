@@ -731,7 +731,7 @@ fn machine_label(inputs: &SidebarInputs, machine_id: &str) -> String {
         .map(|tab| tab.label.trim())
         .filter(|label| !label.is_empty())
         .unwrap_or(if machine_id == LOCAL_MACHINE_ID {
-            "This computer"
+            "Local"
         } else {
             machine_id
         })

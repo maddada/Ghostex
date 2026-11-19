@@ -872,8 +872,12 @@ impl NativeChatView {
     ) -> AnyElement {
         let s = p.scale;
         let mut column = div().flex().flex_col().min_w_0();
+        let machine_icon =
+            crate::app::gx_chat::session_directory::machine_icon(&self.config.machine_id);
         for (index, row) in section["rows"].as_array().into_iter().flatten().enumerate() {
             let icon = match row["icon"].as_str() {
+                // The computer the session runs on wears its own icon, as its computer tab does.
+                Some("computer") => Some(machine_icon),
                 Some("laptop") => Some("titlebar/device-laptop.svg"),
                 Some("box") => Some("titlebar/box.svg"),
                 Some("folder") => Some("titlebar/folder.svg"),

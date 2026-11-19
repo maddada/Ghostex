@@ -97,7 +97,7 @@ impl GhostexGpuiApp {
                 let computer = machine_id
                     .as_deref()
                     .and_then(crate::app::helpers::gpui_remote_machine_name_from_settings)
-                    .unwrap_or_else(|| "this computer".to_string());
+                    .unwrap_or_else(super::this_computer_name);
                 self.upsert_gpui_app_toast(
                     GpuiAppToast {
                         id: format!("security-manages-{}", machine_id.as_deref().unwrap_or("local")),

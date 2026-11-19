@@ -604,7 +604,7 @@ impl AgentsTab {
                     if self.shown_machine.is_some() {
                         self.cli_machine_label()
                     } else {
-                        "this computer".to_string()
+                        crate::host_name::local_computer_name()
                     }
                 )),
                 cx,

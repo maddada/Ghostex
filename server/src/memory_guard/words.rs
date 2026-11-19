@@ -72,7 +72,8 @@ pub(crate) fn stopped_command_card(group: &ChildGroup, agent: &str) -> CardWords
     CardWords {
         title: format!("Stopped {} to free memory", group.label),
         detail: format!(
-            "This computer was running out of memory and {} used {}. {agent} was told why.",
+            "{} was running out of memory and {} used {}. {agent} was told why.",
+            crate::connected_computers::this_computer_name(),
             group.label,
             size_text(group.bytes)
         ),
@@ -116,7 +117,8 @@ pub(crate) fn stopped_session_card(usage: &SessionUsage) -> CardWords {
     CardWords {
         title: "Stopped: out of memory".to_string(),
         detail: format!(
-            "This computer was running out of memory and this chat's work used {used}, so Ghostex stopped all of it. Resume starts it again."
+            "{} was running out of memory and this chat's work used {used}, so Ghostex stopped all of it. Resume starts it again.",
+            crate::connected_computers::this_computer_name()
         ),
         details: group_lines(&usage.groups.iter().collect::<Vec<_>>()),
     }

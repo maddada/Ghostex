@@ -399,8 +399,8 @@ fn read_code(flags: &super::args::Flags) -> CliResult<ComputerCode> {
         computer_name: entry
             .pointer("/code/name")
             .and_then(Value::as_str)
-            .unwrap_or("This computer")
-            .to_string(),
+            .map(str::to_string)
+            .unwrap_or_else(crate::connected_computers::this_computer_name),
         text,
     })
 }

@@ -526,7 +526,7 @@ impl WorkspacesTab {
                     value: "cloud".into(),
                 },
                 SettingOption {
-                    label: "This computer".into(),
+                    label: crate::host_name::local_computer_name().into(),
                     value: "local".into(),
                 },
             ],

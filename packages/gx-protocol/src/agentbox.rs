@@ -5,8 +5,11 @@
 //! The labels themselves come from gxserver's `/api/agentbox status` (a registered SSH host is its
 //! alias); these helpers add what a client draws around them.
 
-/// The run location that is not a box.
-pub const THIS_COMPUTER_LABEL: &str = "This computer";
+/// The run location that is not a box, named when neither gxserver nor the host said the
+/// computer's own name (CDXC:RemoteMachines 2026-11-19 in
+/// packages/gx-chat-core/src/extras/where_pill.rs: a computer goes by its name, never "This
+/// computer").
+pub const THIS_COMPUTER_LABEL: &str = "Local";
 
 /// The hover text of a location: `Your server <alias> over SSH` for a registered remote Docker
 /// host (`docker:<alias>`), nothing for the others (their label says it all).

@@ -6,8 +6,8 @@
 //! (a Cloud Box or an agentbox), the worktree, the branch with its lines changed against the
 //! default branch, its pull request, how far it is ahead of and behind its upstream, how many files
 //! have uncommitted changes, the agent's account and the terminal backend that keeps the session.
-//! The machine's own name is the client's to give: on a remote machine this read would call itself
-//! "This computer".
+//! The machine's own name (`location.computer`, its host name, the one phones and other computers
+//! pair with) comes with it; a client that saved its own name for that machine shows that instead.
 //!
 //! Unlike `/api/readSessionDetails` it does not depend on the Session details extension, and it is
 //! cheap: the branch and lines changed come from the Session details panel's own cache
@@ -170,9 +170,11 @@ fn account_text(value: &Value, hide_emails: bool) -> Value {
     }
 }
 
-/// `{kind, label}`: `cloudBox` with its provider for a session on a Cloud Box's own gxserver,
-/// `box` with its provider for an agentbox session, else `local`, the machine that answered.
+/// `{kind, label, computer}`: `cloudBox` with its provider for a session on a Cloud Box's own
+/// gxserver, `box` with its provider for an agentbox session, else `local`, the machine that
+/// answered. `computer` is that machine's own name in every case.
 fn location(session: &Value) -> Value {
+    let computer = crate::connected_computers::this_computer_name();
     use ghostex_gx_protocol::cloud_box::{SessionCloudBoxRuntime, CLOUD_BOX_RUNTIME_SETTINGS_KEY};
     let cloud_box = session
         .get("runtimeSettings")
@@ -181,14 +183,19 @@ fn location(session: &Value) -> Value {
         .and_then(|record| serde_json::from_value::<SessionCloudBoxRuntime>(record.clone()).ok())
         .filter(|runtime| !runtime.box_id.is_empty());
     if let Some(runtime) = cloud_box {
-        return json!({"kind": "cloudBox", "label": runtime.provider.label()});
+        return json!({
+            "kind": "cloudBox",
+            "label": runtime.provider.label(),
+            "computer": computer,
+        });
     }
     match crate::agentbox::session_agentbox(session) {
         Some(agentbox) => json!({
             "kind": "box",
             "label": crate::agentbox::provider_label(&agentbox.provider),
+            "computer": computer,
         }),
-        None => json!({"kind": "local"}),
+        None => json!({"kind": "local", "computer": computer}),
     }
 }
 

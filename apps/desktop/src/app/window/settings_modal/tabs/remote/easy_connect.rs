@@ -378,7 +378,7 @@ pub(super) fn qr_preview_dialog(
                 code.host
                     .clone()
                     .or_else(|| code.ip.clone())
-                    .unwrap_or_else(|| "This computer".to_string()),
+                    .unwrap_or_else(crate::host_name::local_computer_name),
                 "The app recognizes this as a Tailscale code.",
             )
         }

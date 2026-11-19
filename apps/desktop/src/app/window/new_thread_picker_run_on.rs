@@ -31,9 +31,12 @@ const CLOUD_BOX_LABEL: &str = "Cloud Box";
 const CLOUD_BOX_TOOLTIP: &str =
     "Runs on a cloud box. The box starts when you send the first message.";
 const ICON_CLOUD_BOX: &str = "titlebar/cloud.svg";
-const THIS_COMPUTER: &str = "This computer";
 const SET_UP_LINK: &str = "Run in a cloud box…";
-const ICON_THIS_COMPUTER: &str = "titlebar/device-desktop.svg";
+/// The computer you're on wears its own icon, the one its computer tab draws (CDXC:RemoteMachines
+/// 2026-11-19 in packages/gx-chat-core/src/extras/where_pill.rs: never "This computer").
+fn this_computer_icon() -> &'static str {
+    crate::app::gx_chat::session_directory::machine_icon(ghostex_gx_core::LOCAL_MACHINE_ID)
+}
 const ICON_REMOTE_MACHINE: &str = "titlebar/server.svg";
 /// A chip's narrowest width while the chips share the row; past that the row scrolls.
 const CHIP_MIN_WIDTH: f32 = 76.0;
@@ -202,9 +205,9 @@ impl RunOnState {
         let mut chips: Vec<RunOnChip> = if self.machines.is_empty() {
             vec![RunOnChip {
                 key: "local".to_string(),
-                label: THIS_COMPUTER.to_string(),
-                name: THIS_COMPUTER.to_string(),
-                icon: ICON_THIS_COMPUTER,
+                label: crate::host_name::local_computer_name(),
+                name: crate::host_name::local_computer_name(),
+                icon: this_computer_icon(),
                 selectable: true,
                 tooltip: Some(ghostex_gx_core::THIS_COMPUTER_DESCRIPTION.to_string()),
             }]
@@ -219,7 +222,7 @@ impl RunOnState {
                         .clone()
                         .unwrap_or_else(|| machine.label.clone()),
                     icon: machine.icon.unwrap_or(if machine.local {
-                        ICON_THIS_COMPUTER
+                        this_computer_icon()
                     } else {
                         ICON_REMOTE_MACHINE
                     }),
@@ -654,8 +657,8 @@ impl GpuiNewThreadPickerWindow {
         let mut chips: Vec<AnyElement> = if self.run_on.machines.is_empty() {
             vec![self.render_run_on_chip(
                 0,
-                ICON_THIS_COMPUTER,
-                THIS_COMPUTER.to_string(),
+                this_computer_icon(),
+                crate::host_name::local_computer_name(),
                 Some(ghostex_gx_core::THIS_COMPUTER_DESCRIPTION.to_string()),
                 cx,
             )]
@@ -674,11 +677,11 @@ impl GpuiNewThreadPickerWindow {
                     };
                     self.render_run_on_chip(
                         index,
-                        if machine.local {
-                            ICON_THIS_COMPUTER
+                        machine.icon.unwrap_or(if machine.local {
+                            this_computer_icon()
                         } else {
                             ICON_REMOTE_MACHINE
-                        },
+                        }),
                         machine.label.clone(),
                         tooltip,
                         cx,
