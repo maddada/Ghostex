@@ -435,6 +435,9 @@ pub fn project(state: &ChatState) -> Value {
                 "code": code,
                 "codePreview": folded.as_ref().map(|(preview, _)| preview.clone()),
                 "codeMore": folded.map(|(_, more)| more),
+                // The wrapped rows `codePreview` holds back, as a count (the board's command block).
+                "codeMoreRows": crate::questions::permission_card::fold_code_rows(&code, CODE_PREVIEW_LINES)
+                    .map_or(0, |(_, rows)| rows),
                 "report": report_look(&status),
                 "codeLabel": code_label,
                 "reason": reason,
@@ -590,13 +593,12 @@ pub fn audit_lines(state: &ChatState) -> Value {
             .iter()
             .map(|line| {
                 let label = text(line, "label");
-                let verb = if tone_of(label, false) == "deny" {
-                    "Denied"
-                } else if crate::questions::pending_approval::lasting(label) {
-                    "Always allowed"
-                } else {
-                    "Approved"
+                // "Approved" / "Denied" only for the exact words; otherwise what was picked.
+                let verb = match crate::questions::pending_approval::settled_words(label) {
+                    words if words == "Approved" || words == "Denied" => words,
+                    words => format!("\u{201c}{words}\u{201d}"),
                 };
+                let denied = tone_of(label, false) == "deny";
                 let from = match text(line, "from") {
                     "" => "the coordinator",
                     from => from,
@@ -609,7 +611,7 @@ pub fn audit_lines(state: &ChatState) -> Value {
                     } else {
                         format!("Picked \"{label}\" for: {question}")
                     },
-                    "tone": if verb == "Denied" { "bad" } else { "good" },
+                    "tone": if denied { "bad" } else { "good" },
                     "at": text(line, "at"),
                 })
             })

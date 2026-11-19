@@ -32,17 +32,16 @@ pub struct PendingApproval {
     pub command: String,
 }
 
-/// Whether an answer grants more than this one time ("Yes, and don't ask again …", "Always
-/// allow", "Trust and remember"): its settled row says "Always allowed".
-pub(crate) fn lasting(label: &str) -> bool {
-    let lower = label.to_lowercase();
-    !lower.trim_start().starts_with("no")
-        && !lower.trim_start().starts_with("deny")
-        && (lower.contains("don't ask again")
-            || lower.contains("always")
-            || lower.contains("remember")
-            || lower.contains("this session")
-            || lower.contains("for this conversation"))
+/// What an answered approval's settled row says: "Approved" only for exactly Yes, Allow or "Yes,
+/// proceed", "Denied" only for exactly No or Deny, and otherwise the words picked ("Yes, and don't
+/// ask again for …"), so a lasting or scoped grant always says what it granted.
+pub(crate) fn settled_words(label: &str) -> String {
+    let label = crate::questions::notice_choices::without_key_hint(label).trim();
+    match label.to_lowercase().as_str() {
+        "yes" | "allow" | "yes, proceed" => "Approved".to_string(),
+        "no" | "deny" => "Denied".to_string(),
+        _ => label.to_string(),
+    }
 }
 
 /// Whether a picked label refuses.
@@ -167,14 +166,7 @@ pub fn sync(state: &mut ChatState) {
     }
     state.questions.pending_approval = None;
     state.questions.settled_approval = Some(json!({
-        // A lasting grant says so ("Yes, and don't ask again …").
-        "text": if pending.denied {
-            "Denied"
-        } else if lasting(&pending.label) {
-            "Always allowed"
-        } else {
-            "Approved"
-        },
+        "text": settled_words(&pending.label),
         "detail": format!("Picked \"{}\"", pending.label),
         "tone": if pending.denied { "bad" } else { "good" },
         "command": pending.command,
