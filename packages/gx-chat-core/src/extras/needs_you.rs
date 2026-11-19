@@ -115,6 +115,10 @@ pub fn rows(
                 "title": title,
                 "titleRuns": crate::questions::form_links::word_runs(title),
                 "body": body(item),
+                // A to-do with a detail shows Details on its row, its answers in the panel
+                // (`work_cards::details_fields`); its command chip stays on the row.
+                "details": super::work_cards::details_fields(text(item, "detail")).0,
+                "preview": super::work_cards::details_fields(text(item, "detail")).1,
                 "command": text(item, "command"),
                 "age": crate::transcript::message_time::age_label(now_ms, at),
                 "detail": [],

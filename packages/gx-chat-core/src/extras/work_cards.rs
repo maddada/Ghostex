@@ -685,6 +685,11 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 // Its title's links (`#562`, a Markdown link) as runs the renderers draw, or null.
                 "titleRuns": crate::questions::form_links::word_runs(text(ask, "text")),
                 "body": card["body"],
+                // An ask with a longer explanation (`item ask --detail`) shows Details on its row
+                // and its answers only in the panel that opens under the detail; one without keeps
+                // its answers on the row (`details_fields`).
+                "details": details_fields(text(ask, "detail")).0,
+                "preview": details_fields(text(ask, "detail")).1,
                 "age": card["age"],
                 // The line under it names only its own item (`chips`); whether it holds that item
                 // up is the row's mark. Other items that wait on its answer follow (`waitedBy`).
@@ -1089,6 +1094,40 @@ fn work_row(item: &Value, turns: &[Turn], now_ms: i64, done_key: Option<String>)
     })
 }
 
+/// Whether a Needs you row's question has details to read before answering (`detail`, an ask's
+/// `--detail` or a to-do's), and the first line of them as plain words for the Work panel card's
+/// preview ("" for none). A row with details shows Details on its row instead of its answers,
+/// which wait in the panel the row opens, under the details; a row without keeps its answers.
+///
+/// CDXC:Coordinators 2026-11-19 DECISION:
+/// User: "sometimes the questions you ask in 'needs you' don't have any details under them so i
+/// don't need to click on them, and in other cases i click and it just has 1 button saying 'open'
+/// … somehow inform the user that there's 'Details' instead of showing them choices when they
+/// can't actually make a choice without viewing details anyways", then picked "A. Details pill"
+/// (Q4232): a row whose ask has a detail shows Details and Reply, its answers only in the panel;
+/// a quick question keeps its answers on the row; a form's or page's row says Answer with how
+/// many questions and opens them directly; a thread approval shows its command on its card. The
+/// phone does the same, over the air.
+/// SEE-ALSO: apps/desktop/src/app/native_chat/work_cards.rs (`dock_row_look`),
+/// apps/mobile/app/src/chat/native/cards/WorkCards.tsx (`DockRow`).
+pub(crate) fn details_fields(detail: &str) -> (bool, String) {
+    let detail = detail.trim();
+    if detail.is_empty() {
+        return (false, String::new());
+    }
+    let line = detail
+        .lines()
+        .map(|line| {
+            line.trim()
+                .trim_start_matches(['#', '>', '-', '*', '+'])
+                .trim()
+        })
+        .find(|line| !line.is_empty() && !line.starts_with("```"))
+        .unwrap_or_default();
+    let plain = crate::questions::form_links::plain_words(line).replace(['*', '`'], "");
+    (true, plain.split_whitespace().collect::<Vec<_>>().join(" "))
+}
+
 /// The forms, pages and one-click questions in the chat's replies that still wait on the reader,
 /// as dock rows with when they were asked. They are the ? pill's own unanswered list
 /// (`questions::open_questions::unanswered`), so For later ones stay out and nothing is counted
@@ -1210,6 +1249,18 @@ fn question_rows_of(
                         row["opened"] = json!(true);
                     }
                 }
+                // A form says how much it still asks after its name, as a page does, and both
+                // open straight to their questions from the row (no panel step).
+                if form && !asker.seen_only {
+                    row["count"] = json!(match open {
+                        0 => String::new(),
+                        1 => "(1 question)".to_string(),
+                        n => format!("({n} questions)"),
+                    });
+                }
+                // What the row's button says: Answer while it asks something, Open for a page
+                // that only waits to be seen (`details_fields`' decision).
+                row["openLabel"] = json!(if asker.seen_only { "Open" } else { "Answer" });
                 row["buttons"] = json!([]);
                 // A page that asks nothing waits to be marked seen (`Asker::seen_only`), unlabelled.
                 let detail = if asker.seen_only {

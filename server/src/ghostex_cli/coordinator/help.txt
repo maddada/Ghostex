@@ -300,7 +300,10 @@ WORK ITEMS
   today?"); everything else (why, what to check, where) goes in --detail, which
   shows under the title when the user opens the row. --detail takes Markdown
   and line breaks (bold, code, links, lists; #562 links to the PR): write it as
-  a few short lines or bullets, not one long paragraph. One-click answers
+  a few short lines or bullets, not one long paragraph. Give --detail only when
+  the user needs it to decide: the row then shows Details, its answers in the
+  panel under the detail; a yes/no the title answers alone gets no --detail, so
+  its answers stay one click on the row. One-click answers
   with --answers (commas split them; write \, for a comma inside an answer,
   or give each with --answer "Too small to read, simplify it"), the steps to
   follow with --steps, and --holds when the work

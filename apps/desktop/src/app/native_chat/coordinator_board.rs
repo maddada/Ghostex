@@ -1784,6 +1784,21 @@ impl NativeChatView {
                 .map(|relayed| self.board_relay_buttons(relayed, CHIP_SIZE, true, p, cx)),
             reference: text(row, "reference"),
         };
+        // A thread's approval is decided from what it would run: its command shows on the card,
+        // as a to-do's does (the chip copies it), not only in its buttons' tooltip (gx-chat-core
+        // `work_cards::details_fields`' decision).
+        let mut dock = row["dock"].clone();
+        if let Some(relayed) = &relayed {
+            let code = [text(relayed, "codePreview"), text(relayed, "code")]
+                .into_iter()
+                .find(|code| !code.trim().is_empty())
+                .unwrap_or_default();
+            let mut lines = code.lines().map(str::trim).filter(|line| !line.is_empty());
+            if let Some(first) = lines.next() {
+                let more = if lines.next().is_some() { " \u{2026}" } else { "" };
+                dock["command"] = json!(format!("{first}{more}"));
+            }
+        }
         let move_to = row["moveTo"].clone();
         let menu_key = key.clone();
         div()
@@ -1804,7 +1819,7 @@ impl NativeChatView {
                     .bg(p.accent.opacity(0.08))
                     .child(scroll_into_view(scroll.clone(), focus.tries.clone(), s))
             })
-            .child(self.dock_row_look(&row["dock"], look, p, cx))
+            .child(self.dock_row_look(&dock, look, p, cx))
             .children(self.board_remove_badge(row, &hover_group, p, cx))
             .children(self.board_card_menu(row, p, cx))
             .when(has_menu, |this| {

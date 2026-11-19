@@ -335,11 +335,19 @@ pub(super) fn buttons_width(widths: &[f32]) -> f32 {
     widths.iter().sum::<f32>() + 6.0 * widths.len().saturating_sub(1) as f32
 }
 
-/// What a row with no answers shows in their place: Open for a page or form, Reply for a
-/// question with no preset answers (`work_actions.rs` `work_row_action`).
+/// What a row shows in its answers' place: Details for a question with details to read first
+/// (its answers wait in the panel, gx-chat-core `details_fields`), Answer (or Open for a page that
+/// asks nothing) for a page or form, Reply for a question with no preset answers
+/// (`work_actions.rs` `work_row_action`).
 fn dock_row_action(row: &Value) -> Option<&'static str> {
-    if row["open"].is_object() {
-        Some("Open")
+    if row["details"] == true {
+        Some("Details")
+    } else if row["open"].is_object() {
+        Some(if text(row, "openLabel") == "Answer" {
+            "Answer"
+        } else {
+            "Open"
+        })
     } else if row["reply"].is_object() {
         Some("Reply")
     } else {
@@ -1113,6 +1121,9 @@ impl NativeChatView {
         // basically) where i can click to see show in chat/dismiss/snooze. don't make it expand
         // on click since it's useless when it expands".
         let page_row = row["page"] == true && row["open"].is_object();
+        // A form's row opens the form at once, as a page's opens the page: the panel it went
+        // through had nothing but another Open (gx-chat-core `details_fields`' decision).
+        let opens_directly = page_row || (text(row, "kind") == "form" && row["open"].is_object());
         let (icon, color) = row_mark(row, p);
         // A thread (only a Work panel card, `BoardRow::dock`) is marked by its agent's logo, as
         // the panel's agent button and the Moving list's Who are.
@@ -1133,7 +1144,9 @@ impl NativeChatView {
         // The answers, the look every place shares (work_actions.rs); a row with none shows what
         // it asks for in their place (Open or Reply).
         let answers: Vec<Value> = row["buttons"].as_array().cloned().unwrap_or_default();
-        let action = if answers.is_empty() && row["needs"] == true {
+        // A question with details shows Details in its answers' place: they wait in its panel,
+        // under what the reader needs to read first.
+        let action = if row["details"] == true || (answers.is_empty() && row["needs"] == true) {
             dock_row_action(row)
         } else {
             None
@@ -1144,7 +1157,7 @@ impl NativeChatView {
         //
         // CDXC:Coordinators 2026-11-12 DECISION:
         // User, of a form's row with only Open: "i can't reply to this or mention it :> pls fix".
-        let reply_answer = ((!answers.is_empty() || action == Some("Open"))
+        let reply_answer = ((!answers.is_empty() || matches!(action, Some("Open" | "Answer")))
             && row["reply"].is_object())
         .then(|| Self::reply_answer(&row["reply"], &text(row, "replied"), busy));
         // What fits: the answers may take the first line while the question keeps half the row.
@@ -1218,7 +1231,7 @@ impl NativeChatView {
             ));
         }
         let count = text(row, "count");
-        let question = if page_row && !count.is_empty() && wrap {
+        let question = if opens_directly && !count.is_empty() && wrap {
             // Wrapped, the name and its count are one run of words, the count quieter.
             let words = format!("{title} {count}");
             let muted = gpui::HighlightStyle {
@@ -1237,7 +1250,7 @@ impl NativeChatView {
                         .with_highlights(vec![(title.len() + 1..words.len(), muted)]),
                 )
                 .into_any_element()
-        } else if page_row && !count.is_empty() {
+        } else if opens_directly && !count.is_empty() {
             // The page's name, then how much it still asks; the name gives way first.
             div()
                 .flex_1()
@@ -1337,15 +1350,30 @@ impl NativeChatView {
         };
         let right_row = row.clone();
         let line = head.child(age_menu);
-        let line = match under {
-            Some(under) => div()
+        // Wrapped (a Work panel card), a question with details shows their first line under its
+        // title, cut at one line, so the card says what Details holds (gx-chat-core
+        // `details_fields`).
+        let preview = text(row, "preview");
+        let preview = (wrap && row["details"] == true && !preview.is_empty()).then(|| {
+            div()
+                .min_w_0()
+                .pl(px(DOCK_LEAD * s))
+                .truncate()
+                .text_size(px(PROSE_SIZE * 0.93 * s))
+                .text_color(p.card_muted)
+                .child(preview.to_string())
+        });
+        let line = if under.is_some() || preview.is_some() {
+            div()
                 .w_full()
                 .min_w_0()
                 .flex()
                 .flex_col()
                 .child(line)
-                .child(under),
-            None => line,
+                .children(preview)
+                .children(under)
+        } else {
+            line
         };
         let press = Self::dock_row_press(&format!("{}{key}", look.scope), line, p)
             // Named after its row, so accessibility clients (cua-driver, VoiceOver) can find it.
@@ -1383,7 +1411,7 @@ impl NativeChatView {
                 .children(self.dock_command_chip(&key, &text(row, "command"), p, cx))
                 .into_any_element();
         }
-        if page_row {
+        if opens_directly {
             let page = row["open"].clone();
             if let Some(page_id) = row["pageId"].as_str() {
                 self.refresh_page_counts(page_id, cx);
