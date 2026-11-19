@@ -65,7 +65,14 @@ pub(crate) fn install(paths: &GxserverPaths) {
 struct Known {
     by_id: HashMap<String, u32>,
     highest: u32,
+    /// Rows that will never get a number (another agent's message, a report, a note, a row sent
+    /// before numbering began), so each read stops parsing them again. Queued rows are not
+    /// kept here: the agent's queue releases them as the user's message.
+    skipped: std::collections::HashSet<String>,
 }
+
+/// Past this many remembered skipped rows a chat starts the list over rather than grow it.
+const SKIPPED_LIMIT: usize = 4_096;
 
 type ChatKey = (String, String);
 
@@ -211,16 +218,30 @@ fn annotate_with(db: &Connection, messages: &mut [Value], project_id: &str, sess
             stamped.push((index, *number));
             continue;
         }
+        if known.skipped.contains(id) {
+            continue;
+        }
+        let queued = message.get("queued").and_then(Value::as_bool) == Some(true);
+        let mut skip = |known: &mut Known| {
+            if !queued {
+                if known.skipped.len() >= SKIPPED_LIMIT {
+                    known.skipped.clear();
+                }
+                known.skipped.insert(id.to_string());
+            }
+        };
         let Some(sent_at) = message.get("timestamp").and_then(Value::as_i64) else {
             continue;
         };
         if sent_at < since {
+            skip(known);
             continue;
         }
         let Ok(parsed) = serde_json::from_value::<ChatMessage>(message.clone()) else {
             continue;
         };
         if !is_own_prompt(&parsed) {
+            skip(known);
             continue;
         }
         let offset = message
@@ -518,14 +539,12 @@ mod tests {
             .collect()
     }
 
-    // `since_ms` is cached for the run, so every test shares one stamp of 0.
-    fn reset() {
-        known().lock().unwrap().clear();
-    }
+    // `since_ms` is cached for the run, so every test shares one stamp of 0. Each test uses chats
+    // of its own (`G1a`, `G1b`…), so the shared cache never mixes them and nothing clears it
+    // while another test runs.
 
     #[test]
     fn numbers_the_users_messages_in_order_and_never_twice() {
-        reset();
         let db = db();
         let mut rows = vec![
             user("b", 2_000, "second"),
@@ -547,7 +566,6 @@ mod tests {
 
     #[test]
     fn leaves_out_queued_rows_and_other_agents_messages() {
-        reset();
         let db = db();
         let mut queued = user("q", 1_000, "still in the agent's queue");
         queued["queued"] = json!(true);
@@ -559,11 +577,15 @@ mod tests {
         let mut rows = vec![queued, report, user("u", 1_200, "mine")];
         annotate_with(&db, &mut rows, "P1", "G1b");
         assert_eq!(numbers(&rows), vec![None, None, Some(1)]);
+        // The report is remembered as never numbered; the queued row is looked at again.
+        let all = known().lock().unwrap();
+        let chat = &all[&("P1".to_string(), "G1b".to_string())];
+        assert!(chat.skipped.contains("x"));
+        assert!(!chat.skipped.contains("q"));
     }
 
     #[test]
     fn a_fork_keeps_the_numbers_it_copied_and_goes_on() {
-        reset();
         let db = db();
         let mut source = vec![user("a", 1_000, "one"), user("b", 2_000, "two")];
         annotate_with(&db, &mut source, "P1", "G1c");
@@ -578,7 +600,6 @@ mod tests {
 
     #[test]
     fn a_reference_quotes_the_start_of_the_message() {
-        reset();
         let db = db();
         let mut rows = vec![user(
             "a",
