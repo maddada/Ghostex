@@ -552,6 +552,22 @@ pub fn detect_codex_dialog(text: &str) -> Option<TerminalDialog> {
     detect_codex_dialog_as_drawn(text).map(update_prompt_dialog)
 }
 
+/// Whether a line is the heading of a Codex approval dialog (a command, terminal input, network
+/// access, permissions, edits or an MCP tool's), as session_chat_codex_blocking.rs names them.
+fn is_codex_approval_heading(line: &str) -> bool {
+    const HEADINGS: [&str; 6] = [
+        "Would you like to run the following command",
+        "Would you like to send input to terminal",
+        "Would you like to send input to the existing terminal",
+        "Do you want to approve network access to",
+        "Would you like to grant these permissions",
+        "Would you like to make the following edits",
+    ];
+    let line = line.trim();
+    HEADINGS.iter().any(|heading| line.starts_with(heading))
+        || line.trim_end_matches('.').ends_with("needs your approval")
+}
+
 fn detect_codex_dialog_as_drawn(text: &str) -> Option<TerminalDialog> {
     if let Some(pager) = crate::session_chat_codex_pager::detect_codex_transcript_pager(text) {
         return Some(pager);
@@ -626,7 +642,12 @@ fn detect_codex_dialog_as_drawn(text: &str) -> Option<TerminalDialog> {
     let first_painted = (start..footer_index).find(|&i| !lines[i].trim().is_empty());
     if start >= 2 && first_painted.is_some_and(|i| row(&lines[i]).is_some()) {
         let heading_start = band_above(start - 2);
-        if start - heading_start <= 12 {
+        // CDXC:AgentScreenDetection 2026-11-20 WHY:
+        // A multi-line command (a backslash script, a heredoc) puts its approval heading more than 12 lines above the rows, so the dialog lost its heading and its command, its first row read as its title, and the card showed no command at all (security review of the chat's approval rows, finding 8). A longer stretch is still the heading when its first painted line is one of Codex's own approval headings, never scrollback.
+        let approval_heading = (heading_start..start)
+            .find(|&i| !lines[i].trim().is_empty())
+            .is_some_and(|i| is_codex_approval_heading(clean(&lines[i])));
+        if start - heading_start <= 12 || (approval_heading && start - heading_start <= 80) {
             start = heading_start;
         }
     }
