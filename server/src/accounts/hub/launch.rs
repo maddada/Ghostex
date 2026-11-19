@@ -42,10 +42,21 @@ fn private_dir(dir: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Writes `body` to `path` readable by this user only, through a rename.
+/// Writes `body` to `path` readable by this user only, through a rename. Each write has a temp
+/// name of its own, so two launches preparing the same profile folder at once never write into or
+/// rename away each other's file.
 fn write_private(path: &Path, body: &[u8]) -> std::io::Result<()> {
-    let temp = path.with_extension("ghostex-tmp");
-    let _ = fs::remove_file(&temp);
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let temp = path.with_file_name(format!(
+        "{name}.{}-{}.ghostex-tmp",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
     {
         let mut options = fs::OpenOptions::new();
         options.write(true).create_new(true);
@@ -58,7 +69,9 @@ fn write_private(path: &Path, body: &[u8]) -> std::io::Result<()> {
         file.write_all(body)?;
         file.sync_all()?;
     }
-    fs::rename(&temp, path)
+    fs::rename(&temp, path).inspect_err(|_| {
+        let _ = fs::remove_file(&temp);
+    })
 }
 
 fn read_object(path: &Path) -> Map<String, Value> {
