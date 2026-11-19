@@ -50,3 +50,53 @@ pub(crate) fn pane_prepaint_background_color() -> u32 {
         crate::app::consts::CEF_DARK_PREPAINT_BACKGROUND_COLOR
     }
 }
+
+/// CDXC:Theming 2026-11-20 DECISION:
+/// User, of the chat's Copy / Add to Chat / Reply bar drawn as a near-black pill over their glass
+/// window: "i hate when ui elements in the app are this dark bg as you show here, doesn't fit the
+/// rest of the glass aesthetic. need to make the bg of these less dark when the transparency i
+/// enable isn't dark", then, shown 39 such spots side by side (dark-fills audit page, Q4219 to
+/// Q4225, Q4247 "Lift the ticked ones"), lifted 38 of them; only the floating Commands pane keeps
+/// its dark fill. Under window glass a surface drawn inside a window that cannot blur what is under
+/// it (a floating bar, menu, popover, tooltip, sheet or card over content) takes the colour of the
+/// window it sits on, lifted toward white ([`glass_lifted_from`]), at [`GLASS_LIFTED_ALPHA`] so text
+/// under it never reads through (CDXC:Tooltips 2026-10-25). It is never the menu colour or a fixed
+/// near-black. A fill with nothing under it (a box inside a card, a badge, a code box) takes the
+/// ink wash of the fenced code blocks ([`glass_wash`]). Glass off, every spot keeps its colour.
+/// SEE-ALSO: `glass_lifted_surface` and `glass_veil` in helpers/window_glass.rs (the work area's
+/// own colour), ModalPalette::lifted_dialog_fill (the same lift inside dialogs and Settings).
+pub(crate) const GLASS_LIFT_DARK: f32 = 0.10;
+/// [`GLASS_LIFT_DARK`] in light mode, where the window colour is already light.
+pub(crate) const GLASS_LIFT_LIGHT: f32 = 0.6;
+/// How much of what is under it a lifted surface covers: nearly all of it, as Settings' inner
+/// dialogs (`LIFTED_DIALOG_GLASS_ALPHA`).
+pub(crate) const GLASS_LIFTED_ALPHA: f32 = 0.96;
+
+/// `base` (the colour of the window the surface sits on) lifted toward white by
+/// [`GLASS_LIFT_DARK`] (or [`GLASS_LIFT_LIGHT`] in light mode), at [`GLASS_LIFTED_ALPHA`].
+pub(crate) fn glass_lifted_from(base: gpui::Hsla, light: bool) -> gpui::Hsla {
+    let lift = if light {
+        GLASS_LIFT_LIGHT
+    } else {
+        GLASS_LIFT_DARK
+    };
+    base.opacity(1.0)
+        .blend(gpui::white().opacity(lift))
+        .opacity(GLASS_LIFTED_ALPHA)
+}
+
+/// [`glass_lifted_from`] kept opaque, for a surface whose content must not show anything through
+/// it (a × over a picture, Capture's windows over other apps).
+pub(crate) fn glass_lifted_opaque_from(base: gpui::Hsla, light: bool) -> gpui::Hsla {
+    glass_lifted_from(base, light).opacity(1.0)
+}
+
+/// The ink wash a box with nothing under it takes on glass (the fenced code blocks' 6% light wash
+/// in dark mode, 4% dark in light mode), times `strength`.
+pub(crate) fn glass_wash(light: bool, strength: f32) -> gpui::Hsla {
+    if light {
+        gpui::black().opacity(0.04 * strength)
+    } else {
+        gpui::white().opacity(0.06 * strength)
+    }
+}
