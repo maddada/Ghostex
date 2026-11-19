@@ -142,29 +142,16 @@ pub(crate) async fn relay(
     // callers' messages leaves marked as the user's (`userSend`), so the other computer records it
     // as theirs (quotes of earlier messages, chat_message_numbers.rs); nobody else's carries it.
     let bytes = if crate::session_chat_send::sender_mark::MESSAGE_ROUTES.contains(&forwarded) {
-        match serde_json::from_slice::<serde_json::Value>(&bytes) {
-            Ok(mut body) => {
-                if let Some(params) = body.get_mut("params").and_then(|p| p.as_object_mut()) {
-                    crate::session_chat_send::sender_mark::mark_relayed_send(caller, params);
-                    if let Principal::Session {
-                        project_id,
-                        session_id,
-                        ..
-                    } = caller
-                    {
-                        params.remove("via");
-                        crate::session_chat_send::sender_mark::sign_agent_message(
-                            paths,
-                            server_id_here,
-                            project_id,
-                            session_id,
-                            params,
-                        );
-                    }
-                }
-                serde_json::to_vec(&body).map(Into::into).unwrap_or(bytes)
+        match marked_message_body(paths, server_id_here, caller, &bytes) {
+            Ok(marked) => marked.into(),
+            Err(message) => {
+                return refusal(
+                    StatusCode::BAD_REQUEST,
+                    "badRequest",
+                    message.to_string(),
+                    request_id,
+                )
             }
-            Err(_) => bytes,
         }
     } else {
         bytes
@@ -323,6 +310,50 @@ fn header_text(headers: &HeaderMap, name: &str) -> Option<String> {
         .get(name)
         .and_then(|value| value.to_str().ok())
         .map(str::to_string)
+}
+
+/// A message route's body as it leaves for the other computer: one of the user's own callers'
+/// marked as theirs, an agent's session's signed. Refused unless it is a JSON object with an
+/// object `params`, read with the same whitespace rule as the receiving gxserver
+/// (`server/http_infra.rs`), so nothing reaches the other computer unmarked.
+///
+/// CDXC:ServerLinks 2026-11-20 FIX:
+/// Fable's review of 809e881f4 found the relay passed a body it could not parse on untouched:
+/// serde_json takes only space, tab, LF and CR around a document while the receiver trims every
+/// Unicode space first, so an agent's body wrapped in a form feed or NBSP reached the other
+/// computer neither signed nor stripped of `userSend`.
+pub(crate) fn marked_message_body(
+    paths: &crate::paths::GxserverPaths,
+    server_id_here: &str,
+    caller: &Principal,
+    bytes: &[u8],
+) -> Result<Vec<u8>, &'static str> {
+    const NOT_A_MESSAGE: &str = "A message must be a JSON object with an object `params`.";
+    let text = std::str::from_utf8(bytes)
+        .map_err(|_| NOT_A_MESSAGE)?
+        .trim();
+    let mut body: serde_json::Value = serde_json::from_str(text).map_err(|_| NOT_A_MESSAGE)?;
+    let params = body
+        .get_mut("params")
+        .and_then(|params| params.as_object_mut())
+        .ok_or(NOT_A_MESSAGE)?;
+    crate::session_chat_send::sender_mark::mark_relayed_send(caller, params);
+    if let Principal::Session {
+        project_id,
+        session_id,
+        ..
+    } = caller
+    {
+        params.remove("via");
+        crate::session_chat_send::sender_mark::sign_agent_message(
+            paths,
+            server_id_here,
+            project_id,
+            session_id,
+            params,
+        );
+    }
+    serde_json::to_vec(&body).map_err(|_| NOT_A_MESSAGE)
 }
 
 pub(crate) fn refusal(

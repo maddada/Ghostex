@@ -244,3 +244,44 @@ fn an_off_switch_is_named_on_the_computer_it_belongs_to() {
     assert_eq!(find("S4k").unwrap().off_by, None);
     registry::reset_for_tests();
 }
+
+/// A message an agent relays to another computer is signed and never carries the user's mark,
+/// however its body is wrapped; a body the relay cannot read as a message is refused, not passed
+/// on (Fable's review of 809e881f4).
+#[test]
+fn a_relayed_message_body_is_read_as_the_receiver_reads_it_or_refused() {
+    use crate::security::{Principal, SessionRole};
+    let temp = tempfile::tempdir().unwrap();
+    let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
+    let agent = Principal::Session {
+        project_id: "P1".into(),
+        session_id: "G1".into(),
+        role: SessionRole::Agent,
+    };
+    // A form feed, NBSP and NEL around the body: the receiver trims them, so the relay does too.
+    let wrapped = "\u{c}\u{a0}\u{85}{\"params\":{\"projectId\":\"P2\",\"sessionId\":\"G2\",\"text\":\"see #M1\",\"userSend\":true}}\u{b}";
+    let marked = relay::marked_message_body(&paths, "S1", &agent, wrapped.as_bytes())
+        .expect("the receiver would read it, so the relay reads it");
+    let body: serde_json::Value = serde_json::from_slice(&marked).unwrap();
+    assert!(body["params"].get("userSend").is_none());
+    // The user's own caller's message leaves marked as theirs.
+    let user = relay::marked_message_body(
+        &paths,
+        "S1",
+        &Principal::LocalAgent,
+        b"{\"params\":{\"text\":\"see #M1\"}}",
+    )
+    .unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&user).unwrap();
+    assert_eq!(body["params"]["userSend"], true);
+    // Anything that is not an object with object params is refused.
+    for refused in [
+        &b"not json"[..],
+        b"[1]",
+        b"{\"params\":\"x\"}",
+        b"{}",
+        b"\xff",
+    ] {
+        assert!(relay::marked_message_body(&paths, "S1", &agent, refused).is_err());
+    }
+}
