@@ -378,29 +378,56 @@ impl<'a> DomainRepository<'a> {
     pub fn relocate_project_moving_sessions(
         &self,
         params: &Map<String, Value>,
-    ) -> DomainResult<Value> {
+    ) -> DomainResult<RelocatedProject> {
+        // One transaction for the project and its sessions, so a failure leaves the old folder
+        // everywhere and a retry starts from the same state; a caller already inside one owns it.
+        if !self.db.is_autocommit() {
+            return self.relocate_project_moving_sessions_in_transaction(params);
+        }
+        let transaction =
+            rusqlite::Transaction::new_unchecked(self.db, rusqlite::TransactionBehavior::Immediate)
+                .map_err(sql_error)?;
+        let relocated = DomainRepository::new(&transaction, self.server_id.as_str())
+            .relocate_project_moving_sessions_in_transaction(params)?;
+        transaction.commit().map_err(sql_error)?;
+        Ok(relocated)
+    }
+
+    fn relocate_project_moving_sessions_in_transaction(
+        &self,
+        params: &Map<String, Value>,
+    ) -> DomainResult<RelocatedProject> {
         let project_id = read_unvalidated_project_lookup_id(params);
         let old_path = self
             .get_project_without_session_history(&project_id)?
             .and_then(|project| read_optional_text(project.get("path")));
         let project = self.relocate_project(params)?;
-        let (Some(old_path), Some(new_path)) = (old_path, read_optional_text(project.get("path")))
+        let mut relocated = RelocatedProject {
+            project,
+            moved_session_ids: Vec::new(),
+        };
+        let (Some(old_path), Some(new_path)) =
+            (old_path, read_optional_text(relocated.project.get("path")))
         else {
-            return Ok(project);
+            return Ok(relocated);
         };
         if old_path == new_path {
-            return Ok(project);
+            return Ok(relocated);
         }
+        let old_folder = ghostex_paths::folder_below::MissingFolderRoot::new(&old_path);
         let moved_at = crate::domain::now_iso();
         for session in self.list_sessions(Some(&project_id))? {
             let Some(update) =
-                plan_relocated_project_session_move(&session, &old_path, &new_path, &moved_at)
+                plan_relocated_project_session_move(&session, &old_folder, &new_path, &moved_at)
             else {
                 continue;
             };
             self.update_session(&update)?;
+            if let Some(session_id) = read_optional_text(session.get("sessionId")) {
+                relocated.moved_session_ids.push(session_id);
+            }
         }
-        Ok(project)
+        Ok(relocated)
     }
 
     pub fn list_projects(&self) -> DomainResult<Vec<Value>> {
@@ -805,6 +832,13 @@ impl<'a> DomainRepository<'a> {
     }
 }
 
+/// `relocate_project_moving_sessions`' answer: the project, and the sessions that moved with it
+/// (the route publishes a delta for each, so every client sees their new folder).
+pub struct RelocatedProject {
+    pub project: Value,
+    pub moved_session_ids: Vec<String>,
+}
+
 /// Runtime-settings key a session gets when it moved with its project's located folder
 /// (`relocate_project_moving_sessions`): the folder it left and when.
 pub const RELOCATED_PROJECT_SESSION_RUNTIME_KEY: &str = "relocatedProjectSession";
@@ -814,21 +848,24 @@ pub const RELOCATED_PROJECT_SESSION_RUNTIME_KEY: &str = "relocatedProjectSession
 /// elsewhere.
 fn plan_relocated_project_session_move(
     session: &Value,
-    old_path: &str,
+    old_folder: &ghostex_paths::folder_below::MissingFolderRoot,
     new_path: &str,
     moved_at: &str,
 ) -> Option<Map<String, Value>> {
     let cwd = read_optional_text(session.get("cwd"))?;
-    let cwd_path = std::path::Path::new(&cwd);
-    if cwd_path.is_dir() {
+    if std::path::Path::new(&cwd).is_dir() {
         return None;
     }
-    let below = cwd_path.strip_prefix(old_path).ok()?;
-    let moved = std::path::Path::new(new_path).join(below);
-    let moved_cwd = if below.as_os_str().is_empty() {
-        new_path.to_string()
-    } else if moved.is_dir() {
-        moved.to_string_lossy().into_owned()
+    let below = old_folder.parts_below(&cwd)?;
+    let windows = cfg!(windows) || ghostex_paths::folder_below::is_windows_path(new_path);
+    let separator = if windows { "\\" } else { "/" };
+    let moved = format!(
+        "{}{separator}{}",
+        new_path.trim_end_matches(|c| c == '/' || (windows && c == '\\')),
+        below.join(separator)
+    );
+    let moved_cwd = if !below.is_empty() && std::path::Path::new(&moved).is_dir() {
+        moved
     } else {
         new_path.to_string()
     };
