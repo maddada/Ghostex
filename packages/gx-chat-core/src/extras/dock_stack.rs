@@ -78,15 +78,43 @@ fn held_body(entry: &Value) -> String {
     parts.join("\n\n")
 }
 
-/// What a held message says, for its row's block: its words, or the forms it answers.
+/// What a held message says, for its row's block: its words, then each form's answers ("Answers to
+/// <title>:" and every "question: answer"), so the owner reads all that Send delivers on the row
+/// itself (security review of the dock rows, T2).
 fn held_words(entry: &Value) -> String {
+    let mut parts: Vec<String> = Vec::new();
     let words = text(entry, "text").trim();
     if !words.is_empty() {
-        return words.to_string();
+        parts.push(words.to_string());
     }
-    match text(&entry["answers"], "title") {
-        "" => "(a picture)".to_string(),
-        title => format!("Answers to {title}"),
+    let answers = entry["answers"]
+        .is_object()
+        .then_some(&entry["answers"])
+        .into_iter()
+        .chain(entry["extraAnswers"].as_array().into_iter().flatten());
+    for card in answers.filter(|card| card.is_object()) {
+        let mut lines = vec![format!("Answers to {}:", text(card, "title"))];
+        for row in card["rows"].as_array().into_iter().flatten() {
+            let value = if row["skipped"] == true {
+                "Skipped".to_string()
+            } else {
+                text(row, "value").to_string()
+            };
+            let mut line = match text(row, "label") {
+                "" => value,
+                label => format!("{label}: {value}"),
+            };
+            if let Some(note) = row["note"].as_str().filter(|note| !note.trim().is_empty()) {
+                line.push_str(&format!(" (note: {note})"));
+            }
+            lines.push(line);
+        }
+        parts.push(lines.join("\n"));
+    }
+    if parts.is_empty() {
+        "(a picture)".to_string()
+    } else {
+        parts.join("\n\n")
     }
 }
 
