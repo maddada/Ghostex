@@ -374,6 +374,9 @@ fn is_command_line(code: &str) -> bool {
     if COMMAND_WORDS.contains(first) {
         return words.len() >= 2 && command_arguments_fit(first, &words[1..]);
     }
+    if is_unknown_program_line(first, &words[1..]) {
+        return true;
+    }
     let steps: Vec<&str> = code.split("&&").map(str::trim).collect();
     steps.len() >= 2
         && words.len() >= 2
@@ -383,6 +386,52 @@ fn is_command_line(code: &str) -> bool {
                 .find(|word| !is_assignment(word))
                 .is_some_and(|name| name.len() >= 2 && is_command_name(name))
         })
+}
+
+/// A program the list above does not know, written the way a command line is: a command name
+/// followed by a flag (`-config`, `--help`) or a path from the root, home or here (`/etc/x`,
+/// `~/.config/x`, `./x`), or a path to an executable (`~/.local/opt/hub/cli-proxy-api`,
+/// `./run.sh`) with any argument. Plain words, one name, a path alone and prose stay code.
+///
+/// CDXC:SessionChat 2026-11-19 DECISION:
+/// User, of an ask whose `cli-proxy-api -config ~/.config/cliproxyapi/config.yaml -claude-login`
+/// had no Copy or Paste in terminal: "why dont we show the copy and the send to terminal buttons on
+/// these commands here". A command line is recognised by its shape as well as by the known
+/// programs, wherever the chat offers command buttons (replies, asks, the floating ask panel).
+fn is_unknown_program_line(first: &str, arguments: &[&str]) -> bool {
+    if arguments.is_empty() {
+        return false;
+    }
+    let is_flag = |word: &&str| {
+        let name = word.trim_start_matches('-');
+        word.starts_with('-')
+            && word.len() - name.len() <= 2
+            && name.as_bytes().first().is_some_and(u8::is_ascii_alphabetic)
+    };
+    let is_rooted_path = |word: &&str| {
+        let word = word.trim_matches(['"', '\'']);
+        ["/", "~/", "./", "../"]
+            .iter()
+            .any(|start| word.starts_with(start) && word.len() > start.len())
+            || word == "~"
+    };
+    if ["/", "~/", "./", "../"]
+        .iter()
+        .any(|start| first.starts_with(start))
+    {
+        // A path to an executable: its last part a command name, a script's extension at most.
+        let name = first.rsplit('/').next().unwrap_or_default();
+        let script = name
+            .rsplit_once('.')
+            .is_none_or(|(_, extension)| {
+                matches!(extension, "sh" | "bash" | "zsh" | "py" | "js" | "mjs" | "rb" | "pl")
+            });
+        return name.len() >= 2 && is_command_name(name) && script;
+    }
+    first.len() >= 2
+        && is_command_name(first)
+        && !first.contains('/')
+        && arguments.iter().any(|word| is_flag(word) || is_rooted_path(word))
 }
 
 /// Arguments that keep an English phrase written as code (`source code`, `open questions`) from
@@ -433,6 +482,19 @@ mod tests {
             ("source ~/.zshrc", "source ~/.zshrc"),
             ("export PATH=$HOME/bin:$PATH", "export PATH=$HOME/bin:$PATH"),
             ("claude /login", "claude /login"),
+            // Programs it does not know, by their command line's shape.
+            (
+                "cli-proxy-api -config ~/.config/cliproxyapi/config.yaml -claude-login",
+                "cli-proxy-api -config ~/.config/cliproxyapi/config.yaml -claude-login",
+            ),
+            ("mytool --verbose", "mytool --verbose"),
+            ("hub-agent ~/hub.yaml", "hub-agent ~/hub.yaml"),
+            (
+                "~/.local/opt/cliproxyapi/8.0.78/cli-proxy-api -config ~/c.yaml",
+                "~/.local/opt/cliproxyapi/8.0.78/cli-proxy-api -config ~/c.yaml",
+            ),
+            ("./run.sh build", "./run.sh build"),
+            ("/usr/local/bin/hub serve", "/usr/local/bin/hub serve"),
         ] {
             assert_eq!(inline_command(span).as_deref(), Some(command), "{span}");
         }
@@ -462,6 +524,18 @@ mod tests {
             "! ",
             "a && b",
             "Foo && Bar",
+            // A program it does not know needs a command line's shape: a path alone, plain
+            // words, a name and a number, a relative path or a file are not one.
+            "~/.local/opt/cliproxyapi/8.0.78/cli-proxy-api",
+            "./run.sh",
+            "mytool build",
+            "fix the bug",
+            "count -1",
+            "a - b",
+            "see src/main.rs",
+            "src/main.rs --help",
+            "~/notes/todo.md later",
+            "Option -x",
         ] {
             assert_eq!(inline_command(span), None, "{span}");
         }
