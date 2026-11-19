@@ -338,17 +338,29 @@ mod windows {
         }
     }
 
+    /// CDXC:PlatformSupport 2026-11-19 WHY:
+    /// Moving a window leaves it in its band, as the macOS move does. This always passed `HWND_TOPMOST`, so the floating page window, once a drag ended where it had to be put back (`frame::settle`), and an unpinned session window resized by Expand or Shrink became topmost: they floated over other apps, and the page window's ⋯ menu, a non-topmost pop-up it owns, stacked behind it. A floating capture window is topmost from `prepare` and is still raised to the top of that band here.
     pub(super) fn set_frame(native: usize, frame: Bounds<Pixels>, scale: f32) {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            GWL_EXSTYLE, GetWindowLongPtrW, SWP_NOZORDER, WS_EX_TOPMOST,
+        };
         let device = |value: Pixels| (f32::from(value) * scale).round() as i32;
+        let hwnd = native as HWND;
+        let topmost = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) } as u32 & WS_EX_TOPMOST != 0;
+        let (after, order) = if topmost {
+            (HWND_TOPMOST, 0)
+        } else {
+            (std::ptr::null_mut(), SWP_NOZORDER)
+        };
         unsafe {
             SetWindowPos(
-                native as HWND,
-                HWND_TOPMOST,
+                hwnd,
+                after,
                 device(frame.origin.x),
                 device(frame.origin.y),
                 device(frame.size.width),
                 device(frame.size.height),
-                SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                SWP_NOACTIVATE | SWP_SHOWWINDOW | order,
             );
         }
     }

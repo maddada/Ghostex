@@ -68,10 +68,14 @@ pub(crate) fn own_gpui_popup_window(window: &mut Window, owner: *mut std::ffi::c
     let RawWindowHandle::Win32(handle) = handle.as_raw() else {
         return;
     };
-    windows_chrome::own_popup_window(
-        handle.hwnd.get() as windows_chrome::Hwnd,
-        owner as windows_chrome::Hwnd,
-    );
+    own_popup_hwnd(handle.hwnd.get() as *mut std::ffi::c_void, owner);
+}
+
+/// `own_gpui_popup_window` for a pop-up known by its HWND: a reused frosted host shown again over
+/// an owner whose band may have changed while it was hidden (`frosted_host.rs`).
+#[cfg(target_os = "windows")]
+pub(crate) fn own_popup_hwnd(popup: *mut std::ffi::c_void, owner: *mut std::ffi::c_void) {
+    windows_chrome::own_popup_window(popup as windows_chrome::Hwnd, owner as windows_chrome::Hwnd);
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -111,10 +115,13 @@ mod windows_chrome {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
+    /// CDXC:PlatformSupport 2026-11-19 WHY:
+    /// An owned pop-up sits in its owner's band. Windows keeps an owned window above its owner only inside one band, so a non-topmost pop-up owned by a topmost window (a pinned session window, a capture window, or the floating page window once a move had made it topmost) stacked behind its owner: the page window's ⋯ menu opened hidden behind the page and the press seemed to do nothing on Windows. Under a topmost owner the pop-up is topmost too, at the top of that band, which is right over the owner.
     pub(super) fn own_popup_window(popup: Hwnd, owner: Hwnd) {
         use windows_sys::Win32::UI::WindowsAndMessaging::{
             GW_HWNDPREV, GW_OWNER, GWL_EXSTYLE, GWLP_HWNDPARENT, GetWindow, HWND_NOTOPMOST,
-            SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE, SetWindowPos, WS_EX_TOPMOST,
+            HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE, SetWindowPos,
+            WS_EX_TOPMOST,
         };
         if owner.is_null() || popup == owner {
             return;
@@ -122,8 +129,17 @@ mod windows_chrome {
         let topmost = |hwnd: Hwnd| {
             (unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) } as u32 & WS_EX_TOPMOST) != 0
         };
+        let owner_topmost = topmost(owner);
         let owned = unsafe { GetWindow(popup, GW_OWNER) } == owner;
-        if owned && !topmost(popup) {
+        if owned && topmost(popup) == owner_topmost {
+            return;
+        }
+        let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER;
+        if owner_topmost {
+            unsafe {
+                SetWindowLongPtrW(popup, GWLP_HWNDPARENT, owner as isize);
+                SetWindowPos(popup, HWND_TOPMOST, 0, 0, 0, 0, flags);
+            }
             return;
         }
         // The window just above the owner, read before the pop-up moves, so the pop-up can be
@@ -131,7 +147,6 @@ mod windows_chrome {
         // is topmost (or there is none), the owner leads the normal band and the top of that band,
         // where `HWND_NOTOPMOST` puts the pop-up, is already right over it.
         let above_owner = unsafe { GetWindow(owner, GW_HWNDPREV) };
-        let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER;
         unsafe {
             SetWindowLongPtrW(popup, GWLP_HWNDPARENT, owner as isize);
             SetWindowPos(popup, HWND_NOTOPMOST, 0, 0, 0, 0, flags);
