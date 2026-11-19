@@ -1,5 +1,5 @@
 //! The header's Work button: the focused chat's Work panel (a coordinator's work items, or an
-//! ordinary session's own while the Work items extension is on), with how many wait on the user.
+//! ordinary session's own while the Work items extension is on).
 //! It sits beside Session details; the two share the spot beside the chat, one at a time.
 //!
 //! CDXC:Coordinators 2026-11-18 SEE-ALSO: native_chat/work_topic.rs (the user's decision: layout B,
@@ -17,12 +17,10 @@ use crate::app::helpers::*;
 use crate::*;
 
 /// The Work button's look, shared by the main header and a popup window's header: the board
-/// icon, "Work", and the pink count of what waits on the user.
-pub(crate) fn work_button(
-    id: &'static str,
-    open: bool,
-    waiting: usize,
-) -> gpui::Stateful<gpui::Div> {
+/// icon and "Work". No count badge: what waits on the user shows in the dock (CDXC:Coordinators
+/// 2026-11-19, the user: "I don't want to see 6 here at the top. I think it's useless because I
+/// can already see it in the dock").
+pub(crate) fn work_button(id: &'static str, open: bool) -> gpui::Stateful<gpui::Div> {
     let text = titlebar_active_text_color();
     div()
         .id(id)
@@ -45,20 +43,6 @@ pub(crate) fn work_button(
             text,
         ))
         .child(div().text_size(px(12.0)).text_color(text).child("Work"))
-        .when(waiting > 0, |this| {
-            this.child(
-                div()
-                    .px(px(5.0))
-                    .h(px(16.0))
-                    .flex()
-                    .items_center()
-                    .rounded(px(8.0))
-                    .bg(gpui::rgb(0xf472b6))
-                    .text_size(px(10.5))
-                    .text_color(gpui::rgb(0x1a1a1a))
-                    .child(waiting.to_string()),
-            )
-        })
         .tooltip(move |window, cx| {
             gpui_component::tooltip::Tooltip::new(if open {
                 "Hide work items"
@@ -75,16 +59,16 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
         let chat = self.session_details_target_chat()?;
-        let (open, waiting) = {
+        let open = {
             let chat = chat.read(cx);
             if !chat.work_panel_available() {
                 return None;
             }
-            (chat.work_panel_shown(), chat.work_panel_waiting())
+            chat.work_panel_shown()
         };
         let bounds = self.session_details.work_button_bounds.clone();
         Some(
-            work_button("ghostex-gpui-workarea-header-work", open, waiting)
+            work_button("ghostex-gpui-workarea-header-work", open)
                 .on_mouse_down(
                     MouseButton::Right,
                     super::header_pins::header_slot_right_click(
@@ -121,17 +105,17 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
         let chat = self.native_chat_views.get(&session_id)?;
-        let (open, waiting) = {
+        let open = {
             let chat = chat.read(cx);
             if !chat.work_panel_available() {
                 return None;
             }
-            (chat.work_panel_shown(), chat.work_panel_waiting())
+            chat.work_panel_shown()
         };
         let bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>> = Default::default();
         let anchor = bounds.clone();
         Some(
-            work_button("session-popup-work", open, waiting)
+            work_button("session-popup-work", open)
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener({
