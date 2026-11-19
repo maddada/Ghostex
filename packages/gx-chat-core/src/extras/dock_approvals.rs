@@ -147,6 +147,19 @@ pub(crate) fn block_preview(text: &str) -> (String, usize) {
         .unwrap_or_else(|| (text.to_string(), 0))
 }
 
+/// The line count of Codex's own cut of a long command (`[… 57 lines]`, also with `...`), or `None`.
+fn codex_cut_lines(line: &str) -> Option<u64> {
+    let inner = line.trim().strip_prefix('[')?.strip_suffix(']')?;
+    let inner = inner
+        .strip_prefix('\u{2026}')
+        .or_else(|| inner.strip_prefix("..."))?
+        .trim();
+    let count = inner
+        .strip_suffix(" lines")
+        .or_else(|| inner.strip_suffix(" line"))?;
+    count.trim().parse().ok()
+}
+
 /// How many lines of the command its row shows before "Show N more lines".
 const COMMAND_PREVIEW_LINES: usize = 4;
 
@@ -206,8 +219,27 @@ fn open_row(state: &ChatState) -> Option<Value> {
         ),
     };
     // The whole command, every line: the row shows its first lines and "Show N more lines".
-    let command = code.trim_end().trim_start_matches('\n').to_string();
-    let (preview, more) = block_preview(&command);
+    let mut command = code.trim_end().trim_start_matches('\n').to_string();
+    // Codex's own cut of a command taller than its screen ("[… 57 lines]") is not part of it: it
+    // says how much is only in the terminal.
+    let mut codex_cut = String::new();
+    if let Some((rest, last)) = command.rsplit_once('\n') {
+        if let Some(count) = codex_cut_lines(last) {
+            codex_cut = format!("{count} more lines in the terminal");
+            command = rest.trim_end().to_string();
+        }
+    }
+    // Text in the command that reads like another approval's heading (a script can print one):
+    // the row shows all of it, with a caution, so nothing hides behind "Show N more lines".
+    let second_heading = command
+        .lines()
+        .skip(1)
+        .any(|line| codex_approval_heading(line.trim()));
+    let (preview, more) = if second_heading {
+        (command.clone(), 0)
+    } else {
+        block_preview(&command)
+    };
     // Lines gxserver itself left out of a long command ("12 more lines in the terminal").
     let cut = card["notice"]
         .get("permissionRequest")
@@ -218,11 +250,19 @@ fn open_row(state: &ChatState) -> Option<Value> {
                 .and_then(Value::as_str)
                 .map(str::to_string)
         })
-        .unwrap_or_default();
+        .unwrap_or(codex_cut);
     // Why the agent flagged it ("Dangerous rm operation …"), on the row itself.
+    let caution = if second_heading {
+        "The command's text holds another approval heading: read all of it before answering. "
+    } else {
+        ""
+    };
     let note = json!({
-        "text": text(&reason, "text").trim(),
-        "tone": match text(&reason, "tone") { "" => "warning", tone => tone },
+        "text": format!("{caution}{}", text(&reason, "text").trim()).trim(),
+        "tone": match (second_heading, text(&reason, "tone")) {
+            (true, _) | (false, "") => "warning",
+            (false, tone) => tone,
+        },
     });
     // The panel a click on the row opens: the command, why it asks, where from, then the full words
     // of an answer whose button says less ("Yes, proceed" as Yes).
