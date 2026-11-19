@@ -330,6 +330,8 @@ pub(crate) fn chat_state(runtime: &Value) -> Option<Value> {
         "blockedBy": recovery["blockedBy"],
         "reason": recovery["reason"],
         "errorText": recovery["errorText"],
+        // A session On a CLIProxyAPI hub: the card names the hub, not the internet.
+        "hub": runtime["cliproxyHubId"].is_string(),
     }))
 }
 

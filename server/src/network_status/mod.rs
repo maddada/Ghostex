@@ -162,6 +162,19 @@ pub fn session_reachable_now(session: &Value, ttl: Duration) -> bool {
 /// still comes first, as for every agent.
 pub fn session_target(session: &Value) -> Option<String> {
     let agent = crate::session_chat_follower::session_chat_agent_for_session(session)?;
+    // A Claude On a CLIProxyAPI hub talks only to the hub (accounts/hub/launch.rs).
+    if agent == "claude" && proxy_target().is_none() {
+        if let Some(target) = session
+            .pointer("/runtimeSettings/cliproxyHubId")
+            .and_then(Value::as_str)
+            .and_then(|hub| {
+                crate::accounts::hub::launch::hub_url(&crate::paths::get_gxserver_paths(None), hub)
+            })
+            .and_then(|url| url_target(&url))
+        {
+            return Some(target);
+        }
+    }
     if agent == "codex" && proxy_target().is_none() {
         let home = crate::accounts::session_identity::session_home(
             session,

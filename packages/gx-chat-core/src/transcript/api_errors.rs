@@ -281,17 +281,29 @@ pub fn api_error_card(state: &ChatState, context: &ChatContext) -> Value {
         }
     };
     let (kind, title) = classify_api_error(&detail);
-    let (status, actions) = retry_status(retry, now_ms, context);
+    // A session On a CLIProxyAPI hub reaches only the hub (server/src/accounts/api_errors.rs `hub`).
+    let on_hub = retry.is_some_and(|retry| retry["hub"] == true)
+        && matches!(kind, "offline" | "refused" | "lost");
+    let title = if on_hub { "Can't reach the hub" } else { title };
+    let (mut status, actions) = retry_status(retry, now_ms, context);
+    if on_hub && retry.is_some_and(|retry| retry["waitingForNetwork"] == true) {
+        status["label"] = json!("Waiting for the hub\u{2026}");
+    }
     // Amber while Ghostex is still on it, red once nothing more will happen by itself.
     let tone = match status["tone"].as_str() {
         Some("waiting" | "busy" | "done") => "warning",
         _ => "error",
     };
     // Only while a try is still coming: a stale "Retried at" (`done`) is amber too, but nothing is retrying.
-    let body = if matches!(status["tone"].as_str(), Some("waiting" | "busy")) {
-        format!("{} Ghostex keeps retrying.", kind_body(kind))
+    let said = if on_hub {
+        "Check that the CLIProxyAPI hub is running and that this computer can reach it."
     } else {
-        kind_body(kind).to_string()
+        kind_body(kind)
+    };
+    let body = if matches!(status["tone"].as_str(), Some("waiting" | "busy")) {
+        format!("{said} Ghostex keeps retrying.")
+    } else {
+        said.to_string()
     };
     json!({
         "messageId": message_id,

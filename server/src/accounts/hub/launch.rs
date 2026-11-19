@@ -355,6 +355,26 @@ pub(crate) fn hub_named(paths: &GxserverPaths, wanted: &str) -> Option<String> {
     }
 }
 
+/// Whether hub `hub_id` answers with its client key now, before a session starts on it: a hub that
+/// is down or refuses the key would only fail the session's first message.
+pub(crate) fn check_reachable(paths: &GxserverPaths, hub_id: &str) -> Result<(), DomainStateError> {
+    let Some(hub) = super::store::find(paths, hub_id) else {
+        return Ok(());
+    };
+    let key =
+        super::store::open_key(paths, &hub.client_key).map_err(DomainStateError::bad_request)?;
+    super::client::check_client_key(&hub.url, &key).map_err(|error| {
+        DomainStateError::bad_request(format!(
+            "The session didn't start on the hub. {error} Or start it on another account."
+        ))
+    })
+}
+
+/// The address of hub `hub_id`, while it is saved.
+pub(crate) fn hub_url(paths: &GxserverPaths, hub_id: &str) -> Option<String> {
+    super::store::find(paths, hub_id).map(|hub| hub.url)
+}
+
 /// The hub id a launcher's picked account names (`cliproxy:<hub id>`), if it names one.
 pub(crate) fn picked_hub(runtime: &Map<String, Value>) -> Option<String> {
     runtime

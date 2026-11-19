@@ -247,6 +247,11 @@ pub(crate) fn create_agent_session_params_for_project(
             let base = configured_command
                 .clone()
                 .or_else(|| default_agent_command(&agent_id).map(str::to_string));
+            // CDXC:AgentProviders 2026-11-19 WHY: a hub that is down, or refuses the key, is said at the start (security review of the hub work), not as a failed first message the user has to decode.
+            crate::accounts::hub::launch::check_reachable(
+                &crate::paths::get_gxserver_paths(None),
+                &hub_id,
+            )?;
             Some(crate::accounts::hub::launch::apply(
                 &crate::paths::get_gxserver_paths(None),
                 provider,
