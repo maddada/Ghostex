@@ -137,9 +137,6 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
         if let Some(workspace_id) = crate::workspaces::stored_project_workspace_id(project) {
             output.insert("workspaceId".to_string(), json!(workspace_id));
         }
-        if crate::workspaces::project_in_every_workspace(project) {
-            output.insert("everyWorkspace".to_string(), Value::Bool(true));
-        }
     }
     Value::Object(output)
 }

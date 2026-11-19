@@ -17,23 +17,15 @@ pub(crate) fn stored_project_workspace_id(project: &Value) -> Option<&str> {
         .filter(|id| !id.is_empty())
 }
 
-/// Whether a project shows in every workspace: the Ghostex config folder's project, where every
-/// Help chat (and the Cloud Boxes setup chat) lives, until the user moves it to a workspace.
+/// Set in the config folder's project's `launchSettings` once the user moves it to a workspace:
+/// from then on it stays there instead of following the home project.
+const WORKSPACE_MOVED_KEY: &str = "workspaceMoved";
+
+/// Whether `project` is rooted at the Ghostex config folder: Ask Ghostex AI's project, where every
+/// Help chat (and the Cloud Boxes setup chat) lives.
 ///
 /// CDXC:Workspaces 2026-11-20 DECISION:
-/// User: "it doesn't matter if I move it to Personal or Work, it's always shown in the Work workspace" (the config folder's project, holding Chief of Staff and a Grok Bot chat); Move to workspace must stick for it. Supersedes "always in every workspace" (2026-10-09, kept below): it shows in every workspace only while it has no stored `workspaceId`, and Move to workspace stores one even for the default workspace (`place_project_in_workspace`). Help opened from another window still never moves it; once it has a workspace, a Help chat opens in the window showing that workspace (workspace_windows/session_routing.rs). It was shown in Work as a project of its own because Main Hub lifts its chats into the home project only in a window that shows the home (gx-core `lift_into_home`).
-///
-/// CDXC:Workspaces 2026-10-09 DECISION:
-/// User: the Help-chat project must not flip workspaces each time Help is opened from a different
-/// window; make it visible in every workspace. It is recognised by its folder (the Ghostex config
-/// folder the desktop roots it at), so no client has to mark it and installs that already have it
-/// need no migration; its own `workspaceId` still decides its Linear key and Claude account.
-pub(crate) fn project_in_every_workspace(project: &Value) -> bool {
-    is_config_folder_project(project) && stored_project_workspace_id(project).is_none()
-}
-
-/// Whether `project` is rooted at the Ghostex config folder (Ask Ghostex AI's project), wherever
-/// it is placed.
+/// User: "it doesn't matter if I move it to Personal or Work, it's always shown in the Work workspace" (this project, holding Chief of Staff and Help chats), then: it follows the home project's workspace unless the user moved it, so a Work window never draws it as "ghostex" and its chats stay under Main Hub where the home project lives. Supersedes "visible in every workspace" (2026-10-09): that drew it as a project of its own in every window whose workspace does not hold the home, because Main Hub lifts its chats only into a home it shows (gx-core `lift_into_home`). It is stored, not derived, like a worktree that follows its parent: a move of the home project moves it too (`move_project_to_workspace`), adding it places it with the home (`place_added_project`), and gxserver lines it up at start (`config_project_follows_home_at_startup`), so every client and older phones place it from its `workspaceId` alone. A Move to workspace of this project itself marks it (`workspaceMoved`) and it stays where it was put. Help opened from another window never moves it; its chat opens in the window showing its workspace (workspace_windows/session_routing.rs). It is recognised by its folder, so no client has to mark it.
 pub(crate) fn is_config_folder_project(project: &Value) -> bool {
     static CONFIG_DIR: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     let config_dir = CONFIG_DIR.get_or_init(|| {
@@ -88,10 +80,12 @@ pub(crate) fn project_workspace_id(
 /// Returns the updated project, or `None` when nothing changed. The Work-workspace default for
 /// Work mode it used to write is gone with the switch (CDXC:WorkMode 2026-10-24 in
 /// server/src/work_mode/project.rs); a stored `workMode` is left as it is.
+/// `moved_by_user` marks the config folder's project as placed by the user (`workspaceMoved`).
 pub(crate) fn place_project_in_workspace(
     repository: &DomainRepository<'_>,
     project: &Value,
     workspace_id: &str,
+    moved_by_user: bool,
 ) -> Result<Option<Value>, DomainStateError> {
     let project_id = project
         .get("projectId")
@@ -103,12 +97,13 @@ pub(crate) fn place_project_in_workspace(
         .cloned()
         .unwrap_or_default();
     let before = launch_settings.clone();
-    // The config folder's project keeps an explicit default id: without one it shows in every
-    // workspace (`project_in_every_workspace`), so a move to Personal would not stick.
-    if workspace_id == DEFAULT_WORKSPACE_ID && !is_config_folder_project(project) {
+    if workspace_id == DEFAULT_WORKSPACE_ID {
         launch_settings.remove("workspaceId");
     } else {
         launch_settings.insert("workspaceId".into(), json!(workspace_id));
+    }
+    if moved_by_user && is_config_folder_project(project) {
+        launch_settings.insert(WORKSPACE_MOVED_KEY.into(), json!(true));
     }
     if launch_settings == before {
         return Ok(None);
@@ -146,13 +141,75 @@ pub(crate) fn move_project_to_workspace(
             == Some(project_id)
     });
     for moving in std::iter::once(project).chain(worktrees) {
-        if place_project_in_workspace(repository, moving, workspace_id)?.is_some() {
+        if place_project_in_workspace(repository, moving, workspace_id, true)?.is_some() {
             if let Some(id) = moving.get("projectId").and_then(Value::as_str) {
                 changed.push(id.to_string());
             }
         }
     }
+    // The config folder's project follows the home project it was not moved away from.
+    if crate::chief::is_home_project(project) {
+        for id in config_project_follow_home(repository, workspaces)? {
+            if !changed.contains(&id) {
+                changed.push(id);
+            }
+        }
+    }
     Ok(changed)
+}
+
+/// Places the config folder's project (`is_config_folder_project`) in the home project's workspace
+/// (the default one while there is no home project), unless the user moved it there themselves
+/// (`workspaceMoved`). Returns its id when its row changed.
+pub(crate) fn config_project_follow_home(
+    repository: &DomainRepository<'_>,
+    workspaces: &Value,
+) -> Result<Vec<String>, DomainStateError> {
+    let projects = repository.list_projects_without_session_history()?;
+    let Some(config) = projects
+        .iter()
+        .find(|project| is_config_folder_project(project))
+    else {
+        return Ok(Vec::new());
+    };
+    let moved_by_user = config
+        .get("launchSettings")
+        .and_then(|settings| settings.get(WORKSPACE_MOVED_KEY))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if moved_by_user {
+        return Ok(Vec::new());
+    }
+    let workspace_id = projects
+        .iter()
+        .find(|project| crate::chief::is_home_project(project))
+        .map(|home| project_workspace_id(workspaces, home, &projects))
+        .unwrap_or_else(|| DEFAULT_WORKSPACE_ID.to_string());
+    if place_project_in_workspace(repository, config, &workspace_id, false)?.is_none() {
+        return Ok(Vec::new());
+    }
+    Ok(config
+        .get("projectId")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .into_iter()
+        .collect())
+}
+
+/// Lines the config folder's project up with the home project once at start, for a home that was
+/// added or moved while it could not follow (CDXC:Workspaces 2026-11-20 on
+/// `is_config_folder_project`). Runs before the first snapshot, so nothing is published.
+pub(crate) fn config_project_follows_home_at_startup(
+    paths: &crate::paths::GxserverPaths,
+    server_id: &str,
+) {
+    let Ok(db) = crate::storage::open_gxserver_database(paths) else {
+        return;
+    };
+    let repository = DomainRepository::new(&db, server_id);
+    if let Ok(workspaces) = read_sidebar_workspaces(&db) {
+        let _ = config_project_follow_home(&repository, &workspaces);
+    }
 }
 
 /// Re-places every project in a workspace (after it was deleted and its projects fell back to the
@@ -171,7 +228,7 @@ pub(crate) fn reapply_workspace_defaults(
         if project_workspace_id(workspaces, project, &projects) != workspace_id {
             continue;
         }
-        if place_project_in_workspace(repository, project, workspace_id)?.is_some() {
+        if place_project_in_workspace(repository, project, workspace_id, false)?.is_some() {
             if let Some(id) = project.get("projectId").and_then(Value::as_str) {
                 changed.push(id.to_string());
             }
@@ -198,6 +255,34 @@ pub(crate) fn place_added_project(
     if project_parent_id(&project).is_some() {
         return place_worktree_project(repository, db, project);
     }
+    // The config folder's project goes where the home project is, and follows a home added now.
+    let is_config = is_config_folder_project(&project);
+    if is_config || crate::chief::is_home_project(&project) {
+        let project = place_added_project_in_window(repository, db, project, params, is_config)?;
+        let workspaces = read_sidebar_workspaces(db)?;
+        let project_id = project.get("projectId").and_then(Value::as_str);
+        let changed = config_project_follow_home(repository, &workspaces)?;
+        return match project_id {
+            Some(id) if changed.iter().any(|changed| changed == id) => {
+                Ok(repository.get_project(id)?.unwrap_or(project))
+            }
+            _ => Ok(project),
+        };
+    }
+    place_added_project_in_window(repository, db, project, params, false)
+}
+
+/// The window's workspace part of `place_added_project`; `skip` leaves the project where it is.
+fn place_added_project_in_window(
+    repository: &DomainRepository<'_>,
+    db: &rusqlite::Connection,
+    project: Value,
+    params: &Map<String, Value>,
+    skip: bool,
+) -> Result<Value, DomainStateError> {
+    if skip {
+        return Ok(project);
+    }
     // With Workspaces off a window has no workspace to add to, so the project stays in the
     // default one.
     if !super::workspaces_feature_enabled() {
@@ -215,7 +300,7 @@ pub(crate) fn place_added_project(
     let Some(workspace_id) = find_workspace_id(&workspaces, reference) else {
         return Ok(project);
     };
-    Ok(place_project_in_workspace(repository, &project, &workspace_id)?.unwrap_or(project))
+    Ok(place_project_in_workspace(repository, &project, &workspace_id, false)?.unwrap_or(project))
 }
 
 fn project_parent_id(project: &Value) -> Option<&str> {
