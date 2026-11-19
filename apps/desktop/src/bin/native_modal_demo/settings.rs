@@ -33,6 +33,7 @@ mod settings_e;
 mod settings_f1;
 #[path = "settings_f2.rs"]
 mod settings_f2;
+mod settings_grok_bot;
 #[path = "settings_machines.rs"]
 mod settings_machines;
 mod settings_secrets;
@@ -283,6 +284,12 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                     cx.defer(move |cx| reply(result, cx));
                     return;
                 }
+                if settings_grok_bot::owns(&host_state)
+                    && let Some(result) = settings_grok_bot::rpc(&host_state, &path, &params)
+                {
+                    cx.defer(move |cx| reply(result, cx));
+                    return;
+                }
                 if settings_workspaces::owns(&host_state)
                     && let Some(result) = settings_workspaces::rpc(&host_state, &path, &params)
                 {
@@ -402,6 +409,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             .or_else(|| settings_sync::open_message(&state))
             .or_else(|| settings_cloud_boxes::open_message(&state))
             .or_else(|| settings_secrets::open_message(&state))
+            .or_else(|| settings_grok_bot::open_message(&state))
             .or_else(|| settings_voice::open_message(&state))
             .or_else(|| settings_f2::open_message(&state))
             .or_else(|| settings_e::open_message(&state))
@@ -430,6 +438,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     } else if settings_workspaces::owns(&state)
         || settings_machines::owns(&state)
         || settings_secrets::owns(&state)
+        || settings_grok_bot::owns(&state)
         || settings_voice::owns(&state)
     {
         true

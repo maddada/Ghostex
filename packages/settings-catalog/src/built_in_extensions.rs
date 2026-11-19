@@ -51,6 +51,11 @@ pub const CLAUDE_WEB: &str = "claudeWeb";
 /// Grok (grok.com in the same place as Claude, opened from its own header button, with a bar to
 /// switch between Grok logins, each with its own browser profile). Off by default.
 pub const GROK_WEB: &str = "grokWeb";
+/// Grok Bot remote (Settings > Grok Bot: a "Ghostex" bot in xAI's Grok Bot drives this computer's
+/// agents, and they send it notes through its webhook). On by default; its page stays while it is
+/// off, to turn it back on. gxserver refuses connect, test and notes while it is off
+/// (server/src/grokbot/feature.rs).
+pub const GROK_BOT: &str = "grokBot";
 /// Connectors (Settings > Connectors, the `ghostex connectors` verbs and routes). Experimental, off
 /// by default.
 pub const CONNECTORS: &str = "connectors";

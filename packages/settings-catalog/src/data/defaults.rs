@@ -161,6 +161,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("claudeWebHidden", J::Bool(true)),
     // CDXC:Extensions 2026-11-09 DECISION: Grok is off by default, like Claude (official_extensions.rs).
     ("grokWebHidden", J::Bool(true)),
+    // CDXC:GrokBot 2026-11-19 DECISION: Grok Bot remote is a built-in extension, on by default (official_extensions.rs).
+    ("grokBotHidden", J::Bool(false)),
     // CDXC:AgentProviders 2026-11-18 DECISION: CLIProxyAPI is off by default (official_extensions.rs).
     ("cliProxyApiEnabled", J::Bool(false)),
     // CDXC:Extensions 2026-10-19 DECISION: Connectors, OS Integration and Debugging are on by default; their old gates still apply (official_extensions.rs).

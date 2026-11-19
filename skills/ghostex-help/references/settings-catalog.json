@@ -10978,6 +10978,73 @@
       "agentWritable": true
     },
     {
+      "key": "grokBotHidden",
+      "title": "Grok Bot remote",
+      "subtitle": "Control your agents from a \"Ghostex\" bot in xAI's Grok Bot app on your phone, and get their notes there. Turn it off to stop sending anything to Grok Bot; the saved connection is kept. On by default.",
+      "tab": "grokBot",
+      "tabTitle": "Grok Bot",
+      "section": "switch",
+      "sectionTitle": "Grok Bot remote",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "grokBotDesktopApp",
+      "title": "Grok Bot desktop app",
+      "subtitle": "Install the Grok Bot desktop app from x.ai/bot, sign in and leave it running: the bot runs Ghostex's commands on this computer through it. Ghostex ticks this off when it finds the app.",
+      "tab": "grokBot",
+      "tabTitle": "Grok Bot",
+      "section": "setup",
+      "sectionTitle": "Set up",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "grokBotMakeBot",
+      "title": "Make the Ghostex bot",
+      "subtitle": "Make a bot named Ghostex in Grok Bot and paste the instructions (Copy instructions). Send it any message; when it asks to run ghostex grokbot brief, choose Allow once. Ghostex ticks this off when the bot reaches this computer.",
+      "tab": "grokBot",
+      "tabTitle": "Grok Bot",
+      "section": "setup",
+      "sectionTitle": "Set up",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "grokBotWebhook",
+      "title": "Paste the webhook",
+      "subtitle": "The bot makes a routine called Ghostex reports in its first reply. Open it in the Grok Bot desktop app and paste its POST to address and its key here. Ghostex keeps the key in an owner-only file and never shows it again.",
+      "tab": "grokBot",
+      "tabTitle": "Grok Bot",
+      "section": "setup",
+      "sectionTitle": "Set up",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "grokBotTestNote",
+      "title": "Check the test note",
+      "subtitle": "Ghostex sends the bot a test note; say whether it showed up in the bot's chat.",
+      "tab": "grokBot",
+      "tabTitle": "Grok Bot",
+      "section": "setup",
+      "sectionTitle": "Set up",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "grokBotConnection",
+      "title": "Connected",
+      "subtitle": "How many notes your agents sent to Grok Bot and when the last one went, with Send a test note, Change (a new webhook address and key), Copy instructions and Disconnect.",
+      "tab": "grokBot",
+      "tabTitle": "Grok Bot",
+      "section": "connection",
+      "sectionTitle": "Connection",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "cloudBoxesInstabox",
       "title": "Instabox",
       "subtitle": "Connect your Instabox.sh account in the browser, or paste an API key. Boxes run on your account and bill to it.",

@@ -1,10 +1,13 @@
 //! `/api/grokbot` `{op, …}`: `status`, `connect` `{url, key}`, `disconnect`, `test` and
-//! `notify` `{text, kind?, from?}`. No answer ever carries the key.
+//! `notify` `{text, kind?, from?}`, and for Settings > Grok Bot's checklist `setup` (status, the
+//! switch, the desktop app and the checklist's marks), `instructions` (the text to paste into the
+//! bot), `briefSeen` (sent by `ghostex grokbot brief`), `confirmApp`, `confirmTest` `{arrived}`
+//! and `openApp` (opens the Grok Bot desktop app). No answer ever carries the key.
 
 use serde_json::{json, Map, Value};
 
 use super::delivery::{self, files_lock, now_ms, MAX_QUEUE};
-use super::store::{self, Connection, QueuedNote};
+use super::store::{self, Connection, QueuedNote, Setup};
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
 use crate::security::Principal;
@@ -122,23 +125,28 @@ fn connect(paths: &GxserverPaths, params: &Map<String, Value>) -> Result<Value, 
         DomainStateError::bad_request("url is required: the routine's POST to address.")
     })?)?;
     let key = text(params, "key")
+        .map(|key| key_from_paste(&key))
+        .filter(|key| !key.is_empty())
         .ok_or_else(|| DomainStateError::bad_request("key is required: the routine's key."))?;
     if key.len() > MAX_KEY_CHARS || key.chars().any(char::is_control) || key.contains(' ') {
         return Err(DomainStateError::bad_request(
-            "That doesn't look like the routine's key. Copy key (not header) from its Webhook section.",
+            "That doesn't look like the routine's key. Copy key from its Webhook section.",
         ));
     }
     let test = test_note("Ghostex is connected. Agents' notes will arrive here.");
     let tested = delivery::post(&url, &key, &delivery::body(&[test]));
     {
         let _guard = files_lock();
+        let mut setup = store::read_setup(paths);
+        setup.test_arrived = None;
+        store::write_setup(paths, &setup).map_err(io_error)?;
         store::write_key(paths, &key).map_err(io_error)?;
         let now = now_ms();
         let connection = Connection {
             url,
             connected_at: now,
             last_sent_at: tested.is_ok().then_some(now),
-            last_error: tested.as_ref().err().cloned(),
+            last_error: tested.as_ref().err().map(|failure| failure.message.clone()),
             last_error_at: tested.is_err().then_some(now),
             sent: u64::from(tested.is_ok()),
         };
@@ -149,8 +157,12 @@ fn connect(paths: &GxserverPaths, params: &Map<String, Value>) -> Result<Value, 
     delivery::kick_and_wake(paths);
     let mut result = status(paths);
     result["tested"] = json!(tested.is_ok());
-    if let Err(message) = tested {
-        result["message"] = json!(format!("Saved, but the test didn't arrive: {message}"));
+    if let Err(failure) = tested {
+        result["failure"] = json!(failure.kind);
+        result["message"] = json!(format!(
+            "Saved, but the test didn't arrive: {}",
+            failure.message
+        ));
     }
     Ok(result)
 }
@@ -190,8 +202,8 @@ fn test(paths: &GxserverPaths) -> Result<Value, DomainStateError> {
                 connection.last_error = None;
                 connection.last_error_at = None;
             }
-            Err(message) => {
-                connection.last_error = Some(message.clone());
+            Err(failure) => {
+                connection.last_error = Some(failure.message.clone());
                 connection.last_error_at = Some(now);
             }
         }
@@ -199,13 +211,15 @@ fn test(paths: &GxserverPaths) -> Result<Value, DomainStateError> {
     }
     match outcome {
         Ok(()) => Ok(json!({ "sent": true })),
-        Err(message) => Err(DomainStateError::bad_request(message)),
+        Err(failure) => {
+            Ok(json!({ "sent": false, "failure": failure.kind, "message": failure.message }))
+        }
     }
 }
 
 fn not_connected() -> DomainStateError {
     DomainStateError::bad_request(
-        "Grok Bot isn't connected. Run `ghostex grokbot connect` in your own terminal first.",
+        "Grok Bot isn't connected. Connect it in Settings > Grok Bot, or run `ghostex grokbot connect` in your own terminal.",
     )
 }
 
@@ -270,7 +284,54 @@ fn notify(
 fn disconnect(paths: &GxserverPaths) -> Result<Value, DomainStateError> {
     let _guard = files_lock();
     store::remove_all(paths).map_err(io_error)?;
+    let mut setup = store::read_setup(paths);
+    if setup.test_arrived.is_some() {
+        setup.test_arrived = None;
+        store::write_setup(paths, &setup).map_err(io_error)?;
+    }
     Ok(json!({ "connected": false }))
+}
+
+/// The key from what the user pasted: the routine's key field, or its header field
+/// (`Authorization: Bearer <key>`), which sits right beside it and is easy to copy instead.
+fn key_from_paste(pasted: &str) -> String {
+    let mut key = pasted.trim();
+    if let Some((name, rest)) = key.split_once(':') {
+        if name.trim().eq_ignore_ascii_case("authorization") {
+            key = rest.trim();
+        }
+    }
+    if key.len() > 7 && key[..7].eq_ignore_ascii_case("bearer ") {
+        key = key[7..].trim();
+    }
+    key.to_string()
+}
+
+/// Settings > Grok Bot's whole picture: the switch, the connection (as `status`), the desktop app
+/// and the checklist's marks. Reading it also restarts delivery of notes that waited while the
+/// extension was off.
+fn setup(paths: &GxserverPaths) -> Value {
+    let on = super::feature::on(paths);
+    let marks = store::read_setup(paths);
+    let mut answer = status(paths);
+    answer["enabled"] = json!(on);
+    answer["app"] = json!(super::app::desktop_app_state());
+    answer["appConfirmedAt"] = json!(marks.app_confirmed_at);
+    answer["briefSeenAt"] = json!(marks.brief_seen_at);
+    answer["testArrived"] = json!(marks.test_arrived);
+    if on {
+        resume_delivery(paths);
+    }
+    answer
+}
+
+/// Records one of the checklist's marks.
+fn mark(paths: &GxserverPaths, change: impl FnOnce(&mut Setup)) -> Result<Value, DomainStateError> {
+    let _guard = files_lock();
+    let mut setup = store::read_setup(paths);
+    change(&mut setup);
+    store::write_setup(paths, &setup).map_err(io_error)?;
+    Ok(json!({ "saved": true }))
 }
 
 /// Runs one `/api/grokbot` call (off the async runtime: `connect` and `test` call Grok Bot).
@@ -281,17 +342,46 @@ pub(crate) fn handle(
     server_id: &str,
 ) -> Result<Value, DomainStateError> {
     let op = text(params, "op").unwrap_or_else(|| "status".to_string());
-    if matches!(op.as_str(), "connect" | "disconnect" | "test") {
+    if matches!(
+        op.as_str(),
+        "connect" | "disconnect" | "test" | "briefSeen" | "confirmApp" | "confirmTest" | "openApp"
+    ) {
         require_this_computer(caller)?;
     }
+    // Off, only what Settings > Grok Bot needs to show the switch answers, and disconnect, which
+    // only forgets.
+    if !matches!(
+        op.as_str(),
+        "status" | "setup" | "instructions" | "disconnect"
+    ) && !super::feature::on(paths)
+    {
+        return Err(super::feature::turned_off());
+    }
     match op.as_str() {
-        "status" => Ok(status(paths)),
+        "status" => {
+            let mut answer = status(paths);
+            answer["enabled"] = json!(super::feature::on(paths));
+            Ok(answer)
+        }
+        "setup" => Ok(setup(paths)),
+        "instructions" => Ok(json!({ "text": super::INSTRUCTIONS })),
         "connect" => connect(paths, params),
         "disconnect" => disconnect(paths),
         "test" => test(paths),
         "notify" => notify(paths, params, caller, server_id),
+        "briefSeen" => mark(paths, |setup| setup.brief_seen_at = Some(now_ms())),
+        "confirmApp" => mark(paths, |setup| setup.app_confirmed_at = Some(now_ms())),
+        "openApp" => super::app::open_desktop_app()
+            .map(|()| json!({ "opened": true }))
+            .map_err(DomainStateError::bad_request),
+        "confirmTest" => {
+            let arrived = params.get("arrived").and_then(Value::as_bool).ok_or_else(|| {
+                DomainStateError::bad_request("arrived (true or false) is required.")
+            })?;
+            mark(paths, |setup| setup.test_arrived = Some(arrived))
+        }
         other => Err(DomainStateError::bad_request(format!(
-            "Unknown op \"{other}\": use status, connect, disconnect, test or notify."
+            "Unknown op \"{other}\": use status, setup, instructions, connect, disconnect, test, notify, briefSeen, confirmApp, confirmTest or openApp."
         ))),
     }
 }
@@ -300,5 +390,27 @@ pub(crate) fn handle(
 pub(crate) fn resume_delivery(paths: &GxserverPaths) {
     if !store::read_queue(paths).is_empty() {
         delivery::kick(paths);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_key_comes_from_the_key_or_the_header_field() {
+        assert_eq!(key_from_paste("  abc123  "), "abc123");
+        assert_eq!(key_from_paste("Authorization: Bearer abc123"), "abc123");
+        assert_eq!(key_from_paste("authorization:bearer abc123"), "abc123");
+        assert_eq!(key_from_paste("Bearer abc123"), "abc123");
+        // A key that merely contains a colon is kept whole.
+        assert_eq!(key_from_paste("ab:c123"), "ab:c123");
+    }
+
+    #[test]
+    fn global_refs_are_three_plain_parts() {
+        assert!(is_global_ref("S90:P3lv0:G9jt7"));
+        assert!(!is_global_ref("S90:P3lv0"));
+        assert!(!is_global_ref("S90:P3lv0:G9jt7; rm -rf"));
     }
 }

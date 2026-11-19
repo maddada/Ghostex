@@ -32,6 +32,7 @@ pub(crate) enum SettingsTabId {
     SizeZoom,
     WindowLayout,
     Integrations,
+    GrokBot,
     CloudBoxes,
     Extensions,
     OsIntegration,
@@ -108,7 +109,7 @@ impl SettingsTabId {
     /// `RailTier`) ending with About, then the Extensions page (the catalog) at the rail's bottom with the pages
     /// that fold under it ([`Self::EXTENSIONS_GROUP`]). Pages the shell filters (OS Integration,
     /// Connectors, Debugging, the built-in extensions' pages) leave the rail while they are off.
-    pub(crate) const RAIL_ORDER: [SettingsTabId; 34] = [
+    pub(crate) const RAIL_ORDER: [SettingsTabId; 35] = [
         SettingsTabId::Updates,
         SettingsTabId::Experience,
         SettingsTabId::Theme,
@@ -128,6 +129,8 @@ impl SettingsTabId {
         SettingsTabId::Autopilot,
         SettingsTabId::Secrets,
         SettingsTabId::Integrations,
+        // CDXC:GrokBot 2026-11-19 DECISION: User (Q4206): Grok Bot is "a new page in settings below integrations", the Grok Bot remote built-in extension's own page; it stays listed while the extension is off, to show the switch that turns it back on (official_extensions.rs).
+        SettingsTabId::GrokBot,
         SettingsTabId::Remote,
         SettingsTabId::Sync,
         SettingsTabId::Collab,
@@ -189,7 +192,8 @@ impl SettingsTabId {
             | SettingsTabId::Accounts
             | SettingsTabId::Autopilot
             | SettingsTabId::Secrets
-            | SettingsTabId::Integrations => RailTier::AgentsAccounts,
+            | SettingsTabId::Integrations
+            | SettingsTabId::GrokBot => RailTier::AgentsAccounts,
             SettingsTabId::Remote | SettingsTabId::Sync | SettingsTabId::Collab => {
                 RailTier::Connections
             }
@@ -243,6 +247,7 @@ impl SettingsTabId {
             SettingsTabId::SizeZoom => "sizeZoom",
             SettingsTabId::WindowLayout => "windowLayout",
             SettingsTabId::Integrations => "integrations",
+            SettingsTabId::GrokBot => "grokBot",
             SettingsTabId::CloudBoxes => "cloudBoxes",
             SettingsTabId::Extensions => "extensions",
             SettingsTabId::OsIntegration => "osIntegration",
@@ -298,6 +303,7 @@ impl SettingsTabId {
             SettingsTabId::SizeZoom => "Size & Zoom",
             SettingsTabId::WindowLayout => "Window & Layout",
             SettingsTabId::Integrations => "Integrations",
+            SettingsTabId::GrokBot => "Grok Bot",
             SettingsTabId::CloudBoxes => "Cloud Boxes",
             SettingsTabId::Extensions => "Extensions",
             SettingsTabId::OsIntegration => "OS Integration",
@@ -338,6 +344,7 @@ impl SettingsTabId {
             SettingsTabId::SizeZoom => "modals/settings/arrows-maximize.svg",
             SettingsTabId::WindowLayout => "modals/settings/browser.svg",
             SettingsTabId::Integrations => "modals/settings/tools.svg",
+            SettingsTabId::GrokBot => "agent-icons/grok-build.svg",
             SettingsTabId::CloudBoxes => "modals/settings/box.svg",
             SettingsTabId::Extensions => "modals/settings/puzzle.svg",
             SettingsTabId::OsIntegration => "modals/settings/device-desktop.svg",
@@ -633,7 +640,14 @@ mod tests {
                 ),
                 (
                     "Agents & accounts",
-                    vec!["Agents", "Accounts", "Autopilot", "Secrets", "Integrations"]
+                    vec![
+                        "Agents",
+                        "Accounts",
+                        "Autopilot",
+                        "Secrets",
+                        "Integrations",
+                        "Grok Bot"
+                    ]
                 ),
                 ("Connections", vec!["Remote", "Sync", "Collab"]),
                 (

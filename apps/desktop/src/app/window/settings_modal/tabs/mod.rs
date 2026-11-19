@@ -12,6 +12,7 @@ pub(crate) mod connectors;
 pub(crate) mod debugging;
 pub(crate) mod extensions;
 pub(crate) mod general;
+pub(crate) mod grok_bot;
 pub(crate) mod hotkeys;
 pub(crate) mod integrations;
 pub(crate) mod machine_picker;
@@ -62,6 +63,7 @@ pub(crate) fn settings_tab_view(
         SettingsTabId::About => about::about_tab_view(store, cx),
         SettingsTabId::Debugging => debugging::debugging_tab_view(store, cx),
         SettingsTabId::Integrations => integrations::integrations_tab_view(store, cx),
+        SettingsTabId::GrokBot => grok_bot::grok_bot_tab_view(store, window, cx),
         SettingsTabId::CloudBoxes => cloud_boxes::cloud_boxes_tab_view(store, cx),
         SettingsTabId::Hotkeys => hotkeys::hotkeys_tab_view(store, cx),
         SettingsTabId::Theme
@@ -123,4 +125,5 @@ pub(crate) fn settings_tab_holds_unsaved_input(view: &AnyView, cx: &App) -> bool
         || holds::<projects::ProjectsTab>(view, cx)
         || holds::<remote::RemoteTab>(view, cx)
         || holds::<secrets::SecretsTab>(view, cx)
+        || holds::<grok_bot::GrokBotTab>(view, cx)
 }

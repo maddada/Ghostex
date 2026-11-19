@@ -503,6 +503,17 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         user_only: false,
     },
     Supplemental {
+        key: "grokBotHidden",
+        tab: EXTENSIONS,
+        group: None,
+        section: "official",
+        section_title: "Built-in",
+        title: "Turn off Grok Bot remote",
+        subtitle: "Turn off Grok Bot remote: a \"Ghostex\" bot in xAI's Grok Bot app that controls your agents, and the notes your agents send it. Off, Ghostex sends nothing to Grok Bot, refuses connect and test, and agents are no longer told about it; the saved connection is kept. The switch is also at the top of Settings > Grok Bot. On by default.",
+        options: &[],
+        user_only: false,
+    },
+    Supplemental {
         key: "cliProxyApiEnabled",
         tab: EXTENSIONS,
         group: None,

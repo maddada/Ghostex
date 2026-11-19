@@ -68,10 +68,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             &parsed,
             "Grok Bot disconnected: Ghostex forgot the webhook address and key. Delete the routine's webhook in Grok Bot too.",
         ),
-        "brief" => {
-            print!("{}", crate::grokbot::BRIEF);
-            Ok(())
-        }
+        "brief" => brief_command(&parsed),
         "instructions" => {
             print!("{}", crate::grokbot::INSTRUCTIONS);
             Ok(())
@@ -94,9 +91,34 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or_default()
 }
 
+/// CDXC:GrokBot 2026-11-19 WHY: the bot runs `brief` at the start of every chat, so its first run
+/// is how Settings > Grok Bot sees "the bot reached this computer" (step 2 of the checklist). The
+/// mark is best-effort with a short wait: an older or stopped gxserver must not keep the bot from
+/// its commands. While Grok Bot remote is off, the bot is told so instead of getting the commands.
+fn brief_command(parsed: &ParsedArgs) -> CliResult<()> {
+    let mut flags = parsed.flags.clone();
+    flags.0.remove("timeoutMs");
+    flags.insert_text("timeout", "3000");
+    match call_gxserver_rpc(ENDPOINT, &json!({ "op": "briefSeen" }), &flags) {
+        Err(CliError::Rpc { message, response })
+            if response.to_string().contains(crate::grokbot::TURNED_OFF) =>
+        {
+            Err(CliError::Other(message))
+        }
+        _ => {
+            print!("{}", crate::grokbot::BRIEF);
+            Ok(())
+        }
+    }
+}
+
 fn print_status(answer: &Value) {
+    if answer["enabled"] == false {
+        println!("Grok Bot remote is turned off: Ghostex sends nothing to Grok Bot. Turn it on at the top of Settings > Grok Bot.");
+        return;
+    }
     if answer["connected"] != true {
-        println!("Grok Bot isn't connected. Run `ghostex grokbot connect` in your own terminal.");
+        println!("Grok Bot isn't connected. Set it up in Settings > Grok Bot, or run `ghostex grokbot connect` in your own terminal.");
         return;
     }
     println!("Connected to Grok Bot: {}", text(answer, "url"));
@@ -128,6 +150,10 @@ fn status_command(parsed: &ParsedArgs) -> CliResult<()> {
 
 fn simple_command(op: &str, parsed: &ParsedArgs, done: &str) -> CliResult<()> {
     let answer = call_gxserver_rpc(ENDPOINT, &json!({ "op": op }), &slow_flags(&parsed.flags))?;
+    // `test` answers `sent: false` with Grok Bot's refusal (Settings shows it as the step's state).
+    if answer["sent"] == false && !parsed.flags.contains("json") {
+        return Err(CliError::Other(text(&answer, "message").to_string()));
+    }
     if parsed.flags.contains("json") {
         print_json(&answer);
     } else {

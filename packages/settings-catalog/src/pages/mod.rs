@@ -10,6 +10,7 @@ mod connectors;
 mod debugging;
 mod dictation;
 mod extensions;
+mod grok_bot;
 mod integrations;
 mod open_targets;
 mod os_integration;
@@ -36,6 +37,7 @@ pub fn pages(platform: Platform) -> Vec<Page> {
         collab::page(),
         agents::page(),
         integrations::page(),
+        grok_bot::page(),
         cloud_boxes::page(),
         extensions::page(platform),
         open_targets::page(),

@@ -383,6 +383,18 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("title", J::Str("Grok Bot")),
         ("settingKeys", J::Arr(&[J::Str("grokWebStartPage"), J::Str("grokWebLogins")])),
     ]),
+    // CDXC:GrokBot 2026-11-19 DECISION:
+    // User (Q4206 = A, the checklist), with: "don't put this under integrations put this as a new page in settings below integrations make it an enabled by default extension but allow people to disable this extension with a button at the top of the settings page". A whole-feature entry, on by default (`grokBotHidden`, default false; agents may switch it like any setting, Q2140). It owns no `settingsPages`: its Settings page (Settings > Grok Bot, right below Integrations) stays in the rail while it is off and shows only the switch, so the page is where it is turned back on. Off, gxserver refuses connect, test and notes, stops sending, and agents' launch notes and coordinators' guides leave out the Grok Bot line (server/src/grokbot/feature.rs); the saved connection is kept. Titled "Grok Bot remote" because "Grok Bot" is already the grok.com view's card above.
+    // SEE-ALSO: apps/desktop/src/app/window/settings_modal/tabs/grok_bot.rs (the page), server/src/grokbot/ (the connection).
+    J::Obj(&[
+        ("description", J::Str("Control your agents from a \"Ghostex\" bot in xAI's Grok Bot app on your phone, and get their notes there. Settings > Grok Bot walks you through the setup.")),
+        ("category", J::Str("features")),
+        ("id", J::Str("grokBot")),
+        ("placement", J::Str("feature")),
+        ("settingsKey", J::Str("grokBotHidden")),
+        ("appWide", J::Bool(true)),
+        ("title", J::Str("Grok Bot remote")),
+    ]),
     // CDXC:Extensions 2026-10-19 DECISION:
     // User (Q306): Connectors, OS Integration and Debugging join the Settings rail's Extensions group, and "for the ones that aren't in extensions already add them to extensions and allow disabling/enabling them". Q313: "Switch on top of the gate": each is on by default and its page shows only while its switch is on and its gate (`gatedBy`) is open: Enable Experimental Features for Connectors and OS Integration. Debugging has no gate (CDXC:Settings 2026-10-29 in rail.rs: Show Advanced never hides a page), only its switch. Its Store card is left out while the gate is closed. Turning Connectors off also turns off `ghostex connectors` and its gxserver routes (server/src/connectors/gate.rs, whose CDXC:Connectors 2026-10-15 decision still holds). New `…Hidden` keys default to false, so nobody's Settings changes.
     J::Obj(&[

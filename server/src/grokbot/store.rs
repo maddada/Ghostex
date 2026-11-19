@@ -1,6 +1,7 @@
 //! What gxserver keeps for the Grok Bot connection, in `<app state>/grokbot/` (a 0700 folder):
 //! `connection.json` (the webhook address and what happened lately), `webhook-key` (the key alone,
-//! 0600, read only by delivery.rs) and `queue.json` (notes not delivered yet).
+//! 0600, read only by delivery.rs), `queue.json` (notes not delivered yet) and `setup.json` (how
+//! far Settings > Grok Bot's checklist got).
 
 use std::fs;
 use std::io::Write;
@@ -14,6 +15,7 @@ const DIR: &str = "grokbot";
 const CONNECTION_FILE: &str = "connection.json";
 const KEY_FILE: &str = "webhook-key";
 const QUEUE_FILE: &str = "queue.json";
+const SETUP_FILE: &str = "setup.json";
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -44,6 +46,21 @@ pub(crate) struct QueuedNote {
     /// The sender's global reference, which `ghostex agents send <ref>` answers.
     #[serde(default, rename = "ref")]
     pub(crate) reply_to: Option<String>,
+}
+
+/// What Settings > Grok Bot's checklist has seen happen: the bot's first `ghostex grokbot brief`
+/// here, the user saying the desktop app is installed (where Ghostex can't look for it), and their
+/// answer to "Did the test note show up?".
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct Setup {
+    #[serde(default)]
+    pub(crate) brief_seen_at: Option<i64>,
+    #[serde(default)]
+    pub(crate) app_confirmed_at: Option<i64>,
+    /// `true` when the user saw the test note, `false` when they didn't; `None` until they answer.
+    #[serde(default)]
+    pub(crate) test_arrived: Option<bool>,
 }
 
 pub(crate) fn dir(paths: &GxserverPaths) -> PathBuf {
@@ -128,6 +145,19 @@ pub(crate) fn write_queue(paths: &GxserverPaths, queue: &[QueuedNote]) -> std::i
     }
     let bytes = serde_json::to_vec(queue).map_err(std::io::Error::other)?;
     write_private(&dir, QUEUE_FILE, &bytes)
+}
+
+pub(crate) fn read_setup(paths: &GxserverPaths) -> Setup {
+    fs::read_to_string(dir(paths).join(SETUP_FILE))
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+pub(crate) fn write_setup(paths: &GxserverPaths, setup: &Setup) -> std::io::Result<()> {
+    let dir = private_dir(paths)?;
+    let bytes = serde_json::to_vec_pretty(setup).map_err(std::io::Error::other)?;
+    write_private(&dir, SETUP_FILE, &bytes)
 }
 
 /// Forgets the connection: the key, the address and every note still waiting.

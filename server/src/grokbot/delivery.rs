@@ -91,8 +91,24 @@ pub(crate) fn body(notes: &[QueuedNote]) -> Value {
     })
 }
 
+/// Why a POST to Grok Bot didn't start the routine: `kind` is one of `keyRefused` (401, 403),
+/// `notFound` (404), `unreachable` (no connection), `notStarted` (another status) or `failed`, so
+/// Settings > Grok Bot can show its own fix; `message` says it in words.
+#[derive(Clone, Debug)]
+pub(crate) struct PostFailure {
+    pub(crate) kind: &'static str,
+    pub(crate) message: String,
+}
+
+fn failure(kind: &'static str, message: impl Into<String>) -> PostFailure {
+    PostFailure {
+        kind,
+        message: message.into(),
+    }
+}
+
 /// One POST to `url` with the key. `Ok` once Grok Bot answered 2xx (the routine started).
-pub(crate) fn post(url: &str, key: &str, body: &Value) -> Result<(), String> {
+pub(crate) fn post(url: &str, key: &str, body: &Value) -> Result<(), PostFailure> {
     let agent: ureq::Agent = crate::http_agent::config()
         .timeout_global(Some(POST_TIMEOUT))
         // A webhook that redirects is not the address the user connected; never follow it with
@@ -107,20 +123,25 @@ pub(crate) fn post(url: &str, key: &str, body: &Value) -> Result<(), String> {
         .send_json(body)
         .map_err(|error| {
             if crate::http_agent::never_connected(&error) {
-                "Grok Bot could not be reached.".to_string()
+                failure("unreachable", "Grok Bot could not be reached.")
             } else {
-                format!("The call to Grok Bot failed ({error}).")
+                failure("failed", format!("The call to Grok Bot failed ({error})."))
             }
         })?;
     let status = response.status().as_u16();
     match status {
         200..=299 => Ok(()),
-        401 | 403 => Err(format!(
-            "Grok Bot refused the key (HTTP {status}). Copy the routine's current key and run `ghostex grokbot connect` again."
+        401 | 403 => Err(failure(
+            "keyRefused",
+            format!("Grok Bot refused the key (HTTP {status}). Copy the routine's current key and connect again."),
         )),
-        404 => Err("Grok Bot doesn't know this webhook (HTTP 404). Check the routine still has its webhook, then connect again.".to_string()),
-        _ => Err(format!(
-            "Grok Bot didn't start the routine (HTTP {status}). Check the routine isn't paused."
+        404 => Err(failure(
+            "notFound",
+            "Grok Bot doesn't know this webhook (HTTP 404). Check the routine still has its webhook, then connect again.",
+        )),
+        _ => Err(failure(
+            "notStarted",
+            format!("Grok Bot didn't start the routine (HTTP {status}). Check the routine isn't paused."),
         )),
     }
 }
@@ -165,8 +186,10 @@ fn run(paths: &GxserverPaths) {
             }
             let connection = store::read_connection(paths);
             let key = store::read_key(paths);
+            // Grok Bot remote turned off: stop; the notes wait in the queue until it is back on.
+            let on = super::feature::on(paths);
             match (connection, key) {
-                (Some(connection), Some(key)) if !queue.is_empty() => {
+                (Some(connection), Some(key)) if on && !queue.is_empty() => {
                     queue.truncate(BATCH);
                     (connection.url, key, queue)
                 }
@@ -198,8 +221,8 @@ fn run(paths: &GxserverPaths) {
                     connection.last_error = None;
                     connection.last_error_at = None;
                 }
-                Err(message) => {
-                    connection.last_error = Some(message.clone());
+                Err(failure) => {
+                    connection.last_error = Some(failure.message.clone());
                     connection.last_error_at = Some(now_ms());
                 }
             }

@@ -5075,23 +5075,44 @@ pass on your answers. It works by running the `ghostex` command on your
 computer through the Grok Bot desktop app. Your agents reach you back through
 the bot: Ghostex sends their notes to a webhook routine on the bot.
 `ghostex grokbot` comes with the Ghostex release after 11.10.0; on 11.10.0
-and older, `ghostex grokbot` is an unknown command.
+and older, `ghostex grokbot` is an unknown command. Settings > Grok Bot, the
+guided setup below, comes with the release after that one.
 
-Connect the two:
+It's a built-in extension, Grok Bot remote, on by default. Its switch is at
+the top of Settings > Grok Bot (right below Integrations) and on Settings >
+Extensions. Off, Ghostex sends nothing to Grok Bot, refuses connect, test and
+notes, agents are no longer told about it, and `ghostex grokbot brief` tells
+the bot it's off; the saved connection is kept.
 
-1. Install the Grok Bot desktop app on the computer that runs Ghostex, sign
-   in, and leave it running (the computer has to be on and awake).
-2. In Grok Bot, make a new bot named Ghostex and paste in its instructions:
-   run `ghostex grokbot instructions` and copy what it prints.
-3. Say hi to it. When it asks to run `ghostex grokbot brief` on your computer,
-   choose Allow once. Keep Settings > Computer > Execution on this computer at
-   Ask every time until you trust it: every command then shows on a card first.
-4. Ask it to "add a routine called Ghostex reports with a webhook trigger".
-   Open that routine on the desktop and, under Webhook, copy POST to and key.
-5. In your own terminal run `ghostex grokbot connect <the POST to address>`
-   and paste the key when asked (it doesn't show). Ghostex sends a test note
-   to the bot's chat.
-6. Try it: ask the bot "What are my agents doing?"
+Connect the two in Settings > Grok Bot, no terminal needed. Its checklist
+ticks each step off as Ghostex sees it happen:
+
+1. Grok Bot desktop app: install it from x.ai/bot on the computer that runs
+   Ghostex, sign in, and leave it running (the computer has to be on and
+   awake). On a Mac, Ghostex finds it by itself; elsewhere, click It's
+   installed.
+2. Make the Ghostex bot: in Grok Bot, make a new bot named Ghostex and paste
+   the instructions (Copy instructions). Send it any message. In its first
+   reply it makes its "Ghostex reports" routine with a webhook trigger and
+   tells you where to click. When it asks to run `ghostex grokbot brief` on
+   your computer, choose Allow once; Ghostex ticks the step off. Keep
+   Settings > Computer > Execution on this computer at Ask every time until
+   you trust it: every command then shows on a card first.
+3. Paste the webhook: open Routines > Ghostex reports in the Grok Bot desktop
+   app. Under Webhook, click POST to and paste it into Ghostex, then the same
+   with key (pasting the header field works too). Click Connect and send a
+   test note.
+4. Check the test note: say whether "Ghostex is connected" showed up in the
+   bot's chat. If Grok Bot refused the key, the routine is gone or the
+   computer is offline, the step says what to do.
+
+Then try it: ask the bot "What are my agents doing?" Once connected, the page
+shows the notes sent, Send a test note, Change (a new address and key), Copy
+instructions (paste them again when an update changes them) and Disconnect.
+
+From a terminal instead: `ghostex grokbot instructions` prints the text to
+paste, and `ghostex grokbot connect <the POST to address>` asks for the key
+without showing it, then sends the test note.
 
 What the bot may do: anything the `ghostex` command can, including answering
 an agent's question or permission prompt and unblocking a stuck agent, but
@@ -5115,9 +5136,10 @@ retried when Grok Bot doesn't answer; each call uses some of your Grok Bot
 usage. While Grok Bot is connected, agents Ghostex starts are told about
 `ghostex grokbot notify`.
 
-To stop: in Grok Bot, set Execution on this computer to Never allow; run
-`ghostex grokbot disconnect` (Ghostex forgets the address and key) and delete
-the routine's webhook.
+To stop: in Grok Bot, set Execution on this computer to Never allow; click
+Disconnect in Settings > Grok Bot or run `ghostex grokbot disconnect`
+(Ghostex forgets the address and key), and delete the routine's webhook. To
+pause it instead, turn Grok Bot remote off at the top of Settings > Grok Bot.
 
 CLI: `ghostex grokbot` (status), `connect [<url>] [--key-stdin]`,
 `notify [--kind ask|blocked|done|report|info] "<text>"`, `test`,

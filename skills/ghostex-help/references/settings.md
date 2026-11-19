@@ -490,6 +490,20 @@ How to use this file:
 ### Floating Capture
 
 - **Switch to the session after sending** `ghostexCaptureSwitchToSession` (boolean, default true): After a prompt is sent from Floating Capture, the Ghostex window shows the session it went to, without coming in front of the app you are in.
+## Grok Bot (tab `grokBot`)
+
+### Grok Bot remote
+
+- **Grok Bot remote** `grokBotHidden` (boolean, default false): Control your agents from a "Ghostex" bot in xAI's Grok Bot app on your phone, and get their notes there. Turn it off to stop sending anything to Grok Bot; the saved connection is kept. On by default.
+### Set up
+
+- **Grok Bot desktop app** `grokBotDesktopApp` (Settings UI row without a settings key; use `ghostex settings open`): Install the Grok Bot desktop app from x.ai/bot, sign in and leave it running: the bot runs Ghostex's commands on this computer through it. Ghostex ticks this off when it finds the app.
+- **Make the Ghostex bot** `grokBotMakeBot` (Settings UI row without a settings key; use `ghostex settings open`): Make a bot named Ghostex in Grok Bot and paste the instructions (Copy instructions). Send it any message; when it asks to run ghostex grokbot brief, choose Allow once. Ghostex ticks this off when the bot reaches this computer.
+- **Paste the webhook** `grokBotWebhook` (Settings UI row without a settings key; use `ghostex settings open`): The bot makes a routine called Ghostex reports in its first reply. Open it in the Grok Bot desktop app and paste its POST to address and its key here. Ghostex keeps the key in an owner-only file and never shows it again.
+- **Check the test note** `grokBotTestNote` (Settings UI row without a settings key; use `ghostex settings open`): Ghostex sends the bot a test note; say whether it showed up in the bot's chat.
+### Connection
+
+- **Connected** `grokBotConnection` (Settings UI row without a settings key; use `ghostex settings open`): How many notes your agents sent to Grok Bot and when the last one went, with Send a test note, Change (a new webhook address and key), Copy instructions and Disconnect.
 ## Cloud Boxes (tab `cloudBoxes`)
 
 ### Providers
