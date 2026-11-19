@@ -1798,12 +1798,16 @@ impl NativeChatView {
             let code = text(relayed, "code");
             let code = code.trim_end().trim_start_matches('\n');
             if !code.trim().is_empty() {
-                let lines: Vec<&str> = code.lines().collect();
+                // Its first rows, folded by wrapped rows in the chat core (`codeMoreRows`).
+                let more = relayed["codeMoreRows"].as_u64().unwrap_or(0);
                 dock["command"] = json!(code);
                 dock["commandLines"] = json!(true);
-                dock["commandPreview"] =
-                    json!(lines.iter().take(4).copied().collect::<Vec<_>>().join("\n"));
-                dock["commandMore"] = json!(lines.len().saturating_sub(4));
+                dock["commandPreview"] = json!(if more > 0 {
+                    text(relayed, "codePreview")
+                } else {
+                    code.to_string()
+                });
+                dock["commandMore"] = json!(more);
             }
             if relayed["reason"]["text"]
                 .as_str()

@@ -7,7 +7,7 @@
 //! User, of an "✓ Approved" bar between the dock and the chat box: "I don't like this 'approved' thingy. pls let's not show multiple bars like this above the dock chat box; the dock/dock bar should be the only one there." On the design page they picked "A. Settles in its row, then gone" (Q4243): an approval that still needs them is a dock row with Yes / Always / No, and once answered the row shows Approved for about 3 seconds and disappears, with no record kept in the chat; a thread's "Approved from <coordinator>" line gets the same treatment. This supersedes the 2026-11-08 "Approved" / "Denied" line in questions/pending_approval.rs, which stayed until the next prompt. The answers, the dimmed busy state and the refusal stay the card's (`questions::actions`), so keyboard answers and the composer's hold are unchanged; only where it is drawn moved. A notice this cannot turn into buttons keeps its card.
 //!
 //! CDXC:SessionChat 2026-11-20 WHY:
-//! A security review of the first version found an approval could wait undrawn and read as less than it grants. So: a row exists only where it is drawn (no row while a question card takes the dock's place; the dock never stays collapsed over one; the desktop draws the card while the chat box is maximized); the row shows the whole command (a Codex command runs from its `$ ` line to the next blank line) with "Show N more lines" and the agent's warning; a button says "Yes" or "No" only for exactly Yes, Allow, "Yes, proceed" or No, every other answer keeps the agent's words, which supersedes the Yes / Always / No wording above; and a new row's answers wait 400 ms before taking a click (the renderers).
+//! A security review of the first version found an approval could wait undrawn and read as less than it grants. So: a row exists only where it is drawn (no row while a question card takes the dock's place; the dock never stays collapsed over one; the desktop draws the card while the chat box is maximized); the row shows the whole command (a Codex command runs from its `$ ` line to the end of the dialog's body) with "Show N more lines" and the agent's warning; a button says "Yes" or "No" only for exactly Yes, Allow, "Yes, proceed" or No, every other answer keeps the agent's words, and the settled row says "Approved" or "Denied" only for those, otherwise the words picked, which supersedes the Yes / Always / No wording above; and a new row's answers wait 400 ms before taking a click (the renderers).
 //! SEE-ALSO: extras/relayed_approvals.rs (`choices`, `body`: the same answers a coordinator's relayed card sends), apps/desktop/src/app/native_chat/work_cards.rs and apps/mobile/app/src/chat/native/cards/WorkCards.tsx (the rows), native_chat/composer.rs and apps/mobile/app/src/chat/native/cards/NativeChatCards.tsx (`approvalInDock` hides the card).
 
 use serde_json::{json, Value};
@@ -115,15 +115,15 @@ fn short_label(label: &str) -> String {
     }
 }
 
-/// The command a Codex dialog approves: from its first `$ ` line through the lines after it, up to
-/// the next blank line (a script's later lines are part of it); the dialog's body when it names no
-/// command (an edit's diff, a permission's scope).
+/// The command a Codex dialog approves: from the first `$ ` line that starts a paragraph (so a
+/// wrapped Reason line can't stand in for it) to the end of the dialog's body, blank lines and all,
+/// without the dialog's own indent; the dialog's body when it names no command (an edit's diff, a
+/// permission's scope).
 pub(crate) fn dialog_command(body: &str) -> String {
     let lines: Vec<&str> = body.lines().collect();
-    let Some(start) = lines
-        .iter()
-        .position(|line| line.trim_start().starts_with("$ "))
-    else {
+    let Some(start) = (0..lines.len()).find(|&i| {
+        lines[i].trim_start().starts_with("$ ") && (i == 0 || lines[i - 1].trim().is_empty())
+    }) else {
         return body.trim().to_string();
     };
     // The dialog's own indent (that of the `$ ` line) comes off every line; the script's stays.
@@ -132,16 +132,19 @@ pub(crate) fn dialog_command(body: &str) -> String {
         .trim_start()
         .trim_start_matches("$ ")
         .trim_end()];
-    command.extend(
-        lines[start + 1..]
-            .iter()
-            .take_while(|line| !line.trim().is_empty())
-            .map(|line| {
-                let lead = line.len() - line.trim_start().len();
-                line[lead.min(indent)..].trim_end()
-            }),
-    );
-    command.join("\n")
+    command.extend(lines[start + 1..].iter().map(|line| {
+        let lead = line.len() - line.trim_start().len();
+        line[lead.min(indent)..].trim_end()
+    }));
+    command.join("\n").trim_end().to_string()
+}
+
+/// A block's first rows for its dock row, and how many wrapped rows "Show N more lines" holds back
+/// (0 when it all fits): folded by wrapped rows, so one very long line is cut too
+/// (`permission_card::fold_code_rows`).
+pub(crate) fn block_preview(text: &str) -> (String, usize) {
+    crate::questions::permission_card::fold_code_rows(text, COMMAND_PREVIEW_LINES)
+        .unwrap_or_else(|| (text.to_string(), 0))
 }
 
 /// How many lines of the command its row shows before "Show N more lines".
@@ -204,8 +207,7 @@ fn open_row(state: &ChatState) -> Option<Value> {
     };
     // The whole command, every line: the row shows its first lines and "Show N more lines".
     let command = code.trim_end().trim_start_matches('\n').to_string();
-    let lines: Vec<&str> = command.lines().collect();
-    let more = lines.len().saturating_sub(COMMAND_PREVIEW_LINES);
+    let (preview, more) = block_preview(&command);
     // Lines gxserver itself left out of a long command ("12 more lines in the terminal").
     let cut = card["notice"]
         .get("permissionRequest")
@@ -255,7 +257,7 @@ fn open_row(state: &ChatState) -> Option<Value> {
         // lines, then "Show N more lines" (`commandMore`), and gxserver's own cut (`commandCut`).
         "command": command,
         "commandLines": true,
-        "commandPreview": lines.iter().take(COMMAND_PREVIEW_LINES).copied().collect::<Vec<_>>().join("\n"),
+        "commandPreview": preview,
         "commandMore": more,
         "commandCut": cut,
         "note": if text(&note, "text").is_empty() { Value::Null } else { note },

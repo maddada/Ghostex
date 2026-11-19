@@ -23,6 +23,20 @@ pub fn wrapped_rows(line: &str) -> usize {
 /// its Allow and Deny out of reach (2026-11-08, "i can't approve when i click on approvals").
 /// `(preview, "N more lines")`, or `None` when the whole command fits.
 pub fn fold_code(code: &str, rows: usize) -> Option<(String, String)> {
+    fold_code_rows(code, rows).map(|(preview, more)| {
+        (
+            preview,
+            match more {
+                1 => "1 more line".to_string(),
+                more => format!("{more} more lines"),
+            },
+        )
+    })
+}
+
+/// [`fold_code`] with the hidden rows as a count: `(preview, hidden wrapped rows)`, or `None` when
+/// the whole command fits in `rows`.
+pub fn fold_code_rows(code: &str, rows: usize) -> Option<(String, usize)> {
     let total: usize = code.lines().map(wrapped_rows).sum();
     if total <= rows {
         return None;
@@ -43,14 +57,7 @@ pub fn fold_code(code: &str, rows: usize) -> Option<(String, String)> {
             left = 0;
         }
     }
-    let more = total - rows;
-    Some((
-        preview.join("\n"),
-        match more {
-            1 => "1 more line".to_string(),
-            more => format!("{more} more lines"),
-        },
-    ))
+    Some((preview.join("\n"), total - rows))
 }
 
 const GENERIC_QUESTION: &str = "Do you want to proceed?";
