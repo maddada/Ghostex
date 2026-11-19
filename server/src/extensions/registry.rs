@@ -84,7 +84,12 @@ impl ExtensionRegistry {
             taps: Arc::default(),
         };
         for id in super::RETIRED_OFFICIAL_EXTENSIONS {
-            if registry.installed_dir().join(id).exists() {
+            let payload_dir = registry.installed_dir().join(id);
+            let retired = id == "storybook" && payload_dir.exists()
+                || read_manifest(&payload_dir, Some(id)).is_ok_and(|manifest| {
+                    super::is_retired_official_extension(id, &manifest.author)
+                });
+            if retired {
                 if let Err(error) = registry.uninstall(id) {
                     eprintln!("Could not retire the {id} extension: {error}");
                 }
@@ -494,7 +499,7 @@ impl ExtensionRegistry {
                 "Storybook is now a built-in view. Open it from the project view picker.",
             ));
         }
-        if super::RETIRED_OFFICIAL_EXTENSIONS.contains(&id.as_str()) {
+        if super::is_retired_official_extension(&id, &manifest.author) {
             return Err(ExtensionError::bad_request(format!(
                 "The {id} extension was retired and can no longer be installed."
             )));
@@ -571,7 +576,7 @@ impl ExtensionRegistry {
                 .into_string()
                 .map_err(|_| ExtensionError::internal("Installed extension id is not UTF-8."))?;
             validate_extension_id(&id)?;
-            if super::RETIRED_OFFICIAL_EXTENSIONS.contains(&id.as_str()) {
+            if id == "storybook" {
                 continue;
             }
             // CDXC:Extensions 2026-11-19 WHY:
@@ -583,6 +588,9 @@ impl ExtensionRegistry {
                     continue;
                 }
             };
+            if super::is_retired_official_extension(&id, &manifest.author) {
+                continue;
+            }
             // A payload never installed through Ghostex lists as off: it can't start or be
             // served (see `start`), only uninstalled.
             let state = store
@@ -724,11 +732,6 @@ impl ExtensionRegistry {
                 "Storybook is now a built-in view.",
             ));
         }
-        if super::RETIRED_OFFICIAL_EXTENSIONS.contains(&id) {
-            return Err(ExtensionError::bad_request(format!(
-                "The {id} extension was retired."
-            )));
-        }
         let _guard = self.lock()?;
         let payload_dir = self.installed_dir().join(id);
         let manifest = read_manifest(&payload_dir, Some(id)).map_err(|error| {
@@ -738,6 +741,11 @@ impl ExtensionRegistry {
                 ExtensionError::not_found(format!("Extension {id:?} is not installed."))
             }
         })?;
+        if super::is_retired_official_extension(id, &manifest.author) {
+            return Err(ExtensionError::bad_request(format!(
+                "The {id} extension was retired."
+            )));
+        }
         // CDXC:Extensions 2026-11-08 DECISION:
         // GitHub #495 follow-up (Q1860, "settings only"): only an extension installed through
         // Ghostex has a store entry, so a payload put into the extensions folder some other way is

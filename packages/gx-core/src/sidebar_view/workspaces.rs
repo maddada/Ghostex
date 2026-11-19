@@ -86,15 +86,8 @@ impl<'a> RemoteWindowWorkspace<'a> {
         loaded: &'a LoadedPresentation,
         project: &'a PresentationProject,
     ) -> &'a str {
-        let project_id = project
-            .worktree
-            .as_ref()
-            .and_then(|worktree| worktree.get("parentProjectId"))
-            .and_then(|id| id.as_str())
-            .filter(|parent_id| loaded.project(parent_id).is_some())
-            .unwrap_or(project.project_id.as_str());
         self.state
-            .remote_project_workspace(self.machine_id, project_id)
+            .remote_project_workspace(self.machine_id, placed_project_id(loaded, project))
     }
 
     /// Whether a remote project belongs to the window's workspace.
@@ -104,6 +97,21 @@ impl<'a> RemoteWindowWorkspace<'a> {
             None => true,
         }
     }
+}
+
+/// The project whose placement a remote project follows: its parent checkout's for a worktree
+/// project the machine also publishes, else its own. Move to workspace moves that one.
+pub fn placed_project_id<'a>(
+    loaded: &'a LoadedPresentation,
+    project: &'a PresentationProject,
+) -> &'a str {
+    project
+        .worktree
+        .as_ref()
+        .and_then(|worktree| worktree.get("parentProjectId"))
+        .and_then(|id| id.as_str())
+        .filter(|parent_id| loaded.project(parent_id).is_some())
+        .unwrap_or(project.project_id.as_str())
 }
 
 /// This computer's workspaces and the window's, for placing a remote machine's projects; `None`
@@ -185,7 +193,15 @@ pub fn window_machine_tabs(
     };
     let window = state.resolve(window_workspace_id);
     tabs.iter()
-        .filter(|tab| tab.is_local() || state.machine_shows_in(&tab.machine_id, window))
+        .filter(|tab| {
+            tab.is_local()
+                || state.machine_shows_in(&tab.machine_id, window, |project_id| {
+                    // A machine the store holds nothing for may still have the project.
+                    store
+                        .loaded(&MachineId::Remote(tab.machine_id.clone()))
+                        .is_none_or(|loaded| loaded.project(project_id).is_some())
+                })
+        })
         .cloned()
         .collect()
 }

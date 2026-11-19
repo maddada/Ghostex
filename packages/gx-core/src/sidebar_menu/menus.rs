@@ -46,10 +46,11 @@ pub struct SidebarMenus<'a> {
     /// The workspace each of this computer's projects is in (worktrees follow their parent).
     project_workspaces: std::collections::BTreeMap<String, String>,
     /// While a remote machine's section is drawn and this computer's daemon has workspaces: those
-    /// workspaces, and the one of them each of that machine's projects shows in.
+    /// workspaces, and for each of that machine's projects the project its placement follows (a
+    /// worktree's parent) and the workspace it shows in.
     remote_workspaces: Option<(
         ghostex_gx_protocol::SidebarWorkspacesState,
-        std::collections::BTreeMap<String, String>,
+        std::collections::BTreeMap<String, (String, String)>,
     )>,
     /// The drawn machine's daemon id (`S…`), the first part of a session's global ref; absent
     /// until a stream frame has named it.
@@ -149,7 +150,13 @@ impl<'a> SidebarMenus<'a> {
                         .map(|project| {
                             (
                                 project.project_id.clone(),
-                                workspace.project_workspace_id(loaded, project).to_string(),
+                                (
+                                    crate::sidebar_view::workspaces::placed_project_id(
+                                        loaded, project,
+                                    )
+                                    .to_string(),
+                                    workspace.project_workspace_id(loaded, project).to_string(),
+                                ),
                             )
                         })
                         .collect(),
@@ -479,12 +486,13 @@ impl<'a> SidebarMenus<'a> {
             remote_workspace: self.remote_workspaces.as_ref().and_then(
                 |(state, project_workspaces)| {
                     let remote = group.core.remote_machine.as_ref()?;
-                    let project_id = remote.project_id.as_deref()?;
+                    let (placed_project_id, workspace_id) =
+                        project_workspaces.get(remote.project_id.as_deref()?)?;
                     Some(project::RemoteProjectWorkspace {
                         state,
                         machine_id: remote.machine_id.as_str(),
-                        project_id,
-                        workspace_id: project_workspaces.get(project_id)?.as_str(),
+                        project_id: placed_project_id.as_str(),
+                        workspace_id: workspace_id.as_str(),
                     })
                 },
             ),

@@ -194,13 +194,23 @@ impl SidebarWorkspacesState {
     }
 
     /// Whether a remote machine has anything to show in `workspace_id`: its tab is placed there,
-    /// or one of its projects is.
-    pub fn machine_shows_in(&self, machine_id: &str, workspace_id: &str) -> bool {
+    /// or one of its projects is. `has_project` says whether the machine still has a project, so a
+    /// placement left by a project removed there does not keep its tab in an empty workspace.
+    pub fn machine_shows_in(
+        &self,
+        machine_id: &str,
+        workspace_id: &str,
+        has_project: impl Fn(&str) -> bool,
+    ) -> bool {
         self.machine_workspace(machine_id) == workspace_id
             || self
                 .remote_project_workspaces
                 .get(machine_id)
-                .is_some_and(|projects| projects.values().any(|id| id == workspace_id))
+                .is_some_and(|projects| {
+                    projects
+                        .iter()
+                        .any(|(project_id, id)| id == workspace_id && has_project(project_id))
+                })
     }
 
     /// The default workspace's id (`personal` when the document came without one).

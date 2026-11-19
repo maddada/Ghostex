@@ -143,5 +143,5 @@ pub use view::{
 pub use work::{SessionWork, WorkGithubIssue, WorkLinearIssue, WorkLinearProject, WorkPullRequest};
 pub use workspaces::{
     project_workspace_id, remote_window_workspace, window_machine_tabs, window_spaces,
-    window_workspace, RemoteWindowWorkspace, WindowWorkspace,
+    window_workspace, WindowWorkspace,
 };

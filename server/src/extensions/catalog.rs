@@ -59,6 +59,13 @@ fn fill_source_urls(catalog: &mut super::ExtensionCatalog, url: &str) {
 /// extension leaves the Store; the header's Commit/Git popover is Ghostex's own and stays.
 pub(crate) const RETIRED_OFFICIAL_EXTENSIONS: [&str; 2] = ["storybook", "git"];
 
+/// Whether the extension `id` by `author` is one of [`RETIRED_OFFICIAL_EXTENSIONS`]: Storybook
+/// whoever made it (as before), the others only as Ghostex published them, so a user's own
+/// extension that happens to use the id is left alone.
+pub(crate) fn is_retired_official_extension(id: &str, author: &str) -> bool {
+    id == "storybook" || (RETIRED_OFFICIAL_EXTENSIONS.contains(&id) && author.trim() == "Ghostex")
+}
+
 pub(crate) fn catalog_url() -> String {
     std::env::var("GHOSTEX_EXTENSIONS_CATALOG_URL")
         .ok()
@@ -236,9 +243,9 @@ fn parse_catalog(bytes: &[u8]) -> ExtensionResult<ExtensionCatalog> {
             )));
         }
     }
-    catalog
-        .extensions
-        .retain(|entry| !RETIRED_OFFICIAL_EXTENSIONS.contains(&entry.manifest.name.as_str()));
+    catalog.extensions.retain(|entry| {
+        !is_retired_official_extension(&entry.manifest.name, &entry.manifest.author)
+    });
     Ok(catalog)
 }
 
@@ -314,7 +321,11 @@ mod tests {
         }))
         .unwrap();
         let catalog = parse_catalog(&bytes).unwrap();
-        let names: Vec<_> = catalog.extensions.iter().map(|e| e.manifest.name.as_str()).collect();
+        let names: Vec<_> = catalog
+            .extensions
+            .iter()
+            .map(|e| e.manifest.name.as_str())
+            .collect();
         assert_eq!(names, ["good"]);
     }
 }
