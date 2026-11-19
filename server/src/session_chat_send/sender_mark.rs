@@ -480,11 +480,17 @@ mod tests {
         };
         let _serial = crate::connected_computers::tests::serial();
         let ttl = std::time::Duration::from_secs(60);
-        crate::connected_computers::issue_grant("S2", "Laptop", true, false, ttl, true).unwrap();
+        crate::connected_computers::issue_grant("S2", "Laptop", true, false, ttl, true, false)
+            .unwrap();
         let mut body = json!({ "params": { "projectId": "P1", "sessionId": "G1", "text": "see #M0", "userSend": true } });
         accept(&peer, &mut body);
         assert!(!is_user_send(&paths, "P1", "G1", "see #M0"));
-        crate::connected_computers::set_owner_issued("S2");
+        // The desktop app's grant, then a renewal that keeps the token: still the app's.
+        crate::connected_computers::issue_grant("S2", "Laptop", true, false, ttl, true, true)
+            .unwrap();
+        crate::connected_computers::issue_grant("S2", "Laptop", true, false, ttl, true, false)
+            .unwrap();
+        assert!(crate::connected_computers::owner_issued("S2"));
         let relayed = |caller: &Principal, text: &str| {
             let mut params = Map::new();
             params.insert("projectId".into(), json!("P1"));

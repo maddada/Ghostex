@@ -335,6 +335,9 @@ pub(crate) struct GrantDenied;
 /// `rotate` (a new way back was opened, or the machine reconnected) or when there is none. With
 /// Agent access off the grant is dropped and there is no token. `owner` is this computer's own
 /// app: its "on" lifts this computer's deny; anyone else is refused while the deny holds.
+/// `desktop_issued`: the desktop app asked for it (the owner session or the token file, or a
+/// server link the user approved), so the computer's relayed messages may count as the user's
+/// (`owner_issued`); a renewal that keeps the token keeps it.
 ///
 /// CDXC:RemoteMachines 2026-11-03 WHY:
 /// The token rotates whenever the way back is (re)opened: a dead reverse forward frees its port on the other computer, where any local user could listen and collect the token the other side keeps sending, so a token must never outlive the tunnel it was handed over through.
@@ -345,6 +348,7 @@ pub(crate) fn issue_grant(
     rotate: bool,
     ttl: Duration,
     owner: bool,
+    desktop_issued: bool,
 ) -> Result<Option<String>, GrantDenied> {
     let mut registry = registry();
     let now = Instant::now();
@@ -360,12 +364,12 @@ pub(crate) fn issue_grant(
         registry.grants.remove(server_id);
         return Ok(None);
     }
-    let token = registry
-        .grants
-        .get(server_id)
-        .filter(|_| !rotate)
+    let kept = registry.grants.get(server_id).filter(|_| !rotate);
+    let token = kept
         .map(|grant| grant.token.clone())
         .unwrap_or_else(new_peer_token);
+    // A renewal that keeps the token keeps what the desktop app said of it.
+    let owner_issued = desktop_issued || kept.is_some_and(|grant| grant.owner_issued);
     registry.grants.insert(
         server_id.to_string(),
         PeerGrant {
@@ -373,17 +377,10 @@ pub(crate) fn issue_grant(
             name: name.chars().take(MAX_NAME_CHARS).collect(),
             agent_access,
             expires_at: now + ttl.clamp(Duration::from_secs(10), MAX_REGISTRATION_TTL),
-            owner_issued: false,
+            owner_issued,
         },
     );
     Ok(Some(token))
-}
-
-/// Notes that the desktop app (an owner-level caller) issued `server_id`'s grant just now.
-pub(crate) fn set_owner_issued(server_id: &str) {
-    if let Some(grant) = registry().grants.get_mut(server_id) {
-        grant.owner_issued = true;
-    }
 }
 
 /// Whether `server_id`'s live grant was issued by the desktop app (`set_owner_issued`).

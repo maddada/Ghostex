@@ -65,10 +65,10 @@ const TTL: std::time::Duration = std::time::Duration::from_secs(60);
 fn a_renewal_keeps_the_token_and_a_new_way_back_rotates_it() {
     let _serial = serial();
     registry::reset_for_tests();
-    let first = registry::issue_grant("S4k", "Omarchy", true, false, TTL, true)
+    let first = registry::issue_grant("S4k", "Omarchy", true, false, TTL, true, true)
         .unwrap()
         .expect("a token");
-    let renewed = registry::issue_grant("S4k", "Omarchy", true, false, TTL, true)
+    let renewed = registry::issue_grant("S4k", "Omarchy", true, false, TTL, true, true)
         .unwrap()
         .expect("renewal");
     assert_eq!(first, renewed);
@@ -80,7 +80,7 @@ fn a_renewal_keeps_the_token_and_a_new_way_back_rotates_it() {
             name: "Omarchy".into()
         })
     );
-    let rotated = registry::issue_grant("S4k", "Omarchy", true, true, TTL, true)
+    let rotated = registry::issue_grant("S4k", "Omarchy", true, true, TTL, true, true)
         .unwrap()
         .expect("rotated");
     assert_ne!(rotated, first);
@@ -101,12 +101,12 @@ fn a_renewal_keeps_the_token_and_a_new_way_back_rotates_it() {
 fn turning_agent_access_off_drops_the_token_and_refuses_the_relay() {
     let _serial = serial();
     registry::reset_for_tests();
-    let token = registry::issue_grant("S4k", "Omarchy", true, false, TTL, true)
+    let token = registry::issue_grant("S4k", "Omarchy", true, false, TTL, true, true)
         .unwrap()
         .unwrap();
     registry::register(outbound("S4k", true));
     assert_eq!(
-        registry::issue_grant("S4k", "Omarchy", false, false, TTL, true).unwrap(),
+        registry::issue_grant("S4k", "Omarchy", false, false, TTL, true, true).unwrap(),
         None
     );
     registry::register(outbound("S4k", false));
@@ -188,7 +188,7 @@ fn this_computers_own_off_switch_holds_until_it_turns_it_back_on() {
     let _serial = serial();
     registry::reset_for_tests();
     // On: the other computer's app gets a token here.
-    let token = registry::issue_grant("S4k", "Omarchy", true, false, TTL, false)
+    let token = registry::issue_grant("S4k", "Omarchy", true, false, TTL, false, true)
         .unwrap()
         .expect("a token");
     // This computer's app turns the switch off: the token is dropped and a deny is set.
@@ -196,10 +196,10 @@ fn this_computers_own_off_switch_holds_until_it_turns_it_back_on() {
     assert_eq!(authorize_peer_token(&token), None);
     // The other computer's next renewal asks again: refused, and nothing is minted.
     assert_eq!(
-        registry::issue_grant("S4k", "Omarchy", true, false, TTL, false),
+        registry::issue_grant("S4k", "Omarchy", true, false, TTL, false, true),
         Err(registry::GrantDenied)
     );
-    assert!(registry::issue_grant("S4k", "Omarchy", true, true, TTL, false).is_err());
+    assert!(registry::issue_grant("S4k", "Omarchy", true, true, TTL, false, true).is_err());
     // Nor can it register itself back on.
     assert!(!registry::register(registration("S4k", true, false, false)));
     let held = find("S4k").unwrap();
@@ -208,11 +208,11 @@ fn this_computers_own_off_switch_holds_until_it_turns_it_back_on() {
     assert!(held.token().is_empty());
     // This computer's app turns it back on: the deny lifts and the other computer is served again.
     assert!(
-        registry::issue_grant("S4k", "Omarchy", true, false, TTL, true)
+        registry::issue_grant("S4k", "Omarchy", true, false, TTL, true, true)
             .unwrap()
             .is_some()
     );
-    let again = registry::issue_grant("S4k", "Omarchy", true, false, TTL, false)
+    let again = registry::issue_grant("S4k", "Omarchy", true, false, TTL, false, true)
         .unwrap()
         .expect("a token again");
     assert!(authorize_peer_token(&again).is_some());
