@@ -2049,9 +2049,9 @@ messages, plus Edit message, Back to composer and Delete message while one still
 waits for the agent.
 Select words in the chat and right-click them for Copy, Add to Chat (quotes
 them into the chat box) and Reply, which opens a small box for your answer:
-Add to prompt (Enter) adds the quote with your reply under it to the end of the
-chat box, and Send reply (Cmd+Enter, Ctrl+Enter on Windows and Linux) also
-sends it, as Send would. Shift+Enter starts a new line and Escape closes it.
+Enter sends the reply right away, as it does in the chat box, and Add to prompt
+(Option+Enter, Alt+Enter on Windows and Linux) adds the quote with your reply under it to
+the end of the chat box instead. Shift+Enter starts a new line and Escape closes it.
 On the phone there is no hover. Hold a message's words to select them (drag
 the handles to change the selection); the menu that appears offers Copy, Add to
 Chat, which quotes the selected words into the chat box, and More, which opens
@@ -4305,7 +4305,7 @@ version of the Projects features in Cursor and Claude Code.
   Copy as Markdown in the same rows. A question's Reply takes voice and
   pictures: its microphone dictates into the box, and a picture you paste or
   pick with its paperclip (the phone's photo button) goes with your words.
-  **Reply in chat box** (Enter on the computer) puts the question in the chat
+  **Reply in chat box** (Option+Enter, Alt+Enter on Windows and Linux, on the computer) puts the question in the chat
   box as a pill with its title, inside your text, with your words after it, so
   you can use everything the chat box does and answer several questions in one
   message; point at a pill to see which question it answers. Sending it answers

@@ -1,7 +1,8 @@
 //! The transcript menu's Reply popover: a small frosted card where the menu was, with a field for
-//! the reply and its two actions, Add to prompt (Enter) and Send reply (Cmd+Enter, Ctrl+Enter off
-//! a Mac). The row and the draft it leaves are the core's (CDXC:SessionChat 2026-10-29 DECISION on
-//! `reply_item` in `packages/gx-chat-core/src/composer/transcript_menu.rs`).
+//! the reply and its two actions, Send reply (Enter, as in the chat box) and Add to prompt
+//! (Option+Enter, Alt+Enter off a Mac). The row and the draft it leaves are the core's
+//! (CDXC:SessionChat 2026-10-29 DECISION on `reply_item` in
+//! `packages/gx-chat-core/src/composer/transcript_menu.rs`).
 //!
 //! CDXC:SessionChat 2026-10-29 WHY:
 //! It is a child window like the chat's menus because GPUI blurs only behind a whole window
@@ -848,8 +849,7 @@ impl NativeChatView {
 }
 
 /// The card's width before the chat's zoom: `WIDTH`, or what its button row takes when that is
-/// more. Off a Mac the keys are spelled out ("Ctrl+Enter"), and with a question's labels the row
-/// was wider than 400px on Linux and Windows.
+/// more. The key hint is the same narrow ⌥⏎ glyphs on every platform.
 fn card_width(question: bool, appearance: &ChatAppearance, window: &Window) -> f32 {
     let scale = appearance.scale;
     let mut style = window.text_style();
@@ -873,9 +873,8 @@ fn card_width(question: bool, appearance: &ChatAppearance, window: &Window) -> f
         .into_iter()
         .map(|(label, action)| {
             text_width(label)
-                + text_width(shortcut_label(action))
+                + shortcut_label(action).map_or(0.0, |key| text_width(key) + ACTION_GAP)
                 + ACTION_PADDING * 2.0
-                + ACTION_GAP
         })
         .sum();
     // Both icons, the status line's own padding, the four gaps and a little air.
@@ -944,24 +943,15 @@ impl ReplyPopover {
                 .placeholder(placeholder)
                 .default_value(typed.clone())
         });
-        // Enter is the field's own key (GPUI runs key bindings before key-down listeners): with
-        // `submit_on_enter` a plain Enter reports `PressEnter` instead of a new line, Cmd+Enter
-        // (Ctrl+Enter off a Mac) reports it as `secondary`, and Shift+Enter stays a new line.
+        // CDXC:SessionChat 2026-11-20 DECISION: User: "Enter sends the reply right away, matching
+        // the regular chat box"; Option+Enter (Alt+Enter off a Mac) adds it to the chat box (`key`
+        // below). Enter is the field's own key (GPUI runs key bindings before key-down
+        // listeners): with `submit_on_enter` a plain Enter reports `PressEnter` instead of a new
+        // line, Cmd+Enter (Ctrl+Enter off a Mac) reports it as `secondary` and sends too, as in the
+        // chat box, and Shift+Enter stays a new line.
         let enter = cx.subscribe(&input, |popover: &mut Self, _, event: &InputEvent, cx| {
-            if let InputEvent::PressEnter {
-                secondary,
-                shift: false,
-            } = event
-            {
-                popover.close(
-                    Some(if *secondary {
-                        ReplyAction::Send
-                    } else {
-                        ReplyAction::AddToPrompt
-                    }),
-                    true,
-                    cx,
-                );
+            if let InputEvent::PressEnter { shift: false, .. } = event {
+                popover.close(Some(ReplyAction::Send), true, cx);
             }
         });
         // Every edit is kept at once (`KEPT_REPLIES`), whatever closes the card after.
@@ -1128,12 +1118,24 @@ impl ReplyPopover {
         });
     }
 
-    /// Escape closes the card without touching the chat box (the field lets it through).
+    /// Escape closes the card without touching the chat box (the field lets it through), and
+    /// Option+Enter (Alt+Enter off a Mac, which the field has no binding for) adds the reply to
+    /// the chat box.
     fn key(&mut self, event: &gpui::KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        if event.keystroke.key == "escape" {
+        let key = &event.keystroke;
+        if key.key == "escape" {
             cx.stop_propagation();
             window.prevent_default();
             self.close(None, true, cx);
+        } else if key.key == "enter"
+            && key.modifiers.alt
+            && !key.modifiers.shift
+            && !key.modifiers.control
+            && !key.modifiers.platform
+        {
+            cx.stop_propagation();
+            window.prevent_default();
+            self.close(Some(ReplyAction::AddToPrompt), true, cx);
         }
     }
 
@@ -1258,7 +1260,10 @@ impl ReplyPopover {
         div()
             .id(id)
             .role(gpui::Role::Button)
-            .aria_label(format!("{label} ({shortcut})"))
+            .aria_label(match action {
+                ReplyAction::Send => format!("{label} (Enter)"),
+                ReplyAction::AddToPrompt => format!("{label} ({}+Enter)", option_key_name()),
+            })
             .chat_cursor_pointer()
             .flex()
             .min_w_0()
@@ -1271,13 +1276,15 @@ impl ReplyPopover {
             .hover(move |row| row.bg(hover))
             .child(div().flex_shrink_0().text_color(p.foreground).child(label))
             // In a chat too narrow for the whole row the key gives way first.
-            .child(
-                div()
-                    .min_w_0()
-                    .truncate()
-                    .text_color(p.muted)
-                    .child(shortcut),
-            )
+            .when_some(shortcut, |button, shortcut| {
+                button.child(
+                    div()
+                        .min_w_0()
+                        .truncate()
+                        .text_color(p.muted)
+                        .child(shortcut),
+                )
+            })
             .on_click(cx.listener(move |popover, _, _, cx| popover.close(Some(action), true, cx)))
             .into_any_element()
     }
@@ -1432,14 +1439,21 @@ fn action_labels(question: bool) -> (&'static str, &'static str) {
     }
 }
 
-/// The action's key as the reference popover shows it: ⏎ and ⌘⏎ on a Mac keyboard, spelled out
-/// elsewhere (Ctrl+Enter sends there).
-fn shortcut_label(action: ReplyAction) -> &'static str {
-    match (action, super::keyboard::chat_mac_keys()) {
-        (ReplyAction::AddToPrompt, true) => "⏎",
-        (ReplyAction::Send, true) => "⌘⏎",
-        (ReplyAction::AddToPrompt, false) => "Enter",
-        (ReplyAction::Send, false) => "Ctrl+Enter",
+/// The action's key hint, drawn as glyphs on every platform (never "Alt+Enter") so it stays
+/// narrow: Add to prompt shows ⌥⏎; Send shows none, Enter being the chat box's own send key.
+fn shortcut_label(action: ReplyAction) -> Option<&'static str> {
+    match action {
+        ReplyAction::AddToPrompt => Some("⌥⏎"),
+        ReplyAction::Send => None,
+    }
+}
+
+/// The Add to prompt key's name for a screen reader: Option on a Mac keyboard, Alt elsewhere.
+fn option_key_name() -> &'static str {
+    if super::keyboard::chat_mac_keys() {
+        "Option"
+    } else {
+        "Alt"
     }
 }
 
