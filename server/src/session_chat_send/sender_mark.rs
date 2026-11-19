@@ -10,16 +10,30 @@
 //!   carries the exact "Message from another agent" block, at its start or end, naming that same
 //!   session; anything else (no block, a block in a code fence, a forged block naming another
 //!   agent) gets gxserver's own block for the session, first for a `/` or `!` body so it never
-//!   runs as a command. An agent message to another computer is marked here before the relay
-//!   sends it (connected_computers/relay.rs); there, the other computer passes it on as it came,
-//!   so `--as-user --computer` and gxserver's own nudges stay unmarked.
+//!   runs as a command. An agent message to another computer is signed by the relay before it
+//!   leaves (connected_computers/relay.rs `marked_message_body`, which refuses a body it cannot
+//!   read as a message rather than pass it on unsigned); the other computer passes it on as it
+//!   came.
 //! - The "Sent from the terminal" / "Sent via Grok Bot" line and the security log entry
 //!   (`chat.sendAsUser`) are added only when the CLI passes `via` (`ghostex agents send
-//!   --as-user`), from the token file, and never to text that carries a `draftVersion`.
-//! - A "W7 Q12: …" answer settles a coordinator's ask only when one of the user's own callers sent
-//!   that text: the record is kept in gxserver's database (`session_chat_user_sends`), so a restart
-//!   or a queued prompt that goes out later still settles it, and an edit by the user records the
-//!   new text.
+//!   --as-user`), from the token file, and never to text that carries a `draftVersion`. For a chat
+//!   on another computer the relay adds them, since that computer drops `via`.
+//! - A "W7 Q12: …" answer settles a coordinator's ask, and a message's quotes of earlier messages
+//!   are added (chat_message_numbers.rs), only when one of the user's own callers sent that text:
+//!   the record is kept in gxserver's database (`session_chat_user_sends`), written when the send
+//!   or queued prompt is accepted (never for a replay; withdrawn when it fails), so a restart or a
+//!   queued prompt that goes out later still finds it, and an edit by the user records the new
+//!   text.
+//!
+//! CDXC:Security 2026-11-20 DECISION (Fable's review of 809e881f4):
+//! User (Q4256 A): anything holding one computer's token file or a paired phone counts as the user
+//! on the other computer too, the rule each computer already applies to its own chats. The relay
+//! marks such a caller's message `userSend` (`mark_relayed_send`) and strips the field from
+//! everyone else's; the receiving computer honours it only from a computer whose grant the desktop
+//! app issued (`owner_issued`, and only the owner session or the token file may issue, register,
+//! unregister or revoke grants, connected_computers/http.rs), and drops it from every other
+//! caller's message before any handler sees it. Held messages (`holdSessionChatSend`) are never
+//! marked: that route does not record its caller and a session token may call it.
 //! SEE-ALSO: server/src/ghostex_cli/agents/identity.rs `sender` (`--as-user`),
 //! server/src/session_chat_queue_runtime/send.rs `settle_work_replies`.
 
@@ -248,6 +262,8 @@ pub(crate) fn prepare(
     // The relay's mark never reaches a handler, whoever sent it; it is read below only from a
     // computer the desktop app connected (`owner_issued`).
     let relayed_user = params.remove(RELAYED_USER_SEND) == Some(Value::Bool(true));
+    // Only this function sets the accepted-send mark; a caller's own copy is dropped.
+    params.remove(USER_SEND_MARK);
     let target_project = param(params, "projectId").to_string();
     let target_session = param(params, "sessionId").to_string();
     match caller {
@@ -273,9 +289,10 @@ pub(crate) fn prepare(
             }
             let text =
                 label_as_user_send(server_id, caller, via.as_deref(), params).unwrap_or(text);
-            // An edit by the user records its new text; the scheduler's later send settles by it.
-            if route != "/api/sendSessionMessage" {
-                note_user_send(paths, &target_project, &target_session, &text);
+            // Recorded once the send is accepted (`note_accepted_user_send`); an edit by the user
+            // records its new text, which the scheduler's later send settles by.
+            if route != "/api/sendSessionMessage" && !text.trim().is_empty() {
+                params.insert(USER_SEND_MARK.to_string(), Value::Bool(true));
             }
         }
         // Another of the user's computers relays a message one of the user's own callers sent
@@ -299,11 +316,46 @@ pub(crate) fn prepare(
                 && !signed_by_an_agent
                 && route != "/api/sendSessionMessage"
             {
-                note_user_send(paths, &target_project, &target_session, &text);
+                params.insert(USER_SEND_MARK.to_string(), Value::Bool(true));
             }
         }
         // Anything else was marked by the computer it came from before it came (see above).
         _ => {}
+    }
+}
+
+/// The mark `prepare` puts on a message one of the user's own callers sent (or that a computer the
+/// desktop app connected relayed as theirs), for the handler to record once it accepts the send
+/// (`note_accepted_user_send`). Any copy a caller sends is dropped by `prepare`.
+pub(crate) const USER_SEND_MARK: &str = "ghostexUserSend";
+
+/// Records a message `prepare` marked as the user's, when its handler accepts it: before the send
+/// types it (its quotes of earlier messages check the record), and never for a replay the send
+/// ledger answers. Answers what to withdraw (`withdraw_user_send`) if the send then fails.
+pub(crate) fn note_accepted_user_send(
+    paths: &GxserverPaths,
+    body: &Value,
+) -> Option<(String, String, String)> {
+    let params = body.get("params")?.as_object()?;
+    if params.get(USER_SEND_MARK) != Some(&Value::Bool(true)) {
+        return None;
+    }
+    let (project_id, session_id, text) = (
+        param(params, "projectId").to_string(),
+        param(params, "sessionId").to_string(),
+        param(params, "text").to_string(),
+    );
+    if text.trim().is_empty() {
+        return None;
+    }
+    note_user_send(paths, &project_id, &session_id, &text);
+    Some((project_id, session_id, text))
+}
+
+/// Forgets a user send recorded for a send that was then refused or failed.
+pub(crate) fn withdraw_user_send(paths: &GxserverPaths, noted: Option<(String, String, String)>) {
+    if let Some((project_id, session_id, text)) = noted {
+        take_user_send(paths, &project_id, &session_id, &text);
     }
 }
 
@@ -404,17 +456,16 @@ mod tests {
             server_id: "S2".into(),
             name: "Laptop".into(),
         };
+        // What the route does: `prepare`, then the handler records the send it accepts.
+        let accept = |caller: &Principal, body: &mut Value| {
+            prepare(&paths, "S1", "/api/sendSessionChatMessage", caller, body);
+            note_accepted_user_send(&paths, body);
+        };
         let _serial = crate::connected_computers::tests::serial();
         let ttl = std::time::Duration::from_secs(60);
         crate::connected_computers::issue_grant("S2", "Laptop", true, false, ttl, true).unwrap();
         let mut body = json!({ "params": { "projectId": "P1", "sessionId": "G1", "text": "see #M0", "userSend": true } });
-        prepare(
-            &paths,
-            "S1",
-            "/api/sendSessionChatMessage",
-            &peer,
-            &mut body,
-        );
+        accept(&peer, &mut body);
         assert!(!is_user_send(&paths, "P1", "G1", "see #M0"));
         crate::connected_computers::set_owner_issued("S2");
         let relayed = |caller: &Principal, text: &str| {
@@ -426,13 +477,7 @@ mod tests {
             params
         };
         let mut body = json!({ "params": relayed(&Principal::LocalAgent, "see #M2") });
-        prepare(
-            &paths,
-            "S1",
-            "/api/sendSessionChatMessage",
-            &peer,
-            &mut body,
-        );
+        accept(&peer, &mut body);
         assert!(is_user_send(&paths, "P1", "G1", "see #M2"));
         assert!(body["params"].get(RELAYED_USER_SEND).is_none());
         // An agent's session cannot mark its own message as the user's.
@@ -445,17 +490,14 @@ mod tests {
         assert!(forged.get(RELAYED_USER_SEND).is_none());
         forged.insert(RELAYED_USER_SEND.into(), json!(false));
         let mut body = json!({ "params": forged });
-        prepare(
-            &paths,
-            "S1",
-            "/api/sendSessionChatMessage",
-            &peer,
-            &mut body,
-        );
+        accept(&peer, &mut body);
         assert!(!is_user_send(&paths, "P1", "G1", "see #M3"));
         // Nor does a peer's message without the mark count.
-        let mut body =
-            json!({ "params": { "projectId": "P1", "sessionId": "G1", "text": "see #M4" } });
+        let mut body = json!({ "params": { "projectId": "P1", "sessionId": "G1", "text": "see #M4", "ghostexUserSend": true } });
+        accept(&peer, &mut body);
+        assert!(!is_user_send(&paths, "P1", "G1", "see #M4"));
+        // A refused send's record is withdrawn.
+        let mut body = json!({ "params": relayed(&Principal::LocalAgent, "see #M5") });
         prepare(
             &paths,
             "S1",
@@ -463,7 +505,10 @@ mod tests {
             &peer,
             &mut body,
         );
-        assert!(!is_user_send(&paths, "P1", "G1", "see #M4"));
+        let noted = note_accepted_user_send(&paths, &body);
+        assert!(is_user_send(&paths, "P1", "G1", "see #M5"));
+        withdraw_user_send(&paths, noted);
+        assert!(!is_user_send(&paths, "P1", "G1", "see #M5"));
     }
 
     #[test]

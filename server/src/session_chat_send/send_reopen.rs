@@ -50,6 +50,10 @@ pub(crate) async fn handle_send_session_chat_message_from(
                 Some(key) => plan_worker_compaction(&state, key, &message_text(&body)).await,
                 None => None,
             };
+            // The user's own send is recorded now that the send ledger took it (never for a
+            // replay it answers), before it is typed: its quotes check the record
+            // (sender_mark.rs `note_accepted_user_send`); a refused or failed send withdraws it.
+            let noted = super::sender_mark::note_accepted_user_send(&state.paths, &body);
             let response = match &compaction {
                 Some(compaction) => {
                     send_after_compaction(&state, endpoint_path, request_id, &body, compaction)
@@ -61,6 +65,7 @@ pub(crate) async fn handle_send_session_chat_message_from(
                 }
             };
             if !response.response.status().is_success() {
+                super::sender_mark::withdraw_user_send(&state.paths, noted);
                 return response;
             }
             let mut fields = Map::new();
