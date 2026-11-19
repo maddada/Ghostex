@@ -53,12 +53,20 @@ impl GhostexGpuiApp {
                 .when(cfg!(target_os = "windows"), |this| this.occlude())
                 .when(open, |this| this.bg(titlebar_button_hover_color()))
                 .hover(|this| this.bg(titlebar_button_hover_color()))
-                .child(session_details_ring(
-                    percent.unwrap_or(0.0) as f32,
-                    titlebar_button_border_color(),
-                    text,
-                    14.0,
-                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_shrink_0()
+                        .size(px(super::header_pins::HEADER_ICON_BOX))
+                        .items_center()
+                        .justify_center()
+                        .child(session_details_ring(
+                            percent.unwrap_or(0.0) as f32,
+                            text.opacity(0.18),
+                            text,
+                            14.0,
+                        )),
+                )
                 .child(session_details_ring_label(label, text))
                 .tooltip(move |window, cx| {
                     gpui_component::tooltip::Tooltip::new(if open {
@@ -68,6 +76,13 @@ impl GhostexGpuiApp {
                     })
                     .build(window, cx)
                 })
+                .on_mouse_down(
+                    MouseButton::Right,
+                    super::header_pins::header_slot_right_click(
+                        super::header_pins::HeaderSlot::SessionDetails,
+                        cx,
+                    ),
+                )
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|this, _, window, cx| {

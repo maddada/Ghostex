@@ -28,6 +28,13 @@ thread_local! {
     static TARGET: RefCell<Option<SessionKey>> = const { RefCell::new(None) };
 }
 
+/// Where the Share popover hangs from when the button is not drawn (it is in the ⋯ menu).
+pub(crate) fn set_share_anchor(anchor: Option<Bounds<Pixels>>) {
+    if anchor.is_some() {
+        ANCHOR.with(|cell| cell.set(anchor));
+    }
+}
+
 /// The chat the Share popover was opened for.
 pub(crate) fn share_target() -> Option<SessionKey> {
     TARGET.with(|target| target.borrow().clone())
@@ -49,16 +56,19 @@ impl GhostexGpuiApp {
         Some((key, self.native_chat_views.get(&session)?.clone()))
     }
 
+    /// The focused chat's Collab part, when it can be shared from here. None while Collab isn't
+    /// installed (or is stopped) on this computer, so there is no Share.
+    pub(crate) fn share_button_collab(&self, cx: &gpui::App) -> Option<serde_json::Value> {
+        let (_, chat) = self.share_button_chat()?;
+        let collab = chat.read(cx).snapshot["collab"].clone();
+        (!collab.is_null()).then_some(collab)
+    }
+
     pub(crate) fn render_workarea_header_share_button(
         &self,
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
-        let (_, chat) = self.share_button_chat()?;
-        let collab = chat.read(cx).snapshot["collab"].clone();
-        // No Collab part: Collab isn't installed (or is stopped) on this computer, so no Share.
-        if collab.is_null() {
-            return None;
-        }
+        let collab = self.share_button_collab(cx)?;
         let shared = collab["shared"] == true;
         let watching = collab["viewerCount"].as_u64().unwrap_or(0);
         let label = match (shared, watching) {
@@ -94,7 +104,7 @@ impl GhostexGpuiApp {
                 .when(cfg!(target_os = "windows"), |this| this.occlude())
                 .when(open, |this| this.bg(titlebar_button_hover_color()))
                 .hover(|this| this.bg(titlebar_button_hover_color()))
-                .child(titlebar_svg_icon("titlebar/users.svg", 14.0, text))
+                .child(super::header_pins::header_icon("titlebar/users.svg", text))
                 .when(shared, |this| {
                     this.child(div().size(px(6.0)).rounded_full().bg(gpui::rgb(0x4ade80)))
                 })
@@ -109,6 +119,13 @@ impl GhostexGpuiApp {
                         cx.stop_propagation();
                         this.toggle_collab_share_popover(window, cx);
                     }),
+                )
+                .on_mouse_down(
+                    MouseButton::Right,
+                    super::header_pins::header_slot_right_click(
+                        super::header_pins::HeaderSlot::Share,
+                        cx,
+                    ),
                 )
                 .on_prepaint(|bounds, _, _| ANCHOR.with(|anchor| anchor.set(Some(bounds))))
                 .into_any_element(),

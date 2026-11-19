@@ -105,6 +105,7 @@ impl GhostexGpuiApp {
                 | GpuiTitlebarPopupKind::BrowserDeviceView(_)
                 | GpuiTitlebarPopupKind::Extensions
                 | GpuiTitlebarPopupKind::Git
+                | GpuiTitlebarPopupKind::HeaderMore
                 | GpuiTitlebarPopupKind::Help
                 | GpuiTitlebarPopupKind::Updates
                 | GpuiTitlebarPopupKind::OpenTargets
@@ -527,6 +528,16 @@ impl GhostexGpuiApp {
                 GpuiTitlebarPopupContent::Reading(
                     cx.new(|cx| GpuiTitlebarReadingPanel::notifications(main_app, feed, cx)),
                 )
+            }
+            GpuiTitlebarPopupKind::HeaderMore => {
+                GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
+                    self.build_gpui_header_more_popup_menu(
+                        menu,
+                        menu_width,
+                        menu_max_height,
+                        menu_scrollable,
+                    )
+                }))
             }
             GpuiTitlebarPopupKind::Extensions => {
                 GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {

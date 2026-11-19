@@ -952,6 +952,16 @@ impl Render for GhostexGpuiApp {
             .on_action(cx.listener(|this, action: &ToggleGpuiExtensionPin, _window, cx| {
                 this.update_extension_pin(action.extension_id.clone(), action.pinned, cx);
             }))
+            // A header control's right-click Unpin (render/workarea_header/header_pins.rs).
+            .on_action(cx.listener(
+                |this, action: &crate::app::render::workarea_header::header_pins::PinWorkareaHeaderSlot, _window, cx| {
+                    if let Some(slot) =
+                        crate::app::render::workarea_header::header_pins::HeaderSlot::from_key(&action.slot)
+                    {
+                        this.set_header_slot_pinned(slot, action.pinned, cx);
+                    }
+                },
+            ))
             .on_action(cx.listener(|this, action: &DisableGpuiExtension, _window, cx| {
                 this.disable_extension(action.extension_id.clone(), cx);
             }))

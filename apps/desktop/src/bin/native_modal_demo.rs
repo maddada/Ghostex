@@ -4,7 +4,7 @@ Standalone preview of the native GPUI app modals so their look can be checked
 against the React Storybook stories without launching Ghostex. Run with:
     cargo run --release --bin native-modal-demo
 Environment:
-    GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|go-back|crash-report|updates-menu|start-menu|chief-row|notice-modal|gbot-team|new-gbot|new-bot|... (which modal; default export-transcript)
+    GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|go-back|header-more|crash-report|updates-menu|start-menu|chief-row|notice-modal|gbot-team|new-gbot|new-bot|... (which modal; default export-transcript)
     GHOSTEX_NATIVE_MODAL_DEMO_THEME=dark|light                (default dark)
     GHOSTEX_NATIVE_MODAL_DEMO_SIDEBAR_THEME=dark-green|...    (a dark theme's text colours)
     GHOSTEX_NATIVE_MODAL_DEMO_CHROME=<rrggbb>                 (tint the modal from a theme chrome)
@@ -94,6 +94,8 @@ mod delete_worktree_demo;
 mod delete_worktree_modal;
 #[path = "native_modal_demo/extension_menu.rs"]
 mod extension_menu_demo;
+#[path = "native_modal_demo/header_more.rs"]
+mod header_more_demo;
 #[path = "native_modal_demo/gbot_settings.rs"]
 mod gbot_settings_demo;
 #[path = "../app/window/gbot_settings_modal/mod.rs"]
@@ -879,6 +881,7 @@ fn main() {
                 "session-note" => session_note_demo::open(&demo, cx),
                 "chief-row" => chief_row_demo::open(&demo, cx),
                 "extension-menu" => extension_menu_demo::open(&demo, cx),
+                "header-more" => header_more_demo::open(&demo, cx),
                 "voice-panel" => voice_panel_demo::open(&demo, cx),
                 "permission-guide" => permission_guide_demo::open(&demo, cx),
                 "install-hooks" => agent_hooks_required_demo::open(&demo, cx),

@@ -16,6 +16,7 @@ use gpui_component::tooltip::ManagedTooltipPlacement;
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use super::header_pins::{HeaderSlot, header_icon, header_icon_button, header_slot_right_click};
 use crate::app::consts::*;
 use crate::app::helpers::*;
 use crate::app::model::*;
@@ -98,22 +99,31 @@ impl GhostexGpuiApp {
         &self,
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
+        // Each toggle while pinned (header_pins.rs); with neither, no divider either.
+        let bottom = self.header_slot_pinned(HeaderSlot::BottomPanel);
+        let side = self.header_slot_pinned(HeaderSlot::SidePanel);
         h_flex()
             .flex_shrink_0()
             .h(px(TITLEBAR_CONTROL_HEIGHT))
             .items_center()
             .gap(px(2.0))
-            .child(
-                // Visual-only separator: a plain div with no id and no interactivity, so it
-                // registers no hitbox and the band's drag area keeps the gap.
-                div()
-                    .w(px(1.0))
-                    .h(px(16.0))
-                    .mx(px(3.0))
-                    .bg(titlebar_button_border_color()),
-            )
-            .child(self.render_workarea_header_command_terminal_toggle(cx))
-            .child(self.render_workarea_header_view_panel_toggle(cx))
+            .when(bottom || side, |this| {
+                this.child(
+                    // Visual-only separator: a plain div with no id and no interactivity, so it
+                    // registers no hitbox and the band's drag area keeps the gap.
+                    div()
+                        .w(px(1.0))
+                        .h(px(14.0))
+                        .mx(px(5.0))
+                        .bg(titlebar_split_button_border_color()),
+                )
+            })
+            .when(bottom, |this| {
+                this.child(self.render_workarea_header_command_terminal_toggle(cx))
+            })
+            .when(side, |this| {
+                this.child(self.render_workarea_header_view_panel_toggle(cx))
+            })
             .on_prepaint(|bounds, _window, _cx| {
                 PANEL_TOGGLES_WIDTH.store(bounds.size.width.as_f32().to_bits(), Ordering::Relaxed);
             })
@@ -195,15 +205,15 @@ impl GhostexGpuiApp {
     ) -> impl IntoElement {
         let expanded = self.command_pane.is_expanded();
         let tooltip = titlebar_tooltip_label("Toggle bottom panel", "openCommandsPanel");
-        header_panel_toggle_button(
+        header_icon_button(
             "ghostex-gpui-workarea-header-command-terminal-toggle",
-            TITLEBAR_ICON_PANEL_BOTTOM,
-            0.0,
-            true,
-            None,
-            1.0,
+            expanded,
         )
-        .when(expanded, |this| this.bg(titlebar_active_segment_color()))
+        .child(header_icon(TITLEBAR_ICON_PANEL_BOTTOM, titlebar_active_text_color()))
+        .on_mouse_down(
+            MouseButton::Right,
+            header_slot_right_click(HeaderSlot::BottomPanel, cx),
+        )
         .on_mouse_down(
             MouseButton::Left,
             cx.listener(|this, _, window, cx| {
@@ -233,16 +243,13 @@ impl GhostexGpuiApp {
     ) -> impl IntoElement {
         let open = self.view_panel_open();
         let tooltip = titlebar_tooltip_label("Toggle side panel", "toggleViewPanel");
-        header_panel_toggle_button(
-            "ghostex-gpui-workarea-header-view-panel-toggle",
-            TITLEBAR_ICON_PANEL_RIGHT,
-            0.0,
-            true,
-            None,
-            1.0,
-        )
-        .when(open, |this| this.bg(titlebar_active_segment_color()))
-        .on_mouse_down(
+        header_icon_button("ghostex-gpui-workarea-header-view-panel-toggle", open)
+            .child(header_icon(TITLEBAR_ICON_PANEL_RIGHT, titlebar_active_text_color()))
+            .on_mouse_down(
+                MouseButton::Right,
+                header_slot_right_click(HeaderSlot::SidePanel, cx),
+            )
+            .on_mouse_down(
             MouseButton::Left,
             cx.listener(|this, _, window, cx| {
                 window.prevent_default();

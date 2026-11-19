@@ -15,6 +15,7 @@ use gpui_component::tooltip::ManagedTooltipExt as _;
 use gpui_component::tooltip::ManagedTooltipPlacement;
 
 use super::place::WebPlace;
+use crate::app::render::workarea_header::header_pins::{HeaderSlot, header_icon, header_slot_right_click};
 use crate::app::helpers::*;
 use crate::*;
 
@@ -30,12 +31,19 @@ struct WebBotButton {
 
 impl GhostexGpuiApp {
     /// The buttons to show now: Claude's and Grok Bot's, each while it is on and its view can open
-    /// here.
+    /// here, and pinned or showing its page (render/workarea_header/header_pins.rs).
     fn web_bot_buttons(&self) -> Vec<WebBotButton> {
         // Grok Bot first, then Claude (the user, 2026-11-10, after seeing the header: "just swap them").
         [WebPlace::Grok, WebPlace::Claude]
             .into_iter()
             .filter(|place| place.enabled() && self.titlebar_mode_available(place.mode()))
+            .filter(|place| {
+                self.web_place_on() == Some(*place)
+                    || self.header_slot_pinned(match place {
+                        WebPlace::Claude => HeaderSlot::Claude,
+                        WebPlace::Grok => HeaderSlot::GrokBot,
+                    })
+            })
             .map(|place| WebBotButton {
                 id: place.view_id_str().to_string(),
                 title: place.title().to_string(),
@@ -60,6 +68,11 @@ impl GhostexGpuiApp {
                     icon,
                     showing,
                 } = button;
+                let slot = if WebPlace::from_view_id(&id) == Some(WebPlace::Claude) {
+                    HeaderSlot::Claude
+                } else {
+                    HeaderSlot::GrokBot
+                };
                 let click_id = id.clone();
                 let tooltip = title.clone();
                 div()
@@ -86,15 +99,16 @@ impl GhostexGpuiApp {
                             this.bg(titlebar_button_hover_color())
                         }
                     })
-                    .child(titlebar_svg_icon(
+                    // Logos drawn to the header's sizing rule, so Claude is no bigger than the rest.
+                    .child(header_icon(
                         icon,
-                        16.0,
                         if showing {
                             titlebar_active_text_color()
                         } else {
                             titlebar_icon_color()
                         },
                     ))
+                    .on_mouse_down(MouseButton::Right, header_slot_right_click(slot, cx))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |app, _: &MouseDownEvent, window, cx| {

@@ -827,7 +827,17 @@ impl GhostexGpuiApp {
                 .cursor_default()
                 .when(cfg!(target_os = "windows"), |this| this.occlude())
                 .hover(|this| this.bg(titlebar_button_hover_color()))
-                .child(titlebar_svg_icon("titlebar/external-link.svg", 14.0, color))
+                .child(crate::app::render::workarea_header::header_pins::header_icon(
+                    "titlebar/external-link.svg",
+                    color,
+                ))
+                .on_mouse_down(
+                    MouseButton::Right,
+                    crate::app::render::workarea_header::header_pins::header_slot_right_click(
+                        crate::app::render::workarea_header::header_pins::HeaderSlot::Popout,
+                        cx,
+                    ),
+                )
                 .tooltip(move |window, cx| {
                     gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
                 })

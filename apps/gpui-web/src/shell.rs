@@ -57,7 +57,7 @@ impl GhostexGpuiApp {
             .text_size(px(12.0))
             .text_color(color)
             .cursor_not_allowed()
-            .child(titlebar_svg_icon(icon, 15.0, color))
+            .child(titlebar_svg_icon(icon, 16.0, color))
             .when_some(label, |button, label| button.child(label))
             .tooltip(|window, cx| Tooltip::new(WEB_DISABLED_REASON).build(window, cx))
             .into_any_element()
@@ -193,7 +193,9 @@ impl GhostexGpuiApp {
                 .child(
                     gpui::svg()
                         .path("titlebar/layout-board-split.svg")
-                        .size(px(14.0))
+                        // The desktop header's sizing rule: a solid shape drawn to about 11px
+                        // (render/workarea_header/header_pins.rs `header_icon_size`).
+                        .size(px(15.0))
                         .flex_none()
                         .text_color(text),
                 )
@@ -286,7 +288,7 @@ impl GhostexGpuiApp {
                 .child(
                     crate::app::native_chat::session_details::session_details_ring(
                         percent.unwrap_or(0.0) as f32,
-                        titlebar_popup_menu_border_color(),
+                        text.opacity(0.18),
                         text,
                         14.0,
                     ),
@@ -401,7 +403,7 @@ impl GhostexGpuiApp {
             .text_color(text)
             .cursor_pointer()
             .hover(|button| button.bg(titlebar_popup_menu_hover_color()))
-            .child(titlebar_svg_icon(TITLEBAR_ICON_GIT_COMMIT, 15.0, text))
+            .child(titlebar_svg_icon(TITLEBAR_ICON_GIT_COMMIT, 16.0, text))
             .child("Commit")
             .child(
                 gpui::canvas(

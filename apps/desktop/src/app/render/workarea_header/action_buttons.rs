@@ -20,6 +20,7 @@ use gpui_component::ElementExt as _;
 use gpui_component::h_flex;
 
 use crate::app::claude_web::HeaderControl;
+use super::header_pins::{HEADER_ICON_BOX, HeaderSlot, header_slot_right_click};
 use crate::app::consts::*;
 use crate::app::helpers::*;
 use crate::app::window::*;
@@ -192,6 +193,15 @@ impl GhostexGpuiApp {
     }
 }
 
+/// Where a split button sits in the header's one outline round Start, Open and Commit: the
+/// first rounds its left end, the last its right, and every one after the first draws the short
+/// line before it.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SplitJoin {
+    pub(crate) first: bool,
+    pub(crate) last: bool,
+}
+
 /// A name longer than this is cut and given an ellipsis, so one verbose Action cannot push Open
 /// and Commit out of the header.
 const WORKAREA_HEADER_QUICK_ACTION_LABEL_MAX_CHARS: usize = 9;
@@ -286,9 +296,12 @@ fn toggle_git_menu(
 }
 
 impl GhostexGpuiApp {
+    #[allow(clippy::too_many_arguments)]
     fn render_workarea_header_split_button(
         &self,
         spec: WorkareaHeaderSplitButton,
+        slot: HeaderSlot,
+        join: SplitJoin,
         compact: bool,
         primary: WorkareaHeaderPress,
         menu: WorkareaHeaderPress,
@@ -323,11 +336,13 @@ impl GhostexGpuiApp {
             .items_center()
             .justify_center()
             .gap(px(6.0))
-            .pl(px(if compact { 9.0 } else { 10.0 }))
-            .pr(px(if compact { 7.0 } else { 9.0 }))
-            .rounded_l(titlebar_split_button_segment_radius(
-                TITLEBAR_CONTROL_HEIGHT,
-            ))
+            .pl(px(if compact { 6.0 } else { 8.0 }))
+            .pr(px(if compact { 2.0 } else { 4.0 }))
+            .when(join.first, |this| {
+                this.rounded_l(titlebar_split_button_segment_radius(
+                    TITLEBAR_CONTROL_HEIGHT,
+                ))
+            })
             .when(cfg!(target_os = "windows"), |this| this.occlude())
             .text_color(icon_color)
             .text_size(px(12.5))
@@ -344,14 +359,8 @@ impl GhostexGpuiApp {
                     primary(this, trigger_bounds, window, cx);
                 }),
             )
-            .on_mouse_down(
-                MouseButton::Right,
-                cx.listener(move |this, _: &MouseDownEvent, window, cx| {
-                    window.prevent_default();
-                    cx.stop_propagation();
-                    menu(this, trigger_bounds, window, cx);
-                }),
-            )
+            // Right-click unpins (header_pins.rs); the arrow still opens the menu.
+            .on_mouse_down(MouseButton::Right, header_slot_right_click(slot, cx))
             .map(|this| {
                 if spec.busy {
                     this.child(
@@ -364,7 +373,15 @@ impl GhostexGpuiApp {
                         .size(px(15.0)),
                     )
                 } else {
-                    this.child(titlebar_svg_icon(spec.icon, spec.icon_size, icon_color))
+                    this.child(
+                        div()
+                            .flex()
+                            .flex_shrink_0()
+                            .size(px(HEADER_ICON_BOX))
+                            .items_center()
+                            .justify_center()
+                            .child(titlebar_svg_icon(spec.icon, spec.icon_size, icon_color)),
+                    )
                 }
             })
             .when(!compact, |this| match spec.rich_label {
@@ -381,11 +398,12 @@ impl GhostexGpuiApp {
             .h_full()
             .items_center()
             .justify_center()
-            .pl(px(5.0))
-            .pr(px(6.0))
-            .rounded_r(titlebar_split_button_segment_radius(
-                TITLEBAR_CONTROL_HEIGHT,
-            ))
+            .w(px(18.0))
+            .when(join.last, |this| {
+                this.rounded_r(titlebar_split_button_segment_radius(
+                    TITLEBAR_CONTROL_HEIGHT,
+                ))
+            })
             .when(cfg!(target_os = "windows"), |this| this.occlude())
             .cursor_default()
             .when(open, |this| this.bg(titlebar_split_button_open_color()))
@@ -408,19 +426,31 @@ impl GhostexGpuiApp {
             )
             .child(titlebar_svg_icon(
                 TITLEBAR_ICON_CHEVRON_DOWN,
-                12.0,
-                icon_color,
+                10.0,
+                if open {
+                    icon_color
+                } else {
+                    titlebar_inactive_text_color()
+                },
             ));
 
-        titlebar_split_button_frame(h_flex().id(spec.id), TITLEBAR_CONTROL_HEIGHT)
+        h_flex()
+            .id(spec.id)
             .relative()
             .flex_shrink_0()
-            .ml(px(4.0))
+            .h_full()
             .items_center()
-            .overflow_hidden()
             .when(spec.dimmed, |this| this.opacity(0.5))
+            .when(!join.first, |this| {
+                this.child(
+                    div()
+                        .flex_shrink_0()
+                        .w(px(1.0))
+                        .h(px(15.0))
+                        .bg(titlebar_split_button_border_color()),
+                )
+            })
             .child(main)
-            .child(titlebar_split_button_divider(TITLEBAR_CONTROL_HEIGHT))
             .child(caret)
             .on_prepaint({
                 let anchor_state = anchor_state.clone();
@@ -486,6 +516,130 @@ impl GhostexGpuiApp {
         } else {
             Vec::new()
         };
+        // Pinned or in use (header_pins.rs); each button's own checks still decide if it applies.
+        let drawn_slots = HeaderSlot::ALL.map(|slot| self.header_slot_drawn(slot, cx));
+        let drawn = move |slot: HeaderSlot| {
+            HeaderSlot::ALL
+                .iter()
+                .position(|candidate| *candidate == slot)
+                .is_some_and(|index| drawn_slots[index])
+        };
+        let show_start = show_actions_button
+            && shown(HeaderControl::Actions)
+            && !self.built_in_feature_button_hidden(
+                ghostex_settings_catalog::built_in_extensions::ACTIONS,
+            )
+            && drawn(HeaderSlot::Start);
+        let show_open = shown(HeaderControl::OpenIn)
+            && !self
+                .built_in_feature_button_hidden(ghostex_settings_catalog::built_in_extensions::OPEN_IN)
+            && drawn(HeaderSlot::Open);
+        let show_commit = shown(HeaderControl::Commit)
+            && !self.titlebar_button_hidden(GIT_ACTIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY, "gitActions")
+            && drawn(HeaderSlot::Commit);
+        let split_count = [show_start, show_open, show_commit]
+            .into_iter()
+            .filter(|shown| *shown)
+            .count();
+        let mut split_index = 0;
+        let mut next_join = || {
+            let join = SplitJoin {
+                first: split_index == 0,
+                last: split_index + 1 == split_count,
+            };
+            split_index += 1;
+            join
+        };
+        let mut segments: Vec<AnyElement> = Vec::new();
+        if show_start {
+            let join = next_join();
+            segments.push(self.render_workarea_header_split_button(
+                WorkareaHeaderSplitButton {
+                    id: "ghostex-gpui-workarea-header-button-actions",
+                    kind: GpuiTitlebarPopupKind::Actions,
+                    icon: actions_icon_path,
+                    icon_size: 16.0,
+                    label: actions_label,
+                    dimmed: self.titlebar_quick_action_button_on_cooldown(),
+                    busy: false,
+                    rich_label: None,
+                    tooltip: None,
+                },
+                HeaderSlot::Start,
+                join,
+                compact,
+                run_quick_action,
+                toggle_quick_actions_menu,
+                window,
+                cx,
+            ));
+        }
+        if show_open {
+            let join = next_join();
+            segments.push(self.render_workarea_header_split_button(
+                WorkareaHeaderSplitButton {
+                    id: "ghostex-gpui-workarea-header-button-open-project",
+                    kind: GpuiTitlebarPopupKind::OpenTargets,
+                    icon: open_target_icon_path,
+                    icon_size: 13.0,
+                    label: "Open".into(),
+                    dimmed: false,
+                    busy: false,
+                    rich_label: None,
+                    tooltip: None,
+                },
+                HeaderSlot::Open,
+                join,
+                compact,
+                open_active_open_target,
+                toggle_open_targets_menu,
+                window,
+                cx,
+            ));
+        }
+        if show_commit {
+            let join = next_join();
+            segments.push(self.render_workarea_header_split_button(
+                WorkareaHeaderSplitButton {
+                    id: "ghostex-gpui-workarea-header-button-git",
+                    kind: GpuiTitlebarPopupKind::Git,
+                    icon: git_icon_path,
+                    icon_size: 16.0,
+                    label: "Commit".into(),
+                    dimmed: false,
+                    busy: self
+                        .titlebar_git_menu_state
+                        .as_ref()
+                        .is_some_and(|state| state.is_busy),
+                    rich_label: git_summary.render(),
+                    tooltip: git_summary.tooltip().map(SharedString::from),
+                },
+                HeaderSlot::Commit,
+                join,
+                compact,
+                toggle_git_menu,
+                toggle_git_menu,
+                window,
+                cx,
+            ));
+        }
+        /*
+        CDXC:Titlebar 2026-11-19 DECISION:
+        User (Q4196 C): Start, Open and Commit share one outline, a pill of two-part buttons, instead of
+        an outlined box each; inside it each part's arrow is its own hover area with no line before
+        it, and a short line separates one button from the next.
+        */
+        let split_group = (!segments.is_empty()).then(|| {
+            titlebar_split_button_frame(
+                h_flex().id("ghostex-gpui-workarea-header-project-buttons"),
+                TITLEBAR_CONTROL_HEIGHT,
+            )
+            .flex_shrink_0()
+            .ml(px(6.0))
+            .items_center()
+            .overflow_hidden()
+            .children(segments)
+        });
         let buttons = h_flex()
             .flex_shrink_0()
             .h(px(TITLEBAR_CONTROL_HEIGHT))
@@ -507,100 +661,20 @@ impl GhostexGpuiApp {
             })
             // A clone or other long job in progress (CDXC:BackgroundJobs in window/jobs_popover_view.rs).
             .children(self.render_workarea_header_jobs_button(cx))
-            // Claude and Grok Bot, directly left of Voice (CDXC:Extensions 2026-11-10 in claude_web/header_buttons.rs).
+            // Claude and Grok Bot, directly left of Voice (CDXC:Extensions 2026-11-10 in claude_web/header_buttons.rs),
+            // each while pinned or on.
             .when(shown(HeaderControl::WebBots), |this| {
                 this.children(self.render_workarea_header_web_bot_buttons(cx))
             })
-            // The Voice button leads the split buttons (CDXC:VoiceMode in voice_agent/header_button.rs).
+            // The Voice button leads the split buttons (CDXC:VoiceMode in voice_agent/header_button.rs),
+            // while pinned or in a call.
             .when(
-                crate::app::voice_agent::voice_agent_on() && shown(HeaderControl::Voice),
+                crate::app::voice_agent::voice_agent_on()
+                    && shown(HeaderControl::Voice)
+                    && drawn(HeaderSlot::Voice),
                 |this| this.child(self.render_workarea_header_voice_button(cx)),
             )
-            .when(
-                show_actions_button
-                    && shown(HeaderControl::Actions)
-                    && !self.built_in_feature_button_hidden(
-                        ghostex_settings_catalog::built_in_extensions::ACTIONS,
-                    ),
-                |this| {
-                    this.child(self.render_workarea_header_split_button(
-                        WorkareaHeaderSplitButton {
-                            id: "ghostex-gpui-workarea-header-button-actions",
-                            kind: GpuiTitlebarPopupKind::Actions,
-                            icon: actions_icon_path,
-                            icon_size: 16.0,
-                            label: actions_label,
-                            dimmed: self.titlebar_quick_action_button_on_cooldown(),
-                            busy: false,
-                            rich_label: None,
-                            tooltip: None,
-                        },
-                        compact,
-                        run_quick_action,
-                        toggle_quick_actions_menu,
-                        window,
-                        cx,
-                    ))
-                },
-            )
-            .when(
-                shown(HeaderControl::OpenIn)
-                    && !self.built_in_feature_button_hidden(
-                        ghostex_settings_catalog::built_in_extensions::OPEN_IN,
-                    ),
-                |this| {
-                    this.child(self.render_workarea_header_split_button(
-                        WorkareaHeaderSplitButton {
-                            id: "ghostex-gpui-workarea-header-button-open-project",
-                            kind: GpuiTitlebarPopupKind::OpenTargets,
-                            icon: open_target_icon_path,
-                            icon_size: 13.0,
-                            label: "Open".into(),
-                            dimmed: false,
-                            busy: false,
-                            rich_label: None,
-                            tooltip: None,
-                        },
-                        compact,
-                        open_active_open_target,
-                        toggle_open_targets_menu,
-                        window,
-                        cx,
-                    ))
-                },
-            )
-            .when(
-                shown(HeaderControl::Commit)
-                    && !self.titlebar_button_hidden(
-                        GIT_ACTIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY,
-                        "gitActions",
-                    ),
-                |this| {
-                    this.child(
-                        self.render_workarea_header_split_button(
-                            WorkareaHeaderSplitButton {
-                                id: "ghostex-gpui-workarea-header-button-git",
-                                kind: GpuiTitlebarPopupKind::Git,
-                                icon: git_icon_path,
-                                icon_size: 16.0,
-                                label: "Commit".into(),
-                                dimmed: false,
-                                busy: self
-                                    .titlebar_git_menu_state
-                                    .as_ref()
-                                    .is_some_and(|state| state.is_busy),
-                                rich_label: git_summary.render(),
-                                tooltip: git_summary.tooltip().map(SharedString::from),
-                            },
-                            compact,
-                            toggle_git_menu,
-                            toggle_git_menu,
-                            window,
-                            cx,
-                        ),
-                    )
-                },
-            );
+            .children(split_group);
         // The pinned controls and the two panel toggles never scroll out of reach: only the split buttons
         // and pinned extensions before them can, so a narrow column loses the least-needed first.
         let pinned = h_flex()
@@ -608,7 +682,7 @@ impl GhostexGpuiApp {
             .h(px(TITLEBAR_CONTROL_HEIGHT))
             .items_center()
             .gap(px(WORKAREA_HEADER_PINNED_GAP))
-            .ml(px(4.0))
+            .ml(px(6.0))
             // Approvals put aside with Escape or Close, until answered (notice_modal_host.rs).
             .children(self.render_approvals_waiting_pill(compact, cx))
             .children(self.render_workarea_header_box_chip(compact, cx))
@@ -617,15 +691,23 @@ impl GhostexGpuiApp {
             })
             // Work and Session details: one spot beside the chat, one panel at a time
             // (work_button.rs).
-            .children(self.render_workarea_header_work_button(cx))
-            .when(shown(HeaderControl::SessionDetails), |this| {
-                this.children(self.render_workarea_header_session_details_button(cx))
+            .when(drawn(HeaderSlot::Work), |this| {
+                this.children(self.render_workarea_header_work_button(cx))
             })
-            .children(self.render_workarea_header_share_button(cx))
+            .when(
+                shown(HeaderControl::SessionDetails) && drawn(HeaderSlot::SessionDetails),
+                |this| this.children(self.render_workarea_header_session_details_button(cx)),
+            )
+            .when(drawn(HeaderSlot::Share), |this| {
+                this.children(self.render_workarea_header_share_button(cx))
+            })
             // The focused session in a window of its own (app/session_popup/).
-            .children(self.render_workarea_header_session_popup_button(cx))
-            // No trailing ⋯ button: what it held opens from the sidebar's menu
-            // (CDXC:Titlebar 2026-11-11 DECISION in titlebar/menu_panels.rs).
+            .when(drawn(HeaderSlot::Popout), |this| {
+                this.children(self.render_workarea_header_session_popup_button(cx))
+            })
+            // What is not pinned (header_pins.rs). The app menus the old trailing ⋯ held stay in the
+            // sidebar's menu (CDXC:Titlebar 2026-11-11 DECISION in titlebar/menu_panels.rs).
+            .children(self.render_workarea_header_more_button(cx))
             // With a view open the toggles end the view tab strip instead (render_workarea_panel_toggles).
             .when(
                 !self.workarea_header_hosts_view_tab_strip() && shown(HeaderControl::PanelToggles),

@@ -71,13 +71,13 @@ impl GhostexGpuiApp {
                     this.toggle_voice_agent_conversation(cx);
                 }),
             )
+            // Right-click unpins it (render/workarea_header/header_pins.rs); the arrow keeps its menu.
             .on_mouse_down(
                 MouseButton::Right,
-                cx.listener(|this, _: &MouseDownEvent, window, cx| {
-                    window.prevent_default();
-                    cx.stop_propagation();
-                    this.toggle_voice_agent_menu(cx);
-                }),
+                crate::app::render::workarea_header::header_pins::header_slot_right_click(
+                    crate::app::render::workarea_header::header_pins::HeaderSlot::Voice,
+                    cx,
+                ),
             )
             .on_a11y_action(gpui::AccessibleAction::Click, {
                 let app = cx.entity().downgrade();

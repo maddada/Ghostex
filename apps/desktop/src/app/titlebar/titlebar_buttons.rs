@@ -117,6 +117,7 @@ impl GhostexGpuiApp {
                 titlebar_popup_menu_height_for_rows(&rows)
             }
             GpuiTitlebarPopupKind::Git => self.titlebar_git_popup_content_height(),
+            GpuiTitlebarPopupKind::HeaderMore => self.header_more_popup_content_height(),
             GpuiTitlebarPopupKind::Help => super::help_menu::titlebar_help_popup_content_height(),
             GpuiTitlebarPopupKind::Updates => {
                 super::updates_menu::titlebar_updates_popup_content_height(

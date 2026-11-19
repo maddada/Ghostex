@@ -9,7 +9,7 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, div, px, svg,
+    StatefulInteractiveElement as _, Styled as _, div, px,
 };
 use gpui_component::ElementExt as _;
 
@@ -40,13 +40,10 @@ pub(crate) fn work_button(
         .when(cfg!(target_os = "windows"), |this| this.occlude())
         .when(open, |this| this.bg(titlebar_button_hover_color()))
         .hover(|this| this.bg(titlebar_button_hover_color()))
-        .child(
-            svg()
-                .path("titlebar/layout-board-split.svg")
-                .size(px(14.0))
-                .flex_shrink_0()
-                .text_color(text),
-        )
+        .child(super::header_pins::header_icon(
+            "titlebar/layout-board-split.svg",
+            text,
+        ))
         .child(div().text_size(px(12.0)).text_color(text).child("Work"))
         .when(waiting > 0, |this| {
             this.child(
@@ -88,6 +85,13 @@ impl GhostexGpuiApp {
         let bounds = self.session_details.work_button_bounds.clone();
         Some(
             work_button("ghostex-gpui-workarea-header-work", open, waiting)
+                .on_mouse_down(
+                    MouseButton::Right,
+                    super::header_pins::header_slot_right_click(
+                        super::header_pins::HeaderSlot::Work,
+                        cx,
+                    ),
+                )
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|this, _, window, cx| {

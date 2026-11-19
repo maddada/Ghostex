@@ -18,6 +18,9 @@ pub(crate) enum GpuiTitlebarPopupKind {
     BrowserDeviceView(BrowserPaneId),
     /// The chat header's Share popover (Ghostex Collab, window/collab_share.rs).
     CollabShare,
+    /// The chat header's ⋯ menu: the controls not pinned to the header
+    /// (render/workarea_header/header_pins.rs).
+    HeaderMore,
     ContextMenu,
     /// The header's jobs button's popover (window/jobs_popover.rs).
     Jobs,
@@ -61,6 +64,7 @@ impl GpuiTitlebarPopupKind {
             Self::BrowserActions(_) => "browserActions",
             Self::BrowserDeviceView(_) => "browserDeviceView",
             Self::CollabShare => "collabShare",
+            Self::HeaderMore => "headerMore",
             Self::Jobs => "jobs",
             Self::ContextMenu => "contextMenu",
             Self::Extensions => "extensions",
@@ -122,6 +126,7 @@ impl GpuiTitlebarPopupWindow {
             GpuiTitlebarPopupKind::BrowserActions(_) => "Ghostex Browser Actions",
             GpuiTitlebarPopupKind::BrowserDeviceView(_) => "Ghostex Browser Page Size",
             GpuiTitlebarPopupKind::CollabShare => "Ghostex Collab",
+            GpuiTitlebarPopupKind::HeaderMore => "Ghostex More",
             GpuiTitlebarPopupKind::Jobs => "Ghostex Jobs",
             GpuiTitlebarPopupKind::ContextMenu => "Ghostex Menu",
             GpuiTitlebarPopupKind::Extensions => "Ghostex Extensions",
@@ -348,6 +353,35 @@ impl Render for GpuiTitlebarPopupWindow {
                     this.close_from_popup_window(window, cx);
                 }),
             )
+            // The ⋯ menu's rows close it and then act, so a row that opens a popover of its own
+            // (Commit's Git menu, Share) opens it on a cleared popup slot.
+            .on_action(cx.listener(
+                |this, action: &crate::app::render::workarea_header::header_pins::RunWorkareaHeaderSlot, window, cx| {
+                    let Some(slot) =
+                        crate::app::render::workarea_header::header_pins::HeaderSlot::from_key(&action.slot)
+                    else {
+                        return;
+                    };
+                    this.close_from_popup_window(window, cx);
+                    this.update_main_window(cx, move |app, main_window, cx| {
+                        app.run_header_slot(slot, main_window, cx);
+                    });
+                },
+            ))
+            .on_action(cx.listener(
+                |this, action: &crate::app::render::workarea_header::header_pins::PinWorkareaHeaderSlot, _window, cx| {
+                    let Some(slot) =
+                        crate::app::render::workarea_header::header_pins::HeaderSlot::from_key(&action.slot)
+                    else {
+                        return;
+                    };
+                    let pinned = action.pinned;
+                    this.update_main_window(cx, move |app, main_window, cx| {
+                        app.set_header_slot_pinned(slot, pinned, cx);
+                        app.refresh_open_header_more_popup(main_window, cx);
+                    });
+                },
+            ))
             .on_action(cx.listener(|this, _: &BrowseGpuiExtensions, window, cx| {
                 this.update_main_window(cx, |app, main_window, cx| {
                     app.open_gpui_settings_extensions_page(Some(main_window), cx);
