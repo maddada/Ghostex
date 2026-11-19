@@ -78,7 +78,7 @@ pub(super) async fn route_projects_http(
             request_id,
             &body_json,
             |repository, db, params, _| {
-                let project = repository.relocate_project(params)?;
+                let project = repository.relocate_project_moving_sessions(params)?;
                 let project_id = value_text(&project, "projectId")?;
                 schedule_presentation_project_delta(
                     &state,

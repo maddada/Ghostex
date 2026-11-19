@@ -405,7 +405,7 @@ pub fn runtime_settings_with_moved_worktree_path(
 /// Runtime-settings key that replaces `worktreeSession` once the session's
 /// worktree folder is gone and the session moved to its project's folder: the
 /// old marker plus `removedAt`. Its presence also tells the Codex resume to pass
-/// the new folder (`with_codex_removed_worktree_cwd` in agents/resume_plan.rs).
+/// the new folder (`with_codex_moved_cwd` in agents/resume_plan.rs).
 pub const REMOVED_WORKTREE_SESSION_RUNTIME_KEY: &str = "removedWorktreeSession";
 
 /// CDXC:Worktrees 2026-10-15 WHY:

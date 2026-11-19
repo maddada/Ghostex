@@ -170,6 +170,7 @@ pub(crate) mod visual_page_hidden;
 pub(crate) mod visual_page_modal_lifecycle;
 pub(crate) mod visual_page_thumbnails;
 pub(crate) mod voice_agent;
+pub(crate) mod terminal_open_failure;
 pub(crate) mod web_page_sleep;
 pub(crate) mod web_runtime_install;
 pub(crate) mod web_runtime_prompt_modal_lifecycle;

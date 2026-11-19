@@ -95,7 +95,7 @@ pub(crate) fn gpui_prepare_local_workspace_attach_terminal_plan_with_code(
         Duration::from_secs(15),
     )?;
     let mut attach = gpui_local_workspace_attach_object(&result)?;
-    gpui_validate_local_workspace_attach_not_restore_blocked(attach)?;
+    gpui_attach_refused_for_missing_folder(attach)?;
     let mut startup_text_for_plan =
         gpui_local_workspace_attach_startup_text(attach).map(str::to_string);
     let mut startup_text_disposition_for_plan =
@@ -115,7 +115,7 @@ pub(crate) fn gpui_prepare_local_workspace_attach_terminal_plan_with_code(
             Duration::from_secs(15),
         )?;
         attach = gpui_local_workspace_attach_object(&result)?;
-        gpui_validate_local_workspace_attach_not_restore_blocked(attach)?;
+        gpui_attach_refused_for_missing_folder(attach)?;
         if startup_text_for_plan.is_none() {
             startup_text_for_plan =
                 gpui_local_workspace_attach_startup_text(attach).map(str::to_string);
@@ -418,6 +418,45 @@ pub(crate) fn gpui_validate_local_workspace_attach_metadata(
         );
     }
     Ok(())
+}
+
+/// The code of an attach gxserver refused because the terminal's folder does not exist (its
+/// `restoreBlocked.reason`), with the folder in `missing_folder`.
+pub(crate) const RESTORE_BLOCKED_MISSING_FOLDER: &str = "missingCwd";
+
+/// `gpui_validate_local_workspace_attach_not_restore_blocked` keeping the folder gxserver could
+/// not find, so the app can name it and offer the missing project folder dialog.
+fn gpui_attach_refused_for_missing_folder(
+    attach: &serde_json::Map<String, serde_json::Value>,
+) -> Result<(), GpuiGxserverRpcError> {
+    let Some(blocked) = attach.get("restoreBlocked") else {
+        return Ok(());
+    };
+    let folder = blocked
+        .get("cwd")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|folder| !folder.is_empty())
+        .map(str::to_string);
+    let message = match &folder {
+        Some(folder) => format!(
+            "Session restore is blocked because its working directory is unavailable: {folder}"
+        ),
+        None => {
+            "Session restore is blocked because its working directory is unavailable.".to_string()
+        }
+    };
+    Err(GpuiGxserverRpcError {
+        code: Some(
+            blocked
+                .get("reason")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or(RESTORE_BLOCKED_MISSING_FOLDER)
+                .to_string(),
+        ),
+        message,
+        missing_folder: folder,
+    })
 }
 
 pub(crate) fn gpui_validate_local_workspace_attach_not_restore_blocked(

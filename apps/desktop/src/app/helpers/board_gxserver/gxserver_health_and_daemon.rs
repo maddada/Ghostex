@@ -20,6 +20,9 @@ use crate::*;
 pub(crate) struct GpuiGxserverRpcError {
     pub(crate) code: Option<String>,
     pub(crate) message: String,
+    /// The folder a terminal could not start in, when gxserver refused it as missing
+    /// (`RESTORE_BLOCKED_MISSING_FOLDER`).
+    pub(crate) missing_folder: Option<String>,
 }
 
 impl From<String> for GpuiGxserverRpcError {
@@ -27,6 +30,7 @@ impl From<String> for GpuiGxserverRpcError {
         Self {
             code: None,
             message,
+            missing_folder: None,
         }
     }
 }
@@ -44,6 +48,7 @@ pub(crate) fn gpui_gxserver_rpc_result_with_code(
                 .ok()
                 .and_then(|value| value.get("error")?.as_str().map(str::to_string)),
             message: gpui_gxserver_rpc_error_message(status_code, &body),
+            missing_folder: None,
         });
     }
     Ok(parse_gpui_gxserver_rpc_result(&body)?)
