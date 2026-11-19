@@ -40,7 +40,8 @@ pub const MESSAGE_REFERENCE_KIND: &str = "message";
 pub const QUOTE_MAX_LINES: usize = 6;
 /// The most characters of a referenced message the agent is sent.
 pub const QUOTE_MAX_CHARS: usize = 600;
-/// The most referenced messages one prompt quotes; the rest are named by ID only.
+/// The most referenced messages one prompt quotes; the rest are only named, on one line of the
+/// block (`quotes_block`), and are not looked up.
 pub const MAX_QUOTED_MESSAGES: usize = 5;
 
 /// A message ID as written: the number, and the session when it points into another chat.
@@ -288,13 +289,15 @@ pub fn quote_excerpt(text: &str, reference: &str) -> (Vec<String>, Option<String
 
 /// The block under a prompt that quotes the messages it points at, in one `<ghostex-system>`
 /// block: every chat already leaves those out of the bubble it draws, the phone apps already out
-/// included (`session::appended_notes::without_notes`). `None` for no quotes.
-pub fn quotes_block(quotes: &[QuotedMessage]) -> Option<String> {
-    if quotes.is_empty() {
+/// included (`session::appended_notes::without_notes`). `quotes` are the first
+/// [`MAX_QUOTED_MESSAGES`] references, looked up; `unquoted` names the ones past them, which the
+/// agent can read with `ghostex message show`. `None` for neither.
+pub fn quotes_block(quotes: &[QuotedMessage], unquoted: &[String]) -> Option<String> {
+    if quotes.is_empty() && unquoted.is_empty() {
         return None;
     }
     let mut parts: Vec<String> = Vec::new();
-    for quote in quotes.iter().take(MAX_QUOTED_MESSAGES) {
+    for quote in quotes {
         match &quote.text {
             Some(text) => {
                 let (lines, note) = quote_excerpt(text, &quote.reference);
@@ -318,6 +321,12 @@ pub fn quotes_block(quotes: &[QuotedMessage]) -> Option<String> {
             )),
         }
     }
+    if !unquoted.is_empty() {
+        parts.push(format!(
+            "Also pointed at, not quoted (only the first {MAX_QUOTED_MESSAGES} are): {}. `ghostex message show <ID>` prints each.",
+            unquoted.join(", ")
+        ));
+    }
     use crate::session::appended_notes::{SYSTEM_CLOSE, SYSTEM_OPEN};
     Some(format!(
         "{SYSTEM_OPEN}\nThe user pointed at their earlier messages above; Ghostex quotes the start of each:\n{}\n{SYSTEM_CLOSE}",
@@ -325,9 +334,10 @@ pub fn quotes_block(quotes: &[QuotedMessage]) -> Option<String> {
     ))
 }
 
-/// `text` with the quotes of the messages it points at under it, a blank line apart.
-pub fn with_quotes(text: &str, quotes: &[QuotedMessage]) -> String {
-    match quotes_block(quotes) {
+/// `text` with the quotes of the messages it points at under it, a blank line apart
+/// ([`quotes_block`]).
+pub fn with_quotes(text: &str, quotes: &[QuotedMessage], unquoted: &[String]) -> String {
+    match quotes_block(quotes, unquoted) {
         Some(block) => format!("{}\n\n{block}", text.trim_end()),
         None => text.to_string(),
     }
@@ -585,9 +595,13 @@ mod tests {
                     text: None,
                 },
             ],
+            &["M7".to_string(), "G2.M8".to_string()],
         );
         assert!(sent.contains("M12 (sent 2026-11-19 16:59):\n> make them 30px"));
         assert!(sent.contains("M99: Ghostex has no message with this ID."));
+        assert!(sent.contains(
+            "Also pointed at, not quoted (only the first 5 are): M7, G2.M8. `ghostex message show <ID>` prints each."
+        ));
         assert_eq!(
             crate::session::appended_notes::without_notes(&sent),
             "same for the tab bar as [M12](message:M12)"
@@ -674,6 +688,7 @@ mod tests {
                 sent_at: None,
                 text: Some(quoted.into()),
             }],
+            &[],
         );
         assert_eq!(
             crate::session::appended_notes::without_notes(&sent),

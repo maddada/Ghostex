@@ -377,7 +377,11 @@ fn quote_with(
     text: &str,
     references: &[ghostex_gx_chat_core::transcript::message_numbers::MessageRef],
 ) -> String {
-    let quotes: Vec<QuotedMessage> = references
+    use ghostex_gx_chat_core::transcript::message_numbers::MAX_QUOTED_MESSAGES;
+    // Only the first few are looked up and quoted; the rest are named.
+    let (quoted, named) = references.split_at(references.len().min(MAX_QUOTED_MESSAGES));
+    let unquoted: Vec<String> = named.iter().map(|reference| reference.written()).collect();
+    let quotes: Vec<QuotedMessage> = quoted
         .iter()
         .map(|reference| {
             let stored = match &reference.session_id {
@@ -391,7 +395,7 @@ fn quote_with(
             }
         })
         .collect();
-    with_quotes(text, &quotes)
+    with_quotes(text, &quotes, &unquoted)
 }
 
 /// `/api/chatMessages {projectId, sessionId, op}`: `show` (`ref`: `M12` or `G9jt7.M12`) prints a

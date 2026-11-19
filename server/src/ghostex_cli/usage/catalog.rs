@@ -283,7 +283,7 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "message show <M12|G9jt7.M12> | list [--last N] [--grep words]",
-            "Read one of the user's numbered messages whole (M12 in this chat, G9jt7.M12 in another), or list this chat's with their first line. When the user points at a message by its ID, its start is already quoted at the bottom of their prompt",
+            "Read one of the user's numbered messages whole (M12 in this chat, G9jt7.M12 in another), or list this chat's with their first line. When the user points at a message (a pill, #M12 or G9jt7.M12, not a bare M12), its start is already quoted at the bottom of their prompt",
         ),
         format_help_command(
             "work item add|now|step|ask|wait|done|drop|list … | work topic [\"one line\"] | work next-tag",
