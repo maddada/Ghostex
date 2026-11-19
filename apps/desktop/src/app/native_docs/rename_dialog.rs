@@ -192,7 +192,12 @@ impl GhostexGpuiApp {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let dialog = self.native_docs.rename_dialog.as_ref()?;
-        let p = self.gpui_native_modal_palette();
+        // CDXC:Theming 2026-11-20 (decision in helpers/chrome_palette.rs): under glass the dialog
+        // takes the lifted fill of the dialogs inside Settings (`ModalPalette::lifted_dialog_fill`)
+        // with the frosted dialogs' washes for its field, which is the notice palette, instead of
+        // the near-black `frosted_modal_fill` that nothing blurs here. Glass off, both palettes
+        // are the solid one.
+        let p = self.gpui_native_notice_palette();
         let (input, error, renaming) =
             (dialog.input.clone(), dialog.error.clone(), dialog.renaming);
         let empty = input.read(cx).value().trim().is_empty();
@@ -260,7 +265,9 @@ impl GhostexGpuiApp {
                     .items_center()
                     .justify_center()
                     .p(px(16.0))
-                    .bg(gpui::black().opacity(0.3))
+                    // CDXC:Theming 2026-11-20: under glass a veil of the work area's own colour
+                    // (`glass_veil`), not black.
+                    .bg(crate::app::helpers::glass_veil(gpui::black().opacity(0.3)))
                     .occlude()
                     .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                         if event.keystroke.key == "escape" {

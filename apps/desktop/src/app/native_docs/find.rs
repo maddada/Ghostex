@@ -560,7 +560,9 @@ impl GhostexGpuiApp {
                 .flex_col()
                 .gap(px(4.0))
                 .rounded(px(10.0))
-                .bg(p.floating)
+                // CDXC:Theming 2026-11-20 (decision in helpers/chrome_palette.rs): lifted under
+                // glass, not the near-black #0b0b0b.
+                .bg(p.glass_lifted(p.floating))
                 .border_1()
                 .border_color(p.border)
                 .shadow_lg()

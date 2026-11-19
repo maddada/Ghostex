@@ -509,8 +509,11 @@ impl Render for DocsPictureViewer {
         )
         .absolute()
         .size_full();
+        // CDXC:Theming 2026-11-20 (decision in helpers/chrome_palette.rs): under glass the
+        // backdrop is a veil of the view's own background (the chat's work area colour) at 60%,
+        // as `glass_veil` in helpers/window_glass.rs, not black at 45%.
         let dim = if crate::app::helpers::window_glass_active() {
-            gpui::black().opacity(0.45)
+            p.background.opacity(0.6)
         } else {
             gpui::black().opacity(0.7)
         };

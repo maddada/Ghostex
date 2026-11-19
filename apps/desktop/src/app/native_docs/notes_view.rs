@@ -185,7 +185,9 @@ impl GhostexGpuiApp {
                         .flex()
                         .items_center()
                         .justify_center()
-                        .bg(p.raised)
+                        // CDXC:Theming 2026-11-20 (decision in helpers/chrome_palette.rs): a
+                        // badge takes the ink wash under glass, not the near-black #161616.
+                        .bg(p.glass_wash(2.0, p.raised))
                         .border_1()
                         .border_color(p.border_strong)
                         .text_size(px(9.0))
@@ -1008,7 +1010,9 @@ impl GhostexGpuiApp {
             .flex()
             .flex_col()
             .rounded(px(5.0))
-            .bg(p.raised)
+            // CDXC:Theming 2026-11-20 (decision in helpers/chrome_palette.rs): lifted under
+            // glass, not the near-black #161616.
+            .bg(p.glass_lifted(p.raised))
             .border_1()
             .border_color(p.border_strong)
             .shadow_lg()
@@ -1129,7 +1133,9 @@ impl GhostexGpuiApp {
             .pl(px(12.0))
             .pr(px(36.0))
             .rounded(px(8.0))
-            .bg(p.raised)
+            // CDXC:Theming 2026-11-20 (decision in helpers/chrome_palette.rs): lifted under
+            // glass, not the near-black #161616.
+            .bg(p.glass_lifted(p.raised))
             .border_1()
             .border_color(color.opacity(0.28))
             .shadow_lg()
