@@ -465,6 +465,8 @@ fn with_codex_moved_cwd(family: Option<&str>, session: &Value, command: String) 
         || [
             crate::worktree_sessions::REMOVED_WORKTREE_SESSION_RUNTIME_KEY,
             crate::domain::repository::project::RELOCATED_PROJECT_SESSION_RUNTIME_KEY,
+            // `ghostex move-project-folder` (project_folder_move/record.rs, risk 1 of its plan).
+            crate::project_folder_move::MOVED_FOLDER_SESSION_RUNTIME_KEY,
         ]
         .iter()
         .all(|key| {
