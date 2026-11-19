@@ -53,8 +53,14 @@ static PATHS: OnceLock<GxserverPaths> = OnceLock::new();
 
 /// Lets the frame builders, which have no `AppState`, reach the database. Called once when
 /// gxserver starts.
-pub(crate) fn install(paths: &GxserverPaths) {
+static STATE: OnceLock<std::sync::Arc<crate::server::AppState>> = OnceLock::new();
+
+pub(crate) fn install(state: &std::sync::Arc<crate::server::AppState>) {
+    let paths = &state.paths;
     let _ = PATHS.set(paths.clone());
+    // Numbering reads a chat's older pages to keep the numbers in the order messages were sent
+    // (`older_candidates`).
+    let _ = STATE.set(state.clone());
     // The first start of a gxserver that numbers messages is where numbering begins: stamped
     // now, not at the first chat read, which can come after messages were already sent.
     if let Ok(db) = open_gxserver_database(paths) {
@@ -265,6 +271,7 @@ fn assign(db: &Connection, key: &ChatKey, candidate: &Candidate) -> Option<u32> 
 }
 
 /// A message the user wrote that has no number yet.
+#[derive(Clone)]
 struct Candidate {
     index: usize,
     id: String,
@@ -329,7 +336,13 @@ pub(crate) fn annotate_messages(messages: &mut [Value], project_id: &str, sessio
     };
     let stamped = off_worker(|| {
         let db = open_gxserver_database(paths).ok()?;
-        Some(annotate_with(&db, &key, &mut known, messages))
+        // The transcript is looked up only when older pages are needed.
+        let mut pages: Option<Option<Box<PageReader<'static>>>> = None;
+        let mut older = |before: Option<u64>| {
+            let reader = pages.get_or_insert_with(|| transcript_pages(&key));
+            reader.as_mut().and_then(|read| read(before))
+        };
+        Some(annotate_with(&db, &key, &mut known, messages, &mut older))
     });
     drop(known);
     if let Some(stamped) = stamped {
@@ -452,19 +465,112 @@ fn annotate_with(
     key: &ChatKey,
     known: &mut Known,
     messages: &[Value],
+    older: &mut PageReader<'_>,
 ) -> Vec<(usize, u32)> {
     let since = since_ms(db);
     if !known.loaded {
         load_known(db, key, known);
     }
     let (mut stamped, candidates) = classify(known, messages, since);
-    for candidate in candidates {
-        if let Some(number) = assign(db, key, &candidate) {
+    if candidates.is_empty() {
+        return stamped;
+    }
+    // The user's messages the rows in hand don't reach, numbered first, so the numbers follow
+    // the order the messages were sent whichever page is read first.
+    let mut all = older_candidates(known, since, older);
+    let mut seen: std::collections::HashSet<String> =
+        all.iter().map(|candidate| candidate.id.clone()).collect();
+    for candidate in &candidates {
+        if seen.insert(candidate.id.clone()) {
+            all.push(candidate.clone());
+        }
+    }
+    all.sort_by_key(|candidate| candidate.order);
+    for candidate in &all {
+        if let Some(number) = assign(db, key, candidate) {
             known.by_id.insert(candidate.id.clone(), number);
-            stamped.push((candidate.index, number));
+        }
+    }
+    for candidate in candidates {
+        if let Some(number) = known.by_id.get(&candidate.id) {
+            stamped.push((candidate.index, *number));
         }
     }
     stamped
+}
+
+/// How many pages back numbering reads a chat's transcript, at [`OLDER_PAGE_ROWS`] rows each,
+/// for messages still without a number.
+const OLDER_PAGES: usize = 20;
+const OLDER_PAGE_ROWS: usize = 200;
+
+/// Reads one page of a chat's transcript ending before `before` (the newest page for `None`):
+/// its rows oldest first, whether older rows remain, and where the page starts.
+type PageReader<'a> = dyn FnMut(Option<u64>) -> Option<(Vec<Value>, bool, u64)> + 'a;
+
+/// The user's messages without a number that are older than the rows in hand, read back from
+/// the newest page until a numbered message, a message from before numbering began, the start of
+/// the chat or [`OLDER_PAGES`].
+///
+/// CDXC:SessionChat 2026-11-20 WHY:
+/// The review of the first build found a chat read from its newest page numbered those messages
+/// first, so older messages on a page read later got higher numbers, and messages on pages nobody
+/// read got none (`message list` missed them). One long turn of tool rows is enough to push the
+/// earlier messages off the newest page.
+fn older_candidates(known: &mut Known, since: i64, read: &mut PageReader<'_>) -> Vec<Candidate> {
+    let mut found = Vec::new();
+    let mut before: Option<u64> = None;
+    for _ in 0..OLDER_PAGES {
+        let Some((rows, has_more, start)) = read(before) else {
+            break;
+        };
+        let reached = rows.iter().any(|row| {
+            row.get("role").and_then(Value::as_str) == Some("user")
+                && (row
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| known.by_id.contains_key(id))
+                    || row
+                        .get("timestamp")
+                        .and_then(Value::as_i64)
+                        .is_some_and(|at| at < since))
+        });
+        let (_, candidates) = classify(known, &rows, since);
+        found.extend(candidates);
+        if reached || !has_more {
+            break;
+        }
+        before = Some(start);
+    }
+    found
+}
+
+/// The production [`PageReader`]: the chat's own transcript, as the chat reads it (fork lineages
+/// included). `None` when the chat has no transcript to read. Blocking.
+fn transcript_pages(key: &ChatKey) -> Option<Box<PageReader<'static>>> {
+    let state = STATE.get()?;
+    let (agent, path) = crate::session_chat_read::session_transcript(state, &key.0, &key.1)?;
+    Some(Box::new(move |before: Option<u64>| {
+        let page = crate::session_chat_fork_stitch::read_session_chat_tail_page_stitched(
+            agent,
+            &path,
+            OLDER_PAGE_ROWS,
+            before,
+        )
+        .ok()?;
+        match page.page {
+            crate::session_chat::SessionChatTailPage::Page {
+                messages,
+                has_more,
+                before_offset,
+                ..
+            } => match serde_json::to_value(&messages) {
+                Ok(Value::Array(rows)) => Some((rows, has_more, before_offset)),
+                _ => None,
+            },
+            crate::session_chat::SessionChatTailPage::NotFound => None,
+        }
+    }))
 }
 
 /// One stored message: its number, where it is in the transcript, and the start of its words.
@@ -825,9 +931,32 @@ mod tests {
         let key: ChatKey = (project_id.to_string(), session_id.to_string());
         let held = chat(&key);
         let mut known = held.lock().unwrap();
-        let stamped = annotate_with(db, &key, &mut known, rows);
+        let stamped = annotate_with(db, &key, &mut known, rows, &mut |_| None);
         drop(known);
         stamp(rows, &stamped, session_id);
+    }
+
+    /// Reading the newest page first still numbers the messages in the order they were sent:
+    /// the older page is read back before any number is given.
+    #[test]
+    fn the_newest_page_first_still_numbers_in_send_order() {
+        let db = db();
+        let key: ChatKey = ("P1".to_string(), "G1g".to_string());
+        let older_page = vec![user("a", 1_000, "one"), user("b", 2_000, "two")];
+        let newest_page = vec![user("c", 3_000, "three"), user("d", 4_000, "four")];
+        let mut read = |before: Option<u64>| match before {
+            None => Some((newest_page.clone(), true, 100)),
+            Some(100) => Some((older_page.clone(), false, 0)),
+            Some(_) => None,
+        };
+        let held = chat(&key);
+        let mut newest = newest_page.clone();
+        let stamped = annotate_with(&db, &key, &mut held.lock().unwrap(), &newest, &mut read);
+        stamp(&mut newest, &stamped, &key.1);
+        assert_eq!(numbers(&newest), vec![Some(3), Some(4)]);
+        let mut older = older_page.clone();
+        number_rows(&db, &mut older, "P1", "G1g");
+        assert_eq!(numbers(&older), vec![Some(1), Some(2)]);
     }
 
     /// Two readers numbering the same chat at once never give two messages one number.
