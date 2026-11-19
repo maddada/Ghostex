@@ -21,6 +21,7 @@ pub fn suggestion_sources(state: &ChatState) -> SuggestionSources {
         &state.identity.project_id,
         &state.identity.session_id,
     );
+    sources.messages = crate::transcript::message_numbers::message_choices(&state.messages.list);
     sources
 }
 

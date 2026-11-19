@@ -951,6 +951,22 @@ shell_environment_policy is inherit = "core"), from the Ghostex pane the agent r
         .to_string()
 }
 
+pub fn message_usage() -> String {
+    r#"Usage:
+  ghostex message show <M12 | G9jt7.M12> [--json] [--session <alias|id|title>]
+  ghostex message list [--last N] [--grep "words|other words"] [--json] [--session <alias|id|title>]
+
+Every message the user writes in a chat gets an ID that counts up in that chat: M1, M2, M3.
+Written with the session in front (G9jt7.M12), it names a message of another chat. When the
+user points at one ("do it like M12", a pill, #M12), the start of that message is quoted at the
+bottom of the prompt; this prints it whole.
+show: one message, whole: this chat's M12, or another chat's G9jt7.M12.
+list: this chat's numbered messages with their first line, newest first (20 unless --last);
+--grep keeps those that contain any of the words.
+--session: the chat to read. Without it the calling session is used."#
+        .to_string()
+}
+
 pub fn secret_usage() -> String {
     r#"Usage:
   ghostex secret request --label <text> --reason <text> [--placeholder <text>] [--timeout-minutes N] [--session <alias|id|title>]

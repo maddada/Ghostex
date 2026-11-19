@@ -519,7 +519,11 @@ impl NativeChatView {
         } else if action.command["type"] == "imageViewer" {
             self.image_viewer_action(action.command["action"].as_str().unwrap_or_default(), cx);
         } else if action.command["type"] == "appendToDraft" {
-            self.append_to_draft(action.command["text"].as_str().unwrap_or_default(), cx);
+            self.append_to_draft(
+                action.command["text"].as_str().unwrap_or_default(),
+                action.command["inline"] == true,
+                cx,
+            );
         } else if action.command["type"] == "replyToSelection" {
             self.open_reply_popover(&action.command, window, cx);
         } else if action.command["type"] == "host" {

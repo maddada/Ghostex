@@ -163,14 +163,15 @@ impl NativeChatView {
         !self.snapshot["subagent"].is_object() && self.list.viewport_bounds().contains(&at)
     }
 
-    /// Add to Chat: the controller appends the quoted selection to the current draft.
-    pub(super) fn append_to_draft(&mut self, text: &str, cx: &mut Context<Self>) {
+    /// Add to Chat: the controller appends the quoted selection to the current draft. `inline`
+    /// (a message's Reference in chat) puts a pill after the words instead, a space apart.
+    pub(super) fn append_to_draft(&mut self, text: &str, inline: bool, cx: &mut Context<Self>) {
         if text.is_empty() {
             return;
         }
         let draft = self.draft.clone();
         self.invoke(
-            json!({"type":"appendToDraft","text":text,"draft":draft}),
+            json!({"type":"appendToDraft","text":text,"draft":draft,"inline":inline}),
             cx,
         );
     }

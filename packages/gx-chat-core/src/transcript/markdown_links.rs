@@ -26,6 +26,10 @@ pub fn markdown_link(href: &str, label: &str) -> Option<Value> {
     if let Some(reference) = crate::extras::coordinator_board::board_reference(href, label) {
         return Some(reference);
     }
+    // One of the user's earlier messages (`message_numbers.rs`): its ID in a pill.
+    if let Some(reference) = crate::transcript::message_numbers::message_reference(href, label) {
+        return Some(reference);
+    }
     // What a Reply in chat box answered: its title in a pill, its tags only in the link
     // (`questions/answer_pills.rs`).
     if crate::questions::answer_pills::parse_href(href).is_some() {

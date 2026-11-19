@@ -294,6 +294,8 @@ pub(crate) fn unrecorded_failure(state: &ChatState, transcript: &[ChatRow]) -> O
         api_error: Some(TRANSIENT_API_ERROR_CODE.to_string()),
         mention_paths: None,
         custom_message: None,
+        message_number: None,
+        message_ref: None,
     })
 }
 

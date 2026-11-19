@@ -41,7 +41,12 @@ pub enum SuggestionKind {
     File,
     /// The `+` list of agent sessions: this project's, then every other one by computer.
     Session,
+    /// The `#M` list of the user's earlier messages in this chat (`message_numbers.rs`).
+    Message,
 }
+
+/// The heading above the composer's `#M` message list.
+pub const MESSAGE_SUGGESTION_HEADING: &str = "Your messages";
 
 /// One pickable row.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -116,6 +121,8 @@ pub struct SuggestionSources {
     /// The `+` list: this project's other agent sessions, then every other reachable one, by
     /// computer, newest first (`session_choices`).
     pub sessions: Vec<SessionChoice>,
+    /// The `#M` list: this chat's numbered messages that are loaded, newest first.
+    pub messages: Vec<crate::transcript::message_numbers::MessageChoice>,
     /// The agent the skills list was read for, so a switch re-reads it.
     pub skills_agent: Option<String>,
     /// The skills read in flight, so a late answer to a retired one is dropped.
@@ -145,6 +152,7 @@ impl Default for SuggestionSources {
             files: None,
             files_loading: false,
             sessions: Vec::new(),
+            messages: Vec::new(),
             skills_agent: None,
             skills_request: None,
             files_request: None,
@@ -169,6 +177,7 @@ pub struct SuggestionDismissals {
     pub skill: bool,
     pub file: bool,
     pub session: bool,
+    pub message: bool,
 }
 
 /// What the three filters produced for one draft and caret.
@@ -193,6 +202,8 @@ pub struct SuggestionMatches {
     pub file_open: bool,
     pub session_matches: Vec<SessionChoice>,
     pub session_open: bool,
+    pub message_matches: Vec<crate::transcript::message_numbers::MessageChoice>,
+    pub message_open: bool,
 }
 
 /// Which of the two mention pickers the draft has open, without filtering either catalog.
@@ -300,6 +311,19 @@ pub fn composer_suggestions(
         _ => Vec::new(),
     };
     let session_open = !session_matches.is_empty();
+    // The `#M` list comes from the loaded transcript and, like `+`, opens only with a match.
+    let message_matches = match &trigger {
+        Some(trigger)
+            if trigger.kind == TriggerKind::Message && !dismissed.message && !slash_open =>
+        {
+            crate::transcript::message_numbers::filter_message_choices(
+                &sources.messages,
+                &trigger.query,
+            )
+        }
+        _ => Vec::new(),
+    };
+    let message_open = !message_matches.is_empty();
     SuggestionMatches {
         slash_query,
         slash_skills,
@@ -317,6 +341,8 @@ pub fn composer_suggestions(
         file_open,
         session_matches,
         session_open,
+        message_matches,
+        message_open,
     }
 }
 
@@ -575,6 +601,8 @@ pub fn suggestion_popup(
         SuggestionKind::File
     } else if matches.session_open {
         SuggestionKind::Session
+    } else if matches.message_open {
+        SuggestionKind::Message
     } else {
         return None;
     };
@@ -584,7 +612,7 @@ pub fn suggestion_popup(
         SuggestionKind::Slash => sections(&slash, sources),
         SuggestionKind::Skill => sections(&skill_rows, sources),
         SuggestionKind::Session => session_sections(&matches.session_matches),
-        SuggestionKind::File => (None, Vec::new()),
+        SuggestionKind::File | SuggestionKind::Message => (None, Vec::new()),
     };
     let row_label = |row: &SlashRow| match row {
         SlashRow::Skill(skill) => (format!("/{}", skill.name), skill_detail(skill)),
@@ -610,6 +638,11 @@ pub fn suggestion_popup(
             .session_matches
             .iter()
             .map(|choice| (choice.title.clone(), choice_detail(choice)))
+            .collect(),
+        SuggestionKind::Message => matches
+            .message_matches
+            .iter()
+            .map(|choice| (format!("M{}", choice.number), choice.preview.clone()))
             .collect(),
     };
     let choice = |row_index: usize| {
@@ -659,6 +692,7 @@ pub fn suggestion_popup(
             SuggestionKind::Session => {
                 section_heading.unwrap_or_else(|| SESSION_SUGGESTION_HEADING.to_string())
             }
+            SuggestionKind::Message => MESSAGE_SUGGESTION_HEADING.to_string(),
         },
         status: match kind {
             SuggestionKind::Skill => {
@@ -689,7 +723,7 @@ pub fn suggestion_popup(
         loading: match kind {
             SuggestionKind::Skill => sources.skills_loading,
             SuggestionKind::File => count == 0,
-            SuggestionKind::Slash | SuggestionKind::Session => false,
+            SuggestionKind::Slash | SuggestionKind::Session | SuggestionKind::Message => false,
         },
     })
 }
@@ -729,6 +763,14 @@ pub fn suggestion_replacement(
             .get(index)
             .map(|path| file_mention(path, next_file_reference_index(text))),
         SuggestionKind::Session => matches.session_matches.get(index).map(choice_mention),
+        SuggestionKind::Message => matches.message_matches.get(index).map(|choice| {
+            crate::transcript::message_numbers::message_link(
+                &crate::transcript::message_numbers::MessageRef {
+                    session_id: None,
+                    number: choice.number,
+                },
+            )
+        }),
     }
 }
 

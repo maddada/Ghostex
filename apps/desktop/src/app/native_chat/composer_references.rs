@@ -150,6 +150,12 @@ pub(super) fn replacements(
                     } else if reference.kind == "answer" {
                         // The question it answers, by its title (never its tags).
                         ghostex_gx_chat_core::questions::answer_pills::tooltip(&reference.label)
+                    } else if reference.kind == "message" {
+                        // One of the user's earlier messages (gx-chat-core `message_numbers.rs`).
+                        format!(
+                            "Message {}: its start is quoted for the agent",
+                            reference.label
+                        )
                     } else if reference.kind == "board" {
                         format!(
                             "{} on the board",

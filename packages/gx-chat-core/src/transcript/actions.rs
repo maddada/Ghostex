@@ -318,6 +318,14 @@ fn handle_action(state: &mut ChatState, action: &UserAction, context: &ChatConte
             if crate::questions::answer_pills::parse_href(&href).is_some() {
                 return Vec::new();
             }
+            // One of the user's earlier messages (`message_numbers.rs`): scrolls to it when it is
+            // in the loaded part of this chat.
+            if let Some(reference) = href
+                .strip_prefix(crate::transcript::message_numbers::MESSAGE_LINK_SCHEME)
+                .and_then(crate::transcript::message_numbers::parse_message_ref)
+            {
+                return show_message(state, context, &reference);
+            }
             match classify_link_href(&href) {
                 LinkTarget::File(path) => vec![position_effect(&href, path)],
                 // CDXC:SessionChat 2026-10-26 WHY: Shift+click on a chat link opens it in the system browser (the 2026-08-03 SessionChat comment in the desktop's session_chat/host_actions.rs). The TypeScript brain passed the click's `external` on to the host; the Rust port dropped it, so Shift+click opened the app's Browser like a plain click.
@@ -557,6 +565,44 @@ fn restore_prompt(prompt: String) -> Effect {
         caret: Some(caret),
         from_history: false,
     }
+}
+
+/// A message pill's click (`message_numbers.rs`): scrolls to that message of this chat and
+/// flashes it, or says it is not in the loaded part of the chat (or is another chat's).
+fn show_message(
+    state: &mut ChatState,
+    context: &ChatContext,
+    reference: &crate::transcript::message_numbers::MessageRef,
+) -> Vec<Effect> {
+    let written = reference.written();
+    let here = reference.is_in(&state.identity.session_id);
+    let id = here
+        .then(|| {
+            state
+                .messages
+                .list
+                .iter()
+                .find(|row| row.message_number == Some(reference.number))
+                .map(|row| row.id.clone())
+        })
+        .flatten();
+    let message = match id {
+        Some(id)
+            if crate::questions::open_questions::jump_to_row(
+                state, context, &id, "message", None,
+            ) =>
+        {
+            return Vec::new()
+        }
+        _ if !here => format!(
+            "{written} is a message in another chat: `ghostex message show {written}` prints it."
+        ),
+        _ => format!("{written} isn't in the loaded part of this chat."),
+    };
+    vec![Effect::Toast {
+        level: "info".to_string(),
+        message,
+    }]
 }
 
 /// A click on an agent pill (`session_mentions.rs`): the session it names, switched to as its

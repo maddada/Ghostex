@@ -39,6 +39,7 @@ pub mod local_command;
 pub mod long_prompt;
 pub mod markdown_links;
 pub mod marked_sections;
+pub mod message_numbers;
 pub mod message_text;
 pub mod message_time;
 pub mod native_markdown;

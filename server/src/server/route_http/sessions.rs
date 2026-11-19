@@ -566,6 +566,16 @@ pub(super) async fn route_sessions_http(
             )
             .await
         }
+        // `ghostex message show` and `list`: the user's numbered messages (chat_message_numbers.rs).
+        crate::chat_message_numbers::CHAT_MESSAGES_ENDPOINT => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |_, db, params, _| {
+                crate::chat_message_numbers::handle_chat_messages_request(db, params)
+            },
+        ),
         // `ghostex needs-you`: a session's to-dos for the user (session_needs_you/).
         crate::session_needs_you::SESSION_NEEDS_YOU_ENDPOINT => {
             let caller = caller.clone();

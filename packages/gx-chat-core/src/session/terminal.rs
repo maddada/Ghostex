@@ -78,6 +78,8 @@ fn hook_message(id: String, role: ChatRole, blocks: Vec<ChatBlock>, timestamp: i
         api_error: None,
         mention_paths: None,
         custom_message: None,
+        message_number: None,
+        message_ref: None,
     }
 }
 

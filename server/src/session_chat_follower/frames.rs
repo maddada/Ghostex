@@ -339,6 +339,11 @@ pub(super) fn emit_snapshot_frame(
         &config.project_id,
         &config.session_id,
     );
+    crate::chat_message_numbers::annotate_messages(
+        &mut rows,
+        &config.project_id,
+        &config.session_id,
+    );
     stream.emit_sequenced(
         |seq| {
             let mut frame = session_chat_frame(config, frame_type, epoch, seq);
@@ -427,6 +432,11 @@ pub(super) fn emit_appended_frame(
         _ => Vec::new(),
     };
     crate::session_chat_mention_paths::annotate_messages(
+        &mut rows,
+        &config.project_id,
+        &config.session_id,
+    );
+    crate::chat_message_numbers::annotate_messages(
         &mut rows,
         &config.project_id,
         &config.session_id,

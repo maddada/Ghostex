@@ -2053,6 +2053,22 @@ Copy message, Reply by Annotating, Save to Markdown and Read aloud for
 an agent's final reply; Copy message, Save prompt and Rewind to here for your own
 messages, plus Edit message, Back to composer and Delete message while one still
 waits for the agent.
+Message IDs: every message you write in a chat gets an ID that counts up in that
+chat (M1, M2, M3…), so you can point back to it instead of pasting it again. The ID
+is not shown under the message: the ⋯ menu's Copy message ID copies it in a form
+that works from any chat (G9jt7.M12, the session's ID and the number), and
+Reference in chat puts a pill for it in the chat box. Typing #M in the chat box
+lists your messages in this chat, newest first (#M1 narrows them to M1, M10,
+M12…); pick one for its pill. Hover the pill in a sent message to see the
+message's first line, and click it to scroll there. When you send a message that
+points at one (a pill, #M12, or G9jt7.M12 for another chat's), the agent gets the
+ID and, at the bottom of your message, the start of the one you pointed at: up to
+6 lines and 600 characters, whole lines first (a longer line is cut at a word);
+the chat shows only your words. Agents read the whole message with
+`ghostex message show M12` and list them with `ghostex message list`. Numbers are
+never reused (after Rewind to here the next message gets a new one), a fork keeps
+the numbers up to where it was cut, a queued message gets its number once the
+agent has it, and only messages written after the update that added IDs have one.
 Select words in the chat and right-click them for Copy, Add to Chat (quotes
 them into the chat box) and Reply, which opens a small box for your answer:
 Add to prompt (Enter) adds the quote with your reply under it to the end of the
