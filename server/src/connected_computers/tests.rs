@@ -260,20 +260,24 @@ fn a_relayed_message_body_is_read_as_the_receiver_reads_it_or_refused() {
     };
     // A form feed, NBSP and NEL around the body: the receiver trims them, so the relay does too.
     let wrapped = "\u{c}\u{a0}\u{85}{\"params\":{\"projectId\":\"P2\",\"sessionId\":\"G2\",\"text\":\"see #M1\",\"userSend\":true}}\u{b}";
-    let marked = relay::marked_message_body(&paths, "S1", &agent, wrapped.as_bytes())
+    let marked = relay::marked_message_body(&paths, "S1", "S2", &agent, wrapped.as_bytes())
         .expect("the receiver would read it, so the relay reads it");
     let body: serde_json::Value = serde_json::from_slice(&marked).unwrap();
     assert!(body["params"].get("userSend").is_none());
-    // The user's own caller's message leaves marked as theirs.
+    // The user's own caller's message leaves marked as theirs; `--as-user` from the terminal
+    // carries its label, since the other computer drops `via`.
     let user = relay::marked_message_body(
         &paths,
         "S1",
+        "S2",
         &Principal::LocalAgent,
-        b"{\"params\":{\"text\":\"see #M1\"}}",
+        b"{\"params\":{\"projectId\":\"P2\",\"sessionId\":\"G2\",\"text\":\"see #M1\",\"via\":\"terminal\"}}",
     )
     .unwrap();
     let body: serde_json::Value = serde_json::from_slice(&user).unwrap();
     assert_eq!(body["params"]["userSend"], true);
+    assert_eq!(body["params"]["text"], "see #M1\n\nSent from the terminal");
+    assert!(body["params"].get("via").is_none());
     // Anything that is not an object with object params is refused.
     for refused in [
         &b"not json"[..],
@@ -282,6 +286,6 @@ fn a_relayed_message_body_is_read_as_the_receiver_reads_it_or_refused() {
         b"{}",
         b"\xff",
     ] {
-        assert!(relay::marked_message_body(&paths, "S1", &agent, refused).is_err());
+        assert!(relay::marked_message_body(&paths, "S1", "S2", &agent, refused).is_err());
     }
 }

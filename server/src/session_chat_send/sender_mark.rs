@@ -271,46 +271,8 @@ pub(crate) fn prepare(
             if text.trim().is_empty() {
                 return;
             }
-            // Only `ghostex agents send --as-user` passes `via`; the app's, the web build's and
-            // a phone's sends stay exactly as they were.
-            let label = match via.as_deref() {
-                Some("grokBot") => Some(VIA_GROK_BOT),
-                Some("terminal") => Some(FROM_TERMINAL),
-                _ => None,
-            }
-            .filter(|_| matches!(caller, Principal::LocalAgent))
-            .filter(|_| !params.contains_key("draftVersion"));
-            let text = match label {
-                Some(label) => {
-                    let target = crate::ids::create_global_session_ref(
-                        server_id,
-                        &target_project,
-                        &target_session,
-                    );
-                    crate::audit::record(
-                        crate::audit::Action::new(
-                            "chat.sendAsUser",
-                            format!(
-                                "Sent a message into {target}'s chat as you ({})",
-                                label.to_lowercase()
-                            ),
-                        )
-                        .target(target.clone()),
-                        crate::audit::Actor::current(),
-                        crate::audit::Outcome::Done,
-                        None,
-                    );
-                    // A `/` or `!` command from the user's own terminal still runs as one.
-                    let labelled = if text.trim_start().starts_with(['/', '!']) {
-                        text
-                    } else {
-                        format!("{}\n\n{label}", text.trim_end())
-                    };
-                    params.insert("text".to_string(), json!(labelled));
-                    labelled
-                }
-                None => text,
-            };
+            let text =
+                label_as_user_send(server_id, caller, via.as_deref(), params).unwrap_or(text);
             // An edit by the user records its new text; the scheduler's later send settles by it.
             if route != "/api/sendSessionMessage" {
                 note_user_send(paths, &target_project, &target_session, &text);
@@ -334,6 +296,57 @@ pub(crate) fn prepare(
         // Anything else was marked by the computer it came from before it came (see above).
         _ => {}
     }
+}
+
+/// `ghostex agents send --as-user`'s label and security log entry: only it passes `via`, from the
+/// token file, and never with a `draftVersion`; the app's, the web build's and a phone's sends stay
+/// exactly as they were. Labels `params`' text ("Sent from the terminal", "Sent via Grok Bot") and
+/// answers it, or `None` when nothing applies. `server_id` is the computer whose chat it goes to:
+/// this one, or the one a relay passes it on to (connected_computers/relay.rs), which drops `via`.
+pub(crate) fn label_as_user_send(
+    server_id: &str,
+    caller: &Principal,
+    via: Option<&str>,
+    params: &mut Map<String, Value>,
+) -> Option<String> {
+    let label = match via {
+        Some("grokBot") => VIA_GROK_BOT,
+        Some("terminal") => FROM_TERMINAL,
+        _ => return None,
+    };
+    if !matches!(caller, Principal::LocalAgent) || params.contains_key("draftVersion") {
+        return None;
+    }
+    let text = param(params, "text").to_string();
+    if text.trim().is_empty() {
+        return None;
+    }
+    let target = crate::ids::create_global_session_ref(
+        server_id,
+        param(params, "projectId"),
+        param(params, "sessionId"),
+    );
+    crate::audit::record(
+        crate::audit::Action::new(
+            "chat.sendAsUser",
+            format!(
+                "Sent a message into {target}'s chat as you ({})",
+                label.to_lowercase()
+            ),
+        )
+        .target(target.clone()),
+        crate::audit::Actor::current(),
+        crate::audit::Outcome::Done,
+        None,
+    );
+    // A `/` or `!` command from the user's own terminal still runs as one.
+    let labelled = if text.trim_start().starts_with(['/', '!']) {
+        text
+    } else {
+        format!("{}\n\n{label}", text.trim_end())
+    };
+    params.insert("text".to_string(), json!(labelled));
+    Some(labelled)
 }
 
 /// The flag a relay sets on a message one of the user's own callers sent through it to another

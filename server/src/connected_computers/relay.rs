@@ -142,7 +142,7 @@ pub(crate) async fn relay(
     // callers' messages leaves marked as the user's (`userSend`), so the other computer records it
     // as theirs (quotes of earlier messages, chat_message_numbers.rs); nobody else's carries it.
     let bytes = if crate::session_chat_send::sender_mark::MESSAGE_ROUTES.contains(&forwarded) {
-        match marked_message_body(paths, server_id_here, caller, &bytes) {
+        match marked_message_body(paths, server_id_here, server_id, caller, &bytes) {
             Ok(marked) => marked.into(),
             Err(message) => {
                 return refusal(
@@ -325,6 +325,7 @@ fn header_text(headers: &HeaderMap, name: &str) -> Option<String> {
 pub(crate) fn marked_message_body(
     paths: &crate::paths::GxserverPaths,
     server_id_here: &str,
+    target_server_id: &str,
     caller: &Principal,
     bytes: &[u8],
 ) -> Result<Vec<u8>, &'static str> {
@@ -338,13 +339,23 @@ pub(crate) fn marked_message_body(
         .and_then(|params| params.as_object_mut())
         .ok_or(NOT_A_MESSAGE)?;
     crate::session_chat_send::sender_mark::mark_relayed_send(caller, params);
+    // `--as-user --computer`: the other computer drops `via`, so the label and the security log
+    // entry are written here, as for a chat on this computer (Fable's review of 809e881f4).
+    let via = params
+        .remove("via")
+        .and_then(|value| value.as_str().map(str::to_string));
+    crate::session_chat_send::sender_mark::label_as_user_send(
+        target_server_id,
+        caller,
+        via.as_deref(),
+        params,
+    );
     if let Principal::Session {
         project_id,
         session_id,
         ..
     } = caller
     {
-        params.remove("via");
         crate::session_chat_send::sender_mark::sign_agent_message(
             paths,
             server_id_here,
