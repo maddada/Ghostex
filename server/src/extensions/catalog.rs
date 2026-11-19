@@ -48,6 +48,17 @@ fn fill_source_urls(catalog: &mut super::ExtensionCatalog, url: &str) {
     }
 }
 
+/// Official extensions taken out of the Store: an installed copy is uninstalled when gxserver
+/// starts (its payload, Settings entry, panels, skill and data go), so none is left behind.
+///
+/// CDXC:Workarea 2026-09-22 DECISION:
+/// User: remove the original Storybook extension and keep only the built-in view.
+///
+/// CDXC:Extensions 2026-11-19 DECISION:
+/// User, after the Git extension's modal got stuck on screen: "anyways we dont need it". The Git
+/// extension leaves the Store; the header's Commit/Git popover is Ghostex's own and stays.
+pub(crate) const RETIRED_OFFICIAL_EXTENSIONS: [&str; 2] = ["storybook", "git"];
+
 pub(crate) fn catalog_url() -> String {
     std::env::var("GHOSTEX_EXTENSIONS_CATALOG_URL")
         .ok()
@@ -227,7 +238,7 @@ fn parse_catalog(bytes: &[u8]) -> ExtensionResult<ExtensionCatalog> {
     }
     catalog
         .extensions
-        .retain(|entry| entry.manifest.name != "storybook");
+        .retain(|entry| !RETIRED_OFFICIAL_EXTENSIONS.contains(&entry.manifest.name.as_str()));
     Ok(catalog)
 }
 

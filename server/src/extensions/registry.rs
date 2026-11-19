@@ -59,7 +59,9 @@ const RECENT_CATALOG_TTL: Duration = Duration::from_secs(5 * 60);
 fn log_skipped_extension_once(id: &str, message: &str) {
     static LOGGED: std::sync::Mutex<Option<std::collections::HashSet<(String, String)>>> =
         std::sync::Mutex::new(None);
-    let mut logged = LOGGED.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut logged = LOGGED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let first = logged
         .get_or_insert_with(Default::default)
         .insert((id.to_string(), message.to_string()));
@@ -81,11 +83,11 @@ impl ExtensionRegistry {
             agent_home: paths.agent_config_home_dir().to_path_buf(),
             taps: Arc::default(),
         };
-        // CDXC:Workarea 2026-09-22 DECISION:
-        // User: remove the original Storybook extension and keep only the built-in view.
-        if registry.installed_dir().join("storybook").exists() {
-            if let Err(error) = registry.uninstall("storybook") {
-                eprintln!("Could not retire the replaced Storybook extension: {error}");
+        for id in super::RETIRED_OFFICIAL_EXTENSIONS {
+            if registry.installed_dir().join(id).exists() {
+                if let Err(error) = registry.uninstall(id) {
+                    eprintln!("Could not retire the {id} extension: {error}");
+                }
             }
         }
         // The skills follow the switches as they stand at start (`follow_skill`): an extension
@@ -492,6 +494,11 @@ impl ExtensionRegistry {
                 "Storybook is now a built-in view. Open it from the project view picker.",
             ));
         }
+        if super::RETIRED_OFFICIAL_EXTENSIONS.contains(&id.as_str()) {
+            return Err(ExtensionError::bad_request(format!(
+                "The {id} extension was retired and can no longer be installed."
+            )));
+        }
         let previous_manifest = read_manifest(&self.installed_dir().join(&id), Some(&id)).ok();
         check_install_approval(&manifest, previous_manifest.as_ref(), approval)?;
         self.runtime.stop(&id)?;
@@ -564,7 +571,7 @@ impl ExtensionRegistry {
                 .into_string()
                 .map_err(|_| ExtensionError::internal("Installed extension id is not UTF-8."))?;
             validate_extension_id(&id)?;
-            if id == "storybook" {
+            if super::RETIRED_OFFICIAL_EXTENSIONS.contains(&id.as_str()) {
                 continue;
             }
             // CDXC:Extensions 2026-11-19 WHY:
@@ -716,6 +723,11 @@ impl ExtensionRegistry {
             return Err(ExtensionError::bad_request(
                 "Storybook is now a built-in view.",
             ));
+        }
+        if super::RETIRED_OFFICIAL_EXTENSIONS.contains(&id) {
+            return Err(ExtensionError::bad_request(format!(
+                "The {id} extension was retired."
+            )));
         }
         let _guard = self.lock()?;
         let payload_dir = self.installed_dir().join(id);
