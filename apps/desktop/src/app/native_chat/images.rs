@@ -1572,7 +1572,14 @@ impl NativeChatView {
             .rounded(px(VISUAL.strip_radius * s))
             .border(px(VISUAL.border_width * s))
             .border_color(p.border)
-            .bg(gpui::black())
+            // CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): under window glass the letterbox
+            // behind the picture is the code blocks' wash (`glass_wash`), not solid black, which
+            // read as a black slab around a picture narrower than its frame.
+            .bg(if p.window_glass {
+                crate::app::helpers::glass_wash(p.light, 1.0)
+            } else {
+                gpui::black()
+            })
             .group_hover("chat-strip-tile", |frame| {
                 frame.border_color(gpui::white().opacity(0.28))
             });

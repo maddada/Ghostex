@@ -47,9 +47,21 @@ impl Palette {
         let white = Rgba::from(gpui::white());
         let black = Rgba::from(gpui::black());
         Self {
-            backdrop: rgba(if p.light { 0x00000061 } else { 0x00000094 }),
+            // CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): under window glass the dark
+            // card's scrim is a veil of the chat's own colour at 60% (as `glass_veil`) and its
+            // surface the chat's colour lifted toward white (`glass_lifted_from`), not black at 58%
+            // and a near-black card. Light mode and glass off keep their colours.
+            backdrop: if p.light {
+                rgba(0x00000061)
+            } else if p.window_glass {
+                Rgba::from(p.background.opacity(0.6))
+            } else {
+                rgba(0x00000094)
+            },
             surface: if p.light {
                 css_mix(white, 0.7, background)
+            } else if p.window_glass {
+                Rgba::from(crate::app::helpers::glass_lifted_from(p.background, p.light))
             } else {
                 css_mix(white, 0.04, background)
             },

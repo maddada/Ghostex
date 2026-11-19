@@ -507,7 +507,14 @@ impl NativeChatView {
             .w_full()
             .h(px(v.preview_height * s))
             .overflow_hidden()
-            .bg(p.background)
+            // CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): under window glass the dark
+            // preview area is the code blocks' wash (`glass_wash`), not the opaque near-black chat
+            // background. Light mode and glass off keep the chat background.
+            .bg(if p.window_glass && !p.light {
+                crate::app::helpers::glass_wash(p.light, 1.0)
+            } else {
+                p.background
+            })
             .map(|this| match picture {
                 // As wide as the card, cut at the bottom: the top of the page is what it opens on.
                 Some(picture) => this.child(

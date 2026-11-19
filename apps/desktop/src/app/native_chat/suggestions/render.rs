@@ -54,12 +54,23 @@ impl Render for SuggestionPanel {
         CDXC:SessionChat 2026-09-23 DECISION:
         User: the `$`, `@` and `/` list "looks out of place" above the frosted composer ("can we make this look more fitting please?"): a heavy near-black card whose rows each carried their own outline, so the list read as separate black blocks with thick seams. Under window glass the card is the chat's frosted menu surface in a blurred window, its edge the composer's soft ink border, and the rows are one continuous list: no per-row outline, and the selected row is a wash of the menu's ink. Row corners still follow the 2026-09-19 rule (only the list's outer corners round). The opaque card keeps React's `bg-popover`, `bg-accent` and the legacy row outline.
         */
+        // CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): the maximized composer's inline list
+        // in a glass window is drawn over the transcript in the chat's own window, so it is the
+        // chat's colour lifted toward white (`glass_lifted_from`) and its selected row the code
+        // blocks' wash (`glass_wash`), never the opaque menu colour and #333333 that read as a
+        // black card on the glass. Glass off, unchanged.
+        let lifted =
+            !self.windowed && crate::app::helpers::window_glass_active_for(Some(self.source));
         let popover = if glass {
             p.menu_surface()
+        } else if lifted {
+            crate::app::helpers::glass_lifted_from(p.background, p.light)
         } else {
             p.menu_opaque()
         };
-        let highlight: Hsla = if glass {
+        let highlight: Hsla = if lifted {
+            crate::app::helpers::glass_wash(p.light, 1.5)
+        } else if glass {
             Hsla::from(rgb(if p.light { 0x000000 } else { 0xffffff })).opacity(if p.light {
                 0.06
             } else {

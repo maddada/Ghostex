@@ -14,6 +14,35 @@ const TILE_PX: f32 = 48.0;
 /// Hover group of one tile, which is what uncovers its remove button.
 const TILE_GROUP: &str = "chat-attachment";
 
+/// A tile's remove (×) circle: its fill, hovered fill and glyph.
+#[derive(Clone, Copy)]
+struct RemoveButtonLook {
+    fill: gpui::Hsla,
+    hover: gpui::Hsla,
+    glyph: gpui::Hsla,
+}
+
+/// CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): under window glass the × hangs over the
+/// picture as the chat's colour lifted toward white and kept opaque (`glass_lifted_opaque_from`),
+/// not the near-black chat background; it stays opaque as CDXC:SessionChat 2026-09-27 asks, and
+/// its glyph takes the chat's foreground so it reads on the lighter fill. Glass off, the chat
+/// background with the muted glyph as before.
+fn remove_button_look(p: &ChatAppearance) -> RemoveButtonLook {
+    let (fill, glyph) = if p.window_glass {
+        (
+            crate::app::helpers::glass_lifted_opaque_from(p.background, p.light),
+            p.foreground,
+        )
+    } else {
+        (p.background, p.muted)
+    };
+    RemoveButtonLook {
+        fill,
+        hover: fill.blend(p.muted.opacity(0.35)),
+        glyph,
+    }
+}
+
 impl NativeChatView {
     /// Drops the markdown reference this tile stands for, through the shared removal rule.
     fn remove_composer_attachment(
@@ -91,6 +120,7 @@ impl NativeChatView {
             return Vec::new();
         }
         let s = p.scale;
+        let remove = remove_button_look(p);
         let error = p.error();
         let words = super::composer_attach::UPLOAD_FAILED_WORDS;
         let mut tiles: Vec<AnyElement> = self
@@ -184,17 +214,13 @@ impl NativeChatView {
                             .rounded_full()
                             .border_1()
                             .border_color(p.input_border)
-                            .bg(p.background)
-                            .hover(|style| {
-                                style
-                                    .visible()
-                                    .bg(p.background.blend(p.muted.opacity(0.35)))
-                            })
+                            .bg(remove.fill)
+                            .hover(move |style| style.visible().bg(remove.hover))
                             .child(
                                 gpui::svg()
                                     .path("titlebar/x.svg")
                                     .size(px(9.0 * s))
-                                    .text_color(p.muted),
+                                    .text_color(remove.glyph),
                             )
                             .on_click(
                                 cx.listener(move |this, _, _, cx| this.drop_failed_upload(key, cx)),
@@ -226,6 +252,7 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let s = p.scale;
+        let remove = remove_button_look(p);
         let attachments: Vec<_> = references
             .iter()
             .filter(|reference| reference.kind == "image")
@@ -345,21 +372,18 @@ impl NativeChatView {
                             .border_color(p.input_border)
                             // It hangs over the picture, so it is opaque at rest too: under window
                             // glass `card_background` is clear and the picture read through it.
-                            .bg(p.background)
+                            // Under glass, the opaque lift (`remove_button_look`).
+                            .bg(remove.fill)
                             /*
                             CDXC:SessionChat 2026-09-27 DECISION:
                             User: a hovered remove button has a grayish background, never a transparent one. The palette's `border` and `card_background` are see-through washes under window glass, so the gray is the muted tone mixed into the opaque chat background.
                             */
-                            .hover(|style| {
-                                style
-                                    .visible()
-                                    .bg(p.background.blend(p.muted.opacity(0.35)))
-                            })
+                            .hover(move |style| style.visible().bg(remove.hover))
                             .child(
                                 gpui::svg()
                                     .path("titlebar/x.svg")
                                     .size(px(9.0 * s))
-                                    .text_color(p.muted),
+                                    .text_color(remove.glyph),
                             )
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 if disabled {

@@ -352,7 +352,7 @@ impl Render for ImageViewerWindow {
         // from the right so the round close button sits beside them, both outside the scrolling
         // layer so zooming and panning never move them.
         // The sidebar tooltip bubble's fill: these float over the picture (CDXC:Tooltips 2026-10-25
-        // on `in_window_bubble`).
+        // on `in_window_bubble`). Under glass, the lifted work area colour (CDXC:Theming 2026-11-20).
         let surface = crate::app::native_sidebar::link_chips::in_window_bubble(p.window_glass).fill;
         let surface_hover =
             surface.blend(crate::app::helpers::titlebar_popup_menu_foreground().opacity(0.1));
@@ -457,10 +457,12 @@ impl Render for ImageViewerWindow {
             .flex_col()
             .items_center()
             .justify_center()
-            // Under glass the window blurs the chat behind the picture, so a lighter dim is enough.
+            // Under glass the window blurs the chat behind the picture, so a veil of the chat's own
+            // colour at 60% (as `glass_veil`) dims it instead of black (CDXC:Theming 2026-11-20 in
+            // helpers/chrome_palette.rs; supersedes the black 45% dim under glass).
             .bg(
                 if crate::app::helpers::window_glass_active_for(self.chat.read(cx).main_window) {
-                    gpui::Hsla::from(gpui::rgb(0x000000)).opacity(0.45)
+                    p.background.opacity(0.6)
                 } else {
                     gpui::Hsla::from(gpui::rgb(0x000000)).opacity(0.7)
                 },

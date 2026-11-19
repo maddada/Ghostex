@@ -88,6 +88,14 @@ pub(super) const LIST_GUTTER: f32 = 20.0;
 /// React's `li + li` margin.
 const LIST_ITEM_GAP: f32 = 4.0;
 
+/// A fenced code block's fill: the Code blocks theme role when set, else the chat's input tone
+/// (under window glass, the ink wash `glass_wash` names). The code-like boxes that sit on glass
+/// (inline code, approval command boxes, a terminal's screen) take it there too
+/// (CDXC:Theming 2026-11-20 in helpers/chrome_palette.rs).
+pub(crate) fn fenced_code_fill(p: &ChatAppearance) -> gpui::Hsla {
+    crate::app::helpers::theme_role_or("codeBlock", p.light, p.input)
+}
+
 pub(crate) fn text_style(p: &ChatAppearance) -> TextViewStyle {
     let mut style = TextViewStyle::default()
         // The chat view never changes the mouse cursor (see native_chat/cursor.rs), so the
@@ -103,11 +111,7 @@ pub(crate) fn text_style(p: &ChatAppearance) -> TextViewStyle {
     // (CDXC:Theming 2026-11-18 in packages/settings-catalog/src/theme_roles.rs).
     style.code_block = StyleRefinement::default()
         .text_color(p.code_text)
-        .bg(crate::app::helpers::theme_role_or(
-            "codeBlock",
-            p.light,
-            p.input,
-        ))
+        .bg(fenced_code_fill(p))
         .border_1()
         .border_color(p.border)
         .rounded(px(12.0 * p.scale));
@@ -192,7 +196,14 @@ pub(super) fn inline_code(p: &ChatAppearance) -> InlineCodeStyle {
         padding_y: px(visual.padding_y * p.scale),
         border_width: px(visual.border_width * p.scale),
         radius: px(visual.radius * p.scale),
-        background: super::chat_text_look::inline_code_fill(p.light),
+        // CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): under window glass dark inline code
+        // and an inline command's chip take the fenced code blocks' fill (`fenced_code_fill`), not
+        // the opaque #272727 that read as a black chip on the glass. Light mode keeps #efeff0.
+        background: if p.window_glass && !p.light {
+            fenced_code_fill(p)
+        } else {
+            super::chat_text_look::inline_code_fill(p.light)
+        },
         border_color: p.foreground.opacity(if p.light { 0.16 } else { 0.18 }),
         swatches: true,
         swatch: None,
