@@ -133,9 +133,11 @@ struct PeerGrant {
     name: String,
     agent_access: bool,
     expires_at: Instant,
-    /// The desktop app (the owner session or the token file) issued it (`set_owner_issued`): only
-    /// such a computer's relayed messages may count as the user's
-    /// (session_chat_send/sender_mark.rs `RELAYED_USER_SEND`).
+    /// The desktop app issued it (`issue_grant`'s `desktop_issued`): only such a computer's
+    /// relayed messages may count as the user's (session_chat_send/sender_mark.rs
+    /// `RELAYED_USER_SEND`). Both callers today pass true (the grant route, which only the owner
+    /// session and the token file reach, and an approved server link), so this only guards a
+    /// future caller that issues grants for someone else.
     owner_issued: bool,
 }
 
@@ -383,7 +385,8 @@ pub(crate) fn issue_grant(
     Ok(Some(token))
 }
 
-/// Whether `server_id`'s live grant was issued by the desktop app (`set_owner_issued`).
+/// Whether `server_id`'s live grant was issued by the desktop app (`issue_grant`'s
+/// `desktop_issued`).
 pub(crate) fn owner_issued(server_id: &str) -> bool {
     let mut registry = registry();
     prune(&mut registry, Instant::now());
