@@ -38,6 +38,12 @@
 
 <sub>Want an animated wallpaper behind Ghostex like these? Try [Wallspace](https://wallspace.app/) on macOS (free, recommended), [Lively Wallpaper](https://github.com/rocksdanister/lively) on Windows (free, open source) or [Hidamari](https://github.com/jeffshee/hidamari) on Linux (free, open source; it has no gallery, so add your own videos, for example looping clips from [Pexels Videos](https://www.pexels.com/search/videos/abstract%20loop/), or paste a YouTube link: search for "4K live wallpaper loop"). Move Ghostex to its own desktop or workspace so only the wallpaper sits behind it.</sub>
 
+## Click to Connect GrokBot:
+
+Manage your agents from Grok Bot and send tasks from any thread to any coordinator or session running in Ghostex!
+
+<p align="center"><a href="https://x.ai/bot/W-heW_JNPbQxU7bWKxNP5" target="_blank"><img width="400" alt="2026-11-19_Grok Bot_09-49-08@2x" src="https://github.com/user-attachments/assets/a5486fcb-d955-480c-8c98-83ddcde5a538" /></a></p>
+
 ## What it does
 
 ### 📱 Your agents, in your pocket
