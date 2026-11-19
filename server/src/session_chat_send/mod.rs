@@ -60,7 +60,7 @@ pub(crate) use composer_repaint::claude_composer_needs_redraw;
 mod answer_http;
 mod ask_answer_keys;
 mod busy_input_wait;
-mod claude_queue_pull;
+pub(crate) mod claude_queue_pull;
 mod constants;
 mod draft_capture;
 mod grok_queue_pull;

@@ -26,8 +26,12 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
 }
 
 /// The chat box's picture references (`[Image #1](/path/to/picture.png)`, what a paste writes)
-/// taken out of `text`: the words left, and the pictures' paths in order.
-fn split_image_references(text: &str) -> (String, Vec<String>) {
+/// taken out of `text`: the words left, and the pictures' paths in order. Only a reference `own`
+/// accepts becomes a picture; any other stays in the words as written.
+///
+/// CDXC:Collab 2026-11-20 WHY:
+/// A guest's words can name any path on the owner's computer (`[Image #1](/Users/mo/.ssh/id_rsa)`); drawn as a picture, the owner's own chat would read that file. Only the held message's own uploads (`imagePaths`, which the Collab component checked against the guest's uploads) are pictures, and gxserver refuses to deliver a message naming any other file (server/src/collab_shim/http.rs `Deliver`). Security review of the dock rows, N8.
+fn split_image_references(text: &str, own: &[&str]) -> (String, Vec<String>) {
     let mut words = String::new();
     let mut paths = Vec::new();
     let mut rest = text;
@@ -43,8 +47,13 @@ fn split_image_references(text: &str) -> (String, Vec<String>) {
             rest = &rest[start + 1..];
             continue;
         };
-        words.push_str(&rest[..start]);
-        paths.push(tail[2..2 + close].to_string());
+        let path = &tail[2..2 + close];
+        if own.contains(&path) {
+            words.push_str(&rest[..start]);
+            paths.push(path.to_string());
+        } else {
+            words.push_str(&rest[..start + "[Image #".len() + digits + 2 + close + 1]);
+        }
         rest = &tail[2 + close + 1..];
     }
     words.push_str(rest);
@@ -53,13 +62,28 @@ fn split_image_references(text: &str) -> (String, Vec<String>) {
 
 /// A held message's words, without the picture references its pictures replace.
 fn held_text(row: &Value) -> String {
-    split_image_references(text(row, "text")).0
+    split_image_references(text(row, "text"), &own_images(row)).0
+}
+
+/// A held message's own uploads (`imagePaths`), the only pictures its words may name.
+fn own_images(row: &Value) -> Vec<&str> {
+    row.get("imagePaths")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect()
 }
 
 /// A held message's pictures (its attachments, then the ones its words reference), in the
 /// transcript's own image source shape, so the renderers draw them with the chat's own thumbnails.
 fn held_images(row: &Value) -> Value {
-    let referenced = split_image_references(text(row, "text")).1;
+    let own = own_images(row);
+    let referenced: Vec<String> = split_image_references(text(row, "text"), &own)
+        .1
+        .into_iter()
+        .filter(|path| !own.contains(&path.as_str()))
+        .collect();
     Value::Array(
         row.get("imagePaths")
             .and_then(Value::as_array)
@@ -103,7 +127,8 @@ pub fn owner_name(state: &ChatState) -> String {
 /// draws for them (`pageAnswers`), with what else it says (`answersText`). `by` names who answered
 /// when it is not the reader.
 fn held_answers(state: &ChatState, row: &Value, by: Option<&str>) -> Option<(Vec<Value>, String)> {
-    let (envelopes, rest) = crate::transcript::page_answers::split_all_page_answers(text(row, "text"));
+    let (envelopes, rest) =
+        crate::transcript::page_answers::split_all_page_answers(text(row, "text"));
     if envelopes.is_empty() {
         return None;
     }
@@ -122,7 +147,7 @@ fn held_answers(state: &ChatState, row: &Value, by: Option<&str>) -> Option<(Vec
             card
         })
         .collect();
-    Some((cards, split_image_references(&rest).0))
+    Some((cards, split_image_references(&rest, &own_images(row)).0))
 }
 
 /// On a guest's page, a form whose answers the owner held follows what the owner did with them
