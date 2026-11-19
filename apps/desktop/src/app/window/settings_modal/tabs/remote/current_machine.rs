@@ -62,9 +62,23 @@ pub(super) fn computer_name(tab: &RemoteTab) -> String {
         .unwrap_or_else(crate::host_name::local_computer_name)
 }
 
+/// The line under this computer's icon: its width (a share of the icon's), height and gap under
+/// the icon, as the sidebar draws it (native_sidebar/computer_mark.rs `with_here_line`, which
+/// Settings, also drawn by the preview binary, can't call).
+const LINE_WIDTH: f32 = 0.62;
+const LINE_HEIGHT: f32 = 1.5;
+const LINE_GAP: f32 = 2.0;
+
 /// This computer's icon (the one picked for it, else its system's), in the tile a saved computer's
-/// row has.
-pub(super) fn this_computer_icon_tile(tab: &RemoteTab, t: &RemoteTokens) -> AnyElement {
+/// row has, underlined while another computer shows in the sidebar.
+///
+/// CDXC:RemoteMachines 2026-11-20 SEE-ALSO: native_sidebar/computer_mark.rs `with_here_line` (Q4248,
+/// the line under the computer you're on).
+pub(super) fn this_computer_icon_tile(
+    tab: &RemoteTab,
+    t: &RemoteTokens,
+    cx: &gpui::App,
+) -> AnyElement {
     let id = ghostex_gx_core::LOCAL_MACHINE_ID;
     let asset = tab
         .computer_icons
@@ -73,12 +87,41 @@ pub(super) fn this_computer_icon_tile(tab: &RemoteTab, t: &RemoteTokens) -> AnyE
         .map(|icon| icon.asset)
         .or_else(|| tab.computer_icons.default_asset(id))
         .unwrap_or(ICON_DEVICE_DESKTOP);
+    // Another computer the sidebar shows: a saved one that is on and isn't this one again.
+    let several = tab.remote_machines(cx).iter().any(|machine| {
+        machine.get("disabled").and_then(serde_json::Value::as_bool) != Some(true)
+            && machine
+                .get("id")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|machine_id| !tab.this_computer.contains(machine_id))
+    });
+    const SIZE: f32 = 18.0;
     super::machines::tile_frame(t)
-        .child(settings_icon(
-            asset,
-            18.0,
-            css_mix(t.muted, 0.70, t.foreground),
-        ))
+        .child(
+            div()
+                .relative()
+                .size(px(SIZE))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(settings_icon(
+                    asset,
+                    SIZE,
+                    css_mix(t.muted, 0.70, t.foreground),
+                ))
+                .when(several, |icon| {
+                    icon.child(
+                        div()
+                            .absolute()
+                            .left(px(SIZE * (1.0 - LINE_WIDTH) / 2.0))
+                            .top(px(SIZE + LINE_GAP))
+                            .w(px(SIZE * LINE_WIDTH))
+                            .h(px(LINE_HEIGHT))
+                            .rounded(px(1.0))
+                            .bg(hsla(t.foreground)),
+                    )
+                }),
+        )
         .into_any_element()
 }
 

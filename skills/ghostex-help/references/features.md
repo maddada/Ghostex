@@ -1449,6 +1449,12 @@ where they are while you open, change and close views.
 - Every computer goes by its icon and its own name, the one you're on too:
   Ghostex never calls it "This computer" (the where pill's card, Session
   details, Run on, menus, usage cards and Settings all name it).
+- While more than one computer is in the sidebar, the computer you're on has
+  a short line under its icon wherever that icon shows: its computer tile (and
+  the folded computers button), its session rows and Unified cards, a
+  project's header, the chat's where pill and its card, Session details and
+  its row in Settings > Remote. With one computer nothing is marked, and the
+  phone marks nothing.
 - Every computer has an icon. While more than one computer is in the
   sidebar, every session row ends with its computer's icon, this computer's
   sessions included (a Unified card shows it after the branch), and a
