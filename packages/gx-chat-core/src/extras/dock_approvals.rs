@@ -147,17 +147,27 @@ pub(crate) fn block_preview(text: &str) -> (String, usize) {
         .unwrap_or_else(|| (text.to_string(), 0))
 }
 
-/// The line count of Codex's own cut of a long command (`[… 57 lines]`, also with `...`), or `None`.
-fn codex_cut_lines(line: &str) -> Option<u64> {
-    let inner = line.trim().strip_prefix('[')?.strip_suffix(']')?;
-    let inner = inner
+/// Whether a line is Codex's own cut of a long command: it starts `[… N lines]` (or `[... N
+/// line]`), whatever follows ("ctrl + a view all" and the like).
+fn is_codex_cut(line: &str) -> bool {
+    let Some(inner) = line.trim().strip_prefix('[') else {
+        return false;
+    };
+    let Some(inner) = inner
         .strip_prefix('\u{2026}')
-        .or_else(|| inner.strip_prefix("..."))?
-        .trim();
-    let count = inner
+        .or_else(|| inner.strip_prefix("..."))
+    else {
+        return false;
+    };
+    let Some((count, _)) = inner.split_once(']') else {
+        return false;
+    };
+    let count = count.trim();
+    let digits = count
         .strip_suffix(" lines")
-        .or_else(|| inner.strip_suffix(" line"))?;
-    count.trim().parse().ok()
+        .or_else(|| count.strip_suffix(" line"))
+        .map(str::trim);
+    digits.is_some_and(|digits| !digits.is_empty() && digits.chars().all(|ch| ch.is_ascii_digit()))
 }
 
 /// How many lines of the command its row shows before "Show N more lines".
@@ -221,11 +231,11 @@ fn open_row(state: &ChatState) -> Option<Value> {
     // The whole command, every line: the row shows its first lines and "Show N more lines".
     let mut command = code.trim_end().trim_start_matches('\n').to_string();
     // Codex's own cut of a command taller than its screen ("[… 57 lines]") is not part of it: it
-    // says how much is only in the terminal.
+    // says the rest is only in the terminal.
     let mut codex_cut = String::new();
     if let Some((rest, last)) = command.rsplit_once('\n') {
-        if let Some(count) = codex_cut_lines(last) {
-            codex_cut = format!("{count} more lines in the terminal");
+        if is_codex_cut(last) {
+            codex_cut = "More lines in the terminal".to_string();
             command = rest.trim_end().to_string();
         }
     }
