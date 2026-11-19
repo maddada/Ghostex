@@ -23,6 +23,7 @@ pub mod automations;
 pub(crate) mod autopilot;
 pub mod beads_view;
 pub mod board_start_work;
+pub(crate) mod boosts;
 pub(crate) mod bot_feed;
 pub(crate) mod bot_projects;
 pub(crate) mod carry_on_compaction;

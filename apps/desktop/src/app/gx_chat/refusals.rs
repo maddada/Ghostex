@@ -134,6 +134,7 @@ fn rpc_method_name(wire: &str) -> &'static str {
         ChatRpcMethod::OpenCoordinatorThread => "openCoordinatorThread",
         ChatRpcMethod::CoordinatorBoard => "coordinatorBoard",
         ChatRpcMethod::Autopilot => "autopilot",
+        ChatRpcMethod::Boosts => "boosts",
         ChatRpcMethod::Collab => "collab",
         ChatRpcMethod::CollabTyping => "collabTyping",
         ChatRpcMethod::StartSideChat => "startSideChat",

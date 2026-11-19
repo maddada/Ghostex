@@ -125,6 +125,11 @@ impl NativeChatView {
                         )
                     },
                 )
+                // "Try a Boost" (boosts.rs), under a regular new chat's headline.
+                .when(
+                    welcome.get("showTitle").and_then(Value::as_bool) != Some(false),
+                    |this| this.children(self.render_try_a_boost(p, cx)),
+                )
                 // The tips card (new_chat_tips.rs): under a regular new chat's headline only; a
                 // coordinator's welcome hides the headline and has its own intro.
                 .when(

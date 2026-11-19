@@ -194,7 +194,7 @@ fn picks_note(findings: &[String], file: &str) -> String {
 fn old_layout_hint(source: &str) -> Option<String> {
     (!is_current_layout(source)).then(|| {
         format!(
-            "Note: this page has no {PAGE_VERSION_META_TAG}, so it was written for the old page layout and the reader sees a notice saying so. Load the current $ghostex-visuals skill again (Ghostex keeps it up to date) and start your next page from its skeleton."
+            "Note: this page has no {PAGE_VERSION_META_TAG}, so it was written for the old page layout and the reader sees a notice saying so. Run `ghostex visual guide pages` (or load the current $ghostex-visuals skill) and start your next page from its skeleton."
         )
     })
 }

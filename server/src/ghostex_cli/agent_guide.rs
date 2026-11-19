@@ -18,7 +18,7 @@ Show things in the chat (use these names with the user; older words mean the sam
 - A Ghostex form (gx form; \"inline questions\"): questions with choices, a ```questions block; link what a question is about (Markdown link with the full URL, or a file path link).
 - A Live page (\"gx page\", \"inline HTML\"): mockups, small tools, picture questions; publish a self-contained HTML file with `ghostex show page.html`, paste the block it prints.
 - Check first with `ghostex visual check <file>`.
-- Formats are in the ghostex-visuals skill; if missing, offer `ghostex visual install-skill`.
+- Read `ghostex visual guide visuals|forms|pages` before your first. A Boost note: do what it asks.
 
 Open a page you built (a site or app preview)
 {browser}

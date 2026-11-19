@@ -248,6 +248,8 @@ text the user has typed, so a draft reads as what it is about instead of as
 default, which is what a promoted draft goes back to showing.
 */
 pub(crate) fn draft_display_title(content: &str) -> Option<String> {
+    // A Boost pill is how the message is answered, not what it is about (server/src/boosts.rs).
+    let content = ghostex_gx_chat_core::extras::boosts::without_boost_links(content);
     let line = content
         .lines()
         .map(str::trim)

@@ -312,6 +312,11 @@ pub(crate) struct NativeChatView {
     pub(super) passthrough_screen_shown: Option<String>,
     pub(crate) note_input: Option<Entity<TextareaState>>,
     pub(crate) note_subscription: Option<Subscription>,
+    /// The Boost prompt editor's field and the Boost it edits (boosts.rs).
+    pub(crate) boost_editor_input: Option<(String, Entity<TextareaState>)>,
+    pub(crate) boost_editor_subscription: Option<Subscription>,
+    /// Where the strip's Boost pill was painted, which its menu lines up with (boosts.rs).
+    pub(super) boost_pill_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
     /// The note and text boxes of the open question forms, by `<form id>:<question>`.
     pub(super) form_inputs: std::collections::HashMap<String, super::question_form::FormInput>,
     /// Transcript search (Cmd+F): the field, and the navigation it last scrolled to.
@@ -706,6 +711,9 @@ impl NativeChatView {
             passthrough_screen_shown: None,
             note_input: None,
             note_subscription: None,
+            boost_editor_input: None,
+            boost_editor_subscription: None,
+            boost_pill_bounds: Default::default(),
             form_inputs: Default::default(),
             search_input: None,
             search_subscription: None,

@@ -65,6 +65,8 @@ pub enum ReferenceKind {
     /// One of the user's earlier messages, `[M12](message:M12)`
     /// (`transcript/message_numbers.rs`).
     Message,
+    /// A Boost for this message, `[Live page](boost:live-page)` (`extras/boosts.rs`).
+    Boost,
 }
 
 impl ReferenceKind {
@@ -82,6 +84,7 @@ impl ReferenceKind {
             Self::Board => "board",
             Self::Answer => "answer",
             Self::Message => "message",
+            Self::Boost => "boost",
         }
     }
 }
@@ -369,6 +372,7 @@ pub fn reference_display_label(label: &str, path: &str, kind: ReferenceKind) -> 
         || kind == ReferenceKind::Board
         || kind == ReferenceKind::Answer
         || kind == ReferenceKind::Message
+        || kind == ReferenceKind::Boost
     {
         return crate::transcript::session_mentions::pill_label(label);
     }
@@ -778,6 +782,18 @@ pub fn composer_references(text: &str) -> Vec<ComposerReference> {
                 end: indexed.offset(destination.end),
                 identity: format!("message:{}", reference.written()),
                 kind: ReferenceKind::Message,
+                label,
+                path: destination.path.trim().to_string(),
+                start: indexed.offset(start),
+            });
+            continue;
+        }
+        // A Boost for this message: its name in a pill (`extras/boosts.rs`).
+        if let Some(boost) = crate::extras::boosts::boost_of_href(&destination.path) {
+            references.push(ComposerReference {
+                end: indexed.offset(destination.end),
+                identity: format!("boost:{}", boost.id),
+                kind: ReferenceKind::Boost,
                 label,
                 path: destination.path.trim().to_string(),
                 start: indexed.offset(start),
