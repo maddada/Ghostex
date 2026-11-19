@@ -711,6 +711,8 @@ async fn send_session_chat_message_locked(
             &expanded,
         )
     };
+    // Each Boost pill's prompt goes under the message (CDXC:Boosts 2026-11-20 in boosts.rs).
+    let expanded = crate::boosts::with_boosts(&state.paths, &expanded);
     let text = expanded.as_str();
     let mut params = Map::new();
     params.insert("projectId".to_string(), json!(project_id));

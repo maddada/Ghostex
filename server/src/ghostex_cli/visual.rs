@@ -38,6 +38,8 @@ pub fn visual_command(args: &[String]) -> CliResult<()> {
         "check" => check_command(rest),
         "export" => crate::ghostex_cli::visual_export::export_command(rest),
         "install-skill" => skills::install_visuals_skill_command(rest),
+        "guide" => crate::ghostex_cli::visual_guide::guide_command(rest),
+        "boosts" | "boost" => crate::ghostex_cli::visual_guide::boosts_command(rest),
         other => Err(CliError::Other(format!(
             "Unknown visual command: {other}\n\n{}",
             usage::visuals_usage()

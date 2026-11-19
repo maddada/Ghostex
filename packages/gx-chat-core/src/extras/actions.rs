@@ -34,6 +34,15 @@ pub fn handle_with_ids(
             crate::extras::session_details::actions::handle(state, action, next_request_id)
         }
         ActionKind::WherePill => crate::extras::where_pill::handle(state, action),
+        ActionKind::ToggleBoost
+        | ActionKind::OpenBoostEditor
+        | ActionKind::EditBoostPrompt
+        | ActionKind::SaveBoostPrompt
+        | ActionKind::ResetBoostPrompt
+        | ActionKind::CloseBoostEditor
+        | ActionKind::DismissBoostHint => {
+            crate::extras::boosts::handle(state, action, &mut next_request_id)
+        }
         ActionKind::ToggleAgentFleet => {
             state.extras.panels.fleet_open = Some(flag(action, "open"));
             Vec::new()

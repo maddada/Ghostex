@@ -67,6 +67,10 @@ fn settle_with_ids(
                 crate::extras::where_pill::settle_rpc(state, *request_id, outcome.as_ref(), context)
             {
                 effects.extend(more);
+            } else if let Some(more) =
+                crate::extras::boosts::settle_rpc(state, *request_id, outcome.as_ref())
+            {
+                effects.extend(more);
             } else if let Some(more) = subagent::settle_rpc(
                 &mut state.extras.subagent,
                 *request_id,
@@ -226,6 +230,10 @@ fn settle_with_ids(
     }
     crate::extras::session_details::settle::prune_stopping(state);
     effects.extend(crate::extras::where_pill::read_if_due(
+        state,
+        &mut next_request_id,
+    ));
+    effects.extend(crate::extras::boosts::read_if_due(
         state,
         &mut next_request_id,
     ));

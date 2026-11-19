@@ -93,6 +93,7 @@ mod theme_cli;
 pub mod usage;
 mod visual;
 mod visual_export;
+mod visual_guide;
 mod visual_page_check;
 mod voice;
 pub mod wait;

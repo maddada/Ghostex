@@ -2359,7 +2359,16 @@ is an HTML page the agent publishes, for things a chart can't show, such as a
 UI mockup, a comparison or a small interactive tool. Ask for them by name
 ("give me a Live page for this", "ask me in a gx form", "show it as gx
 visuals"); agents still understand the older words Ghostex page, gx page,
-inline HTML, inline questions and inline graphs. For a Live page the chat shows a card with a small preview
+inline HTML, inline questions and inline graphs. **Boosts** ask for them in one click: the Boost pill at the right
+of the strip on top of the chat box lists Live page, Chart it, Side by side, Map it and
+Triage requests (issues, pull requests or tickets explained one by one on a Live page,
+with a decision for each), and a new chat offers them as "Try a Boost". A pick adds a
+Boost pill to your message; pick it again, or delete the pill, to take it out. A Boost
+lasts that one message. Point at the pill in the chat box to read the instruction the
+agent gets, and double-click it to change that instruction: Save keeps your version for
+that Boost in every chat on this computer, and Reset to default goes back to Ghostex's.
+`ghostex visual boosts` lists them, and `ghostex visual boosts reset <id>` resets one.
+For a Live page the chat shows a card with a small preview
 picture of the page, the same on desktop, web, and mobile. Pages share one
 look: a soft dusk backdrop in dark mode (a soft dawn in light) with frosted
 glass cards and choices. The picture is taken

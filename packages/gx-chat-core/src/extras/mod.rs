@@ -11,6 +11,7 @@ pub mod agent_tasks;
 pub mod agents;
 pub mod autopilot;
 pub mod background_tasks;
+pub mod boosts;
 pub mod chat_pills;
 pub mod collab;
 pub mod coordinator_board;

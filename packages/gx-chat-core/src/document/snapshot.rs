@@ -377,6 +377,11 @@ pub struct Document {
     /// is none (a draft, no answer yet, an older gxserver). Family f.
     #[serde(default)]
     pub where_pill: Value,
+    /// The Boosts (`extras/boosts.rs`): the strip's Boost pill and its menu, every Boost with its
+    /// prompt, the open prompt editor and the one-time hint; `null` while gxserver has none.
+    /// Family f.
+    #[serde(default)]
+    pub boosts: Value,
     /// The card of the failed API call nothing has answered yet, with gxserver's retry, or
     /// `null` (`transcript/api_errors.rs`). Family b.
     pub api_error_card: Value,

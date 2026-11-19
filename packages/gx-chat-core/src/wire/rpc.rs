@@ -76,6 +76,9 @@ pub enum ChatRpcMethod {
     CoordinatorBoard,
     /// Autopilot's choices (`/api/autopilot`, server/src/server/autopilot_http.rs): the pill.
     Autopilot,
+    /// The Boosts' edited prompts and one-time hint (`/api/boosts`, server/src/boosts/): the
+    /// Boost pill, its prompt editor and the hint (`extras/boosts.rs`).
+    Boosts,
     /// Ghostex Collab's owner calls (`/api/collab`, forwarded by server/src/collab_shim/http.rs to the Collab component): the answer
     /// to a guest's message.
     Collab,
@@ -162,6 +165,7 @@ impl ChatRpcMethod {
             Self::OpenCoordinatorThread => "openCoordinatorThread",
             Self::CoordinatorBoard => "coordinatorBoard",
             Self::Autopilot => "autopilot",
+            Self::Boosts => "boosts",
             Self::Collab => "collab",
             Self::CollabTyping => "collabTyping",
             Self::StartSideChat => "startSideChat",
@@ -228,6 +232,7 @@ impl ChatRpcMethod {
             "openCoordinatorThread" => Self::OpenCoordinatorThread,
             "coordinatorBoard" => Self::CoordinatorBoard,
             "autopilot" => Self::Autopilot,
+            "boosts" => Self::Boosts,
             "collab" => Self::Collab,
             "collabTyping" => Self::CollabTyping,
             "startSideChat" => Self::StartSideChat,

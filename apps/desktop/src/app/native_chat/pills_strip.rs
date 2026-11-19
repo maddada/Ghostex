@@ -424,6 +424,10 @@ impl NativeChatView {
         if hidden > 0 {
             pills.push((StripItem::Overflow, self.strip_overflow_pill(hidden, p, cx)));
         }
+        // The Boost pill after the panel pills, never folded away (boosts.rs).
+        if let Some(boost) = self.boost_strip_pill(p, cx) {
+            pills.push((StripItem::Fixed, boost));
+        }
         // The Links pill is the last one (links_pill.rs has the user's words).
         if let Some(links) = &self.links_pill {
             pills.push((StripItem::Fixed, self.links_pill_element(links, p, cx)));
@@ -571,6 +575,7 @@ impl NativeChatView {
                 || self.where_pill().is_some()
                 || chips
                 || self.links_pill.is_some()
+                || self.boost_pill_shown()
                 || !self.strip_pill_ids().is_empty()
                 || self.open_question_pill_text().is_some())
     }

@@ -214,6 +214,13 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::InsertBoardReference
         | ActionKind::HideCoordinatorIntro
         | ActionKind::ToggleAutopilot
+        | ActionKind::ToggleBoost
+        | ActionKind::OpenBoostEditor
+        | ActionKind::EditBoostPrompt
+        | ActionKind::SaveBoostPrompt
+        | ActionKind::ResetBoostPrompt
+        | ActionKind::CloseBoostEditor
+        | ActionKind::DismissBoostHint
         | ActionKind::DismissCoordinatorQuality
         | ActionKind::SetCollabGuest
         | ActionKind::ResolveCollabMessage
@@ -403,6 +410,13 @@ fn clears_error(kind: &ActionKind) -> bool {
             | ActionKind::InsertBoardReference
             | ActionKind::HideCoordinatorIntro
         | ActionKind::ToggleAutopilot
+        | ActionKind::ToggleBoost
+        | ActionKind::OpenBoostEditor
+        | ActionKind::EditBoostPrompt
+        | ActionKind::SaveBoostPrompt
+        | ActionKind::ResetBoostPrompt
+        | ActionKind::CloseBoostEditor
+        | ActionKind::DismissBoostHint
         | ActionKind::DismissCoordinatorQuality
         | ActionKind::SetCollabGuest
         | ActionKind::ResolveCollabMessage
@@ -481,6 +495,13 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::InsertBoardReference
             | ActionKind::HideCoordinatorIntro
             | ActionKind::ToggleAutopilot
+            | ActionKind::ToggleBoost
+            | ActionKind::OpenBoostEditor
+            | ActionKind::EditBoostPrompt
+            | ActionKind::SaveBoostPrompt
+            | ActionKind::ResetBoostPrompt
+            | ActionKind::CloseBoostEditor
+            | ActionKind::DismissBoostHint
             | ActionKind::DismissCoordinatorQuality
             | ActionKind::SetCollabGuest
             | ActionKind::ResolveCollabMessage

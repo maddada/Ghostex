@@ -647,7 +647,23 @@ Usage:
   gx visual check <file.json|-> [--width N] [--light] [--out file.png]
   gx visual check <page.html> [--width N] [--text-scale P] [--light] [--out file.png]
   gx visual export <file.html|page id|page URL> [--out file.html] [--json]
+  gx visual guide <visuals|forms|pages|example|all>
+  gx visual boosts [list|show <id>|set <id> <prompt|->|reset <id>] [--json]
   gx visual install-skill [--json]
+
+Guide:
+  `gx visual guide pages` (or visuals, forms) prints the whole guide to that
+  kind: what to write, the layout, the look, how to check and publish it.
+  Read it once per conversation before you make one; it always matches this
+  Ghostex. `gx visual guide example` prints a complete Live page to copy the
+  shape of. The ghostex-visuals skill holds the same text.
+
+Boosts:
+  A Boost is a pill the user adds to a chat message (Live page, Chart it,
+  Side by side, Map it, Triage requests). Ghostex adds its prompt under that
+  message in a <ghostex-system> block; do what it asks in your answer, after
+  reading the guide it names. `gx visual boosts` lists them and edits or
+  resets their prompts.
 
 Names:
   Ghostex visuals (gx visuals): charts, stats and tables, a ```visual block.
@@ -708,8 +724,8 @@ Pages (Live pages):
   previews the page's top: give it a strong header (.gx-eyebrow, a specific
   h1, a one-line .gx-lede, .gx-chip facts), put options side by side in a
   .gx-options row of tied sections (each gets a Pick button), one question
-  under them, and keep it to about one screen. The skill's
-  examples/plan-review.html shows the whole shape.
+  under them, and keep it to about one screen. `gx visual guide example`
+  shows the whole shape.
   A page that lists items and asks about them puts the picks on the rows:
   each item a <gx-pick value=\"FB-34\"> with Markdown inside (or data-pick on
   any element), under data-question=\"Q3\", and a <gx-question tag=\"Q3\">

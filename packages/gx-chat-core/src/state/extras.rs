@@ -42,6 +42,8 @@ pub struct ExtrasState {
     pub session_details: crate::extras::session_details::SessionDetailsState,
     /// The where pill at the left of the pill strip (`extras/where_pill.rs`).
     pub where_pill: crate::extras::where_pill::WherePillState,
+    /// The Boosts: edited prompts, the one-time hint and the prompt editor (`extras/boosts.rs`).
+    pub boosts: crate::extras::boosts::BoostsState,
     /// A coordinator's relayed thread approval cards: answers in flight and refusals.
     pub relayed_approvals: crate::extras::relayed_approvals::RelayedApprovalsState,
     /// Whether this coordinator chat hid its model warning pill.

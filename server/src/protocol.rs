@@ -401,6 +401,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/deleteSyncedProjectGroup" => remote_allowed(path),
         // The phone and a desktop connected to this computer turn Autopilot on and off and read its log too.
         "/api/autopilot" => remote_allowed(path),
+        // The Boost pill's prompt editor and hint on the phone and on a desktop connected to this
+        // computer: the prompts this computer adds under its sessions' messages (boosts.rs).
+        crate::boosts::BOOSTS_ENDPOINT => remote_allowed(path),
         // Ghostex Collab: the owner's shares (the phone stops and approves them too), and the
         // typing signal both the owner and a guest send (server/src/collab_shim/http.rs; the component answers a guest's).
         // A guest's page reads the chat's pages and sends their answers through the same tunnel.

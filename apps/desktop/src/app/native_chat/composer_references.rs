@@ -150,6 +150,9 @@ pub(super) fn replacements(
                     } else if reference.kind == "answer" {
                         // The question it answers, by its title (never its tags).
                         ghostex_gx_chat_core::questions::answer_pills::tooltip(&reference.label)
+                    } else if reference.kind == "boost" {
+                        // Its prompt, and how to edit it (boosts.rs).
+                        super::boosts::pill_tooltip(&reference.path)
                     } else if reference.kind == "message" {
                         // One of the user's earlier messages (gx-chat-core `message_numbers.rs`).
                         format!(
@@ -312,6 +315,7 @@ impl NativeChatView {
             self.cancel_composer_reference_open();
             self.composer_image_hover = None;
         }
+        self.sync_boost_tooltips();
         let replacements = replacements(&self.composer_references, appearance, COMPOSER_FONT_PX);
         if let Some(input) = self.input.clone() {
             input.update(cx, |input, cx| {
@@ -351,6 +355,16 @@ impl NativeChatView {
         }
         // A review comment pill has nothing to open; it goes to the agent when the message is sent.
         if reference.kind == "comment" {
+            return true;
+        }
+        // A Boost pill opens its prompt for editing on a double click, as its hover says
+        // (boosts.rs); a single click does nothing.
+        if reference.kind == "boost" {
+            if event.click_count >= 2
+                && let Some(id) = super::boosts::boost_id(&reference.path)
+            {
+                self.invoke(json!({"type": "openBoostEditor", "id": id}), cx);
+            }
             return true;
         }
         if event.click_count >= 2 {

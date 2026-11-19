@@ -551,6 +551,9 @@ impl NativeChatView {
         if let Some(note) = self.render_note(p, window, cx) {
             waiting.push(note.into_any_element());
         }
+        if let Some(editor) = self.render_boost_editor(p, window, cx) {
+            waiting.push(editor);
+        }
         if let Some(card) = self.render_catch_up(p, window, cx) {
             waiting.push(card.into_any_element());
         }
