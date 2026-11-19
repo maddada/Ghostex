@@ -497,12 +497,13 @@ impl NativeChatView {
                 return;
             }
         }
-        // The approval card's Allow and Deny carry these two keys as hints (approval.rs).
+        // The approval card's Allow and Deny carry these two keys as hints (approval.rs). As for
+        // a notice, Cmd+Enter with a draft in the box sends the draft and never allows.
         if this.snapshot["questionCard"]["visible"] == true
             && this.snapshot["questionCard"]["loading"] != true
             && this.snapshot["questionCard"]["busy"] != true
             && this.snapshot["prompt"]["kind"] == "approval"
-            && (primary || secondary)
+            && (secondary || (primary && !draft_typed))
             && !event.is_held
         {
             this.invoke(
