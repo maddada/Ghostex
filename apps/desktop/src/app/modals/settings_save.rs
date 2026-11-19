@@ -142,6 +142,7 @@ impl GhostexGpuiApp {
         Any shared Settings entry point can show agent-owned controls after the React host selects its initial tab. Reconcile gxserver-owned agent policy before hydrating Settings, Hotkeys, Configure Agents, Configure Actions, and Open Targets so entry-specific modal ids do not drift from the canonical Settings route.
         */
         if modal.is_settings_modal_entry() {
+            crate::app::settings_open_timing::start();
             self.reconcile_gpui_gxserver_agent_settings_in_background(cx);
         }
         self.gpui_app_modal_sidebar_state_message_from_held_hydrate(cx)
