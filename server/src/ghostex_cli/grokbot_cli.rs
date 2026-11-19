@@ -41,10 +41,15 @@ More: the "Grok Bot" section of `ghostex guide features`."#
 pub(crate) fn run(args: &[String]) -> CliResult<()> {
     let verb = args.first().map(String::as_str).unwrap_or("status");
     let rest = args.get(1..).unwrap_or_default();
-    if rest
-        .iter()
-        .any(|arg| matches!(arg.as_str(), "-h" | "--help" | "help"))
-    {
+    // `notify`'s words are its message, so only a leading -h/--help asks for help there: an
+    // unquoted `notify I need help` is sent, never answered with the usage.
+    let wants_help = if verb == "notify" || verb == "send" {
+        matches!(rest.first().map(String::as_str), Some("-h" | "--help"))
+    } else {
+        rest.iter()
+            .any(|arg| matches!(arg.as_str(), "-h" | "--help" | "help"))
+    };
+    if wants_help {
         println!("{}", usage());
         return Ok(());
     }
@@ -166,7 +171,24 @@ fn prompt_line(question: &str, hidden: bool) -> CliResult<String> {
 
 /// The key from the private card in the calling agent session's chat. The card's owner-only file
 /// is read here and deleted at once.
-fn key_from_card(project_id: &str, session_id: &str, flags: &Flags) -> CliResult<String> {
+fn key_from_card(
+    project_id: &str,
+    session_id: &str,
+    url: &str,
+    flags: &Flags,
+) -> CliResult<String> {
+    // The card names where the key will go, so the user sees an address an agent chose.
+    let host = url::Url::parse(url.trim())
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_string))
+        .ok_or_else(|| {
+            CliError::Other(
+                "That isn't a web address. Give the routine's POST to address.".to_string(),
+            )
+        })?;
+    let reason = format!(
+        "Ghostex keeps it and sends your agents' notes with it to {host} only. Give it only if that is your Grok Bot routine's webhook: copy key from the \"Ghostex reports\" routine's Webhook section."
+    );
     let mut rpc_flags = flags.clone();
     rpc_flags.0.remove("timeout");
     rpc_flags.0.remove("timeoutMs");
@@ -174,13 +196,15 @@ fn key_from_card(project_id: &str, session_id: &str, flags: &Flags) -> CliResult
         project_id,
         session_id,
         "Grok Bot webhook key",
-        "Ghostex keeps it to send your agents' notes to the Ghostex bot in Grok Bot. Copy key from the \"Ghostex reports\" routine's Webhook section.",
+        &reason,
         Some("The routine's key".to_string()),
         10.0,
         &rpc_flags,
     )?
     else {
-        return Err(CliError::Other("Ghostex couldn't show the key card.".to_string()));
+        return Err(CliError::Other(
+            "Ghostex couldn't show the key card.".to_string(),
+        ));
     };
     let Some(file) = outcome.get("file").and_then(Value::as_str) else {
         return Err(CliError::Other(format!(
@@ -194,7 +218,7 @@ fn key_from_card(project_id: &str, session_id: &str, flags: &Flags) -> CliResult
     Ok(key?.trim().to_string())
 }
 
-fn read_key(parsed: &ParsedArgs) -> CliResult<String> {
+fn read_key(parsed: &ParsedArgs, url: &str) -> CliResult<String> {
     if parsed.flags.contains("keyStdin") {
         let mut line = String::new();
         std::io::stdin()
@@ -211,7 +235,7 @@ fn read_key(parsed: &ParsedArgs) -> CliResult<String> {
         return prompt_line("Paste the routine's key (it won't show): ", true);
     }
     if let Some((project_id, session_id)) = notify::session_reference_from_environment() {
-        return key_from_card(&project_id, &session_id, &parsed.flags);
+        return key_from_card(&project_id, &session_id, url, &parsed.flags);
     }
     Err(CliError::Other(
         "No key: run this in your own terminal (it asks for the key without showing it), or pipe it in with --key-stdin.".to_string(),
@@ -241,7 +265,7 @@ fn connect_command(parsed: &ParsedArgs) -> CliResult<()> {
             ))
         }
     };
-    let key = read_key(parsed)?;
+    let key = read_key(parsed, &url)?;
     if key.is_empty() {
         return Err(CliError::Other("No key was given.".to_string()));
     }

@@ -5103,10 +5103,12 @@ in Grok Bot applies to every bot on that computer. Letting in a new phone or
 computer, and approvals Ghostex asks you to confirm with Touch ID or a PIN,
 always stay with you.
 
-The webhook key: Ghostex keeps it in a file only you can read, never prints
-it, and never gives it to agents; agents send notes with `ghostex grokbot
-notify` and Ghostex does the sending. The key can only start that one
-routine. Notes are sent together, at most one call every 20 seconds, and
+The webhook key: Ghostex keeps it in a file only your user account can read
+and never prints it. Agents aren't given it: they send notes with `ghostex
+grokbot notify` and Ghostex does the sending. (Agents run as you, so one could
+still read that file, as it can any of your files.) The key can only start
+that one routine. Connect, test and disconnect work only on the computer
+itself, never from a paired phone or another computer. Notes are sent together, at most one call every 20 seconds, and
 retried when Grok Bot doesn't answer; each call uses some of your Grok Bot
 usage. While Grok Bot is connected, agents Ghostex starts are told about
 `ghostex grokbot notify`.
