@@ -643,12 +643,33 @@ fn detect_codex_dialog_as_drawn(text: &str) -> Option<TerminalDialog> {
     if start >= 2 && first_painted.is_some_and(|i| row(&lines[i]).is_some()) {
         let heading_start = band_above(start - 2);
         // CDXC:AgentScreenDetection 2026-11-20 WHY:
-        // A multi-line command (a backslash script, a heredoc) puts its approval heading more than 12 lines above the rows, so the dialog lost its heading and its command, its first row read as its title, and the card showed no command at all (security review of the chat's approval rows, finding 8). A longer stretch is still the heading when its first painted line is one of Codex's own approval headings, never scrollback.
-        let approval_heading = (heading_start..start)
-            .find(|&i| !lines[i].trim().is_empty())
-            .is_some_and(|i| is_codex_approval_heading(clean(&lines[i])));
-        if start - heading_start <= 12 || (approval_heading && start - heading_start <= 80) {
-            start = heading_start;
+        // A Codex approval's command is the agent's own text, so it can hold a double blank line and a heading of its own: taking the nearest band above the rows let a script put a fake "Would you like to run the following command?" and `$ ls -la` inside its heredoc, which the card then showed as the whole command while the real `curl … | sh` above it was left out (security review of the chat's approval rows, finding 8; a long command also pushed the real heading past the old 12-line reach). So the bands are walked upward to the first line drawn at column 0 (scrollback: "• Running …", "› your message"; every line of a Codex dialog is indented, its command too), and the topmost stretch that starts with one of Codex's approval headings is the dialog's top, which puts a fake heading inside the command it belongs to. When the walk runs off the top of the captured screen first, the real top is not on it: the dialog keeps no heading, so the chat draws it as a plain card rather than an approval with part of its command.
+        let mut cursor = start;
+        let mut topmost = None;
+        let mut bounded = false;
+        while cursor >= 2 {
+            let top = band_above(cursor - 2);
+            if (top..cursor).any(|i| !lines[i].trim().is_empty() && !lines[i].starts_with(' ')) {
+                bounded = true;
+                break;
+            }
+            if (top..cursor)
+                .find(|&i| !lines[i].trim().is_empty())
+                .is_some_and(|i| is_codex_approval_heading(clean(&lines[i])))
+            {
+                topmost = Some(top);
+            }
+            if top == 0 {
+                break;
+            }
+            cursor = top;
+        }
+        match topmost {
+            Some(top) if bounded => start = top,
+            // Ran off the capture: the approval's real top is not on screen.
+            Some(_) => {}
+            None if start - heading_start <= 12 => start = heading_start,
+            None => {}
         }
     }
     // Onboarding and text-entry views use a single empty line above their
