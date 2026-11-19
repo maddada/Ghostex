@@ -2061,10 +2061,12 @@ Reference in chat puts a pill for it in the chat box. Typing #M in the chat box
 lists your messages in this chat, newest first (#M1 narrows them to M1, M10,
 M12…); pick one for its pill. Hover the pill in a sent message to see the
 message's first line, and click it to scroll there. When you send a message that
-points at one (a pill, #M12, or G9jt7.M12 for another chat's), the agent gets the
-ID and, at the bottom of your message, the start of the one you pointed at: up to
-6 lines and 600 characters, whole lines first (a longer line is cut at a word);
-the chat shows only your words. Agents read the whole message with
+points at one (a pill, #M12, or G9jt7.M12 for another chat's; a bare M12 stays
+plain text), the agent gets the ID and, at the bottom of your message, the start
+of the one you pointed at: up to 6 lines and 600 characters, whole lines first (a
+longer line is cut at a word). Up to 5 are quoted per message; any more are named
+there without their words. The chat shows only your words. Only messages you send
+yourself carry quotes: a Collab guest's or another agent's never do. Agents read the whole message with
 `ghostex message show M12` and list them with `ghostex message list`. Numbers are
 never reused (after Rewind to here the next message gets a new one), a fork keeps
 the numbers up to where it was cut, a queued message gets its number once the

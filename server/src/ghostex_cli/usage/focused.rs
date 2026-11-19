@@ -958,8 +958,9 @@ pub fn message_usage() -> String {
 
 Every message the user writes in a chat gets an ID that counts up in that chat: M1, M2, M3.
 Written with the session in front (G9jt7.M12), it names a message of another chat. When the
-user points at one ("do it like M12", a pill, #M12), the start of that message is quoted at the
-bottom of the prompt; this prints it whole.
+user points at one in a message they send (a pill, #M12 or G9jt7.M12; a bare M12 is plain text),
+the start of each of the first 5 is quoted in a block at the bottom of the prompt and any more
+are named there; this prints a message whole.
 show: one message, whole: this chat's M12, or another chat's G9jt7.M12.
 list: this chat's numbered messages with their first line, newest first (20 unless --last);
 --grep keeps those that contain any of the words.
