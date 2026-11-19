@@ -80,8 +80,9 @@ async fn run(state: &AppState, id: &str, source: &'static str) {
     } else {
         Err(failed("Ghostex doesn't know how to update this."))
     };
+    let updated = result.is_ok();
     store::finish(id, result.err());
-    items::invalidate();
+    items::changed(id, updated);
 }
 
 async fn usage(state: &AppState) -> Usage {

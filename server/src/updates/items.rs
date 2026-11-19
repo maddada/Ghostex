@@ -41,40 +41,127 @@ struct GroupCheck {
     /// When, in milliseconds since 1970 ("Checked 4 min ago").
     at_ms: i64,
     items: Vec<Value>,
-    /// Read again at the next list whatever its setting says: an update ended since (`invalidate`),
-    /// or a row was mid-update when it was read.
+    /// Read again at the next list when the kind is on a schedule: an item of it changed since
+    /// (`changed`), or a row was mid-update when it was read.
     stale: bool,
 }
 
 static GROUPS: std::sync::LazyLock<std::sync::Mutex<HashMap<UpdateCheckKind, GroupCheck>>> =
     std::sync::LazyLock::new(|| std::sync::Mutex::new(HashMap::new()));
 static COLLECTING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-/// Bumped by `invalidate`, so a check that ran while an update finished is read again.
+/// Bumped by `changed`, so a check that ran while an update finished is read again.
 static GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static EXTENSION_CATALOG: std::sync::Mutex<Option<(Instant, HashMap<String, String>)>> =
     std::sync::Mutex::new(None);
 
-/// The next list reads every kind checked before again (after an update finished).
-pub(crate) fn invalidate() {
-    GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    for group in GROUPS
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .values_mut()
-    {
-        group.stale = true;
+/// Agents whose install or update job ended since the last list (`agent_job_ended`).
+static ENDED_AGENT_JOBS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// The kind an item id belongs to (`None` for the rows every list reads anyway: Ghostex and the
+/// extension components).
+fn kind_of(id: &str) -> Option<UpdateCheckKind> {
+    if id.starts_with("agent:") {
+        Some(UpdateCheckKind::Agents)
+    } else if id.starts_with("helper:") || id.starts_with("tool:") || id == EASY_CONNECT_ITEM {
+        Some(UpdateCheckKind::Tools)
+    } else if id.starts_with("extension:") {
+        Some(UpdateCheckKind::Extensions)
+    } else {
+        None
     }
 }
 
-/// Whether a kind is checked now: never checked and on a schedule, read again on purpose, or its
-/// time has come. Only on Check now (`None`) is never due by itself.
-fn due(check: Option<&GroupCheck>, interval: Option<Duration>) -> bool {
-    match check {
-        None => interval.is_some(),
-        Some(check) => {
-            check.stale || interval.is_some_and(|interval| check.at.elapsed() >= interval)
+/// Item `id` changed (an update or install of it ended): its kind is read again at the next list
+/// when the kind is on a schedule; a kind set to Only on Check now keeps its last check. After an
+/// update that worked, the row reads as up to date at once either way. An agent's row is read
+/// again by itself when its job ends (`agent_job_ended`).
+///
+/// CDXC:Updates 2026-11-19 FIX: review of adce25cd5. WHY: marking every checked kind to be read
+/// again after any install, or after the Ghostex card's switch, re-checked (and then auto-updated)
+/// kinds set to Only on Check now.
+pub(crate) fn changed(id: &str, updated: bool) {
+    GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let Some(kind) = kind_of(id) else {
+        return;
+    };
+    let mut groups = GROUPS.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(group) = groups.get_mut(&kind) else {
+        return;
+    };
+    group.stale = true;
+    if updated && kind != UpdateCheckKind::Agents {
+        if let Some(item) = group.items.iter_mut().find(|item| item["id"] == id) {
+            if item["latest"].is_string() {
+                item["installed"] = item["latest"].clone();
+            }
+            if item["state"] == "available" {
+                item["state"] = json!("upToDate");
+            }
         }
     }
+}
+
+/// An agent's install or update job ended (Settings > Agents, or an Update here): the next list
+/// reads that one agent again and puts its row in the Agents check, whatever the setting, since
+/// only that agent runs.
+pub(crate) fn agent_job_ended(agent: &str) {
+    let mut ended = ENDED_AGENT_JOBS.lock().unwrap_or_else(|e| e.into_inner());
+    if !ended.iter().any(|known| known == agent) {
+        ended.push(agent.to_string());
+    }
+}
+
+/// Reads again the agents whose job ended, into the Agents check (never an agent turned off, whose
+/// row goes instead).
+async fn reread_ended_agents(state: &AppState, usage: &Usage) {
+    let ended = std::mem::take(&mut *ENDED_AGENT_JOBS.lock().unwrap_or_else(|e| e.into_inner()));
+    if ended.is_empty()
+        || !usage.read_ok
+        || !GROUPS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key(&UpdateCheckKind::Agents)
+    {
+        return;
+    }
+    let home = state.paths.agent_config_home_dir().to_path_buf();
+    for agent in ended {
+        let row = if usage.enabled.contains(&agent) {
+            match crate::agent_cli::endpoint::read_agent(&home, &agent).await {
+                Ok(answer) => agent_item(&answer, usage)
+                    .or_else(|| super::missing::missing_agent_item(&answer)),
+                Err(_) => continue,
+            }
+        } else {
+            None
+        };
+        let id = format!("agent:{agent}");
+        let mut groups = GROUPS.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(group) = groups.get_mut(&UpdateCheckKind::Agents) else {
+            return;
+        };
+        let at = group
+            .items
+            .iter()
+            .position(|item| item["id"] == id.as_str());
+        match (at, row) {
+            (Some(at), Some(row)) => group.items[at] = row,
+            (Some(at), None) => {
+                group.items.remove(at);
+            }
+            (None, Some(row)) => group.items.push(row),
+            (None, None) => {}
+        }
+    }
+}
+
+/// Whether a kind is checked now: never checked, read again on purpose (`stale`), or its time has
+/// come; Only on Check now (`None`) is never due by itself.
+fn due(check: Option<&GroupCheck>, interval: Option<Duration>) -> bool {
+    let Some(interval) = interval else {
+        return false;
+    };
+    check.is_none_or(|check| check.stale || check.at.elapsed() >= interval)
 }
 
 /// When the last check ran (milliseconds since 1970), and the groups never checked yet (a kind
@@ -97,8 +184,8 @@ pub(super) fn checks() -> (Option<i64>, Vec<&'static str>) {
 /// CDXC:Updates 2026-11-19 WHY: one cache for the whole list read every source every ten minutes
 /// whenever anything asked, so the user's per-kind times (update_checks.rs in the settings
 /// catalog) could not hold; each kind keeps its own check now. A check that ran across an
-/// `invalidate`, or that read a row mid-update, is read again at the next list (the 2026-11-07
-/// "Waiting…" fix: those rows change within seconds).
+/// update's end (`changed`), or that read a row mid-update, is read again at the next list when its
+/// kind is on a schedule (the 2026-11-07 "Waiting…" fix: those rows change within seconds).
 pub(super) async fn list(state: &AppState, fresh: bool) -> Vec<Value> {
     let asked_at = Instant::now();
     let settings = crate::shared_settings_file::read_shared_settings(&state.paths);
@@ -124,22 +211,38 @@ pub(super) async fn list(state: &AppState, fresh: bool) -> Vec<Value> {
     if !due_kinds(after).is_empty() {
         let _collecting = COLLECTING.lock().await;
         // Another list may have checked them while this one waited.
-        let kinds = due_kinds(after);
+        let mut kinds = due_kinds(after);
+        // Which agents are on wasn't read: checking now would drop every agent's row.
+        if !usage.read_ok {
+            kinds.retain(|kind| *kind != UpdateCheckKind::Agents);
+        }
         if !kinds.is_empty() {
             let generation = GENERATION.load(std::sync::atomic::Ordering::SeqCst);
             let checked = collect(state, &usage, &kinds, fresh).await;
             let unchanged = GENERATION.load(std::sync::atomic::Ordering::SeqCst) == generation;
             let auto = store::auto_ids(&state.paths);
-            let found_auto_update = checked.iter().flat_map(|(_, items)| items).any(|item| {
-                item["state"] == "available"
-                    && item["id"]
-                        .as_str()
-                        .is_some_and(|id| auto.iter().any(|on| on == id))
-            });
             let at_ms = chrono::Utc::now().timestamp_millis();
+            let mut found_auto_update = false;
             {
                 let mut groups = GROUPS.lock().unwrap_or_else(|e| e.into_inner());
                 for (kind, items) in checked {
+                    // An update this kind's last check didn't have yet, for an item whose switch
+                    // is on (one the last check already had was the pass's to act on then).
+                    let known = |id: &str, latest: &Value| {
+                        groups.get(&kind).is_some_and(|previous| {
+                            previous.items.iter().any(|item| {
+                                item["id"] == id
+                                    && item["state"] == "available"
+                                    && item["latest"] == *latest
+                            })
+                        })
+                    };
+                    found_auto_update |= items.iter().any(|item| {
+                        item["state"] == "available"
+                            && item["id"].as_str().is_some_and(|id| {
+                                auto.iter().any(|on| on == id) && !known(id, &item["latest"])
+                            })
+                    });
                     let stale = !unchanged || items.iter().any(|item| item["state"] == "updating");
                     groups.insert(
                         kind,
@@ -153,11 +256,16 @@ pub(super) async fn list(state: &AppState, fresh: bool) -> Vec<Value> {
                 }
             }
             // An item's "Update automatically" acts after whichever check found its update.
+            //
+            // CDXC:Updates 2026-11-19 FIX: review of adce25cd5. WHY: waking the pass for every
+            // update a check listed made checks run back to back while an agent updated (each
+            // check woke the pass, whose list checked again); only a new update wakes it now.
             if found_auto_update {
                 super::auto::wake_auto_updates();
             }
         }
     }
+    reread_ended_agents(state, &usage).await;
     let checked: Vec<Value> = {
         let groups = GROUPS.lock().unwrap_or_else(|e| e.into_inner());
         CHECKED_KINDS
@@ -299,7 +407,7 @@ async fn collect(
 }
 
 /// The id of the Easy Connect helper's row.
-pub(super) const EASY_CONNECT_ITEM: &str = "easyConnect";
+pub(crate) const EASY_CONNECT_ITEM: &str = "easyConnect";
 
 /// `v0.6.0` as numbers; `None` for an answer that isn't a version.
 fn tailcat_version_parts(version: &str) -> Option<(u64, u64, u64)> {
@@ -515,6 +623,9 @@ pub(super) struct Usage {
     running: HashMap<String, Vec<(String, String)>>,
     working: HashSet<String>,
     any_working: bool,
+    /// Which agents are on was read: a failed read leaves `enabled` empty, which must not read as
+    /// "every agent turned off".
+    read_ok: bool,
 }
 
 impl Usage {
@@ -529,6 +640,7 @@ impl Usage {
             repository.list_projects_without_session_history(),
             repository.agent_launcher_last_used(),
         ) {
+            usage.read_ok = true;
             let roster = crate::sidebar_hud::read_sidebar_agent_roster(&projects, &last_used);
             for entry in roster.as_array().into_iter().flatten() {
                 let agent = entry["agentId"]

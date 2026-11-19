@@ -68,8 +68,8 @@ async fn dispatch(state: &AppState, params: &Map<String, Value>) -> Result<Value
                 .and_then(Value::as_bool)
                 .ok_or("enabled must be true or false.")?;
             if id == "app" {
+                // Ghostex's row is read on every list.
                 crate::app_update::set_app_auto_update(state, enabled).await?;
-                items::invalidate();
             } else {
                 store::set_auto(&state.paths, id, enabled)?;
             }

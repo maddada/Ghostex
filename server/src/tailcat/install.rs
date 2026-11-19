@@ -163,7 +163,10 @@ fn start_job(paths: GxserverPaths, runtime: TailcatRuntime, updating: bool) -> b
             error,
         };
         // Settings > Updates reads the helper's new version (or its absence) on its next ask.
-        crate::updates::items::invalidate();
+        crate::updates::items::changed(
+            crate::updates::items::EASY_CONNECT_ITEM,
+            INSTALLATION.lock().unwrap().error.is_none(),
+        );
     });
     true
 }

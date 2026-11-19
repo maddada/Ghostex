@@ -415,6 +415,8 @@ async fn start(
                 }
             }
         }
+        // Settings > Updates reads this agent again (only this one) at its next list.
+        crate::updates::items::agent_job_ended(&definition.agent_id);
     });
     Ok(state)
 }
