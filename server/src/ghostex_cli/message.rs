@@ -9,18 +9,83 @@ use crate::ghostex_cli::output::print_json;
 use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
 use crate::ghostex_cli::{notify, selector, usage};
 
+/// The flags of `message show|list` that take a value; every other flag is a switch (`--json`).
+const VALUE_FLAGS: &[&str] = &[
+    "--session",
+    "--session-id",
+    "--last",
+    "--grep",
+    "--computer",
+];
+
+/// Where the subcommand stands in `args`: the first word that is neither a flag nor a value
+/// flag's value. Flags may come before it (`message --session X show M12`, `message --json list`).
+fn subcommand_at(args: &[String]) -> Option<usize> {
+    let mut index = 0;
+    while index < args.len() {
+        let arg = args[index].as_str();
+        if VALUE_FLAGS.contains(&arg) {
+            index += 2;
+        } else if arg.starts_with('-') {
+            index += 1;
+        } else {
+            return Some(index);
+        }
+    }
+    None
+}
+
+/// Whether `ghostex message …` reads numbered messages (`show` or `list`, wherever the flags
+/// are) rather than sending one: any other `message <selector> <text>` stays send-message's alias.
+pub fn is_message_read(args: &[String]) -> bool {
+    subcommand_at(args).is_some_and(|at| matches!(args[at].as_str(), "show" | "list"))
+}
+
+/// `args` without the subcommand, written so the parser reads every switch as a switch and every
+/// word as a word: value flags keep their value, switches become `--name=true`, and the words
+/// follow `--`.
+fn normalized(args: &[String], skip: Option<usize>) -> Vec<String> {
+    let mut flags = Vec::new();
+    let mut words = Vec::new();
+    let mut index = 0;
+    while index < args.len() {
+        let arg = &args[index];
+        if Some(index) == skip {
+            index += 1;
+        } else if VALUE_FLAGS.contains(&arg.as_str()) {
+            flags.push(arg.clone());
+            if let Some(value) = args.get(index + 1) {
+                flags.push(value.clone());
+            }
+            index += 2;
+        } else if arg.starts_with("--") && !arg.contains('=') {
+            flags.push(format!("{arg}=true"));
+            index += 1;
+        } else if arg.starts_with('-') {
+            flags.push(arg.clone());
+            index += 1;
+        } else {
+            words.push(arg.clone());
+            index += 1;
+        }
+    }
+    flags.push("--".to_string());
+    flags.extend(words);
+    flags
+}
+
 pub fn message_command(args: &[String]) -> CliResult<()> {
-    let subcommand = args.first().map(String::as_str).unwrap_or("help");
-    let rest = args.get(1..).unwrap_or_default();
-    if matches!(subcommand, "help" | "-h" | "--help")
-        || rest
+    let at = subcommand_at(args);
+    let subcommand = at.map_or("help", |at| args[at].as_str());
+    if matches!(subcommand, "help")
+        || args
             .iter()
             .any(|arg| matches!(arg.as_str(), "-h" | "--help"))
     {
         println!("{}", usage::message_usage());
         return Ok(());
     }
-    let parsed = parse_args(rest);
+    let parsed = parse_args(&normalized(args, at));
     let (project_id, session_id) = session(&parsed)?;
     let mut params = Map::new();
     params.insert("projectId".into(), json!(project_id));
@@ -119,4 +184,29 @@ fn session(parsed: &ParsedArgs) -> CliResult<(String, String)> {
                 .to_string(),
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn words(line: &str) -> Vec<String> {
+        line.split(' ').map(str::to_string).collect()
+    }
+
+    #[test]
+    fn show_and_list_are_found_after_flags_and_sends_stay_sends() {
+        assert!(is_message_read(&words("show M12")));
+        assert!(is_message_read(&words("--session X show M12")));
+        assert!(is_message_read(&words("--json list")));
+        assert!(is_message_read(&words("--last 5 list --grep accent")));
+        assert!(!is_message_read(&words("X show me the logs")));
+        assert!(!is_message_read(&words("--session X hello")));
+        let parsed = parse_args(&normalized(&words("--json show M12"), Some(1)));
+        assert!(parsed.flags.truthy("json"));
+        assert_eq!(parsed.rest, vec!["M12".to_string()]);
+        let parsed = parse_args(&normalized(&words("--session G1 --json list"), Some(3)));
+        assert_eq!(parsed.flags.string_value("session"), Some("G1"));
+        assert!(parsed.rest.is_empty());
+    }
 }
