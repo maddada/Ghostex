@@ -137,7 +137,9 @@ fn now_ms() -> f64 {
 /// doesn't flicker it.
 fn note_failed_read(account: &mut Value, counted: bool, now: f64) {
     if counted {
-        let reads = account["unreachableReads"].as_u64().unwrap_or(0) + 1;
+        // Capped at 2, where the card fades: a computer that keeps failing changes nothing more,
+        // so the sidebar doesn't redraw for it on every 30-second poll.
+        let reads = (account["unreachableReads"].as_u64().unwrap_or(0) + 1).min(2);
         account["unreachableReads"] = json!(reads);
         if !account["unreachableSince"].is_number() {
             account["unreachableSince"] = json!(now);
@@ -818,6 +820,9 @@ impl GhostexGpuiApp {
                         // Most refreshes return what is already shown; only a change redraws the window.
                         let previous_accounts = this.titlebar_accounts.clone();
                         match result {
+                            // A computer whose connection stopped while this read was out: its
+                                // rows stay flagged (`flag_stopped_machine_accounts`).
+                                Ok(_) if machine != "local" && !this.remote_gxserver_connections.contains_key(&machine) => return,
                             Ok(result) => {
                                 let logins_changed = remember_swap_logins(
                                     &machine,
@@ -965,6 +970,22 @@ impl GhostexGpuiApp {
             chrome_color(0xb9b9b9, 0x404040)
         };
         let unreachable = meter.unreachable;
+        // A card with no letters (Gemini, Cursor, Copilot, a "-" label) or no numbers would show
+        // its sign-in state only in its tooltip, so its logo itself turns amber: the agent logo
+        // as a one-colour mask in the amber (CDXC:AgentProviders 2026-11-19, the re-check of
+        // 3f01dc86c).
+        let amber_logo = (meter.sign_in != MeterSignIn::SignedIn
+            && (indicator.is_none() || badge_lines.is_empty()))
+        .then(|| {
+            let key = match meter.provider.as_str() {
+                "cursor" => "cursor-cli",
+                provider => provider,
+            };
+            (
+                format!("agent-icons/{key}.svg"),
+                needs_sign_in_amber(claude_card),
+            )
+        });
         let tooltip = meter.tooltip.clone();
         let tooltip_delay = host.tooltip_delay;
         let hover_background = host.hover_background;
@@ -984,14 +1005,26 @@ impl GhostexGpuiApp {
                 .items_center()
                 .justify_center()
                 .flex_shrink_0()
-                .child(
-                    img(icon_image.clone())
-                        .absolute()
-                        .top_0()
-                        .left_0()
-                        .size(px(size))
-                        .when(indicator.is_some(), |this| this.opacity(0.3)),
-                )
+                .map(|this| match amber_logo.clone() {
+                    Some((path, amber)) => this.child(
+                        gpui::svg()
+                            .path(path)
+                            .text_color(amber)
+                            .absolute()
+                            .top_0()
+                            .left_0()
+                            .size(px(size))
+                            .when(indicator.is_some(), |this| this.opacity(0.3)),
+                    ),
+                    None => this.child(
+                        img(icon_image.clone())
+                            .absolute()
+                            .top_0()
+                            .left_0()
+                            .size(px(size))
+                            .when(indicator.is_some(), |this| this.opacity(0.3)),
+                    ),
+                })
                 .when_some(indicator.clone(), |this, indicator| {
                     this.child(
                         div()

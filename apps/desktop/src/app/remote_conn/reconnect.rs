@@ -237,6 +237,9 @@ impl GhostexGpuiApp {
                     );
                     // Its Ghostex version and update, for the machine tab and Settings > Remote (app_update.rs).
                     self.refresh_remote_app_update(remote_machine_id.clone(), cx);
+                    // Its sidebar meters read again now, so cards faded while it was away clear
+                    // without waiting for the 30-second poll (titlebar/account_usage.rs).
+                    self.refresh_titlebar_accounts(cx);
                     // Agents here can use the machine, and the machine's agents this computer.
                     self.renew_connected_computers(true, cx);
                     let reconnects_active_remote_docs = self
