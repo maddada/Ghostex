@@ -49,6 +49,9 @@ pub(super) struct Arguments {
     /// `--path` (on `--computer`), not a session ref (main_coordinator.rs).
     pub main_coordinator: bool,
     pub if_none: Option<IfNone>,
+    /// `send --as-user`: the user's own terminal (or Grok Bot on this computer) sends as the user;
+    /// refused inside any Ghostex session (identity.rs `sender`).
+    pub as_user: bool,
     pub flags: Flags,
 }
 
@@ -72,6 +75,7 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
         help: args.is_empty(),
         main_coordinator: false,
         if_none: None,
+        as_user: false,
         flags: Flags::default(),
     };
     let mut args = args.iter();
@@ -87,6 +91,7 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
             "--allow-hidden" => parsed.allow_hidden = true,
             "--standalone" => parsed.standalone = true,
             "--main-coordinator" => parsed.main_coordinator = true,
+            "--as-user" => parsed.as_user = true,
             "--if-none" => {
                 let value = args.next().map(String::as_str).unwrap_or_default();
                 parsed.if_none = Some(match value {
@@ -168,6 +173,11 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
     {
         return Err(CliError::Other(
             "--request-id must be 1 to 128 characters.".into(),
+        ));
+    }
+    if parsed.as_user && parsed.command != "send" {
+        return Err(CliError::Other(
+            "--as-user is only available for send.".into(),
         ));
     }
     if (parsed.main_coordinator || parsed.if_none.is_some()) && parsed.command != "send" {

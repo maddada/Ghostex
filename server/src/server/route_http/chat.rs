@@ -207,6 +207,10 @@ pub(super) async fn route_chat_http(
             handle_read_session_chat_files_http(&state, endpoint.path, request_id, &body_json).await
         }
         "/api/sendSessionChatMessage" => {
+            // Who the text is from is the caller's to say, never the text's
+            // (session_chat_send/sender_mark.rs).
+            let mut body_json = body_json;
+            crate::session_chat_send::sender_mark::prepare(&state, &caller, &mut body_json);
             let mut response = handle_send_session_chat_message_from(
                 &state,
                 &caller,
@@ -356,6 +360,8 @@ pub(super) async fn route_chat_http(
         | "/api/acknowledgeSessionChatDraftHandoff" => {
             // A queued prompt is a send too: a repeated `sendRequestId` must not queue it twice.
             let mut response = if endpoint.path == "/api/queueSessionChatPrompt" {
+                let mut body_json = body_json.clone();
+                crate::session_chat_send::sender_mark::prepare(&state, &caller, &mut body_json);
                 let queue_state = state.clone();
                 crate::session_chat_send_requests::send_once(
                     &state,

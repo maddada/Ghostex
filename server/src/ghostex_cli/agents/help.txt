@@ -8,7 +8,7 @@ USAGE
                        [--standalone] [--computer <name>]
   ghostex agents list [--all] [--json]
   ghostex agents send <session-ref> <text> [--interrupt | --queue | --with-next]
-                     [--request-id <id>]
+                     [--request-id <id>] [--as-user]
   ghostex agents send <session-ref> --body-file <path|-> [--interrupt | --queue | --with-next]
                      [--request-id <id>]
   ghostex agents send --main-coordinator (--project-id <id> | --path <folder>)
@@ -118,9 +118,11 @@ SENDER BLOCK
   Run from an agent session, send-session-chat-message, queue-session-chat-prompt
   and send-message to another session attach the same block, so a message
   between agents never reads as the user's own words.
-  Run from outside any Ghostex session (your own terminal, or Grok Bot running
-  ghostex on this computer), agents send goes as you, with no block: the
-  recipient sees it as your message, as if typed into its chat.
+  From your own terminal (or Grok Bot running ghostex on this computer),
+  agents send --as-user sends as you, with no block, labelled "Sent from the
+  terminal" (or "Sent via Grok Bot") and recorded in the security log. It is
+  refused inside any Ghostex session; without it, a send with no session is
+  refused ("Cannot identify the caller").
 
 THREADS AND THEIR ORCHESTRATOR
   A thread reports by ending its turn: Ghostex forwards its final message to

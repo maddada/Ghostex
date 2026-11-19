@@ -128,6 +128,42 @@ fn adopt_agent_session_token(agent: u32, zmx_name: &str) {
     }
 }
 
+/// What runs above this process: a Ghostex session pane (a `zmx`/`wmx` process anywhere up the
+/// tree, whatever runs in it) and whether the Grok Bot desktop app started it.
+pub(crate) struct CallerAncestry {
+    pub(crate) in_session_pane: bool,
+    pub(crate) grok_bot: bool,
+}
+
+/// CDXC:GrokBot 2026-11-19 WHY: `agents send --as-user` speaks as the user, so it must not run
+/// anywhere under a Ghostex session, even one whose variables were dropped (`env -u`, Codex's
+/// `inherit = "core"`, a backgrounded command): unlike `ancestor_zmx_session`, this walk doesn't
+/// stop at the first process that isn't a shell or an agent, it looks all the way up.
+pub(crate) fn caller_ancestry() -> CallerAncestry {
+    let mut ancestry = CallerAncestry {
+        in_session_pane: false,
+        grok_bot: false,
+    };
+    let table = super::nested_agent::ProcessTable::read();
+    let mut current = std::process::id();
+    for _ in 0..128 {
+        let Some(parent) = table.parent(current) else {
+            break;
+        };
+        if let Some(stem) = table.executable_stem(parent) {
+            let stem = stem.trim_start_matches('-').to_ascii_lowercase();
+            if stem == "zmx" || stem == "wmx" {
+                ancestry.in_session_pane = true;
+            }
+            if stem.starts_with("grok bot") {
+                ancestry.grok_bot = true;
+            }
+        }
+        current = parent;
+    }
+    ancestry
+}
+
 /// Points this process at the Ghostex session `zmx_name` names, with the local gxserver address.
 /// False when the name is not a Ghostex session name.
 fn adopt_ancestor_routing(zmx_name: &str) -> bool {

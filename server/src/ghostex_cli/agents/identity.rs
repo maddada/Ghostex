@@ -56,10 +56,56 @@ pub(crate) fn caller() -> CliResult<Value> {
 
 /// CDXC:GrokBot 2026-11-19 DECISION:
 /// User's report: Grok Bot runs `ghostex` on the Mac through its desktop app, in a plain shell outside any Ghostex session, and `ghostex agents send <ref> "<text>"` failed with "Cannot identify the caller", so the bot could not pass the user's answers on. The coordinator: a send from outside any session, with the token file (the user's own terminal), goes as the user, the same as the user typing into that chat; who may send otherwise is unchanged (gxserver checks the caller as before). Only "no session at all" counts as the user: a session variable that names no single agent session still fails rather than guessing.
-/// The calling agent session; `None` when the command runs outside any Ghostex session (the
-/// user's own terminal, Grok Bot's commands), so it acts as the user. An environment that names a
-/// session but not exactly one agent session is still an error.
-pub(crate) fn caller_or_user() -> CliResult<Option<Value>> {
+/// CDXC:GrokBot 2026-11-19 DECISION (security review of 38bfa3647): "can't tell who I am" is never "I am the user": an agent that lost its session variables would otherwise speak as the user, its "W7 Q12: …" lines counting as the user's answers and a `/` or `!` body running as a command. Sending as the user takes `--as-user`, refused when a session variable, a session token or a Ghostex session pane above the command is present; without it the old "Cannot identify the caller" error stands.
+/// Who a send is from.
+pub(crate) enum Sender {
+    /// The calling agent session (its sender block goes with the message).
+    Agent(Value),
+    /// The user, from their own terminal (`terminal`) or Grok Bot on this computer (`grokBot`).
+    User { via: &'static str },
+}
+
+/// The sender of an `agents send`: the calling agent session, or the user when `as_user`.
+pub(crate) fn sender(as_user: bool) -> CliResult<Sender> {
+    if !as_user {
+        return caller().map(Sender::Agent);
+    }
+    let refuse = |why: String| {
+        CliError::Other(format!(
+            "--as-user is for your own terminal: {why}, so this command can't send as the user. An agent sends as itself: drop --as-user."
+        ))
+    };
+    if let Some(key) = SESSION_VARIABLES
+        .iter()
+        .chain([crate::security::SESSION_TOKEN_ENV].iter())
+        .find(|key| std::env::var(key).is_ok_and(|value| !value.trim().is_empty()))
+    {
+        return Err(refuse(format!("{key} is set")));
+    }
+    let ancestry = crate::agent_hooks::caller_ancestry();
+    if ancestry.in_session_pane {
+        return Err(refuse("it runs inside a Ghostex session".to_string()));
+    }
+    Ok(Sender::User {
+        via: if ancestry.grok_bot {
+            "grokBot"
+        } else {
+            "terminal"
+        },
+    })
+}
+
+/// The session variables [`lookup_caller`] reads, in its order.
+const SESSION_VARIABLES: [&str; 4] = [
+    "GHOSTEX_GLOBAL_SESSION_REF",
+    "GHOSTEX_NATIVE_SESSION_ID",
+    "GHOSTEX_SESSION_ID",
+    "ZMX_SESSION",
+];
+
+/// The calling agent session; `None` only when no session variable is set at all. A variable that
+/// names no single agent session is an error, never "the user" (the raw verbs' sender block).
+pub(crate) fn agent_caller_strict() -> CliResult<Option<Value>> {
     match lookup_caller()? {
         CallerLookup::Agent(caller) => Ok(Some(caller)),
         CallerLookup::NoSession => Ok(None),

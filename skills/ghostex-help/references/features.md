@@ -5145,6 +5145,13 @@ https://grok-bot.directory/bots/ghostex, or `ghostex grokbot instructions`
 prints the text to paste into a bot of your own, and `ghostex grokbot connect <the POST to address>` asks for the key
 without showing it, then sends the test note.
 
+The bot passes your answers on with `ghostex agents send --as-user <ref>`:
+the message arrives in the agent's chat as yours, labelled "Sent via Grok Bot"
+(from your own terminal, "Sent from the terminal"), and Settings > Security's
+log records it. `--as-user` is refused inside any Ghostex session, so an agent
+can't use it to speak as you; a message from another agent always carries its
+"Message from another agent" block, which gxserver adds itself when it's missing.
+
 What the bot may do: anything the `ghostex` command can, including answering
 an agent's question or permission prompt and unblocking a stuck agent, but
 only when you say so in its chat ("approve it", "yes, allow that"). Its

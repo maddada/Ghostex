@@ -620,13 +620,19 @@ fn status_target(parsed: &ParsedArgs) -> CliResult<(Value, Flags)> {
     let named = ["coordinator", "orchestrator", "session"]
         .iter()
         .any(|key| flag_text(&parsed.flags, key).is_some());
-    let Some(project_id) = flag_text(&parsed.flags, "projectId").filter(|_| !named) else {
-        return target_coordinator(parsed).map_err(|error| match error {
-            CliError::Other(message) if message.starts_with("Cannot identify the caller") => {
-                CliError::Other("Outside an agent session, name the coordinator: --coordinator <ref>, or --project-id <id> for that project's main coordinator (ghostex projects --json lists ids).".into())
+    // A named coordinator, or the calling session, wins as before; `--project-id` picks the main
+    // coordinator only when neither is there.
+    let outside_session = |error: &CliError| matches!(error, CliError::Other(message) if message.starts_with("Cannot identify the caller"));
+    let project_id = match target_coordinator(parsed) {
+        Ok(found) => return Ok(found),
+        Err(error) if named || !outside_session(&error) => return Err(error),
+        Err(error) => match flag_text(&parsed.flags, "projectId") {
+            Some(project_id) => project_id,
+            None => {
+                let _ = error;
+                return Err(CliError::Other("Outside an agent session, name the coordinator: --coordinator <ref>, or --project-id <id> for that project's main coordinator (ghostex projects --json lists ids).".into()));
             }
-            other => other,
-        });
+        },
     };
     let mut base = server_flags(&parsed.flags);
     if let Some(computer) = flag_text(&parsed.flags, "computer") {

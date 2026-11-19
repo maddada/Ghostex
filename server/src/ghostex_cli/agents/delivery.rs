@@ -45,10 +45,13 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
     if body.trim().is_empty() {
         return Err(CliError::Other("Message body must not be empty.".into()));
     }
-    // `None`: run outside any Ghostex session (the user's terminal, Grok Bot's commands), so the
-    // message goes as the user's own, with no sender header and nothing that expects a reply
-    // session (CDXC:GrokBot 2026-11-19 in identity.rs).
-    let sender = identity::caller_or_user()?;
+    // `None`: the user, with `--as-user` from their own terminal or Grok Bot (identity.rs
+    // `sender`): no sender block, nothing that expects a reply session, and gxserver labels it
+    // with `via`.
+    let (sender, via) = match identity::sender(args.as_user)? {
+        identity::Sender::Agent(sender) => (Some(sender), None),
+        identity::Sender::User { via } => (None, Some(via)),
+    };
     let reference = &args.positional[0];
     let flags = identity::inventory_flags(&args.flags, reference)?;
     let recipient = selector::resolve_live_or_closed_session(reference, &flags)?;
@@ -77,7 +80,15 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         )));
     }
     if args.delivery == Delivery::WithNext {
-        return hold_with_next(sender.as_ref(), &recipient, &message, &body, args, &flags);
+        return hold_with_next(
+            sender.as_ref(),
+            via,
+            &recipient,
+            &message,
+            &body,
+            args,
+            &flags,
+        );
     }
     // A sleeping or closed recipient has nothing to interrupt; the send itself wakes it and
     // resumes its conversation.
@@ -105,6 +116,9 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         transcript_rows_before_send(&read_payload, &flags)
     };
     payload["text"] = json!(message);
+    if let Some(via) = via {
+        payload["via"] = json!(via);
+    }
     payload["sendRequestId"] = json!(send_request_id);
     let endpoint = if args.delivery == Delivery::Queue {
         "/api/queueSessionChatPrompt"
@@ -241,8 +255,10 @@ fn sender_summary(sender: Option<&Value>) -> Value {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn hold_with_next(
     sender: Option<&Value>,
+    via: Option<&str>,
     recipient: &Value,
     message: &str,
     body: &str,
@@ -258,7 +274,7 @@ fn hold_with_next(
         &json!({
             "globalRef": recipient["globalRef"], "projectId": recipient["projectId"],
             "sessionId": recipient["sessionId"], "text": message, "withNext": true,
-            "sendRequestId": send_request_id,
+            "sendRequestId": send_request_id, "via": via,
         }),
         flags,
     )

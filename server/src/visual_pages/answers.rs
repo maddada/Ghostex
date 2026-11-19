@@ -178,6 +178,8 @@ pub(super) async fn deliver(
         .unwrap_or_else(|_| Err("The answers could not be queued.".to_string()))
         .err()
     } else {
+        // The user's own answers on a page: they settle the asks they name.
+        crate::session_chat_send::sender_mark::note_user_send(&project_id, &session_id, &message);
         let body = json!({"params": {
             "projectId": project_id,
             "sessionId": session_id,

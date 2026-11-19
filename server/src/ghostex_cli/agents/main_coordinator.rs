@@ -137,10 +137,11 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
             where_(args, &project_label)
         ))),
         Some(IfNone::Create) => {
-            let caller = identity::caller().ok();
-            let task = match &caller {
-                Some(caller) => identity::message(caller, &body),
-                None => body.clone(),
+            // Never a lookup error turned into the user's words: an agent's message carries its
+            // block, and the user's needs --as-user (identity.rs `sender`).
+            let task = match identity::sender(args.as_user)? {
+                identity::Sender::Agent(caller) => identity::message(&caller, &body),
+                identity::Sender::User { .. } => body.clone(),
             };
             // The message is its first request, so it is sent at once rather than left for Start.
             let mut argv = vec!["--task".to_string(), task, "--start".to_string()];

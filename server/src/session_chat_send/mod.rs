@@ -73,6 +73,7 @@ mod queue;
 mod queued_prompt_escape;
 mod send_http;
 mod send_reopen;
+pub(crate) mod sender_mark;
 mod single_paste;
 mod steps;
 #[cfg(test)]

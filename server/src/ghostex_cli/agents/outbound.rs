@@ -22,7 +22,7 @@ pub(crate) struct AgentWrite {
 /// WHY: the CLI is where the sender is known (its environment names the calling session), so the block is added here; gxserver decides whether the write is allowed at all (`/api/checkAgentSessionWrite`, coordinators/thread_messages.rs), which refuses a thread writing to its own orchestrator.
 /// SEE-ALSO: server/src/ghostex_cli/agents/identity.rs `message` (the block), server/src/coordinators/thread_messages.rs.
 pub(crate) fn agent_write(selector_text: &str, flags: &Flags) -> CliResult<Option<AgentWrite>> {
-    let Some(sender) = identity::agent_caller()? else {
+    let Some(sender) = identity::agent_caller_strict()? else {
         return Ok(None);
     };
     let flags = identity::inventory_flags(flags, selector_text)?;
