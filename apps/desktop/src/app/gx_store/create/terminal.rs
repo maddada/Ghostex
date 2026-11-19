@@ -308,7 +308,7 @@ impl GhostexGpuiApp {
 
     /// `presentMissingProjectFolder(projectId)`: the dialog, or a toast when the project has no
     /// saved folder to name.
-    pub(crate) fn gx_store_present_missing_project_folder(
+    pub(super) fn gx_store_present_missing_project_folder(
         &mut self,
         project_id: &str,
         cx: &mut gpui::Context<Self>,
