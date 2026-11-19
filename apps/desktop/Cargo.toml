@@ -97,6 +97,8 @@ image = { version = "0.25", default-features = false, features = ["png", "webp",
 # CDXC:SessionTitles 2026-09-15 WHY: the native Rename Session dialog ports `normalizeSessionRenameTitle` (NFKC + a Unicode-class glyph filter); both crates were already in the graph through gpui and url, so this is a direct-dependency promotion, not a new download.
 icu_normalizer = "2"
 libc = "0.2"
+# Only the freeze-detector feature uses it, to unwind and symbolize the stuck main thread.
+backtrace = { version = "0.3", optional = true }
 log = "0.4"
 portable-pty = "0.9"
 # CDXC:RemotePairing 2026-09-15: the native Remote Setup dialog draws the Android install QR code itself (src/app/window/remote_setup_modal.rs); no image or svg render features, the modules are painted as gpui squares.
@@ -242,3 +244,7 @@ shader-canvas-probe = ["gpui/test-support"]
 # The native-modal-demo's offscreen PNG snapshot (GHOSTEX_NATIVE_MODAL_DEMO_SNAPSHOT): draws a
 # preview to an image without showing a window, for agents that can't use a virtual display.
 modal-demo-snapshot = ["gpui/test-support", "gpui_platform/test-support"]
+# The dev-build freeze detector (src/freeze_detector/). Only the local-start build scripts
+# (scripts/build-macos-rust.sh with GHOSTEX_LOCAL_START=1, scripts/build-linux-rust.sh) turn it
+# on; `cargo xtask build` and every release build leave it off, so it is not in published apps.
+freeze-detector = ["dep:backtrace"]
