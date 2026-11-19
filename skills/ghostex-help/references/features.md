@@ -6461,7 +6461,7 @@ phone, and covers a sudo password too. The card closes on its own when the
 agent stops waiting (10 minutes unless it asked for longer). While a card is
 open the chat box still works: typing goes to the card until you click into the
 chat box, and from then on to the chat. If something you send from the chat box
-looks like a key or password, Ghostex warns you above the box and sends it only
+looks like a key or password, Ghostex warns you inside the box and sends it only
 when you press Send again. Agents ask with
 `ghostex secret request`; the bundled `$ghostex-secrets` skill teaches them
 when and how, so tell an agent "ask me for the token privately" if it asks in

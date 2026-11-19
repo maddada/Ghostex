@@ -554,12 +554,6 @@ impl NativeChatView {
         if let Some(card) = self.render_catch_up(p, window, cx) {
             waiting.push(card.into_any_element());
         }
-        if let Some(warning) = self.render_secret_send_warning(p) {
-            waiting.push(warning);
-        }
-        if let Some(note) = self.render_draft_kept_note(p) {
-            waiting.push(note);
-        }
         // A coordinator's dock (work_cards.rs) sits above the working card, which says how long
         // the turn took and what it changed, so the order over the box is the transcript, the
         // dock, that card, then the box. With no dock (none, stepped aside for a long message, or

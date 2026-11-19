@@ -1,4 +1,4 @@
-//! The quiet warning above the chat box for text that looks like a key or token: the first Send of
+//! The quiet warning inside the chat box (box_notes.rs) for text that looks like a key or token: the first Send of
 //! it stays in the box and shows the warning, and a second Send of the same text posts it
 //! (CDXC:Secrets 2026-11-19 in packages/gx-chat-core/src/composer/secret_like.rs, where the rule
 //! that decides what looks like a key lives).
