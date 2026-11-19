@@ -11,8 +11,8 @@ use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text}
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, div, px, svg,
+    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _,
+    StatefulInteractiveElement as _, Styled as _, div, px,
 };
 use serde_json::{Value, json};
 
@@ -29,16 +29,6 @@ const COMMAND_BOX_ROWS: usize = 8;
 /// The least height (unscaled) a card in the menu shrinks to: its header, its buttons and a few
 /// rows of its command, so several cards scroll as a list instead of each shrinking to nothing.
 const APPROVALS_CARD_FLOOR: f32 = 230.0;
-
-/// A settled card's mark and colour.
-fn settled_mark(tone: &str, p: &ChatAppearance) -> (&'static str, gpui::Hsla) {
-    match tone {
-        "good" => ("titlebar/check.svg", gpui::rgb(0x3fb871).into()),
-        "bad" => ("titlebar/x.svg", gpui::rgb(0xec5357).into()),
-        "warn" => ("titlebar/clock.svg", gpui::rgb(0xf5a524).into()),
-        _ => ("titlebar/arrow-right.svg", p.muted),
-    }
-}
 
 /// "2:15 PM" for an ISO time, empty when it does not parse.
 fn clock(at: &str) -> String {
@@ -639,63 +629,5 @@ impl NativeChatView {
             );
         }
         row.into_any_element()
-    }
-
-    /// A thread's chat: the newest answer its coordinator's chat sent for it ("Approved from Main
-    /// Coordinator"), where its card was, while it is recent (gxserver sends the last 12 hours).
-    pub(super) fn render_relayed_answer_lines(&self, p: &ChatAppearance) -> Option<AnyElement> {
-        let line = self.snapshot["relayedAnswerLines"]
-            .as_array()
-            .and_then(|lines| lines.last())
-            .cloned()?;
-        let s = p.scale;
-        let (icon, color) = settled_mark(&text(&line, "tone"), p);
-        let detail = text(&line, "detail");
-        let time = clock(&text(&line, "at"));
-        Some(
-            div()
-                .id("chat-relayed-answer")
-                .w_full()
-                .min_w_0()
-                .flex()
-                .items_center()
-                .gap(px(8.0 * s))
-                .px(px(10.0 * s))
-                .py(px(5.0 * s))
-                .rounded(px(9.0 * s))
-                .border_1()
-                .border_color(p.input_border)
-                .bg(p.card_panel)
-                .text_size(px(12.5 * s))
-                .tooltip(move |window, cx| {
-                    gpui_component::tooltip::Tooltip::new(detail.clone()).build(window, cx)
-                })
-                .child(
-                    svg()
-                        .path(icon)
-                        .size(px(14.0 * s))
-                        .flex_shrink_0()
-                        .text_color(color),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .truncate()
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(p.foreground)
-                        .child(text(&line, "text")),
-                )
-                .when(!time.is_empty(), |row| {
-                    row.child(
-                        div()
-                            .flex_shrink_0()
-                            .text_size(px(11.0 * s))
-                            .text_color(p.muted)
-                            .child(time),
-                    )
-                })
-                .into_any_element(),
-        )
     }
 }

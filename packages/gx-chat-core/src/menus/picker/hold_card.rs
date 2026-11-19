@@ -140,7 +140,7 @@ pub fn remember_model_hold(state: &mut ChatState) {
 /// The card, or `None` while nothing is held behind a failed change.
 ///
 /// CDXC:SessionChat 2026-10-30 WHY: A model change picked in the chat can fail for good (the agent refused it, an OMP compaction was cancelled or failed, or three tries went unconfirmed), and the messages behind it then waited with only a spinner while the reason sat in the sidebar's tooltip and the model menu. One card counts the held messages (the queued rows of Ghostex's queue, which its scheduler delivers only after a pick applies; a message's own Send now still sends it on the current model), gives the reason and opens the model menu with Pick model, so it is drawn only where that menu exists: until the agent's model list is available, the sidebar's mark alone explains the hold. A change still retrying draws nothing, as in the model menu (the 2026-09-18 decision in menus/option_menus.rs). It has no Dismiss: hiding it would be a way to clear the hold the 2026-09-27 decision in server/src/session_chat_model_selection_alert.rs does not have, so it leaves only when a pick applies or the messages leave.
-/// SEE-ALSO: apps/desktop/src/app/native_chat/model_hold_card.rs and apps/mobile/app/src/chat/native/cards/ModelHoldCard.tsx draw it.
+/// SEE-ALSO: extras/dock_stack.rs, which makes it a row of the dock that the desktop and the phone draw (apps/desktop/src/app/native_chat/work_cards.rs, apps/mobile/app/src/chat/native/cards/WorkCards.tsx).
 pub fn model_hold_card(state: &ChatState, menu: Option<&ModelMenuContext>) -> Option<Arc<Value>> {
     menu?;
     let inputs = hold_inputs(state)?;

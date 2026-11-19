@@ -818,9 +818,10 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
     }
     needs.sort_by(|left, right| left.0.cmp(&right.0).then(right.1.cmp(&left.1)));
     later.sort_by(|left, right| right.0.cmp(&left.0));
-    let rows: Vec<Value> = needs
+    // The approval the agent waits on, and the one just answered, lead (`dock_approvals`).
+    let rows: Vec<Value> = crate::extras::dock_approvals::rows(state)
         .into_iter()
-        .map(|(_, _, row)| row)
+        .chain(needs.into_iter().map(|(_, _, row)| row))
         .chain(later.into_iter().map(|(_, row)| row))
         .collect();
     // Soonest back first.

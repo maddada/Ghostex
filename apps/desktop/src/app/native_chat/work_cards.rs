@@ -606,7 +606,10 @@ impl NativeChatView {
             .input
             .as_ref()
             .is_some_and(|input| input.read(cx).value().len() > DOCK_FOLDS_PAST_CHARS);
-        if long_draft || (self.board.open && self.board.docked) {
+        // An approval the agent waits on (or one just answered) keeps the dock up: it is drawn
+        // nowhere else (gx-chat-core extras/dock_approvals.rs).
+        let stays = rows.iter().any(|row| row["stays"] == true);
+        if !stays && (long_draft || (self.board.open && self.board.docked)) {
             return None;
         }
         let s = p.scale;
@@ -1137,7 +1140,14 @@ impl NativeChatView {
             } else {
                 (icon.into(), color)
             };
-        let body = p.strengthened(p.prose);
+        // An answered approval's row says so quietly for its few seconds (gx-chat-core
+        // extras/dock_approvals.rs).
+        let settled = row["settled"] == true;
+        let body = if settled {
+            p.card_muted
+        } else {
+            p.strengthened(p.prose)
+        };
         let busy = row["busy"] == true;
         let title = text(row, "title");
         let age = text(row, "age");
@@ -1218,7 +1228,10 @@ impl NativeChatView {
             && all_width > beside_room;
         let mut buttons: Vec<AnyElement> = match &action {
             _ if look.buttons.is_some() => look.buttons.into_iter().collect(),
-            Some(_) => self.dock_row_icon_action(&key, row, p, cx).into_iter().collect(),
+            Some(_) => self
+                .dock_row_icon_action(&key, row, p, cx)
+                .into_iter()
+                .collect(),
             None if fold => vec![self.answers_dropdown(&key, &answers, busy, p, cx)],
             None => self.work_answer_buttons(&key, &answers, busy, p, cx),
         };
@@ -1358,7 +1371,19 @@ impl NativeChatView {
                 .text_color(p.card_muted)
                 .child(preview.to_string())
         });
-        let line = if under.is_some() || preview.is_some() {
+        // Why an approval's answer did not land, under its title.
+        let error = text(row, "error");
+        let error = (!error.is_empty()).then(|| {
+            div()
+                .min_w_0()
+                .pl(px(DOCK_LEAD * s))
+                .pt(px(2.0 * s))
+                .whitespace_normal()
+                .text_size(px(PROSE_SIZE * 0.93 * s))
+                .text_color(gpui::rgb(0xec5357))
+                .child(error.to_string())
+        });
+        let line = if under.is_some() || preview.is_some() || error.is_some() {
             div()
                 .w_full()
                 .min_w_0()
@@ -1366,6 +1391,7 @@ impl NativeChatView {
                 .flex_col()
                 .child(line)
                 .children(preview)
+                .children(error)
                 .children(under)
         } else {
             line
@@ -1418,6 +1444,9 @@ impl NativeChatView {
                     this.open_work_target(page.clone(), window, cx);
                 })))
                 .into_any_element();
+        }
+        if settled {
+            return div().w_full().child(press).into_any_element();
         }
         let shown = key.clone();
         div()

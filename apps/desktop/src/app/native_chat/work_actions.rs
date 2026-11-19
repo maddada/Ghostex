@@ -125,6 +125,19 @@ impl NativeChatView {
                     (busy || locked) && !picked,
                     p,
                 )
+                // A short answer's full words (an approval's "Always" is "Yes, and don't ask
+                // again for …", gx-chat-core extras/dock_approvals.rs).
+                .when_some(
+                    answer["tooltip"]
+                        .as_str()
+                        .filter(|tip| !tip.is_empty() && answer["recommended"] != true)
+                        .map(str::to_string),
+                    |button, tip| {
+                        button.tooltip(move |window, cx| {
+                            gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
+                        })
+                    },
+                )
                 .when(answer["recommended"] == true, |button| {
                     button
                         .aria_label(format!("{label}, Recommended"))
@@ -152,6 +165,8 @@ impl NativeChatView {
                                 "at": [f32::from(at.x), f32::from(at.y)],
                             });
                             this.open_reply_popover(&command, window, cx);
+                        } else if command["type"] == "hostAction" {
+                            this.run_dock_host_action(&command, window, cx);
                         } else if command.is_object() {
                             this.invoke(command.clone(), cx);
                         }
@@ -160,6 +175,19 @@ impl NativeChatView {
                 .into_any_element()
             })
             .collect()
+    }
+
+    /// A dock row's button that opens something of the app's instead of asking the chat core
+    /// (gx-chat-core extras/dock_stack.rs): Pick model opens the composer's model menu.
+    pub(super) fn run_dock_host_action(
+        &mut self,
+        command: &Value,
+        window: &mut gpui::Window,
+        cx: &mut Context<Self>,
+    ) {
+        if command["action"] == "pickModel" {
+            self.toggle_model_menu(None, window, cx);
+        }
     }
 
     /// An ask's answers folded into one button, for a line too short for them all (the dock's rows,
@@ -334,18 +362,20 @@ impl NativeChatView {
             (busy || locked) && !picked,
             p,
         )
-        .on_click(cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
-            cx.stop_propagation();
-            if busy || locked || !reply.is_object() {
-                return;
-            }
-            let at = event.position();
-            let command = json!({
-                "question": reply.clone(),
-                "at": [f32::from(at.x), f32::from(at.y)],
-            });
-            this.open_reply_popover(&command, window, cx);
-        }))
+        .on_click(
+            cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                cx.stop_propagation();
+                if busy || locked || !reply.is_object() {
+                    return;
+                }
+                let at = event.position();
+                let command = json!({
+                    "question": reply.clone(),
+                    "at": [f32::from(at.x), f32::from(at.y)],
+                });
+                this.open_reply_popover(&command, window, cx);
+            }),
+        )
         .into_any_element()
     }
 
