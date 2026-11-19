@@ -15,6 +15,7 @@ use gpui::{
     px, svg,
 };
 use gpui_component::{h_flex, v_flex};
+use std::rc::Rc;
 use std::sync::Arc;
 
 /// `.extension-card-grid { gap: 0.625rem }`.
@@ -287,6 +288,11 @@ pub(crate) struct GridCardSpec {
     /// Opens the extension's own page (its details, permissions, settings, version, remove) when
     /// the tile is clicked anywhere but its switch, its buttons and its (i).
     pub(crate) open: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
+    /// The card's one switch, flipped by a click anywhere on the card (CDXC:SwitchRows
+    /// 2026-11-19). `None` for a card with no switch, a second switch (its option row) or a
+    /// disabled one. A card that also has `open` opens its page from its name and its Details
+    /// button instead of its body.
+    pub(crate) toggle: Option<RowToggle>,
     /// A Community extension's folder on GitHub: the GitHub mark after its title.
     pub(crate) source_url: Option<String>,
 }
@@ -331,9 +337,17 @@ fn keep_press<E: gpui::InteractiveElement>(element: E, guard: bool) -> E {
 /// User, of the one-card-per-row page and its On tab: "all extensions rows have to be same height pls. don t wrap text" (for 11.4.0). Every card's main row is `CARD_ROW_HEIGHT` tall: the name on one line (with its badge and scope label) and the description on ONE line, cut with an ellipsis, never wrapped; hovering that line shows the whole description (and the type or author) in a tooltip, like the (i). A card with a row of its own (a chat-bar extension's "Open automatically in sessions", Collab's status) shows it under a hairline as a second row of `CARD_SUB_ROW_HEIGHT`, also one line, so the list reads as an even grid. Supersedes "wraps to a second line" in the next decision.
 /// CDXC:Extensions 2026-11-11 DECISION:
 /// User, of the Built-in tiles two to a row: "also i dont like the 2 in a row look", with "it's super hard to tell which are disabled and which enabled" (for 11.4.0). Every card list on the Extensions page now has one card to a row (`EXTENSION_LIST_COLUMNS`), so the description gets the page's width and wraps to a second line before it is cut. A card that is off draws its title in the muted grey and its icon fainter, so on and off read at a glance with the switch. Supersedes "two to a row" in the first 2026-11-09 decision above; the rest of that tile stands.
+/// CDXC:Extensions 2026-11-19 DECISION:
+/// User: "allow me to click on the card to toggle something on and off in settings (for example on extension card to toggle it on and off)". A card with one switch (Built-in, Experimental, the user's views, an Installed extension without its chat-bar option) flips that switch from a click anywhere on it but its buttons, its (i), its GitHub mark and its grip, and from Space or Enter once focused; a screen reader reads the card as the switch. An Installed card whose body opened its page now opens it from its name (underlined on hover) and an always-shown Details chevron beside the switch. A card with a second switch (an Installed chat-bar extension's "Open automatically in sessions") keeps opening its page from its body and toggles only from its switches; a Store card has no switch and still opens its page from its body. Supersedes "opens that page when clicked anywhere but its switch" in the 2026-11-09 decision above for cards with one switch.
 pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
     let group: SharedString = format!("extension-card-{}", spec.id).into();
-    let opens = spec.open.is_some();
+    let toggle = spec.toggle;
+    let toggles = toggle.is_some();
+    let open: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>> = spec.open.map(Rc::from);
+    // The body opens the page only while no switch claims it.
+    let body_open = open.clone().filter(|_| !toggles);
+    let link_open = open.filter(|_| toggles);
+    let opens = body_open.is_some() || toggles;
     let hover_surface = p.raised_hover;
     let ring = p.ring;
     let editing = spec.editing;
@@ -384,6 +398,7 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
         .gap(px(6.0))
         .child(
             div()
+                .id(SharedString::from(format!("extension-card-title-{}", spec.id)))
                 .min_w_0()
                 .overflow_hidden()
                 .whitespace_nowrap()
@@ -391,7 +406,18 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
                 .text_size(px(14.0))
                 .line_height(px(20.0))
                 .text_color(hsla(if enabled { p.foreground } else { p.muted }))
-                .child(spec.title),
+                .when_some(link_open.clone(), |this, open| {
+                    keep_press(this, true)
+                        .role(gpui::Role::Link)
+                        .aria_label(SharedString::from(format!("{} details", spec.title)))
+                        .cursor_pointer()
+                        .hover(|this| this.underline())
+                        .on_click(move |event, window, cx| {
+                            cx.stop_propagation();
+                            open(event, window, cx);
+                        })
+                })
+                .child(spec.title.clone()),
         )
         .children(spec.badge.map(|badge| {
             div()
@@ -468,8 +494,14 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
             }])
         })
         .when(spec.dragging, |this| this.opacity(0.6))
-        .hover(move |this| this.bg(hsla(hover_surface)))
-        .when_some(spec.open, |this, open| this.cursor_pointer().on_click(open))
+        .map(|this| match toggle {
+            Some(toggle) => this.switch_row_press_with(hover_surface, ring, false, toggle),
+            None => this.hover(move |this| this.bg(hsla(hover_surface))),
+        })
+        .when_some(body_open, |this, open| {
+            this.cursor_pointer()
+                .on_click(move |event, window, cx| open(event, window, cx))
+        })
         .child(
             h_flex()
                 .w_full()
@@ -497,6 +529,7 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
                         .children(line.map(|line| one_line(line, p.muted))),
                 )
                 .children(actions)
+                .children(link_open.map(|open| details_button(p, &spec.id, open)))
                 .children(spec.control.map(|control| {
                     keep_press(h_flex(), opens)
                         .flex_shrink_0()
@@ -523,6 +556,38 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
                 true,
             )
         }))
+        .into_any_element()
+}
+
+/// The Details chevron of a card whose body flips its switch: opens the card's page.
+fn details_button(
+    p: &SettingsPalette,
+    id: &SharedString,
+    open: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>,
+) -> AnyElement {
+    let hover = p.foreground_alpha(0.08);
+    keep_press(div(), true)
+        .id(SharedString::from(format!("extension-card-details-{id}")))
+        .role(gpui::Role::Button)
+        .aria_label("Details")
+        .flex_shrink_0()
+        .size(px(24.0))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(5.0))
+        .cursor_pointer()
+        .hover(move |this| this.bg(hsla(hover)))
+        .tooltip(tooltip_text("Details"))
+        .on_click(move |event, window, cx| {
+            cx.stop_propagation();
+            open(event, window, cx);
+        })
+        .child(settings_icon(
+            "modals/settings/chevron-right.svg",
+            16.0,
+            p.muted,
+        ))
         .into_any_element()
 }
 

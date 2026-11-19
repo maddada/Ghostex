@@ -1358,7 +1358,7 @@ impl IntegrationsTab {
             },
             cx,
         );
-        let session_press = session_switch.press();
+        let (session_switch, session_press) = session_switch.into_row_parts();
         let rows = vec![toggle_from_row(
             p,
             "ghostex-capture-switch-to-session-row",

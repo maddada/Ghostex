@@ -271,13 +271,86 @@ pub(crate) fn switch_row_wash(foreground: Rgba) -> Rgba {
 pub(crate) trait SwitchRowExt:
     gpui::StatefulInteractiveElement + gpui::Styled + Sized
 {
-    fn switch_row_press(self, wash: Rgba, disabled: bool, press: BoundPress) -> Self {
+    fn switch_row_press(self, wash: Rgba, disabled: bool, press: impl Into<RowToggle>) -> Self {
+        let ring = rgba_of(wash, (wash.a * 8.0).min(0.35));
+        self.switch_row_press_with(wash, ring, disabled, press)
+    }
+
+    /// [`SwitchRowExt::switch_row_press`] with the row's own hover fill (a card's raised hover)
+    /// and the colour of its keyboard focus ring. Set no other `hover` on the row.
+    fn switch_row_press_with(
+        self,
+        wash: Rgba,
+        ring: Rgba,
+        disabled: bool,
+        press: impl Into<RowToggle>,
+    ) -> Self {
         if disabled {
             return self;
         }
-        self.cursor_pointer()
+        let RowToggle { press, switch } = press.into();
+        let row = self
+            .cursor_pointer()
             .hover(move |this| this.bg(hsla(wash)))
-            .on_bound_press(press)
+            .on_bound_press(press);
+        let Some(switch) = switch else {
+            return row;
+        };
+        let row = row
+            .role(gpui::Role::Switch)
+            .aria_toggled(a11y_toggled(switch.checked))
+            .aria_label(switch.label);
+        let row = match switch.accessibility_id {
+            Some(id) => row.accessibility_id(id),
+            None => row,
+        };
+        row.focusable()
+            .tab_stop(true)
+            .focus_visible(move |this| {
+                this.bg(hsla(wash)).shadow(vec![gpui::BoxShadow {
+                    color: hsla(ring),
+                    offset: gpui::point(px(0.0), px(0.0)),
+                    blur_radius: px(0.0),
+                    spread_radius: px(2.0),
+                    inset: true,
+                }])
+            })
+            .on_key_down(|event: &gpui::KeyDownEvent, _window, cx| {
+                if matches!(event.keystroke.key.as_str(), "enter" | "space")
+                    && !event.keystroke.modifiers.modified()
+                {
+                    // GPUI clicks a focused element on the key's release; keep Space out of
+                    // Settings' type-to-search.
+                    cx.stop_propagation();
+                }
+            })
+    }
+}
+
+/// What a switch row's click runs, and, for a row that stands for its switch, what the switch
+/// says to a screen reader.
+///
+/// CDXC:SwitchRows 2026-11-19 DECISION:
+/// User: "allow me to click on the card to toggle something on and off in settings (for example on extension card to toggle it on and off)". A Settings row or card built around one switch is the switch: besides the click anywhere on it (2026-11-06 above), it is a keyboard stop that Space or Enter toggles, with a focus ring, and the accessibility tree has the row itself as the switch (its title, its on/off state, the switch's accessibility id) instead of a small switch inside a row. The switch inside then draws without its own node so it is not announced twice. A plain `BoundPress` (the other modals' switch rows) keeps the click and hover only.
+pub(crate) struct RowToggle {
+    pub(crate) press: BoundPress,
+    pub(crate) switch: Option<RowSwitchA11y>,
+}
+
+/// The switch a row stands for, in the accessibility tree.
+#[derive(Clone)]
+pub(crate) struct RowSwitchA11y {
+    pub(crate) label: SharedString,
+    pub(crate) checked: bool,
+    pub(crate) accessibility_id: Option<SharedString>,
+}
+
+impl From<BoundPress> for RowToggle {
+    fn from(press: BoundPress) -> Self {
+        Self {
+            press,
+            switch: None,
+        }
     }
 }
 

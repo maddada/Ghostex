@@ -541,7 +541,7 @@ impl UpdatesTab {
                 move |tab: &mut Self, enabled, _window, cx| tab.set_auto(&toggle, enabled, cx),
                 cx,
             );
-            let auto_press = auto_switch.press();
+            let (auto_switch, auto_press) = auto_switch.into_row_parts();
             h_flex()
                 .id(SharedString::from(format!("updates-auto-row-{id}")))
                 .min_w_0()

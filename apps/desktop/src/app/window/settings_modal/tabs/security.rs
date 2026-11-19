@@ -219,7 +219,7 @@ impl SecurityTab {
             },
             cx,
         );
-        let press = switch.press();
+        let (switch, press) = switch.into_row_parts();
         let row = toggle_from_row(
             p,
             "approvalsRequirePresence-row",
@@ -344,7 +344,7 @@ impl SecurityTab {
             },
             cx,
         );
-        let press = switch.press();
+        let (switch, press) = switch.into_row_parts();
         let open_log = settings_button(
             p,
             "security-open-log",

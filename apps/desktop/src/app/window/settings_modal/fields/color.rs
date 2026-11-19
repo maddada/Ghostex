@@ -1137,7 +1137,7 @@ pub(crate) fn toggle_color_field<V: SettingsPage>(
         },
         cx,
     );
-    let toggle = switch.press();
+    let (switch, toggle) = switch.into_row_parts();
     let control = h_flex()
         .id(SharedString::from(format!("{toggle_key}-toggle-color")))
         .items_center()

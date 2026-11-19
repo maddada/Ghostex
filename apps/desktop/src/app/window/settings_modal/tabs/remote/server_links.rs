@@ -18,7 +18,7 @@ use super::style::*;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
-    StatefulInteractiveElement as _, Styled as _, div, px,
+    Styled as _, div, px,
 };
 use gpui_component::{h_flex, v_flex};
 use serde_json::{Value, json};
@@ -274,12 +274,6 @@ fn link_row(
         .id(SharedString::from(format!(
             "remote-server-link-{id}-access"
         )))
-        .role(gpui::Role::Switch)
-        .aria_toggled(a11y_toggled(on))
-        .aria_label(SharedString::from(format!(
-            "Agent access with {}",
-            row.name
-        )))
         .flex_1()
         .min_w_0()
         .items_center()
@@ -290,9 +284,16 @@ fn link_row(
         .switch_row_press(
             switch_row_wash(t.p.foreground),
             busy || !settled,
-            bind_press(cx, move |tab: &mut RemoteTab, _window, cx| {
-                tab.set_server_link_access(toggle_machine.clone(), toggle_id.clone(), !on, cx);
-            }),
+            RowToggle {
+                press: bind_press(cx, move |tab: &mut RemoteTab, _window, cx| {
+                    tab.set_server_link_access(toggle_machine.clone(), toggle_id.clone(), !on, cx);
+                }),
+                switch: Some(RowSwitchA11y {
+                    label: format!("Agent access with {}", row.name).into(),
+                    checked: on,
+                    accessibility_id: None,
+                }),
+            },
         )
         .child(
             v_flex()

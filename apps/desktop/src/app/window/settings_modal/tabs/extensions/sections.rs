@@ -393,6 +393,7 @@ impl ExtensionsTab {
             },
             cx,
         );
+        let (control, toggle) = control.into_row_parts();
         let mut actions: Vec<AnyElement> = Vec::new();
         // `OFFICIAL_EXTENSION_RUNTIME_IDS`: the Code editor's component can be reinstalled.
         if extension.id == "code" {
@@ -463,6 +464,7 @@ impl ExtensionsTab {
                 dragging: false,
                 source_url: None,
                 open: None,
+                toggle,
             },
         );
         let wide = if scoped {
@@ -777,6 +779,12 @@ impl ExtensionsTab {
                     ),
                 )
             });
+        // A card with its chat-bar option has two switches: only the switches toggle.
+        let (control, toggle) = if extra.is_some() {
+            (control.into_any_element(), None)
+        } else {
+            control.into_row_parts()
+        };
         let editing = self
             .scope_editor
             .as_ref()
@@ -816,6 +824,7 @@ impl ExtensionsTab {
                         cx.notify();
                     },
                 ))),
+                toggle,
             },
         )
     }
@@ -901,6 +910,7 @@ impl ExtensionsTab {
                         page.select_store_entry(Some(open_name.clone()), cx);
                     },
                 ))),
+                toggle: None,
             },
         )
     }
@@ -1064,6 +1074,7 @@ impl ExtensionsTab {
                 cx,
             )
         };
+        let (control, toggle) = control.into_row_parts();
         grid_card(
             p,
             GridCardSpec {
@@ -1087,6 +1098,7 @@ impl ExtensionsTab {
                 dragging,
                 source_url: None,
                 open: None,
+                toggle,
             },
         )
     }

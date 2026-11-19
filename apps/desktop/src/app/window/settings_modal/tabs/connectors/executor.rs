@@ -326,7 +326,7 @@ impl ConnectorsTab {
             move |page: &mut Self, on, _window, cx| page.executor_set_enabled(&target, on, cx),
             cx,
         );
-        let executor_press = executor_switch.press();
+        let (executor_switch, executor_press) = executor_switch.into_row_parts();
         let mut rows: Vec<AnyElement> = vec![toggle_from_row(
             p,
             format!("connectors-{id}-executor-row"),

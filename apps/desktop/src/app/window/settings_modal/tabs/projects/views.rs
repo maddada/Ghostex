@@ -194,7 +194,7 @@ fn binding_switch(
         },
         cx,
     );
-    let press = control.press();
+    let (control, press) = control.into_row_parts();
     let row = plain_row(
         p,
         &SharedString::from(format!("project-view-{view_id}-{id}")),

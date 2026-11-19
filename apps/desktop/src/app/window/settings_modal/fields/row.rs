@@ -389,7 +389,7 @@ fn setting_row_bound(
     spec: RowSpec,
     on_reset: Option<BoundPress>,
     control: AnyElement,
-    toggle: Option<BoundPress>,
+    toggle: Option<super::super::super::native_modal_kit::RowToggle>,
 ) -> AnyElement {
     let group: SharedString = format!("settings-row-{id}").into();
     let tooltip = spec.tooltip_text();

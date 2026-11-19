@@ -302,7 +302,7 @@ pub(crate) fn diagnostic_logging_field<V: SettingsPage>(
             },
             cx,
         );
-        let press = switch.press();
+        let (switch, press) = switch.into_row_parts();
         rows.push(toggle_from_row(
             p,
             SharedString::from(format!("diagnostic-{id}-row")),

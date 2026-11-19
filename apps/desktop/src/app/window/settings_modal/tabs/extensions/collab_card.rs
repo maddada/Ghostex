@@ -263,6 +263,7 @@ impl ExtensionsTab {
                 dragging: false,
                 open: None,
                 source_url: None,
+                toggle: None,
             },
         );
         Some(card)

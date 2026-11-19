@@ -682,19 +682,23 @@ pub(super) fn dialog_switch_row(
     h_flex()
         .id(id)
         .group(group.clone())
-        .role(gpui::Role::Switch)
-        .aria_toggled(a11y_toggled(value))
-        .aria_label(label)
         .w_full()
         .items_center()
         .gap(px(12.0))
         .switch_row_press(
             switch_row_wash(p.foreground),
             false,
-            bind_press(cx, move |tab, _window, cx| {
-                toggle(tab);
-                cx.notify();
-            }),
+            RowToggle {
+                press: bind_press(cx, move |tab, _window, cx| {
+                    toggle(tab);
+                    cx.notify();
+                }),
+                switch: Some(RowSwitchA11y {
+                    label: label.into(),
+                    checked: value,
+                    accessibility_id: None,
+                }),
+            },
         )
         .child(
             div()

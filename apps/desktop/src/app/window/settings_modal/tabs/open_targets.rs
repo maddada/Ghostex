@@ -605,7 +605,7 @@ impl Render for OpenTargetsTab {
                         },
                         cx,
                     );
-                    let press = switch.press();
+                    let (switch, press) = switch.into_row_parts();
                     let item = settings_list_item(
                         &p,
                         None,
