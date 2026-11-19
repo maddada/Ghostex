@@ -19,7 +19,7 @@
 
 - **A new coordinator starts on the model and effort you last used for a coordinator with that agent,** so you pick it once; Opus 5.5 High is only the very first default, thanks to @sebastianarena ([#658](https://github.com/maddada/Ghostex/pull/658)).
 - **A low-end model asks you to confirm** on the first-message card before Start, on the computer and the phone.
-- **Grok Bot can drive your agents:** `ghostex grokbot connect` links a Ghostex bot in xAI's Grok Bot, so you can ask what your agents are doing and hand out work from its chat, and your agents send you notes through it. Help > Grok Bot has the steps.
+- **Grok Bot can drive your agents:** `ghostex grokbot connect` links a Ghostex bot in xAI's Grok Bot, so you can ask what your agents are doing and hand out work from its chat, and your agents send you notes through it. Ask Ghostex AI "how do I connect Grok Bot?" or run `ghostex grokbot instructions` for the steps.
 
 ### 🌐 Remote computers
 
