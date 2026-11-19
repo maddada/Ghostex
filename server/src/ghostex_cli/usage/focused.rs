@@ -707,10 +707,13 @@ Questions:
 
 One-click answers:
   One quick pick with 2 to 4 short answers and nothing to explain or note
-  (\"Merge it?\", \"Delete the branch?\") goes in the reply itself instead of a
-  form: after the question, one Markdown link per answer to ghostex-answer:
-  and the question's tag, such as
+  goes in the reply itself instead of a form: after the question, one
+  Markdown link per answer to ghostex-answer: and the question's tag, such as
     PR #414: Merge it? [Yes](ghostex-answer:Q901) [No](ghostex-answer:Q901)
+  The question shows alone in the dock and on the phone, so it names its
+  subject (\"PR #414: Merge it?\", \"Delete the branch fix/tab-drag?\"), never
+  \"it\" or \"this\" alone; the lines just above it show as its description.
+  Coordinators never use these: they ask with item ask, a form or a page.
   A title of \"recommended\" marks your pick ([Keep](ghostex-answer:Q902
   \"recommended\")) and =value sends a value other than the label
   (ghostex-answer:Q902=keep). The chat draws the answers as a pill under the
@@ -950,10 +953,12 @@ pub fn needs_you_usage() -> String {
 add: when a step can only be done by the user (a sudo command, a tap on their phone, a sign-in,
 a check by eye), put it above this session's chat box as a to-do with a Done button, without
 being asked. It takes the session's next Q tag and stays until the user presses Done or you
-clear it, even if the chat is cleared. --command shows as a chip the user clicks to copy;
---detail is one or two sentences under the title, given only when the user needs them to act or
-decide: the row then shows Details, and its Done or answers wait under the detail; without it
-they stay on the row, one click. --answer (repeated) offers choices such as "Works" and
+clear it, even if the chat is cleared. The user reads it with nothing else on screen, often in
+another chat: its title names what it is about ("Run the signing setup on this computer"), never
+"it", "this" or "that" without the thing. --command shows as a chip the user clicks to copy.
+--detail says what it is about and why, always: one short line (about 90 characters) shows under
+the title with Done or the answers still on the row; a longer one shows Details, and its Done or
+answers wait under it. --answer (repeated) offers choices such as "Works" and
 "Something's off" instead of a single Done. Also list it under Needs you in your
 reply. The user's answer arrives as a message: "Q61: Done" (or the answer they picked, or their
 own words). Inside a coordinator's thread the to-do goes to the coordinator's Needs you list,

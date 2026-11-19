@@ -176,8 +176,9 @@ pub(super) fn tone_color(tone: &str) -> Option<u32> {
 /// (`jumpToQuestion`, or the question link a card's chip carries).
 fn board_action_jumps(action: &Value) -> bool {
     match action["type"].as_str() {
-        // `openResource`: a card's form or page (gx-chat-core `go`, its Open).
-        Some("jumpToQuestion" | "openCoordinatorThread" | "openResource") => true,
+        // `openResource`: a card's form or page (gx-chat-core `go`, its Open). `showInChat`: a
+        // card's Show in chat or Jump to context, the reply that asked it.
+        Some("jumpToQuestion" | "openCoordinatorThread" | "openResource" | "showInChat") => true,
         Some("openMarkdownLink") => action["href"].as_str().is_some_and(|href| {
             href.starts_with(ghostex_gx_chat_core::transcript::open_questions::QUESTION_LINK_PREFIX)
         }),

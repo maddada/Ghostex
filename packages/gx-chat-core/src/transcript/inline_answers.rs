@@ -52,6 +52,10 @@ pub struct InlineQuestion {
     pub question: String,
     /// The lines between the question and its links: what a pop-up shows under the title.
     pub detail: String,
+    /// The lines above the question ([`context_above`]): its description when no lines sit
+    /// between it and its links. Never part of the form's id, so a question asked before it was
+    /// read keeps its answers.
+    pub context: String,
     /// The question as replies were titled before the question was read from its tag line (see
     /// [`asking_line_with`]): the form's id is hashed from it, so answers already sent keep
     /// matching their question. Empty when it is `question`.
@@ -104,7 +108,22 @@ impl InlineQuestion {
         if !self.id_question.is_empty() {
             form.id = parse_form(&self.form_body(true)).id;
         }
+        if self.detail.is_empty() && !self.context.is_empty() {
+            if let Some(question) = form.questions.first_mut() {
+                question.detail = self.context.clone();
+            }
+        }
         form
+    }
+
+    /// What the question's row and pop-up show under its title: the lines between it and its
+    /// links, else the lines above it; "" for none.
+    pub fn description(&self) -> &str {
+        if self.detail.is_empty() {
+            &self.context
+        } else {
+            &self.detail
+        }
     }
 
     /// What the marked line carries: the form's id, the tag, and the answers in order.
@@ -436,6 +455,75 @@ struct Asked {
     led: bool,
     /// What the question was before it was read from the tag line.
     legacy: String,
+    /// The lines above the line that asks ([`context_above`]).
+    context: String,
+}
+
+/// The most lines and characters [`context_above`] carries.
+const CONTEXT_LINES: usize = 12;
+const CONTEXT_CHARS: usize = 800;
+
+/// The Markdown right above `lines[at]` that says what its question is about: the paragraphs and
+/// list items over it, past blank lines, up to a heading, a fence, a rule, another line of answer
+/// links or a short section label ("❓ **Needs you:**"), at most [`CONTEXT_LINES`] lines and about
+/// [`CONTEXT_CHARS`] characters, the nearest kept. "" when nothing above it says anything.
+///
+/// CDXC:SessionChat 2026-11-20 DECISION:
+/// The coordinator asked "Q4252: What should I do with it? [Move it to Personal](ghostex-answer:Q4252)
+/// …" right under three sentences saying "it" was the "ghostex" project at ~/.config/ghostex in the
+/// Work workspace; the dock, the Work panel and the phone showed only "Q4252: What should I do with
+/// it?" with nothing under it. User: "u asked me a question but the title isn't clear what u are
+/// asking about and there's no description, we should NEVER EVER DO THIS!!!". From the design page
+/// (clear-questions-1120, Q4255) a one-click question's row carries the lines above it as its
+/// description when none sit between it and its links, and its title loses the tag written in
+/// front of it.
+pub fn context_above(lines: &[&str], at: usize) -> String {
+    let mut kept: Vec<&str> = Vec::new();
+    let mut chars = 0;
+    for line in lines[..at.min(lines.len())].iter().rev() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            if !kept.is_empty() && kept.last() != Some(&"") {
+                kept.push("");
+            }
+            continue;
+        }
+        let words = line_words(line);
+        let label = words.ends_with(':') && words.split_whitespace().count() <= 4;
+        let rule = trimmed.len() >= 3
+            && trimmed.chars().all(|character| matches!(character, '-' | '*' | '_' | ' '));
+        if trimmed.starts_with('#')
+            || rule
+            || label
+            || fence_open(line).is_some()
+            || fence_close(line).is_some()
+            || line.contains(ANSWER_SCHEME)
+            || line.starts_with(ANSWERS_OPEN)
+        {
+            break;
+        }
+        let shown = kept.iter().filter(|line| !line.is_empty()).count();
+        if shown >= CONTEXT_LINES || (shown > 0 && chars + trimmed.len() > CONTEXT_CHARS) {
+            break;
+        }
+        chars += trimmed.len();
+        kept.push(line.trim_end());
+    }
+    while kept.last() == Some(&"") {
+        kept.pop();
+    }
+    kept.reverse();
+    // The block's own indent goes, so a list item's lines read as Markdown at the left edge.
+    let indent = kept
+        .iter()
+        .filter(|line| !line.is_empty())
+        .map(|line| line.len() - line.trim_start().len())
+        .min()
+        .unwrap_or(0);
+    kept.iter()
+        .map(|line| line.get(indent..).unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// What [`asking_line`] finds for `tag`, or nothing.
@@ -470,13 +558,18 @@ fn asked(lines: &[&str], index: usize, tag: &str) -> Asked {
         detail: detail.join("\n"),
         led,
         legacy,
+        context: context_above(lines, at),
     }
 }
 
 /// One line's questions: each tag's answers, the question they ask (the line that starts with the
 /// tag; else the line's own words before the link; else what `look` finds for the tag when the line
 /// holds only the links), and the line with every answer link taken out.
-fn read_line(line: &str, look: impl Fn(&str) -> Asked) -> Option<(Vec<InlineQuestion>, String)> {
+fn read_line(
+    line: &str,
+    context: impl Fn() -> String,
+    look: impl Fn(&str) -> Asked,
+) -> Option<(Vec<InlineQuestion>, String)> {
     let links = answer_links(line);
     if links.is_empty() {
         return None;
@@ -499,16 +592,23 @@ fn read_line(line: &str, look: impl Fn(&str) -> Asked) -> Option<(Vec<InlineQues
             }
             None => {
                 let words = question_words(line, link.start);
+                // "Q4252: What …? [links]" asks "What …?": the tag in front is the row's tag, not
+                // part of its title (`context_above`'s decision). A line of only the tag asks
+                // what the lines above it say.
+                let own = match without_tag(&words, &link.tag) {
+                    Some(rest) => rest,
+                    None => words.clone(),
+                };
                 let above = look(&link.tag);
                 let legacy = if words.is_empty() {
                     above.legacy.clone()
                 } else {
                     words.clone()
                 };
-                let (question, detail) = if above.led || words.is_empty() {
-                    (above.question, above.detail)
+                let (question, detail, context) = if above.led || own.is_empty() {
+                    (above.question, above.detail, above.context)
                 } else {
-                    (words, String::new())
+                    (own, String::new(), context())
                 };
                 questions.push(InlineQuestion {
                     tag: link.tag.clone(),
@@ -519,6 +619,7 @@ fn read_line(line: &str, look: impl Fn(&str) -> Asked) -> Option<(Vec<InlineQues
                     },
                     question,
                     detail,
+                    context,
                     choices: vec![link.choice.clone()],
                 });
             }
@@ -571,7 +672,11 @@ pub fn inline_questions(markdown: &str) -> Vec<InlineQuestion> {
     }
     let mut questions: Vec<InlineQuestion> = Vec::new();
     each_prose_line(markdown, |lines, index| {
-        if let Some((found, _)) = read_line(lines[index], |tag| asked(lines, index, tag)) {
+        if let Some((found, _)) = read_line(
+            lines[index],
+            || context_above(lines, index),
+            |tag| asked(lines, index, tag),
+        ) {
             for question in found {
                 if !questions
                     .iter()
@@ -602,7 +707,7 @@ pub fn inline_forms(message: &ChatMessage) -> Vec<QuestionForm> {
 /// own ([`asking_line`]).
 pub fn mark_line(lines: &[&str], index: usize) -> Option<Vec<String>> {
     let line = *lines.get(index)?;
-    let (questions, kept) = read_line(line, |tag| asked(lines, index, tag))?;
+    let (questions, kept) = read_line(line, String::new, |tag| asked(lines, index, tag))?;
     let mut lines = Vec::with_capacity(questions.len() + 1);
     // A line that held only the links (beside its list marker or not) leaves nothing to show.
     let column = content_column(&kept).min(kept.len());
@@ -628,7 +733,7 @@ pub fn tags_asked_by(lines: &[&str], index: usize) -> Vec<String> {
     let Some(line) = lines.get(index) else {
         return Vec::new();
     };
-    let mut tags: Vec<String> = read_line(line, |_| Asked::default())
+    let mut tags: Vec<String> = read_line(line, String::new, |_| Asked::default())
         .map(|(questions, _)| questions.into_iter().map(|question| question.tag).collect())
         .unwrap_or_default();
     let end = lines.len().min(index + 1 + ASKING_REACH);

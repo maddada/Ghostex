@@ -36,7 +36,7 @@ Secrets
 - A password, API key or token: `ghostex secret request --label <what> --reason <why>`, never in chat.
 
 Steps only the user can do
-- A sudo command, a phone tap, a sign-in, a check by eye: unasked, run `ghostex needs-you add \"<what to do>\" [--detail \"…\"] [--command \"…\"]` and list it under Needs you in your reply. It sits above the chat box with a Done button; the answer arrives as \"Q<n>: Done\". Done: `ghostex needs-you done Q<n>`; not needed: `ghostex needs-you drop Q<n>`.
+- A sudo command, a phone tap, a sign-in, a check by eye: unasked, run `ghostex needs-you add \"<what to do>\" --detail \"<why>\" [--command \"…\"]` and list it under Needs you in your reply. It sits above the chat box with a Done button; the answer arrives as \"Q<n>: Done\". Done: `ghostex needs-you done Q<n>`; not needed: `ghostex needs-you drop Q<n>`.
 
 Ghostex skills
 - Install when wanted: `ghostex visual install-skill` (ghostex-visuals), `ghostex browser install-skill` (ghostex-embedded-browser-use), `ghostex browser-use install-skill` (other browsers through Cua Driver), `ghostex computer-use install-skill` (drive desktop apps), `ghostex agents-orchestration install-skill` (ghostex-agents), `ghostex guide install-skill` (ghostex-help).

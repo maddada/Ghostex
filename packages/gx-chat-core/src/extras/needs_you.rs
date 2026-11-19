@@ -143,6 +143,8 @@ pub fn rows(
                 "needs": true,
             });
             row["showInChat"] = show_in_chat(turns, at, &key);
+            // Jump to context: the reply of the turn that added it (`work_cards::context_of`).
+            row["context"] = row["showInChat"].clone();
             (at, row)
         })
         .collect()
