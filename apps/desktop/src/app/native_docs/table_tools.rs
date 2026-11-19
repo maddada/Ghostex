@@ -319,7 +319,9 @@ pub(crate) fn render_table_actions(
                     .rounded(px(7.0))
                     .border_1()
                     .border_color(p.border)
-                    .bg(p.raised)
+                    // CDXC:Theming 2026-11-20 (decision in helpers/chrome_palette.rs): lifted
+                    // under glass, not the near-black #161616.
+                    .bg(p.glass_lifted(p.raised))
                     .on_hover(move |hovered, window, _| {
                         ACTIONS_HOVERED.with(|cell| cell.set(hovered.then_some(header)));
                         window.refresh();

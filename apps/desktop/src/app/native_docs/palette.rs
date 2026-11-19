@@ -13,6 +13,9 @@ pub(crate) struct DocsPalette {
     pub(crate) mono_font: String,
     /// The document's fill; transparent under glass.
     pub(crate) page: Hsla,
+    /// The colour of the window under the view (the chat's work area colour), opaque: what a
+    /// surface floating over a document is lifted from under glass ([`Self::glass_lifted`]).
+    pub(crate) background: Hsla,
     /// The files list, the search row and the header rows.
     pub(crate) chrome: Hsla,
     /// A floating files list covers the document, so it is always opaque.
@@ -85,6 +88,7 @@ impl DocsPalette {
             } else {
                 background
             },
+            background: background.opacity(1.0),
             chrome: if glass {
                 wash(0.03, 0.04)
             } else {
@@ -136,6 +140,39 @@ impl DocsPalette {
             danger: theme_role_or("danger", light, pick(light, 0xbe123c, 0xfda4af)),
             green: pick(light, 0x15803d, 0x86efac),
             amber: rgb(0xfbbf24).into(),
+        }
+    }
+
+    /// A surface drawn over the document (a menu, popover, floating bar, find panel or card):
+    /// under glass the view's own background lifted toward white, at `GLASS_LIFTED_ALPHA`, so it
+    /// never reads as a black slab on the glass and the text under it never reads through.
+    /// Glass off, `fallback`. CDXC:Theming 2026-11-20 (decision in helpers/chrome_palette.rs).
+    pub(crate) fn glass_lifted(&self, fallback: Hsla) -> Hsla {
+        if self.glass {
+            crate::app::helpers::glass_lifted_from(self.background, self.light)
+        } else {
+            fallback
+        }
+    }
+
+    /// A box with nothing under it (a count badge): under glass the code blocks' ink wash times
+    /// `strength`. Glass off, `fallback`. CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs).
+    pub(crate) fn glass_wash(&self, strength: f32, fallback: Hsla) -> Hsla {
+        if self.glass {
+            crate::app::helpers::glass_wash(self.light, strength)
+        } else {
+            fallback
+        }
+    }
+
+    /// A dimming layer (a scrim behind a dialog or a picture): under glass a veil of the view's
+    /// own background at 60%, as `glass_veil` in helpers/window_glass.rs does with the work area,
+    /// instead of black. Glass off, `fallback`. CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs).
+    pub(crate) fn glass_veil(&self, fallback: Hsla) -> Hsla {
+        if self.glass {
+            self.background.opacity(0.6)
+        } else {
+            fallback
         }
     }
 }

@@ -1192,7 +1192,9 @@ impl GhostexGpuiApp {
                                 .items_center()
                                 .justify_center()
                                 .rounded(px(4.0))
-                                .bg(p.raised)
+                                // CDXC:Theming 2026-11-20 (decision in helpers/chrome_palette.rs):
+                                // the ink wash under glass, not the near-black #161616.
+                                .bg(p.glass_wash(2.0, p.raised))
                                 .border_1()
                                 .border_color(p.border_strong)
                                 .text_size(px(10.0))

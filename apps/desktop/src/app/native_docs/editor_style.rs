@@ -58,7 +58,9 @@ pub(crate) fn syntax_style(p: &DocsPalette) -> zorite_editor::SyntaxStyle {
         block_label: None,
         block_label_gen: 0,
         block_ref_count: None,
-        popover_bg: pick(0xffffff, 0x0e0e0e),
+        // CDXC:Theming 2026-11-20 (decision in helpers/chrome_palette.rs): the editor's menus are
+        // lifted under glass, not the near-black #0e0e0e.
+        popover_bg: p.glass_lifted(pick(0xffffff, 0x0e0e0e)),
         popover_border: ink(0.12),
         popover_fg: pick(0x18181b, 0xf4f4f5).opacity(0.88),
         popover_hover: ink(0.105),

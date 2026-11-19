@@ -768,7 +768,9 @@ fn popover(p: &DocsPalette) -> gpui::Div {
         .left(px(0.0))
         .p(px(6.0))
         .rounded(px(8.0))
-        .bg(p.raised)
+        // CDXC:Theming 2026-11-20 (decision in helpers/chrome_palette.rs): lifted under glass,
+        // not the near-black #161616.
+        .bg(p.glass_lifted(p.raised))
         .border_1()
         .border_color(p.border_strong)
         .shadow_lg()

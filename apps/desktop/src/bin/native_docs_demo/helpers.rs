@@ -26,3 +26,12 @@ pub(crate) fn theme_role_or(_id: &str, _light: bool, fallback: gpui::Hsla) -> gp
 pub(crate) fn theme_role_or_rgba(_id: &str, _light: bool, fallback: gpui::Rgba) -> gpui::Rgba {
     fallback
 }
+
+/// The app's glass lift and wash (app/helpers/chrome_palette.rs): a preview has no window glass,
+/// so its palette never asks for them; these keep the Docs files compiling.
+pub(crate) fn glass_lifted_from(base: gpui::Hsla, _light: bool) -> gpui::Hsla {
+    base
+}
+pub(crate) fn glass_wash(_light: bool, _strength: f32) -> gpui::Hsla {
+    gpui::transparent_black()
+}
