@@ -7215,14 +7215,14 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   The **Work items** extension (it was Thread brief) uses these: while it is on,
   every ordinary session keeps its own work items the way a coordinator does,
   in the same Work panel (the **Work** button in the window's header, with its
-  Topic), with what it asks you as rows above the chat box and on the phone,
-  and a **Work** button in the sidebar's top row lists every session with work
-  items, its Topic, how many are open and how many wait on you. New and resumed
+  Topic), with what it asks you as rows above the chat box and on the phone.
+  It adds nothing to the sidebar. New and resumed
   agent sessions are told about it and its **work-items** skill is in place only
   while it is on; turned off, ordinary sessions work exactly as before and
   `ghostex work item` refuses in them. Coordinators keep theirs as before, and
   their threads keep none. Updating from Thread brief turns each session's
-  brief into its work items once (the objective becomes the Topic). Turn its sidebar button or its sections off on its page in Settings >
+  brief into its work items once (the objective becomes the Topic).
+  A sidebar extension's button or sections are turned off on its page in Settings >
   Extensions (Sidebar mode, Sections in Projects). On the phone, the extension's
   button sits in the sessions list's header, its sections show in the Project
   list, a tap ticks an item or opens it, and a long press opens its options

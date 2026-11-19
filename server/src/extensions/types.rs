@@ -673,7 +673,7 @@ impl ExtensionManifest {
         Ok(())
     }
 
-    /// `kind: "sidebar"`: a mode, sections or a side panel, an optional command or static server
+    /// `kind: "sidebar"`: a mode, sections or a side panel (or none of them: it then draws nothing), an optional command or static server
     /// (for outside data and, later, web blocks), and no web placements or terminal.
     fn validate_sidebar_shape(&self) -> ExtensionResult<()> {
         if self.terminal.is_some()
@@ -695,11 +695,8 @@ impl ExtensionManifest {
                 "sidebar needs a mode, sections, or both.",
             ));
         }
-        if !sidebar_shows && self.side_panel.is_none() {
-            return Err(ExtensionError::bad_request(
-                "A sidebar extension needs sidebar (a mode or sections) or sidePanel.",
-            ));
-        }
+        // CDXC:Extensions 2026-11-19 DECISION:
+        // User, on the Work items extension's sidebar button (it was Briefs): "remove briefs from the left side sidebar doesn't make sense to have that button/ui there". The extension has nothing else to draw (its Work panel and header button are Ghostex's own), so a sidebar extension may declare neither a sidebar nor a sidePanel: it then draws nothing and only brings what the rest of its manifest asks for (a skill, an agent note).
         if let Some(sidebar) = &self.sidebar {
             if let Some(mode) = &sidebar.mode {
                 if mode.title.trim().is_empty() {
@@ -1024,4 +1021,43 @@ pub(crate) fn validate_relative_path(value: &str, field: &str) -> ExtensionResul
         )));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod sidebar_shape_tests {
+    use super::ExtensionManifest;
+    use serde_json::json;
+
+    fn manifest(extra: serde_json::Value) -> ExtensionManifest {
+        let mut value = json!({
+            "name": "work-items",
+            "title": "Work items",
+            "description": "Work items for any session.",
+            "version": "0.4.0",
+            "author": "Ghostex",
+            "icon": "icon.svg",
+            "categories": ["Productivity"],
+            "kind": "sidebar",
+        });
+        value
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        serde_json::from_value(value).unwrap()
+    }
+
+    /// The Work items extension draws nothing in the sidebar (user, 2026-11-19: no Briefs
+    /// button), so a sidebar extension with neither a sidebar nor a sidePanel is valid.
+    #[test]
+    fn a_sidebar_extension_may_draw_nothing() {
+        manifest(json!({})).validate(None, None).unwrap();
+    }
+
+    #[test]
+    fn an_empty_sidebar_block_is_still_refused() {
+        let error = manifest(json!({ "sidebar": {} }))
+            .validate(None, None)
+            .unwrap_err();
+        assert!(error.to_string().contains("sidebar needs a mode"));
+    }
 }

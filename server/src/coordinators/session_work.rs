@@ -12,6 +12,7 @@
 //! (`ghostex work item` for every session, `ghostex coordinator item` kept as its alias), Q4136
 //! "Work" for the button, panel and sidebar list, and Q4137 keep the one line at the top of the
 //! Work panel for every session, "instead of goal its more like topic", rewritten with a click.
+//! 2026-11-19, the user: "remove briefs from the left side sidebar doesn't make sense to have that button/ui there": the extension no longer draws a Work list in the sidebar (see extensions/types.rs `validate_sidebar_shape`).
 //! The extension keeps its id (`thread-brief`) so existing installs keep working. A coordinator's
 //! thread keeps no list of its own: its coordinator's Work panel tracks it.
 //! SEE-ALSO: server/src/coordinators/work.rs (the store and its requests), server/src/ghostex_cli/work.rs (the verbs),
