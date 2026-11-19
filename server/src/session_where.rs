@@ -125,7 +125,13 @@ fn read_where(
         agent.as_deref(),
     );
     let worktree = environment["worktree"] == Value::Bool(true);
-    let project_name = project.as_ref().and_then(|project| text(project, "/name"));
+    // Main Hub's sessions are named Main Hub (session_details/environment.rs).
+    let main_hub = environment["mainHub"] == Value::Bool(true);
+    let project_name = if main_hub {
+        Some("Main Hub".to_string())
+    } else {
+        project.as_ref().and_then(|project| text(project, "/name"))
+    };
     let parent_name = parent.as_ref().and_then(|parent| text(parent, "/name"));
     let git = folder.as_deref().and_then(|folder| {
         let mut git = crate::session_details::read_changes(folder)?;
@@ -144,6 +150,7 @@ fn read_where(
     Ok(json!({
         // A worktree shows under its parent's name; its own folder is the worktree's name.
         "project": parent_name.clone().or(project_name),
+        "mainHub": main_hub,
         "folder": folder,
         "folderLabel": environment["folderLabel"],
         "location": location(&session),

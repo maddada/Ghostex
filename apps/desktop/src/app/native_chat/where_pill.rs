@@ -31,7 +31,7 @@ pub(super) const WHERE_TRIGGER: &str = "chat-pill-where";
 
 /// The details menu's width and the hover card's (unscaled).
 pub(super) const WHERE_MENU_WIDTH: f32 = 380.0;
-const CARD_WIDTH: f32 = 340.0;
+const CARD_WIDTH: f32 = 380.0;
 
 /// A detail row's height and the menu's padding around its rows (unscaled).
 const ROW_HEIGHT: f32 = 24.0;
@@ -176,7 +176,12 @@ fn card_header(pill: &Value, ink: CardInk, s: f32) -> gpui::Div {
         .text_size(px(13.0 * s))
         .child(
             svg()
-                .path(icon_path("folder"))
+                // Main Hub's flower (`card.icon`, packages/gx-chat-core/src/extras/where_pill.rs).
+                .path(if card["icon"] == "mainHub" {
+                    crate::app::native_sidebar::chief_row_view::FLOWER_ICON.to_string()
+                } else {
+                    icon_path("folder")
+                })
                 .size(px(14.0 * s))
                 .flex_shrink_0()
                 .text_color(ink.secondary),
@@ -198,9 +203,11 @@ fn card_header(pill: &Value, ink: CardInk, s: f32) -> gpui::Div {
                 .text_color(ink.secondary),
         )
         .child(
+            // The computer's name gets most of the row (a chosen name such as "Mohamad's MacBook
+            // Pro (2)" fits whole); the project shortens first.
             div()
                 .flex_shrink_0()
-                .max_w(px(150.0 * s))
+                .max_w(px(230.0 * s))
                 .truncate()
                 .text_color(ink.secondary)
                 .child(text(card, "subtitle")),
@@ -372,8 +379,14 @@ impl NativeChatView {
                 .flex_shrink_0()
                 .text_color(p.card_muted)
         };
+        // Main Hub's flower stands for the session's place (its card names the computer).
+        let place_icon = if pill["mainHub"] == Value::Bool(true) {
+            crate::app::native_sidebar::chief_row_view::FLOWER_ICON.to_string()
+        } else {
+            machine_icon(&pill)
+        };
         let left = half()
-            .child(icon(machine_icon(&pill)))
+            .child(icon(place_icon))
             .when(project_w > 0.0, |half| {
                 half.child(label(project.clone(), project_w, p.foreground))
             });

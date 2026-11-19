@@ -30,7 +30,7 @@ fn codex_slot_email(slot: &str) -> Option<String> {
         .filter(|email| !email.is_empty())
 }
 
-/// `{location: {kind, label}, project, folder, folderLabel, worktree, account, accountEmail,
+/// `{location: {kind, label}, project, mainHub, folder, folderLabel, worktree, account, accountEmail,
 /// accountName}`. `account` is the "account 5 (ST)" label; a Claude or Codex session's account
 /// also carries the email Ghostex knows for that slot, which the panel shows instead.
 pub(crate) fn read_environment(
@@ -50,10 +50,21 @@ pub(crate) fn read_environment(
             "label": crate::connected_computers::this_computer_name(),
         }),
     };
-    let project_name = project
-        .and_then(|project| project.get("name"))
-        .and_then(Value::as_str)
-        .map(str::to_string);
+    // CDXC:Chief 2026-11-19 DECISION:
+    // User, of an Ask Ghostex chat's where pill reading "ghostex", "Not a git repository",
+    // "~/.config/ghostex": a session listed under Main Hub (chief/home.rs `lists_under_main_hub`)
+    // is shown as Main Hub, with its icon, never as the internal config folder's project; the
+    // folder stays a row of its own for Copy path. `mainHub` tells the where pill and Session
+    // details (gx-chat-core) so; an older gxserver sends neither.
+    let main_hub = project.is_some_and(crate::chief::lists_under_main_hub);
+    let project_name = if main_hub {
+        Some("Main Hub".to_string())
+    } else {
+        project
+            .and_then(|project| project.get("name"))
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    };
     // A linked worktree's `.git` is a file pointing at the main checkout.
     let worktree = folder.is_some_and(|folder| Path::new(folder).join(".git").is_file())
         || project.is_some_and(|project| project.pointer("/worktree/parentProjectId").is_some());
@@ -74,6 +85,7 @@ pub(crate) fn read_environment(
     json!({
         "location": location,
         "project": project_name,
+        "mainHub": main_hub,
         "folder": folder,
         "folderLabel": folder.map(|folder| folder_label(folder, home)),
         "worktree": worktree,
