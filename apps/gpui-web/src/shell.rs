@@ -157,19 +157,19 @@ impl GhostexGpuiApp {
     }
 
     /// The Work button, as the desktop header draws it (`render/workarea_header/work_button.rs`):
-    /// the open chat's Work panel, with how many wait on the user; Session details makes way while
+    /// the open chat's Work panel, no count badge; Session details makes way while
     /// it opens.
     fn render_web_work_button(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let session = self.open_session.as_ref()?;
         if self.web_shows_terminal(session) {
             return None;
         }
-        let (open, waiting) = {
+        let open = {
             let view = self.native_chats.get(session)?.1.read(cx);
             if !view.work_panel_available() {
                 return None;
             }
-            (view.work_panel_shown(), view.work_panel_waiting())
+            view.work_panel_shown()
         };
         let key = session.to_sidebar_session_id();
         let bounds = self.work_button_bounds.clone();
@@ -200,20 +200,6 @@ impl GhostexGpuiApp {
                         .text_color(text),
                 )
                 .child(div().text_size(px(12.0)).text_color(text).child("Work"))
-                .when(waiting > 0, |button| {
-                    button.child(
-                        div()
-                            .px(px(5.0))
-                            .h(px(16.0))
-                            .flex()
-                            .items_center()
-                            .rounded(px(8.0))
-                            .bg(rgb(0xf472b6))
-                            .text_size(px(10.5))
-                            .text_color(rgb(0x1a1a1a))
-                            .child(waiting.to_string()),
-                    )
-                })
                 .tooltip(move |window, cx| {
                     Tooltip::new(if open {
                         "Hide work items"

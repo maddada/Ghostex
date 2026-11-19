@@ -18,8 +18,6 @@ use gpui::Pixels;
 use gpui::StatefulInteractiveElement as _;
 use gpui::Styled as _;
 use gpui::Window;
-use gpui::div;
-use gpui::prelude::FluentBuilder as _;
 use gpui::px;
 use gpui_component::ElementExt as _;
 use gpui_component::Side;
@@ -147,12 +145,7 @@ impl GhostexGpuiApp {
                 if let Some(chat) = self.session_details_target_chat() {
                     let chat = chat.read(cx);
                     state.available = chat.work_panel_available();
-                    let waiting = chat.work_panel_waiting();
-                    state.status = if chat.work_panel_shown() {
-                        Some("Open".into())
-                    } else {
-                        (waiting > 0).then(|| format!("{waiting} waiting"))
-                    };
+                    state.status = chat.work_panel_shown().then(|| "Open".into());
                 }
             }
             HeaderSlot::SessionDetails => {
@@ -273,26 +266,15 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
         let mut sections = Vec::new();
-        let mut work_waiting = false;
         for (title, slots) in HEADER_MORE_SECTIONS {
             let rows: Vec<HeaderMoreRow> = slots
                 .iter()
                 .filter_map(|&slot| {
                     let state = self.header_slot_state(slot, cx);
-                    (state.available && !self.header_slot_pinned(slot)).then(|| {
-                        if slot == HeaderSlot::Work
-                            && state
-                                .status
-                                .as_deref()
-                                .is_some_and(|s| s.ends_with("waiting"))
-                        {
-                            work_waiting = true;
-                        }
-                        HeaderMoreRow {
-                            slot,
-                            status: state.status,
-                            live: state.live,
-                        }
+                    (state.available && !self.header_slot_pinned(slot)).then(|| HeaderMoreRow {
+                        slot,
+                        status: state.status,
+                        live: state.live,
                     })
                 })
                 .collect();
@@ -319,18 +301,6 @@ impl GhostexGpuiApp {
                 .aria_expanded(open)
                 .relative()
                 .child(header_icon(TITLEBAR_ICON_DOTS, text))
-                // Work's items waiting on the user, while Work is in here.
-                .when(work_waiting, |this| {
-                    this.child(
-                        div()
-                            .absolute()
-                            .top(px(5.0))
-                            .right(px(4.0))
-                            .size(px(6.0))
-                            .rounded_full()
-                            .bg(gpui::rgb(0xf472b6)),
-                    )
-                })
                 .tooltip(|window, cx| titlebar_tooltip("More", window, cx))
                 .on_mouse_down(
                     MouseButton::Left,
