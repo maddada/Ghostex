@@ -128,11 +128,13 @@ impl NativeChatView {
             .flex()
             .flex_col()
             .gap(px(CARD_GAP * s))
-            .max_h(px((INTRO_MENU_MAX
-                - super::chat_pills::MENU_HEADER_HEIGHT
-                - super::chat_pills::MENU_SECTION_GAP * 2.0
-                - footer_height(&intro))
-                * s))
+            // CDXC:CoordinatorIntro 2026-11-20 WHY: the user: "pls make this don't show again
+            // bottom bar always pinned to bottom". The list had only a fixed cap, so a panel the
+            // window made shorter than its estimate pushed the footer out and cut it at the
+            // edge. The list now takes whatever the fixed-height menu leaves above the footer
+            // (flex_1 + min_h_0) and scrolls; the footer never shrinks.
+            .flex_1()
+            .min_h_0()
             .overflow_y_scroll()
             .child(
                 div()
