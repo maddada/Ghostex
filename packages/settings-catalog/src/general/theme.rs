@@ -6,6 +6,8 @@ use crate::Platform;
 
 /// CDXC:Settings 2026-11-18 DECISION:
 /// User (Q4153, after arranging the Interface tab on a page): "let's split interface into multiple tabs also please to make each one more focused", "themes / glass / colors need to be in 1 area. text and fonts need to be in separate page for sure", "close button on the right and frame the main area and other ones like that need to be in separate place", and (Q4154's note) "under a new section in the sidebar called interface". The one `theming` section is four, one per page of the rail's Interface group: Themes (keeps the `theming` id and the `theme` tab, so old deep links and searches land there), Text & Fonts, Size & Zoom and Window & Layout. Every setting keeps its key, default and behaviour; only the page it is on changed.
+/// CDXC:Settings 2026-11-19 DECISION:
+/// User, on Size & Zoom's "Sidebar size" row, whose Open searched Sidebar & Sessions for "Sidebar Interface Size" and found nothing: "why not just move the settings related to size here in interface instead of linking somewhere else? pls bring settings related to each area in interface to that page". Each Interface page holds its own settings and links nowhere: Sidebar width on double-click (from Sidebar & Sessions) and Commands pane height on double-click (from Terminal) are Size & Zoom's Panel sizes; the terminal's Font weight, Bold text uses a heavier font, Line height and Letter spacing (from Terminal) are Text & Fonts' Terminal text; Terminal background, its colour and image, the image opacity and Background opacity (from Terminal) join Themes' Terminal colours; Animations and Close side panel with its last tab (from Sidebar & Sessions) and Commands pane side (from Terminal) are Window & Layout's Panels. Each lives in one place; keys, defaults and behaviour are unchanged. Chat's Transcript width and Terminal's width and padding stay with the view they shape.
 /// SEE-ALSO: layout.rs (`GENERAL_GROUPS`' `appearance`), help/mod.rs (the four tabs), apps/desktop/src/app/window/settings_modal/model.rs (`RailTier::Interface`).
 pub(crate) fn theming() -> Section {
     let rows = vec![
@@ -43,6 +45,11 @@ pub(crate) fn theming() -> Section {
             row("terminalColorScheme", "Terminal theme", "Follow the app theme by default, or override terminals with Light, Dark, or System.").options(SESSION_CHAT_THEME_OPTIONS),
             row("terminalGhosttyTheme", "Terminal palette in dark mode", "Uses the dark theme set in Ghostex's terminal config, or GitHub Dark when none is set.").options(GHOSTTY_THEME_SETTING_OPTIONS),
             row("terminalGhosttyLightTheme", "Terminal palette in light mode", "Uses the light theme set in Ghostex's terminal config, or GitHub Light when none is set.").options(&ghostty_themes_without_unmanaged()),
+            row("terminalBackgroundMode", "Terminal background", "Only changes the terminal panes. Black / white is pure black in dark mode and pure white in light mode.").options(&[opt("Black / white", "pure"), opt("Follow theme", "theme"), opt("Custom color", "custom")]),
+            row("workspaceBackgroundColor", "Terminal background color", "Custom terminal background, painted behind terminal text in dark and light mode."),
+            row("terminalBackgroundOpacity", "Terminal background opacity (%)", "How much of the work area's glass tint terminals keep while transparency is on (Transparency, higher on this page). 100% matches the rest of the work area; lower shows more of what is behind the window. Off while transparency is off."),
+            row("terminalBackgroundImage", "Terminal background image", "Absolute path to an image drawn behind terminal panes."),
+            row("terminalBackgroundImageOpacity", "Background image opacity", "Blend the background image toward the terminal background color."),
     ];
     section("theming", "Themes", rows)
 }
@@ -52,6 +59,10 @@ pub(crate) fn text_fonts() -> Section {
     let rows = vec![
             row("sessionChatFontFamily", "App font", "Pick one of the fonts installed on this computer for the whole app: sidebar, chat, menus, dialogs and Settings, then press Apply. App default keeps Ghostex's own fonts. Terminals and code use the Monospace font."),
             row("terminalFontFamily", "Monospace font", "Font family for terminals, code in the Files view, diffs, code blocks and tool output in chat. Pick an installed monospace font, or type a Ghostty font-family name, then press Apply."),
+            row("terminalFontWeight", "Font weight", "Set terminal text weight."),
+            row("terminalBoldUsesHeavierFont", "Bold text uses a heavier font", "Draw bold terminal text in a heavier weight. Turn off to keep bold text at your normal font weight, so it stands out by color only. A font-style-bold or font-variation-bold line in Ghostex's terminal config takes priority."),
+            row("terminalLineHeight", "Line height", "Adjust terminal row height."),
+            row("terminalLetterSpacing", "Letter spacing", "Adjust spacing between glyphs."),
             row("sessionChatTextStrengthPercent", "Text strength", "How strong agents' replies and your messages read in chat, on the computer and the phone. 0% is the standard colour; 100% is full white in dark mode and full black in light mode. Muted text, links, code blocks and status colours stay as they are."),
             row("sessionChatMutedThinking", "Show thinking in grey", "Show the agent's thinking in grey, so it reads apart from the agent's replies."),
     ];
@@ -76,6 +87,11 @@ pub(crate) fn size_zoom(platform: Platform) -> Section {
             row("linuxDisplayScale", "Display scale", "How big the whole app is drawn: the header, menus, dialogs and web pages too. Automatic follows your desktop's display scale; pick a fixed one if Ghostex gets it wrong. UI Scale applies on top. Takes effect when Ghostex restarts. Default: Automatic.").options(crate::interface_scale::LINUX_DISPLAY_SCALE_OPTIONS),
         );
     }
+    // Panel sizes, the page's second group (CDXC:Settings 2026-11-19 at [`theming`]).
+    rows.extend([
+        row("sidebarDefaultWidthPx", "Sidebar width on double-click", "Width restored when double-clicking the sidebar resize handle."),
+        row("commandsPanelDefaultHeightPx", "Commands pane height on double-click", "Height used when opening the command pane and when double-clicking its top resize rail."),
+    ]);
     section("sizeZoom", "Size & Zoom", rows)
 }
 
@@ -89,6 +105,10 @@ pub(crate) fn window_layout() -> Section {
             row("closeButtonsOnRight", "Close buttons on the right", "Put the X that closes dialogs and pop-up messages at their top right. Off keeps it at their top left, where macOS puts a window's close button."),
             row("showActivePaneOutline", "Show active pane outline", "Show an outline around the currently focused pane."),
             row("workspaceActivePaneBorderColor", "Active pane outline colour", "Color of the outline around the currently focused pane."),
+            row("panelAnimationSpeed", "Animations", "Set how fast the sidebar, the side panel, the Agents Panel and the bottom or right panel slide open and closed: Off, Slow, Normal or Fast. Reduce Motion in your computer settings always turns it off.").options(PANEL_ANIMATION_SPEED_OPTIONS),
+            row("sidebarCollapseAnimationDurationMs", "Animations (fold speed, set with Animations)", "Set how quickly sidebar sections, groups, and projects expand or collapse, and how quickly the floating sidebar and Agents Panel slide in from the window edge. Set to 0 for no animation."),
+            row("closeSidePanelWithLastTab", "Close side panel with its last tab", "Close the side panel when you close its last tab, instead of showing the Open a view picker."),
+            row("commandsPanelSide", "Commands pane side", "Dock the command pane below the workspace or to its right.").options(COMMANDS_PANEL_SIDE_OPTIONS),
     ];
     section("windowLayout", "Window & Layout", rows)
 }

@@ -1,5 +1,6 @@
-//! The Commands pane rows of Settings > Terminal: its height on double-click, its side, and
-//! Auto-minimize.
+//! The Commands pane row of Settings > Terminal: Auto-minimize. Its height on double-click and its
+//! side are on Size & Zoom and Window & Layout since CDXC:Settings 2026-11-19 (the settings
+//! catalog's general/theme.rs, `theme/panels.rs`).
 //!
 //! CDXC:Settings 2026-11-11 DECISION:
 //! User: "move settings around so things make full sense"; Q2511 ("Move all five"): the Commands pane rows moved here from Sidebar & Sessions, because the pane is a terminal under or beside the work area, not part of the sidebar. Each row keeps its name, its key and its place in the Advanced fold (Commands pane side is an everyday row).
@@ -18,33 +19,6 @@ pub(super) fn commands_pane_rows(
     cx: &mut Context<GeneralTab>,
 ) -> Vec<AnyElement> {
     let mut rows: Vec<AnyElement> = Vec::new();
-    rows.extend(page.slider(
-        g,
-        s,
-        "commandsPanelDefaultHeightPx",
-        "Commands pane height on double-click",
-        "Used when opening the command pane (F12 or sidebar) and when double-clicking its top resize rail.",
-        (
-            g.number("MIN_COMMANDS_PANEL_DEFAULT_HEIGHT_PX"),
-            g.number("MAX_COMMANDS_PANEL_DEFAULT_HEIGHT_PX"),
-            1.0,
-        ),
-        false,
-        window,
-        cx,
-    ));
-    rows.extend(page.select(
-        g,
-        s,
-        "commandsPanelSide",
-        "Commands pane side",
-        "Where terminal Actions and F12 open the command pane: below the workspace or as a column to its right.",
-        g.options("COMMANDS_PANEL_SIDE_OPTIONS"),
-        None,
-        false,
-        window,
-        cx,
-    ));
     // CDXC:Settings 2026-10-29 DECISION (cleanup Q21): Auto-minimize Commands pane and Minimize
     // after are one select: Off, or how long the pane stays open after focus and the pointer leave.
     if g.any_visible(

@@ -17,7 +17,6 @@ mod sidebar;
 mod system;
 mod terminal;
 pub(super) mod terminal_font;
-mod terminal_transparency;
 
 use super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::fields::advanced_fold_header;
@@ -444,8 +443,9 @@ impl Render for GeneralTab {
                 },
             )));
         }
-        // The preview binary's `select` state opens a dropdown; its `pick-color` state (and a host
-        // without a system colour panel) the terminal background's Pick Color dialog.
+        // The preview binary's `select` state opens a dropdown. Its `pick-color` state (and a host
+        // without a system colour panel) opens the terminal background's Pick Color dialog, which
+        // is on Themes since 2026-11-19 (theme/mod.rs); a request for any other key is dropped here.
         if let Some(id) = self
             .store
             .update(cx, |store, _| store.request_mut().open_select.take())
@@ -453,18 +453,12 @@ impl Render for GeneralTab {
             self.fields.pending_open_select = Some(id.into());
             cx.notify();
         }
-        let open_picker = self
-            .store
-            .update(cx, |store, _| store.request_mut().open_color_picker.take());
-        if open_picker.as_deref() == Some("workspaceBackgroundColor") {
-            super::super::fields::open_picker(
-                self,
-                "workspaceBackgroundColor",
-                "#121212",
-                window,
-                cx,
-            );
-        }
+        self.store.update(cx, |store, _| {
+            let request = store.request_mut();
+            if request.open_color_picker.as_deref() != Some("workspaceBackgroundColor") {
+                request.open_color_picker = None;
+            }
+        });
         let preview = self.marked_sections_preview(&g, window, cx);
         let instructions =
             super::orchestrator_playbook::render_playbook_sheet(self, &g.p, window, cx);

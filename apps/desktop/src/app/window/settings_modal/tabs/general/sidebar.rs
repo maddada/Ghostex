@@ -269,73 +269,8 @@ fn sidebar_section(
         false,
         cx,
     ));
-    rows.extend(page.slider(
-        g,
-        s,
-        "sidebarDefaultWidthPx",
-        "Sidebar width on double-click",
-        "Used when double-clicking the sidebar resize handle. App restart still restores your last manually set sidebar width.",
-        (g.number("MIN_SIDEBAR_DEFAULT_WIDTH_PX"), g.number("MAX_SIDEBAR_DEFAULT_WIDTH_PX"), 1.0),
-        false,
-        window,
-        cx,
-    ));
-    // CDXC:Settings 2026-10-29 DECISION (cleanup Q13): one Animations row sets the panel slide
-    // speed and the sidebar fold speed together (Off 0 ms, Slow 600, Normal 400, Fast 200).
-    if g.any_visible(
-        s,
-        &["panelAnimationSpeed", "sidebarCollapseAnimationDurationMs"],
-    ) {
-        let spec = g
-            .spec(
-                "panelAnimationSpeed",
-                "Animations",
-                "How fast the sidebar, the side panel, the Agents Panel and the bottom or right panel slide open and closed, and how fast sidebar sections, groups and projects fold. Reduce Motion in your computer settings always turns them off.",
-            )
-            .modified(
-                g.values.is_modified("panelAnimationSpeed")
-                    || g.values.is_modified("sidebarCollapseAnimationDurationMs"),
-            );
-        let options = g.options("PANEL_ANIMATION_SPEED_OPTIONS");
-        let allowed: Vec<String> = options.iter().map(|option| option.value.clone()).collect();
-        let value = g.values.choice("panelAnimationSpeed", &allowed);
-        let reset: PageAction<GeneralTab> = Rc::new(|page: &mut GeneralTab, _window, cx| {
-            let store = page.store.clone();
-            store.update(cx, |store, cx| {
-                store.reset_setting("panelAnimationSpeed", cx);
-                store.reset_setting("sidebarCollapseAnimationDurationMs", cx);
-            });
-        });
-        rows.push(segmented_field(
-            &g.p,
-            "panelAnimationSpeed",
-            spec,
-            Some(reset),
-            &options,
-            Some(value.as_str()),
-            None,
-            |page: &mut GeneralTab, next, _window, cx| {
-                let fold_ms = match next.as_str() {
-                    "off" => 0,
-                    "slow" => 600,
-                    "fast" => 200,
-                    _ => 400,
-                };
-                let mut patch = Map::new();
-                patch.insert("panelAnimationSpeed".to_string(), json!(next));
-                patch.insert(
-                    "sidebarCollapseAnimationDurationMs".to_string(),
-                    json!(fold_ms),
-                );
-                let store = page.store.clone();
-                store.update(cx, |store, cx| {
-                    store.apply_patch(patch, "settings:control", cx)
-                });
-            },
-            cx,
-        ));
-    }
-    rows.extend(page.toggle(g, s, "closeSidePanelWithLastTab", "Close side panel with its last tab", "Close the side panel when you close its last tab, instead of showing the Open a view picker.", false, cx));
+    // Sidebar width on double-click, Animations and Close side panel with its last tab are on Size &
+    // Zoom and Window & Layout since CDXC:Settings 2026-11-19 (the settings catalog's general/theme.rs).
     // CDXC:Settings 2026-10-29 DECISION (cleanup Q14): the old tab strip's Hide New Terminal and
     // Hide New Browser Tab rows are gone with it.
     // The sidebar's Sort & Filter menu writes the same setting (CDXC:Sidebar 2026-10-05 in gx-core

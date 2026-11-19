@@ -4,9 +4,9 @@ use super::super::super::super::native_modal_kit::hsla;
 use super::super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::super::fields::toggle_field_with;
 use super::super::super::fields::{
-    ButtonVariant, RowSpec, SliderBinding, SliderSaver, card_inset, color_field, reset_key,
-    select_field, setting_row, settings_button, settings_section, slider_number_field_with,
-    text_field, tooltip_text,
+    ButtonVariant, RowSpec, SliderBinding, SliderSaver, card_inset, reset_key, select_field,
+    setting_row, settings_button, settings_section, slider_number_field_with, text_field,
+    tooltip_text,
 };
 use super::super::super::model::SettingsTabId;
 use super::super::super::page::PageBlock;
@@ -21,9 +21,6 @@ use gpui::{
 use gpui_component::{h_flex, v_flex};
 use serde_json::{Map, Value, json};
 use std::rc::Rc;
-
-/// The colour Terminal background starts from when Follow theme is turned off.
-const TERMINAL_BACKGROUND_STARTING_COLOR: &str = "#111111";
 
 fn option(label: &str, value: &str) -> SettingOption {
     SettingOption {
@@ -91,7 +88,7 @@ fn ghostty_preset(page: &mut GeneralTab, recommended: bool, cx: &mut Context<Gen
 }
 
 /// CDXC:Settings 2026-10-31 DECISION:
-/// User: the Terminal page gets a link row to the moved Monospace font, which jumps to it on the Interface page (Text & Fonts since 2026-11-18). The font itself lives once, beside the App font and the chat preview (`theme/font.rs`).
+/// User: the Terminal page gets a link row to the moved Monospace font, which jumps to it on the Interface page (Text & Fonts since 2026-11-18). The font itself lives once, beside the App font and the chat preview (`theme/font.rs`), and since 2026-11-19 the terminal's weight, line height and letter spacing sit there too (Terminal text, `theme/terminal_text.rs`).
 fn monospace_font_link(p: &SettingsPalette, cx: &mut Context<GeneralTab>) -> AnyElement {
     let button = settings_button(
         p,
@@ -112,8 +109,9 @@ fn monospace_font_link(p: &SettingsPalette, cx: &mut Context<GeneralTab>) -> Any
     setting_row(
         p,
         "terminal-monospace-font-link-row",
-        RowSpec::new("Monospace font")
-            .description("The terminal's font is set on the Text & Fonts page, with the App font."),
+        RowSpec::new("Monospace font").description(
+            "The terminal's font, its weight, line height and letter spacing are set on the Text & Fonts page, with the App font.",
+        ),
         None,
         button,
         cx,
@@ -353,124 +351,8 @@ fn terminal_section(
             ));
         }
     }
-    // CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): with Terminal shaders on (macOS) the
-    // shaders draw the background from Ghostex's terminal config, so Terminal background and its
-    // colour are hidden instead of greyed out; the saved choice returns when shaders go off.
-    let shaders_own_background =
-        cfg!(target_os = "macos") && g.values.bool("terminalShadersEnabled");
-    if !shaders_own_background && g.visible(s, "terminalBackgroundMode") {
-        let spec = g.spec(
-            "terminalBackgroundMode",
-            "Terminal background",
-            "Only changes the terminal panes. Black / white is pure black in dark mode and pure white in light mode.",
-        );
-        let options = vec![
-            option("Black / white", "pure"),
-            option("Follow theme", "theme"),
-            option("Custom color", "custom"),
-        ];
-        let allowed: Vec<String> = options.iter().map(|option| option.value.clone()).collect();
-        let value = g.values.choice("terminalBackgroundMode", &allowed);
-        rows.push(select_field(
-            page,
-            &p,
-            "terminalBackgroundMode",
-            spec,
-            Some(reset_key::<GeneralTab>("terminalBackgroundMode")),
-            &options,
-            &value,
-            None,
-            |page: &mut GeneralTab, next, _window, cx| {
-                let store = page.store.clone();
-                store.update(cx, |store, cx| {
-                    let mut patch = serde_json::Map::new();
-                    if next == "custom" && store.string("workspaceBackgroundColor").is_empty() {
-                        patch.insert(
-                            "workspaceBackgroundColor".into(),
-                            json!(TERMINAL_BACKGROUND_STARTING_COLOR),
-                        );
-                    }
-                    patch.insert("terminalBackgroundMode".into(), json!(next));
-                    store.apply_patch(patch, "settings:control", cx);
-                });
-            },
-            window,
-            cx,
-        ));
-    }
-    if !shaders_own_background
-        && g.values.string("terminalBackgroundMode") == "custom"
-        && g.visible(s, "workspaceBackgroundColor")
-    {
-        let spec = g
-            .spec(
-                "workspaceBackgroundColor",
-                "Terminal background color",
-                "Painted behind terminal text in dark and light mode. Window glass keeps the theme.",
-            )
-            .dependent();
-        let value = g.values.string("workspaceBackgroundColor");
-        rows.push(color_field(
-            page,
-            &p,
-            "workspaceBackgroundColor",
-            spec,
-            Some(reset_key::<GeneralTab>("workspaceBackgroundColor")),
-            &value,
-            window,
-            cx,
-        ));
-    }
-    rows.extend(super::terminal_transparency::transparency_rows(
-        page, g, window, cx,
-    ));
-    if g.visible(s, "terminalBackgroundImage") {
-        let spec = g.spec(
-            "terminalBackgroundImage",
-            "Background image",
-            "Absolute path to an image drawn behind terminal panes. Leave blank for none.",
-        );
-        let value = g.values.string("terminalBackgroundImage");
-        rows.push(text_field(
-            page,
-            &p,
-            "terminalBackgroundImage",
-            spec,
-            Some(reset_key::<GeneralTab>("terminalBackgroundImage")),
-            &value,
-            Some("/Users/you/Pictures/background.png"),
-            None,
-            Some((
-                "Choose image file".into(),
-                std::rc::Rc::new(
-                    |page: &mut GeneralTab, _window: &mut Window, cx: &mut Context<GeneralTab>| {
-                        post(
-                            page,
-                            json!({ "type": "pickTerminalBackgroundImageFile" }),
-                            cx,
-                        )
-                    },
-                ),
-            )),
-            window,
-            cx,
-        ));
-    }
-    // CDXC:Settings 2026-10-29 DECISION (cleanup Q16): the opacity sits under the picked image, and the
-    // image always covers the pane (the Fit setting is gone).
-    if !g.values.string("terminalBackgroundImage").trim().is_empty() {
-        rows.extend(page.slider(
-            g,
-            s,
-            "terminalBackgroundImageOpacity",
-            "Background image opacity",
-            "Blend the background image toward the terminal background color.",
-            (0.0, 1.0, 0.05),
-            true,
-            window,
-            cx,
-        ));
-    }
+    // Terminal background, its colour and image, and Background opacity are on Themes' Terminal
+    // colours since CDXC:Settings 2026-11-19 (the settings catalog's general/theme.rs).
     // The two links are not settings, so only the page body's pass draws them: drawn in the
     // Advanced fold's pass too they showed twice once the fold opened, with the same element ids
     // (a duplicate a11y node, a panic in a debug build).
@@ -478,48 +360,6 @@ fn terminal_section(
         rows.push(monospace_font_link(&p, cx));
         rows.push(font_size_link(&p, cx));
     }
-    rows.extend(page.slider(
-        g,
-        s,
-        "terminalFontWeight",
-        "Font weight",
-        "Set terminal text weight.",
-        (100.0, 900.0, 50.0),
-        false,
-        window,
-        cx,
-    ));
-    rows.extend(page.toggle(
-        g,
-        s,
-        "terminalBoldUsesHeavierFont",
-        "Bold text uses a heavier font",
-        "Draw bold terminal text in a heavier weight. Turn off to keep bold text at your normal font weight, so it stands out by color only. A font-style-bold or font-variation-bold line in Ghostex's terminal config takes priority.",
-        false,
-        cx,
-    ));
-    rows.extend(page.slider(
-        g,
-        s,
-        "terminalLineHeight",
-        "Line height",
-        "Adjust terminal row height.",
-        (0.8, 2.0, 0.1),
-        false,
-        window,
-        cx,
-    ));
-    rows.extend(page.slider(
-        g,
-        s,
-        "terminalLetterSpacing",
-        "Letter spacing",
-        "Adjust spacing between glyphs.",
-        (-2.0, 8.0, 0.1),
-        false,
-        window,
-        cx,
-    ));
     // CDXC:Settings 2026-10-29 DECISION (cleanup Q15): Terminal width is one slider (100% is the
     // full pane, so the Full choice is gone) and Match chat a switch; Padding is one slider that
     // sets both axes.

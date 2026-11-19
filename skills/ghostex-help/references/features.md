@@ -107,7 +107,7 @@ for this project are not in the list; **Manage views and where they appear…** 
 the bottom opens their settings, and **Hidden here** on the `+` menu brings one
 back. Closing the panel's last tab closes the whole panel; to bring the picker
 back instead, turn off **Close side panel with its last tab** in Settings >
-Sidebar & Sessions, under Advanced at the bottom of the page (`closeSidePanelWithLastTab`, on by default).
+Window & Layout > Panels (`closeSidePanelWithLastTab`, on by default).
 
 While a view in the side panel has focus, the session shortcuts act on that view
 instead of the session beside it: Cmd+W or Cmd+Shift+Backspace closes its tab,
@@ -1225,7 +1225,8 @@ put it back; each project remembers its own. Your agents keep running and stay e
 where they are while you open, change and close views.
 
 - Width: the sidebar sits on the left; drag the divider to resize,
-  double-click it to restore `sidebarDefaultWidthPx`. Cmd+B collapses it.
+  double-click it to restore the width set in Settings > Size & Zoom > Panel sizes
+  (`sidebarDefaultWidthPx`). Cmd+B collapses it.
 - Reveal active session: the hollow-circle header button expands its section and scrolls
   the active session into view with 50px of space from the top or bottom edge
   (below any pinned headers, where scrolling allows), then blinks its outline
@@ -1239,7 +1240,7 @@ where they are while you open, change and close views.
   floating while you hover it. While collapsed, hovering the window's left 10px (an
   invisible hover zone over whatever is there) floats the sidebar back over your work, and it slides away when you
   move off it; the slide runs at the sidebar's Animations speed (Settings >
-  Sidebar & Sessions > Animations, which also sets `sidebarCollapseAnimationDurationMs`; Off for no animation), whatever the
+  Window & Layout > Panels > Animations, which also sets `sidebarCollapseAnimationDurationMs`; Off for no animation), whatever the
   system's Reduce Motion setting says. If you have also expanded a view to fill the window, that edge
   splits in two: hovering the top half floats the sidebar and the bottom half
   floats the Agents Panel, so you can glance at your agents without
@@ -1253,7 +1254,7 @@ where they are while you open, change and close views.
 - Panel animations: showing or hiding the sidebar, the side panel, the Agents Panel
   and the bottom or right command pane slides it open or closed; the side panel and a
   right-docked pane slide in from the window's right edge, and the command pane's
-  terminals fade in as it finishes opening. "Panel animations" sets the speed: Off,
+  terminals fade in as it finishes opening. Animations (Settings > Window & Layout > Panels) sets the speed: Off,
   Slow, Normal (the default) or Fast. With Reduce Motion turned on in your computer's
   settings, panels always open and close instantly (`panelAnimationSpeed`).
 - Pane width: agent panes have a minimum resize width of 388px, and so does the
@@ -1349,7 +1350,7 @@ where they are while you open, change and close views.
   Click anywhere across the heading row, including the empty space to its
   right, to animate the section closed or open. Sessions keep their full size
   and spacing while the section reveals or clips the list. The animation follows the
-  Animations row (Settings > Sidebar & Sessions) and reduced-motion preferences. Related setting:
+  Animations row (Settings > Window & Layout > Panels) and reduced-motion preferences. Related setting:
   `sidebarCollapseAnimationDurationMs`.
 - A red dot on a session usually means its agent is stuck waiting for your
   approval (a permission prompt such as "Run shell command? Yes / No"). It wins
@@ -1466,7 +1467,7 @@ and `agentManagerZoomPercent` (the sidebar's size, Settings > Size & Zoom), `sid
 ## Commands pane
 
 The Commands pane holds command terminals below the workspace, or on its right
-when Commands pane side (Settings > Terminal) is set to Right. Open it with Cmd+J (Mac), Shift+Esc or F12; Settings > Hotkeys can
+when Commands pane side (Settings > Window & Layout > Panels) is set to Right. Open it with Cmd+J (Mac), Shift+Esc or F12; Settings > Hotkeys can
 change the first two (Open Commands Panel and its Second Key). The **Terminal** view
 (see Views) is the same kind of terminal opened as a tab of the view panel
 instead; it has its own tabs and does not affect the Commands pane. Auto-minimize Commands
@@ -1484,8 +1485,9 @@ Keep open survives project switches but resets when the app restarts.
 Middle-click a tab to close it, or middle-click an empty spot in the tab bar to
 close all of that bar's terminals at once.
 Related settings: `commandsPanelAutoMinimize`,
-`commandsPanelAutoMinimizeDelaySeconds`, `commandsPanelSide`,
-`commandsPanelDefaultHeightPx`.
+`commandsPanelAutoMinimizeDelaySeconds` (Settings > Terminal), `commandsPanelSide`
+(Settings > Window & Layout > Panels), `commandsPanelDefaultHeightPx` (Settings > Size & Zoom >
+Panel sizes).
 
 ## Sessions
 
@@ -3547,8 +3549,9 @@ Keys: `windowsTerminalBackend`, `windowsWslDistribution`.
 
 Terminals are embedded Ghostty surfaces with their own config file, separate
 from the Ghostty app: Ghostex never reads or changes Ghostty's own config. Font,
-theme, cursor, padding, scrollback, clipboard, and scrolling are Settings >
-Settings > Terminal rows and are written into Ghostex's terminal config
+theme, cursor, padding, scrollback, clipboard, and scrolling are Settings rows
+(Terminal; the font, its weight, line height and letter spacing on Text & Fonts; the
+size on Size & Zoom; the theme, palettes and background on Themes) and are written into Ghostex's terminal config
 (`~/.config/ghostex/ghostty/config.ghostty` on macOS and Linux,
 `%APPDATA%\Ghostex\ghostty\config.ghostty` on Windows). The Ghostty settings
 actions row applies the recommended set, resets the defaults, opens the Ghostty
@@ -3622,17 +3625,17 @@ are GitHub Light and GitHub Dark. All open terminals refresh automatically when 
 app, system, or terminal theme changes, including idle terminals and terminals in
 inactive projects. The appearance override and light palette apply to Ghostex only.
 
-Terminal background (Settings, Terminal) is Black / white by default: pure black
+Terminal background (Settings > Themes > Terminal colours) is Black / white by default: pure black
 behind dark terminals and pure white behind light ones. Choose Follow theme to use
 the theme's background color instead, or Custom color to pick your own for both
 dark and light mode. A theme preset (Settings > Themes, under Appearance) sets Follow theme.
 
 Terminals are see-through only while the window is: set Transparency to Dark only
 or Always (Settings > Themes > Glass; it starts Off on Windows and Dark only on
-macOS and Linux). Background opacity (Settings, Terminal) then sets how much of the
-work area's tint terminals keep: 100% matches the rest of the work area, lower
-shows more of your desktop through them. While transparency is off the row offers
-Turn on transparency instead. The window's Blur (on Windows with Desktop and windows,
+macOS and Linux). Terminal background opacity (Settings > Themes > Terminal colours, shown
+while Transparency is on) then sets how much of the work area's tint terminals keep: 100%
+matches the rest of the work area, lower shows more of your desktop through them. Terminal
+background image, in the same group, draws a picture behind terminal panes. The window's Blur (on Windows with Desktop and windows,
 the Acrylic, Plain blur or Off choice) is set on the Themes page only (Settings > Themes >
 Glass). Ghostty's own `background-opacity`
 and `background-blur` lines in the terminal config do not change Ghostex's panes.
@@ -8025,11 +8028,15 @@ Settings has an **Interface** group in its sidebar, right under Experience, with
 (`ghostex settings open --tab interface` lists their settings):
 **Themes** (`--tab theme`): Themes (Appearance, the presets, Theme it in your words), Colours,
 Glass, Chat colours (with Chat theme), Fine-tune colours and Terminal colours (Terminal theme,
-the palettes and a link to Terminal background); **Text & Fonts** (`--tab textFonts`): Fonts and
-Text; **Size & Zoom** (`--tab sizeZoom`): Scale, a link to the sidebar's size, and More size
-options; **Window & Layout** (`--tab windowLayout`): Window frame (Frame the work area, the window
-buttons, Close buttons on the right) and Panes (the active pane outline). A search for a row
-inside a More fold opens it.
+the palettes, Terminal background and its colour, Terminal background opacity, and the
+background image); **Text & Fonts** (`--tab textFonts`): Fonts, Terminal text (the terminal's
+font weight, bold text, line height and letter spacing) and Text; **Size & Zoom** (`--tab
+sizeZoom`): Size (Scale and More size options) and Panel sizes (the sidebar's width and the
+Commands pane's height on double-click); **Window & Layout** (`--tab windowLayout`): Window frame
+(Frame the work area, the window buttons, Close buttons on the right), Panes (the active pane
+outline) and Panels (Animations, Close side panel with its last tab, Commands pane side). Each
+setting is on one page, and these pages link nowhere else. A search for a row inside a More
+fold opens it.
 Fonts: App font lists the fonts installed on this computer, with a search field and
 each name drawn in its own font; monospaced fonts sit at the end of the list. The
 pick applies to the whole app (sidebar, chat, composer, menus, dialogs, Settings,
