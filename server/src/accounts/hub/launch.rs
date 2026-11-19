@@ -73,6 +73,19 @@ fn io(error: std::io::Error) -> DomainStateError {
     DomainStateError::bad_request(format!("Couldn't set up the hub's profile folder: {error}"))
 }
 
+/// The `apiKeyHelper` command that prints the key file.
+///
+/// CDXC:AgentProviders 2026-11-19 WHY:
+/// On native Windows Claude Code runs `apiKeyHelper` through `cmd.exe` (its `ComSpec`), not PowerShell or bash: a probe on Windows with Claude Code 2.1.328 saw `%OS%` expanded and `$0` left as text, and the `cat '…'` helper failed with "'cat' is not recognized", so a session On the hub had no key. cmd's own `type "…"` prints the file there; everywhere else the helper runs in a POSIX shell.
+fn key_helper(key_file: &Path) -> String {
+    let path = key_file.to_string_lossy();
+    if cfg!(windows) {
+        format!("type \"{path}\"")
+    } else {
+        format!("cat {}", quote_shell_arg(&path))
+    }
+}
+
 /// Claude's folder: the key file, `settings.json` with the hub's address and the key helper (the
 /// hooks Ghostex adds there are kept), and `.claude.json` marked as past Claude's first-run steps.
 fn prepare_claude(
@@ -97,13 +110,7 @@ fn prepare_claude(
     } else {
         settings.insert("env".into(), json!({ "ANTHROPIC_BASE_URL": url }));
     }
-    settings.insert(
-        "apiKeyHelper".into(),
-        json!(format!(
-            "cat {}",
-            quote_shell_arg(&key_file.to_string_lossy())
-        )),
-    );
+    settings.insert("apiKeyHelper".into(), json!(key_helper(&key_file)));
     // What Ghostex gives every Claude profile with or without hooks: its statusLine (the model,
     // effort and limits the chat shows) while Read live status from Claude Code and Cursor is on
     // (agent_hooks/statusline_setting.rs), and transcripts kept for good.
