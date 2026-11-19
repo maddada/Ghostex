@@ -171,6 +171,13 @@ impl RemoteTab {
             code_edited: false,
             _subscriptions: subscriptions,
         });
+        // Its Paired computers (server_links.rs), asked through its tunnel.
+        if let Some(machine_id) = machine
+            .and_then(|machine| machine.get("id").and_then(Value::as_str))
+            .map(str::to_string)
+        {
+            self.refresh_server_links(Some(machine_id), cx);
+        }
         cx.notify();
     }
 
@@ -1234,6 +1241,13 @@ pub(super) fn machine_dialog(
     let mut body = v_flex().w_full().min_w_0().gap(px(12.0)).pr(px(2.0));
     if let Some(machine_id) = machine_id.as_deref()
         && let Some(panel) = machine_status_panel(tab, t, &colors, machine_id, &title, cx)
+    {
+        body = body.child(panel);
+    }
+    // The computers it keeps a server link with (server_links.rs).
+    if let Some(machine_id) = machine_id.as_deref()
+        && let Some(panel) =
+            super::server_links::server_links_panel(tab, t, Some(machine_id.to_string()), &title, cx)
     {
         body = body.child(panel);
     }

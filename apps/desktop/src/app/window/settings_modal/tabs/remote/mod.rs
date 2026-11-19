@@ -40,6 +40,7 @@ mod pair_again;
 mod paired_devices;
 mod reach;
 mod relay;
+mod server_links;
 mod ssh_form;
 mod ssh_row;
 mod style;
@@ -228,6 +229,8 @@ pub(crate) struct RemoteTab {
     preview_applied: bool,
     /// Phones and computers from before 11.0.1 that still wait to be paired again (pair_again.rs).
     pair_again_waiting: usize,
+    /// Each computer's server links (Paired computers, server_links.rs): `""` is this computer.
+    server_links: HashMap<String, server_links::LinksView>,
 }
 
 impl super::HoldsUnsavedInput for RemoteTab {
@@ -370,6 +373,7 @@ impl RemoteTab {
             advanced: advanced::AdvancedState::default(),
             relay: relay::RelayState::default(),
             machine_dialog: None,
+            server_links: HashMap::new(),
             computer_icons: Default::default(),
             kept_machine_form: None,
             machines_bounds: Rc::new(Cell::new(None)),
@@ -671,6 +675,7 @@ impl RemoteTab {
             return;
         }
         self.slow_in_flight = true;
+        self.refresh_server_links(None, cx);
         self.rpc(
             "/api/securityUpgradeNotice",
             json!({ "op": "read" }),

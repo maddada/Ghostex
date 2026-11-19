@@ -304,6 +304,11 @@ pub(super) fn reach_card(
             )),
     );
     body = body.child(paired_devices::device_rows(tab, t, rpc, cx));
+    if let Some(panel) =
+        super::server_links::server_links_panel(tab, t, None, "this computer", cx)
+    {
+        body = body.child(panel);
+    }
     path_card(
         t,
         "remote-reach-card",
