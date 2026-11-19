@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
-use crate::accounts::model::Provider;
+use crate::accounts::model::{NewSessionAccount, Provider, Registry};
 use crate::agents::quote_shell_arg;
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
@@ -283,6 +283,56 @@ pub(crate) fn apply(
     let command = in_profile(provider, &dir, base);
     runtime.insert("accountBaseCommand".into(), json!(command));
     Ok(command)
+}
+
+/// The hub `id` names (`cliproxy:<hub id>`) while the extension is on and the hub is still saved.
+fn saved_hub(paths: &GxserverPaths, id: &str) -> Option<String> {
+    let hub_id = id.strip_prefix(ACCOUNT_PREFIX)?;
+    (super::enabled(paths) && super::store::find(paths, hub_id).is_some())
+        .then(|| hub_id.to_string())
+}
+
+/// The hub `provider`'s New sessions start on is pinned to, while it can be used. A pin to a hub
+/// that was removed, or while the extension is off, reads as no hub (the rule falls back to Auto).
+///
+/// CDXC:AgentProviders 2026-11-19 DECISION:
+/// User: "make my macbook and windows machine call claude and codex thro that hub which should balance my different accounts". A hub is a choice in New sessions start on, saved as a pinned account `cliproxy:<hub id>`, so every launch that names no account (quick launch, the launchers, `start-thread`, `agents create`, the phone) starts On the hub, and the hub balances its own accounts. A picked account and a workspace's Claude account still win, as they do over every rule.
+/// SEE-ALSO: default_account.rs (`pick`, `quick_launch_accounts`), agents/launch_plan.rs, apps/desktop/src/app/window/settings_modal/tabs/accounts/rules.rs.
+pub(crate) fn default_hub(registry: &Registry, provider: Provider) -> Option<String> {
+    match registry.new_session_accounts.get(&provider)? {
+        NewSessionAccount::Pinned { id } if id.starts_with(ACCOUNT_PREFIX) => {
+            saved_hub(&crate::paths::get_gxserver_paths(None), id)
+        }
+        _ => None,
+    }
+}
+
+/// Whether `id` is a saved hub (`cliproxy:<hub id>`) that New sessions start on can be pinned to.
+pub(crate) fn pinnable(paths: &GxserverPaths, id: &str) -> bool {
+    saved_hub(paths, id).is_some()
+}
+
+/// The hub `wanted` names (`ghostex coordinator start-thread --account`): its id, `cliproxy:<id>`,
+/// its name or host (any case), or `hub` while exactly one is saved. `None` when the extension is
+/// off or nothing matches, so the name is read as a Claude Swap or Codex Swap account.
+pub(crate) fn hub_named(paths: &GxserverPaths, wanted: &str) -> Option<String> {
+    if !super::enabled(paths) {
+        return None;
+    }
+    let hubs = super::store::read(paths).ok()?;
+    let wanted = wanted.trim();
+    let id = wanted.strip_prefix(ACCOUNT_PREFIX).unwrap_or(wanted);
+    if let Some(hub) = hubs.iter().find(|hub| {
+        hub.id == id
+            || (!hub.label.trim().is_empty() && hub.label.trim().eq_ignore_ascii_case(wanted))
+            || super::host(&hub.url).eq_ignore_ascii_case(wanted)
+    }) {
+        return Some(hub.id.clone());
+    }
+    match hubs.as_slice() {
+        [only] if wanted.eq_ignore_ascii_case("hub") => Some(only.id.clone()),
+        _ => None,
+    }
 }
 
 /// The hub id a launcher's picked account names (`cliproxy:<hub id>`), if it names one.

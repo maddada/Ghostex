@@ -173,6 +173,60 @@ pub(crate) fn create_agent_session_params_for_project(
     } else {
         configured_command
     };
+    // `coordinator start-thread --account`: the account is checked here, where the agent and its command are known, and stored as the picked account `apply_new_session` honours (or, for a hub, the hub below starts on).
+    if let Some(wanted) = read_text(params, "account") {
+        if agentbox_provider.is_some() {
+            return Err(DomainStateError::bad_request(
+                "A session that runs in a box takes no account. Leave out --account.",
+            ));
+        }
+        let id = crate::accounts::launch::requested_account(
+            db,
+            &agent_id,
+            agent_icon.as_deref(),
+            configured_command.as_deref(),
+            &wanted,
+        )?;
+        runtime_settings.insert("accountId".to_string(), json!(id));
+    } else if agentbox_provider.is_none() && !runtime_settings.contains_key("accountId") {
+        // New sessions start on a hub (CDXC:AgentProviders 2026-11-19 in accounts/hub/launch.rs),
+        // unless the workspace picks a Claude account or the command chooses its own login.
+        if let Some(provider) =
+            crate::accounts::launch::agent_provider(&agent_id, agent_icon.as_deref())
+        {
+            let base = configured_command
+                .clone()
+                .or_else(|| default_agent_command(&agent_id).map(str::to_string))
+                .unwrap_or_else(|| provider.id().to_string());
+            if !crate::accounts::launch::uses_own_login(&base, provider) {
+                let registry = crate::accounts::store::read(db)?;
+                let workspace_account = match provider {
+                    crate::accounts::model::Provider::Claude => {
+                        crate::workspaces::project_claude_account_id(db, project)?.filter(|id| {
+                            registry
+                                .accounts
+                                .iter()
+                                .any(|a| a.id == *id && a.provider == provider && !a.user_disabled)
+                        })
+                    }
+                    crate::accounts::model::Provider::Codex => None,
+                };
+                if workspace_account.is_none() {
+                    if let Some(hub) =
+                        crate::accounts::hub::launch::default_hub(&registry, provider)
+                    {
+                        runtime_settings.insert(
+                            "accountId".to_string(),
+                            json!(format!(
+                                "{}{hub}",
+                                crate::accounts::hub::launch::ACCOUNT_PREFIX
+                            )),
+                        );
+                    }
+                }
+            }
+        }
+    }
     // On the hub (CDXC:AgentProviders 2026-11-18 in accounts/hub/launch.rs): a launcher that picked
     // a CLIProxyAPI hub as the account starts the session in that hub's profile folder, which makes
     // it a session on its own login that `apply_new_session` leaves alone.
@@ -203,22 +257,6 @@ pub(crate) fn create_agent_session_params_for_project(
         }
         None => configured_command,
     };
-    // `coordinator start-thread --account`: the account is checked here, where the agent and its command are known, and stored as the picked account `apply_new_session` honours.
-    if let Some(wanted) = read_text(params, "account") {
-        if agentbox_provider.is_some() {
-            return Err(DomainStateError::bad_request(
-                "A session that runs in a box takes no account. Leave out --account.",
-            ));
-        }
-        let id = crate::accounts::launch::requested_account(
-            db,
-            &agent_id,
-            agent_icon.as_deref(),
-            configured_command.as_deref(),
-            &wanted,
-        )?;
-        runtime_settings.insert("accountId".to_string(), json!(id));
-    }
     let account_command = if agentbox_provider.is_some() {
         None
     } else {

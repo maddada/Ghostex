@@ -135,6 +135,18 @@ impl AccountsTab {
                     value: account.id(),
                 }),
         );
+        let has_hubs = data.hubs().is_some_and(|hubs| !hubs.is_empty());
+        // A CLIProxyAPI hub, saved as the pinned account `cliproxy:<hub id>`
+        // (CDXC:AgentProviders 2026-11-19 in server/src/accounts/hub/launch.rs).
+        options.extend(
+            data.hubs()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|hub| SettingOption {
+                    label: format!("On the hub · {}", hub.label()),
+                    value: format!("cliproxy:{}", hub.id()),
+                }),
+        );
         let control = settings_select(
             self,
             p,
@@ -164,7 +176,12 @@ impl AccountsTab {
             SharedString::from(format!("accounts-{provider}-default-account-row")),
             RowSpec::new("New sessions start on")
                 .description(format!(
-                    "Quick launch starts new {label} sessions with this account. The automatic rules only consider accounts with Auto-switch on: Auto weighs remaining limit against time to reset and picks the account that can absorb the most usage before any of its limits resets, Most limit remaining picks the account with the most limit left, Soonest reset the one whose limit resets first, Most used first keeps draining the account already in use, and Same as last session reuses the account of the last session."
+                    "Quick launch starts new {label} sessions with this account. The automatic rules only consider accounts with Auto-switch on: Auto weighs remaining limit against time to reset and picks the account that can absorb the most usage before any of its limits resets, Most limit remaining picks the account with the most limit left, Soonest reset the one whose limit resets first, Most used first keeps draining the account already in use, and Same as last session reuses the account of the last session.{}",
+                    if has_hubs {
+                        " On the hub starts them on that CLIProxyAPI hub, which picks among its own accounts."
+                    } else {
+                        ""
+                    }
                 ))
                 .inset_x(0.0),
             None,

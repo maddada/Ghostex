@@ -3246,7 +3246,10 @@ copies your Claude Swap or Codex Swap logins into it, and never changes its
 accounts. Both keys stay sealed on the computer and are never synced. With the
 management key, the hub's accounts show under it with read-only usage bars
 (sign accounts in or out on the hub itself). New Claude and Codex sessions can
-start On the hub from the New Thread picker's account list: they run in a
+start On the hub from the New Thread picker's account list, or every new
+session can: pick the hub under New sessions start on (Claude rules or Codex
+rules) and the hub balances its own accounts. `ghostex coordinator
+start-thread --account <hub name>` starts a thread on it. They run in a
 profile folder of their own (`~/.claude-profiles/ghostex-<hub>` or
 `~/.codex-profiles/ghostex-<hub>`), so they use their own login and are never
 switched to another account. When every hub account is out of room, the

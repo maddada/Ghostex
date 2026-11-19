@@ -62,7 +62,7 @@ impl Hub {
     pub(crate) fn id(&self) -> String {
         text(&self.raw, "id")
     }
-    fn label(&self) -> String {
+    pub(crate) fn label(&self) -> String {
         text(&self.raw, "label")
     }
     fn custom_label(&self) -> String {

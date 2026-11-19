@@ -13,7 +13,7 @@ USAGE
   ghostex coordinator status [--coordinator <ref>] [--all] [--json]
   ghostex coordinator start-thread --title <title> (--task <text> | --body-file <path|->)
                               [--agent <agent-id> [--allow-hidden]] [--model <m>] [--effort <e>]
-                              [--account <number|email>] [--worktree [--base-branch <branch>]]
+                              [--account <number|email|hub>] [--worktree [--base-branch <branch>]]
                               [--project-id <id> | --path <folder>] [--computer <name>]
                               [--read-only] [--coordinator <ref>] [--json]
   ghostex coordinator link <session-ref> [--task <text>] [--coordinator <ref>]
@@ -175,7 +175,8 @@ THREADS
   --model only, and an OpenCode, ZCode or DeepSeek Harness thread keeps its configured model).
   --account starts a Claude or Codex thread on that saved account (its number or email, as
   `ghostex accounts` lists them) instead of the Account for new sessions rule; an account that
-  needs signing in or is turned off is refused, with the accounts that would work.
+  needs signing in or is turned off is refused, with the accounts that would work. A
+  CLIProxyAPI hub's name or host (or `hub` when there is one) starts it On the hub.
   --read-only starts the thread's agent in its read-only mode, for a reviewer
   or a researcher that should not change anything: Codex in its read-only
   sandbox (Read Only), which refuses writes; Claude in Plan mode, which blocks

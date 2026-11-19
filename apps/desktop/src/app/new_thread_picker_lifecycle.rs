@@ -255,7 +255,9 @@ fn hub_picker_accounts(state: &Value) -> Vec<NewThreadPickerAccount> {
                         n => format!("{n} accounts"),
                     }),
                     ready: hub["status"].as_str() != Some("unavailable"),
-                    is_default: false,
+                    // New sessions start on this hub (gxserver answers it as `cliproxy:<id>`).
+                    is_default: state["defaultAccounts"][provider].as_str()
+                        == Some(format!("cliproxy:{id}").as_str()),
                     hub: true,
                 }
             }))

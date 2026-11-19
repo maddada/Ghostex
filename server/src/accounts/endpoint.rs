@@ -77,6 +77,22 @@ pub(crate) fn dispatch(
         return super::cli::switch_session(state, params);
     }
     if super::hub::handle(&state.paths, params)? {
+        // A removed hub no longer starts new sessions: its New sessions start on pins go back to Auto.
+        if operation == "hubRemove" {
+            if let Some(hub_id) = params.get("hubId").and_then(Value::as_str) {
+                let pinned = format!("{}{}", super::hub::launch::ACCOUNT_PREFIX, hub_id.trim());
+                let db =
+                    crate::storage::open_gxserver_database(&state.paths).map_err(store::error)?;
+                let mut registry = store::read(&db)?;
+                let before = registry.new_session_accounts.len();
+                registry
+                    .new_session_accounts
+                    .retain(|_, c| !matches!(c, NewSessionAccount::Pinned { id } if *id == pinned));
+                if registry.new_session_accounts.len() != before {
+                    store::write(&db, &registry)?;
+                }
+            }
+        }
         let mut list = Map::new();
         list.insert("operation".into(), json!("list"));
         return dispatch(state, &list);
@@ -438,7 +454,13 @@ pub(crate) fn dispatch(
                         DomainStateError::bad_request("Choose how new sessions pick their account.")
                     })?;
             if let NewSessionAccount::Pinned { id } = &choice {
-                if !registry
+                if id.starts_with(super::hub::launch::ACCOUNT_PREFIX) {
+                    if !super::hub::launch::pinnable(&state.paths, id) {
+                        return Err(DomainStateError::bad_request(
+                            "That hub was removed. Choose another place for new sessions.",
+                        ));
+                    }
+                } else if !registry
                     .accounts
                     .iter()
                     .any(|a| a.id == *id && a.provider == provider)

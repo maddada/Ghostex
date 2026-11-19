@@ -50,6 +50,14 @@ fn pick<'a>(
         .cloned()
         .unwrap_or(NewSessionAccount::Auto);
     let rule = match rule {
+        // A hub (CDXC:AgentProviders 2026-11-19 in hub/launch.rs) is no Swap account: the launch
+        // starts On the hub instead. A hub that can't be used any more falls back to Auto.
+        NewSessionAccount::Pinned { id } if id.starts_with(super::hub::launch::ACCOUNT_PREFIX) => {
+            if super::hub::launch::default_hub(registry, provider).is_some() {
+                return None;
+            }
+            NewSessionAccount::Auto
+        }
         NewSessionAccount::Pinned { id } => match registered(&id) {
             Some(account) => return Some(account),
             // A pinned account the user turned off (or that needs signing in again) falls back to
@@ -186,6 +194,12 @@ pub(crate) fn quick_launch_accounts(
     [Provider::Claude, Provider::Codex]
         .into_iter()
         .filter_map(|provider| {
+            if let Some(hub) = super::hub::launch::default_hub(registry, provider) {
+                return Some((
+                    provider,
+                    format!("{}{hub}", super::hub::launch::ACCOUNT_PREFIX),
+                ));
+            }
             quick_launch_account(registry, snapshot, provider, &launch_model(provider, None))
                 .map(|a| (provider, a.id.clone()))
         })
