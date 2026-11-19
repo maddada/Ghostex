@@ -146,7 +146,7 @@ fn connect(paths: &GxserverPaths, params: &Map<String, Value>) -> Result<Value, 
     }
     delivery::note_post();
     // Notes queued before (or under an older key) go out now.
-    delivery::kick(paths);
+    delivery::kick_and_wake(paths);
     let mut result = status(paths);
     result["tested"] = json!(tested.is_ok());
     if let Err(message) = tested {

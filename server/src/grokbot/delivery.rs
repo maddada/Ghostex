@@ -38,13 +38,13 @@ fn last_post() -> MutexGuard<'static, Option<Instant>> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Set by [`kick`] to cut short the worker's wait between tries; [`pause`] waits on it.
+/// Set by [`kick_and_wake`] to cut short the worker's wait between tries; [`pause`] waits on it.
 fn wake_signal() -> &'static (Mutex<bool>, Condvar) {
     static WAKE: OnceLock<(Mutex<bool>, Condvar)> = OnceLock::new();
     WAKE.get_or_init(|| (Mutex::new(false), Condvar::new()))
 }
 
-/// Waits `duration`, or less when [`kick`] wakes the worker (a new key was connected).
+/// Waits `duration`, or less when [`kick_and_wake`] wakes the worker (a new key was connected).
 fn pause(duration: Duration) -> bool {
     let (lock, signal) = wake_signal();
     let woken = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -125,12 +125,21 @@ pub(crate) fn post(url: &str, key: &str, body: &Value) -> Result<(), String> {
     }
 }
 
-/// Starts the delivery worker unless it already runs; a running one stops waiting and tries now.
-pub(crate) fn kick(paths: &GxserverPaths) {
-    if WORKER_RUNNING.swap(true, Ordering::SeqCst) {
+/// Starts the delivery worker, and makes a running one stop waiting between tries and try now
+/// (a new key was connected).
+pub(crate) fn kick_and_wake(paths: &GxserverPaths) {
+    if WORKER_RUNNING.load(Ordering::SeqCst) {
         let (lock, signal) = wake_signal();
         *lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = true;
         signal.notify_all();
+    }
+    kick(paths);
+}
+
+/// Starts the delivery worker unless it already runs. A running one keeps its wait, so a failing
+/// webhook's retry wait still grows while agents keep sending notes.
+pub(crate) fn kick(paths: &GxserverPaths) {
+    if WORKER_RUNNING.swap(true, Ordering::SeqCst) {
         return;
     }
     let paths = paths.clone();

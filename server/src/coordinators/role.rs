@@ -184,6 +184,12 @@ pub fn coordinator_guide_for(playbook: &str, overrides: &str, paths: &GxserverPa
             coordinator_skill_renamed_line()
         )
     };
+    // While Grok Bot is connected, every coordinator learns `ghostex grokbot notify` here too:
+    // Claude coordinators launched with the role file and older Codex ones with the guide pointer
+    // never get the launch note that carries it (agents/marked_handovers.rs).
+    if let Some(note) = crate::grokbot::agent_note(paths) {
+        guide.push_str(&format!("\n{note}\n"));
+    }
     let overrides = overrides.trim();
     if !overrides.is_empty() {
         guide.push_str(&format!(
