@@ -285,9 +285,18 @@ pub(crate) fn prepare(
         Principal::Peer { server_id, .. } => {
             let from_user = relayed_user && crate::connected_computers::owner_issued(server_id);
             let text = param(params, "text").to_string();
+            // Not a security check (a forger simply leaves the block out; the mark itself is what
+            // is trusted): it keeps an honest agent's message that its own CLI signed but sent
+            // through the token file (Empryo has no session variables) from counting as the
+            // user's. The same line test as `settle_work_replies` in
+            // session_chat_queue_runtime/send.rs, so a user's words that only mention the phrase
+            // still count.
+            let signed_by_an_agent = text
+                .lines()
+                .any(|line| line.trim() == crate::coordinators::AGENT_MESSAGE_OPENER);
             if from_user
                 && !text.trim().is_empty()
-                && !text.contains(AGENT_MESSAGE_OPENER.trim())
+                && !signed_by_an_agent
                 && route != "/api/sendSessionMessage"
             {
                 note_user_send(paths, &target_project, &target_session, &text);
