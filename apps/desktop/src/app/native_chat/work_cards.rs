@@ -1348,6 +1348,8 @@ impl NativeChatView {
             None => line,
         };
         let press = Self::dock_row_press(&format!("{}{key}", look.scope), line, p)
+            // Named after its row, so accessibility clients (cua-driver, VoiceOver) can find it.
+            .aria_label(text(row, "title"))
             .group(hover.clone())
             .when(in_dock, |press| {
                 press.on_mouse_down(

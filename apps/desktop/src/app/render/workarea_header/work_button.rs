@@ -96,6 +96,14 @@ impl GhostexGpuiApp {
                         this.toggle_work_panel(window, cx);
                     }),
                 )
+                // A press from accessibility (VoiceOver, cua-driver): `on_mouse_down` alone
+                // offers none, and the button keeps acting on mouse-down for the pointer.
+                .on_a11y_action(gpui::AccessibleAction::Click, {
+                    let app = cx.entity().downgrade();
+                    move |_, window, cx| {
+                        let _ = app.update(cx, |this, cx| this.toggle_work_panel(window, cx));
+                    }
+                })
                 .on_prepaint(move |painted, _, _| bounds.set(painted))
                 .into_any_element(),
         )
@@ -122,12 +130,23 @@ impl GhostexGpuiApp {
             work_button("session-popup-work", open, waiting)
                 .on_mouse_down(
                     MouseButton::Left,
-                    cx.listener(move |this, _, window, cx| {
-                        window.prevent_default();
-                        cx.stop_propagation();
-                        this.toggle_work_panel_for(session_id, anchor.get(), window, cx);
+                    cx.listener({
+                        let anchor = anchor.clone();
+                        move |this, _, window, cx| {
+                            window.prevent_default();
+                            cx.stop_propagation();
+                            this.toggle_work_panel_for(session_id, anchor.get(), window, cx);
+                        }
                     }),
                 )
+                .on_a11y_action(gpui::AccessibleAction::Click, {
+                    let app = cx.entity().downgrade();
+                    move |_, window, cx| {
+                        let _ = app.update(cx, |this, cx| {
+                            this.toggle_work_panel_for(session_id, anchor.get(), window, cx)
+                        });
+                    }
+                })
                 .on_prepaint(move |painted, _, _| bounds.set(painted))
                 .into_any_element(),
         )

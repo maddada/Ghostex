@@ -123,10 +123,28 @@ after-release commit (see "Keeping the list").
      filtered out even with `on_click`); it gets AXPress only from
      `.on_click(...)` or `.on_a11y_action(AccessibleAction::Click, …)`
      (`on_mouse_down` alone gives none); Focus is answered for focusable
-     elements; SetValue isn't handled, so `set_value` never fills a GPUI
-     field. A background `click` with x,y is often turned into an AX press
-     of whatever the hit-test finds ("PX hit-test pressed the background
-     element via AX") and then misses controls that have no press.
+     elements. Text fields (gpui-component `Input`) list SetValue too, and
+     it fires the same change event typing does, but the 11.11.0 run saw
+     `set_value` do nothing on the Search palette's box (5.2): read the
+     value back after every `set_value`. A background `click` with x,y is
+     often turned into an AX press of whatever the hit-test finds ("PX
+     hit-test pressed the background element via AX") and then misses
+     controls that have no press.
+   - **Presses added after 11.11.0** (2026-11-19, first in the release after
+     it; an older build still needs the `drag` below): the header `Work`
+     button (main window and a popup's), every frosted sidebar menu row
+     (role MenuItem, labelled with its text: `Snooze`, `Park`, `Advanced`,
+     `Move to New Group`, a group's `Ungroup` and `Close`), the Needs you
+     rows and Work panel cards (a Button labelled with the to-do's title)
+     and a Work panel card's `More actions` (⋯). Find each with
+     `get_window_state({pid, window_id, query:"<label>"})` and press it with
+     `click({element_token:"<snapshot_id>:<row>"})`. The Close Group dialog
+     (`Cancel`, `Close`) and the floating ask panel (a Dialog labelled with
+     the to-do's title: `Works`-style answers, `Reply`, `More actions`,
+     `Close`, the command's `Copy` and `Run in terminal`) already answered a
+     press; the panel is its own window, so `list_windows({pid})` for its
+     window_id first. Pressing an answer there closes the panel as a mouse
+     press does.
    - **Real pointer events: a zero-length background `drag`.** `drag` is
      pixel-only (no AX substitute), so it delivers a real mouse down/up to
      the window in the background, and it takes `modifier`:
@@ -135,11 +153,9 @@ after-release commit (see "Keeping the list").
      `get_window_state` screenshot of that window. Seen working on the
      11.11.0 follow-up: it collapsed the chat's Needs you dock (a GPUI
      control) and pressed the native red close button of a second window.
-     Use it for controls with no press: the header Work button
-     (`work_button.rs`, `on_mouse_down` only), the frosted sidebar menu rows,
-     and a Cmd+click (`modifier:["cmd"]`, the Files table link). Not yet
-     confirmed on screen for those three: the run's window went to another
-     Space mid-test (see the next bullet). Read the result from the
+     Use it for a Cmd+click (`modifier:["cmd"]`, the Files table link), and
+     on a build from before the presses above for the header Work button
+     and the frosted sidebar menu rows. Read the result from the
      accessibility tree too: the Work panel shows as an element labelled
      `Work` about 380 wide at the chat's right edge, and the button carries
      `aria_expanded`.
@@ -152,9 +168,14 @@ after-release commit (see "Keeping the list").
      zero-length `drag` on its red button, about x 21, y 13 at 900 wide).
      Don't loop waiting; report the GUI parts as not yet run.
    - Frosted sidebar menus (session and project right-click menus, window
-     id `ghostex.frostedSidebarMenu`) expose only Rename, Pin and Open in a
-     Popup to accessibility: the other rows (`native-menu-item-*`,
-     native_sidebar/menus.rs) have `on_click` but no `.role`. Its
+     id `ghostex.frostedSidebarMenu`): open one with cua-driver `right_click`
+     at the row's x,y in a `get_window_state` screenshot (as above), then
+     `list_windows({pid})` for the menu's window and
+     `get_window_state({pid, window_id:<menu>, query:"Advanced"})`. A row
+     with a submenu (`Advanced`, `Snooze`, `Park`) opens it when pressed;
+     re-read the menu window with `since:"latest"` for its rows. On 11.11.0
+     and older only Rename, Pin and Open in a Popup were in the tree; for
+     the others there, use the pixel route: its
      `get_window_state` screenshot is a scaled copy of the whole display,
      but it is still twice the window's point size, so a row at screen
      point (sx, sy) is window pixel ((sx − wx)·2, (sy − wy)·2) with the
@@ -332,8 +353,14 @@ by accessibility opens the palette and it closes again at once; Cmd+P
 into it (`window_not_key`: macOS still reports the main window as key), and
 pid-targeted `press_key` letters close it and land in the open chat's box
 as stray text (clear them and check `read-session-chat-queue` `.draft`).
-`set_value` on its `Search sessions...` field does nothing (GPUI doesn't
-handle SetValue). Next to try, on screen: open it with Cmd+P, press its
+`set_value` on its `Search sessions...` field did nothing that run,
+although the field offers SetValue and a SetValue fires the same change
+event typing does (gpui-component `handle_accessibility_set_value`; the web
+build's mirror lists `Focus SetValue` on its text boxes); the cause wasn't
+found. Next run, try first: Cmd+P, then
+`get_window_state({pid, window_id:<palette>, query:"Search sessions"})`,
+`set_value({element_token, value:"term"})`, and read the box back with
+`since:"latest"` (its value, and whether the rows narrowed). Then, on screen: open it with Cmd+P, press its
 box with the zero-length background `drag` (a pixel press makes the
 target window key for event routing), then `type_text` on the box's
 element token and read the value back. If that is still refused with

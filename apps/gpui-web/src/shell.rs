@@ -177,6 +177,9 @@ impl GhostexGpuiApp {
         Some(
             div()
                 .id("web-header-work")
+                .role(gpui::Role::Button)
+                .aria_label("Work")
+                .aria_expanded(open)
                 .flex()
                 .flex_none()
                 .items_center()

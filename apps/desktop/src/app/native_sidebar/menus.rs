@@ -1253,9 +1253,36 @@ impl GhostexGpuiApp {
                     origin: row_bounds.origin + Point::new(px(0.0), panel.scroll.offset().y),
                     size: row_bounds.size,
                 };
+                // CDXC:Accessibility 2026-11-19 WHY: a row without a role is left out of the
+                // accessibility tree, so cua-driver (and VoiceOver) could press only the few rows
+                // that had one; the release smoke test drives Move to New Group, Ungroup, Close
+                // Group, Snooze, Park and Advanced from here. Headings stay out: they act on nothing.
+                let accessible_label = (!heading).then(|| match item["suffix"].as_str() {
+                    Some(suffix) => format!("{label} {suffix}"),
+                    None => label.clone(),
+                });
                 content = content.child(
                     h_flex()
                         .id(format!("native-menu-item-{panel_index}-{item_index}"))
+                        .when_some(accessible_label, |row, name| {
+                            row.role(gpui::Role::MenuItem)
+                                .aria_label(name)
+                                .on_a11y_action(gpui::AccessibleAction::Click, {
+                                    let app = cx.entity().downgrade();
+                                    move |_, window, cx| {
+                                        let _ = app.update(cx, |app, cx| {
+                                            app.activate_native_sidebar_menu_item(
+                                                panel_index,
+                                                item_index,
+                                                row_bounds,
+                                                true,
+                                                window,
+                                                cx,
+                                            )
+                                        });
+                                    }
+                                })
+                        })
                         .w_full()
                         .min_h(px(row_height * scale))
                         .flex_shrink_0()

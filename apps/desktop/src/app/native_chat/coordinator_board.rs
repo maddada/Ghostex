@@ -30,6 +30,7 @@ use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, ScrollHandle,
     StatefulInteractiveElement as _, Styled as _, Window, div, px, rgb, svg,
 };
+use gpui_component::ElementExt as _;
 use serde_json::{Value, json};
 
 /// The column's width, docked or floating, unscaled.
@@ -1832,6 +1833,8 @@ impl NativeChatView {
     ) -> gpui::Stateful<gpui::Div> {
         let s = p.scale;
         let key = key.to_string();
+        let anchor =
+            std::rc::Rc::new(std::cell::Cell::new(gpui::Bounds::<gpui::Pixels>::default()));
         div()
             .id(gpui::SharedString::from(format!(
                 "chat-board-menu-button:{key}"
@@ -1855,13 +1858,25 @@ impl NativeChatView {
                     .size(px(13.0 * s))
                     .text_color(p.card_muted),
             )
-            .on_mouse_down(
-                gpui::MouseButton::Left,
+            .on_mouse_down(gpui::MouseButton::Left, {
+                let key = key.clone();
                 cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
                     cx.stop_propagation();
                     this.open_board_card_menu(&key, event.position, window, cx);
-                }),
-            )
+                })
+            })
+            // A press from accessibility (VoiceOver, cua-driver), which `on_mouse_down` alone
+            // never offers: the menu opens under the button.
+            .on_a11y_action(gpui::AccessibleAction::Click, {
+                let view = cx.entity().downgrade();
+                let anchor = anchor.clone();
+                move |_, window, cx| {
+                    let _ = view.update(cx, |this, cx| {
+                        this.open_board_card_menu(&key, anchor.get().bottom_left(), window, cx)
+                    });
+                }
+            })
+            .on_prepaint(move |bounds, _, _| anchor.set(bounds))
     }
 
     /// An open card's last line: Mention, then its age and ⋯. It has no Open button: the card's link
