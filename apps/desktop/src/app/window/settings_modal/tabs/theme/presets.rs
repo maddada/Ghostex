@@ -1,7 +1,8 @@
 //! The presets of the Themes page's Themes group: twenty theme presets (Catppuccin, Dracula, Solarized,
 //! Tokyo Night, Nord, Kanagawa, Everforest, Gruvbox Material) above the colours. A preset writes
 //! the existing colour settings in one save; it is not a stored choice, so the card that matches
-//! the current settings shows as selected and any later edit simply leaves no card selected.
+//! the current settings shows as selected and any later edit simply leaves no card selected. The
+//! row's tile (`theme_tile`) also draws the agent-made looks that lead the row (prompt_gallery.rs).
 //!
 //! CDXC:Theming 2026-11-01 WHY:
 //! A preset sets its own appearance's colour to the custom colour Colourfulness Full paints as the
@@ -187,8 +188,8 @@ impl ThemeTab {
     ///
     /// CDXC:Theming 2026-11-08 DECISION:
     /// User, of the preset panel: "Please make these a scrollable sideways (1 line) list and make each one 1 word max. it's ugly now please make it nicer area. also takes too much space". The presets sit in one row under the heading, about a card and its label tall. (2026-11-08, User: "presets works well but please put them in a card like the ones below have": the row sits in the same section card as Colours and Transparency and scrolls inside it, its cards passing under the card's edges, where the fades sit in the card's fill.) Labels are one word (the family's own word plus the moon or sun where a family is only Dark and Light). A thin hairline separates families, and a small quiet caption names a family above its first card only where no card says it (Catppuccin, Tokyo Night, Kanagawa): a caption over "Solarized" would say it twice. The row scrolls with a sideways swipe, Shift and the wheel, or a finger; a vertical swipe or wheel turn still scrolls the page. Like the chat box's pills (pills_strip.rs), an edge that hides more fades into the card and dims the cards it cuts, so nothing paints a dark band on glass. On open the row brings the picked card into view.
-    /// The presets' sideways row, drawn inside the Themes group (CDXC:Settings 2026-11-18 in
-    /// model.rs).
+    /// The themes' sideways row, drawn inside the Themes group (CDXC:Settings 2026-11-18 in
+    /// model.rs): the agent-made looks, then the presets, as tiles of one kind.
     pub(super) fn presets_strip(
         &mut self,
         p: &SettingsPalette,
@@ -203,25 +204,37 @@ impl ThemeTab {
         let scroll = row.scroll.clone();
         let cut = row.cut.get();
         let (fade_left, fade_right) = row.fades.get();
-        // The scroller's children: a hairline before each family but the first, then its cards.
-        // `slots[i]` is preset i's child index, for measuring and scrolling to it.
-        let mut items: Vec<AnyElement> = Vec::with_capacity(presets.len() + 8);
-        let mut slots: Vec<usize> = Vec::with_capacity(presets.len());
+        // The scroller's children: the agent-made looks first (prompt_gallery.rs), then the
+        // presets, with a hairline before each family but the first. `slots[i]` is tile i's child
+        // index, for measuring and scrolling to it.
+        let mut items: Vec<AnyElement> = Vec::with_capacity(presets.len() + 16);
+        let mut slots: Vec<usize> = Vec::with_capacity(presets.len() + 8);
         let mut selected_slot = None;
         let hairline = hsla(p.hairline);
+        let family_rule = || {
+            div()
+                .flex_shrink_0()
+                .mx(px(FAMILY_GAP / 2.0))
+                .mt(px(CAPTION_HEIGHT + CARD_TOP))
+                .w(px(1.0))
+                .h(px(PREVIEW_HEIGHT))
+                .bg(hairline)
+                .into_any_element()
+        };
+        let looks = self.look_tiles(p, values, cut, cx);
+        for (selected, tile) in looks {
+            let slot = items.len();
+            if selected && selected_slot.is_none() {
+                selected_slot = Some(slot);
+            }
+            slots.push(slot);
+            items.push(tile);
+        }
+        let first_preset = slots.len();
         for (index, preset) in presets.iter().enumerate() {
             let first_of_family = index == 0 || presets[index - 1].family != preset.family;
-            if first_of_family && index > 0 {
-                items.push(
-                    div()
-                        .flex_shrink_0()
-                        .mx(px(FAMILY_GAP / 2.0))
-                        .mt(px(CAPTION_HEIGHT + CARD_TOP))
-                        .w(px(1.0))
-                        .h(px(PREVIEW_HEIGHT))
-                        .bg(hairline)
-                        .into_any_element(),
-                );
+            if first_of_family && !items.is_empty() {
+                items.push(family_rule());
             }
             let caption = (first_of_family
                 && !presets
@@ -240,7 +253,7 @@ impl ThemeTab {
                 preset,
                 caption,
                 selected,
-                cut & (1 << index) != 0,
+                cut & (1 << (first_preset + index)) != 0,
                 cx,
             ));
         }
@@ -354,13 +367,13 @@ impl ThemeTab {
     }
 }
 
-/// The presets row's scroll and what its last paint measured.
+/// The themes row's scroll and what its last paint measured.
 #[derive(Default)]
 pub(super) struct PresetsRow {
     scroll: ScrollHandle,
     /// An edge hides more cards: (left, right).
     fades: Rc<Cell<(bool, bool)>>,
-    /// Which presets (bit per catalog index) an edge cuts.
+    /// Which tiles (bit per tile, looks then presets) an edge cuts.
     cut: Rc<Cell<u64>>,
     /// The picked card was brought into view (once, the first time one is picked).
     revealed: bool,
@@ -395,46 +408,50 @@ fn edge_fade(toward_left: bool, edge: gpui::Hsla) -> gpui::Div {
     ))
 }
 
-/// One preset card: its family's caption when it names one, the sidebar and work area as the
-/// preset paints them, two lines of text, the palette's first four colours, and the one-word label
-/// with a sun or moon for its appearance. `cut`: an edge of the row cuts it, so it dims.
-fn preset_card(
+/// What every tile of the row shows besides its preview: its id, full name (the tooltip and the
+/// screen reader's label), one-word label with a moon or sun, the family caption when it names one,
+/// whether it is the picked one, and whether an edge of the row cuts it (it dims).
+pub(super) struct TileSpec {
+    pub(super) id: SharedString,
+    pub(super) name: SharedString,
+    pub(super) label: SharedString,
+    pub(super) dark: bool,
+    pub(super) caption: Option<String>,
+    pub(super) selected: bool,
+    pub(super) cut: bool,
+}
+
+/// One tile of the themes row, presets and agent-made looks alike: the caption lane, the preview
+/// framed and ringed when picked, `corner` over the preview's top-right corner while the tile is
+/// hovered, and the label. Pressing it (or Enter or Space) runs `press`.
+pub(super) fn theme_tile(
     p: &SettingsPalette,
-    preset: &ThemePreset,
-    caption: Option<String>,
-    selected: bool,
-    cut: bool,
+    spec: TileSpec,
+    preview: Vec<AnyElement>,
+    corner: Option<AnyElement>,
+    press: impl Fn(&mut ThemeTab, &mut gpui::Window, &mut Context<ThemeTab>) + 'static,
     cx: &mut Context<ThemeTab>,
 ) -> AnyElement {
-    let (sidebar, work, foreground) = preview_colours(
-        &SettingsValues::from_map(theme_preset_patch(preset, None)),
-        preset.dark,
-    );
-    let ink = |alpha: f32| hsla(css_fade(foreground_for(work).gpui(), alpha));
-    let line = move |width: f32, alpha: f32| {
-        div()
-            .h(px(3.0))
-            .w(gpui::relative(width))
-            .rounded(px(2.0))
-            .bg(ink(alpha))
-    };
-    let dots = preset.swatch.iter().map(|hex| {
-        div()
-            .size(px(7.0))
-            .rounded_full()
-            .bg(hsla(colour_of(hex).gpui()))
-    });
+    let TileSpec {
+        id: element_id,
+        name,
+        label,
+        dark,
+        caption,
+        selected,
+        cut,
+    } = spec;
     let ring = p.foreground_alpha(0.85);
     let rim = p.foreground_alpha(0.1);
     let hover = p.foreground_alpha(0.45);
-    let id = preset.id.clone();
-    let element_id = SharedString::from(format!("theme-preset-{}", preset.id));
     let focus_ring = p.ring;
+    let group = SharedString::from(format!("{element_id}-tile"));
     v_flex()
         .id(element_id.clone())
+        .group(group.clone())
         .role(gpui::Role::Button)
         .accessibility_id(element_id)
-        .aria_label(preset.name.clone())
+        .aria_label(name.clone())
         .aria_selected(selected)
         .focusable()
         .tab_stop(true)
@@ -461,10 +478,8 @@ fn preset_card(
             ])
         })
         .cursor_pointer()
-        .tooltip(tooltip_text(preset.name.clone()))
-        .on_press(cx, move |page, _window, cx| {
-            page.apply_theme_preset(&id, cx)
-        })
+        .tooltip(tooltip_text(name))
+        .on_press(cx, press)
         .on_key_down(|event: &KeyDownEvent, _window, cx| {
             if matches!(event.keystroke.key.as_str(), "enter" | "space")
                 && !event.keystroke.modifiers.modified()
@@ -496,30 +511,7 @@ fn preset_card(
                         .border_1()
                         .border_color(hsla(rim))
                         .hover(move |this| this.border_color(hsla(hover)))
-                        .child(
-                            div()
-                                .w(px(20.0))
-                                .h_full()
-                                .rounded_tl(px(7.0))
-                                .rounded_bl(px(7.0))
-                                .bg(hsla(sidebar.gpui())),
-                        )
-                        .child(
-                            v_flex()
-                                .flex_1()
-                                .h_full()
-                                .gap(px(4.0))
-                                .px(px(7.0))
-                                .pt(px(7.0))
-                                .border_l_1()
-                                .border_color(hsla(css_fade(foreground.gpui(), 0.08)))
-                                .rounded_tr(px(7.0))
-                                .rounded_br(px(7.0))
-                                .bg(hsla(work.gpui()))
-                                .child(line(0.8, 0.8))
-                                .child(line(0.55, 0.45))
-                                .child(h_flex().mt(px(4.0)).gap(px(3.0)).children(dots)),
-                        ),
+                        .children(preview),
                 )
                 .when(selected, |this| {
                     this.child(
@@ -533,6 +525,17 @@ fn preset_card(
                             .border(px(1.5))
                             .border_color(hsla(ring)),
                     )
+                })
+                .when_some(corner, |this, corner| {
+                    this.child(
+                        div()
+                            .absolute()
+                            .top(px(4.0))
+                            .right(px(4.0))
+                            .opacity(0.0)
+                            .group_hover(group, |this| this.opacity(1.0))
+                            .child(corner),
+                    )
                 }),
         )
         .child(
@@ -541,12 +544,8 @@ fn preset_card(
                 .gap(px(3.0))
                 .items_center()
                 .child(
-                    settings_icon(
-                        if preset.dark { ICON_DARK } else { ICON_LIGHT },
-                        11.0,
-                        p.muted,
-                    )
-                    .flex_shrink_0(),
+                    settings_icon(if dark { ICON_DARK } else { ICON_LIGHT }, 11.0, p.muted)
+                        .flex_shrink_0(),
                 )
                 .child(
                     div()
@@ -555,10 +554,81 @@ fn preset_card(
                         .line_height(px(13.0))
                         .text_color(hsla(if selected { p.foreground } else { p.muted }))
                         .when(selected, |this| this.font_weight(gpui::FontWeight::MEDIUM))
-                        .child(preset.label.clone()),
+                        .child(label),
                 ),
         )
         .into_any_element()
+}
+
+/// One preset card: the sidebar and work area as the preset paints them, two lines of text and the
+/// palette's first four colours, in the row's tile.
+fn preset_card(
+    p: &SettingsPalette,
+    preset: &ThemePreset,
+    caption: Option<String>,
+    selected: bool,
+    cut: bool,
+    cx: &mut Context<ThemeTab>,
+) -> AnyElement {
+    let (sidebar, work, foreground) = preview_colours(
+        &SettingsValues::from_map(theme_preset_patch(preset, None)),
+        preset.dark,
+    );
+    let ink = |alpha: f32| hsla(css_fade(foreground_for(work).gpui(), alpha));
+    let line = move |width: f32, alpha: f32| {
+        div()
+            .h(px(3.0))
+            .w(gpui::relative(width))
+            .rounded(px(2.0))
+            .bg(ink(alpha))
+    };
+    let dots = preset.swatch.iter().map(|hex| {
+        div()
+            .size(px(7.0))
+            .rounded_full()
+            .bg(hsla(colour_of(hex).gpui()))
+    });
+    let preview = vec![
+        div()
+            .w(px(20.0))
+            .h_full()
+            .rounded_tl(px(7.0))
+            .rounded_bl(px(7.0))
+            .bg(hsla(sidebar.gpui()))
+            .into_any_element(),
+        v_flex()
+            .flex_1()
+            .h_full()
+            .gap(px(4.0))
+            .px(px(7.0))
+            .pt(px(7.0))
+            .border_l_1()
+            .border_color(hsla(css_fade(foreground.gpui(), 0.08)))
+            .rounded_tr(px(7.0))
+            .rounded_br(px(7.0))
+            .bg(hsla(work.gpui()))
+            .child(line(0.8, 0.8))
+            .child(line(0.55, 0.45))
+            .child(h_flex().mt(px(4.0)).gap(px(3.0)).children(dots))
+            .into_any_element(),
+    ];
+    let id = preset.id.clone();
+    theme_tile(
+        p,
+        TileSpec {
+            id: SharedString::from(format!("theme-preset-{}", preset.id)),
+            name: preset.name.clone().into(),
+            label: preset.label.clone().into(),
+            dark: preset.dark,
+            caption,
+            selected,
+            cut,
+        },
+        preview,
+        None,
+        move |page, _window, cx| page.apply_theme_preset(&id, cx),
+        cx,
+    )
 }
 
 /// A `#rrggbb` colour from the catalog.

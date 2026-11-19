@@ -8046,14 +8046,16 @@ the card and the command say what is hard to read. `ghostex theme undo` and `gho
 step through the last 20 changes, kept across restarts, and `ghostex theme history` lists them
 with when they were made, by which agent or by you, and what changed; Undo is refused once a
 setting it would put back was changed again.
-Settings > Themes has **Theme it in your words**, right under Appearance and the presets, which says an agent can do this:
-**Ask an agent** opens a Help chat with a starter prompt as its draft to edit and send, and six
-example themes (Firefly Forest, Ember Forge, Synthwave '84, Polar Night, Inkstone and Orchid
-Dusk) each show a picture, the prompt that describes them, **Copy prompt** and **Apply**. Apply
-sets the whole look as one theme change, the same as `ghostex theme set`, and its button then
-reads **Undo** (`ghostex theme undo` works too). The examples are dark mode looks: applying one
-while the app shows light mode switches Appearance to Dark, and a font the theme names that this
-computer doesn't have is left as it is.
+Settings > Themes shows this in the Themes group, under Appearance. The themes row starts with
+six **Agent-made** looks (Firefly, Ember, Synthwave, Polar, Inkstone and Orchid: Firefly Forest,
+Ember Forge, Synthwave '84, Polar Night, Inkstone and Orchid Dusk), drawn like the presets with a
+picture of the look. Clicking one sets the whole look as one theme change, the same as
+`ghostex theme set`; the line under the row then names it, with **Undo** (`ghostex theme undo`
+works too) and Change them. Hovering a look shows **Make it your own**, which opens a Help chat
+with the prompt that describes it as the draft, to change and send. **Describe a look**, under
+the row, has **Ask an agent**, which opens a Help chat with a starter prompt as its draft. The
+looks are dark mode looks: applying one while the app shows light mode switches Appearance to
+Dark, and a font the look names that this computer doesn't have is left as it is.
 Theme colours go further than the colour squares: borders, dividers, text, grey text, the
 accent, links, cards, controls, menus, the selected and hovered rows, the focus ring, your
 messages, the chat box, code blocks and the success, warning and danger colours, each set apart
@@ -8067,8 +8069,8 @@ Your messages, Chat box, Cards and Accent; Your messages' slider says how see-th
 **Fine-tune colours**, further down, has the rest under More theme colours (Borders, Dividers,
 Text, Grey text and the others), which opens by itself while one of them is set. Every colour
 has a swatch that opens the colour picker, a box for an exact value, an opacity slider once it is
-set and Reset, with one line per appearance the app shows. After an example theme is applied, the
-gallery says which one and how many colours it set, and Change them opens them. They change the
+set and Reset, with one line per appearance the app shows. After an agent-made look is applied, the
+line under the themes row says which one and how many colours it set, and Change them opens them. They change the
 computer's own window and the web app; the phone keeps its own look. When a colour makes text hard
 to read (under 4.5:1 for text, 3:1 for grey text, the accent, links and status colours, the text
 on a fill) or a border or divider all but vanish, the change is saved and the card says so.
@@ -8076,7 +8078,7 @@ Commands: `ghostex theme read`, `ghostex theme set <key>=<value> ...`, `ghostex 
 
 Settings has an **Interface** group in its sidebar, right under Experience, with four pages
 (`ghostex settings open --tab interface` lists their settings):
-**Themes** (`--tab theme`): Themes (Appearance, the presets, Theme it in your words), Colours,
+**Themes** (`--tab theme`): Themes (Appearance, the agent-made looks and presets, Describe a look), Colours,
 Glass, Chat colours (with Chat theme), Fine-tune colours and Terminal colours (Terminal theme,
 the palettes, Terminal background and its colour, Terminal background opacity, and the
 background image); **Text & Fonts** (`--tab textFonts`): Fonts, Terminal text (the terminal's
@@ -8118,8 +8120,8 @@ Ghostex restarts. The first time Ghostex finds a display scale above 100% on
 COSMIC while UI Scale is raised, it offers once to set UI Scale back
 to 100%.
 Settings: `interfaceScalePercent`, `interfaceScaleAreasSeparately`, `linuxDisplayScale`, `agentManagerZoomPercent`, `sessionChatZoomPercent`, `filesZoomPercent`, `terminalFontSize`.
-The presets, in the Themes group under Appearance, are twenty theme cards in one row that scrolls
-sideways (swipe sideways, hold Shift and turn the wheel, or drag with a finger); a
+The presets, in the Themes group under Appearance, are twenty theme cards in one row (after the
+agent-made looks) that scrolls sideways (swipe sideways, hold Shift and turn the wheel, or drag with a finger); a
 thin line separates families: Catppuccin (Mocha, Macchiato, Frappé, Latte), Dracula
 and Alucard, Solarized, Tokyo Night (Night, Storm, Moon, Day), Nord, Kanagawa (Wave,
 Dragon, Lotus), Everforest, and Gruvbox (Material); a moon or sun marks dark and
