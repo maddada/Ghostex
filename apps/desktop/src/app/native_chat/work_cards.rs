@@ -1283,65 +1283,37 @@ impl NativeChatView {
         if let Some(answer) = &reply_answer {
             buttons.push(self.dock_reply_icon(&format!("{key}:reply"), answer, busy, p, cx));
         }
+        // A page or form's answered/total ("0/1"), quiet, at the row's right end just before
+        // its buttons and age.
+        //
+        // CDXC:Coordinators 2026-11-20 DECISION:
+        // User, of "Title 0/1" in a dock row: the count goes on the right side of the row, not
+        // after the title. Supersedes the 2026-11-11 placement after the page's name.
         let count = text(row, "count");
-        let question = if opens_directly && !count.is_empty() && wrap {
-            // Wrapped, the name and its count are one run of words, the count quieter.
-            let words = format!("{title} {count}");
-            let muted = gpui::HighlightStyle {
-                color: Some(p.card_muted),
-                ..Default::default()
-            };
+        let mut count = (opens_directly && !count.is_empty()).then(|| {
             div()
-                .flex_1()
-                .min_w_0()
-                .whitespace_normal()
+                .flex_shrink_0()
+                .whitespace_nowrap()
                 .text_size(px(PROSE_SIZE * s))
                 .line_height(px(PROSE_LINE_HEIGHT * s))
-                .text_color(body)
-                .child(
-                    gpui::StyledText::new(words.clone())
-                        .with_highlights(vec![(title.len() + 1..words.len(), muted)]),
-                )
-                .into_any_element()
-        } else if opens_directly && !count.is_empty() {
-            // The page's name, then how much it still asks; the name gives way first.
-            div()
-                .flex_1()
-                .min_w_0()
-                .flex()
-                .gap(px(6.0 * s))
-                .child(
-                    div()
-                        .min_w_0()
-                        .truncate()
-                        .text_color(body)
-                        .child(title.to_string()),
-                )
-                .child(
-                    div()
-                        .flex_shrink_0()
-                        .whitespace_nowrap()
-                        .text_color(p.card_muted)
-                        .child(count.to_string()),
-                )
-                .into_any_element()
-        } else {
-            div()
-                .flex_1()
-                .min_w_0()
-                .child(self.ask_title(
-                    &key,
-                    &title,
-                    &row["titleRuns"],
-                    !wrap,
-                    body,
-                    PROSE_SIZE,
-                    PROSE_LINE_HEIGHT,
-                    p,
-                    cx,
-                ))
-                .into_any_element()
-        };
+                .text_color(p.card_muted)
+                .child(count.to_string())
+        });
+        let question = div()
+            .flex_1()
+            .min_w_0()
+            .child(self.ask_title(
+                &key,
+                &title,
+                &row["titleRuns"],
+                !wrap,
+                body,
+                PROSE_SIZE,
+                PROSE_LINE_HEIGHT,
+                p,
+                cx,
+            ))
+            .into_any_element();
         // The title is one line, so the mark, the title, the answers (taller than a line) and the
         // ⋯ over the age share the row's middle.
         //
@@ -1378,15 +1350,20 @@ impl NativeChatView {
                     .gap(px(6.0 * s))
                     .children(buttons),
             );
-        } else if !buttons.is_empty() {
+        } else if !buttons.is_empty() || count.is_some() {
             head = head.child(
                 div()
                     .flex_shrink_0()
                     .flex()
                     .items_center()
                     .gap(px(6.0 * s))
+                    .children(count.take().map(|count| count.mr(px(4.0 * s))))
                     .children(buttons),
             );
+        }
+        // Wrapped, the buttons are under the title: the count ends the title's line, before the age.
+        if let Some(count) = count {
+            head = head.child(count);
         }
         // The row's other actions (Show in chat, Dismiss, Snooze, Mention) are one ⋯ menu that
         // takes the age's place while the pointer is over the row.
