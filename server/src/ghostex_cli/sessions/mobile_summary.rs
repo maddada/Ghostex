@@ -357,6 +357,20 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
                                 .get("worktreeJson")
                                 .or_else(|| project.get("worktree")),
                         );
+                        // A missing folder's mark and sheet on the phone's project header
+                        // (server/src/project_folder_problem.rs); sent only while it is missing.
+                        if project
+                            .get("pathState")
+                            .and_then(Value::as_str)
+                            .is_some_and(|state| state != "available")
+                        {
+                            insert_present(&mut project_map, "pathState", project.get("pathState"));
+                            insert_present(
+                                &mut project_map,
+                                "pathProblem",
+                                project.get("pathProblem"),
+                            );
+                        }
                         // Issues Workflow's parts, folded in from the daemon's snapshot (inventory.rs) under the snapshot's own keys: `workMode` (on), `workLinear`, `workGithubOff` and `workTracker`, which pick the phone's Link to rows.
                         if project.get("workMode").and_then(Value::as_bool) == Some(true) {
                             project_map.insert("workMode".to_string(), json!(true));

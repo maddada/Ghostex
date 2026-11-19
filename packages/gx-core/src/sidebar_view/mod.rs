@@ -20,6 +20,7 @@ mod daemon_wait;
 mod draft_arrivals;
 mod drop_landing;
 pub mod extension_panel;
+pub(crate) mod folder_problem;
 mod gbots;
 mod groups;
 #[cfg(test)]
@@ -87,6 +88,7 @@ pub use draft_arrivals::{
     DraftRow, DRAFT_ARRIVAL_WINDOW_MS, DRAFT_CLOCK_SLACK_MS, DRAFT_FOCUS_WAIT_MS,
 };
 pub use drop_landing::{DropLanding, DropWrites, TreeDropTarget};
+pub use folder_problem::{FolderProblemCause, FolderProblemPath, FolderProblemView};
 pub use gbots::{
     gbots_department_storage_id, gbots_section_storage_id, GbotsDepartmentView, GbotsSectionView,
 };

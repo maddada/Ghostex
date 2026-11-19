@@ -356,6 +356,9 @@ pub struct ProjectContextView {
     /// The GBot whose folder this project is: the group is drawn as that bot's row in Main Hub's
     /// GBots section (`SidebarView::gbots`), never as a project.
     pub gbot: Option<ghostex_gx_protocol::presentation::PresentationGbotsBot>,
+    /// The project's folder is missing: the slashed computer on its header and the popover it
+    /// opens (folder_problem.rs). `None` while the folder is there.
+    pub folder_problem: Option<super::folder_problem::FolderProblemView>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

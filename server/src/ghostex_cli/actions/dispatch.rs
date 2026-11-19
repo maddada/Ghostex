@@ -37,6 +37,7 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
             rpc::call_gxserver_flat_body("/api/recordClientEvent", payload, flags)
         }
         "removeProject" => rpc::call_gxserver_rpc("/api/removeProject", payload, flags),
+        "relocateProject" => rpc::call_gxserver_rpc("/api/relocateProject", payload, flags),
         "renameProject" => rpc::call_gxserver_rpc("/api/renameProject", payload, flags),
         "restoreRecentProject" => {
             rpc::call_gxserver_rpc("/api/restoreRecentProject", payload, flags)

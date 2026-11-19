@@ -92,6 +92,12 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
                 .to_string(),
         ),
     );
+    // Why the folder is missing, for the header's mark and its popover (project_folder_problem.rs).
+    insert_present_value(
+        &mut output,
+        "pathProblem",
+        crate::project_folder_problem::published_path_problem(project),
+    );
     output.insert("projectId".to_string(), Value::String(project_id.clone()));
     output.insert(
         "sortKey".to_string(),

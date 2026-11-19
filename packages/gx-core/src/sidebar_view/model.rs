@@ -1303,6 +1303,12 @@ pub(super) fn project_context(
         is_home: project.is_home,
         is_help_home: project.is_help_home,
         gbot: project.gbots_bot.clone(),
+        folder_problem: super::folder_problem::FolderProblemView::new(
+            &project.title,
+            project.path.as_deref().unwrap_or_default(),
+            project.path_state.as_ref(),
+            project.path_problem.as_ref(),
+        ),
     })
 }
 

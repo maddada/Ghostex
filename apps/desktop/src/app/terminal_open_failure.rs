@@ -1,5 +1,5 @@
 //! What the app says when a terminal the user opened could not be attached: the reason in plain
-//! words, and for a missing project folder the dialog that can fix it.
+//! words, and for a terminal of a project whose folder is missing, the mark's popover.
 //!
 //! CDXC:AppModal 2026-11-19 DECISION:
 //! User, of "Couldn't open this terminal / Ghostex couldn't reconnect to it" shown when they opened
@@ -12,9 +12,14 @@
 //!
 //! CDXC:AppModal 2026-11-19 WHY: a failed open never opens the Missing Project Folder dialog. It
 //! did for a few hours (9a3853b53), and a chat that retries its terminal reopened that dialog
-//! again and again, which is what the user could not get rid of on their shortpoint project. The
-//! notice queue drops a repeat of the same notice; the dialog has no such guard. The dialog's
-//! redesign (one card per missing folder, closed until the folder changes) is pending Q4242.
+//! again and again, which is what the user could not get rid of on their shortpoint project.
+//!
+//! CDXC:Projects 2026-11-20 DECISION: User (Q4242, Q4244): no pop-up for a missing project folder.
+//! A terminal of a project whose header wears the slashed computer opens no notice: its chat says
+//! the folder is missing (server/src/project_folder_problem.rs), and a click on the session opens
+//! the mark's popover under the project's header (native_sidebar/folder_mark.rs); a retry opens
+//! nothing. A terminal whose own folder is gone inside a project that is still there (a removed
+//! worktree folder) keeps the notice that names it.
 //! SEE-ALSO: apps/desktop/src/bin/native_modal_demo/notice_modal.rs (the `terminal-*` preview
 //! states, same words).
 
@@ -82,13 +87,26 @@ pub(crate) fn terminal_open_failure_words(
 
 impl GhostexGpuiApp {
     /// Tells the user why the terminal of `key` did not open (an account refusal has its own
-    /// notice, `show_local_workspace_account_refusal_toast`).
+    /// notice, `show_local_workspace_account_refusal_toast`). `opened_by_user`: a click in the
+    /// sidebar asked for it, not a retry.
     pub(crate) fn show_local_workspace_terminal_open_failure(
         &mut self,
-        _key: &GpuiLocalWorkspaceSessionKey,
+        key: &GpuiLocalWorkspaceSessionKey,
         error: &GpuiGxserverRpcError,
+        opened_by_user: bool,
         cx: &mut gpui::Context<Self>,
     ) {
+        // A session of a project whose folder is missing: the project's header wears the mark and
+        // the session's chat says so, so no notice. A click opens the mark's popover; a retry
+        // opens nothing.
+        if error.code.as_deref() == Some(RESTORE_BLOCKED_MISSING_FOLDER)
+            && self.local_project_wears_folder_mark(&key.project_id)
+        {
+            if opened_by_user {
+                self.open_folder_popover_for_local_project(&key.project_id, cx);
+            }
+            return;
+        }
         let words = terminal_open_failure_words(
             error.code.as_deref(),
             &error.message,

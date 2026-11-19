@@ -1,12 +1,12 @@
-//! A picked folder: the Add Project folder pick, the Missing Project Folder dialog's Locate, and the
+//! A picked folder: the Add Project folder pick, the missing folder popover's Locate, and the
 //! onboarding's Finish, performed in Rust (`handleGpuiWorkspaceFolderPicked` and
 //! `relocateProjectFolder` in the old runtime).
 //!
-//! The calls are the runtime's: `/api/relocateProject` then a fresh snapshot, the dialog closed and
-//! a toast; `/api/addProjectPath` then the project opened the way the menu bar opens one (its last
-//! session, or the default agent when it has none); and for the onboarding, the project made active
-//! and its first session created with the agent the Get Started page chose, the dialog told how it
-//! went.
+//! The calls are the runtime's: `/api/relocateProject` then a fresh snapshot and the missing
+//! folder's popover told (a toast without one); `/api/addProjectPath` then the project opened the
+//! way the menu bar opens one (its last session, or the default agent when it has none); and for
+//! the onboarding, the project made active and its first session created with the agent the Get
+//! Started page chose, the dialog told how it went.
 //!
 //! CDXC:Onboarding 2026-08-24:
 //! Onboarding Finish lands the user in a working workspace: the project it just registered gets its
@@ -99,9 +99,10 @@ impl GhostexGpuiApp {
             let result = gx_rpc(
                 None,
                 "/api/relocateProject",
-                json!({ "path": path, "projectId": project_id }),
+                json!({ "path": &path, "projectId": &project_id }),
             )
             .await;
+            let project = ProjectKey::local(&project_id);
             let _ = this.update(cx, |this, cx| match result {
                 Ok(_) => {
                     // `refreshDomainPresentationSnapshotFromClient('patch')`: the row shows the
@@ -109,15 +110,22 @@ impl GhostexGpuiApp {
                     if let Some(client) = this.gx_store.client.as_ref() {
                         client.request_resubscribe();
                     }
-                    this.close_app_modal_from_bridge(cx);
-                    this.gx_store_create_toast("info", "Project folder updated", None, cx);
+                    // Locate Folder… from the header's popover: the popover says it worked and
+                    // closes (native_sidebar/folder_mark.rs).
+                    if !this.folder_popover_relocated(&project, &path, cx) {
+                        this.gx_store_create_toast("info", "Project folder updated", None, cx);
+                    }
                 }
-                Err(error) => this.gx_store_create_toast(
-                    "error",
-                    "Could not update project folder",
-                    Some(&error.message),
-                    cx,
-                ),
+                Err(error) => {
+                    if !this.folder_popover_failed(&project, &error.message, cx) {
+                        this.gx_store_create_toast(
+                            "error",
+                            "Could not update project folder",
+                            Some(&error.message),
+                            cx,
+                        );
+                    }
+                }
             });
         })
         .detach();

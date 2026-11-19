@@ -180,13 +180,13 @@ impl NativeChatView {
             .collect()
     }
 
-    /// Whether an approval row's answers take clicks yet: not for `APPROVAL_ARM_MS` after the row
-    /// first appeared, so a click meant for the row that was there before it lands on nothing
-    /// (security review of the dock approval rows: rows shift under the pointer). Every other row
-    /// is always armed.
+    /// Whether an approval's or a Collab message's row takes clicks yet: not for `APPROVAL_ARM_MS`
+    /// after the row first appeared, so a click meant for the row that was there before it lands
+    /// on nothing (security review of the dock rows: rows shift under the pointer, and a guest
+    /// chooses when a message arrives). Every other row is always armed.
     pub(super) fn approval_armed(&self, key: &str) -> bool {
         const APPROVAL_ARM_MS: u128 = 400;
-        if !key.starts_with("approval:") {
+        if !key.starts_with("approval:") && !key.starts_with("collab:") {
             return true;
         }
         self.board

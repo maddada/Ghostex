@@ -18,85 +18,97 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or_default()
 }
 
-/// The first line of a held message's words, cut, for its row's title.
-fn first_line(words: &str) -> String {
-    let line = words
-        .lines()
-        .map(str::trim)
-        .find(|line| !line.is_empty())
-        .unwrap_or_default();
-    let mut cut: String = line.chars().take(120).collect();
-    if cut.len() < line.len() || words.trim().lines().count() > 1 {
-        cut.push('\u{2026}');
+/// A guest's words as literal text in the chat's Markdown: every character Markdown would read
+/// (a link, a picture, emphasis, a heading) escaped, so they are drawn as written and a guest's
+/// `![](https://…)` never loads a picture.
+fn literal(words: &str) -> String {
+    let mut out = String::with_capacity(words.len());
+    for ch in words.chars() {
+        if "\\`*_[](){}#+-.!<>|~".contains(ch) {
+            out.push('\\');
+        }
+        out.push(ch);
     }
-    cut
+    out
 }
 
-/// What a held Collab message says, for its row's title: its words, or the form it answers.
-fn held_gist(entry: &Value) -> String {
-    let words = text(entry, "text");
-    if !words.trim().is_empty() {
-        return format!("\u{201c}{}\u{201d}", first_line(words));
-    }
-    match text(&entry["answers"], "title") {
-        "" => "a picture".to_string(),
-        title => format!("answers to {title}"),
-    }
-}
-
-/// A held Collab message whole, for the panel its row opens: the words, the pictures and each
-/// form's answers, as the chat's Markdown (its pictures drawn as the chat draws them).
+/// A held Collab message whole, for the panel its row opens: the words as plain text, its own
+/// uploaded pictures (`images`, gx-chat-core `extras::collab` keeps only those), and each form's
+/// answers, also as plain text.
 fn held_body(entry: &Value) -> String {
     let mut parts: Vec<String> = Vec::new();
     let words = text(entry, "text").trim();
     if !words.is_empty() {
-        parts.push(words.to_string());
+        parts.push(words.lines().map(literal).collect::<Vec<_>>().join("  \n"));
     }
     let pictures: Vec<String> = entry["images"]
         .as_array()
         .into_iter()
         .flatten()
-        .filter_map(|image| {
-            [text(image, "path"), text(image, "url")]
-                .into_iter()
-                .find(|source| !source.is_empty())
-                .map(|source| format!("![]({source})"))
-        })
+        .map(|image| text(image, "path"))
+        .filter(|path| !path.is_empty())
+        .map(|path| format!("![]({path})"))
         .collect();
-    if !pictures.is_empty() {
-        parts.push(pictures.join("\n"));
-    }
+    let mut body = crate::transcript::native_markdown::native_markdown(&pictures.join("\n"), false);
     let answers = entry["answers"]
         .is_object()
         .then_some(&entry["answers"])
         .into_iter()
         .chain(entry["extraAnswers"].as_array().into_iter().flatten());
     for card in answers.filter(|card| card.is_object()) {
-        let mut lines = vec![format!("**{}**", text(card, "title"))];
+        let mut lines = vec![format!("**{}**", literal(text(card, "title")))];
         for row in card["rows"].as_array().into_iter().flatten() {
-            let label = text(row, "label");
+            let label = literal(text(row, "label"));
             let value = if row["skipped"] == true {
-                "Skipped"
+                "Skipped".to_string()
             } else {
-                text(row, "value")
+                literal(text(row, "value"))
             };
             lines.push(if label.is_empty() {
-                format!("- {value}")
+                format!("\\- {value}")
             } else {
-                format!("- {label}: {value}")
+                format!("\\- {label}: {value}")
             });
         }
-        parts.push(lines.join("\n"));
+        parts.push(lines.join("  \n"));
     }
-    crate::transcript::native_markdown::native_markdown(&parts.join("\n\n"), false)
+    if !body.is_empty() {
+        parts.insert(parts.len().min(1), std::mem::take(&mut body));
+    }
+    parts.join("\n\n")
+}
+
+/// What a held message says, for its row's block: its words, or the forms it answers.
+fn held_words(entry: &Value) -> String {
+    let words = text(entry, "text").trim();
+    if !words.is_empty() {
+        return words.to_string();
+    }
+    match text(&entry["answers"], "title") {
+        "" => "(a picture)".to_string(),
+        title => format!("Answers to {title}"),
+    }
 }
 
 /// Ghostex Collab's rows: the owner's "Message from <guest>" with Decline, Edit and Send, and a
-/// guest's own messages waiting for the owner.
+/// guest's own messages waiting for the owner. The whole message shows on the row as plain text
+/// (its first rows, then "Show N more lines"), so Send is never pressed on a first line alone.
 fn collab_rows(collab: &Value) -> Vec<Value> {
     if collab["shared"] != true {
         return Vec::new();
     }
+    let block = |entry: &Value| {
+        let words = held_words(entry);
+        let (preview, more) = crate::extras::dock_approvals::block_preview(&words);
+        json!({
+            "command": words,
+            "commandLines": true,
+            // Drawn in the chat's own type, copied as a message (renderers' command block).
+            "commandPlain": true,
+            "commandPreview": preview,
+            "commandMore": more,
+        })
+    };
     let mut out = Vec::new();
     for card in collab["cards"].as_array().into_iter().flatten() {
         let id = text(card, "id");
@@ -107,11 +119,11 @@ fn collab_rows(collab: &Value) -> Vec<Value> {
                 "command": { "type": "resolveCollabMessage", "heldId": id, "action": action },
             })
         };
-        out.push(json!({
+        let mut row = json!({
             "key": format!("collab:{id}"),
             "kind": "collab",
             "status": "needs",
-            "title": format!("{}: {}", text(card, "title"), held_gist(card)),
+            "title": text(card, "title"),
             "body": held_body(card),
             "detail": [],
             "age": "",
@@ -119,28 +131,38 @@ fn collab_rows(collab: &Value) -> Vec<Value> {
             "busy": card["busy"] == true,
             "needs": true,
             "stays": true,
-        }));
+        });
+        merge(&mut row, block(card));
+        out.push(row);
     }
-    for row in collab["waiting"].as_array().into_iter().flatten() {
-        out.push(json!({
-            "key": format!("collab-waiting:{}", text(row, "id")),
+    for entry in collab["waiting"].as_array().into_iter().flatten() {
+        let mut row = json!({
+            "key": format!("collab-waiting:{}", text(entry, "id")),
             "kind": "collabWaiting",
             "status": "waiting",
-            "title": format!("{}: {}", text(collab, "waitingForOwner"), held_gist(row)),
-            "body": held_body(row),
+            "title": text(collab, "waitingForOwner"),
+            "body": held_body(entry),
             "detail": [],
             "age": "",
             "buttons": [],
             "needs": false,
             "stays": true,
-        }));
+        });
+        merge(&mut row, block(entry));
+        out.push(row);
     }
     out
 }
 
+fn merge(row: &mut Value, more: Value) {
+    if let (Some(row), Value::Object(more)) = (row.as_object_mut(), more) {
+        row.extend(more);
+    }
+}
+
 /// The computer's row, the held messages' row and Collab's rows, from what the document already
 /// says.
-fn rows(document: &Document) -> Vec<Value> {
+fn rows(state: &ChatState, document: &Document) -> Vec<Value> {
     let mut out = Vec::new();
     if let Some(notice) = document.computer_notice.as_ref() {
         out.push(json!({
@@ -184,9 +206,9 @@ fn rows(document: &Document) -> Vec<Value> {
             "stays": true,
         }));
     }
-    if let ghostex_gx_protocol::Tri::Value(collab) = &document.collab {
-        out.extend(collab_rows(collab));
-    }
+    // Read from the state, not the document: the document's `collab` is written after this runs
+    // (`document::assemble`), and a held message must never be drawn nowhere.
+    out.extend(collab_rows(&crate::extras::collab::project(state)));
     out
 }
 
@@ -211,7 +233,7 @@ pub fn keys(state: &ChatState, context: &crate::state::ChatContext) -> Vec<Strin
 
 /// Puts the computer's and the held messages' rows into `workDock`, right after its approvals.
 pub fn add(state: &ChatState, document: &mut Document) {
-    let rows = rows(document);
+    let rows = rows(state, document);
     if rows.is_empty() {
         return;
     }

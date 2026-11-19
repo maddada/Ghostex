@@ -1145,7 +1145,15 @@ impl GhostexGpuiApp {
                             this.show_local_workspace_account_refusal_toast(&key, &error.message, cx);
                             return;
                         }
-                        this.show_local_workspace_terminal_open_failure(&key, &error, cx);
+                        this.show_local_workspace_terminal_open_failure(
+                            &key,
+                            &error,
+                            matches!(
+                                completion_origin,
+                                GpuiLocalWorkspaceAttachOrigin::SidebarFocus
+                            ),
+                            cx,
+                        );
                     }
                 }
             });

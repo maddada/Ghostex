@@ -559,6 +559,10 @@ fn native_group(
             )
             .collect(),
         holds_active_session_group: group.holds_active_session_group,
+        folder_problem: core
+            .project_context
+            .as_ref()
+            .and_then(|project| project.folder_problem.clone()),
         project_context: project_context(group),
         remote_machine_context: core.remote_machine.as_ref().map(|remote| {
             let mut context = json!({

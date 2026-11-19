@@ -3,9 +3,8 @@
 //!
 //! CDXC:Worktrees 2026-11-19 WHY: Rename Worktree (server/src/server/worktree_ops/rename.rs), Locate
 //! Folder… on a missing project (`relocate_project_moving_sessions` in
-//! server/src/domain/repository/project.rs) and the desktop's missing-folder check
-//! (apps/desktop/src/app/terminal_open_failure.rs) all decide which stored folders sat inside a
-//! folder that is gone, so they share one matcher: paths compared part by part, `\` separating parts
+//! server/src/domain/repository/project.rs) both decide which stored folders sat inside a folder
+//! that is gone, so they share one matcher: paths compared part by part, `\` separating parts
 //! in a Windows path as `/` does, a `\\?\` prefix ignored, letter case ignored where the volume
 //! ignores it, and a folder reached through a symlink matched under the link's target too (the
 //! user's `~/dev/shortpoint` was a link into a folder on another drive, and sessions stored either

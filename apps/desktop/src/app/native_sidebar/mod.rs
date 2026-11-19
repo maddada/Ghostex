@@ -16,6 +16,7 @@ mod disclosure;
 pub(crate) mod drag;
 mod drag_source;
 mod empty;
+pub(crate) mod folder_mark;
 pub(crate) mod extension_panel;
 pub(crate) mod focus_order;
 mod gbots_departments;

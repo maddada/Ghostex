@@ -89,6 +89,10 @@ pub(crate) struct NativeSidebarGroup {
     /// The chip draws that computer's icon (gx-core `MachineChip`, computer_icons.rs).
     #[serde(default)]
     pub(crate) machine_names: Vec<SidebarMachineChip>,
+    /// The project's folder is missing: the slashed computer after its name and the popover it
+    /// opens (gx-core `FolderProblemView`, native_sidebar/folder_mark.rs).
+    #[serde(skip)]
+    pub(crate) folder_problem: Option<ghostex_gx_core::FolderProblemView>,
     pub(crate) project_context: Option<Value>,
     pub(crate) remote_machine_context: Option<Value>,
     #[serde(deserialize_with = "deserialize_sessions")]

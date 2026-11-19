@@ -183,10 +183,21 @@ impl GhostexGpuiApp {
                             )
                         }),
                 )
+                // The slashed computer of a project whose folder is missing (folder_mark.rs).
+                .when(home.is_none(), |title| {
+                    title.children(self.render_project_folder_mark(
+                        group,
+                        tooltip_span,
+                        appearance,
+                        cx,
+                    ))
+                })
                 .when_some(tooltip.filter(|_| home.is_none()), |title, tooltip| {
                     title.when(
                         self.native_sidebar.pointer_inside
                             && self.native_sidebar.menu.is_none()
+                            // The missing folder's popover hangs right under it (folder_mark.rs).
+                            && self.native_sidebar.folder_popover.is_none()
                             && !cx.has_active_drag(),
                         |row| {
                             row.managed_discrete_tooltip_with_placement(
@@ -244,6 +255,10 @@ impl GhostexGpuiApp {
                 .on_any_mouse_down(cx.listener(|app, _, _, cx| app.dismiss_main_hub_card(cx)))
             })
             .child(self.native_sidebar.header_hover.probe(hover_id))
+            // Its popover hangs under the list's header, not the pinned copy (folder_mark.rs).
+            .when(!pinned, |row| {
+                row.children(self.render_project_folder_popover(group, appearance, cx))
+            })
             // Where the pick-an-agent menu of this computer's Chief hangs (chief.rs).
             .when(
                 home.as_ref()
