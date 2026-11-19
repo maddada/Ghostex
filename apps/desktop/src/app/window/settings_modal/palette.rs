@@ -58,14 +58,15 @@ pub(crate) struct SettingsPalette {
 
 /// How much of what is behind it a Settings dialog's fill covers under glass
 /// (CDXC:Settings 2026-11-11 on [`SettingsPalette::dialog_surface`]): nearly all of it, since a
-/// dialog drawn inside the Settings window cannot blur that window's own page.
-const GLASS_DIALOG_ALPHA: f32 = 0.96;
+/// dialog drawn inside the Settings window cannot blur that window's own page. Shared with the
+/// notice window through the modal kit (`ModalPalette::lifted_dialog_fill`).
+const GLASS_DIALOG_ALPHA: f32 = LIFTED_DIALOG_GLASS_ALPHA;
 
 /// How far a Settings dialog's fill is lifted from the theme colour toward white, dark and light.
 /// The see-through tint it replaces read as the popovers' fill ([`SettingsPalette::solid_dialog_surface`],
 /// 5.5% and 60%) brightened by the page under it; this solid fill sits a smidge darker than that.
-const DIALOG_LIFT_DARK: f32 = 0.075;
-const DIALOG_LIFT_LIGHT: f32 = 0.55;
+const DIALOG_LIFT_DARK: f32 = LIFTED_DIALOG_LIFT_DARK;
+const DIALOG_LIFT_LIGHT: f32 = LIFTED_DIALOG_LIFT_LIGHT;
 
 /// `--ghostex-accent` for the default tint: the sky accent the React modal host publishes before
 /// the settings arrive.
