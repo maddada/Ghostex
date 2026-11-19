@@ -62,22 +62,9 @@ pub(super) fn computer_name(tab: &RemoteTab) -> String {
         .unwrap_or_else(crate::host_name::local_computer_name)
 }
 
-/// The pip's diameter and how far it sits past the icon's top and right edges: the sidebar's
-/// (native_sidebar/computer_mark.rs `with_here_pip`, which Settings, also drawn by the preview
-/// binary, can't call).
-const PIP_SIZE: f32 = 4.0;
-const PIP_OUTSET: f32 = 3.0;
-
 /// This computer's icon (the one picked for it, else its system's), in the tile a saved computer's
-/// row has, with the pip on its top-right corner while another computer shows in the sidebar.
-///
-/// CDXC:RemoteMachines 2026-11-20 SEE-ALSO: native_sidebar/computer_mark.rs `with_here_pip` (Q4241,
-/// the corner pip on the computer you're on).
-pub(super) fn this_computer_icon_tile(
-    tab: &RemoteTab,
-    t: &RemoteTokens,
-    cx: &gpui::App,
-) -> AnyElement {
+/// row has.
+pub(super) fn this_computer_icon_tile(tab: &RemoteTab, t: &RemoteTokens) -> AnyElement {
     let id = ghostex_gx_core::LOCAL_MACHINE_ID;
     let asset = tab
         .computer_icons
@@ -86,36 +73,12 @@ pub(super) fn this_computer_icon_tile(
         .map(|icon| icon.asset)
         .or_else(|| tab.computer_icons.default_asset(id))
         .unwrap_or(ICON_DEVICE_DESKTOP);
-    // Another computer the sidebar shows: a saved one that is on and isn't this one again.
-    let several = tab.remote_machines(cx).iter().any(|machine| {
-        machine.get("disabled").and_then(serde_json::Value::as_bool) != Some(true)
-            && machine
-                .get("id")
-                .and_then(serde_json::Value::as_str)
-                .is_some_and(|machine_id| !tab.this_computer.contains(machine_id))
-    });
-    let icon = settings_icon(asset, 18.0, css_mix(t.muted, 0.70, t.foreground));
     super::machines::tile_frame(t)
-        .child(
-            div()
-                .relative()
-                .size(px(18.0))
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(icon)
-                .when(several, |icon| {
-                    icon.child(
-                        div()
-                            .absolute()
-                            .top(px(-PIP_OUTSET))
-                            .right(px(-PIP_OUTSET))
-                            .size(px(PIP_SIZE))
-                            .rounded_full()
-                            .bg(hsla(t.foreground)),
-                    )
-                }),
-        )
+        .child(settings_icon(
+            asset,
+            18.0,
+            css_mix(t.muted, 0.70, t.foreground),
+        ))
         .into_any_element()
 }
 

@@ -10,7 +10,7 @@ pub(crate) mod chief_row_view;
 mod claude_cloud;
 mod cloud_box;
 mod collections;
-pub(crate) mod computer_mark;
+mod computer_mark;
 mod decorations;
 mod disclosure;
 pub(crate) mod drag;
