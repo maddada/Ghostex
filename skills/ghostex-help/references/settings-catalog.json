@@ -10748,6 +10748,8 @@
         "~/.azure",
         "~/.codex/auth.json",
         "~/.claude/.credentials.json",
+        "~/.claude-profiles/ghostex-*/.ghostex-hub-key",
+        "~/.codex-profiles/ghostex-*/config.toml",
         "~/Library/Keychains",
         "~/Library/Cookies",
         "~/Library/Safari",

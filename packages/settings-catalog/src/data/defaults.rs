@@ -196,6 +196,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
             J::Str("~/.azure"),
             J::Str("~/.codex/auth.json"),
             J::Str("~/.claude/.credentials.json"),
+            J::Str("~/.claude-profiles/ghostex-*/.ghostex-hub-key"),
+            J::Str("~/.codex-profiles/ghostex-*/config.toml"),
             J::Str("~/Library/Keychains"),
             J::Str("~/Library/Cookies"),
             J::Str("~/Library/Safari"),

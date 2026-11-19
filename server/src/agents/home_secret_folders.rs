@@ -41,18 +41,84 @@ pub(crate) fn home_secret_folders() -> Vec<String> {
     }
 }
 
-/// The usable entries: `~/`-relative or absolute, without a trailing separator, once each.
+/// The usable entries: `~/`-relative or absolute, without a trailing separator, once each. A `*`
+/// in an entry's folder names matches any name at that level and is expanded to what is on disk
+/// now, since a Codex permission profile takes plain paths.
 fn folders_in<'a>(entries: impl Iterator<Item = &'a str>) -> Vec<String> {
     let mut folders: Vec<String> = Vec::new();
     for folder in entries
         .map(|folder| folder.trim().trim_end_matches(['/', '\\']).to_string())
         .filter(|folder| folder.starts_with("~/") || std::path::Path::new(folder).is_absolute())
+        .flat_map(|folder| {
+            if folder.contains('*') {
+                expand_star(&folder)
+            } else {
+                vec![folder]
+            }
+        })
     {
         if !folders.contains(&folder) {
             folders.push(folder);
         }
     }
     folders
+}
+
+/// `pattern` with each `*` segment (`ghostex-*`: any name starting and ending as written) replaced
+/// by the names on disk that match it, keeping a leading `~/`.
+///
+/// CDXC:Chief 2026-11-19 WHY: the CLIProxyAPI hub profile folders (`~/.claude-profiles/ghostex-<hub>`, `~/.codex-profiles/ghostex-<hub>`) hold a hub's client key in a file of their own, so the default list names them with `ghostex-*` (security review of the hub work); the other profiles there are Claude Swap's and Codex Swap's, which their own sessions use, so the whole folders stay open.
+fn expand_star(pattern: &str) -> Vec<String> {
+    let (home, rest) = match pattern.strip_prefix("~/") {
+        Some(rest) => match crate::accounts::launch::home() {
+            Ok(home) => (Some(home), rest.to_string()),
+            Err(_) => return Vec::new(),
+        },
+        None => (None, pattern.to_string()),
+    };
+    let mut found = vec![String::new()];
+    for segment in rest
+        .split(['/', '\\'])
+        .filter(|segment| !segment.is_empty())
+    {
+        let mut next = Vec::new();
+        for prefix in &found {
+            if let Some((start, end)) = segment.split_once('*') {
+                let base = match &home {
+                    Some(home) => home.join(prefix),
+                    None => std::path::PathBuf::from(format!("/{prefix}")),
+                };
+                for entry in std::fs::read_dir(&base).into_iter().flatten().flatten() {
+                    let name = entry.file_name().to_string_lossy().into_owned();
+                    if name.len() >= start.len() + end.len()
+                        && name.starts_with(start)
+                        && name.ends_with(end)
+                    {
+                        next.push(join(prefix, &name));
+                    }
+                }
+            } else {
+                next.push(join(prefix, segment));
+            }
+        }
+        found = next;
+    }
+    found
+        .into_iter()
+        .filter(|path| !path.is_empty())
+        .map(|path| match home {
+            Some(_) => format!("~/{path}"),
+            None => format!("/{path}"),
+        })
+        .collect()
+}
+
+fn join(prefix: &str, name: &str) -> String {
+    if prefix.is_empty() {
+        name.to_string()
+    } else {
+        format!("{prefix}/{name}")
+    }
 }
 
 /// Whether `runtime_settings` mark a GBot chat: `runtimeSettings.gbot` (server/src/gbots/session.rs
