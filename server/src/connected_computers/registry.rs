@@ -133,6 +133,10 @@ struct PeerGrant {
     name: String,
     agent_access: bool,
     expires_at: Instant,
+    /// The desktop app (the owner session or the token file) issued it (`set_owner_issued`): only
+    /// such a computer's relayed messages may count as the user's
+    /// (session_chat_send/sender_mark.rs `RELAYED_USER_SEND`).
+    owner_issued: bool,
 }
 
 #[derive(Default)]
@@ -369,9 +373,27 @@ pub(crate) fn issue_grant(
             name: name.chars().take(MAX_NAME_CHARS).collect(),
             agent_access,
             expires_at: now + ttl.clamp(Duration::from_secs(10), MAX_REGISTRATION_TTL),
+            owner_issued: false,
         },
     );
     Ok(Some(token))
+}
+
+/// Notes that the desktop app (an owner-level caller) issued `server_id`'s grant just now.
+pub(crate) fn set_owner_issued(server_id: &str) {
+    if let Some(grant) = registry().grants.get_mut(server_id) {
+        grant.owner_issued = true;
+    }
+}
+
+/// Whether `server_id`'s live grant was issued by the desktop app (`set_owner_issued`).
+pub(crate) fn owner_issued(server_id: &str) -> bool {
+    let mut registry = registry();
+    prune(&mut registry, Instant::now());
+    registry
+        .grants
+        .get(server_id)
+        .is_some_and(|grant| grant.owner_issued && grant.agent_access)
 }
 
 /// Whether `server_id` holds a live grant now (a renewal keeps it; the security log notes only new ones).

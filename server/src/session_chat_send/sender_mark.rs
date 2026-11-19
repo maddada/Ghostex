@@ -245,6 +245,9 @@ pub(crate) fn prepare(
     let via = params
         .remove("via")
         .and_then(|value| value.as_str().map(str::to_string));
+    // The relay's mark never reaches a handler, whoever sent it; it is read below only from a
+    // computer the desktop app connected (`owner_issued`).
+    let relayed_user = params.remove(RELAYED_USER_SEND) == Some(Value::Bool(true));
     let target_project = param(params, "projectId").to_string();
     let target_session = param(params, "sessionId").to_string();
     match caller {
@@ -317,8 +320,8 @@ pub(crate) fn prepare(
         // there with `userSend` (connected_computers/relay.rs `mark_relayed_send`); its agents'
         // messages come signed and without it. Recorded as the user's, so the message's quotes
         // of earlier messages work in chats on this computer too.
-        Principal::Peer { .. } => {
-            let from_user = params.remove(RELAYED_USER_SEND) == Some(Value::Bool(true));
+        Principal::Peer { server_id, .. } => {
+            let from_user = relayed_user && crate::connected_computers::owner_issued(server_id);
             let text = param(params, "text").to_string();
             if from_user
                 && !text.trim().is_empty()
@@ -373,11 +376,25 @@ mod tests {
         assert!(take_user_send(&paths, "P1", "G1", "like #M1"));
         assert!(!is_user_send(&paths, "P1", "G1", "like #M1"));
 
-        // Relayed from another of the user's computers: theirs only when that computer marked it.
+        // Relayed from another of the user's computers: theirs only when that computer marked it
+        // and the desktop app connected that computer (`owner_issued`).
         let peer = Principal::Peer {
             server_id: "S2".into(),
             name: "Laptop".into(),
         };
+        let _serial = crate::connected_computers::tests::serial();
+        let ttl = std::time::Duration::from_secs(60);
+        crate::connected_computers::issue_grant("S2", "Laptop", true, false, ttl, true).unwrap();
+        let mut body = json!({ "params": { "projectId": "P1", "sessionId": "G1", "text": "see #M0", "userSend": true } });
+        prepare(
+            &paths,
+            "S1",
+            "/api/sendSessionChatMessage",
+            &peer,
+            &mut body,
+        );
+        assert!(!is_user_send(&paths, "P1", "G1", "see #M0"));
+        crate::connected_computers::set_owner_issued("S2");
         let relayed = |caller: &Principal, text: &str| {
             let mut params = Map::new();
             params.insert("projectId".into(), json!("P1"));

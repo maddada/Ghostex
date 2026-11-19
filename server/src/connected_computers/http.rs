@@ -41,27 +41,44 @@ pub(crate) fn handle_connected_computers_http(
     CDXC:ServerLinks 2026-11-19 FIX:
     Fable 5.2's review of server links (GitHub #674), adopted by the user (2A): any agent's session token could call these for any server id, so it could take a linked server's grant (get its live token back, rotate it, lift a deny with `owner: true`) or register its own address under that server's id. For a server id a server link names here, only this computer's own clients (the app and the CLI through the token file, the owner session, a paired phone) may change its grant or registration; an agent's session token is refused. Every other server id, and the desktop app's own link, behave as before.
     */
-    if matches!(caller, crate::security::Principal::Session { .. })
-        && endpoint_path != "/api/listConnectedComputers"
+    /*
+    CDXC:ServerLinks 2026-11-20 FIX:
+    Fable's review of the relayed user sends (809e881f4) found an agent's session token could
+    still issue itself a grant under a made-up server id (or get a connected computer's live token
+    back) and then call its own gxserver as that "computer", whose messages count as the user's
+    (session_chat_send/sender_mark.rs `RELAYED_USER_SEND`). Only the desktop app calls these,
+    through the owner session or the token file, so every other caller is refused for every
+    server id; listing stays open. Supersedes the linked-servers-only refusal above.
+    */
+    if !matches!(
+        caller,
+        crate::security::Principal::Owner { .. } | crate::security::Principal::LocalAgent
+    ) && endpoint_path != "/api/listConnectedComputers"
     {
-        let server_id = params
+        let linked = params
             .get("serverId")
             .and_then(Value::as_str)
             .map(str::trim)
-            .unwrap_or_default();
-        if !server_id.is_empty()
-            && crate::remote_access::server_links::is_linked_server_id(&state.paths, server_id)
-        {
-            return routed_json(
-                Some(endpoint_path),
-                StatusCode::FORBIDDEN,
-                rpc_error(
-                    "forbidden",
-                    "That computer is linked to this one as a server: only you can change its link (ghostex computers, or Settings › Remote).",
-                    Some(request_id),
-                ),
-            );
-        }
+            .is_some_and(|server_id| {
+                !server_id.is_empty()
+                    && crate::remote_access::server_links::is_linked_server_id(
+                        &state.paths,
+                        server_id,
+                    )
+            });
+        return routed_json(
+            Some(endpoint_path),
+            StatusCode::FORBIDDEN,
+            rpc_error(
+                "forbidden",
+                if linked {
+                    "That computer is linked to this one as a server: only you can change its link (ghostex computers, or Settings › Remote)."
+                } else {
+                    "Only this computer's Ghostex app can connect or disconnect other computers."
+                },
+                Some(request_id),
+            ),
+        );
     }
     let result = match endpoint_path.as_str() {
         "/api/registerConnectedComputer" => {
@@ -125,6 +142,10 @@ pub(crate) fn handle_connected_computers_http(
                 .unwrap_or(registry::DEFAULT_REGISTRATION_TTL);
             let had_grant = registry::has_grant(server_id);
             let grant = registry::issue_grant(server_id, name, agent_access, rotate, ttl, owner);
+            // Only owner-level callers get this far (above).
+            if matches!(grant, Ok(Some(_))) {
+                registry::set_owner_issued(server_id);
+            }
             if matches!(grant, Ok(Some(_))) && (!had_grant || rotate) {
                 crate::audit::record(
                     crate::audit::Action::new(
