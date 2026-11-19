@@ -1194,6 +1194,19 @@ fn state_value(
     let helper_rows:Vec<_>=[Provider::Claude,Provider::Codex].into_iter().map(|p|json!({"provider":p,"installed":helpers::executable(home,p.helper()).is_some(),"cliInstalled":helpers::executable(home,p.id()).is_some(),"error":snapshot.errors.get(&p),"installCommand":p.install_command(home),"loginCommand":p.login_command(),"codexSwapNeedsUpdate":p==Provider::Codex&&super::helper_tools::codex_swap_needs_update_to_add(home)})).collect();
     let mut value = json!({"accounts":rows,"helpers":helper_rows,"defaults":{"claude":registry.defaults.get(&Provider::Claude).cloned().unwrap_or_default(),"codex":registry.defaults.get(&Provider::Codex).cloned().unwrap_or_default()},"defaultAccounts":super::default_account::quick_launch_accounts(registry,snapshot),"newSessionAccounts":registry.new_session_accounts});
     value["swapLogins"] = json!(swap_logins);
+    // The names of the hubs New sessions start on is pinned to, also while the CLIProxyAPI
+    // extension is off (Settings shows the name, not the pin).
+    let paths = crate::paths::get_gxserver_paths(None);
+    value["newSessionHubLabels"] = json!(registry
+        .new_session_accounts
+        .iter()
+        .filter_map(|(provider, choice)| match choice {
+            NewSessionAccount::Pinned { id } => {
+                super::hub::launch::pinned_label(&paths, id).map(|label| (*provider, label))
+            }
+            _ => None,
+        })
+        .collect::<std::collections::BTreeMap<_, _>>());
     value["hubFallbackAccounts"] = json!(super::default_account::hub_fallback_accounts(
         registry, snapshot
     ));

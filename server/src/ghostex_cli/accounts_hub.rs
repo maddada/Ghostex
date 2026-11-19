@@ -35,7 +35,8 @@ from standard input (-), never from the command line, and never printed:
   ssh me@hub 'cat ~/hub-client-key' \\
     | ghostex accounts hub add --name Hub --address http://100.64.0.1:8317 --client-key-stdin
   ghostex secret request --label \"Hub client key\" --reason \"…\"   (then --client-key-file <its file>)
-Only one key can come from standard input per command.
+Only one key can come from standard input per command. A new --address needs the client key
+again (and the management key, when the hub has one): saved keys never go to a new address.
 
 Run it on each computer that should use the hub (an agent session on that computer can run
 it); agents on another computer can't change this computer's accounts.";
@@ -50,6 +51,15 @@ struct Options {
     management_key: Option<String>,
     clear_management_key: bool,
     flags: Flags,
+}
+
+/// `text` to repeat in a message, or "that" when it is long enough to be a key typed by mistake.
+fn shown(text: &str) -> &str {
+    if text.chars().count() >= 16 && !text.contains(char::is_whitespace) {
+        "that"
+    } else {
+        text
+    }
 }
 
 /// Where a key comes from: a file, or standard input (`-`).
@@ -70,7 +80,8 @@ fn read_key(source: &str, what: &str) -> CliResult<String> {
         text
     } else {
         std::fs::read_to_string(source).map_err(|error| {
-            CliError::Other(format!("Could not read the {what} file {source}: {error}"))
+            // The path isn't repeated: a key typed where its file belongs would show here.
+            CliError::Other(format!("Could not read the {what} file: {error}"))
         })?
     };
     let key = text.trim_start_matches('\u{feff}').trim().to_string();
@@ -128,9 +139,14 @@ fn parse(args: &[String]) -> CliResult<Options> {
             }
             "--clear-management-key" => options.clear_management_key = true,
             "--client-key" | "--management-key" | "--key" => {
+                let flag = if arg == "--management-key" {
+                    "--management-key"
+                } else {
+                    "--client-key"
+                };
                 return Err(CliError::Other(format!(
-                    "{arg} isn't taken: a key on the command line stays in your shell's history. Use {arg}-file <path> or {arg}-stdin."
-                )))
+                    "{arg} isn't taken: a key on the command line stays in your shell's history. Use {flag}-file <path> or {flag}-stdin."
+                )));
             }
             // Accounts are not among what another computer's agents may use
             // (connected_computers/scope.rs), so a hub is added on the computer itself.
@@ -143,10 +159,16 @@ fn parse(args: &[String]) -> CliResult<Options> {
                     "Hubs are added on each computer itself: run this command in a session on that computer.".into(),
                 ))
             }
+            // `--flag=value`: never repeated, since the value may be a key.
             other if other.starts_with("--") => {
-                return Err(CliError::Other(format!(
-                    "Unknown argument: {other}. See ghostex accounts hub --help."
-                )))
+                let name = other.split_once('=').map_or(other, |(name, _)| name);
+                return Err(CliError::Other(if name != other {
+                    format!(
+                        "Give {name} its value after a space, and a key only from a file or standard input. See ghostex accounts hub --help."
+                    )
+                } else {
+                    format!("Unknown argument: {name}. See ghostex accounts hub --help.")
+                }));
             }
             other => options.positional.push(other.to_string()),
         }
@@ -190,7 +212,11 @@ fn find_hub<'a>(hubs: &'a [Value], wanted: &str) -> CliResult<&'a Value> {
             CliError::Other(if names.is_empty() {
                 "No hub is added. Add one with ghostex accounts hub add.".to_string()
             } else {
-                format!("No hub is called {wanted}. Hubs: {}.", names.join(", "))
+                format!(
+                    "No hub is called {}. Hubs: {}.",
+                    shown(wanted),
+                    names.join(", ")
+                )
             })
         })
 }
@@ -263,7 +289,7 @@ pub(super) fn run(args: &[String]) -> CliResult<()> {
             if !options.positional.is_empty() {
                 return Err(CliError::Other(format!(
                     "Unknown argument: {}. See ghostex accounts hub --help.",
-                    options.positional[0]
+                    shown(&options.positional[0])
                 )));
             }
             list()?

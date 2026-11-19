@@ -370,6 +370,17 @@ pub(crate) fn check_reachable(paths: &GxserverPaths, hub_id: &str) -> Result<(),
     })
 }
 
+/// The name a New sessions start on pin to a hub (`cliproxy:<hub id>`) shows, whether or not the
+/// extension is on: the hub's name, else its host.
+pub(crate) fn pinned_label(paths: &GxserverPaths, id: &str) -> Option<String> {
+    let hub = super::store::find(paths, id.strip_prefix(ACCOUNT_PREFIX)?)?;
+    Some(if hub.label.trim().is_empty() {
+        super::host(&hub.url)
+    } else {
+        hub.label
+    })
+}
+
 /// The address of hub `hub_id`, while it is saved.
 pub(crate) fn hub_url(paths: &GxserverPaths, hub_id: &str) -> Option<String> {
     super::store::find(paths, hub_id).map(|hub| hub.url)

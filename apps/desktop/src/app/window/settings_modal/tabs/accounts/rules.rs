@@ -136,6 +136,17 @@ impl AccountsTab {
                 }),
         );
         let has_hubs = data.hubs().is_some_and(|hubs| !hubs.is_empty());
+        // A pin to a hub while the CLIProxyAPI extension is off (no hubs listed): its name, and
+        // that Auto is used meanwhile (server/src/accounts/hub/launch.rs `default_hub`).
+        if value.starts_with("cliproxy:") && data.hubs().is_none() {
+            let label = data.raw["newSessionHubLabels"][provider]
+                .as_str()
+                .unwrap_or("removed hub");
+            options.push(SettingOption {
+                label: format!("On the hub · {label} (CLIProxyAPI is off: Auto is used)"),
+                value: value.clone(),
+            });
+        }
         // A CLIProxyAPI hub, saved as the pinned account `cliproxy:<hub id>`
         // (CDXC:AgentProviders 2026-11-19 in server/src/accounts/hub/launch.rs).
         options.extend(

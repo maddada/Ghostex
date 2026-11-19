@@ -199,13 +199,22 @@ pub(crate) fn requested_account(
             "This agent's command chooses its own login, so it takes no account. Leave out --account.",
         ));
     }
-    // A hub's name, host or id starts the session On the hub (hub/launch.rs `hub_named`).
-    if let Some(hub) =
-        super::hub::launch::hub_named(&crate::paths::get_gxserver_paths(None), wanted)
-    {
-        return Ok(format!("{}{hub}", super::hub::launch::ACCOUNT_PREFIX));
-    }
     let registry = store::read(db)?;
+    // A hub's name, host or id starts the session On the hub (hub/launch.rs `hub_named`), unless
+    // it reads as a saved account: a number, an email or a saved account's name come first.
+    let names_account = wanted.trim().parse::<u32>().is_ok()
+        || wanted.contains('@')
+        || registry
+            .accounts
+            .iter()
+            .any(|a| a.provider == provider && a.name.trim().eq_ignore_ascii_case(wanted.trim()));
+    if !names_account {
+        if let Some(hub) =
+            super::hub::launch::hub_named(&crate::paths::get_gxserver_paths(None), wanted)
+        {
+            return Ok(format!("{}{hub}", super::hub::launch::ACCOUNT_PREFIX));
+        }
+    }
     let snapshot = super::runtime::current_snapshot();
     let (account, _) = super::cli::resolve_ready_account(&registry, &snapshot, provider, wanted)?;
     Ok(account.id.clone())
