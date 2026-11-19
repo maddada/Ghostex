@@ -766,6 +766,24 @@ mod tests {
     }
 
     #[test]
+    fn a_pasted_code_reads_back_in_every_form() {
+        let code = compact_vector_code();
+        let bare = encode_easy_connect_code(&code);
+        assert_eq!(decode_easy_connect_code_text(&bare), Some(code.clone()));
+        let compact = encode_easy_connect_compact_code(&code).unwrap();
+        assert_eq!(decode_easy_connect_code_text(&compact), Some(code.clone()));
+        assert_eq!(
+            decode_easy_connect_code_text(&compact.to_ascii_lowercase()),
+            Some(code.clone())
+        );
+        assert_eq!(
+            decode_easy_connect_code_text(&easy_connect_pairing_link(&code)),
+            Some(code)
+        );
+        assert_eq!(decode_easy_connect_code_text("nonsense"), None);
+    }
+
+    #[test]
     fn compact_code_matches_the_shared_vector() {
         assert_eq!(
             encode_easy_connect_compact_code(&compact_vector_code()).as_deref(),
