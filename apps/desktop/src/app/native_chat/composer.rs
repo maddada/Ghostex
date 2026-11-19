@@ -519,9 +519,6 @@ impl NativeChatView {
         if let Some(requests) = self.render_secret_requests(p, window, cx) {
             waiting.push(requests);
         }
-        if let Some(collab) = self.render_collab(p, cx) {
-            waiting.push(collab);
-        }
         if let Some(card) = self.render_unrecorded_api_error(p, cx) {
             waiting.push(card.into_any_element());
         }
@@ -760,6 +757,8 @@ impl NativeChatView {
                     cx,
                 ),
             )
+            // Quiet lines about the box itself (box_notes.rs), under its text.
+            .children((!collapsed).then(|| self.render_box_notes(p, cx)).flatten())
             .child(
                 div()
                     .relative()
