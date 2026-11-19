@@ -22,6 +22,8 @@ pub enum TriggerKind {
     Skill,
     /// `+`: another agent session of the project (`session_mentions.rs`).
     Session,
+    /// `#M`: one of the user's earlier messages in this chat (`message_numbers.rs`).
+    Message,
 }
 
 /// The mention under the caret.
@@ -80,6 +82,8 @@ pub fn detect_composer_trigger(text: &str, caret: Option<usize>) -> Option<Compo
         TriggerKind::Path
     } else if is_session_token(&token) {
         TriggerKind::Session
+    } else if is_message_token(&token) {
+        TriggerKind::Message
     } else {
         return session_words_trigger(&indexed, cursor);
     };
@@ -138,6 +142,16 @@ fn session_words_trigger(indexed: &Utf16Text, cursor: usize) -> Option<ComposerT
         });
     }
     None
+}
+
+/// A `#M` token that is a message ID being typed: `#M`, `#M1`, `#m12`. `#12` stays a GitHub
+/// issue, and `#Make` (a heading's word) is no ID (CDXC:SessionChat 2026-11-20 in
+/// transcript/message_numbers.rs).
+fn is_message_token(token: &str) -> bool {
+    token
+        .strip_prefix("#M")
+        .or_else(|| token.strip_prefix("#m"))
+        .is_some_and(|digits| digits.chars().all(|c| c.is_ascii_digit()))
 }
 
 /// A `+` token that is a mention being typed: `+`, `+fix`, but not `+1`, `++` or `+-`.

@@ -126,8 +126,7 @@ fn shell_command_key(normalized: String) -> String {
 /// as the `!` line that ran it, and a turn gxserver added a note under reads without that note
 /// (`session/appended_notes.rs`).
 fn user_message_text(message: &ChatMessage) -> String {
-    shell_command_prompt_text(message)
-        .unwrap_or_else(|| without_notes(&block_text(message, "\n")))
+    shell_command_prompt_text(message).unwrap_or_else(|| without_notes(&block_text(message, "\n")))
 }
 
 fn user_message_content_key(message: &ChatMessage) -> String {
@@ -583,6 +582,8 @@ pub fn pending_sends_as_messages(pending: &[PendingSend]) -> Vec<ChatRow> {
                 api_error: None,
                 mention_paths: None,
                 custom_message: None,
+                message_number: None,
+                message_ref: None,
             };
             let command = entry
                 .text

@@ -243,10 +243,10 @@ pub fn project_message(
     );
     projected.insert("actionContent".to_string(), message_action_content(&body));
     projected.insert("time".to_string(), message_time(message.timestamp, context));
-    projected.insert(
-        "markdownReferences".to_string(),
-        Value::Array(markdown_references(&native_body)),
-    );
+    let mut references = markdown_references(&native_body);
+    // A message pill's hover names the message it points at (`message_numbers.rs`).
+    crate::transcript::message_numbers::dress_message_references(&mut references, messages);
+    projected.insert("markdownReferences".to_string(), Value::Array(references));
     projected.insert(
         "collapsedReferences".to_string(),
         Value::Array(

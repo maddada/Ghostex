@@ -81,6 +81,8 @@ pub fn markers_as_messages(markers: &[CommandMarker], compaction_records: usize)
                 api_error: None,
                 mention_paths: None,
                 custom_message: None,
+                message_number: None,
+                message_ref: None,
             })
         })
         .map(std::sync::Arc::new)

@@ -62,6 +62,9 @@ pub enum ReferenceKind {
     /// What a Reply in chat box answers, `[<title>](answering:W7.Q12)`
     /// (`questions/answer_pills.rs`).
     Answer,
+    /// One of the user's earlier messages, `[M12](message:M12)`
+    /// (`transcript/message_numbers.rs`).
+    Message,
 }
 
 impl ReferenceKind {
@@ -78,6 +81,7 @@ impl ReferenceKind {
             Self::Session => "session",
             Self::Board => "board",
             Self::Answer => "answer",
+            Self::Message => "message",
         }
     }
 }
@@ -364,6 +368,7 @@ pub fn reference_display_label(label: &str, path: &str, kind: ReferenceKind) -> 
     if kind == ReferenceKind::Session
         || kind == ReferenceKind::Board
         || kind == ReferenceKind::Answer
+        || kind == ReferenceKind::Message
     {
         return crate::transcript::session_mentions::pill_label(label);
     }
@@ -756,6 +761,23 @@ pub fn composer_references(text: &str) -> Vec<ComposerReference> {
                 end: indexed.offset(destination.end),
                 identity: format!("board:{}", destination.path.trim()),
                 kind: ReferenceKind::Board,
+                label,
+                path: destination.path.trim().to_string(),
+                start: indexed.offset(start),
+            });
+            continue;
+        }
+        // One of the user's earlier messages: its ID in a pill (`message_numbers.rs`).
+        if let Some(reference) = destination
+            .path
+            .trim()
+            .strip_prefix(crate::transcript::message_numbers::MESSAGE_LINK_SCHEME)
+            .and_then(crate::transcript::message_numbers::parse_message_ref)
+        {
+            references.push(ComposerReference {
+                end: indexed.offset(destination.end),
+                identity: format!("message:{}", reference.written()),
+                kind: ReferenceKind::Message,
                 label,
                 path: destination.path.trim().to_string(),
                 start: indexed.offset(start),

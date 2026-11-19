@@ -68,7 +68,19 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
             Vec::new()
         }
         ActionKind::AppendToDraft => {
-            let content = append_draft_text(string_param(action, "draft"), text_param(action));
+            // `inline`: a pill that joins the words already there (a message's Reference in chat),
+            // a space apart, rather than a quote on lines of its own.
+            // The phone's message menu names no draft: the chat box's own text is the draft.
+            let content = if action.param("inline") == Some(&Value::Bool(true)) {
+                let draft = action
+                    .param("draft")
+                    .and_then(Value::as_str)
+                    .unwrap_or(state.composer.text.as_str())
+                    .to_string();
+                crate::transcript::message_numbers::append_inline(&draft, text_param(action))
+            } else {
+                append_draft_text(string_param(action, "draft"), text_param(action))
+            };
             let caret = content.encode_utf16().count();
             vec![Effect::SetComposerText {
                 content,
@@ -443,6 +455,14 @@ pub fn selection_changed(state: &mut ChatState, text: &str, caret: usize) {
     {
         composer.suggestions.dismissed.session = false;
     }
+    if next
+        .as_ref()
+        .map(|trigger| trigger.kind != crate::composer::trigger::TriggerKind::Message)
+        .unwrap_or(true)
+        || next_start != previous_start
+    {
+        composer.suggestions.dismissed.message = false;
+    }
     if crate::composer::slash_commands::slash_query(text).is_none() {
         composer.suggestions.dismissed.slash = false;
     }
@@ -494,6 +514,7 @@ fn suggestion_command(state: &mut ChatState, action: &UserAction) -> Vec<Effect>
             SuggestionKind::Skill => state.composer.suggestions.dismissed.skill = true,
             SuggestionKind::File => state.composer.suggestions.dismissed.file = true,
             SuggestionKind::Session => state.composer.suggestions.dismissed.session = true,
+            SuggestionKind::Message => state.composer.suggestions.dismissed.message = true,
         }
         return Vec::new();
     }
@@ -560,7 +581,10 @@ fn suggestion_command(state: &mut ChatState, action: &UserAction) -> Vec<Effect>
     ) else {
         return Vec::new();
     };
-    let completed = if popup.kind == SuggestionKind::Session {
+    let completed = if matches!(
+        popup.kind,
+        SuggestionKind::Session | SuggestionKind::Message
+    ) {
         complete_spaced_mention(
             &state.composer.suggestions.text,
             state.composer.suggestions.caret,
@@ -691,6 +715,9 @@ pub(crate) fn apply_recall(state: &mut ChatState, up: bool) -> Vec<Effect> {
                     }),
                     session: trigger.as_ref().is_some_and(|trigger| {
                         trigger.kind == crate::composer::trigger::TriggerKind::Session
+                    }),
+                    message: trigger.as_ref().is_some_and(|trigger| {
+                        trigger.kind == crate::composer::trigger::TriggerKind::Message
                     }),
                 };
             vec![Effect::SetComposerText {

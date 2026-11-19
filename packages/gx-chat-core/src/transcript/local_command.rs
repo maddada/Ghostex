@@ -400,6 +400,8 @@ pub fn with_live_shell_output(
         api_error: None,
         mention_paths: None,
         custom_message: None,
+        message_number: None,
+        message_ref: None,
     };
     pending.push(std::sync::Arc::new(shell_command_message(
         &template,

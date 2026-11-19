@@ -689,6 +689,19 @@ async fn send_session_chat_message_locked(
     }
     // CDXC:Changes 2026-10-25 WHY: a Changes view review comment sits in the chat box as a pill; the agent reads it as the full block (file, comment, lines as a diff). It is expanded here, after the draft check, because gxserver sends only the exact text of the saved draft revision (the pills), and here every send and queued prompt passes on its way to the agent.
     let expanded = ghostex_gx_chat_core::composer::review_comments::expand_review_comments(text);
+    // A message that points at earlier ones (`[M12](message:M12)`, `#M12`, `G9jt7.M12`) carries
+    // the start of each, quoted at its bottom (CDXC:SessionChat 2026-11-20 in
+    // chat_message_numbers.rs). Never under a slash or shell command, which the agent runs.
+    let expanded = if expanded.trim_start().starts_with(['/', '!']) {
+        expanded
+    } else {
+        crate::chat_message_numbers::with_message_quotes(
+            &state.paths,
+            project_id,
+            session_id,
+            &expanded,
+        )
+    };
     let text = expanded.as_str();
     let mut params = Map::new();
     params.insert("projectId".to_string(), json!(project_id));

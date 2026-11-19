@@ -979,6 +979,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         // A session's to-dos for the user (session_needs_you/): kept by the `ghostex needs-you`
         // an agent runs on this computer. The user's Done arrives as `/api/coordinatorBoard`.
         "/api/sessionNeedsYou" => full_local(path),
+        // The user's numbered messages, read by the `ghostex message` an agent runs on this
+        // computer (chat_message_numbers.rs).
+        crate::chat_message_numbers::CHAT_MESSAGES_ENDPOINT => full_local(path),
         // CDXC:GrokBot 2026-11-19 WHY: the Grok Bot webhook key lives on this computer, and
         // `ghostex grokbot` here connects, tests or sends through it (grokbot/). The label alone
         // keeps no phone out: grokbot/api.rs `require_this_computer` checks the caller.

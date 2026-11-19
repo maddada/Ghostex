@@ -230,6 +230,15 @@ pub struct ChatMessage {
     /// Absent on every other row and from an older gxserver; the row's text is the same either way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_message: Option<CustomMessage>,
+    /// On a message the user wrote: its number in this chat (12 for M12), which gxserver hands
+    /// out (server/src/chat_message_numbers.rs). Absent on every other row, on messages sent
+    /// before message IDs existed, and from an older gxserver.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_number: Option<u32>,
+    /// The same message's ID as it is written from anywhere: `G9jt7.M12`, the session's id and
+    /// the number. Present exactly when `message_number` is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_ref: Option<String>,
 }
 
 /// An OMP custom message's type (`advisor`, `async-result`, `irc:incoming`, …) and its details.

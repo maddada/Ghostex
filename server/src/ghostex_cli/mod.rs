@@ -49,6 +49,7 @@ mod help_ask;
 mod hookless_activity;
 pub mod launchers;
 mod mcp_stdio;
+mod message;
 mod needs_you;
 pub mod notify;
 pub mod output;
@@ -200,6 +201,7 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "manage-beads",
     "notify",
     "needs-you",
+    "messages",
     "work",
     "secret",
     "secrets",
@@ -515,6 +517,7 @@ fn is_known_command(name: &str) -> bool {
         "feedback",
         "notify",
         "needs-you",
+        "messages",
         "work",
         "secret",
         "secrets",
@@ -884,6 +887,14 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             run_resolved_session_bridge_action("sendEnter", Parser::SessionSelector, plain, args)
         }
         "send-key" => run_resolved_session_bridge_action("sendKey", Parser::SendKey, plain, args),
+        // `message show|list` reads the user's numbered messages (message.rs); any other
+        // `message <selector> <text>` stays the older alias of send-message.
+        "message" | "messages"
+            if matches!(args.first().map(String::as_str), Some("show" | "list")) =>
+        {
+            message::message_command(args)
+        }
+        "messages" => message::message_command(args),
         "send-message" | "message" | "msg" => wait::send_message_command(args),
         "read-text" | "read-messages" | "read-thread" => wait::read_session_text_command(args),
         /*

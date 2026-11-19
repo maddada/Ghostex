@@ -282,6 +282,10 @@ pub fn usage() -> String {
             "Put a step only the user can do (a sudo command, a tap on their phone, a sign-in, a check by eye) above this session's chat box as a to-do with a Done button; it stays until they press Done or you clear it, and their answer arrives as \"Q61: Done\". Add one without being asked whenever such a step blocks your work",
         ),
         format_help_command(
+            "message show <M12|G9jt7.M12> | list [--last N] [--grep words]",
+            "Read one of the user's numbered messages whole (M12 in this chat, G9jt7.M12 in another), or list this chat's with their first line. When the user points at a message by its ID, its start is already quoted at the bottom of their prompt",
+        ),
+        format_help_command(
             "work item add|now|step|ask|wait|done|drop|list … | work topic [\"one line\"] | work next-tag",
             "Keep this session's work items and its Topic in the Work panel (ghostex coordinator item is the same command); an ordinary session keeps its own while the Work items extension is on. ghostex work --help has the rules",
         ),
