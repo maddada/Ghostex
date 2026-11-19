@@ -67,7 +67,7 @@ impl NativeChatView {
     ///
     /// CDXC:Coordinators 2026-11-12 DECISION:
     /// User, of the phone's dock, which mixed sizes (header counts, row titles, answer buttons,
-    /// ages): "ONE font size for all text in the dock", the secondary text (ages, "(2 questions)",
+    /// ages): "ONE font size for all text in the dock", the secondary text (ages, "0/2",
     /// "need you", descriptions) a little dimmer than the primary, the button labels at normal or
     /// medium weight, not bold. The desktop dock had the same mix, so it follows.
     /// SEE-ALSO: apps/mobile/app/src/chat/native/cards/workItemParts.tsx (`buttonLabel`).

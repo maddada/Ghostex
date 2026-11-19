@@ -1252,11 +1252,7 @@ fn question_rows_of(
                 // A form says how much it still asks after its name, as a page does, and both
                 // open straight to their questions from the row (no panel step).
                 if form && !asker.seen_only {
-                    row["count"] = json!(match open {
-                        0 => String::new(),
-                        1 => "(1 question)".to_string(),
-                        n => format!("({n} questions)"),
-                    });
+                    row["count"] = json!(answered_of(form_answered(state, &asker.id), open as u64));
                 }
                 // What the row's button says: Answer while it asks something, Open for a page
                 // that only waits to be seen (`details_fields`' decision).
@@ -1437,14 +1433,20 @@ pub fn settle_page_counts(
     Some(Vec::new())
 }
 
-/// How much a page still asks, after its name in the quieter colour: "(14 questions)" while none
-/// is answered, "(10/16 answered)" once some are (a pick or words in the page's saved draft
-/// counts, sent or not), nothing for a page that asks nothing and waits to be marked seen.
-/// Before its gxserver has said, the questions its block lists, none answered.
+/// How much a page still asks, after its name in the quieter colour: answered of total ("0/14",
+/// "10/16"; a pick or words in the page's saved draft counts, sent or not), nothing for a page
+/// that asks nothing and waits to be marked seen. Before its gxserver has said, the questions its
+/// block lists, none answered.
 ///
 /// CDXC:Coordinators 2026-11-11 DECISION:
 /// User, of a page row in the dock: "also show (10/16 answered) or (14 questions) next to the
 /// page name to know how many i need to answer".
+///
+/// CDXC:Coordinators 2026-11-20 DECISION:
+/// User, of the dock's page rows reading "Title (1 question)": "please add 0/1 here indicating
+/// how many questions answered". Page and form rows say answered/total ("0/1", "2/7") in place of
+/// "(N questions)" and "(N/M answered)", following the draft as answers arrive. Supersedes the
+/// 2026-11-11 wording above.
 pub(crate) fn page_count(
     state: &ChatState,
     asker: &crate::transcript::open_questions::Asker,
@@ -1462,12 +1464,27 @@ pub(crate) fn page_count(
         .get(&asker.id.to_ascii_lowercase())
         .copied()
         .unwrap_or((0, asker.tags.len() as u64));
-    match (answered, total) {
-        (_, 0) => String::new(),
-        (0, 1) => "(1 question)".to_string(),
-        (0, total) => format!("({total} questions)"),
-        (answered, total) => format!("({answered}/{total} answered)"),
+    answered_of(answered, total)
+}
+
+/// A page or form row's count after its name: "answered/total", nothing when it asks nothing.
+fn answered_of(answered: u64, total: u64) -> String {
+    if total == 0 {
+        return String::new();
     }
+    format!("{}/{total}", answered.min(total))
+}
+
+/// How many of a form's questions the reader's picks or words answer so far (its draft, before
+/// it is sent).
+fn form_answered(state: &ChatState, form_id: &str) -> u64 {
+    state.questions.forms.get(form_id).map_or(0, |entry| {
+        entry
+            .drafts
+            .iter()
+            .filter(|draft| crate::questions::forms::draft_answered(draft))
+            .count() as u64
+    })
 }
 
 /// The one-click question (a reply's answer links) a form id names, when the form is one.

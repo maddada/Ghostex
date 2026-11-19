@@ -317,7 +317,7 @@ fn board_snooze_choices(row: &Value) -> Vec<Value> {
 fn dock_card_height(dock: &Value) -> f32 {
     use super::chat_text_look::PROSE_LINE_HEIGHT;
     let room = (BOARD_WIDTH - 2.0 * 10.0 - BADGE_ROOM - 2.0 * 8.0 - 23.0 - 34.0) / 7.0;
-    // A page's name runs on into its "(N questions)".
+    // A page's name runs on into its answered/total count ("0/3").
     let words = format!("{} {}", text(dock, "title"), text(dock, "count"));
     let lines = (words.trim().chars().count() as f32 / room).ceil().max(1.0);
     let answers = dock["buttons"].as_array().is_some_and(|b| !b.is_empty())
@@ -1762,7 +1762,7 @@ impl NativeChatView {
             .filter(|session| !session.is_empty())
             .and_then(|session| self.relayed_card_for_thread(&session));
         let go = Some(row["go"].clone()).filter(Value::is_object);
-        // A page's "(N questions)" follows its draft while the card is drawn, as the dock's row's
+        // A page's count follows its draft while the card is drawn, as the dock's row's
         // does (work_cards.rs `dock_row`).
         if row["dock"]["page"] == true {
             if let Some(page_id) = row["dock"]["pageId"].as_str() {
