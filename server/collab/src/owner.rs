@@ -165,16 +165,20 @@ fn share_of(params: &Map<String, Value>) -> Result<StoredShare, Stop> {
 }
 
 /// Sends a guest's (labelled) words to the shared chat's agent through gxserver.
+/// `send_request_id`: the same for every try of one message (a held message's), so gxserver
+/// delivers it at most once even when a reply was lost and Send is pressed again.
 pub async fn deliver(
     share: &StoredShare,
     text: &str,
     image_paths: &[String],
+    send_request_id: Option<String>,
 ) -> Result<(), String> {
     host::call_async(HostCall::Deliver {
         project_id: share.project_id.clone(),
         session_id: share.session_id.clone(),
         text: text.to_string(),
         image_paths: image_paths.to_vec(),
+        send_request_id,
     })
     .await
     .map(|_| ())
@@ -418,20 +422,20 @@ async fn handle_op(run: &mut Run<'_>, params: &Map<String, Value>) -> Result<Val
                     "notFound",
                     "That message was already answered or is being sent.".to_string(),
                 ))?;
+                // Clears the sending mark however this ends, a dropped request included.
+                let guard = shares::SendGuard::new(&share.id, &held_id);
                 let words = text(params, "text").unwrap_or_else(|| held.text.clone());
                 let sent = deliver(
                     &share,
                     &crate::labelled_guest_text(&held.name, &words),
                     &held.image_paths,
+                    Some(format!("collab:{}:{}", share.id, held_id)),
                 )
                 .await;
                 if let Some(approval) = &approval {
                     run.performed(approval, sent.is_ok());
                 }
-                if sent.is_ok() {
-                    shares::take_held(&share.id, &held_id, outcome);
-                }
-                shares::end_send(&share.id, &held_id);
+                guard.finish(sent.is_ok(), outcome);
                 sent.map_err(|message| Stop::Refused("sendFailed", message))?;
                 chat_changed(&share);
                 crate::audit::record(
@@ -445,8 +449,14 @@ async fn handle_op(run: &mut Run<'_>, params: &Map<String, Value>) -> Result<Val
                 );
                 return Ok(json!({ "sent": true }));
             }
-            let held = shares::take_held(&share.id, &held_id, outcome)
-                .ok_or(("notFound", "That message was already answered.".to_string()))?;
+            // A message whose Send is being delivered stays until that ends (`shares::take_held`).
+            let held = shares::take_held(&share.id, &held_id, outcome).ok_or_else(|| {
+                if shares::peek_held(&share.id, &held_id).is_some() {
+                    ("notFound", "That message is being sent.".to_string())
+                } else {
+                    ("notFound", "That message was already answered.".to_string())
+                }
+            })?;
             chat_changed(&share);
             let audit = |outcome: &str| {
                 crate::audit::record(

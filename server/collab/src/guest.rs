@@ -263,6 +263,7 @@ async fn send_guest_words(
                 share,
                 &crate::labelled_guest_text(&viewer.name, &words),
                 &images,
+                None,
             )
             .await
             {

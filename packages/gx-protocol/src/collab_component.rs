@@ -222,6 +222,10 @@ pub enum HostCall {
         text: String,
         #[serde(default)]
         image_paths: Vec<String>,
+        /// The same id for every try of one message (a held message's own), so gxserver's send
+        /// ledger delivers it at most once; a fresh one when absent (older components).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        send_request_id: Option<String>,
     },
     /// Saves a guest's pasted picture like the owner's own. `params` are
     /// `saveSessionChatImage`'s. → `{path}`.
