@@ -840,12 +840,15 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
     // completely; the Work pill keeps its "N need you" and brings it back. On the computer the
     // user later picked a header that collapses the dock to one bar instead (its renderer has the
     // picks), and a collapsed dock opens by itself when something new needs him.
+    // Never collapsed over an approval the agent waits on: its card is not drawn, so the row must
+    // be (`dock_approvals`).
     let hidden = state
         .extras
         .panels
         .work_dock_hidden
         .as_ref()
-        .is_some_and(|keys| rows.iter().all(|row| keys.contains(text(row, "key"))));
+        .is_some_and(|keys| rows.iter().all(|row| keys.contains(text(row, "key"))))
+        && !rows.iter().any(|row| text(row, "kind") == "approval");
     // Mark all seen, once two or more pages wait only to be looked at (one has its own ⋯ Dismiss):
     // every such page in the dock, the rows past the limit too (`questions::later::mark_seen`).
     let unseen: Vec<&str> = rows

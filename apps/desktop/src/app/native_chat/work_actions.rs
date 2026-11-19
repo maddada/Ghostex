@@ -106,6 +106,7 @@ impl NativeChatView {
                 let label = text(answer, "label");
                 let picked = answer["picked"] == true;
                 let locked = answer["locked"] == true;
+                let row_key = key.to_string();
                 let command = answer["command"].clone();
                 // Reply (`reply_answer`): the reply box at the press, its words the answer.
                 let reply = answer["reply"].clone();
@@ -125,8 +126,10 @@ impl NativeChatView {
                     (busy || locked) && !picked,
                     p,
                 )
-                // A short answer's full words (an approval's "Always" is "Yes, and don't ask
-                // again for …", gx-chat-core extras/dock_approvals.rs).
+                // An approval's answer in the agent's long words keeps to the row's width.
+                .when(key.starts_with("approval:"), |button| button.max_w_full())
+                // A short answer's full words (an approval's "Yes" is "Yes, proceed", gx-chat-core
+                // extras/dock_approvals.rs).
                 .when_some(
                     answer["tooltip"]
                         .as_str()
@@ -155,7 +158,7 @@ impl NativeChatView {
                 .on_click(
                     cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
                         cx.stop_propagation();
-                        if busy || locked {
+                        if busy || locked || !this.approval_armed(&row_key) {
                             return;
                         }
                         if reply.is_object() {
@@ -175,6 +178,22 @@ impl NativeChatView {
                 .into_any_element()
             })
             .collect()
+    }
+
+    /// Whether an approval row's answers take clicks yet: not for `APPROVAL_ARM_MS` after the row
+    /// first appeared, so a click meant for the row that was there before it lands on nothing
+    /// (security review of the dock approval rows: rows shift under the pointer). Every other row
+    /// is always armed.
+    pub(super) fn approval_armed(&self, key: &str) -> bool {
+        const APPROVAL_ARM_MS: u128 = 400;
+        if !key.starts_with("approval:") {
+            return true;
+        }
+        self.board
+            .approval_seen
+            .borrow()
+            .get(key)
+            .is_some_and(|seen| seen.elapsed().as_millis() >= APPROVAL_ARM_MS)
     }
 
     /// A dock row's button that opens something of the app's instead of asking the chat core
@@ -222,14 +241,15 @@ impl NativeChatView {
                 .flex_shrink_0()
                 .text_color(p.foreground),
         )
-        .on_click(
+        .on_click({
+            let row_key = key.to_string();
             cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
                 cx.stop_propagation();
-                if !locked {
+                if !locked && this.approval_armed(&row_key) {
                     this.show_answers_menu(rows.clone(), event.position(), window, cx);
                 }
-            }),
-        )
+            })
+        })
         .into_any_element()
     }
 

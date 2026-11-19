@@ -582,6 +582,17 @@ impl NativeChatView {
     /// him; and a collapsed dock "opens by itself" when something new needs him. The round x that
     /// hid the dock is gone, replaced by the chevron. The Work pill and the red Blocked pill leave
     /// the desktop's pills row (pills_strip.rs). The phone keeps its own dock and pills.
+    /// Which card the approval row in the dock stands for (`"notice"` or `"prompt"`, gx-chat-core
+    /// `approvalInDock`), or "" when the card itself is drawn: also while the chat box is
+    /// maximized, which draws no dock, so an approval is never waiting without being drawn.
+    pub(super) fn approval_in_dock(&self) -> String {
+        if self.maximized_window.is_some() {
+            String::new()
+        } else {
+            text(&self.snapshot, "approvalInDock")
+        }
+    }
+
     pub(super) fn render_work_dock(
         &self,
         p: &ChatAppearance,
@@ -592,6 +603,10 @@ impl NativeChatView {
         let dock = &self.snapshot["workDock"];
         let board = &self.snapshot["coordinatorBoard"];
         let rows: Vec<Value> = dock["rows"].as_array().cloned().unwrap_or_default();
+        self.board.approval_seen.borrow_mut().retain(|key, _| {
+            rows.iter()
+                .any(|row| row["key"].as_str() == Some(key.as_str()))
+        });
         // The snoozed asks, forms and pages, folded under one Snoozed row (`work_dock_snoozed`).
         let snoozed: Vec<Value> = dock["snoozed"].as_array().cloned().unwrap_or_default();
         if rows.is_empty() && snoozed.is_empty() && !board.is_object() {
@@ -1100,6 +1115,25 @@ impl NativeChatView {
     /// row card (2026-11-11 and 2026-11-12 decisions, now on the modal in dock_ask_modal.rs) and
     /// its scrolling into view past the dock's height cap.
     fn dock_row(&self, row: &Value, p: &ChatAppearance, cx: &mut Context<Self>) -> AnyElement {
+        // An approval: when it first appeared (its answers wait a moment before taking clicks,
+        // work_actions.rs `approval_armed`), and its answers on their own line under the title, so
+        // the agent's full words fit before they fold into a dropdown.
+        if text(row, "kind") == "approval" {
+            self.board
+                .approval_seen
+                .borrow_mut()
+                .entry(text(row, "key"))
+                .or_insert_with(web_time::Instant::now);
+            return self.dock_row_look(
+                row,
+                DockRowLook {
+                    wrap: true,
+                    ..DockRowLook::default()
+                },
+                p,
+                cx,
+            );
+        }
         self.dock_row_look(row, DockRowLook::default(), p, cx)
     }
 
@@ -1222,7 +1256,11 @@ impl NativeChatView {
         // closed row's "+N" chip.
         let choose_width =
             dock_button_width(super::work_actions::CHOOSE_ANSWER, true, false, p, cx);
+        // An approval's answers never fold into a dropdown: they wrap onto more lines, each in the
+        // agent's own words (gx-chat-core extras/dock_approvals.rs).
+        let approval = row["commandLines"] == true;
         let fold = action.is_none()
+            && !approval
             && !answers.is_empty()
             && buttons_width(&widths) > choose_width
             && all_width > beside_room;
@@ -1329,6 +1367,7 @@ impl NativeChatView {
                     .pt(px(6.0 * s))
                     .flex()
                     .items_center()
+                    .when(approval, |line| line.flex_wrap())
                     .gap(px(6.0 * s))
                     .children(buttons),
             );
@@ -1371,6 +1410,30 @@ impl NativeChatView {
                 .text_color(p.card_muted)
                 .child(preview.to_string())
         });
+        // An approval's answers go under its command, so what they approve is read first.
+        let after_command =
+            if row["commandLines"] == true && !text(row, "command").trim().is_empty() {
+                under.take()
+            } else {
+                None
+            };
+        // Why the agent flagged an approval ("Dangerous rm operation …"), on the row itself:
+        // amber for a warning, quiet for a note (gx-chat-core extras/dock_approvals.rs).
+        let note = text(&row["note"], "text");
+        let note = (!note.is_empty()).then(|| {
+            div()
+                .min_w_0()
+                .pl(px(DOCK_LEAD * s))
+                .pt(px(2.0 * s))
+                .whitespace_normal()
+                .text_size(px(PROSE_SIZE * 0.93 * s))
+                .text_color(if row["note"]["tone"] == "warning" {
+                    gpui::Hsla::from(gpui::rgb(if p.light { 0xb45309 } else { 0xf5a524 }))
+                } else {
+                    p.card_muted
+                })
+                .child(note.to_string())
+        });
         // Why an approval's answer did not land, under its title.
         let error = text(row, "error");
         let error = (!error.is_empty()).then(|| {
@@ -1383,7 +1446,7 @@ impl NativeChatView {
                 .text_color(gpui::rgb(0xec5357))
                 .child(error.to_string())
         });
-        let line = if under.is_some() || preview.is_some() || error.is_some() {
+        let line = if under.is_some() || preview.is_some() || error.is_some() || note.is_some() {
             div()
                 .w_full()
                 .min_w_0()
@@ -1391,6 +1454,7 @@ impl NativeChatView {
                 .flex_col()
                 .child(line)
                 .children(preview)
+                .children(note)
                 .children(error)
                 .children(under)
         } else {
@@ -1429,7 +1493,7 @@ impl NativeChatView {
                         }
                     },
                 )))
-                .children(self.dock_command_chip(&key, &text(row, "command"), p, cx))
+                .children(self.dock_row_command(&key, row, p, cx))
                 .into_any_element();
         }
         if opens_directly {
@@ -1454,8 +1518,149 @@ impl NativeChatView {
             .child(press.on_click(cx.listener(move |this, _, window, cx| {
                 this.open_dock_ask_modal(&shown, window, cx);
             })))
-            .children(self.dock_command_chip(&key, &text(row, "command"), p, cx))
+            .children(self.dock_row_command(&key, row, p, cx))
+            .children(after_command.map(|answers| {
+                answers
+                    .pt_0()
+                    .pl(px((DOCK_ROW_PAD_X + DOCK_LEAD) * s))
+                    .pr(px(DOCK_ROW_PAD_X * s))
+                    .pb(px(6.0 * s))
+            }))
             .into_any_element()
+    }
+
+    /// The command under a row's title: an approval's as a block of its first lines with "Show N
+    /// more lines" (`dock_command_block`), anything else's as one copy chip.
+    fn dock_row_command(
+        &self,
+        key: &str,
+        row: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        if row["commandLines"] == true {
+            return self.dock_command_block(key, row, p, cx);
+        }
+        self.dock_command_chip(key, &text(row, "command"), p, cx)
+    }
+
+    /// An approval's command (gx-chat-core extras/dock_approvals.rs): its first lines, wrapped, never
+    /// cut without saying so; "Show N more lines" opens the rest in place and "Show fewer" folds it,
+    /// and the lines gxserver itself left out say so. A click on it copies the whole command.
+    ///
+    /// CDXC:SessionChat 2026-11-20 WHY:
+    /// A security review of the dock approval rows found the row showed one visual line of a command that was several (a Codex `echo ok &&` hid the `curl … | sh` after it), so the approval read as less than it grants.
+    fn dock_command_block(
+        &self,
+        key: &str,
+        row: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let command = text(row, "command");
+        if command.trim().is_empty() {
+            return None;
+        }
+        let s = p.scale;
+        let more = row["commandMore"].as_u64().unwrap_or(0);
+        let fold_key = format!("dock-command:{key}");
+        let open = more > 0 && self.expanded.contains(&fold_key);
+        let shown = if more == 0 || open {
+            command.clone()
+        } else {
+            text(row, "commandPreview")
+        };
+        let cut = text(row, "commandCut");
+        let copied = command.clone();
+        let block = div()
+            .id(gpui::SharedString::from(format!("dock-row-command:{key}")))
+            .role(gpui::Role::Button)
+            .aria_label("Copy command")
+            .chat_cursor_pointer()
+            .w_full()
+            .min_w_0()
+            .overflow_hidden()
+            .flex()
+            .flex_col()
+            .px(px(8.0 * s))
+            .py(px(4.0 * s))
+            .rounded(px(6.0 * s))
+            .bg(p.foreground.opacity(0.05))
+            .hover(|style| style.bg(p.foreground.opacity(0.09)))
+            .font_family(super::fonts::CHAT_MONO)
+            .text_size(px(PROSE_SIZE * 0.9 * s))
+            .text_color(p.strengthened(p.prose))
+            .children(shown.lines().map(|line| {
+                div()
+                    .min_w_0()
+                    .whitespace_normal()
+                    .child(if line.is_empty() {
+                        " ".to_string()
+                    } else {
+                        line.to_string()
+                    })
+            }))
+            .when(more > 0 && !open, |block| {
+                block.child(div().text_color(p.card_muted).child("\u{2026}"))
+            })
+            .tooltip(|window, cx| {
+                gpui_component::tooltip::Tooltip::new("Copy command").build(window, cx)
+            })
+            .on_click(cx.listener(move |_, _, _, cx| {
+                cx.stop_propagation();
+                crate::app::helpers::gpui_copy_to_clipboard(
+                    gpui::ClipboardItem::new_string(copied.clone()),
+                    cx,
+                );
+            }));
+        let toggle = (more > 0).then(|| {
+            let fold_key = fold_key.clone();
+            div()
+                .id(gpui::SharedString::from(format!(
+                    "dock-row-command-more:{key}"
+                )))
+                .role(gpui::Role::Button)
+                .chat_cursor_pointer()
+                .text_size(px(PROSE_SIZE * 0.9 * s))
+                .text_color(p.card_muted)
+                .hover(|style| style.text_color(p.foreground))
+                .child(if open {
+                    "Show fewer".to_string()
+                } else if more == 1 {
+                    "Show 1 more line".to_string()
+                } else {
+                    format!("Show {more} more lines")
+                })
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    if !this.expanded.remove(&fold_key) {
+                        this.expanded.insert(fold_key.clone());
+                    }
+                    cx.notify();
+                }))
+        });
+        Some(
+            div()
+                .pl(px((DOCK_ROW_PAD_X + DOCK_LEAD) * s))
+                .pr(px(DOCK_ROW_PAD_X * s))
+                .pb(px(6.0 * s))
+                .w_full()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(3.0 * s))
+                .child(block)
+                .children(toggle)
+                .when(!cut.is_empty(), |column| {
+                    column.child(
+                        div()
+                            .text_size(px(PROSE_SIZE * 0.9 * s))
+                            .text_color(p.card_muted)
+                            .child(cut),
+                    )
+                })
+                .into_any_element(),
+        )
     }
 
     /// A Needs you to-do's command (`ghostex needs-you add --command`) under its title, as one
