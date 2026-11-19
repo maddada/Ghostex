@@ -1788,23 +1788,28 @@ impl NativeChatView {
                 .map(|relayed| self.board_relay_buttons(relayed, CHIP_SIZE, true, p, cx)),
             reference: text(row, "reference"),
         };
-        // A thread's approval is decided from what it would run: its command shows on the card,
-        // as a to-do's does (the chip copies it), not only in its buttons' tooltip (gx-chat-core
-        // `work_cards::details_fields`' decision).
+        // A thread's approval is decided from what it would run: its whole command shows on the
+        // card as the chat's own approval row draws it (work_cards.rs `dock_command_block`: its
+        // first lines, "Show N more lines", a click copies it), with the agent's warning under the
+        // title, not only in its buttons' tooltip (gx-chat-core `work_cards::details_fields`'
+        // decision; the security review's finding 2 on the dock approval rows).
         let mut dock = row["dock"].clone();
         if let Some(relayed) = &relayed {
-            let code = [text(relayed, "codePreview"), text(relayed, "code")]
-                .into_iter()
-                .find(|code| !code.trim().is_empty())
-                .unwrap_or_default();
-            let mut lines = code.lines().map(str::trim).filter(|line| !line.is_empty());
-            if let Some(first) = lines.next() {
-                let more = if lines.next().is_some() {
-                    " \u{2026}"
-                } else {
-                    ""
-                };
-                dock["command"] = json!(format!("{first}{more}"));
+            let code = text(relayed, "code");
+            let code = code.trim_end().trim_start_matches('\n');
+            if !code.trim().is_empty() {
+                let lines: Vec<&str> = code.lines().collect();
+                dock["command"] = json!(code);
+                dock["commandLines"] = json!(true);
+                dock["commandPreview"] =
+                    json!(lines.iter().take(4).copied().collect::<Vec<_>>().join("\n"));
+                dock["commandMore"] = json!(lines.len().saturating_sub(4));
+            }
+            if relayed["reason"]["text"]
+                .as_str()
+                .is_some_and(|note| !note.trim().is_empty())
+            {
+                dock["note"] = relayed["reason"].clone();
             }
         }
         let move_to = row["moveTo"].clone();
