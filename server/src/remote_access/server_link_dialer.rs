@@ -83,7 +83,9 @@ fn backing_off(server_id: &str) -> bool {
 }
 
 fn note_failure(server_id: &str) {
-    let mut backoff = backoff().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut backoff = backoff()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let failures = backoff.get(server_id).map_or(0, |(_, failures)| *failures) + 1;
     let wait = Duration::from_secs(10)
         .saturating_mul(1 << failures.min(6))
@@ -107,9 +109,9 @@ pub(crate) fn is_easy_connect_address(address: &str) -> bool {
     !address.is_empty()
         && address.len() <= 4096
         && !address.starts_with('-')
-        && address
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ':' | '=' | '+' | '/'))
+        && address.chars().all(|c| {
+            c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ':' | '=' | '+' | '/')
+        })
 }
 
 /// The key file a server link to `address` pairs and dials with.
@@ -191,7 +193,9 @@ pub fn start_link_pairing(
         .as_deref()
         .is_some_and(|expected| expected != server_id)
     {
-        return cancel("The computer that answered names another server id than the one it linked with.");
+        return cancel(
+            "The computer that answered names another server id than the one it linked with.",
+        );
     }
     // A computer the desktop app connects here can't also be a server link (its grant slot and
     // registration are the app's): the same rule the door side keeps.
@@ -739,7 +743,9 @@ pub fn forget_link(paths: &GxserverPaths, link: &OutgoingLink, tell: bool) -> bo
     forget_retry_timers(link.server_id.as_deref());
     // Its own Easy Connect key goes with it (review of #674, finding 12), only from the folder
     // this file makes them in.
-    if link.key_file.starts_with(paths.root_dir.join("pairing").join("link-keys"))
+    if link
+        .key_file
+        .starts_with(paths.root_dir.join("pairing").join("link-keys"))
         && link
             .key_file
             .file_name()

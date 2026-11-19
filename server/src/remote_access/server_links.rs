@@ -50,8 +50,8 @@ use crate::tailcat::TailcatRuntime;
 
 use super::pair_device::verify_device_signature;
 use super::paired_devices::remove_paired_device;
-use crate::auth::DeviceApiTokens;
 use super::repository::{PairedDeviceStatus, RemotePairingRepository};
+use crate::auth::DeviceApiTokens;
 
 pub const SERVER_LINK_ENDPOINT: &str = "/api/serverLink";
 /// This computer's own clients (CLI, desktop) list, add and remove server links here.
@@ -322,7 +322,8 @@ pub fn door_link_offer(
     if server_id == own_server_id {
         return Err("A computer can't link to itself.".to_string());
     }
-    let live_devices = live_device_ids(db).ok_or("This computer couldn't read its paired devices. Try again.")?;
+    let live_devices =
+        live_device_ids(db).ok_or("This computer couldn't read its paired devices. Try again.")?;
     let file = read(paths);
     if file.door.iter().any(|(device_id, pin)| {
         pin.server_id == server_id
@@ -378,7 +379,10 @@ fn live_device_ids(db: &Connection) -> Option<BTreeSet<String>> {
 
 /// The paired-device row this computer pinned for `device_public_key` (a server link's own row,
 /// never another pairing of the same computer, review of #674 finding 1), with its pin.
-pub fn pinned_row_for_key(paths: &GxserverPaths, device_public_key: &str) -> Option<(String, DoorPin)> {
+pub fn pinned_row_for_key(
+    paths: &GxserverPaths,
+    device_public_key: &str,
+) -> Option<(String, DoorPin)> {
     if device_public_key.is_empty() {
         return None;
     }
@@ -717,9 +721,7 @@ pub fn answer_ask(context: &DoorContext<'_>, ask: ServerLinkAsk) -> Result<Value
             "This ask was signed before this computer last started. It asks again in a minute.",
         ));
     }
-    if ask.timestamp_ms + CLOCK_SKEW_MS < now
-        || ask.timestamp_ms > now + CLOCK_SKEW_MS
-    {
+    if ask.timestamp_ms + CLOCK_SKEW_MS < now || ask.timestamp_ms > now + CLOCK_SKEW_MS {
         return Err(refusal(
             400,
             CLOCK_OFF,

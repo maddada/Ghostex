@@ -1246,8 +1246,13 @@ pub(super) fn machine_dialog(
     }
     // The computers it keeps a server link with (server_links.rs).
     if let Some(machine_id) = machine_id.as_deref()
-        && let Some(panel) =
-            super::server_links::server_links_panel(tab, t, Some(machine_id.to_string()), &title, cx)
+        && let Some(panel) = super::server_links::server_links_panel(
+            tab,
+            t,
+            Some(machine_id.to_string()),
+            &title,
+            cx,
+        )
     {
         body = body.child(panel);
     }

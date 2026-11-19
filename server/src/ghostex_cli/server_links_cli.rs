@@ -61,7 +61,12 @@ pub(crate) fn add(args: &[String]) -> CliResult<()> {
     let server_id = text(&started, "serverId").to_string();
     let here = call(json!({ "op": "list" }))
         .ok()
-        .and_then(|answer| answer.get("name").and_then(Value::as_str).map(str::to_string))
+        .and_then(|answer| {
+            answer
+                .get("name")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
         .unwrap_or_else(crate::connected_computers::this_computer_name);
     println!(
         "Asked {other} to link with {here}. Approve it in Ghostex or on your phone, where it asks \"Let {here} link its agents with {other}?\"."
@@ -211,9 +216,7 @@ pub(crate) fn access(args: &[String]) -> CliResult<()> {
 
 /// Whether a server link (not the desktop app) connects this computer with `server_id`.
 pub(crate) fn is_server_link(server_id: &str) -> bool {
-    links()
-        .iter()
-        .any(|row| text(row, "serverId") == server_id)
+    links().iter().any(|row| text(row, "serverId") == server_id)
 }
 
 /// The server links under `ghostex computers`' table.

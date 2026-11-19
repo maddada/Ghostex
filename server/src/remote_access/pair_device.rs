@@ -546,8 +546,14 @@ pub fn begin_pairing(
     let server_link = match &params.server_link {
         None => None,
         Some(link) => Some(
-            super::server_links::door_link_offer(paths, db, own_server_id, &link.server_id, &device_key.public_key)
-                .map_err(PairDeviceError::BadRequest)?,
+            super::server_links::door_link_offer(
+                paths,
+                db,
+                own_server_id,
+                &link.server_id,
+                &device_key.public_key,
+            )
+            .map_err(PairDeviceError::BadRequest)?,
         ),
     };
 
@@ -1118,8 +1124,7 @@ pub fn pairing_status(
                         // Not let in as a link: the pairing it made goes too, so no row is left
                         // that nothing uses (review of #674, finding 12).
                         if !linked {
-                            if let Some(device_id) =
-                                answer.get("deviceId").and_then(Value::as_str)
+                            if let Some(device_id) = answer.get("deviceId").and_then(Value::as_str)
                             {
                                 let _ = super::paired_devices::remove_paired_device_using(
                                     context.paths,

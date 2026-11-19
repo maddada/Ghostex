@@ -229,7 +229,10 @@ fn decode_compact(body: &str) -> Option<EasyConnectCode> {
     }
     Some(EasyConnectCode {
         v: 1,
-        address: format!("{TAILCAT_ADDRESS_PREFIX}{}", URL_SAFE_NO_PAD.encode(address)),
+        address: format!(
+            "{TAILCAT_ADDRESS_PREFIX}{}",
+            URL_SAFE_NO_PAD.encode(address)
+        ),
         name,
         user,
         port,
