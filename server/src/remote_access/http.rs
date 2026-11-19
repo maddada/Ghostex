@@ -268,6 +268,8 @@ pub(crate) async fn handle_remote_access_http(
                         });
                     }
                 }
+                // A server link's pin, read before its row goes (server_links.rs).
+                let link_pin = super::server_links::pin_of(&paths, &device_id);
                 let Some(device) = remove_paired_device(
                     &paths,
                     &db,
@@ -280,7 +282,7 @@ pub(crate) async fn handle_remote_access_http(
                 };
                 forget_approver_key(&security, &device, &caller);
                 // A server link to it ends both ways (CDXC:ServerLinks 2026-11-19 in server_links.rs).
-                super::server_links::on_device_removed(&paths, &device, true);
+                super::server_links::on_device_removed(&paths, &device.id, link_pin, true);
                 // A revoke never needs approval, so it has no SensitiveAction; the log still says it.
                 crate::audit::record(
                     crate::audit::Action::new("pairing.remove", "Removed a paired phone")

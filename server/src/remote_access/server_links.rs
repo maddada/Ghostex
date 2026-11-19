@@ -51,7 +51,7 @@ use crate::tailcat::TailcatRuntime;
 use super::pair_device::verify_device_signature;
 use super::paired_devices::remove_paired_device;
 use crate::auth::DeviceApiTokens;
-use super::repository::{PairedDeviceStatus, RemotePairedDeviceRecord, RemotePairingRepository};
+use super::repository::{PairedDeviceStatus, RemotePairingRepository};
 
 pub const SERVER_LINK_ENDPOINT: &str = "/api/serverLink";
 /// This computer's own clients (CLI, desktop) list, add and remove server links here.
@@ -62,7 +62,9 @@ const FILE_NAME: &str = "server-links.json";
 const CLOCK_SKEW_MS: u64 = 5 * 60 * 1000;
 /// Asks `/api/serverLink` takes a minute, from everyone together (a linked server asks about once a
 /// minute; this is its own bucket, so asks never use up the pairing attempts).
-const ASKS_PER_MINUTE: usize = 120;
+const ASKS_PER_MINUTE: usize = 600;
+/// What one linked computer may ask a minute (it asks about once a minute).
+const ASKS_PER_KEY_PER_MINUTE: usize = 20;
 
 /// What a refusal says to the asking server. `notPaired` ends its link (only from inside the
 /// tunnel to the address it recorded); the others never do.
@@ -172,58 +174,94 @@ fn file_path(paths: &GxserverPaths) -> PathBuf {
     paths.root_dir.join("security").join(FILE_NAME)
 }
 
-/// The links this computer keeps (an unreadable file reads as none).
+/// Whether this computer keeps any server link (a pin or its own link): the dialer sweeps only
+/// then (review of #674, finding 10).
+static HAS_LINKS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn has_links() -> bool {
+    HAS_LINKS.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+fn note_links(file: &LinksFile) {
+    HAS_LINKS.store(
+        !file.door.is_empty() || !file.outgoing.is_empty(),
+        std::sync::atomic::Ordering::SeqCst,
+    );
+}
+
+/// The links this computer keeps. A missing file reads as none; an unreadable one reads as none
+/// too, and is kept as it is (`update` won't write over it).
 pub fn read(paths: &GxserverPaths) -> LinksFile {
     let _guard = file_lock()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    read_unlocked(paths)
+    let file = read_unlocked(paths).unwrap_or_default();
+    note_links(&file);
+    file
 }
 
-fn read_unlocked(paths: &GxserverPaths) -> LinksFile {
-    std::fs::read_to_string(file_path(paths))
-        .ok()
-        .and_then(|text| serde_json::from_str(&text).ok())
-        .unwrap_or_default()
+/// `Err` when the file is there but can't be read or parsed.
+fn read_unlocked(paths: &GxserverPaths) -> Result<LinksFile, String> {
+    match std::fs::read_to_string(file_path(paths)) {
+        Ok(text) => serde_json::from_str(&text).map_err(|error| format!("{error}")),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(LinksFile::default()),
+        Err(error) => Err(format!("{error}")),
+    }
 }
 
-/// Changes the file under its lock and writes it back (0600); returns what `change` returned.
+/// Changes the file under its lock and writes it back (0600, atomically) when `change` changed
+/// it; returns what `change` returned. An unreadable file is never written over (review of #674,
+/// finding 7): the change runs on an empty copy and nothing is saved.
 pub fn update<T>(paths: &GxserverPaths, change: impl FnOnce(&mut LinksFile) -> T) -> T {
     let _guard = file_lock()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let mut file = read_unlocked(paths);
+    let (mut file, writable) = match read_unlocked(paths) {
+        Ok(file) => (file, true),
+        Err(error) => {
+            eprintln!(
+                "[gxserver] {} can't be read ({error}); server links are off until it is fixed or removed, and it is not written over",
+                file_path(paths).display()
+            );
+            (LinksFile::default(), false)
+        }
+    };
+    let before = serde_json::to_vec(&file).unwrap_or_default();
     let answer = change(&mut file);
-    write_private(
-        &file_path(paths),
-        &serde_json::to_vec_pretty(&file).unwrap_or_default(),
-    );
+    if writable {
+        let after = serde_json::to_vec_pretty(&file).unwrap_or_default();
+        if serde_json::to_vec(&file).unwrap_or_default() != before {
+            write_private(&file_path(paths), &after);
+        }
+        note_links(&file);
+    }
     answer
 }
 
+/// Writes `bytes` to a temporary file beside `path` and renames it over `path` (atomic on every
+/// OS: `std::fs::rename` replaces the target on Windows too), 0600 on Unix.
 pub(crate) fn write_private(path: &Path, bytes: &[u8]) {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    #[cfg(unix)]
-    {
+    let temp = path.with_extension("json.tmp");
+    let written = {
         use std::io::Write;
-        use std::os::unix::fs::OpenOptionsExt;
-        let temp = path.with_extension("json.tmp");
-        let written = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(&temp)
-            .and_then(|mut file| file.write_all(bytes));
-        if written.is_ok() {
-            let _ = std::fs::rename(&temp, path);
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
         }
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = std::fs::write(path, bytes);
+        options
+            .open(&temp)
+            .and_then(|mut file| file.write_all(bytes).and_then(|()| file.sync_all()))
+    };
+    if written.is_ok() {
+        let _ = std::fs::rename(&temp, path);
+    } else {
+        let _ = std::fs::remove_file(&temp);
     }
 }
 
@@ -241,21 +279,26 @@ pub fn access_off(paths: &GxserverPaths, server_id: &str) -> bool {
     read(paths).access_off.contains(server_id)
 }
 
-/// Whether an approval was decided on one of the owner's devices: the app's owner key or a paired
-/// phone record their device id; every other caller records its kind (`approve_plain_as`).
-pub fn decided_by_owner_device(decided_by: &str) -> bool {
-    !matches!(
-        decided_by,
-        "" | "owner"
-            | "device"
-            | "session"
-            | "localAgent"
-            | "peer"
-            | "guest"
-            | "extension"
-            | "anonymous"
-            | "policy"
-    )
+/// Whether a server link's approval lets the link in, or why not (review of #674, findings 4 and
+/// 9): only an approval on one of the owner's own devices (an allow list of caller kinds: the
+/// app's owner session or key, a paired phone), from an app whose card worded the ask as a server
+/// link (`understands`; an older app showed it as a plain connection). Otherwise the pairing is
+/// undone and the asking computer is told why.
+pub fn link_approval(
+    request: &ghostex_gx_protocol::approval::ApprovalRequest,
+) -> Result<(), &'static str> {
+    let kind = request.decided_by_kind.as_deref().unwrap_or_default();
+    if !matches!(kind, "owner" | "device") {
+        return Err("It was approved in a terminal, not in the Ghostex app or on your phone, so the computers were not linked. Approve it in the app or on your phone to link them.");
+    }
+    if !request
+        .decided_understanding
+        .iter()
+        .any(|word| word == ghostex_gx_protocol::approval::UNDERSTANDS_SERVER_LINK)
+    {
+        return Err("It was approved in an older Ghostex app or phone app, which shows it as a plain connection, so the computers were not linked. Update Ghostex there (or approve on a device that is up to date), then run ghostex computers add again.");
+    }
+    Ok(())
 }
 
 /// What `/api/pairDevice` offers a computer asking for a server link.
@@ -279,7 +322,7 @@ pub fn door_link_offer(
     if server_id == own_server_id {
         return Err("A computer can't link to itself.".to_string());
     }
-    let live_devices = live_device_ids(db);
+    let live_devices = live_device_ids(db).ok_or("This computer couldn't read its paired devices. Try again.")?;
     let file = read(paths);
     if file.door.iter().any(|(device_id, pin)| {
         pin.server_id == server_id
@@ -319,9 +362,11 @@ pub fn door_link_offer(
     })
 }
 
-fn live_device_ids(db: &Connection) -> BTreeSet<String> {
+/// The paired rows' ids; `None` when they couldn't be read (never taken for "no rows").
+fn live_device_ids(db: &Connection) -> Option<BTreeSet<String>> {
     RemotePairingRepository::new(db)
         .list_devices()
+        .ok()
         .map(|devices| {
             devices
                 .into_iter()
@@ -329,7 +374,23 @@ fn live_device_ids(db: &Connection) -> BTreeSet<String> {
                 .map(|device| device.id)
                 .collect()
         })
-        .unwrap_or_default()
+}
+
+/// The paired-device row this computer pinned for `device_public_key` (a server link's own row,
+/// never another pairing of the same computer, review of #674 finding 1), with its pin.
+pub fn pinned_row_for_key(paths: &GxserverPaths, device_public_key: &str) -> Option<(String, DoorPin)> {
+    if device_public_key.is_empty() {
+        return None;
+    }
+    read(paths)
+        .door
+        .into_iter()
+        .find(|(_, pin)| pin.device_public_key == device_public_key)
+}
+
+/// The paired rows that are server links' own rows.
+pub fn pinned_device_ids(paths: &GxserverPaths) -> BTreeSet<String> {
+    read(paths).door.into_keys().collect()
 }
 
 /// A finished pairing that asked for a server link: pins it when `allowed` (approved on an owner
@@ -339,19 +400,22 @@ pub fn settle_door_link(
     answer: &mut Value,
     server_id: &str,
     pending: &super::pairing_code::PendingPairing,
-    allowed: bool,
-) {
+    allowed: Result<(), &str>,
+) -> bool {
     let device_id = answer
         .get("deviceId")
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
-    if !allowed || device_id.is_empty() {
+    if let Err(why) = allowed {
         answer["serverLink"] = json!("notLinked");
-        answer["serverLinkReason"] = json!(
-            "It was approved in a terminal, not in the Ghostex app or on your phone, so the computers are paired without a server link. Approve it in the app or on your phone to link them."
-        );
-        return;
+        answer["serverLinkReason"] = json!(why);
+        return false;
+    }
+    if device_id.is_empty() {
+        answer["serverLink"] = json!("notLinked");
+        answer["serverLinkReason"] = json!("The pairing finished without a row to link.");
+        return false;
     }
     let key = pending.device_key.public_key.clone();
     let name = pending.name.clone();
@@ -379,20 +443,32 @@ pub fn settle_door_link(
         crate::audit::Outcome::Done,
         None,
     );
+    true
 }
 
 /// A paired-device row was removed here (Settings, a phone, the bell, `computers remove`, or the
 /// other computer's `unlink`): its pin, its grant and this side's own link to it go too (the
 /// user's 3A), and the other computer hears it when `tell` (best effort, over this side's own
 /// tunnel, signed).
-pub fn on_device_removed(paths: &GxserverPaths, device: &RemotePairedDeviceRecord, tell: bool) {
-    let key = device
-        .device_key
-        .as_ref()
-        .map(|key| key.public_key.clone())
-        .unwrap_or_default();
+///
+/// Only a server link's own row counts (review of #674, finding 1): removing another pairing of the
+/// same computer (Connect a Computer, its own row and key) leaves the link alone, and nothing is
+/// written for a row no link pinned.
+///
+/// `pin` is the row's pin as it was read before the row went: the sweep may drop a pin whose row
+/// is gone at any moment, so it is never looked up only afterwards.
+pub fn on_device_removed(paths: &GxserverPaths, device_id: &str, pin: Option<DoorPin>, tell: bool) {
+    let Some(pin) = pin.or_else(|| read(paths).door.get(device_id).cloned()) else {
+        return;
+    };
+    let device_id = device_id.to_string();
     let (pin, outgoing) = update(paths, |file| {
-        let pin = file.door.remove(&device.id);
+        file.door.remove(&device_id);
+        let pin = Some(pin);
+        let key = pin
+            .as_ref()
+            .map(|pin| pin.device_public_key.clone())
+            .unwrap_or_default();
         let mut outgoing = Vec::new();
         file.outgoing.retain(|link| {
             let theirs = !key.is_empty() && link.peer_device_key.as_deref() == Some(key.as_str());
@@ -426,14 +502,25 @@ pub fn on_device_removed(paths: &GxserverPaths, device: &RemotePairedDeviceRecor
 
 /// Drops pins whose paired-device row is gone (a pairing replaced or removed by another route).
 pub fn prune_pins(paths: &GxserverPaths, db: &Connection) {
-    let live = live_device_ids(db);
-    let stale = read(paths)
+    // A failed read is never taken for "no rows" (review of #674, finding 7).
+    let Some(live) = live_device_ids(db) else {
+        return;
+    };
+    let stale: Vec<(String, DoorPin)> = read(paths)
         .door
-        .keys()
-        .any(|device_id| !live.contains(device_id));
-    if stale {
-        update(paths, |file| file.door.retain(|id, _| live.contains(id)));
+        .into_iter()
+        .filter(|(device_id, _)| !live.contains(device_id))
+        .collect();
+    // A link whose row went by another route ends like any removed link (its own link here, its
+    // grant), so the pin never goes without the rest.
+    for (device_id, pin) in stale {
+        on_device_removed(paths, &device_id, Some(pin), false);
     }
+}
+
+/// The pin of paired row `device_id`, read before the row is removed.
+pub fn pin_of(paths: &GxserverPaths, device_id: &str) -> Option<DoorPin> {
+    read(paths).door.get(device_id).cloned()
 }
 
 /// `/api/serverLink`'s params.
@@ -509,6 +596,7 @@ fn refusal(status: u16, code: &'static str, message: impl Into<String>) -> Refus
     }
 }
 
+/// A cheap limit on every ask, before any work (a key lookup and a signature check).
 fn take_ask_slot() -> bool {
     static ASKS: Mutex<Vec<Instant>> = Mutex::new(Vec::new());
     let mut asks = ASKS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -519,6 +607,33 @@ fn take_ask_slot() -> bool {
     }
     asks.push(now);
     true
+}
+
+/// Each linked computer's own limit, taken once its signature checked out (review of #674,
+/// finding 5): one computer asking too often slows only itself.
+fn take_key_slot(device_public_key: &str) -> bool {
+    static ASKS: OnceLock<Mutex<HashMap<String, Vec<Instant>>>> = OnceLock::new();
+    let mut asks = ASKS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let now = Instant::now();
+    let key_asks = asks.entry(device_public_key.to_string()).or_default();
+    key_asks.retain(|at| now.duration_since(*at) < Duration::from_secs(60));
+    if key_asks.len() >= ASKS_PER_KEY_PER_MINUTE {
+        return false;
+    }
+    key_asks.push(now);
+    true
+}
+
+/// When this gxserver started answering asks: an ask signed before it is refused, so one caught
+/// on its way can't be replayed after a restart, which forgets the last timestamps (review of
+/// #674, finding 8). Unset in tests.
+static SERVING_SINCE_MS: OnceLock<u64> = OnceLock::new();
+
+pub fn note_serving_since(now_ms: u64) {
+    let _ = SERVING_SINCE_MS.set(now_ms);
 }
 
 fn last_timestamps() -> &'static Mutex<HashMap<String, u64>> {
@@ -552,30 +667,35 @@ pub fn answer_ask(context: &DoorContext<'_>, ask: ServerLinkAsk) -> Result<Value
             "This computer has no server link with the computer that asked.",
         )
     };
-    let device = RemotePairingRepository::new(context.db)
-        .list_devices()
-        .map_err(|error| refusal(500, "internal", format!("{error:#}")))?
-        .into_iter()
-        .find(|device| {
-            device.status == PairedDeviceStatus::Paired
-                && device.api_token_hash.is_none()
-                && device.tailcat_client_key.is_some()
-                && device.device_key.as_ref().is_some_and(|key| {
-                    !ask.device_key.is_empty() && key.public_key == ask.device_key
-                })
-        });
-    let pin = device.as_ref().and_then(|device| {
-        read(context.paths)
-            .door
-            .get(&device.id)
-            .filter(|pin| pin.device_public_key == ask.device_key)
-            .cloned()
-    });
-    let (Some(device), Some(pin)) = (device, pin) else {
+    // The row this computer pinned for that key, never another pairing of the same computer
+    // (review of #674, finding 1).
+    let pinned = pinned_row_for_key(context.paths, &ask.device_key);
+    let device = match &pinned {
+        Some((device_id, _)) => RemotePairingRepository::new(context.db)
+            .find_device(device_id)
+            .map_err(|error| refusal(500, "internal", format!("{error:#}")))?
+            .filter(|device| {
+                device.status == PairedDeviceStatus::Paired
+                    && device.api_token_hash.is_none()
+                    && device
+                        .device_key
+                        .as_ref()
+                        .is_some_and(|key| key.public_key == ask.device_key)
+            }),
+        None => None,
+    };
+    let (Some(device), Some((_, pin))) = (device, pinned) else {
         return Err(not_paired());
     };
     if !verify_device_signature(&ask.device_key, &ask.payload(), &ask.signature) {
         return Err(not_paired());
+    }
+    if !take_key_slot(&ask.device_key) {
+        return Err(refusal(
+            429,
+            RATE_LIMITED,
+            "This computer asked too often just now. It asks again in a minute.",
+        ));
     }
     // Signed for another computer (replayed from one it is also linked with), or not by the
     // server this key was pinned to: refused, without ending anything.
@@ -587,7 +707,19 @@ pub fn answer_ask(context: &DoorContext<'_>, ask: ServerLinkAsk) -> Result<Value
         ));
     }
     let now = crate::security::now_ms();
-    if ask.timestamp_ms + CLOCK_SKEW_MS < now || ask.timestamp_ms > now + CLOCK_SKEW_MS {
+    let signed_before_start = SERVING_SINCE_MS
+        .get()
+        .is_some_and(|since| ask.timestamp_ms < *since);
+    if signed_before_start {
+        return Err(refusal(
+            400,
+            CLOCK_OFF,
+            "This ask was signed before this computer last started. It asks again in a minute.",
+        ));
+    }
+    if ask.timestamp_ms + CLOCK_SKEW_MS < now
+        || ask.timestamp_ms > now + CLOCK_SKEW_MS
+    {
         return Err(refusal(
             400,
             CLOCK_OFF,
@@ -668,6 +800,14 @@ pub fn answer_ask(context: &DoorContext<'_>, ask: ServerLinkAsk) -> Result<Value
                     "The asking computer's code is missing its address or secret.",
                 ));
             }
+            // Checked first, before anything else is answered (review of #674, finding 11).
+            if !super::server_link_dialer::is_easy_connect_address(&code.address) {
+                return Err(refusal(
+                    400,
+                    "badRequest",
+                    "The asking computer's Easy Connect address isn't valid.",
+                ));
+            }
             if code.name.chars().count() > 80 || code.name.chars().any(char::is_control) {
                 return Err(refusal(
                     400,
@@ -693,6 +833,8 @@ pub fn answer_ask(context: &DoorContext<'_>, ask: ServerLinkAsk) -> Result<Value
                 },
                 false,
                 Some(ask.device_key.clone()),
+                // It must answer as the server this key was pinned to (review of #674, finding 3).
+                Some(pin.server_id.clone()),
             )
             .map_err(|error| refusal(400, "badRequest", format!("{error:#}")))
         }
@@ -706,7 +848,7 @@ pub fn answer_ask(context: &DoorContext<'_>, ask: ServerLinkAsk) -> Result<Value
             )
             .map_err(|error| refusal(500, "internal", format!("{error:#}")))?
             {
-                on_device_removed(context.paths, &removed, false);
+                on_device_removed(context.paths, &removed.id, Some(pin.clone()), false);
                 crate::audit::record(
                     crate::audit::Action::new(
                         "pairing.remove",

@@ -21,6 +21,10 @@ use crate::approval::{ApprovalRequest, SensitiveAction};
 pub const SERVER_LINK_SUMMARY_TAIL: &str =
     "\" link its agents with this computer through Easy Connect";
 
+/// How gxserver's detail of a server link's ask names what this computer already calls the
+/// server it claims to be, followed by that name and a closing quote.
+pub const SERVER_LINK_KNOWN_AS: &str = "already knows the server it names as \"";
+
 /// A request worded for a person.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PlainAsk {
@@ -78,10 +82,21 @@ pub fn plain_ask(request: &ApprovalRequest, computer: &str) -> Option<PlainAsk> 
                 });
             }
             if summary.ends_with(SERVER_LINK_SUMMARY_TAIL) {
+                // What this computer already calls the server it claims to be (gxserver's
+                // detail), so a computer naming another one's id shows under that other name.
+                let known = request
+                    .detail
+                    .as_deref()
+                    .and_then(|detail| detail.split_once(SERVER_LINK_KNOWN_AS))
+                    .and_then(|(_, rest)| rest.split_once('"'))
+                    .map(|(known, _)| one_line(known))
+                    .filter(|known| !known.is_empty())
+                    .map(|known| format!(" Ghostex on {computer} already knows that server as {known}."))
+                    .unwrap_or_default();
                 return Some(PlainAsk {
                     question: format!("Let {name} link its agents with {computer}?"),
                     body: Some(format!(
-                        "Agents on {name} can then start, message and read agents on {computer}. It gets no sign-in to {computer}."
+                        "Agents on {name} can then start, message and read agents on {computer}, and the two keep your synced settings the same. It gets no sign-in to {computer}.{known}"
                     )),
                     check: (!words.is_empty())
                         .then(|| format!("Approve only if {name} shows the same words.")),

@@ -61,9 +61,55 @@ fn polls() -> &'static Mutex<HashMap<String, Instant>> {
     POLLS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn connect_back_tries() -> &'static Mutex<HashMap<String, Instant>> {
-    static TRIES: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
+/// Each ask to pair back: when it was last tried and how many tries failed in a row.
+fn connect_back_tries() -> &'static Mutex<HashMap<String, (Instant, u32)>> {
+    static TRIES: OnceLock<Mutex<HashMap<String, (Instant, u32)>>> = OnceLock::new();
     TRIES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// A link whose last renewal failed waits before the next (review of #674, finding 5): 10 s,
+/// then twice as long each time, up to ten minutes. By server id: (retry at, failures in a row).
+fn backoff() -> &'static Mutex<HashMap<String, (Instant, u32)>> {
+    static BACKOFF: OnceLock<Mutex<HashMap<String, (Instant, u32)>>> = OnceLock::new();
+    BACKOFF.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn backing_off(server_id: &str) -> bool {
+    backoff()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get(server_id)
+        .is_some_and(|(until, _)| Instant::now() < *until)
+}
+
+fn note_failure(server_id: &str) {
+    let mut backoff = backoff().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let failures = backoff.get(server_id).map_or(0, |(_, failures)| *failures) + 1;
+    let wait = Duration::from_secs(10)
+        .saturating_mul(1 << failures.min(6))
+        .min(Duration::from_secs(600));
+    backoff.insert(server_id.to_string(), (Instant::now() + wait, failures));
+}
+
+fn note_success(server_id: &str) {
+    backoff()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .remove(server_id);
+}
+
+/// Asks to pair back stop after this many failures in a row (`ghostex computers` shows why).
+const CONNECT_BACK_MAX_TRIES: u32 = 5;
+
+/// An Easy Connect address as a code carries it: base64url-ish text (`tc…`), never an option
+/// (a leading `-`), no spaces or control characters, of a sane length.
+pub(crate) fn is_easy_connect_address(address: &str) -> bool {
+    !address.is_empty()
+        && address.len() <= 4096
+        && !address.starts_with('-')
+        && address
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ':' | '=' | '+' | '/'))
 }
 
 /// The key file a server link to `address` pairs and dials with.
@@ -85,7 +131,15 @@ pub fn start_link_pairing(
     code: ComputerPairingCode,
     connect_back: bool,
     expected_key: Option<String>,
+    expected_server_id: Option<String>,
 ) -> Result<Value> {
+    // It reaches tailcat's command line: refused before anything runs (review of #674, finding 11).
+    if !is_easy_connect_address(&code.address) {
+        bail!("That code's Easy Connect address isn't valid.");
+    }
+    if code.name.chars().count() > 80 || code.name.chars().any(char::is_control) {
+        bail!("That code's computer name isn't valid.");
+    }
     let key_file = key_file_for(paths, &code.address);
     if let Some(parent) = key_file.parent() {
         std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
@@ -131,6 +185,25 @@ pub fn start_link_pairing(
     }
     if expected_key.as_deref().is_some_and(|key| key != peer_key) {
         return cancel("The computer that answered isn't the one that asked to link.");
+    }
+    // Pairing back: it must be the server id this computer pinned for it (review of #674, finding 3).
+    if expected_server_id
+        .as_deref()
+        .is_some_and(|expected| expected != server_id)
+    {
+        return cancel("The computer that answered names another server id than the one it linked with.");
+    }
+    // A computer the desktop app connects here can't also be a server link (its grant slot and
+    // registration are the app's): the same rule the door side keeps.
+    let linked_here = {
+        let file = links::read(paths);
+        file.pin_for_server(&server_id).is_some() || file.outgoing_for_server(&server_id).is_some()
+    };
+    if !linked_here
+        && (crate::connected_computers::find(&server_id).is_some()
+            || crate::connected_computers::has_grant(&server_id))
+    {
+        return cancel("That computer is already connected here through the Ghostex app, so it can't link as a server too.");
     }
     // Another link already holds that server id under a different key: refused, not replaced.
     let held = links::read(paths).outgoing.iter().any(|link| {
@@ -200,6 +273,9 @@ fn wake() {
 /// a fresh grant from each linked computer every minute.
 pub(crate) fn start(state: Arc<AppState>) {
     let _ = OWN_SERVER_ID.set(state.metadata.server_id.clone());
+    links::note_serving_since(crate::security::now_ms());
+    // Reads the store once, so `has_links` knows whether there is anything to keep up.
+    let _ = links::read(&state.paths);
     let mut shutdown = state.shutdown_tx.subscribe();
     tokio::spawn(async move {
         static RUNNING: AtomicBool = AtomicBool::new(false);
@@ -209,6 +285,10 @@ pub(crate) fn start(state: Arc<AppState>) {
                 _ = shutdown.recv() => break,
                 _ = tick.tick() => {}
                 () = wake_signal().notified() => {}
+            }
+            // Nothing to keep up: no sweep, no file read (review of #674, finding 10).
+            if !links::has_links() {
+                continue;
             }
             if RUNNING.swap(true, Ordering::SeqCst) {
                 continue;
@@ -501,13 +581,14 @@ fn keep_linked(state: &AppState, link: &OutgoingLink) {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .get(&server_id)
         .is_none_or(|open| open.last_grant.is_none_or(|at| at.elapsed() >= RENEW_EVERY));
-    if !due {
+    if !due || backing_off(&server_id) {
         maybe_connect_back(state, link, &server_id);
         return;
     }
     let local_port = match ensure_tunnel(link, &server_id) {
         Ok(port) => port,
         Err(error) => {
+            note_failure(&server_id);
             eprintln!(
                 "[gxserver] server link to {}: no tunnel ({error:#})",
                 link.name
@@ -530,6 +611,7 @@ fn keep_linked(state: &AppState, link: &OutgoingLink) {
                 open.last_grant = Some(Instant::now());
                 open.rotate = false;
             }
+            note_success(&server_id);
             // Pinned at pairing: an answer naming another server id is refused.
             if answer.get("serverId").and_then(Value::as_str) != Some(server_id.as_str()) {
                 eprintln!(
@@ -583,6 +665,7 @@ fn keep_linked(state: &AppState, link: &OutgoingLink) {
                 // A new tunnel next time, and a new token with it.
                 drop_tunnel(&server_id);
             }
+            note_failure(&server_id);
             eprintln!("[gxserver] server link to {}: {code}: {message}", link.name);
         }
     }
@@ -607,30 +690,23 @@ fn register_off(server_id: &str, name: &str, other_computer: bool) {
 /// The other computer removed this one: its row here and this side's link go too.
 fn end_both_ways(state: &AppState, link: &OutgoingLink) {
     let paths = &state.paths;
-    if let Some(key) = &link.peer_device_key {
+    // Only the row this computer pinned for that link (review of #674, finding 1): another
+    // pairing of the same computer (Connect a Computer, with its SSH key line and Easy Connect
+    // key) is left as it is.
+    let pinned = link
+        .peer_device_key
+        .as_deref()
+        .and_then(|key| links::pinned_row_for_key(paths, key));
+    if let Some((device_id, pin)) = pinned {
         if let Ok(db) = crate::storage::open_gxserver_database(paths) {
-            let device = super::repository::RemotePairingRepository::new(&db)
-                .list_devices()
-                .ok()
-                .and_then(|devices| {
-                    devices.into_iter().find(|device| {
-                        device
-                            .device_key
-                            .as_ref()
-                            .is_some_and(|stored| &stored.public_key == key)
-                            && device.api_token_hash.is_none()
-                    })
-                });
-            if let Some(device) = device {
-                if let Ok(Some(removed)) = super::paired_devices::remove_paired_device(
-                    paths,
-                    &db,
-                    &state.tailcat_runtime,
-                    &state.device_api_tokens,
-                    &device.id,
-                ) {
-                    links::on_device_removed(paths, &removed, false);
-                }
+            if let Ok(Some(removed)) = super::paired_devices::remove_paired_device(
+                paths,
+                &db,
+                &state.tailcat_runtime,
+                &state.device_api_tokens,
+                &device_id,
+            ) {
+                links::on_device_removed(paths, &removed.id, Some(pin), false);
             }
         }
     }
@@ -661,6 +737,17 @@ pub fn forget_link(paths: &GxserverPaths, link: &OutgoingLink, tell: bool) -> bo
     let address = link.address.clone();
     links::update(paths, |file| file.outgoing.retain(|l| l.address != address));
     forget_retry_timers(link.server_id.as_deref());
+    // Its own Easy Connect key goes with it (review of #674, finding 12), only from the folder
+    // this file makes them in.
+    if link.key_file.starts_with(paths.root_dir.join("pairing").join("link-keys"))
+        && link
+            .key_file
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.ends_with("-serverlink.json"))
+    {
+        let _ = std::fs::remove_file(&link.key_file);
+    }
     told
 }
 
@@ -668,6 +755,10 @@ pub fn forget_link(paths: &GxserverPaths, link: &OutgoingLink, tell: bool) -> bo
 fn forget_retry_timers(server_id: Option<&str>) {
     if let Some(server_id) = server_id {
         connect_back_tries()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(server_id);
+        backoff()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .remove(server_id);
@@ -687,24 +778,30 @@ fn maybe_connect_back(state: &AppState, link: &OutgoingLink, server_id: &str) {
     {
         return;
     }
+    // Retried after a wait, and not after repeated failures (review of #674, finding 6).
     {
         let mut tries = connect_back_tries()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if tries
+        let (last, failures) = tries
             .get(server_id)
-            .is_some_and(|at| at.elapsed() < CONNECT_BACK_RETRY)
+            .copied()
+            .unwrap_or((Instant::now() - CONNECT_BACK_RETRY, 0));
+        if failures >= CONNECT_BACK_MAX_TRIES
+            || (failures > 0 && last.elapsed() < CONNECT_BACK_RETRY)
         {
             return;
         }
-        tries.insert(server_id.to_string(), Instant::now());
+        tries.insert(server_id.to_string(), (Instant::now(), failures + 1));
     }
     let Some(peer_key) = link.peer_device_key.clone() else {
         return;
     };
     let outcome = (|| -> std::result::Result<Value, String> {
-        let code = this_computer_code(state, &peer_key)?;
+        // The tunnel first: this computer's pairing door opens only once that computer can be
+        // asked through it.
         let port = ensure_tunnel(link, server_id).map_err(|error| format!("{error:#}"))?;
+        let code = this_computer_code(state, &peer_key)?;
         ask(
             &state.paths,
             port,
@@ -716,6 +813,16 @@ fn maybe_connect_back(state: &AppState, link: &OutgoingLink, server_id: &str) {
         )
         .map_err(|(_, message)| message)
     })();
+    if outcome.is_ok() {
+        // Asked: not asked again unless it fails later on.
+        if let Some(entry) = connect_back_tries()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get_mut(server_id)
+        {
+            entry.1 = CONNECT_BACK_MAX_TRIES;
+        }
+    }
     let reverse = match outcome {
         Ok(answer) => ReverseAsk {
             words: answer
@@ -818,7 +925,7 @@ pub(crate) fn answer_local(
                 secret,
                 name: code.name,
             };
-            start_link_pairing(paths, &state.metadata.server_id, code, true, None)
+            start_link_pairing(paths, &state.metadata.server_id, code, true, None, None)
                 .map_err(|error| (400, format!("{error:#}")))
         }
         "remove" => {
@@ -894,6 +1001,7 @@ fn remove(state: &AppState, server_id: &str) -> std::result::Result<Value, (u16,
         .as_ref()
         .is_some_and(|link| forget_link(paths, link, true));
     if let Some(device_id) = pin {
+        let link_pin = links::pin_of(paths, &device_id);
         let db =
             crate::storage::open_gxserver_database(paths).map_err(|e| (500, format!("{e:#}")))?;
         if let Some(removed) = super::paired_devices::remove_paired_device(
@@ -905,7 +1013,7 @@ fn remove(state: &AppState, server_id: &str) -> std::result::Result<Value, (u16,
         )
         .map_err(|e| (500, format!("{e:#}")))?
         {
-            links::on_device_removed(paths, &removed, false);
+            links::on_device_removed(paths, &removed.id, link_pin, false);
         }
     }
     links::update(paths, |file| {

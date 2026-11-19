@@ -427,8 +427,9 @@ fn approval_action(
                 params.platform, params.device_name
             ),
             format!(
-                "Approve only if that computer shows the same three words: {}. Approving lets it reach this computer through Easy Connect and lets the agents on it start, message and read agents here (a server link), with no sign-in to this computer, until you remove it in Settings › Remote.",
-                words.join(" · ")
+                "Approve only if that computer shows the same three words: {}. Approving lets it reach this computer through Easy Connect and lets the agents on it start, message and read agents here (a server link), and the two computers keep your synced settings the same (Settings › Sync); it gets no sign-in to this computer. It says it is Ghostex server {}. It stays until you remove it in Settings › Remote.",
+                words.join(" · "),
+                params.server_link.as_ref().map(|link| link.server_id.as_str()).unwrap_or_default()
             ),
         ),
         PairingDeviceKind::Computer => (
@@ -582,7 +583,8 @@ pub fn begin_pairing(
     {
         let detail = action.detail.clone().unwrap_or_default();
         action = action.detail(format!(
-            "{detail} Ghostex here already knows the server it names as \"{known}\"."
+            "{detail} Ghostex here {}{known}\".",
+            ghostex_gx_protocol::plain_ask::SERVER_LINK_KNOWN_AS
         ));
     }
     let now = now_ms();
@@ -1031,13 +1033,12 @@ pub fn pairing_status(
         .as_ref()
         .and_then(|request| request.decided_by.as_deref())
         == Some(Principal::LocalAgent.kind());
-    // Approved on one of the owner's own devices (the app's owner key or a paired phone), which
-    // record their device id, not a caller kind: only those let a server link in (CDXC:ServerLinks
-    // 2026-11-19 DECISION in server_links.rs).
-    let by_owner_device = request
-        .as_ref()
-        .and_then(|request| request.decided_by.as_deref())
-        .is_some_and(super::server_links::decided_by_owner_device);
+    // Whether a server link may come in through this approval: one of the owner's own devices,
+    // whose card worded it as a link (CDXC:ServerLinks 2026-11-19 in server_links.rs).
+    let link_verdict: Result<(), &'static str> = match request.as_ref() {
+        Some(request) => super::server_links::link_approval(request),
+        None => Err("The approval could not be read."),
+    };
     let status = request.map(|request| request.status);
     match status {
         Some(ApprovalStatus::Pending) => Ok(PairingStatusAnswer {
@@ -1102,13 +1103,35 @@ pub fn pairing_status(
                         .get("serverLink")
                         .and_then(Value::as_str)
                     {
-                        super::server_links::settle_door_link(
+                        let verdict = if tunnel_only {
+                            Err("It was approved in a terminal, so the computers were not linked. Approve it in the app or on your phone to link them.")
+                        } else {
+                            link_verdict
+                        };
+                        let linked = super::server_links::settle_door_link(
                             context.paths,
                             &mut answer,
                             server_id,
                             &pending,
-                            by_owner_device && !tunnel_only,
+                            verdict,
                         );
+                        // Not let in as a link: the pairing it made goes too, so no row is left
+                        // that nothing uses (review of #674, finding 12).
+                        if !linked {
+                            if let Some(device_id) =
+                                answer.get("deviceId").and_then(Value::as_str)
+                            {
+                                let _ = super::paired_devices::remove_paired_device_using(
+                                    context.paths,
+                                    context.db,
+                                    context.tailcat_runtime,
+                                    context.device_tokens,
+                                    device_id,
+                                    |id| (context.remove_key)(id),
+                                );
+                            }
+                            answer["deviceId"] = Value::Null;
+                        }
                     }
                     // Let in by this computer's terminal while only its own app owned it: the
                     // computer that joined may now ask to manage it once it has signed in over
@@ -1503,11 +1526,16 @@ pub fn register_computer_keys_signed(
             "This computer doesn't know that device key, or the clocks are more than five minutes apart.".to_string(),
         )
     };
+    // Never a server link's own row (review of #674, finding 1): the keys belong with the pairing
+    // the computer's app uses, and must not go when the link is removed. A computer linked only as
+    // a server has no such row, and keeps dialing as it paired.
+    let link_rows = super::server_links::pinned_device_ids(paths);
     let device = RemotePairingRepository::new(db)
         .list_devices()?
         .into_iter()
         .find(|device| {
             device.status == PairedDeviceStatus::Paired
+                && !link_rows.contains(&device.id)
                 && device
                     .device_key
                     .as_ref()
