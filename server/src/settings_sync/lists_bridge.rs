@@ -145,8 +145,11 @@ impl Engine<'_> {
         registry
             .new_session_accounts
             .retain(|_, choice| match choice {
+                // A CLIProxyAPI hub pin (`cliproxy:<hub id>`) names no saved account: the hub's own
+                // removal clears it (accounts/endpoint.rs `hubRemove`), not a synced account change.
                 crate::accounts::model::NewSessionAccount::Pinned { id } => {
                     ids.contains(id.as_str())
+                        || id.starts_with(crate::accounts::hub::launch::ACCOUNT_PREFIX)
                 }
                 _ => true,
             });
