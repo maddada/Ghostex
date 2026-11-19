@@ -587,14 +587,18 @@ impl SidebarViewModel {
         };
         let mut plans: Vec<GroupPlan> = Vec::new();
         let window_workspace = super::workspaces::window_workspace(store, effective, &machine);
+        let remote_workspace =
+            super::workspaces::remote_window_workspace(store, effective, &machine);
         let loaded = store.loaded(&machine);
         for project_id in meta.grouped_project_ids() {
             // Bots belong to no workspace; every other project shows in its workspace's windows.
-            if let (Some(workspace), Some(loaded)) = (&window_workspace, loaded) {
-                if meta.bot_profile(project_id).is_none()
-                    && !meta.is_gbot(project_id)
-                    && !workspace.shows_project(loaded, project_id)
-                {
+            if let Some(loaded) = loaded {
+                let shown = match (&window_workspace, &remote_workspace) {
+                    (Some(workspace), _) => workspace.shows_project(loaded, project_id),
+                    (None, Some(workspace)) => workspace.shows_project(loaded, project_id),
+                    (None, None) => true,
+                };
+                if !shown && meta.bot_profile(project_id).is_none() && !meta.is_gbot(project_id) {
                     continue;
                 }
             }

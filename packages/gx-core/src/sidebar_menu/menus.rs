@@ -45,6 +45,12 @@ pub struct SidebarMenus<'a> {
     workspaces: Option<ghostex_gx_protocol::SidebarWorkspacesState>,
     /// The workspace each of this computer's projects is in (worktrees follow their parent).
     project_workspaces: std::collections::BTreeMap<String, String>,
+    /// While a remote machine's section is drawn and this computer's daemon has workspaces: those
+    /// workspaces, and the one of them each of that machine's projects shows in.
+    remote_workspaces: Option<(
+        ghostex_gx_protocol::SidebarWorkspacesState,
+        std::collections::BTreeMap<String, String>,
+    )>,
     /// The drawn machine's daemon id (`S…`), the first part of a session's global ref; absent
     /// until a stream frame has named it.
     server_id: Option<String>,
@@ -130,6 +136,25 @@ impl<'a> SidebarMenus<'a> {
                     })
                     .collect(),
                 _ => std::collections::BTreeMap::new(),
+            },
+            remote_workspaces: match (
+                crate::sidebar_view::remote_window_workspace(store, inputs, &machine),
+                store.loaded(&machine),
+            ) {
+                (Some(workspace), Some(loaded)) => Some((
+                    workspace.state.clone(),
+                    loaded
+                        .projects()
+                        .iter()
+                        .map(|project| {
+                            (
+                                project.project_id.clone(),
+                                workspace.project_workspace_id(loaded, project).to_string(),
+                            )
+                        })
+                        .collect(),
+                )),
+                _ => None,
             },
             collections: match side_state.and_then(|side| side.project_collections.as_ref()) {
                 Some(state) => CollectionsState::from_wire(state),
@@ -451,6 +476,18 @@ impl<'a> SidebarMenus<'a> {
                     self.project_workspaces.get(project_id)?.as_str(),
                 ))
             }),
+            remote_workspace: self.remote_workspaces.as_ref().and_then(
+                |(state, project_workspaces)| {
+                    let remote = group.core.remote_machine.as_ref()?;
+                    let project_id = remote.project_id.as_deref()?;
+                    Some(project::RemoteProjectWorkspace {
+                        state,
+                        machine_id: remote.machine_id.as_str(),
+                        project_id,
+                        workspace_id: project_workspaces.get(project_id)?.as_str(),
+                    })
+                },
+            ),
         }));
         // The worktrees whose sessions this project lists (`sidebar_view/worktree_fold.rs`) have
         // no header of their own, so their Delete Worktree is here, as on a Unified repository.

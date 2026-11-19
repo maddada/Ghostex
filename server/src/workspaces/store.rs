@@ -11,6 +11,7 @@ const MAX_WORKSPACES: usize = 64;
 const MAX_ID_CHARS: usize = 256;
 const MAX_NAME_CHARS: usize = 128;
 const MAX_MACHINE_ASSIGNMENTS: usize = 256;
+const MAX_REMOTE_PROJECT_ASSIGNMENTS: usize = 2048;
 
 /// The workspace every project and Space without a `workspaceId` belongs to. It always exists
 /// and cannot be deleted.
@@ -178,6 +179,53 @@ pub(crate) fn assign_machine_workspace_in(
     } else {
         machines.insert(machine_id.to_string(), json!(workspace_id));
     }
+    Ok(normalize_sidebar_workspaces_state(&next))
+}
+
+/// Puts one project of a remote machine in a workspace of this computer, apart from the rest of
+/// its machine's tab (`assign_machine_workspace_in`). Kept even for the default workspace, which
+/// is where the project goes when its machine sits in another one.
+///
+/// CDXC:Workspaces 2026-11-19 DECISION:
+/// A Discord user (relayed by the user): "I have existing Project on other computer or server, I wanted to move it to the work workspace, but there is no option to move Projects to workspace". The user asked for Move to workspace on a remote computer's projects too, listing every workspace, both ways. A remote project's own `workspaceId` is its machine's and means nothing here, so the choice is this computer's, by machine and project (`remoteProjectWorkspaces`); a project with none shows where its machine's tab does. Its machine's tab shows in every workspace that holds one of its projects.
+pub(crate) fn assign_remote_project_workspace_in(
+    state: &Value,
+    machine_id: &str,
+    project_id: &str,
+    workspace_id: &str,
+) -> Result<Value, DomainStateError> {
+    let machine_id = machine_id.trim();
+    let project_id = project_id.trim();
+    if machine_id.is_empty() || machine_id.chars().count() > MAX_ID_CHARS {
+        return Err(DomainStateError::bad_request("Pass machineId."));
+    }
+    if project_id.is_empty() || project_id.chars().count() > MAX_ID_CHARS {
+        return Err(DomainStateError::bad_request("Pass projectId."));
+    }
+    if !workspace_exists(state, workspace_id) {
+        return Err(DomainStateError::bad_request("No such workspace."));
+    }
+    let mut next = state.clone();
+    let Some(document) = next.as_object_mut() else {
+        return Err(DomainStateError::bad_request("No such workspace."));
+    };
+    let machines = document
+        .entry("remoteProjectWorkspaces")
+        .or_insert_with(|| json!({}));
+    if !machines.is_object() {
+        *machines = json!({});
+    }
+    let machines = machines.as_object_mut().expect("set to an object above");
+    let projects = machines
+        .entry(machine_id.to_string())
+        .or_insert_with(|| json!({}));
+    if !projects.is_object() {
+        *projects = json!({});
+    }
+    projects
+        .as_object_mut()
+        .expect("set to an object above")
+        .insert(project_id.to_string(), json!(workspace_id));
     Ok(normalize_sidebar_workspaces_state(&next))
 }
 
@@ -403,9 +451,43 @@ pub fn normalize_sidebar_workspaces_state(state: &Value) -> Value {
         }
         machine_workspaces.insert(machine_id.to_string(), json!(workspace_id));
     }
+    // A remote project's assignment to a workspace that is gone is no assignment.
+    let mut remote_project_workspaces = Map::new();
+    let mut remote_project_count = 0;
+    for (machine_id, projects) in state
+        .get("remoteProjectWorkspaces")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        let machine_id = machine_id.trim();
+        if machine_id.is_empty() || machine_id.chars().count() > MAX_ID_CHARS {
+            continue;
+        }
+        let mut kept = Map::new();
+        for (project_id, workspace_id) in projects.as_object().into_iter().flatten() {
+            let project_id = project_id.trim();
+            let Some(workspace_id) = workspace_id.as_str().map(str::trim) else {
+                continue;
+            };
+            if project_id.is_empty()
+                || project_id.chars().count() > MAX_ID_CHARS
+                || !workspaces.contains_key(workspace_id)
+                || remote_project_count >= MAX_REMOTE_PROJECT_ASSIGNMENTS
+            {
+                continue;
+            }
+            remote_project_count += 1;
+            kept.insert(project_id.to_string(), json!(workspace_id));
+        }
+        if !kept.is_empty() {
+            remote_project_workspaces.insert(machine_id.to_string(), Value::Object(kept));
+        }
+    }
     json!({
         "defaultWorkspaceId": DEFAULT_WORKSPACE_ID,
         "machineWorkspaces": machine_workspaces,
+        "remoteProjectWorkspaces": remote_project_workspaces,
         "order": ordered_ids,
         "workspaces": workspaces,
     })

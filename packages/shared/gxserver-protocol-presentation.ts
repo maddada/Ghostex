@@ -793,6 +793,8 @@ export interface GxserverSidebarWorkspacesState {
   defaultWorkspaceId: string;
   /** A remote machine's sidebar tab (this computer's settings id for it) → the workspace it shows in here; unlisted machines show in the default workspace. */
   machineWorkspaces?: Readonly<Record<string, string>>;
+  /** A remote machine → its projects placed apart from its tab → the workspace each shows in here. */
+  remoteProjectWorkspaces?: Readonly<Record<string, Readonly<Record<string, string>>>>;
   order: readonly string[];
   workspaces: Readonly<Record<string, GxserverSidebarWorkspace>>;
 }

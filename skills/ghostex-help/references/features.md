@@ -1060,7 +1060,8 @@ nothing is put to sleep). To move a project,
 right-click it and choose Move to workspace; its sessions and worktrees go with
 it, and it leaves its group and Spaces and shows under Other in the new
 workspace. A project you add with Add Project (or clone from it) joins the
-workspace of the window you are in; a worktree joins its project's workspace;
+workspace of the window you are in, also on a remote machine; a worktree joins
+its project's workspace;
 a project added from the command line (`ghostex add-project`) goes to Personal
 unless you pass `--workspace <name>`. Opening a folder in Ghostex from your
 computer (or a terminal there) adds a new folder to the window's workspace, but
@@ -1069,7 +1070,10 @@ in a window already showing that workspace or by switching the window to it.
 The Ghostex project that holds Help chats shows in every workspace. A Space you
 create joins the window's workspace too. A remote machine's tab shows in one
 workspace of this computer, Personal until you right-click the tab and choose
-Move to workspace; its projects keep that machine's own workspaces. On the
+Move to workspace. To place one of its projects in another workspace, right-click
+the project and choose Move to workspace: it shows there, and the machine's tab
+shows in every workspace that holds one of its projects. This placement is this
+computer's own; on the remote machine the project keeps its workspace there. On the
 phone, the Sessions list shows the same letter tile at the left of the Space
 row for each computer: tap it to choose which of that computer's workspaces the
 list shows. The phone remembers the choice, a session opened from a

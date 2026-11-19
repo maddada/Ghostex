@@ -131,6 +131,39 @@ pub(crate) fn move_to_workspace_menu(
     MenuItem::submenu("Move to workspace", "switch-horizontal", children)
 }
 
+/// "Move to workspace ▸" for a remote machine's project in `project_workspace_id` (this
+/// computer's workspace it shows in): every other workspace of this computer.
+pub(crate) fn move_remote_project_to_workspace_menu(
+    state: &SidebarWorkspacesState,
+    machine_id: &str,
+    project_id: &str,
+    project_workspace_id: &str,
+) -> MenuItem {
+    let children: Vec<MenuItem> = state
+        .ordered()
+        .filter(|workspace| workspace.workspace_id != project_workspace_id)
+        .map(|workspace| {
+            let mut row = MenuItem::row(
+                &workspace.name,
+                if workspace.is_work() {
+                    "briefcase"
+                } else {
+                    "user"
+                },
+                MenuCommand::host(json!({
+                    "type": "moveRemoteProjectToWorkspace",
+                    "machineId": machine_id,
+                    "projectId": project_id,
+                    "workspaceId": workspace.workspace_id,
+                })),
+            );
+            row.icon_color = Some(workspace.color.clone());
+            row
+        })
+        .collect();
+    MenuItem::submenu("Move to workspace", "switch-horizontal", children)
+}
+
 /// "Move to workspace ▸" on a remote machine's tab: every workspace of this computer other than
 /// the one the tab shows in now (`SidebarWorkspacesState::machine_workspace`).
 pub fn machine_workspace_menu(state: &SidebarWorkspacesState, machine_id: &str) -> MenuItem {

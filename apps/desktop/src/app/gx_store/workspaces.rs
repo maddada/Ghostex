@@ -268,6 +268,19 @@ impl GhostexGpuiApp {
                 }
                 true
             }
+            Some("moveRemoteProjectToWorkspace") => {
+                if let (Some(machine_id), Some(project_id), Some(workspace_id)) =
+                    (text("machineId"), text("projectId"), text("workspaceId"))
+                {
+                    self.gx_store_move_remote_project_to_workspace(
+                        machine_id,
+                        project_id,
+                        workspace_id,
+                        cx,
+                    );
+                }
+                true
+            }
             Some("openWorkspaceWindow") => {
                 // The row's new-window button does not close the menu by itself.
                 self.dismiss_native_sidebar_menu(cx);
@@ -366,6 +379,71 @@ impl GhostexGpuiApp {
             }
         })
         .detach();
+    }
+
+    /// Move to workspace on a remote machine's project, or a project just added there from a
+    /// window of another workspace: this computer's daemon keeps where it shows
+    /// (`sidebarWorkspaces.remoteProjectWorkspaces`) and every window follows it.
+    pub(crate) fn gx_store_move_remote_project_to_workspace(
+        &mut self,
+        machine_id: String,
+        project_id: String,
+        workspace_id: String,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let result = gxserver_rpc_result_task(
+                &background,
+                "/api/moveRemoteProjectToWorkspace",
+                json!({
+                    "machineId": machine_id,
+                    "projectId": project_id,
+                    "workspaceId": workspace_id,
+                }),
+                super::sidebar_lifecycle::rpc_timeout(),
+            )
+            .await;
+            if let Err(message) = result {
+                let _ = this.update(cx, |this, cx| {
+                    this.dispatch_gpui_workspace_action_toast(
+                        "error",
+                        "Couldn't move the project",
+                        &message,
+                        cx,
+                    );
+                });
+            }
+        })
+        .detach();
+    }
+
+    /// A project just added (or cloned) on a remote machine shows in the workspace of the window
+    /// it was added from, as a project added on this computer does (gxserver
+    /// `place_added_project`).
+    ///
+    /// CDXC:Workspaces 2026-11-19 DECISION:
+    /// A Discord user (relayed by the user): "on new workspace that I created, and add project, it will going to Personal project instead of new Workspace that I create". Add Project while a workspace is active adds the project to that workspace on every path; a remote computer's project followed its machine's tab, which is in Personal until moved, so it is placed in the window's workspace here.
+    pub(crate) fn gx_store_place_added_remote_project(
+        &mut self,
+        machine_id: &str,
+        project_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(state) = self.gx_store_workspaces_state() else {
+            return;
+        };
+        let window_workspace_id = self.gx_store_window_workspace_id();
+        let window = state.resolve(window_workspace_id.as_deref()).to_string();
+        if state.remote_project_workspace(machine_id, project_id) == window {
+            return;
+        }
+        self.gx_store_move_remote_project_to_workspace(
+            machine_id.to_string(),
+            project_id.to_string(),
+            window,
+            cx,
+        );
     }
 
     /// The tab menu's "Move to workspace ▸" for a remote machine, as sidebar menu JSON; `None`

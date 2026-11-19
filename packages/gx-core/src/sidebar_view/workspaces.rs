@@ -69,6 +69,63 @@ pub fn project_workspace_id<'a>(
     state.resolve(id)
 }
 
+/// A remote machine's projects as a window of this computer places them: each one in the
+/// workspace it was moved to here, else in its machine tab's (CDXC:Workspaces 2026-11-19 in
+/// server/src/workspaces/store.rs `assign_remote_project_workspace_in`).
+pub struct RemoteWindowWorkspace<'a> {
+    pub state: &'a SidebarWorkspacesState,
+    pub workspace_id: &'a str,
+    pub machine_id: &'a str,
+}
+
+impl<'a> RemoteWindowWorkspace<'a> {
+    /// The workspace of this computer a remote project shows in; a worktree project follows its
+    /// parent checkout's.
+    pub fn project_workspace_id(
+        &self,
+        loaded: &'a LoadedPresentation,
+        project: &'a PresentationProject,
+    ) -> &'a str {
+        let project_id = project
+            .worktree
+            .as_ref()
+            .and_then(|worktree| worktree.get("parentProjectId"))
+            .and_then(|id| id.as_str())
+            .filter(|parent_id| loaded.project(parent_id).is_some())
+            .unwrap_or(project.project_id.as_str());
+        self.state
+            .remote_project_workspace(self.machine_id, project_id)
+    }
+
+    /// Whether a remote project belongs to the window's workspace.
+    pub fn shows_project(&self, loaded: &'a LoadedPresentation, project_id: &str) -> bool {
+        match loaded.project(project_id) {
+            Some(project) => self.project_workspace_id(loaded, project) == self.workspace_id,
+            None => true,
+        }
+    }
+}
+
+/// This computer's workspaces and the window's, for placing a remote machine's projects; `None`
+/// for this computer or while its daemon has no workspaces.
+pub fn remote_window_workspace<'a>(
+    store: &'a PresentationStore,
+    inputs: &'a SidebarInputs,
+    machine: &'a MachineId,
+) -> Option<RemoteWindowWorkspace<'a>> {
+    let machine_id = machine.remote_id()?;
+    let state = store
+        .machine(&MachineId::Local)?
+        .side_state()
+        .workspaces
+        .as_ref()?;
+    Some(RemoteWindowWorkspace {
+        state,
+        workspace_id: state.resolve(inputs.host.window_workspace_id.as_deref()),
+        machine_id,
+    })
+}
+
 /// The workspace the window shows on `machine`; `None` when that section is not filtered.
 pub fn window_workspace<'a>(
     store: &'a PresentationStore,
@@ -107,7 +164,8 @@ pub fn window_spaces<'a>(
 
 /// The machine tabs a window shows: this computer always, and a remote machine only in the
 /// workspace it was put in on this computer (Personal until moved with Move to workspace on its
-/// tab). Every tab while this computer's daemon has no workspaces.
+/// tab), and in every workspace one of its projects was moved to (`RemoteWindowWorkspace`). Every
+/// tab while this computer's daemon has no workspaces.
 ///
 /// CDXC:Workspaces 2026-10-09 DECISION:
 /// User: remote machines' sidebar sections follow the window's workspace too. A remote machine's
@@ -127,7 +185,7 @@ pub fn window_machine_tabs(
     };
     let window = state.resolve(window_workspace_id);
     tabs.iter()
-        .filter(|tab| tab.is_local() || state.machine_workspace(&tab.machine_id) == window)
+        .filter(|tab| tab.is_local() || state.machine_shows_in(&tab.machine_id, window))
         .cloned()
         .collect()
 }

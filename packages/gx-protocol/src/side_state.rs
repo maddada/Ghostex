@@ -168,12 +168,39 @@ pub struct SidebarWorkspacesState {
     /// shows in here. A machine not listed shows in the default workspace.
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub machine_workspaces: BTreeMap<String, String>,
+    /// A remote machine (same id as `machine_workspaces`) → its projects placed apart from its tab
+    /// → the workspace each shows in here (gxserver `assign_remote_project_workspace_in`).
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub remote_project_workspaces: BTreeMap<String, BTreeMap<String, String>>,
 }
 
 impl SidebarWorkspacesState {
     /// The workspace a remote machine's tab shows in on this computer.
     pub fn machine_workspace(&self, machine_id: &str) -> &str {
         self.resolve(self.machine_workspaces.get(machine_id).map(String::as_str))
+    }
+
+    /// The workspace a remote machine's project shows in on this computer: its own placement, else
+    /// its machine tab's.
+    pub fn remote_project_workspace(&self, machine_id: &str, project_id: &str) -> &str {
+        match self
+            .remote_project_workspaces
+            .get(machine_id)
+            .and_then(|projects| projects.get(project_id))
+        {
+            Some(id) if self.workspaces.contains_key(id) => id,
+            _ => self.machine_workspace(machine_id),
+        }
+    }
+
+    /// Whether a remote machine has anything to show in `workspace_id`: its tab is placed there,
+    /// or one of its projects is.
+    pub fn machine_shows_in(&self, machine_id: &str, workspace_id: &str) -> bool {
+        self.machine_workspace(machine_id) == workspace_id
+            || self
+                .remote_project_workspaces
+                .get(machine_id)
+                .is_some_and(|projects| projects.values().any(|id| id == workspace_id))
     }
 
     /// The default workspace's id (`personal` when the document came without one).

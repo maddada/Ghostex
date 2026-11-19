@@ -28,8 +28,19 @@ pub struct ProjectMenuInput<'a> {
     /// This computer's workspaces and the one the project is in; `None` for a remote machine's
     /// project or a daemon without workspaces.
     pub workspace: Option<(&'a ghostex_gx_protocol::SidebarWorkspacesState, &'a str)>,
+    /// For a remote machine's project: this computer's workspaces, the machine, the project's id
+    /// there and the workspace of this computer it shows in; `None` otherwise.
+    pub remote_workspace: Option<RemoteProjectWorkspace<'a>>,
     /// Clone on… (`clone_on.rs`), when some known machine lacks the project.
     pub clone_on: Option<MenuItem>,
+}
+
+/// [`ProjectMenuInput::remote_workspace`].
+pub struct RemoteProjectWorkspace<'a> {
+    pub state: &'a ghostex_gx_protocol::SidebarWorkspacesState,
+    pub machine_id: &'a str,
+    pub project_id: &'a str,
+    pub workspace_id: &'a str,
 }
 
 /// `createNativeProjectMenu`.
@@ -179,6 +190,21 @@ pub fn project_menu(input: &ProjectMenuInput<'_>) -> Vec<MenuItem> {
             workspaces,
             project.project_id.as_str(),
             project_workspace_id,
+        ));
+    }
+    // A remote machine's project moves on this computer only (CDXC:Workspaces 2026-11-19 in
+    // server/src/workspaces/store.rs `assign_remote_project_workspace_in`).
+    if let Some(remote) = input.remote_workspace.as_ref().filter(|remote| {
+        project.bot_profile.is_none()
+            && group.is_remote
+            && !group.is_stale
+            && remote.state.workspaces.len() > 1
+    }) {
+        menu.push(super::workspace::move_remote_project_to_workspace_menu(
+            remote.state,
+            remote.machine_id,
+            remote.project_id,
+            remote.workspace_id,
         ));
     }
     menu.push(MenuItem::separator());

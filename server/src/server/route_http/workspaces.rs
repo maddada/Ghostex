@@ -13,10 +13,10 @@ use crate::{
     sidebar_spaces::rehome_sidebar_spaces_for_workspaces,
     work_mode::{store_linear_api_key, LinearKeyScope},
     workspaces::{
-        assign_machine_workspace_in, create_workspace_in, delete_workspace_in, find_workspace_id,
-        move_project_to_workspace, read_sidebar_workspaces, reapply_workspace_defaults,
-        resolve_project_reference, update_workspace_in, write_sidebar_workspaces,
-        DEFAULT_WORKSPACE_ID,
+        assign_machine_workspace_in, assign_remote_project_workspace_in, create_workspace_in,
+        delete_workspace_in, find_workspace_id, move_project_to_workspace, read_sidebar_workspaces,
+        reapply_workspace_defaults, resolve_project_reference, update_workspace_in,
+        write_sidebar_workspaces, DEFAULT_WORKSPACE_ID,
     },
 };
 
@@ -211,6 +211,35 @@ pub(super) async fn route_workspaces_http(
                 }
                 Ok(json!({
                     "machineId": machine_id,
+                    "workspaceId": workspace_id,
+                    "sidebarWorkspaces": workspaces,
+                }))
+            },
+        ),
+        "/api/moveRemoteProjectToWorkspace" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |_, db, params, _| {
+                let machine_id = required_text(params, "machineId")?;
+                let project_id = required_text(params, "projectId")?;
+                let _event_sequence = lock_presentation_event_sequence(&state)?;
+                let current = read_sidebar_workspaces(db)?;
+                let workspace_id = required_workspace(&current, params)?;
+                let next = assign_remote_project_workspace_in(
+                    &current,
+                    &machine_id,
+                    &project_id,
+                    &workspace_id,
+                )?;
+                let workspaces = write_sidebar_workspaces(db, &next)?;
+                if workspaces != current {
+                    broadcast_workspaces(&state, db, &workspaces)?;
+                }
+                Ok(json!({
+                    "machineId": machine_id,
+                    "projectId": project_id,
                     "workspaceId": workspace_id,
                     "sidebarWorkspaces": workspaces,
                 }))

@@ -945,7 +945,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/updateWorkspace"
         | "/api/deleteWorkspace"
         | "/api/moveProjectToWorkspace"
-        | "/api/moveMachineToWorkspace" => remote_allowed(path),
+        | "/api/moveMachineToWorkspace"
+        | "/api/moveRemoteProjectToWorkspace" => remote_allowed(path),
         /*
         CDXC:WorkMode 2026-10-09 WHY:
         The Linear key is a secret on this computer, so only this computer's clients may set it or
