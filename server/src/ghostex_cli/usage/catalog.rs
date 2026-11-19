@@ -131,6 +131,10 @@ pub fn usage() -> String {
             "List every Claude and Codex account with its state, usage and reset times, the default, and the sessions on it",
         ),
         format_help_command(
+            "accounts hub [list|add|update|remove]",
+            "List, add, change or remove CLIProxyAPI hubs; keys are read from a file or standard input only",
+        ),
+        format_help_command(
             "sessions | s | ls [--ungrouped|-u] [--json [--full]] [--mobile-summary]",
             "List running terminal sessions",
         ),

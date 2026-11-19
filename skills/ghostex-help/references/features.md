@@ -3254,7 +3254,12 @@ profile folder of their own (`~/.claude-profiles/ghostex-<hub>` or
 `~/.codex-profiles/ghostex-<hub>`), so they use their own login and are never
 switched to another account. When every hub account is out of room, the
 session waits for the reset the hub names ("cooling down … reset after 1h10m")
-and continues by itself. Setting: `cliProxyApiEnabled`.
+and continues by itself. `ghostex accounts hub add --address <url>
+--client-key-file <path|->` adds a hub from a terminal on the computer that
+uses it, reading keys only from a file or standard input (for example piped
+over `ssh` from the hub), never from the command line; `ghostex accounts hub`
+lists hubs and their accounts, `update` and `remove` change them. Setting:
+`cliProxyApiEnabled`.
 Each Codex login is its own account with its own name and settings, also when
 two people sign in to the same ChatGPT Business workspace or one person has
 several workspaces; this needs Codex Swap 0.3.2 or later (its Update is in the ⋯

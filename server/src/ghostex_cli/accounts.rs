@@ -14,11 +14,15 @@ per window with reset times, which account new sessions use (default), and its r
 sleeping sessions, with a count of stopped ones (--all lists those too). The same reading Settings > Accounts shows; --refresh reads usage
 again instead of using a reading up to two minutes old.
 
+CLIProxyAPI hubs and their accounts: ghostex accounts hub --help
 Move a session to another account:   ghostex agents switch-account <session-ref> --account <number|email>
 Restart a stuck session's agent:     ghostex agents reload <session-ref>";
 
 /// `ghostex accounts`: the `/api/agentAccounts` `roster` (server/src/accounts/cli.rs).
 pub(crate) fn run(args: &[String]) -> CliResult<()> {
+    if args.first().map(String::as_str) == Some("hub") {
+        return super::accounts_hub::run(&args[1..]);
+    }
     let mut json_output = false;
     let mut refresh = false;
     let mut all_sessions = false;

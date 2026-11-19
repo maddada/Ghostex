@@ -1,6 +1,7 @@
 mod account_login;
 mod account_login_codex;
 mod accounts;
+mod accounts_hub;
 pub mod actions;
 mod agent_cli;
 mod agent_guide;
