@@ -97,7 +97,13 @@ impl NativeChatView {
                     .rounded(px(8.0 * s))
                     .border_1()
                     .border_color(p.input_border)
-                    .bg(p.background.opacity(0.7))
+                    // CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): under window glass the dark box is
+                    // the fenced code blocks' fill (`fenced_code_fill`), not near-black at 70%.
+                    .bg(if p.window_glass && !p.light {
+                        super::markdown_style::fenced_code_fill(p)
+                    } else {
+                        p.background.opacity(0.7)
+                    })
                     .child(inner)
                     .into_any_element(),
             );

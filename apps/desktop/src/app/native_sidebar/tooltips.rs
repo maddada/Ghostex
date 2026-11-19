@@ -394,10 +394,20 @@ pub(crate) struct InWindowBubble {
 ///
 /// CDXC:Tooltips 2026-10-25 DECISION: User, of the chat's floating Copy / Paste in terminal bar over a reply: "this floating terminal/copy thing is too clear bg, please make the bg super blurred like we do in the sidebar tool tips!!" Anything that floats over content takes this bubble's fill (the frosted host's when it draws there), never a faint wash the text underneath reads through.
 /// SEE-ALSO: native_chat/image_viewer/ and native_docs/picture_viewer.rs (the picture toolbars and arrows). The chat's inline command bar and selection bar took the chat menu's look instead on 2026-11-13 (CDXC:SessionChat on `ChatMenuGlass`, native_chat/option_menu/render.rs).
+///
+/// CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): under window glass the fill is the work
+/// area's own colour lifted toward white (`glass_lifted_surface`), never the darkened tooltip tone
+/// at 90%, which read as a black slab on the glass. This reaches every in-window bubble: the
+/// sidebar's in-window tooltips and cards, the chat and Docs picture toolbars and arrows, and the
+/// Changes view. Glass off, the opaque tooltip fill as before.
 pub(crate) fn in_window_bubble(glass: bool) -> InWindowBubble {
     let fill = tooltip_background(titlebar_popup_menu_background());
     InWindowBubble {
-        fill: if glass { fill.opacity(0.9) } else { fill },
+        fill: if glass {
+            crate::app::helpers::glass_lifted_surface(fill.opacity(0.9))
+        } else {
+            fill
+        },
         border: titlebar_popup_menu_border_color(),
         secondary: titlebar_popup_menu_foreground().opacity(0.6),
     }

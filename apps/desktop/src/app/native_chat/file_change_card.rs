@@ -65,8 +65,13 @@ impl Palette {
             },
             hairline: p.foreground.opacity(if p.light { 0.08 } else { 0.045 }),
             hover: p.foreground.opacity(if p.light { 0.04 } else { 0.03 }),
+            // CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): under window glass the dark
+            // well is a half-strength code wash (`glass_wash`, white 3% like light mode's ink 3%),
+            // not the opaque chat background, which read as a black slab on the glass.
             well: if p.light {
                 p.foreground.opacity(0.03)
+            } else if p.window_glass {
+                crate::app::helpers::glass_wash(p.light, 0.5)
             } else {
                 p.background
             },

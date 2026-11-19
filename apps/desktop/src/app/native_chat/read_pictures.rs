@@ -99,6 +99,10 @@ impl NativeChatView {
             (offset > 0.5, max - offset > 0.5)
         };
         let shown = fades(&handle);
+        // CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): under window glass there is no
+        // solid colour to fade into, so the strip draws no fades (as the transcript's bottom fade in
+        // composer_scroll.rs); the ramp painted dark bands at the strip's edges.
+        let fade = !p.window_glass;
         let chat = cx.entity_id();
         let wheel = handle.clone();
         Some(
@@ -115,10 +119,10 @@ impl NativeChatView {
                         .track_scroll(&handle)
                         .child(row),
                 )
-                .when(shown.0, |strip| {
+                .when(fade && shown.0, |strip| {
                     strip.child(edge_fade(true, edge, PILLS_FADE * s))
                 })
-                .when(shown.1, |strip| {
+                .when(fade && shown.1, |strip| {
                     strip.child(edge_fade(false, edge, PILLS_FADE * s))
                 })
                 .child(

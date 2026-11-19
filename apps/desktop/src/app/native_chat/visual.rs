@@ -719,8 +719,14 @@ fn tooltip(region: &Region, hover: Hover, scene: &Scene, p: &ChatAppearance) -> 
         (hover.y - OFFSET - height).max(0.0)
     };
     // CDXC:SessionChat 2026-10-06 DECISION: User: the tooltip was "too transparent", so it is a solid card rather than the frosted menu surface.
+    // CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): under window glass the dark card is the
+    // chat's colour lifted toward white (`glass_lifted_from`), not #1f1f23, which read as a black
+    // slab on the glass. It stays dense (`GLASS_LIFTED_ALPHA`) so the numbers stay readable, as the
+    // 2026-10-06 "too transparent" decision asks. Light mode keeps its white card.
     let background: Hsla = if p.light {
         gpui::rgb(0xffffff).into()
+    } else if p.window_glass {
+        crate::app::helpers::glass_lifted_from(p.background, p.light)
     } else {
         gpui::rgb(0x1f1f23).into()
     };

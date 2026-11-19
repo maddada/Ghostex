@@ -88,7 +88,7 @@ impl ImageViewerWindow {
         .absolute()
         .size_full();
         // The sidebar tooltip bubble's fill: these float over the picture (CDXC:Tooltips 2026-10-25
-        // on `in_window_bubble`).
+        // on `in_window_bubble`). Under glass, the lifted work area colour (CDXC:Theming 2026-11-20).
         let surface = crate::app::native_sidebar::link_chips::in_window_bubble(p.window_glass).fill;
         let surface_hover =
             surface.blend(crate::app::helpers::titlebar_popup_menu_foreground().opacity(0.1));
