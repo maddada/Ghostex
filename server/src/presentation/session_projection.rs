@@ -84,20 +84,14 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
         output.insert("isHelpHome".to_string(), Value::Bool(true));
     }
     insert_optional_value(&mut output, "path", project.get("path").cloned());
+    // Whether the folder is there and why not, for the header's mark and its popover, read without
+    // waking a sleeping disk or waiting on a dead share (project_folder_problem.rs).
+    let (path_state, path_problem) = crate::project_folder_problem::published_path_state(project);
     output.insert(
         "pathState".to_string(),
-        Value::String(
-            crate::domain::project_path_state(project)
-                .as_str()
-                .to_string(),
-        ),
+        Value::String(path_state.as_str().to_string()),
     );
-    // Why the folder is missing, for the header's mark and its popover (project_folder_problem.rs).
-    insert_present_value(
-        &mut output,
-        "pathProblem",
-        crate::project_folder_problem::published_path_problem(project),
-    );
+    insert_present_value(&mut output, "pathProblem", path_problem);
     output.insert("projectId".to_string(), Value::String(project_id.clone()));
     output.insert(
         "sortKey".to_string(),

@@ -1288,6 +1288,11 @@ fn validate_project_path_for_session(project: &Value) -> DomainResult<()> {
         }
         ProjectPathState::Unavailable => format!("Project folder is unavailable: {path}"),
     };
+    // The folder watch reads this project now, so its header gets the missing folder's mark even
+    // on a disk the watch otherwise leaves alone (project_folder_problem.rs).
+    if let Some(project_id) = project.get("projectId").and_then(Value::as_str) {
+        crate::project_folder_problem::recheck_project_folder(project_id);
+    }
     Err(DomainStateError {
         code: "projectPathUnavailable",
         message,
