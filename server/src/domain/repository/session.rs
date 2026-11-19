@@ -29,6 +29,13 @@ impl<'a> DomainRepository<'a> {
         params: &Map<String, Value>,
         create_agent_session: bool,
     ) -> DomainResult<Value> {
+        // No new session in a project, or a folder, that is moving (project_folder_move/registry.rs).
+        if let Some(project_id) = params.get("projectId").and_then(Value::as_str) {
+            crate::project_folder_move::refuse_if_moving(
+                project_id,
+                params.get("cwd").and_then(Value::as_str),
+            )?;
+        }
         let mut restored_params;
         let params = if let (Some(project_id), Some(source_id)) = (
             params.get("projectId").and_then(Value::as_str),
@@ -224,6 +231,12 @@ impl<'a> DomainRepository<'a> {
         params: &Map<String, Value>,
         create_agent_session: bool,
     ) -> DomainResult<Value> {
+        if let Some(project_id) = params.get("projectId").and_then(Value::as_str) {
+            crate::project_folder_move::refuse_if_moving(
+                project_id,
+                params.get("cwd").and_then(Value::as_str),
+            )?;
+        }
         /*
         The atomic workspace-terminal endpoint must not expose a session row
         unless its never-reused id allocation is durable too. Keep ordinary

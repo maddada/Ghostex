@@ -253,6 +253,26 @@ pub(super) fn claude_folder_trusted_in_any_profile(home: &Path, folder: &Path) -
     })
 }
 
+/// Whether any Codex profile marks `folder` trusted (`[projects."<folder>"] trust_level =
+/// "trusted"`).
+pub(super) fn codex_folder_trusted_in_any_profile(home: &Path, folder: &Path) -> bool {
+    let key = folder_key(folder);
+    codex_config_files(home).iter().any(|file| {
+        read_text(file)
+            .ok()
+            .flatten()
+            .and_then(|text| text.parse::<DocumentMut>().ok())
+            .is_some_and(|document| {
+                document
+                    .get("projects")
+                    .and_then(|projects| projects.get(&key))
+                    .and_then(|project| project.get("trust_level"))
+                    .and_then(|level| level.as_str())
+                    == Some("trusted")
+            })
+    })
+}
+
 /// Claude Code keys its projects by the folder path, with forward slashes on Windows.
 fn trust_in_claude_config(file: &Path, key: &str) -> io::Result<()> {
     let key = if cfg!(windows) {

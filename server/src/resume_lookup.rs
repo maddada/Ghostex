@@ -147,7 +147,7 @@ fn text_field(item: &Value, key: &str) -> String {
 const CLAUDE_LOOKUP_TIME_LIMIT: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// Claude keeps a conversation under `projects/<folder>`, where the folder is the launch directory with every character other than an ASCII letter or digit (each UTF-16 unit) replaced by `-`, cut to 200 characters plus `-<hash>` when longer. Both the given and the resolved path are tried, because Claude records the resolved one (`/tmp` is stored as `-private-tmp`).
-fn claude_project_folder_names(project_path: &str) -> Vec<String> {
+pub(crate) fn claude_project_folder_names(project_path: &str) -> Vec<String> {
     let encode = |path: &Path| -> String {
         path.to_string_lossy()
             .encode_utf16()
@@ -202,7 +202,25 @@ struct ClaudeMatch {
     session_id: String,
 }
 
+/// `lookup_claude_at` for the path and then each place it had before `ghostex move-project-folder`
+/// moved its folder: Claude files a conversation under the folder it was started in and records
+/// that folder in it, so after a move the old conversations are only found at the former paths
+/// (risk 6 of docs/2026-11-19/project-move-folder/PLAN.md).
 fn lookup_claude(project_path: &str, title: &str, first_prompt: &str) -> Option<String> {
+    lookup_claude_at(project_path, title, first_prompt).or_else(|| {
+        if project_path.trim().is_empty() {
+            return None;
+        }
+        crate::project_folder_move::former_equivalents(
+            &crate::project_folder_move::default_root_dir(),
+            project_path.trim(),
+        )
+        .iter()
+        .find_map(|former| lookup_claude_at(former, title, first_prompt))
+    })
+}
+
+fn lookup_claude_at(project_path: &str, title: &str, first_prompt: &str) -> Option<String> {
     let project_path = project_path.trim();
     let title = normalize_whitespace(title);
     let first_prompt = normalize_whitespace(first_prompt);
@@ -688,7 +706,23 @@ fn codex_transcript_is_internal_exec(transcript_path: &Path) -> bool {
 
 /* ---------------------------------------------------------------- cursor */
 
+/// `lookup_cursor_at` for the path and then its former paths (Cursor names a project's chats by
+/// the md5 of its folder path), like `lookup_claude`.
 fn lookup_cursor(project_path: &str, title: &str) -> Option<String> {
+    lookup_cursor_at(project_path, title).or_else(|| {
+        if project_path.trim().is_empty() {
+            return None;
+        }
+        crate::project_folder_move::former_equivalents(
+            &crate::project_folder_move::default_root_dir(),
+            project_path.trim(),
+        )
+        .iter()
+        .find_map(|former| lookup_cursor_at(former, title))
+    })
+}
+
+fn lookup_cursor_at(project_path: &str, title: &str) -> Option<String> {
     let project_path = project_path.trim();
     let title = title.trim();
     if project_path.is_empty() || title.is_empty() {

@@ -110,6 +110,8 @@ pub async fn run_gxserver_foreground(
     crate::storage::hold_gxserver_database_open(&paths)?;
     let config = read_gxserver_config(&paths)?;
     let identity = ensure_gxserver_identity(&paths)?;
+    // A project folder move a crash interrupted is finished or forgotten before anything is served.
+    crate::project_folder_move::recover_on_startup(&paths, &identity.server_id);
     let auth = ensure_gxserver_auth_token(&paths)?;
     let logger = Arc::new(GxserverLogger::new(paths.clone()));
     crate::crash_report::report_previous_crash(&paths, &logger, &version);

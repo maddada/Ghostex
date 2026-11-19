@@ -9,5 +9,5 @@ mod stores;
 pub(crate) use codex_ghostex_rule::allow_ghostex_in_codex_before_launch;
 pub(crate) use launch::{
     added_project_folder_trusted, carry_claude_folder_trust_for_switch,
-    trust_session_folder_before_launch,
+    carry_folder_trust_for_move, folder_trusted_by, trust_session_folder_before_launch,
 };

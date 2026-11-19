@@ -342,6 +342,79 @@ pub(super) async fn route_projects_http(
                 Ok(json!({ "project": project, "previousName": previous_name }))
             },
         ),
+        // `ghostex move-project-folder` (project_folder_move/): off the async runtime, since it
+        // renames a folder, runs git and writes the database; then every project it touched is
+        // published.
+        "/api/moveProjectFolder" => {
+            let worker_state = state.clone();
+            let worker_endpoint = endpoint.path.clone();
+            let worker_request_id = request_id.clone();
+            match tokio::task::spawn_blocking(move || {
+                handle_domain_http(
+                    &worker_state,
+                    worker_endpoint,
+                    worker_request_id,
+                    &body_json,
+                    |repository, db, params, _| {
+                        let project_id = resolve_sidebar_collection_project_id(repository, params)?;
+                        let flag =
+                            |key: &str| params.get(key).and_then(Value::as_bool) == Some(true);
+                        let server_id = worker_state.metadata.server_id.as_str();
+                        let (result, touched) = if flag("abandon") {
+                            (
+                                crate::project_folder_move::abandon(
+                                    &worker_state.paths,
+                                    &project_id,
+                                )?,
+                                Vec::new(),
+                            )
+                        } else if flag("resume") {
+                            crate::project_folder_move::resume(
+                                &worker_state.paths,
+                                db,
+                                &project_id,
+                            )?
+                        } else {
+                            let new_path = params
+                                .get("newPath")
+                                .and_then(Value::as_str)
+                                .unwrap_or_default()
+                                .to_string();
+                            crate::project_folder_move::move_project_folder(
+                                &worker_state.paths,
+                                db,
+                                server_id,
+                                &crate::project_folder_move::MoveRequest {
+                                    project_id: project_id.clone(),
+                                    new_path,
+                                    dry_run: flag("dryRun"),
+                                    force_open_files: flag("forceOpenFiles"),
+                                },
+                            )?
+                        };
+                        for touched_id in &touched {
+                            schedule_presentation_project_delta(
+                                &worker_state,
+                                db,
+                                repository,
+                                touched_id,
+                                "projectUpdated",
+                            )?;
+                        }
+                        Ok(result)
+                    },
+                )
+            })
+            .await
+            {
+                Ok(response) => response,
+                Err(error) => domain_error_response(
+                    endpoint.path,
+                    request_id,
+                    DomainStateError::corrupt_state(format!("The folder move stopped: {error}")),
+                ),
+            }
+        }
         "/api/deleteWorktreeProject" => {
             handle_delete_worktree_project_http(&state, endpoint.path, request_id, &body_json).await
         }

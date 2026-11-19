@@ -428,6 +428,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
             Transport::WebSocket,
         ),
         "/api/control/stop" | "/api/control/stopAll" => remote_blocked(path),
+        // CDXC:Projects 2026-11-19 WHY: moving a project's folder renames a folder on disk, so only this computer's own CLI may ask for it until the move has been proven (docs/2026-11-19/project-move-folder/PLAN.md, risk 14); it is not on the peer allowlist either.
+        "/api/moveProjectFolder" => remote_blocked(path),
         // The GPUI web build's settings (server/shared_settings_watch.rs): this computer's own clients.
         "/api/readSharedSettings" => full_local(path),
         "/api/readAgentSettings"
