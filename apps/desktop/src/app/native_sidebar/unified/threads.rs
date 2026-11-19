@@ -156,7 +156,9 @@ impl GhostexGpuiApp {
                 .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .on_click(cx.listener(move |app, _, window, cx| {
                     cx.stop_propagation();
-                    if takes_focus { app.select_coordinator_before_fold(&row_id, window, cx); }
+                    if takes_focus {
+                        app.select_coordinator_before_fold(&row_id, window, cx);
+                    }
                     app.gx_store_toggle_unified_coordinator(&key, false, cx);
                 }))
                 // After the mouse-down above, so a press moves focus here before it stops.

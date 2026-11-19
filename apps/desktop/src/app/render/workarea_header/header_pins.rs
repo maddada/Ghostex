@@ -693,9 +693,18 @@ mod tests {
 
     #[test]
     fn only_start_open_and_commit_menus_carry_the_unpin_row() {
-        assert_eq!(menu_slot(GpuiTitlebarPopupKind::Actions), Some(HeaderSlot::Start));
-        assert_eq!(menu_slot(GpuiTitlebarPopupKind::OpenTargets), Some(HeaderSlot::Open));
-        assert_eq!(menu_slot(GpuiTitlebarPopupKind::Git), Some(HeaderSlot::Commit));
+        assert_eq!(
+            menu_slot(GpuiTitlebarPopupKind::Actions),
+            Some(HeaderSlot::Start)
+        );
+        assert_eq!(
+            menu_slot(GpuiTitlebarPopupKind::OpenTargets),
+            Some(HeaderSlot::Open)
+        );
+        assert_eq!(
+            menu_slot(GpuiTitlebarPopupKind::Git),
+            Some(HeaderSlot::Commit)
+        );
         assert_eq!(menu_slot(GpuiTitlebarPopupKind::HeaderMore), None);
     }
 

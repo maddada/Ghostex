@@ -538,11 +538,16 @@ impl ExtensionsTab {
         // A terminal pane has no view tab, so its page says where it opens from.
         let enabled_subtitle = if extension.is_sidebar() {
             // An extension that draws nothing (Work items) has no panel to claim.
-            match (extension.declares_sidebar(), extension.declares_side_panel()) {
+            match (
+                extension.declares_sidebar(),
+                extension.declares_side_panel(),
+            ) {
                 (true, true) => "Shows its panel in the sidebar and the side panel.".to_string(),
                 (true, false) => "Shows its panel in the sidebar.".to_string(),
                 (false, true) => "Shows its panel in the side panel.".to_string(),
-                (false, false) => "Turns it on. It adds nothing to the sidebar or side panel.".to_string(),
+                (false, false) => {
+                    "Turns it on. It adds nothing to the sidebar or side panel.".to_string()
+                }
             }
         } else if extension.is_terminal_pane() {
             format!(

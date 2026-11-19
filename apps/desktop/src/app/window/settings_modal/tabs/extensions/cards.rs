@@ -398,7 +398,10 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
         .gap(px(6.0))
         .child(
             div()
-                .id(SharedString::from(format!("extension-card-title-{}", spec.id)))
+                .id(SharedString::from(format!(
+                    "extension-card-title-{}",
+                    spec.id
+                )))
                 .min_w_0()
                 .overflow_hidden()
                 .whitespace_nowrap()

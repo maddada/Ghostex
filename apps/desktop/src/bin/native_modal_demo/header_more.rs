@@ -6,8 +6,8 @@
 //! popup under This chat, and Claude (on), Grok Bot and Voice under Agents. Point at a row
 //! (`GHOSTEX_NATIVE_MODAL_DEMO_HOVER`) to see its pin. Dark theme only.
 use gpui::{
-    App, AppContext as _, Context, Entity, Focusable as _, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
-    Render, Styled as _, Window, canvas, div, point, px, rgb, svg,
+    App, AppContext as _, Context, Entity, Focusable as _, Hsla, InteractiveElement as _,
+    IntoElement, ParentElement as _, Render, Styled as _, Window, canvas, div, point, px, rgb, svg,
 };
 use gpui_component::Side;
 use gpui_component::h_flex;
