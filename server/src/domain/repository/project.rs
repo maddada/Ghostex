@@ -363,6 +363,46 @@ impl<'a> DomainRepository<'a> {
         self.update_project(&update)
     }
 
+    /// `relocate_project` for a project whose folder went missing (Locate Folder… in the missing
+    /// folder dialog): every session that sat in the old folder, or below it, and whose folder is
+    /// gone moves along to the same place in the new one, or to the new folder itself when that
+    /// subfolder is not there.
+    ///
+    /// CDXC:Projects 2026-11-19 WHY: The user's shortpoint project pointed at a folder renamed
+    /// outside Ghostex, so opening its coordinator showed "Couldn't open this terminal". Locating
+    /// the folder fixed only the project's own path: every session row kept the old folder as its
+    /// cwd, and gxserver refused to start a terminal in a folder that does not exist
+    /// (`restoreBlocked`), so the project looked fixed while each of its terminals still failed.
+    /// A session whose folder still exists stays where it is. The `relocatedProjectSession` marker
+    /// makes a Codex resume name the new folder (`with_codex_moved_cwd` in agents/resume_plan.rs).
+    pub fn relocate_project_moving_sessions(
+        &self,
+        params: &Map<String, Value>,
+    ) -> DomainResult<Value> {
+        let project_id = read_unvalidated_project_lookup_id(params);
+        let old_path = self
+            .get_project_without_session_history(&project_id)?
+            .and_then(|project| read_optional_text(project.get("path")));
+        let project = self.relocate_project(params)?;
+        let (Some(old_path), Some(new_path)) = (old_path, read_optional_text(project.get("path")))
+        else {
+            return Ok(project);
+        };
+        if old_path == new_path {
+            return Ok(project);
+        }
+        let moved_at = crate::domain::now_iso();
+        for session in self.list_sessions(Some(&project_id))? {
+            let Some(update) =
+                plan_relocated_project_session_move(&session, &old_path, &new_path, &moved_at)
+            else {
+                continue;
+            };
+            self.update_session(&update)?;
+        }
+        Ok(project)
+    }
+
     pub fn list_projects(&self) -> DomainResult<Vec<Value>> {
         if let Some(set) = super::project_cache::cached_projects(self.db, true) {
             return Ok(set.projects.clone());
@@ -763,4 +803,55 @@ impl<'a> DomainRepository<'a> {
             .map_err(sql_error)?;
         Ok(())
     }
+}
+
+/// Runtime-settings key a session gets when it moved with its project's located folder
+/// (`relocate_project_moving_sessions`): the folder it left and when.
+pub const RELOCATED_PROJECT_SESSION_RUNTIME_KEY: &str = "relocatedProjectSession";
+
+/// The session update that moves `session` from the missing `old_path` (or a folder below it) to
+/// the same place under `new_path`; `None` when the session's folder still exists or lies
+/// elsewhere.
+fn plan_relocated_project_session_move(
+    session: &Value,
+    old_path: &str,
+    new_path: &str,
+    moved_at: &str,
+) -> Option<Map<String, Value>> {
+    let cwd = read_optional_text(session.get("cwd"))?;
+    let cwd_path = std::path::Path::new(&cwd);
+    if cwd_path.is_dir() {
+        return None;
+    }
+    let below = cwd_path.strip_prefix(old_path).ok()?;
+    let moved = std::path::Path::new(new_path).join(below);
+    let moved_cwd = if below.as_os_str().is_empty() {
+        new_path.to_string()
+    } else if moved.is_dir() {
+        moved.to_string_lossy().into_owned()
+    } else {
+        new_path.to_string()
+    };
+    let mut runtime_settings = session
+        .get("runtimeSettings")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    runtime_settings.insert(
+        RELOCATED_PROJECT_SESSION_RUNTIME_KEY.to_string(),
+        serde_json::json!({ "fromCwd": cwd, "movedAt": moved_at }),
+    );
+    let mut update = Map::new();
+    for key in ["projectId", "sessionId"] {
+        update.insert(
+            key.to_string(),
+            session.get(key).cloned().unwrap_or(Value::Null),
+        );
+    }
+    update.insert("cwd".to_string(), Value::String(moved_cwd));
+    update.insert(
+        "runtimeSettings".to_string(),
+        Value::Object(runtime_settings),
+    );
+    Some(update)
 }

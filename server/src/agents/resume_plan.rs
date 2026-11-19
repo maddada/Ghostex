@@ -322,7 +322,7 @@ pub(crate) fn to_agent_resume_input(
     });
     let base_command = base_command
         .map(|command| with_resume_model_pin(agent_id.as_deref(), project, session, command))
-        .map(|command| with_codex_removed_worktree_cwd(agent_id.as_deref(), session, command));
+        .map(|command| with_codex_moved_cwd(agent_id.as_deref(), session, command));
     let runtime_command = agent_id
         .as_ref()
         .and_then(|agent_id| {
@@ -451,19 +451,21 @@ pub(crate) fn to_agent_resume_input(
 }
 
 /// CDXC:Worktrees 2026-10-15 WHY:
-/// Codex resumes into the folder its rollout recorded last, even when that folder was deleted: every shell call then fails with "No such file or directory" while the conversation itself loads (verified with codex-cli 0.162.1). A session moved out of its removed worktree (`plan_removed_worktree_move` in worktree_sessions.rs) therefore names its new folder with `-C`, which Codex takes ahead of the recorded one without asking which folder to use.
-fn with_codex_removed_worktree_cwd(
-    family: Option<&str>,
-    session: &Value,
-    command: String,
-) -> String {
+/// Codex resumes into the folder its rollout recorded last, even when that folder was deleted: every shell call then fails with "No such file or directory" while the conversation itself loads (verified with codex-cli 0.162.1). A session moved out of its removed worktree (`plan_removed_worktree_move` in worktree_sessions.rs) therefore names its new folder with `-C`, which Codex takes ahead of the recorded one without asking which folder to use. So does a session that moved with its project's located folder (`relocate_project_moving_sessions` in domain/repository/project.rs).
+fn with_codex_moved_cwd(family: Option<&str>, session: &Value, command: String) -> String {
     if family != Some("codex")
-        || session
-            .pointer(&format!(
-                "/runtimeSettings/{}",
-                crate::worktree_sessions::REMOVED_WORKTREE_SESSION_RUNTIME_KEY
-            ))
-            .is_none()
+        || [
+            crate::worktree_sessions::REMOVED_WORKTREE_SESSION_RUNTIME_KEY,
+            crate::domain::repository::project::RELOCATED_PROJECT_SESSION_RUNTIME_KEY,
+            // `ghostex move-project-folder` (project_folder_move/record.rs, risk 1 of its plan).
+            crate::project_folder_move::MOVED_FOLDER_SESSION_RUNTIME_KEY,
+        ]
+        .iter()
+        .all(|key| {
+            session
+                .pointer(&format!("/runtimeSettings/{key}"))
+                .is_none()
+        })
     {
         return command;
     }

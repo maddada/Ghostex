@@ -3,7 +3,8 @@
 //! `approval-presence` (Settings > Security's switch on), `approval-pairing` (a computer joining,
 //! "Let m7-arch connect to M7-Desktop?"), `approval-phone` ("Add iPhone 17 to this Mac?"), `account`,
 //! `views-off`, `files-off`, `sync-undo`, `chief-undo`, `homebrew`, `remote-copy-path`,
-//! `display-scale`, `linux-update`, `terminal-error`, `git-error`, `gxserver-failed`, `queue`
+//! `display-scale`, `linux-update`, `terminal-error`, `terminal-folder-missing`, `terminal-gone`,
+//! `terminal-unreachable`, `git-error`, `gxserver-failed`, `queue`
 //! (three waiting: "1 of 3"), `copied` (Copy details just pressed). Every click is printed and the
 //! queue moves on, as in the app.
 use super::notice_modal::*;
@@ -196,6 +197,31 @@ fn case(state: &str) -> NoticeModalItem {
             "Ghostex couldn't reconnect to it. Try again, or restart it from the sidebar.",
             None,
             Some("attach refused: zmx session gx-4f2a not found"),
+        ),
+        // The reasons app/terminal_open_failure.rs names (CDXC:AppModal 2026-11-19 there).
+        "terminal-folder-missing" => item(
+            "terminal-folder-missing",
+            Warning,
+            "This terminal's folder is missing",
+            "/Users/story/dev/clients/acme-site no longer exists, so the terminal can't start there. Put the folder back, then open the terminal again.",
+            None,
+            Some("Session restore is blocked because its working directory is unavailable: /Users/story/dev/clients/acme-site"),
+        ),
+        "terminal-gone" => item(
+            "terminal-gone",
+            Warning,
+            "This terminal no longer exists",
+            "It was closed or removed. Pick another one in the sidebar.",
+            None,
+            Some("Session P1abc:G2def does not exist."),
+        ),
+        "terminal-unreachable" => item(
+            "terminal-unreachable",
+            Warning,
+            "Ghostex isn't responding",
+            "Its background service didn't answer. Wait a moment and open the terminal again, or restart Ghostex.",
+            None,
+            Some("gxserver is not reachable on 127.0.0.1:58744."),
         ),
         "git-error" => item(
             "git-error",
