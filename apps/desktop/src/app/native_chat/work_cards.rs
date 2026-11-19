@@ -1157,7 +1157,8 @@ impl NativeChatView {
         //
         // CDXC:Coordinators 2026-11-12 DECISION:
         // User, of a form's row with only Open: "i can't reply to this or mention it :> pls fix".
-        let reply_answer = ((!answers.is_empty() || matches!(action, Some("Open" | "Answer")))
+        let reply_answer = ((!answers.is_empty()
+            || matches!(action, Some("Open" | "Answer" | "Details")))
             && row["reply"].is_object())
         .then(|| Self::reply_answer(&row["reply"], &text(row, "replied"), busy));
         // What fits: the answers may take the first line while the question keeps half the row.
@@ -1179,8 +1180,10 @@ impl NativeChatView {
         } else {
             row_width - DOCK_LEAD - age_width - row_width / 2.0
         };
+        // Details (and Reply) are icon buttons, as wide as they are tall.
+        let icon_width = Self::tone_button_height();
         let widths: Vec<f32> = match &action {
-            Some(label) => vec![dock_button_width(label, true, false, p, cx)],
+            Some(_) => vec![icon_width],
             None => answers
                 .iter()
                 .map(|answer| {
@@ -1196,9 +1199,7 @@ impl NativeChatView {
         };
         // Reply always shows: it is the one answer that takes anything, so a row keeps it one
         // click away.
-        let reply_width = reply_answer.as_ref().map_or(0.0, |answer| {
-            dock_button_width(&text(answer, "label"), true, false, p, cx) + 6.0
-        });
+        let reply_width = reply_answer.as_ref().map_or(0.0, |_| icon_width + 6.0);
         let all_width = buttons_width(&widths) + reply_width;
         // The answers and Reply are one line, never wrapped: when they do not all fit beside the
         // title, the answers fold into one Choose an answer dropdown in their place. Measured, with
@@ -1217,18 +1218,12 @@ impl NativeChatView {
             && all_width > beside_room;
         let mut buttons: Vec<AnyElement> = match &action {
             _ if look.buttons.is_some() => look.buttons.into_iter().collect(),
-            Some(_) => self.work_row_action(&key, row, p, cx).into_iter().collect(),
+            Some(_) => self.dock_row_icon_action(&key, row, p, cx).into_iter().collect(),
             None if fold => vec![self.answers_dropdown(&key, &answers, busy, p, cx)],
             None => self.work_answer_buttons(&key, &answers, busy, p, cx),
         };
         if let Some(answer) = &reply_answer {
-            buttons.extend(self.work_answer_buttons(
-                &format!("{key}:reply"),
-                std::slice::from_ref(answer),
-                busy,
-                p,
-                cx,
-            ));
+            buttons.push(self.dock_reply_icon(&format!("{key}:reply"), answer, busy, p, cx));
         }
         let count = text(row, "count");
         let question = if opens_directly && !count.is_empty() && wrap {

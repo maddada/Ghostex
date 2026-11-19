@@ -304,6 +304,56 @@ impl NativeChatView {
         self.tone_button_in_slot(id, label, icon, kind, hint, disabled, None, p)
     }
 
+    /// The buttons' height (unscaled), which is a square icon button's width too.
+    pub(super) fn tone_button_height() -> f32 {
+        VISUAL.shell.button_height
+    }
+
+    /// A secondary button that is only its icon: a square at the buttons' height, with their fill,
+    /// hover and radius, its name for screen readers (and cua-driver) and in its tooltip.
+    ///
+    /// CDXC:Coordinators 2026-11-19 DECISION:
+    /// User, of the dock rows' "Open" and "Reply" buttons: "They should be just icon buttons. Same
+    /// for details ... looks like the other buttons, but just with an icon." The dock's Details and
+    /// Reply (and a Work panel Needs you card's) are these; answers keep their words.
+    pub(super) fn tone_square_icon_button(
+        &self,
+        id: impl Into<gpui::ElementId>,
+        label: &str,
+        icon: &'static str,
+        disabled: bool,
+        p: &ChatAppearance,
+    ) -> Stateful<Div> {
+        let s = p.scale;
+        let v = &VISUAL.shell;
+        let tip = label.to_owned();
+        div()
+            .id(id)
+            .role(gpui::Role::Button)
+            .aria_label(label.to_owned())
+            .size(px(v.button_height * s))
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(v.button_radius * s))
+            .border_1()
+            .chat_filled(p.neutral_button_fills(), !disabled)
+            .text_color(p.foreground)
+            .when(disabled, |button| button.opacity(0.5))
+            .when(!disabled, |button| button.chat_cursor_pointer())
+            .tooltip(move |window, cx| {
+                gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
+            })
+            .child(
+                gpui::svg()
+                    .path(icon)
+                    .size(px(15.0 * s))
+                    .text_color(p.foreground)
+                    .flex_shrink_0(),
+            )
+    }
+
     /// A footer button whose label changes while the card stays open (a menu's highlighted row).
     /// With `slot_width` it keeps that width at scale 1 whatever the label says, cutting a long one
     /// with an ellipsis, so the buttons beside it stay where they are.

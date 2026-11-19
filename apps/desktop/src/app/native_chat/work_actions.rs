@@ -25,6 +25,9 @@ use serde_json::{Value, json};
 
 /// The button an ask's answers fold into when they do not fit on one line (`answers_dropdown`).
 pub(super) const CHOOSE_ANSWER: &str = "Choices";
+/// The one icon of a Needs you row's Details, whatever it opens (a question's panel, a form, a
+/// Live page).
+pub(super) const DETAILS_ICON: &str = "titlebar/file-text.svg";
 /// Its dropdown grows to its longest answer up to this (unscaled), and the window's edge.
 const ANSWERS_MENU_MAX: f32 = 560.0;
 
@@ -252,6 +255,100 @@ impl NativeChatView {
         })
     }
 
+    /// A dock row's (or a Work panel Needs you card's) one action in its answers' place, as an
+    /// icon button: Details for anything that opens something (a question with details, which
+    /// opens its panel; a form or page, which opens itself), one icon for all of them, or Reply
+    /// for a question with no preset answers. `None` when it offers neither.
+    ///
+    /// CDXC:Coordinators 2026-11-19 DECISION:
+    /// User: "I don't like 'open' for the inline HTMLs. Let's do 'details' for those too. Let's just
+    /// unify the icon details for all of them." Forms and Live pages no longer say Open or Answer.
+    pub(super) fn dock_row_icon_action(
+        &self,
+        key: &str,
+        row: &Value,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> Option<AnyElement> {
+        let open = row["open"].clone();
+        if row["details"] == true || open.is_object() {
+            let shown = key.to_string();
+            return Some(
+                self.tone_square_icon_button(
+                    gpui::SharedString::from(format!("work-row-details:{key}")),
+                    "Details",
+                    DETAILS_ICON,
+                    false,
+                    p,
+                )
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    cx.stop_propagation();
+                    if open.is_object() {
+                        this.open_work_target(open.clone(), window, cx);
+                    } else {
+                        this.open_dock_ask_modal(&shown, window, cx);
+                    }
+                }))
+                .into_any_element(),
+            );
+        }
+        let reply = row["reply"].clone();
+        if !reply.is_object() {
+            return None;
+        }
+        Some(self.dock_reply_icon(
+            &format!("{key}:reply"),
+            &Self::reply_answer(&reply, &text(row, "replied"), false),
+            false,
+            p,
+            cx,
+        ))
+    }
+
+    /// Reply as an icon button (`reply_answer`'s answer): the reply box at the press; once sent from
+    /// here a check, its words in the tooltip.
+    pub(super) fn dock_reply_icon(
+        &self,
+        key: &str,
+        answer: &Value,
+        busy: bool,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let picked = answer["picked"] == true;
+        let locked = answer["locked"] == true;
+        let reply = answer["reply"].clone();
+        let label = if picked {
+            format!("Replied: {}", text(answer, "label"))
+        } else {
+            "Reply".to_string()
+        };
+        self.tone_square_icon_button(
+            gpui::SharedString::from(format!("work-row-reply:{key}")),
+            &label,
+            if picked {
+                "titlebar/check.svg"
+            } else {
+                "titlebar/arrow-back-up.svg"
+            },
+            (busy || locked) && !picked,
+            p,
+        )
+        .on_click(cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+            cx.stop_propagation();
+            if busy || locked || !reply.is_object() {
+                return;
+            }
+            let at = event.position();
+            let command = json!({
+                "question": reply.clone(),
+                "at": [f32::from(at.x), f32::from(at.y)],
+            });
+            this.open_reply_popover(&command, window, cx);
+        }))
+        .into_any_element()
+    }
+
     /// The one button a dock row with no answers shows in their place, in their look: Open for a
     /// page or form (`open`), else Reply for a question with no preset answers (`reply`, the
     /// Reply popover at the press). `None` when it offers neither.
@@ -272,7 +369,7 @@ impl NativeChatView {
                 self.dock_tone_button(
                     gpui::SharedString::from(format!("work-row-details:{key}")),
                     "Details",
-                    Some("titlebar/file-text.svg"),
+                    Some(DETAILS_ICON),
                     ToneButton::Secondary,
                     None,
                     false,
