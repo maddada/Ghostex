@@ -43,6 +43,11 @@ const COMMAND_WORDS: &[&str] = &[
     // Shell builtins and core utilities.
     "cd",
     "export",
+    // Shells, run on a script or with `-c`.
+    "bash",
+    "sh",
+    "zsh",
+    "pwsh",
     "source",
     "unset",
     "alias",
@@ -440,7 +445,7 @@ fn is_command_line(code: &str) -> bool {
 /// A program the list above does not know, written the way a command line is: a command name
 /// followed by a flag (`-config`, `--help`) or a path from the root or home (`/etc/x`,
 /// `~/.config/x`), or a path to an executable (`~/.local/opt/hub/cli-proxy-api`, `./run.sh`)
-/// followed by a flag or such a path, or by anything for one run from here (`./run.sh build`).
+/// followed by a flag or such a path (`./run.sh --fast`).
 /// Plain words, one name, a path alone, a slash command (`/model opus`), a file (`main.rs --help`),
 /// a path with spaces in it, code and prose stay code.
 ///
@@ -499,9 +504,9 @@ fn is_unknown_program_line(first: &str, arguments: &[&str]) -> bool {
                 "sh" | "bash" | "zsh" | "py" | "js" | "mjs" | "rb" | "pl"
             )
         });
-        // From the root or home, a flag or a rooted path must follow (`/etc/hosts file`,
-        // `/Users/me/my project` are paths); from here, any argument.
-        let arguments_fit = start.starts_with('.') || arguments.iter().any(fits);
+        // A flag or a rooted path must follow, from wherever it starts (`/etc/hosts file`,
+        // `/Users/me/my project`, `./build output` are paths and words).
+        let arguments_fit = arguments.iter().any(fits);
         return name.len() >= 2 && is_command_name(name) && script && arguments_fit;
     }
     first.len() >= 2
@@ -583,7 +588,12 @@ mod tests {
                 "cli-proxy-api -config ~/.config/cliproxyapi/config.yaml -codex-device-login",
                 "cli-proxy-api -config ~/.config/cliproxyapi/config.yaml -codex-device-login",
             ),
-            ("./run.sh build", "./run.sh build"),
+            ("./run.sh --fast", "./run.sh --fast"),
+            ("../bin/hub -config ~/hub.yaml", "../bin/hub -config ~/hub.yaml"),
+            ("bash ./install.sh", "bash ./install.sh"),
+            ("sh -c 'echo hi'", "sh -c 'echo hi'"),
+            ("zsh ~/setup.zsh", "zsh ~/setup.zsh"),
+            ("pwsh -File ./setup.ps1", "pwsh -File ./setup.ps1"),
             ("/usr/local/bin/hub --serve", "/usr/local/bin/hub --serve"),
         ] {
             assert_eq!(inline_command(span).as_deref(), Some(command), "{span}");
@@ -647,6 +657,9 @@ mod tests {
             "fetch /api/x",
             "relative ~/x",
             "main.rs --help",
+            // From here, a word after a path is not enough.
+            "./build output",
+            "./run.sh build",
             // Class names, not flags.
             "card -top-2",
             "box -mt-4",
