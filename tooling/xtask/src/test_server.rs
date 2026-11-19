@@ -20,12 +20,13 @@ use crate::gxserver::health;
 use crate::util::{home_dir, kill_pid, output, root, sleep_ms, stdout_if_ok, xdg_state_root, Res};
 
 const USAGE: &str = "Usage: cargo xtask test-server <command>
-  start [--name <n>] [--projects <path>...] [--port <p>] [--network online|offline|probe] [--no-build] [--dry-run] [--binaries <dir>]
+  start [--name <n>] [--projects <path>...] [--port <p>] [--network online|offline|probe] [--no-build] [--dry-run] [--binaries <dir>] [--isolated-home]
                 build (or reuse) the debug gxserver, start it on its own GHOSTEX_HOME and port,
                 add the projects, and print the env lines for the ghostex CLI and `ghostex web`;
                 --binaries runs the gxserver and ghostex in <dir> instead (an older release's, to check
                 compatibility); --network sets what its online check sees (online by default, probe for
-                the real check)
+                the real check); --isolated-home gives it a HOME of its own (<home>/user-home), so
+                pairing tests write no SSH key line into your ~/.ssh and use no tailcat key of yours
   network <name> online|offline|probe
                 switch what a running test server's online check sees: offline holds Autopilot and
                 coordinator reports as a real outage does, online brings them back, probe uses the real check
@@ -39,6 +40,8 @@ const USAGE: &str = "Usage: cargo xtask test-server <command>
 /// Ports the test servers pick from: clear of the real gxserver (58744/58745/58746) and the isolated app variants (58747, 58751).
 const PORT_RANGE: std::ops::RangeInclusive<u16> = 58900..=58999;
 const RECORD_FILE: &str = "test-server.json";
+/// Present (holding the tailcat helper's path) for a server started with `--isolated-home`.
+const ISOLATED_HOME_MARKER: &str = "isolated-home";
 const MAX_NAME_LENGTH: usize = 20;
 
 pub fn run(args: &[String]) -> Res<i32> {
@@ -273,6 +276,25 @@ impl Server {
             // Skill installs would fetch GitHub main into this throwaway profile on every start.
             ("GHOSTEX_AGENT_SKILLS_REMOTE", "off".into()),
         ]
+        .into_iter()
+        .chain(self.isolated_home_environment())
+        .collect()
+    }
+
+    /*
+    CDXC:Build 2026-11-19 WHY:
+    Pairing tests (issue #674, server links) on a test server wrote what pairing writes into the real HOME: an approved phone's SSH key line into the user's ~/.ssh/authorized_keys, and tailcat's shared client key under ~/Library/Application Support/tailcat, which the user's own Easy Connect connections dial with. `--isolated-home` gives the server (and the CLI pointed at it) a HOME of its own inside its GHOSTEX_HOME, and names the tailcat helper the real HOME has, which the new HOME can't find.
+    */
+    /// `HOME` and `GHOSTEX_TAILCAT_BIN` for a server started with `--isolated-home`.
+    fn isolated_home_environment(&self) -> Vec<(&'static str, String)> {
+        let Ok(tailcat) = fs::read_to_string(self.folder.join(ISOLATED_HOME_MARKER)) else {
+            return Vec::new();
+        };
+        let mut environment = vec![("HOME", self.home().join("user-home").display().to_string())];
+        if !tailcat.trim().is_empty() {
+            environment.push(("GHOSTEX_TAILCAT_BIN", tailcat.trim().to_string()));
+        }
+        environment
     }
 
     /// A command with this server's environment and none of the caller's inherited Ghostex, zmx or
@@ -385,6 +407,7 @@ fn start(args: &[String]) -> Res<i32> {
     let mut binaries: Option<PathBuf> = None;
     // Online unless asked: a throwaway server should not depend on the shell reaching the agents' API hosts (the plan's default was the real check; online is deliberate, since the real check is what failed).
     let mut network: Option<String> = None;
+    let mut isolated_home = false;
     let mut index = 0;
     while index < args.len() {
         let value = |index: usize| -> Res<&String> {
@@ -418,6 +441,7 @@ fn start(args: &[String]) -> Res<i32> {
             }
             "--no-build" => build = false,
             "--dry-run" => dry_run = true,
+            "--isolated-home" => isolated_home = true,
             // Another build's gxserver and ghostex (an older release's, for a compatibility check): staged instead of
             // server/target/debug, with the same isolation.
             "--binaries" => {
@@ -507,6 +531,26 @@ fn start(args: &[String]) -> Res<i32> {
         None => Server::new(&name, port),
     };
     prepare_folder(&server, &debug, linked)?;
+    if isolated_home {
+        let user_home = server.home().join("user-home");
+        fs::create_dir_all(&user_home)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&user_home, fs::Permissions::from_mode(0o700))?;
+        }
+        let tailcat = std::env::var("GHOSTEX_TAILCAT_BIN")
+            .ok()
+            .filter(|path| !path.is_empty())
+            .map(PathBuf::from)
+            .or_else(|| {
+                Some(home_dir().join(".local/share/ghostex/tailcat/bin/tailcat"))
+                    .filter(|path| path.is_file())
+            })
+            .map(|path| path.display().to_string())
+            .unwrap_or_default();
+        fs::write(server.folder.join(ISOLATED_HOME_MARKER), tailcat)?;
+    }
     set_network(&server, network.as_deref().unwrap_or("online"))?;
     ensure_isolated(&server)?;
     server.write_env_file()?;
