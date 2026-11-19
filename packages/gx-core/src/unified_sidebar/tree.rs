@@ -74,6 +74,9 @@ pub struct UnifiedCrew {
     pub team_status: FoldedStatus,
     /// The focused session is under it and not drawn, so this row carries the active highlight.
     pub contains_active: bool,
+    /// The focused session is one of its threads, at any depth, drawn or not
+    /// (`RowNesting::holds_active_below`).
+    pub active_below: bool,
 }
 
 impl UnifiedCrew {
@@ -87,6 +90,7 @@ impl UnifiedCrew {
             older_threads: if self.older_row { self.older } else { 0 },
             older_threads_shown: self.older_shown,
             contains_active_session: self.contains_active,
+            holds_active_below: self.active_below,
             folded_status: self.folded_status,
             team_status: self.team_status,
             ..RowNesting::default()
@@ -204,6 +208,7 @@ pub(super) fn nest_unified_rows(
         let narrowed = narrowing || !top.matched;
         lay_out(top, folds, narrowing, narrowed, facts.matched);
         mark_active(top, false);
+        mark_active_below(top);
         lift(top);
     }
     tops
@@ -360,6 +365,7 @@ fn lay_out(
         folded_status,
         team_status,
         contains_active: false,
+        active_below: false,
     });
     for child in &mut row.threads {
         let matched = child.subtree_matched;
@@ -393,6 +399,19 @@ fn mark_active(row: &mut UnifiedRow, hidden: bool) -> bool {
         return false;
     }
     pending
+}
+
+/// Whether the focused session is `row` or under it; each coordinator on the way is told it holds it
+/// below (`UnifiedCrew::active_below`).
+fn mark_active_below(row: &mut UnifiedRow) -> bool {
+    let mut below = false;
+    for child in &mut row.threads {
+        below |= mark_active_below(child);
+    }
+    if let Some(crew) = row.crew.as_mut() {
+        crew.active_below = below;
+    }
+    below || row.session.is_focused
 }
 
 /// A card with a thread that needs you leaves Moving and sorts by when that thread came back.

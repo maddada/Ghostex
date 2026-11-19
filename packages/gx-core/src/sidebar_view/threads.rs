@@ -316,6 +316,18 @@ pub(crate) fn nest_threads(
             Some(ancestor)
         });
 
+    // The coordinators above the focused thread, at any depth, whether or not a fold hides it.
+    let mut active_above = std::collections::HashSet::new();
+    if let Some(focused) = sessions.iter().position(|session| session.is_focused) {
+        let mut next = parent_of[focused];
+        while let Some(ancestor) = next {
+            if !active_above.insert(ancestor) {
+                break;
+            }
+            next = parent_of[ancestor];
+        }
+    }
+
     // A coordinator's team stack, folded or not: its own status and every thread under it.
     let team_status: HashMap<usize, FoldedStatus> = (0..sessions.len())
         .filter(|index| children.contains_key(index))
@@ -354,6 +366,7 @@ pub(crate) fn nest_threads(
             older_threads_shown: shows_older[index],
             older_hidden: older_hidden_of[index],
             contains_active_session: holds_active == Some(index),
+            holds_active_below: active_above.contains(&index),
             folded_status: if is_collapsed[index] {
                 team_status.get(&index).copied().unwrap_or_default()
             } else {

@@ -543,6 +543,48 @@ pub(crate) fn coordinator_fold_state(session: &NativeSidebarSession) -> Option<b
     Some(threads.get("collapsed").and_then(Value::as_bool) == Some(true))
 }
 
+/// Whether the focused session of this window is one of the coordinator's threads, at any depth,
+/// open or folded (gx-core `RowNesting::holds_active_below`).
+pub(crate) fn coordinator_holds_active_below(session: &NativeSidebarSession) -> bool {
+    session
+        .details
+        .get("coordinatorThreads")
+        .and_then(|threads| threads.get("activeBelow"))
+        .and_then(Value::as_bool)
+        == Some(true)
+}
+
+/// Whether folding this coordinator's threads must first make it the focused session: they are open,
+/// and the focused session of this window is one of them (see `select_coordinator_before_fold`).
+pub(crate) fn fold_takes_focus(session: &NativeSidebarSession) -> bool {
+    coordinator_fold_state(session) == Some(false)
+        && coordinator_holds_active_below(session)
+        && !session.is_focused
+}
+
+impl crate::GhostexGpuiApp {
+    /// Folding a coordinator's threads while the focused session is one of them makes the coordinator
+    /// the focused session, as a click on its row does; unfolding, or folding with the focus
+    /// elsewhere, changes nothing. Call it just before the fold toggle, when `fold_takes_focus`.
+    ///
+    /// CDXC:Coordinators 2026-11-19 DECISION:
+    /// User: "when i select a worker thread under a certain coordinator then i collapse the coordinator sub threads in the sidebar then please switch to the coordinator thread". Only this window's focus moves; other windows keep their own.
+    pub(crate) fn select_coordinator_before_fold(
+        &mut self,
+        session_id: &str,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.close_sidebar_extension_view(window, cx);
+        self.dispatch_native_sidebar_ui(
+            json!({"type": "selectSession", "sessionId": session_id, "mode": "focus"}),
+            cx,
+        );
+        let _ = self.react_to_native_sidebar_session_click(session_id, cx);
+        self.reveal_floating_sessions(cx);
+    }
+}
+
 /// A folded coordinator that stands in for the focused thread it hides (gx-core
 /// `RowNesting::contains_active_session`).
 pub(crate) fn coordinator_holds_active(session: &NativeSidebarSession) -> bool {

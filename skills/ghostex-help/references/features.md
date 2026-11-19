@@ -4055,7 +4055,9 @@ version of the Projects features in Cursor and Claude Code.
   "N older threads" row at the end, which lists them all (and "Hide older
   threads" tucks them away again; both remembered across restarts). The chevron
   that replaces the crown when you hover the coordinator folds its threads away
-  and back, and a folded coordinator keeps its number and colour. While its
+  and back (folding it while one of its threads is the open chat switches that
+  window to the coordinator's chat), and a folded coordinator keeps its number
+  and colour. While its
   threads are folded, the coordinator's row shows their status dots (with its
   own) overlapping in place of its time, like a computer tile's dots, so a thread
   that is working, finished or asking something is never hidden (a thread

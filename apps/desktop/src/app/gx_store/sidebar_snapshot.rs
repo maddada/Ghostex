@@ -1074,6 +1074,7 @@ pub(crate) fn insert_coordinator_nesting(
                 "olderShown": nesting.older_threads_shown,
                 "passingLinesBelow": nesting.passing_lines_below(),
                 "containsActive": nesting.contains_active_session,
+                "activeBelow": nesting.holds_active_below,
             }),
         );
         let dots = |status: ghostex_gx_core::FoldedStatus| {

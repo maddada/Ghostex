@@ -963,6 +963,32 @@ fn a_coordinators_workers_here_and_on_another_computer_nest_under_its_card() {
 }
 
 #[test]
+fn a_crew_knows_the_focused_session_is_one_of_its_threads_folded_or_not() {
+    let local = MachineId::Local;
+    let lead = coordinator(&local, "p", "lead");
+    let here = worker_of(row(&local, "p", "here"), &lead);
+    let mut project = group("p", "/p", None, vec![lead]);
+    let mut focused = view_of(here);
+    focused.is_focused = true;
+    Arc::make_mut(&mut project.core).sessions.push(focused);
+    let view = sidebar(vec![project]);
+    let machines = [UnifiedMachineInput {
+        machine: local.clone(),
+        label: "Local".to_string(),
+        view: &view,
+        spaces: None,
+    }];
+    let built = build_unified_sidebar(&machines, settings(), &UnifiedFilter::default(), NOW);
+    let crew = find_unified_row(&built, "lead")
+        .expect("the coordinator's card")
+        .row
+        .crew
+        .as_ref()
+        .expect("its crew");
+    assert!(crew.active_below && crew.nesting().holds_active_below);
+}
+
+#[test]
 fn a_worker_whose_coordinator_is_gone_is_a_card_and_a_nested_coordinators_workers_nest_under_it() {
     let local = MachineId::Local;
     let gone = coordinator(&local, "p", "gone");

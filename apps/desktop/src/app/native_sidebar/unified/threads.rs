@@ -112,6 +112,8 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
         let key = unified_fold_key(session)?.to_owned();
+        let takes_focus = super::super::threads::fold_takes_focus(session);
+        let row_id = session.session_id.clone();
         let collapsed = coordinator_fold_state(session)?;
         let threads = &session.details["coordinatorThreads"];
         let count = threads["count"].as_u64().unwrap_or(0);
@@ -152,8 +154,9 @@ impl GhostexGpuiApp {
                 .child(badge)
                 // A press on the count is not a press on the row: the row would open its session.
                 .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .on_click(cx.listener(move |app, _, _, cx| {
+                .on_click(cx.listener(move |app, _, window, cx| {
                     cx.stop_propagation();
+                    if takes_focus { app.select_coordinator_before_fold(&row_id, window, cx); }
                     app.gx_store_toggle_unified_coordinator(&key, false, cx);
                 }))
                 // After the mouse-down above, so a press moves focus here before it stops.

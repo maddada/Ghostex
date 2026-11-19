@@ -33,6 +33,7 @@ impl GhostexGpuiApp {
         div().id(format!("native-session-identity-{id}")).size(px(15.0 * appearance.scale)).flex_shrink_0().flex().items_center().justify_center().child(icon)
             .when_some(fold, |identity, collapsed| {
                 let id = id.clone();
+                let takes_focus = super::threads::fold_takes_focus(session);
                 // A Unified sidebar row folds under its own key (gx_store/unified_sidebar.rs).
                 let unified_key = super::threads::unified_fold_key(session).map(str::to_owned);
                 let scale = appearance.scale;
@@ -55,8 +56,9 @@ impl GhostexGpuiApp {
                     .aria_label(if collapsed { "Show threads" } else { "Hide threads" })
                     .cursor_pointer()
                     .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .on_click(cx.listener(move |app, _, _, cx| {
+                    .on_click(cx.listener(move |app, _, window, cx| {
                         cx.stop_propagation();
+                        if takes_focus { app.select_coordinator_before_fold(&id, window, cx); }
                         match &unified_key {
                             Some(key) => app.gx_store_toggle_unified_coordinator(key, false, cx),
                             None => app.dispatch_native_sidebar_ui(json!({"type": "toggleCoordinator", "sessionId": id}), cx),

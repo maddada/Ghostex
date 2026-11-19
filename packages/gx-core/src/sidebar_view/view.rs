@@ -471,6 +471,12 @@ pub struct RowNesting {
     /// CDXC:Coordinators 2026-10-22 DECISION:
     /// User: "when i'm on a thread that's under a coordinator and the coordinator is collapsed then we need to show the 'active' highlight on that orchestrator but somehow indicate that the thread is under it, not it. just show the circle with empty center we already use to indicate this". The nearest drawn coordinator above the hidden focused thread gets the active fill and the hollow circle a collapsed section heading uses, in its crown's spot while the card is not hovered; an expanded coordinator leaves the highlight on the thread row.
     pub contains_active_session: bool,
+    /// On a coordinator row: the focused session is one of its threads, at any depth, folded or
+    /// not. Folding the threads while this holds makes the coordinator the focused session.
+    ///
+    /// CDXC:Coordinators 2026-11-19 DECISION:
+    /// User: "when i select a worker thread under a certain coordinator then i collapse the coordinator sub threads in the sidebar then please switch to the coordinator thread". The fold control reads this to open the coordinator before it folds (native_sidebar/threads.rs `select_coordinator_before_fold`).
+    pub holds_active_below: bool,
     /// On a coordinator row whose threads are folded: the status dots of the threads the fold
     /// hides, with the coordinator's own, which the row draws as one overlapping stack.
     ///
