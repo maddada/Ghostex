@@ -1,7 +1,8 @@
 //! `/api/updates`: `action` is `list` (`fresh` reads every source again), `install` (`ids`, or
 //! `all` for every item with an update Ghostex can run), `setAuto` (`id`, `enabled`) or `dismiss`
 //! (`id`, `error`: hides that failure until the item's next update runs). Every
-//! answer is `{ items, running, auto }`, `auto` being the ids whose switch is on.
+//! answer is `{ items, running, auto, checkedAt, unchecked }`, `auto` being the ids whose switch is
+//! on (items.rs `checks` for the last two).
 use axum::http::StatusCode;
 use serde_json::{json, Map, Value};
 
@@ -90,9 +91,14 @@ async fn dispatch(state: &AppState, params: &Map<String, Value>) -> Result<Value
     // A row its own Settings page is updating (an agent job queued behind another install) runs
     // too, so the desktop keeps reading the list until it ends.
     let running = store::any_running() || items.iter().any(|item| item["state"] == "updating");
+    let (checked_at, unchecked) = items::checks();
     Ok(json!({
         "items": items,
         "running": running,
+        // When the last check ran (ms since 1970), and the groups (`agents`, `tools`,
+        // `extensions`) not checked yet: set to Only on Check now since Ghostex started.
+        "checkedAt": checked_at,
+        "unchecked": unchecked,
         // Every switch that is on, also for the items only the desktop lists (updates/ there).
         "auto": store::auto_ids(&state.paths),
     }))

@@ -31,7 +31,16 @@ pub(crate) async fn dispatch(
         .and_then(Value::as_str)
         .unwrap_or("read");
     if action == "list" {
-        return list(&home).await;
+        // `agentIds`: only these agents are read (Settings > Updates checks only the agents turned
+        // on, items.rs `agent_items`); the others are never run.
+        let only: Option<Vec<String>> =
+            params.get("agentIds").and_then(Value::as_array).map(|ids| {
+                ids.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            });
+        return list(&home, only.as_deref()).await;
     }
     let agent_id = params
         .get("agentId")
@@ -155,11 +164,18 @@ async fn run_and_wait(
     }
 }
 
-/// Every catalog agent's state in one reply, for the Agents page and `ghostex agent-cli status`.
-async fn list(home: &Path) -> Result<Value, DomainStateError> {
-    let states =
-        futures_util::future::join_all(CATALOG.iter().map(|definition| read(definition, home)))
-            .await;
+/// Every catalog agent's state (or only `only`'s) in one reply, for the Agents page, `ghostex
+/// agent-cli status` and Settings > Updates.
+async fn list(home: &Path, only: Option<&[String]>) -> Result<Value, DomainStateError> {
+    let states = futures_util::future::join_all(
+        CATALOG
+            .iter()
+            .filter(|definition| {
+                only.is_none_or(|ids| ids.iter().any(|id| *id == definition.agent_id))
+            })
+            .map(|definition| read(definition, home)),
+    )
+    .await;
     let agents = states.into_iter().collect::<Result<Vec<_>, _>>()?;
     Ok(json!({ "agents": agents }))
 }

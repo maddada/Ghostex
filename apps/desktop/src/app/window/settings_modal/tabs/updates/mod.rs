@@ -28,6 +28,7 @@
 //! its machine and why). Alone, the page has no picker and its Update all is this computer's.
 //! SEE-ALSO: server/src/updates/mod.rs (all of the user's picks), app/updates/mod.rs.
 mod card;
+mod checks;
 mod go_back;
 
 use super::super::super::native_modal_kit::*;
@@ -75,6 +76,8 @@ pub(crate) struct UpdatesTab {
     go_back_copied: bool,
     /// The Linux Ghostex card whose update command was just copied (its id).
     linux_command_copied: Option<String>,
+    /// Checking for updates is open (closed by default, checks.rs).
+    checks_open: bool,
 }
 
 impl SettingsPage for UpdatesTab {
@@ -163,6 +166,9 @@ impl UpdatesTab {
             ],
             _ => Vec::new(),
         };
+        // The preview binary's `updates-checks`: Checking for updates open.
+        let checks_open =
+            store.read(cx).request().preview_state.as_deref() == Some("updates-checks");
         Self {
             store,
             fields: FieldStates::default(),
@@ -172,6 +178,7 @@ impl UpdatesTab {
             confirm_go_back: false,
             go_back_copied: false,
             linux_command_copied: None,
+            checks_open,
         }
     }
 
@@ -247,7 +254,7 @@ impl UpdatesTab {
                 payload["error"].as_str().unwrap_or_default()
             ),
             Some(_) if running => "Updating…".to_string(),
-            Some(payload) => checked_ago(payload["checkedAt"].as_i64()),
+            Some(payload) => checked_line(payload),
         };
         // The cards shown: the shown machine's updates in the picked group (Update all machines,
         // by the picker, runs every machine's).
@@ -727,6 +734,36 @@ fn run_row(
         .into_any_element()
 }
 
+/// "Checked 4 min ago", and the kinds not checked yet because Checking for updates says Only on
+/// Check now for them (gxserver's `unchecked`).
+fn checked_line(payload: &Value) -> String {
+    let unchecked: Vec<&str> = payload["unchecked"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter_map(|group| {
+            GROUPS
+                .iter()
+                .find(|(id, _)| *id == group)
+                .map(|(_, label)| *label)
+        })
+        .collect();
+    let checked_at = payload["checkedAt"].as_i64();
+    if unchecked.is_empty() {
+        return checked_ago(checked_at);
+    }
+    let names = match unchecked.as_slice() {
+        [one] => one.to_string(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+        [] => String::new(),
+    };
+    match checked_at {
+        None => "Not checked yet".to_string(),
+        Some(_) => format!("{} · {names} not checked yet", checked_ago(checked_at)),
+    }
+}
+
 /// "Checked 4 min ago" from milliseconds since 1970.
 fn checked_ago(at_ms: Option<i64>) -> String {
     let Some(at_ms) = at_ms else {
@@ -845,6 +882,12 @@ impl Render for UpdatesTab {
         }
         if let Some(section) = self.not_installed(&p, &shown, cx) {
             blocks.push(PageBlock::section("notInstalled", section));
+        }
+        // How often this computer checks (only its own page: the settings are this computer's).
+        if shown_id == THIS_COMPUTER
+            && let Some(fold) = self.checks_fold(&p, window, cx)
+        {
+            blocks.push(PageBlock::section(checks::CHECKS_SECTION, fold));
         }
         if shown_id == THIS_COMPUTER
             && let Some(section) = self.go_back_section(&p, payload.as_ref(), cx)

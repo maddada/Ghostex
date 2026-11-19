@@ -528,6 +528,15 @@ impl SharedSidebarSettingsSnapshot {
         strict_bool_field(&self.object, "browserPagesInViewRow").unwrap_or(false)
     }
 
+    /// How often Ghostex checks for a new version of itself on its own (Settings > Updates >
+    /// Checking for updates > Ghostex); `None` for Only on Check now.
+    pub fn ghostex_update_check_interval(&self) -> Option<std::time::Duration> {
+        use ghostex_settings_catalog::update_checks::{
+            UpdateCheckKind, update_check_interval_in_map,
+        };
+        update_check_interval_in_map(&self.object, UpdateCheckKind::Ghostex)
+    }
+
     /// Reload the open project's Browser tabs on launch so active and background pages start
     /// loading without waiting until clicked.
     pub fn reload_browser_tabs_on_startup(&self) -> bool {

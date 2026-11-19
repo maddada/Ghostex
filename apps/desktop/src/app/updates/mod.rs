@@ -30,8 +30,10 @@ use crate::app::helpers::*;
 
 const ENDPOINT: &str = "/api/updates";
 const RPC_TIMEOUT: Duration = Duration::from_secs(90);
-/// How often the list is read again while nothing runs.
-const REFRESH_INTERVAL: Duration = Duration::from_secs(30 * 60);
+/// How often the list is read again while nothing runs. gxserver checks each kind only when its
+/// time in Settings > Updates > Checking for updates has come (server/src/updates/items.rs), so
+/// a read between checks costs nothing and only picks up what a check found.
+const REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
 /// How often the watch looks; it reads the list only while something updates, or when it is old.
 const WATCH_TICK: Duration = Duration::from_secs(3);
 
@@ -44,8 +46,11 @@ struct UpdatesSnapshot {
     running: bool,
     error: Option<String>,
     refreshed_at: Option<Instant>,
-    /// When the list was last read, in milliseconds since 1970, for "Checked 4 min ago".
+    /// When gxserver last checked, in milliseconds since 1970, for "Checked 4 min ago" (when the
+    /// list was read, from a gxserver older than per-kind checks).
     checked_at_ms: Option<i64>,
+    /// The groups gxserver hasn't checked yet: set to Only on Check now since it started.
+    unchecked: Vec<String>,
     in_flight: bool,
     /// What the top bar's badge counts, as last published (rendering reads this, not the sources).
     badge: Vec<Value>,
@@ -197,7 +202,7 @@ impl GhostexGpuiApp {
         })
     }
 
-    /// Reads the list every half hour, and every few seconds while an update runs.
+    /// Reads the list every few minutes, and every few seconds while an update runs.
     pub(crate) fn start_updates_watch(&mut self, cx: &mut gpui::Context<Self>) {
         cx.spawn(async move |this, cx| {
             loop {
@@ -268,7 +273,17 @@ impl GhostexGpuiApp {
                             .collect();
                         snapshot.running = answer["running"] == true;
                         snapshot.error = None;
-                        snapshot.checked_at_ms = Some(chrono::Utc::now().timestamp_millis());
+                        snapshot.checked_at_ms = match answer.get("checkedAt") {
+                            Some(checked_at) => checked_at.as_i64(),
+                            None => Some(chrono::Utc::now().timestamp_millis()),
+                        };
+                        snapshot.unchecked = answer["unchecked"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(Value::as_str)
+                            .map(str::to_string)
+                            .collect();
                     }
                     Err(message) => {
                         snapshot.error = Some(message.clone());
@@ -330,11 +345,12 @@ impl GhostexGpuiApp {
             .cloned()
             .collect();
         with_snapshot(|snapshot| snapshot.badge = badge);
-        let (running, error, checked_at) = with_snapshot(|snapshot| {
+        let (running, error, checked_at, unchecked) = with_snapshot(|snapshot| {
             (
                 snapshot.running,
                 snapshot.error.clone(),
                 snapshot.checked_at_ms,
+                snapshot.unchecked.clone(),
             )
         });
         let message = json!({
@@ -344,6 +360,7 @@ impl GhostexGpuiApp {
             "running": running,
             "error": error,
             "checkedAt": checked_at,
+            "unchecked": unchecked,
             // This computer, then each remote computer, with the line an offline one shows.
             "computers": self.update_computers_payload(),
             // Settings > Updates > Go back (go_back.rs).
@@ -439,7 +456,10 @@ impl GhostexGpuiApp {
                 self.refresh_remote_updates(false, Duration::from_secs(60), cx);
                 self.refresh_stale_remote_app_updates(cx);
             }
+            // Check now checks everything, whatever Checking for updates says: Ghostex's own
+            // release too.
             Some("check") => {
+                self.probe_gpui_app_update(cx);
                 self.refresh_updates(true, cx);
                 self.refresh_remote_updates(true, Duration::ZERO, cx);
                 self.refresh_stale_remote_app_updates(cx);

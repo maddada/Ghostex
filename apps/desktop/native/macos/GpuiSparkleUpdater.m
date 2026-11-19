@@ -564,6 +564,39 @@ void GhostexGpuiSparkleProbeForUpdateInformation(void) {
 }
 
 /*
+ CDXC:Updates 2026-11-19 DECISION: Settings > Updates > Checking for updates >
+ Ghostex drives Sparkle's own schedule (issue #673): Only on Check now turns
+ its automatic checks off, any other choice turns them on at that interval
+ (Sparkle keeps its own minimum of an hour; the app's quiet probe in
+ os_integration/updater.rs keeps the shorter times). Info.plist's
+ SUEnableAutomaticChecks stays on so Sparkle never asks on second launch.
+*/
+void GhostexGpuiSparkleSetAutomaticChecks(int32_t enabled,
+                                          double intervalSeconds) {
+  @autoreleasepool {
+    GhostexGpuiSparkleRunOnMain(^{
+      id updater = gGhostexGpuiSparkleUpdater;
+      if (updater == nil) {
+        return;
+      }
+      @try {
+        if (enabled && intervalSeconds > 0 &&
+            [updater respondsToSelector:@selector(setUpdateCheckInterval:)]) {
+          [updater setValue:@(intervalSeconds) forKey:@"updateCheckInterval"];
+        }
+        if ([updater
+                respondsToSelector:@selector(setAutomaticallyChecksForUpdates:)]) {
+          [updater setValue:@(enabled ? YES : NO)
+                     forKey:@"automaticallyChecksForUpdates"];
+        }
+      } @catch (NSException *exception) {
+        (void)exception;
+      }
+    });
+  }
+}
+
+/*
  Starts Sparkle's user-initiated check in unattended mode: 1 started, 0 no
  updater, 2 a Sparkle session (an update window) is already open, -1 this
  Sparkle cannot be answered unattended.

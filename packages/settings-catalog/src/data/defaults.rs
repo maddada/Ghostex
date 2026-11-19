@@ -26,6 +26,11 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("trustProjectFoldersConfirmedAt", J::Str("")),
     ("agentHooksAutoInstall", J::Bool(false)),
     ("useAgentHooks", J::Bool(false)),
+    // CDXC:Updates 2026-11-19 SEE-ALSO: Settings > Updates > Checking for updates, every hour by default (update_checks.rs, where the user's decision is).
+    ("updatesCheckGhostex", J::Str("1h")),
+    ("updatesCheckAgents", J::Str("1h")),
+    ("updatesCheckTools", J::Str("1h")),
+    ("updatesCheckExtensions", J::Str("1h")),
     ("agentsTidyUpOfferDismissed", J::Bool(false)),
     ("agentManagerZoomPercent", J::Num(100.0)),
     ("defaultPromptAgentId", J::Str("codex")),

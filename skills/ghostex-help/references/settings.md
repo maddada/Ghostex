@@ -331,11 +331,17 @@ How to use this file:
 ### Updates
 
 - **Update all** `updatesUpdateAll` (Settings UI row without a settings key; use `ghostex settings open`): Updates everything the shown machine lists that has an update (Update all machines, beside the machine picker, updates every connected machine): the agents you use, Claude Swap and Codex Swap, Fast Computer & Browser Use, SpaceO, the tools Ghostex installed, extensions, remote machines, the VS Code view and the Chromium runtime. Ghostex itself updates last and restarts once; your agents keep running, and each agent whose CLI changed restarts into the same chat once it finishes its turn.
-- **Update automatically** `updatesAutoUpdate` (Settings UI row without a settings key; use `ghostex settings open`): A switch on each card, off by default: Ghostex installs that item's updates by itself, only while it isn't in use (an agent while none of its sessions is working, the other tools while no agent is working). On Ghostex's own card it is Keep this machine up to date.
-- **Check now** `updatesCheckNow` (Settings UI row without a settings key; use `ghostex settings open`): Checks every item for a newer version now instead of waiting for the next check (every half hour).
+- **Update automatically** `updatesAutoUpdate` (Settings UI row without a settings key; use `ghostex settings open`): A switch on each card, off by default: Ghostex installs that item's updates by itself, only while it isn't in use (an agent while none of its sessions is working, the other tools while no agent is working), once a check finds them. On Ghostex's own card it is Keep this machine up to date.
+- **Check now** `updatesCheckNow` (Settings UI row without a settings key; use `ghostex settings open`): Checks everything for a newer version now (Ghostex, agents, tools and extensions), whatever Checking for updates says.
 ### Up to date
 
 - **Up to date** `updatesUpToDate` (Settings UI row without a settings key; use `ghostex settings open`): Everything already current, and the agents Ghostex can't read the version of (such as Cursor), with a button that runs their own updater.
+### Checking for updates
+
+- **Ghostex** `updatesCheckGhostex` (one of 15m | 30m | 1h | 1d | manual; default 1h): How often Ghostex looks for a new version of itself on its own: every 15 minutes, 30 minutes, hour or day, or Only on Check now. Option labels: 15m = Every 15 minutes, 30m = Every 30 minutes, 1h = Every hour, 1d = Every day, manual = Only on Check now.
+- **Agents** `updatesCheckAgents` (one of 15m | 30m | 1h | 1d | manual; default 1h): How often Ghostex checks the agents turned on in Settings > Agents for updates. Agents you turned off are never checked, not even for their version. Option labels: 15m = Every 15 minutes, 30m = Every 30 minutes, 1h = Every hour, 1d = Every day, manual = Only on Check now.
+- **Tools** `updatesCheckTools` (one of 15m | 30m | 1h | 1d | manual; default 1h): How often Ghostex checks what it installed for you (account switchers, tools such as uv, the Easy Connect helper) for updates. Option labels: 15m = Every 15 minutes, 30m = Every 30 minutes, 1h = Every hour, 1d = Every day, manual = Only on Check now.
+- **Extensions** `updatesCheckExtensions` (one of 15m | 30m | 1h | 1d | manual; default 1h): How often Ghostex checks your extensions for updates. Option labels: 15m = Every 15 minutes, 30m = Every 30 minutes, 1h = Every hour, 1d = Every day, manual = Only on Check now.
 ## Debugging (tab `debugging`)
 
 ### Debug controls

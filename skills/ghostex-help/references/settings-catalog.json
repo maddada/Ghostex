@@ -9153,7 +9153,7 @@
     {
       "key": "updatesAutoUpdate",
       "title": "Update automatically",
-      "subtitle": "A switch on each card, off by default: Ghostex installs that item's updates by itself, only while it isn't in use (an agent while none of its sessions is working, the other tools while no agent is working). On Ghostex's own card it is Keep this machine up to date.",
+      "subtitle": "A switch on each card, off by default: Ghostex installs that item's updates by itself, only while it isn't in use (an agent while none of its sessions is working, the other tools while no agent is working), once a check finds them. On Ghostex's own card it is Keep this machine up to date.",
       "tab": "updates",
       "tabTitle": "Updates",
       "section": "updates",
@@ -9164,7 +9164,7 @@
     {
       "key": "updatesCheckNow",
       "title": "Check now",
-      "subtitle": "Checks every item for a newer version now instead of waiting for the next check (every half hour).",
+      "subtitle": "Checks everything for a newer version now (Ghostex, agents, tools and extensions), whatever Checking for updates says.",
       "tab": "updates",
       "tabTitle": "Updates",
       "section": "updates",
@@ -9182,6 +9182,142 @@
       "sectionTitle": "Up to date",
       "type": "ui",
       "agentWritable": false
+    },
+    {
+      "key": "updatesCheckGhostex",
+      "title": "Ghostex",
+      "subtitle": "How often Ghostex looks for a new version of itself on its own: every 15 minutes, 30 minutes, hour or day, or Only on Check now.",
+      "tab": "updates",
+      "tabTitle": "Updates",
+      "section": "checking",
+      "sectionTitle": "Checking for updates",
+      "type": "enum",
+      "default": "1h",
+      "options": [
+        {
+          "label": "Every 15 minutes",
+          "value": "15m"
+        },
+        {
+          "label": "Every 30 minutes",
+          "value": "30m"
+        },
+        {
+          "label": "Every hour",
+          "value": "1h"
+        },
+        {
+          "label": "Every day",
+          "value": "1d"
+        },
+        {
+          "label": "Only on Check now",
+          "value": "manual"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "updatesCheckAgents",
+      "title": "Agents",
+      "subtitle": "How often Ghostex checks the agents turned on in Settings > Agents for updates. Agents you turned off are never checked, not even for their version.",
+      "tab": "updates",
+      "tabTitle": "Updates",
+      "section": "checking",
+      "sectionTitle": "Checking for updates",
+      "type": "enum",
+      "default": "1h",
+      "options": [
+        {
+          "label": "Every 15 minutes",
+          "value": "15m"
+        },
+        {
+          "label": "Every 30 minutes",
+          "value": "30m"
+        },
+        {
+          "label": "Every hour",
+          "value": "1h"
+        },
+        {
+          "label": "Every day",
+          "value": "1d"
+        },
+        {
+          "label": "Only on Check now",
+          "value": "manual"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "updatesCheckTools",
+      "title": "Tools",
+      "subtitle": "How often Ghostex checks what it installed for you (account switchers, tools such as uv, the Easy Connect helper) for updates.",
+      "tab": "updates",
+      "tabTitle": "Updates",
+      "section": "checking",
+      "sectionTitle": "Checking for updates",
+      "type": "enum",
+      "default": "1h",
+      "options": [
+        {
+          "label": "Every 15 minutes",
+          "value": "15m"
+        },
+        {
+          "label": "Every 30 minutes",
+          "value": "30m"
+        },
+        {
+          "label": "Every hour",
+          "value": "1h"
+        },
+        {
+          "label": "Every day",
+          "value": "1d"
+        },
+        {
+          "label": "Only on Check now",
+          "value": "manual"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "updatesCheckExtensions",
+      "title": "Extensions",
+      "subtitle": "How often Ghostex checks your extensions for updates.",
+      "tab": "updates",
+      "tabTitle": "Updates",
+      "section": "checking",
+      "sectionTitle": "Checking for updates",
+      "type": "enum",
+      "default": "1h",
+      "options": [
+        {
+          "label": "Every 15 minutes",
+          "value": "15m"
+        },
+        {
+          "label": "Every 30 minutes",
+          "value": "30m"
+        },
+        {
+          "label": "Every hour",
+          "value": "1h"
+        },
+        {
+          "label": "Every day",
+          "value": "1d"
+        },
+        {
+          "label": "Only on Check now",
+          "value": "manual"
+        }
+      ],
+      "agentWritable": true
     },
     {
       "key": "debuggingMode",

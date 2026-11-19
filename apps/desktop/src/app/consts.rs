@@ -470,10 +470,12 @@ pub(crate) const TITLEBAR_ICON_ARROWS_DIAGONAL: &str = "titlebar/arrows-diagonal
 pub(crate) const TITLEBAR_ICON_ARROWS_DIAGONAL_MINIMIZE: &str =
     "titlebar/arrows-diagonal-minimize.svg";
 
-// Both platform backends probe quietly at launch and every 15 minutes. The
-// titlebar is the shared availability surface; platform-specific UI is only
+// The platform backends probe quietly at launch and then as often as Settings >
+// Updates > Checking for updates > Ghostex says (every hour by default, never
+// while it says Only on Check now); the loop looks at that setting this often.
+// The titlebar is the shared availability surface; platform-specific UI is only
 // entered after the user clicks it.
-pub(crate) const GPUI_UPDATE_AVAILABILITY_PROBE_INTERVAL: Duration = Duration::from_secs(15 * 60);
+pub(crate) const GPUI_UPDATE_CHECK_SETTING_TICK: Duration = Duration::from_secs(60);
 
 pub(crate) const TITLEBAR_SIDEBAR_COLLAPSE_ICON_SIZE: f32 = 18.0;
 

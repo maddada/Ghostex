@@ -25,6 +25,23 @@ use crate::*;
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 use std::sync::atomic::Ordering;
 
+/// Settings > Updates > Checking for updates > Ghostex: `None` for Only on Check now.
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+fn ghostex_update_check_interval() -> Option<std::time::Duration> {
+    shared_settings::shared_sidebar_settings_snapshot().ghostex_update_check_interval()
+}
+
+/// Sparkle's own automatic checks follow the Ghostex setting: off for Only on Check now, else on
+/// at that interval (GpuiSparkleUpdater.m).
+#[cfg(target_os = "macos")]
+fn apply_sparkle_schedule(interval: Option<std::time::Duration>) {
+    let (enabled, seconds) = match interval {
+        Some(interval) => (1, interval.as_secs_f64()),
+        None => (0, 0.0),
+    };
+    unsafe { GhostexGpuiSparkleSetAutomaticChecks(enabled, seconds) };
+}
+
 impl GhostexGpuiApp {
     /// Startup lifecycle breadcrumb plus the one-minute-delayed support-log
     /// retention pass (macOS `scheduleSupportLogLineRetentionAfterStartup`
@@ -84,33 +101,18 @@ impl GhostexGpuiApp {
             return;
         }
         self.updater_started = true;
+        let interval = ghostex_update_check_interval();
+        apply_sparkle_schedule(interval);
         // Sparkle intentionally defers its automatic scheduler by one main-loop
         // cycle so clients can initiate their own check immediately after
         // start. Match the legacy AppKit host by using that window for the
         // quiet availability probe; deferring this call lets Sparkle's
         // scheduler win and leaves both manual and titlebar checks blocked by
         // its in-progress session.
-        unsafe { GhostexGpuiSparkleProbeForUpdateInformation() };
-        cx.spawn(async move |this, cx| {
-            loop {
-                cx.background_executor()
-                    .timer(GPUI_UPDATE_AVAILABILITY_PROBE_INTERVAL)
-                    .await;
-                let probed = this
-                    .update(cx, |this, _cx| {
-                        if !this.updater_started {
-                            return false;
-                        }
-                        unsafe { GhostexGpuiSparkleProbeForUpdateInformation() };
-                        true
-                    })
-                    .unwrap_or(false);
-                if !probed {
-                    return;
-                }
-            }
-        })
-        .detach();
+        if interval.is_some() {
+            unsafe { GhostexGpuiSparkleProbeForUpdateInformation() };
+        }
+        self.start_gpui_update_check_loop(interval, cx);
     }
 
     #[cfg(target_os = "windows")]
@@ -121,27 +123,11 @@ impl GhostexGpuiApp {
         };
         self.windows_updater = Some(updater);
         self.updater_started = true;
-        self.begin_windows_update_check(false, cx);
-        cx.spawn(async move |this, cx| {
-            loop {
-                cx.background_executor()
-                    .timer(GPUI_UPDATE_AVAILABILITY_PROBE_INTERVAL)
-                    .await;
-                let keep_running = this
-                    .update(cx, |this, cx| {
-                        if !this.updater_started {
-                            return false;
-                        }
-                        this.begin_windows_update_check(false, cx);
-                        true
-                    })
-                    .unwrap_or(false);
-                if !keep_running {
-                    return;
-                }
-            }
-        })
-        .detach();
+        let interval = ghostex_update_check_interval();
+        if interval.is_some() {
+            self.begin_windows_update_check(false, cx);
+        }
+        self.start_gpui_update_check_loop(interval, cx);
     }
 
     #[cfg(target_os = "linux")]
@@ -154,31 +140,83 @@ impl GhostexGpuiApp {
             linux_updater::record_appimage_source(install);
         }
         self.updater_started = true;
-        self.begin_linux_update_check(false, cx);
+        let interval = ghostex_update_check_interval();
+        if interval.is_some() {
+            self.begin_linux_update_check(false, cx);
+        }
+        self.start_gpui_update_check_loop(interval, cx);
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    pub(crate) fn start_gpui_updater(&mut self, _cx: &mut gpui::Context<Self>) {}
+
+    /// The Ghostex release check after launch: every minute it reads Settings > Updates > Checking
+    /// for updates > Ghostex and checks quietly once that much time has passed since the last check
+    /// (never while it says Only on Check now); on macOS it also keeps Sparkle's own schedule the
+    /// same when the setting changes. `interval` is what launch read and applied.
+    ///
+    /// CDXC:Updates 2026-11-19 SEE-ALSO: the user's decision (every hour by default, replacing the
+    /// 15-minute probe) is on packages/settings-catalog/src/update_checks.rs.
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    fn start_gpui_update_check_loop(
+        &mut self,
+        interval: Option<std::time::Duration>,
+        cx: &mut gpui::Context<Self>,
+    ) {
         cx.spawn(async move |this, cx| {
+            let mut last_check = std::time::Instant::now();
+            let mut applied = interval;
             loop {
                 cx.background_executor()
-                    .timer(GPUI_UPDATE_AVAILABILITY_PROBE_INTERVAL)
+                    .timer(GPUI_UPDATE_CHECK_SETTING_TICK)
                     .await;
+                let interval = ghostex_update_check_interval();
+                if interval != applied {
+                    #[cfg(target_os = "macos")]
+                    apply_sparkle_schedule(interval);
+                    applied = interval;
+                }
+                let due = interval.is_some_and(|interval| last_check.elapsed() >= interval);
                 let keep_running = this
                     .update(cx, |this, cx| {
                         if !this.updater_started {
                             return false;
                         }
-                        this.begin_linux_update_check(false, cx);
+                        if due {
+                            this.probe_gpui_app_update(cx);
+                        }
                         true
                     })
                     .unwrap_or(false);
                 if !keep_running {
                     return;
                 }
+                if due {
+                    last_check = std::time::Instant::now();
+                }
             }
         })
         .detach();
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-    pub(crate) fn start_gpui_updater(&mut self, _cx: &mut gpui::Context<Self>) {}
+    /// One quiet check for a new Ghostex (no window; the titlebar shows what it finds): the
+    /// scheduled one, and Settings > Updates' Check now, which checks everything.
+    pub(crate) fn probe_gpui_app_update(&mut self, cx: &mut gpui::Context<Self>) {
+        if !self.updater_started {
+            return;
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let _ = cx;
+            unsafe { GhostexGpuiSparkleProbeForUpdateInformation() };
+        }
+        #[cfg(target_os = "windows")]
+        self.begin_windows_update_check(false, cx);
+        #[cfg(target_os = "linux")]
+        self.begin_linux_update_check(false, cx);
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+        let _ = cx;
+    }
 
     /// Titlebar update-button click and app-menu Check for Updates (macOS
     /// `showUpdateDialogFromTitlebar` / `checkForUpdates` parity): the click is

@@ -196,6 +196,7 @@ unsafe extern "C" {
     pub(crate) fn GhostexGpuiSparkleUpdaterStart() -> i32;
     pub(crate) fn GhostexGpuiSparkleCheckForUpdates();
     pub(crate) fn GhostexGpuiSparkleProbeForUpdateInformation();
+    pub(crate) fn GhostexGpuiSparkleSetAutomaticChecks(enabled: i32, interval_seconds: f64);
     pub(crate) fn GhostexGpuiSparkleInstallUnattended() -> i32;
     pub(crate) fn GhostexGpuiShowStandardAboutPanel();
     pub(crate) fn GhostexGpuiSetLidSleepPreventionEnabled(

@@ -37,6 +37,7 @@ mod search_keywords;
 pub mod spaces;
 pub mod theme_colours;
 pub mod theme_roles;
+pub mod update_checks;
 pub use search_keywords::{search_keywords, section_search_keywords};
 
 pub use hotkey_chords::{

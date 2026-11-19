@@ -17,6 +17,10 @@ use serde_json::{Map, Value, json};
 
 /// The saved machines the picker lists (the Linux box connected, the others not).
 pub(super) fn story_settings(state: &str, settings: &mut Map<String, Value>) {
+    if state == "updates-checks" {
+        settings.insert("updatesCheckExtensions".into(), json!("manual"));
+        return;
+    }
     if !state.starts_with("updates-computers") {
         return;
     }
@@ -177,7 +181,7 @@ fn items(state: &str) -> Vec<Value> {
             json!({"canAuto": false}),
         ),
     ];
-    if state == "updates-done" {
+    if matches!(state, "updates-done" | "updates-checks") {
         items.push(item(
             "app",
             "app",
@@ -630,6 +634,7 @@ pub(super) fn answers(state: &str, message: &Value) -> Vec<Value> {
         "running": false,
         "error": null,
         "checkedAt": chrono::Utc::now().timestamp_millis() - 4 * 60_000,
+        "unchecked": if state == "updates-checks" { json!(["extensions"]) } else { json!([]) },
         "computers": computers,
         // Settings > Updates > Go back (`updates-go-back-command`: a deb install's command).
         "goBack": if state == "updates-go-back-command" {

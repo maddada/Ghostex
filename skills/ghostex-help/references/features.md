@@ -7677,7 +7677,8 @@ brings it back when it is already in a popup.
 Settings > Updates (`ghostex settings open --tab updates`, first in the Settings
 list, with a count beside it) shows everything this computer uses that Ghostex
 can update, as a grid of cards: Ghostex itself, your remote machines' Ghostex,
-the agent CLIs you have turned on or used in the last week, Claude Swap and
+the agent CLIs you have turned on in Settings > Agents (an agent you turned off
+is never checked, not even for its version), Claude Swap and
 Codex Swap, Fast Computer & Browser Use (cua-driver) and SpaceO, the tools
 Ghostex installed (Node, uv and the like), Hex when it is installed (when it is
 missing it sits in the Not installed part, saying so when Dictate is set to use
@@ -7702,8 +7703,20 @@ extension asking for new permissions) says Needs you with Review…, which opens
 the page where you approve it. Everything already current, and the agents
 whose version Ghostex can't read (such as Cursor, with Run its updater), sit in
 one Up to date card below. The filter at the top shows only Ghostex, Agents,
-Tools or Extensions. Check now reads every version again (otherwise every half
-hour).
+Tools or Extensions. Check now checks everything again, Ghostex included,
+whatever Checking for updates says.
+
+**Checking for updates**, a part closed by default under Up to date (its row
+shows the time when all four are the same), sets how often Ghostex checks on its
+own, each with its own dropdown: Ghostex (new versions of Ghostex itself; on a
+Mac it also sets Sparkle's own automatic checks), Agents, Tools (Claude Swap,
+Codex Swap, the tools Ghostex installed, the Easy Connect helper) and
+Extensions. Each is Every 15 minutes, Every 30 minutes, Every hour (the
+default), Every day or Only on Check now, which never checks that kind until you
+press Check now; until then the line under Updates says, for example,
+"Extensions not checked yet". An item's Update automatically acts after
+whichever check finds its update (`updatesCheckGhostex`, `updatesCheckAgents`,
+`updatesCheckTools`, `updatesCheckExtensions`).
 
 **Pick a machine.** Once you have saved a remote machine, a Machine picker sits
 at the top of the page, the same one Settings > Agents, Integrations and

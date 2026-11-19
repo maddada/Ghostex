@@ -12,6 +12,8 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
+use ghostex_settings_catalog::update_checks::{update_check_interval_in, UpdateCheckKind};
+
 use super::store;
 use crate::agent_cli::catalog::{Definition, CATALOG};
 use crate::agent_cli::latest::version_in;
@@ -20,77 +22,190 @@ use crate::presentation::presentation_activity;
 use crate::server::AppState;
 use crate::storage::open_gxserver_database;
 
-/// How long a collected list is served before the sources are read again.
-const LIST_TTL: Duration = Duration::from_secs(10 * 60);
 /// How long the extension catalog is reused (it is a download).
 const CATALOG_TTL: Duration = Duration::from_secs(60 * 60);
 /// An agent used this recently counts as in use (Q1362).
 const RECENT_USE: chrono::Duration = chrono::Duration::days(7);
 
-static LIST: std::sync::Mutex<Option<(Instant, Vec<Value>)>> = std::sync::Mutex::new(None);
+/// The kinds gxserver checks, each on its own schedule (Settings > Updates > Checking for updates).
+/// Ghostex's own releases are the desktop's check; its row here only reads what the app knows.
+const CHECKED_KINDS: [UpdateCheckKind; 3] = [
+    UpdateCheckKind::Agents,
+    UpdateCheckKind::Tools,
+    UpdateCheckKind::Extensions,
+];
+
+/// One kind's items as its last check read them.
+struct GroupCheck {
+    at: Instant,
+    /// When, in milliseconds since 1970 ("Checked 4 min ago").
+    at_ms: i64,
+    items: Vec<Value>,
+    /// Read again at the next list whatever its setting says: an update ended since (`invalidate`),
+    /// or a row was mid-update when it was read.
+    stale: bool,
+}
+
+static GROUPS: std::sync::LazyLock<std::sync::Mutex<HashMap<UpdateCheckKind, GroupCheck>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(HashMap::new()));
 static COLLECTING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-/// Bumped by `invalidate`, so a list collected while an update finished is not kept.
+/// Bumped by `invalidate`, so a check that ran while an update finished is read again.
 static GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static EXTENSION_CATALOG: std::sync::Mutex<Option<(Instant, HashMap<String, String>)>> =
     std::sync::Mutex::new(None);
 
-/// The next list reads every source again (after an update finished).
+/// The next list reads every kind checked before again (after an update finished).
 pub(crate) fn invalidate() {
-    let mut list = LIST.lock().unwrap_or_else(|e| e.into_inner());
     GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    *list = None;
+    for group in GROUPS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .values_mut()
+    {
+        group.stale = true;
+    }
+}
+
+/// Whether a kind is checked now: never checked and on a schedule, read again on purpose, or its
+/// time has come. Only on Check now (`None`) is never due by itself.
+fn due(check: Option<&GroupCheck>, interval: Option<Duration>) -> bool {
+    match check {
+        None => interval.is_some(),
+        Some(check) => {
+            check.stale || interval.is_some_and(|interval| check.at.elapsed() >= interval)
+        }
+    }
+}
+
+/// When the last check ran (milliseconds since 1970), and the groups never checked yet (a kind
+/// set to Only on Check now since Ghostex started).
+pub(super) fn checks() -> (Option<i64>, Vec<&'static str>) {
+    let groups = GROUPS.lock().unwrap_or_else(|e| e.into_inner());
+    let checked_at = groups.values().map(|group| group.at_ms).max();
+    let unchecked = CHECKED_KINDS
+        .into_iter()
+        .filter(|kind| !groups.contains_key(kind))
+        .map(UpdateCheckKind::group)
+        .collect();
+    (checked_at, unchecked)
 }
 
 /// The list with what is running, how the last updates ended and the switches laid over it.
+/// `fresh` (Check now) checks every kind; otherwise only the kinds whose time has come are read
+/// again, and the rest come from their last check.
+///
+/// CDXC:Updates 2026-11-19 WHY: one cache for the whole list read every source every ten minutes
+/// whenever anything asked, so the user's per-kind times (update_checks.rs in the settings
+/// catalog) could not hold; each kind keeps its own check now. A check that ran across an
+/// `invalidate`, or that read a row mid-update, is read again at the next list (the 2026-11-07
+/// "Waiting…" fix: those rows change within seconds).
 pub(super) async fn list(state: &AppState, fresh: bool) -> Vec<Value> {
-    let cached = (!fresh)
-        .then(|| {
-            LIST.lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .as_ref()
-                .filter(|(at, _)| at.elapsed() < LIST_TTL)
-                .map(|(_, items)| items.clone())
-        })
-        .flatten();
-    let items = match cached {
-        Some(items) => items,
-        None => {
-            let _collecting = COLLECTING.lock().await;
-            let again = (!fresh)
-                .then(|| {
-                    LIST.lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .as_ref()
-                        .filter(|(at, _)| at.elapsed() < LIST_TTL)
-                        .map(|(_, items)| items.clone())
-                })
-                .flatten();
-            match again {
-                Some(items) => items,
-                None => {
-                    let generation = GENERATION.load(std::sync::atomic::Ordering::SeqCst);
-                    let items = collect(state, fresh).await;
-                    /*
-                    CDXC:Updates 2026-11-07 FIX:
-                    User: "open code isn't updating pls fix": the top bar's Updates list kept OpenCode at "Waiting…" with a spinner long after its update had ended.
-                    WHY: Update's own answer collected the list while OpenCode's agent job was still queued; the job ended (and invalidated the list) during that collect, and the collect then cached the "Waiting…" row for 10 minutes while saying nothing was running, so the desktop stopped asking. A list collected across an invalidate, or showing a row mid-update, is not cached: those rows change within seconds.
-                    */
-                    let mut list = LIST.lock().unwrap_or_else(|e| e.into_inner());
-                    let settled = !items.iter().any(|item| item["state"] == "updating");
-                    if settled && GENERATION.load(std::sync::atomic::Ordering::SeqCst) == generation
-                    {
-                        *list = Some((Instant::now(), items.clone()));
-                    }
-                    items
+    let asked_at = Instant::now();
+    let settings = crate::shared_settings_file::read_shared_settings(&state.paths);
+    let usage_state = state.clone();
+    let usage = tokio::task::spawn_blocking(move || Usage::read(&usage_state))
+        .await
+        .unwrap_or_default();
+    let due_kinds = |after: Option<Instant>| -> Vec<UpdateCheckKind> {
+        let groups = GROUPS.lock().unwrap_or_else(|e| e.into_inner());
+        CHECKED_KINDS
+            .into_iter()
+            .filter(|kind| {
+                let check = groups.get(kind);
+                match after {
+                    // Check now: everything, unless another check read it since the click.
+                    Some(after) => check.is_none_or(|check| check.stale || check.at < after),
+                    None => due(check, update_check_interval_in(settings.as_ref(), *kind)),
+                }
+            })
+            .collect()
+    };
+    let after = fresh.then_some(asked_at);
+    if !due_kinds(after).is_empty() {
+        let _collecting = COLLECTING.lock().await;
+        // Another list may have checked them while this one waited.
+        let kinds = due_kinds(after);
+        if !kinds.is_empty() {
+            let generation = GENERATION.load(std::sync::atomic::Ordering::SeqCst);
+            let checked = collect(state, &usage, &kinds, fresh).await;
+            let unchanged = GENERATION.load(std::sync::atomic::Ordering::SeqCst) == generation;
+            let auto = store::auto_ids(&state.paths);
+            let found_auto_update = checked.iter().flat_map(|(_, items)| items).any(|item| {
+                item["state"] == "available"
+                    && item["id"]
+                        .as_str()
+                        .is_some_and(|id| auto.iter().any(|on| on == id))
+            });
+            let at_ms = chrono::Utc::now().timestamp_millis();
+            {
+                let mut groups = GROUPS.lock().unwrap_or_else(|e| e.into_inner());
+                for (kind, items) in checked {
+                    let stale = !unchanged || items.iter().any(|item| item["state"] == "updating");
+                    groups.insert(
+                        kind,
+                        GroupCheck {
+                            at: Instant::now(),
+                            at_ms,
+                            items,
+                            stale,
+                        },
+                    );
                 }
             }
+            // An item's "Update automatically" acts after whichever check found its update.
+            if found_auto_update {
+                super::auto::wake_auto_updates();
+            }
         }
+    }
+    let checked: Vec<Value> = {
+        let groups = GROUPS.lock().unwrap_or_else(|e| e.into_inner());
+        CHECKED_KINDS
+            .iter()
+            .filter_map(|kind| groups.get(kind))
+            .flat_map(|group| group.items.iter().cloned())
+            .collect()
     };
-    items.into_iter().map(|item| overlay(state, item)).collect()
+    // Ghostex's row and the extension components read only what is on this computer, every time.
+    let mut items = vec![app_item(state).await];
+    items.extend(checked);
+    items.extend(component_items());
+    items
+        .into_iter()
+        .map(|item| overlay(state, &usage, item))
+        .collect()
 }
 
-fn overlay(state: &AppState, mut item: Value) -> Value {
+/// Whether an item is in use now, as its collector decides it (`None` for kinds that never are):
+/// an agent while one of its sessions works, an account switcher while its agent's do, a tool while
+/// any agent works.
+fn live_in_use(item: &Value, usage: &Usage) -> Option<bool> {
+    if item["state"] == "notInstalled" {
+        return None;
+    }
+    let id = item["id"].as_str()?;
+    match item["kind"].as_str()? {
+        "agent" => id.strip_prefix("agent:").map(|agent| usage.working(agent)),
+        "helper" => id
+            .strip_prefix("helper:")
+            .map(|provider| usage.working(provider)),
+        "tool" => Some(usage.any_working()),
+        _ => None,
+    }
+}
+
+fn overlay(state: &AppState, usage: &Usage, mut item: Value) -> Value {
     let id = item["id"].as_str().unwrap_or_default().to_string();
+    // A kind is read again only on its schedule, so whether its agent works now is read now: the
+    // "Update automatically" pass must never restart an agent mid-turn on a check's old answer.
+    if let Some(in_use) = live_in_use(&item, usage) {
+        item["inUse"] = json!(in_use);
+    }
+    if item["kind"] == "agent" && item["state"] != "notInstalled" {
+        if let Some(agent) = id.strip_prefix("agent:") {
+            item["topBar"] = json!(usage.in_use(agent));
+        }
+    }
     if let Some(phase) = store::running_phase(&id) {
         item["state"] = json!("updating");
         item["progress"] = json!(phase);
@@ -132,33 +247,55 @@ fn overlay(state: &AppState, mut item: Value) -> Value {
     item
 }
 
-/// Reads every source at once.
-async fn collect(state: &AppState, fresh: bool) -> Vec<Value> {
-    let usage_state = state.clone();
-    let usage = tokio::task::spawn_blocking(move || Usage::read(&usage_state))
-        .await
-        .unwrap_or_default();
-    let (agents, helpers, tools, extensions, app) = tokio::join!(
-        agent_items(state, &usage),
-        helper_items(state, &usage, fresh),
-        tool_items(state, &usage, fresh),
-        extension_items(state),
-        app_item(state),
-    );
-    let components = component_items();
-    let easy_connect_state = state.clone();
-    let easy_connect = tokio::task::spawn_blocking(move || easy_connect_item(&easy_connect_state))
-        .await
-        .ok();
-    let mut items = Vec::new();
-    items.push(app);
-    items.extend(agents);
-    items.extend(helpers);
-    items.extend(tools);
-    items.extend(extensions);
-    items.extend(components);
-    items.extend(easy_connect);
-    items
+/// Reads the sources of `kinds` at once, each kind's items in the list's order.
+async fn collect(
+    state: &AppState,
+    usage: &Usage,
+    kinds: &[UpdateCheckKind],
+    fresh: bool,
+) -> Vec<(UpdateCheckKind, Vec<Value>)> {
+    let wanted = |kind: UpdateCheckKind| kinds.contains(&kind);
+    let agents = async {
+        if wanted(UpdateCheckKind::Agents) {
+            Some(agent_items(state, usage).await)
+        } else {
+            None
+        }
+    };
+    let tools = async {
+        if !wanted(UpdateCheckKind::Tools) {
+            return None;
+        }
+        let (helpers, tools) = tokio::join!(
+            helper_items(state, usage, fresh),
+            tool_items(state, usage, fresh)
+        );
+        let easy_connect_state = state.clone();
+        let easy_connect =
+            tokio::task::spawn_blocking(move || easy_connect_item(&easy_connect_state))
+                .await
+                .ok();
+        let mut items = helpers;
+        items.extend(tools);
+        items.extend(easy_connect);
+        Some(items)
+    };
+    let extensions = async {
+        if wanted(UpdateCheckKind::Extensions) {
+            Some(extension_items(state).await)
+        } else {
+            None
+        }
+    };
+    let (agents, tools, extensions) = tokio::join!(agents, tools, extensions);
+    [
+        (UpdateCheckKind::Agents, agents),
+        (UpdateCheckKind::Tools, tools),
+        (UpdateCheckKind::Extensions, extensions),
+    ]
+    .into_iter()
+    .filter_map(|(kind, items)| items.map(|items| (kind, items)))
+    .collect()
 }
 
 /// The id of the Easy Connect helper's row.
@@ -442,6 +579,11 @@ impl Usage {
         self.working.contains(agent)
     }
 
+    /// Used in the last week or running now: its card lights the top bar (Q1362).
+    pub(super) fn in_use(&self, agent: &str) -> bool {
+        self.recent.contains(agent) || self.running.contains_key(agent)
+    }
+
     pub(super) fn any_working(&self) -> bool {
         self.any_working
     }
@@ -556,9 +698,22 @@ fn job_active(job: &Value) -> bool {
     matches!(job["status"].as_str(), Some("queued" | "running"))
 }
 
+/// The agents turned on in Settings > Agents, and only those: an agent turned off is never run, not
+/// even for its version, nor asked of mise, npm or its own update check.
+///
+/// CDXC:Updates 2026-11-19 DECISION: User (issue #673): "we always skip agents that are turned off
+/// fam". Supersedes listing an agent that was off but used in the last week or running (Q1362);
+/// Not installed lists only the agents turned on too.
 async fn agent_items(state: &AppState, usage: &Usage) -> Vec<Value> {
+    if usage.enabled.is_empty() {
+        return Vec::new();
+    }
     let mut params = Map::new();
     params.insert("action".into(), json!("list"));
+    params.insert(
+        "agentIds".into(),
+        json!(usage.enabled.iter().collect::<Vec<_>>()),
+    );
     let Ok(answer) = crate::agent_cli::endpoint::dispatch(&state.paths, &params).await else {
         return Vec::new();
     };
@@ -575,10 +730,10 @@ async fn agent_items(state: &AppState, usage: &Usage) -> Vec<Value> {
 fn agent_item(agent: &Value, usage: &Usage) -> Option<Value> {
     let id = agent["agentId"].as_str()?;
     agent["executablePath"].as_str()?;
-    let in_use = usage.recent.contains(id) || usage.running.contains_key(id);
-    if !usage.enabled.contains(id) && !in_use {
+    if !usage.enabled.contains(id) {
         return None;
     }
+    let in_use = usage.in_use(id);
     let definition = definition(id)?;
     let name = agent["name"]
         .as_str()

@@ -1,10 +1,14 @@
 //! "Update automatically" (Q1365): every half hour, each item whose switch is on and that has an
 //! update installs it while it isn't in use: an agent while none of its sessions is working, the
 //! other tools while no agent is working. The Ghostex card's switch is the app's own "Keep this
-//! machine up to date" (app_update/auto.rs), which runs on its own.
+//! machine up to date" (app_update/auto.rs), which runs on its own. A check that finds an update
+//! for an item whose switch is on wakes the pass at once (items.rs), so the switch acts after
+//! whichever check found it, on its schedule or on Check now.
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
+
+use tokio::sync::Notify;
 
 use super::{install, items, store};
 use crate::server::AppState;
@@ -18,18 +22,28 @@ const RETRY_SAME_VERSION_AFTER: Duration = Duration::from_secs(6 * 60 * 60);
 static ATTEMPTS: LazyLock<Mutex<HashMap<String, (String, Instant)>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
+static WAKE: LazyLock<Notify> = LazyLock::new(Notify::new);
+
+/// Runs the pass now: a check found an update for an item whose switch is on.
+pub(super) fn wake_auto_updates() {
+    WAKE.notify_one();
+}
+
 pub(crate) fn spawn_updates_auto_task(state: &Arc<AppState>) -> tokio::task::JoinHandle<()> {
     let state = state.clone();
     let mut shutdown = state.shutdown_tx.subscribe();
     tokio::spawn(async move {
         let mut wait = FIRST_PASS_DELAY;
         loop {
-            tokio::select! {
+            let woken = tokio::select! {
                 _ = shutdown.recv() => break,
-                _ = tokio::time::sleep(wait) => {}
+                _ = tokio::time::sleep(wait) => false,
+                _ = WAKE.notified() => true,
+            };
+            if !woken {
+                wait = PASS_INTERVAL;
+                keep_mise_versions(&state).await;
             }
-            wait = PASS_INTERVAL;
-            keep_mise_versions(&state).await;
             run_pass(&state).await;
         }
     })
