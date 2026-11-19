@@ -26,7 +26,7 @@ mod web;
 use std::sync::Arc;
 
 use ghostex_gx_core::extension_panel::{
-    ExtensionPanelUiState, ExtensionSidebarView, extension_sidebar_view,
+    ExtensionPanelUiState, ExtensionSidebarView, extension_mode_is_gone, extension_sidebar_view,
 };
 use ghostex_gx_core::{MachineId, SidebarMode};
 use ghostex_gx_protocol::extension_panel::ExtensionPanels;
@@ -102,9 +102,18 @@ impl GhostexGpuiApp {
 
     /// The sidebar's extension modes and sections for the mode and width on screen.
     pub(crate) fn native_extension_sidebar_view(&self) -> ExtensionSidebarView {
+        // CDXC:Extensions 2026-11-19 WHY:
+        // A saved sidebar mode `extension:<id>` outlives its extension's mode (Work items 0.3.1 drops its button, an extension can be turned off or uninstalled). The sidebar then goes back to the projects, sections included, instead of staying in a mode that draws nothing.
+        let panels = self.native_extension_panels();
+        let saved = self.gx_store_sidebar_mode();
+        let mode = if extension_mode_is_gone(panels, &saved) {
+            SidebarMode::Projects
+        } else {
+            saved
+        };
         extension_sidebar_view(
-            self.native_extension_panels(),
-            &self.gx_store_sidebar_mode(),
+            panels,
+            &mode,
             &self.native_sidebar.extension_panel_ui,
             self.sidebar_width,
         )

@@ -9,7 +9,13 @@ use super::{
 
 /// CDXC:Extensions 2026-11-14 DECISION:
 /// Coordinator's phase 2 brief, taking the phase 1 suggestion: sidebar extensions go in a separate catalog file that only this gxserver and newer read, so the stores of 11.7 and older (which reject the whole catalog over one entry they can't read) never see them. The extensions repo's `tooling/build-catalog.mjs` writes `catalog.json` without them and `catalog-v2.json` with every extension, both into the rolling `store` release. Until that release carries `catalog-v2.json`, the old `catalog.json` is read instead.
+///
+/// CDXC:Extensions 2026-11-19 DECISION:
+/// Coordinator, after a review of the Work items change: an extension that draws nothing in the sidebar (Work items 0.3.1) fails `validate` in every gxserver from 11.8.0 to 11.11.0, and those read the whole catalog in one piece, so one such entry would drop `catalog-v2.json` for them and they would fall back to `catalog.json`, where Work items and Workbench vanish silently. Extensions that draw nothing are published only in `catalog-v3.json`, which this gxserver reads first; `catalog-v2.json` keeps the last version those gxservers can read, and `catalog.json` stays for 11.7 and older. `tooling/build-catalog.mjs` in the extensions repo writes all three.
 pub(crate) const DEFAULT_EXTENSIONS_CATALOG_URL: &str =
+    "https://github.com/maddada/Ghostex-extensions/releases/download/store/catalog-v3.json";
+/// The catalog of 11.8.0 to 11.11.0: sidebar extensions, none that draws nothing.
+const V2_EXTENSIONS_CATALOG_URL: &str =
     "https://github.com/maddada/Ghostex-extensions/releases/download/store/catalog-v2.json";
 /// The catalog of 11.7 and older, without sidebar extensions.
 const PREVIOUS_EXTENSIONS_CATALOG_URL: &str =
@@ -27,7 +33,9 @@ const OFFICIAL_EXTENSIONS_SOURCE_BASE: &str =
 /// CDXC:Extensions 2026-11-14 DECISION:
 /// User: "for all community extensions we have to have a small github logo on their card that takes you to their folder in the github repo for ghostex-extensions". build-catalog.mjs writes `sourceUrl`; the published catalogs built before it get the same address here, so every Community card links its folder as soon as this Ghostex runs. A catalog from another address (GHOSTEX_EXTENSIONS_CATALOG_URL) gets a link only when it says where its source is.
 fn fill_source_urls(catalog: &mut super::ExtensionCatalog, url: &str) {
-    let official = url == DEFAULT_EXTENSIONS_CATALOG_URL || url == PREVIOUS_EXTENSIONS_CATALOG_URL;
+    let official = url == DEFAULT_EXTENSIONS_CATALOG_URL
+        || url == V2_EXTENSIONS_CATALOG_URL
+        || url == PREVIOUS_EXTENSIONS_CATALOG_URL;
     for entry in &mut catalog.extensions {
         entry.source_url = entry
             .source_url
@@ -51,9 +59,15 @@ pub(crate) fn catalog_url() -> String {
 pub(crate) fn fetch_catalog(extensions_dir: &Path) -> ExtensionResult<ExtensionCatalogSnapshot> {
     let mut url = catalog_url();
     let mut fetched = fetch_remote_catalog(&url);
-    if fetched.is_err() && url == DEFAULT_EXTENSIONS_CATALOG_URL {
-        url = PREVIOUS_EXTENSIONS_CATALOG_URL.to_string();
-        fetched = fetch_remote_catalog(&url);
+    // The official address falls back catalog by catalog, newest first, until one can be read.
+    if url == DEFAULT_EXTENSIONS_CATALOG_URL {
+        for older in [V2_EXTENSIONS_CATALOG_URL, PREVIOUS_EXTENSIONS_CATALOG_URL] {
+            if fetched.is_ok() {
+                break;
+            }
+            url = older.to_string();
+            fetched = fetch_remote_catalog(&url);
+        }
     }
     match fetched {
         Ok(mut catalog) => {
@@ -160,7 +174,7 @@ fn fetch_remote_catalog(url: &str) -> ExtensionResult<ExtensionCatalog> {
 }
 
 /// CDXC:Extensions 2026-11-14 WHY:
-/// The catalog used to be read in one piece, so one entry this build could not read (a newer `kind` such as `sidebar`, a newer permission) made the whole store fail. Entries are now read one by one and an unreadable one is left out; an entry this build can read is still checked as strictly as before. gxservers up to 11.7 still read the catalog in one piece, so a `kind: "sidebar"` entry must not reach the catalog they fetch until those are gone (Ghostex-extensions `tooling/build-catalog.mjs`).
+/// The catalog used to be read in one piece, so one entry this build could not read (a newer `kind` such as `sidebar`, a newer permission) made the whole store fail. Entries are now read one by one and an unreadable one is left out, and (2026-11-19) so is one that reads but fails `validate`; the other checks (sha256, store metadata, duplicate ids) still fail the catalog. gxservers up to 11.7 still read the catalog in one piece, so a `kind: "sidebar"` entry must not reach the catalog they fetch until those are gone (Ghostex-extensions `tooling/build-catalog.mjs`).
 fn parse_catalog(bytes: &[u8]) -> ExtensionResult<ExtensionCatalog> {
     #[derive(serde::Deserialize)]
     #[serde(rename_all = "camelCase")]
@@ -187,9 +201,13 @@ fn parse_catalog(bytes: &[u8]) -> ExtensionResult<ExtensionCatalog> {
             .filter_map(|entry| serde_json::from_value(entry).ok())
             .collect(),
     };
+    // An entry that reads but fails `validate` (a manifest shape a newer catalog uses) is left out
+    // like one that does not read, so it never fails the whole catalog.
+    catalog
+        .extensions
+        .retain(|entry| entry.manifest.validate(None, None).is_ok());
     let mut ids = std::collections::BTreeSet::new();
     for entry in &catalog.extensions {
-        entry.manifest.validate(None, None)?;
         if !ids.insert(entry.manifest.name.as_str()) {
             return Err(ExtensionError::bad_request(format!(
                 "Extension catalog contains duplicate id {:?}.",
@@ -242,4 +260,50 @@ fn write_catalog_cache(extensions_dir: &Path, catalog: &ExtensionCatalog) -> Ext
         )));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_catalog;
+    use serde_json::json;
+
+    fn entry(manifest: serde_json::Value) -> serde_json::Value {
+        let mut entry = manifest;
+        entry.as_object_mut().unwrap().extend(
+            json!({
+                "zip": "x.zip",
+                "sha256": "0".repeat(64),
+                "readme": "# x",
+                "changelog": "# x",
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+        entry
+    }
+
+    /// One entry that fails `validate` is left out; the catalog and its other entries stay.
+    #[test]
+    fn an_entry_that_fails_validate_is_left_out() {
+        let good = json!({
+            "name": "good", "title": "Good", "description": "Good.", "version": "1.0.0",
+            "author": "A", "icon": "icon.svg", "categories": ["Productivity"],
+            "kind": "sidebar", "sidebar": { "mode": { "title": "Good" } },
+        });
+        let bad = json!({
+            "name": "bad", "title": "Bad", "description": "Bad.", "version": "1.0.0",
+            "author": "A", "icon": "icon.svg", "categories": ["Productivity"],
+            "kind": "sidebar",
+        });
+        let bytes = serde_json::to_vec(&json!({
+            "schemaVersion": 1,
+            "publishedAt": "2026-11-19T00:00:00Z",
+            "extensions": [entry(good), entry(bad)],
+        }))
+        .unwrap();
+        let catalog = parse_catalog(&bytes).unwrap();
+        let names: Vec<_> = catalog.extensions.iter().map(|e| e.manifest.name.as_str()).collect();
+        assert_eq!(names, ["good"]);
+    }
 }

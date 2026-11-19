@@ -696,7 +696,16 @@ impl ExtensionManifest {
             ));
         }
         // CDXC:Extensions 2026-11-19 DECISION:
-        // User, on the Work items extension's sidebar button (it was Briefs): "remove briefs from the left side sidebar doesn't make sense to have that button/ui there". The extension has nothing else to draw (its Work panel and header button are Ghostex's own), so a sidebar extension may declare neither a sidebar nor a sidePanel: it then draws nothing and only brings what the rest of its manifest asks for (a skill, an agent note).
+        // User, on the Work items extension's sidebar button (it was Briefs): "remove briefs from the left side sidebar doesn't make sense to have that button/ui there". The extension has nothing else to draw (its Work panel and header button are Ghostex's own), so a sidebar extension may declare neither a sidebar nor a sidePanel, as long as it brings a skill or an agentNote: it then draws nothing and only brings those. A manifest with none of the four is still refused. Gxservers before this one refuse such a manifest, so an extension that draws nothing is published only in catalog-v3.json (catalog.rs).
+        if !sidebar_shows
+            && self.side_panel.is_none()
+            && self.skill.is_none()
+            && self.agent_note.is_none()
+        {
+            return Err(ExtensionError::bad_request(
+                "A sidebar extension needs sidebar (a mode or sections), sidePanel, a skill or an agentNote.",
+            ));
+        }
         if let Some(sidebar) = &self.sidebar {
             if let Some(mode) = &sidebar.mode {
                 if mode.title.trim().is_empty() {
@@ -1047,10 +1056,22 @@ mod sidebar_shape_tests {
     }
 
     /// The Work items extension draws nothing in the sidebar (user, 2026-11-19: no Briefs
-    /// button), so a sidebar extension with neither a sidebar nor a sidePanel is valid.
+    /// button), so a sidebar extension with neither a sidebar nor a sidePanel is valid while it
+    /// brings a skill or an agentNote.
     #[test]
-    fn a_sidebar_extension_may_draw_nothing() {
-        manifest(json!({})).validate(None, None).unwrap();
+    fn a_sidebar_extension_may_draw_nothing_when_it_brings_a_skill_or_a_note() {
+        manifest(json!({ "skill": { "name": "work-items", "path": "skill" } }))
+            .validate(None, None)
+            .unwrap();
+        manifest(json!({ "permissions": ["agents.note"], "agentNote": "Keep work items." }))
+            .validate(None, None)
+            .unwrap();
+    }
+
+    #[test]
+    fn a_sidebar_extension_with_nothing_at_all_is_refused() {
+        let error = manifest(json!({})).validate(None, None).unwrap_err();
+        assert!(error.to_string().contains("a skill or an agentNote"));
     }
 
     #[test]

@@ -440,6 +440,16 @@ impl InstalledExtension {
         self.manifest()["kind"].as_str() == Some("sidebar")
     }
 
+    /// The sidebar extension draws something in the sidebar (a mode or sections).
+    pub(crate) fn declares_sidebar(&self) -> bool {
+        self.declares_sidebar_mode() || self.declares_sidebar_sections()
+    }
+
+    /// The sidebar extension draws a side panel view.
+    pub(crate) fn declares_side_panel(&self) -> bool {
+        self.manifest()["sidePanel"].is_object()
+    }
+
     /// The sidebar extension has its own sidebar mode.
     pub(crate) fn declares_sidebar_mode(&self) -> bool {
         self.manifest()["sidebar"]["mode"].is_object()

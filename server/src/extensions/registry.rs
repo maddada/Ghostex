@@ -553,7 +553,15 @@ impl ExtensionRegistry {
             if id == "storybook" {
                 continue;
             }
-            let manifest = read_manifest(&entry.path(), Some(&id))?;
+            // CDXC:Extensions 2026-11-19 WHY:
+            // An installed manifest this gxserver cannot read or validate (a newer extension's shape after going back to an older Ghostex, a damaged file) is left out of the listing, not allowed to fail it: one such extension must not hide every other, nor stop the sidebar panels.
+            let manifest = match read_manifest(&entry.path(), Some(&id)) {
+                Ok(manifest) => manifest,
+                Err(error) => {
+                    eprintln!("Skipping installed extension {id}: {error}");
+                    continue;
+                }
+            };
             // A payload never installed through Ghostex lists as off: it can't start or be
             // served (see `start`), only uninstalled.
             let state = store
