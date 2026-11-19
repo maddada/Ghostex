@@ -386,24 +386,52 @@ pub(super) async fn route_chat_http(
                     request_id.clone(),
                     &body_json,
                     move |_, endpoint_path, request_id, body| async move {
-                        handle_session_chat_queue_http(
+                        // The user's own prompt is recorded when the queue takes it, never for a
+                        // replay (sender_mark.rs `note_accepted_user_send`): the scheduler may
+                        // deliver it at once, and its quotes check the record.
+                        let noted = crate::session_chat_send::sender_mark::note_accepted_user_send(
+                            &queue_state.paths,
+                            &body,
+                        );
+                        let response = handle_session_chat_queue_http(
                             &queue_state,
                             endpoint_path,
                             request_id,
                             &body,
                         )
-                        .await
+                        .await;
+                        if !response.response.status().is_success() {
+                            crate::session_chat_send::sender_mark::withdraw_user_send(
+                                &queue_state.paths,
+                                noted,
+                            );
+                        }
+                        response
                     },
                 )
                 .await
             } else {
-                handle_session_chat_queue_http(
+                // An edit of a queued prompt records its new text the same way; only that route
+                // was through `prepare`, which alone sets the mark.
+                let noted = (endpoint.path == "/api/updateSessionChatQueuedPrompt")
+                    .then(|| {
+                        crate::session_chat_send::sender_mark::note_accepted_user_send(
+                            &state.paths,
+                            &body_json,
+                        )
+                    })
+                    .flatten();
+                let response = handle_session_chat_queue_http(
                     &state,
                     endpoint.path,
                     request_id.clone(),
                     &body_json,
                 )
-                .await
+                .await;
+                if !response.response.status().is_success() {
+                    crate::session_chat_send::sender_mark::withdraw_user_send(&state.paths, noted);
+                }
+                response
             };
             crate::session_chat_send_diagnostics::record_response(
                 &state,
