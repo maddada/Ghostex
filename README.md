@@ -31,7 +31,7 @@
 
 **Pick a design and send your choices.**
 
-![Design options with feedback controls](media/readme/gx-hero-10.webp)
+<img width="2048" height="1291" alt="2026-11-19_CleanShot_08-08-12" src="https://github.com/user-attachments/assets/0b481abd-87a8-4575-bff8-1605b570c089" />
 
 **A full editor, with annotations.**
 
@@ -232,11 +232,11 @@ Pair the phone app with Ghostex on your computer using Easy Connect, or use your
 
 ## More screenshots:
 
+![Design options with feedback controls](media/readme/gx-hero-10.webp)
+
 <img width="3456" height="2158" alt="image" src="https://github.com/user-attachments/assets/947b0bc2-c058-4f31-8aaa-0c60c59f5941" />
 
 <img width="3456" height="2079" alt="2026-11-19_Ghostex_08-01-09@2x" src="https://github.com/user-attachments/assets/5881a55a-5906-411b-ac43-84c82373984d" />
-
-<img width="2048" height="1291" alt="2026-11-19_CleanShot_08-08-12" src="https://github.com/user-attachments/assets/0b481abd-87a8-4575-bff8-1605b570c089" />
 
 <img width="3456" height="2077" alt="2026-11-19_Ghostex_08-01-50@2x" src="https://github.com/user-attachments/assets/e307d1b2-807d-4ee0-a124-94d8ff175b70" />
 
