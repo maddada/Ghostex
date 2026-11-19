@@ -168,6 +168,12 @@ pub fn append(log: GpuiSupportLog, event: &str, details: serde_json::Value) {
     append_unconditionally(log, event, details);
 }
 
+/// Whether a routine event for `scenario_id` would be written now ([`append_for_scenario`]'s
+/// gate), for a caller that should not even gather what it would write otherwise.
+pub fn scenario_writes(scenario_id: &str) -> bool {
+    debug_ui_controls_enabled() && scenario_id_enabled(scenario_id)
+}
+
 /// Appends a routine event whose scenario is selected by its caller. Missing,
 /// disabled, or expired scenarios never write; important diagnostics remain
 /// unconditional.
