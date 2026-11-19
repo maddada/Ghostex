@@ -1108,7 +1108,13 @@ impl NativeChatView {
                 div()
                     .text_size(px(CHIP_SIZE * s))
                     .text_color(p.card_muted)
-                    .child(count.to_string()),
+                    // No number for a group holding only opened pages (gx-chat-core
+                    // `coordinator_board`: shown, counted 0).
+                    .child(if count == 0 {
+                        String::new()
+                    } else {
+                        count.to_string()
+                    }),
             )
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.toggle_board_column(&toggle, cx);
@@ -1233,12 +1239,12 @@ impl NativeChatView {
                             .text_color(icon_color),
                     )
                     .child(div().text_color(p.foreground).child(text(group, "title")))
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_color(p.card_muted)
-                            .child(group["count"].as_u64().unwrap_or(0).to_string()),
-                    )
+                    .child(div().flex_1().text_color(p.card_muted).child(
+                        match group["count"].as_u64().unwrap_or(0) {
+                            0 => String::new(),
+                            count => count.to_string(),
+                        },
+                    ))
                     .child(
                         svg()
                             .path("titlebar/chevron-left.svg")
@@ -3075,7 +3081,11 @@ impl NativeChatView {
                             .text_color(icon_color),
                     )
                     .child(div().text_color(p.foreground).child(text(group, "title")))
-                    .child(div().text_color(p.card_muted).child(count.to_string()))
+                    .child(div().text_color(p.card_muted).child(if count == 0 {
+                        String::new()
+                    } else {
+                        count.to_string()
+                    }))
                     .on_click(cx.listener(move |this, _, _, cx| this.invoke(toggle.clone(), cx))),
             );
             let mut cards = div()

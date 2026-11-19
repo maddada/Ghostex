@@ -461,6 +461,12 @@ pub(crate) fn set_removed(
         later.retain(|known| known != id);
         write_later(state, &db, project_id, session_id, &later)?;
     }
+    // A removed page is no longer opened either (`set_opened`).
+    let mut opened = read_opened_page_ids(&db, project_id, session_id);
+    if opened.iter().any(|known| known.eq_ignore_ascii_case(id)) {
+        opened.retain(|known| !known.eq_ignore_ascii_case(id));
+        write_id_list(state, &db, project_id, session_id, OPENED_KEY, &opened)?;
+    }
     write_id_list(state, &db, project_id, session_id, REMOVED_KEY, &removed)?;
     refresh(state, project_id, session_id, None);
     Ok(())
@@ -1344,7 +1350,20 @@ pub(crate) fn refresh(
     // kept until its end whatever this reading says (`leave_out_later`).
     let (open, newly) = leave_out_removed(open, newly, &removed_ids(&session));
     // An opened page that waits only to be seen is still listed by every client, but not counted.
-    let (open, newly) = leave_out_removed(open, newly, &opened_ids(&session));
+    // One whose page no longer waits (answered, its own Mark as seen, withdrawn) is forgotten.
+    let opened = opened_ids(&session);
+    let still_opened = opened_still_open(&opened, &open);
+    if !is_thread && still_opened.len() != opened.len() {
+        let _ = write_id_list(
+            state,
+            &db,
+            project_id,
+            session_id,
+            OPENED_KEY,
+            &still_opened,
+        );
+    }
+    let (open, newly) = leave_out_removed(open, newly, &opened);
     let later = later_ids(&session);
     let snoozed = snoozes_running(session.pointer(&format!("/runtimeSettings/{LATER_UNTIL_KEY}")));
     let (open, newly, still) = leave_out_later(open, newly, &later, &snoozed);
@@ -1384,6 +1403,15 @@ fn leave_out_removed(
         open.into_iter().filter(kept).collect(),
         newly.into_iter().filter(kept).collect(),
     )
+}
+
+/// The opened pages whose page still waits (`refresh` forgets the others).
+fn opened_still_open(opened: &[String], open: &[OpenAsker]) -> Vec<String> {
+    opened
+        .iter()
+        .filter(|id| open.iter().any(|asker| asker.id.eq_ignore_ascii_case(id)))
+        .cloned()
+        .collect()
 }
 
 /// The ids whose snooze has not ended yet, from a `LATER_UNTIL_KEY` object.
@@ -1744,6 +1772,12 @@ mod tests {
             leave_out_removed(open, vec![asker("p1", 1)], &opened_ids(&session));
         assert_eq!(counted.iter().map(OpenAsker::count).sum::<usize>(), 2);
         assert!(notify.is_empty());
+        // Answered or withdrawn, it is forgotten.
+        let opened = vec!["p1".to_string(), "gone".to_string()];
+        assert_eq!(
+            opened_still_open(&opened, &[asker("p1", 1)]),
+            vec!["p1".to_string()]
+        );
     }
 
     #[test]

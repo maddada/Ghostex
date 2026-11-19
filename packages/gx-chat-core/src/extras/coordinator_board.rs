@@ -1164,7 +1164,9 @@ pub fn coordinator_board_with(
         // User: "lets not show the empty statuses in the list (to make it less crowded and not have
         // bunch of Blocked 0 Moving 0 etc." A group with nothing in it is left out of every view and
         // comes back when something lands in it.
-        if total == 0 {
+        // A Needs you group holding only opened pages counts none of them but still shows its
+        // cards (`questions::later::seen_on_open`); its header then has no number.
+        if total == 0 && rows.is_empty() {
             continue;
         }
         let not_shown = total.saturating_sub(rows.len());
@@ -1264,7 +1266,7 @@ pub fn coordinator_board_with(
     let empty = out
         .iter()
         .filter(|group| !matches!(group.id.as_str(), "ideas" | "removed"))
-        .all(|group| group.count == 0);
+        .all(|group| group.count == 0 && group.column_rows.is_empty());
     Some(CoordinatorBoard {
         topic: if work_mode {
             crate::extras::work_source::topic(state)
