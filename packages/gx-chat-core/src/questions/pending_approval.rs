@@ -1,7 +1,7 @@
 //! An approval the user answered, from the click until its prompt leaves the agent's screen.
 //!
 //! CDXC:SessionChat 2026-11-08 DECISION:
-//! User: "even in the worker thread had to click on yes 3 times and each time the approval appeared again, let's please make it show a spinner and dim the approval card when i responded already until it finishes". An approval card (a permission prompt read off the screen, a folder-trust question, a hook's Allow / Deny card) no longer hides the moment its answer goes out (the 2026-09-16 and 2026-10-06 rules in actions.rs still hold for every other card). It stays where it was, dimmed, its buttons held, with a spinner and "Sending…" (`approvalPending`), while the answer travels and while the agent's screen still shows the prompt; once the prompt is gone it becomes one line saying "Approved" or "Denied" (drawn like the "Approved from <coordinator>" line, `relayedAnswerLines`). A refused answer brings the card back with its reason, as before. A different prompt ends both. The cause of the card coming back was gxserver reading Claude Code's countdown as part of the prompt (CDXC:SessionChat 2026-11-08 in server/src/session_chat_claude_permission.rs); this keeps an answered card from ever reading as a fresh one meanwhile.
+//! User: "even in the worker thread had to click on yes 3 times and each time the approval appeared again, let's please make it show a spinner and dim the approval card when i responded already until it finishes". An approval card (a permission prompt read off the screen, a folder-trust question, a hook's Allow / Deny card) no longer hides the moment its answer goes out (the 2026-09-16 and 2026-10-06 rules in actions.rs still hold for every other card). It stays where it was, dimmed, its buttons held, with a spinner and "Sending…" (`approvalPending`), while the answer travels and while the agent's screen still shows the prompt; once the prompt is gone it becomes one line saying "Approved" or "Denied" (since 2026-11-20 a settled dock row that leaves after about 3 seconds, CDXC:SessionChat 2026-11-20 in extras/dock_approvals.rs). A refused answer brings the card back with its reason, as before. A different prompt ends both. The cause of the card coming back was gxserver reading Claude Code's countdown as part of the prompt (CDXC:SessionChat 2026-11-08 in server/src/session_chat_claude_permission.rs); this keeps an answered card from ever reading as a fresh one meanwhile.
 //! SEE-ALSO: packages/gx-chat-core/src/extras/relayed_approvals.rs (a coordinator's relayed cards: `busy` while the answer is in flight, then the answered-here line), apps/desktop/src/app/native_chat/notice.rs and approval.rs (the dimmed card).
 
 use serde_json::{json, Value};
@@ -30,6 +30,8 @@ pub struct PendingApproval {
     pub applied: bool,
     /// The prompt left before gxserver's reply, and the line already says what was picked.
     pub settled: bool,
+    /// The command it answered, one line, for the settled row (`extras::dock_approvals`).
+    pub command: String,
 }
 
 /// Whether a picked label refuses.
@@ -43,9 +45,11 @@ fn denies(label: &str) -> bool {
 pub fn begin(state: &ChatState, kind: &str, answer: &Value) -> Option<PendingApproval> {
     let notice = TerminalNotice::parse(state.session.terminal_notice.as_ref());
     let notice_key = notice_dismiss_key(notice.as_ref());
-    let approval_notice = notice
-        .as_ref()
-        .is_some_and(|notice| crate::questions::notice_tone::notice_tone(notice) == "approval");
+    // A Codex approval dialog is one too (`extras::dock_approvals::approval_kind`).
+    let approval_notice = notice.as_ref().is_some_and(|notice| {
+        crate::questions::notice_tone::notice_tone(notice) == "approval"
+            || crate::extras::dock_approvals::approval_kind(notice).is_some()
+    });
     let row_label = |notice: &TerminalNotice| {
         let index = answer.get("choiceIndex").and_then(Value::as_i64)?;
         notice
@@ -78,6 +82,7 @@ pub fn begin(state: &ChatState, kind: &str, answer: &Value) -> Option<PendingApp
         _ => return None,
     };
     Some(PendingApproval {
+        command: crate::extras::dock_approvals::open_command(state),
         denied: denies(&label),
         card,
         label,
@@ -157,6 +162,10 @@ pub fn sync(state: &mut ChatState) {
     // still on its way (a refusal then takes it back, `answered`).
     if pending.applied {
         state.questions.pending_approval = None;
+        // Its row already settled while gxserver's reply was on its way, and may have left.
+        if pending.settled {
+            return;
+        }
     } else if pending.settled {
         return;
     } else if let Some(pending) = state.questions.pending_approval.as_mut() {
@@ -166,6 +175,7 @@ pub fn sync(state: &mut ChatState) {
         "text": if pending.denied { "Denied" } else { "Approved" },
         "detail": format!("Picked \"{}\"", pending.label),
         "tone": if pending.denied { "bad" } else { "good" },
+        "command": pending.command,
         "at": "",
     }));
 }

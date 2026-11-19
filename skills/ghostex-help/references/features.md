@@ -1382,9 +1382,9 @@ where they are while you open, change and close views.
   on the wrong model. Hover the session to read why, then pick a model again in
   the chat's model menu (the same one, or another); once it applies, the dot
   clears and the waiting messages are sent. Once Ghostex has stopped retrying the change,
-  the session's chat also shows a card above the chat box with how many messages wait
-  and which change failed. Open Details for the agent's diagnostic, including the
-  model and thinking level you picked; Pick model opens the model menu.
+  the session's chat also shows a row in the list above the chat box with how many
+  messages wait; click it for which change failed and the agent's diagnostic,
+  including the model and thinking level you picked. Pick model opens the model menu.
 - A red dot on a working session can also mean it is not moving: it has shown
   no new output (no new chat row and no change on its screen) for 8 minutes, so
   it may be stuck on a hung command. Hovering it says "Not moving", Ghostex adds
@@ -1748,6 +1748,14 @@ image paste and Ctrl+G rich prompt editor, a prompt queue that sends when the
 agent stops, transcript with thinking, tool, and edit cards, subagent
 transcripts, question and approval cards, rewind, and a note per session (with
 the Session notes extension on).
+**Approvals above the chat box**: when the agent asks for permission (a Claude
+Code or Codex permission prompt, a folder-trust question, a hook's Allow / Deny),
+it shows as a row in the list above the chat box with its command and short
+answers such as Yes, Always and No; hover one to read its full words, or click
+the row for the whole command. The keyboard answers as before. Once you answer,
+the row says Approved (or Denied) and the command for a few seconds, then
+leaves; the list above the chat box is the only bar there, with the agent's
+status on its top line.
 **Quote or reply to part of the chat**: select any text in the chat (a reply,
 your own message, tool output or code) and a small bar of buttons shows by
 where you let go: Copy, Add to Chat (puts the text in the chat box as a quote)
@@ -4193,7 +4201,8 @@ version of the Projects features in Cursor and Claude Code.
   to see what it changes: Always allow on a Connectors card allows that tool
   in the thread's workspace (Settings > Connectors). Your click answers the
   thread's real card with exactly that choice, and the thread's chat shows
-  "Approved from <coordinator>" (or "Denied from …") with the time. The
+  "Approved from <coordinator>" (or "Denied from …") in the list above its chat
+  box for a few seconds. The
   coordinator itself never answers these cards: only your click does. After an
   answer the card folds to one line that says how it ended: answered here,
   answered in the thread (when you answered it there instead), expired (a
@@ -6045,15 +6054,15 @@ agents, a connection from either side is enough.
   commands and its tunnel over that signed-in connection and never tries a
   login of its own. After the connection closes, sign in in a terminal again;
   the machine says "No SSH connection to <user>@<host> is open" until you do.
-  A chat whose computer is off or asleep says so in a card above the chat box,
-  for example "Windows PC is offline · last seen 2h ago", with Retry; its
+  A chat whose computer is off or asleep says so in a row of the list above the
+  chat box, for example "Windows PC is offline · last seen 2h ago", with Retry; its
   sessions' computer badge in the sidebar turns red. A message you send then
   waits on this computer and goes out by itself when that computer is back,
   even if Ghostex was closed in between; it shows "Will send when Windows PC is
   back" with Cancel, which puts it back in the chat box. After a day it comes
   back to the chat box with a note. On the phone the message waits on another
   of your computers that is connected to the one that is off. If a message gets
-  no answer for 10 seconds, Ghostex checks the computer at once and the card
+  no answer for 10 seconds, Ghostex checks the computer at once and the row
   says it "isn't answering · checking…".
   To update Ghostex on a remote machine without going to its screen, look at
   its tile in Settings > Remote or its tab in the sidebar: a connected machine

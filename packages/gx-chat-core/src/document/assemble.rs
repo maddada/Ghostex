@@ -73,6 +73,8 @@ pub fn assemble_with(
     document.work_ask_tags = ghostex_gx_protocol::Tri::Value(work_ask_tags(state, cache));
     composer::document(state, context, &mut document);
     menus::document_with(state, context, &mut document, &mut cache.model_menu);
+    // The offline computer and the held messages are dock rows, once both are known.
+    crate::extras::dock_stack::add(state, &mut document);
     let board =
         crate::extras::coordinator_board::project_kept(state, context, &mut cache.board, &turns);
     extras::document_with_board(state, context, &mut document, board);

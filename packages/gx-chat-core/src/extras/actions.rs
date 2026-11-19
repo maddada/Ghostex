@@ -191,6 +191,7 @@ pub fn handle_with_ids(
                 .into_iter()
                 .flatten()
                 .map(|row| row["key"].as_str().unwrap_or_default().to_string())
+                .chain(crate::extras::dock_stack::keys(state, context))
                 .collect();
             state.extras.panels.work_dock_hidden = Some(keys);
             state.core.request_publish();

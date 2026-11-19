@@ -462,18 +462,11 @@ impl NativeChatView {
         } else {
             self.render_working_card(p, cx)
         };
-        // The session's computer is offline: its card tops the stack, above the working card
-        // (computer_card.rs).
-        let computer_card = if maximized {
-            None
-        } else {
-            self.render_computer_card(p, cx)
-        };
-        let card_above_box = working_card.is_some() || computer_card.is_some();
+        // The session's computer being offline is a row of the dock (gx-chat-core
+        // extras/dock_stack.rs), the one bar above the box.
+        let card_above_box = working_card.is_some();
         // The last transcript row's own gap is the space above the card (working_card.rs).
-        footer = footer
-            .when(card_above_box, |this| this.pt_0())
-            .children(computer_card);
+        footer = footer.when(card_above_box, |this| this.pt_0());
         // The working card joins the stack under the dock (below), so it can sit between the dock
         // and the box.
         let mut working_card = working_card;
@@ -515,7 +508,12 @@ impl NativeChatView {
                     .into_any_element(),
             );
         }
-        if let Some(notice) = self.render_notice(p, window, cx) {
+        // An approval waiting on the agent is a row of the dock instead (gx-chat-core
+        // extras/dock_approvals.rs); its card stays out of the stack.
+        let approval_in_dock = text(&self.snapshot, "approvalInDock");
+        if approval_in_dock != "notice"
+            && let Some(notice) = self.render_notice(p, window, cx)
+        {
             waiting.push(notice.into_any_element());
         }
         if let Some(requests) = self.render_secret_requests(p, window, cx) {
@@ -524,19 +522,16 @@ impl NativeChatView {
         if let Some(collab) = self.render_collab(p, cx) {
             waiting.push(collab);
         }
-        if let Some(line) = self.render_relayed_answer_lines(p) {
-            waiting.push(line);
-        }
         if let Some(card) = self.render_unrecorded_api_error(p, cx) {
             waiting.push(card.into_any_element());
-        }
-        if let Some(card) = self.render_model_hold_card(p, cx) {
-            waiting.push(card);
         }
         if let Some(questions) = self.render_async_questions(p, window, cx) {
             waiting.push(questions.into_any_element());
         }
-        if let Some(prompt) = self.render_prompt(p, window, cx) {
+        if let Some(prompt) = (approval_in_dock != "prompt")
+            .then(|| self.render_prompt(p, window, cx))
+            .flatten()
+        {
             if self.snapshot["prompt"]["kind"] == "question" {
                 // The question replaces the box and the dock, so the status keeps its own bar.
                 let working_card = match working_card {

@@ -333,9 +333,11 @@ pub struct Document {
     /// array, empty when none: drawn under each thread's report, in the Approvals pill's menu and
     /// on the board's Needs you row. Family f.
     pub relayed_approvals: Tri<Value>,
-    /// A thread's "Approved from <coordinator>" lines (`extras::relayed_approvals::audit_lines`),
-    /// an array, empty when none. Family f.
-    pub relayed_answer_lines: Tri<Value>,
+    /// Which card the approval the agent waits on would be, `"notice"` or `"prompt"`, while it
+    /// is drawn as a row of `workDock` instead, so the renderers leave that card out; `null`
+    /// otherwise (`extras::dock_approvals`). Family f.
+    #[serde(default)]
+    pub approval_in_dock: Value,
     /// A coordinator's work item cards (`extras::work_cards::project`), an array, empty when none:
     /// drawn under the reply each sits under (`anchorId`), the item's newest card in full and its
     /// earlier ones folded to one line. Family f.

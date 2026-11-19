@@ -17,6 +17,8 @@ pub mod coordinator_board;
 pub mod coordinator_intro;
 pub mod coordinator_quality;
 pub mod coordinator_threads;
+pub mod dock_approvals;
+pub mod dock_stack;
 pub mod document;
 pub mod minimap;
 pub mod minimap_rail;

@@ -133,16 +133,9 @@ pub fn document_with_board(
     into.side_chats_panel = Tri::Value(side_chats_panel);
     into.secret_requests = Tri::Value(secret_requests::project(state));
     into.collab = Tri::Value(crate::extras::collab::project(state));
-    // An approval answered in this chat leaves its "Approved" / "Denied" line after the
-    // coordinator's (questions/pending_approval.rs), so the newest answer is the one drawn.
-    let mut answer_lines = relayed_approvals::audit_lines(state);
-    if let (Some(lines), Some(settled)) = (
-        answer_lines.as_array_mut(),
-        state.questions.settled_approval.as_ref(),
-    ) {
-        lines.push(settled.clone());
-    }
-    into.relayed_answer_lines = Tri::Value(answer_lines);
+    // The approval waiting on the agent is a dock row, so its card steps aside; answered ones
+    // settle in the dock too (`dock_approvals`).
+    into.approval_in_dock = crate::extras::dock_approvals::in_dock(state);
     into.side_chat_of = Tri::Value(side_chats::bar(
         state.session.side_chat_of.as_ref(),
         &state.identity.project_id,

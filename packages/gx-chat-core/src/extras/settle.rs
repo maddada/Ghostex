@@ -276,6 +276,7 @@ fn settle_with_ids(
     search::settle(&mut state.extras.search, &items);
     effects.extend(search::advance_seek(state, context));
     settle_activity_clock(state, context);
+    crate::extras::dock_approvals::settle(state, context);
     arm_timers(state, context);
     effects
 }

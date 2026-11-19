@@ -1,1 +1,0 @@
-../../../../desktop/src/app/native_chat/model_hold_card.rs

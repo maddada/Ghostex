@@ -28,6 +28,10 @@ pub struct RelayedApprovalsState {
     pub sent: BTreeMap<String, String>,
     /// The last refusal of each card, by key.
     pub errors: BTreeMap<String, String>,
+    /// A thread's chat: the newest "Approved from <coordinator>" answer seen, by its time and
+    /// words, and until when its settled dock row shows (`extras::dock_approvals`).
+    pub line_key: Option<String>,
+    pub line_until: Option<f64>,
 }
 
 /// The line under every open card.
@@ -42,11 +46,11 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
 
 /// One button of a relayed card: what it says, how it looks, its tooltip, and the answer it sends
 /// (the thread's own).
-struct Choice {
-    label: String,
+pub(crate) struct Choice {
+    pub(crate) label: String,
     tone: &'static str,
     tooltip: String,
-    answer: Value,
+    pub(crate) answer: Value,
 }
 
 fn tone_of(label: &str, first: bool) -> &'static str {
@@ -76,7 +80,7 @@ fn scope_tooltip(kind: &str, label: &str) -> String {
 }
 
 /// The card's buttons, in the thread card's order.
-fn choices(card: &Value) -> Vec<Choice> {
+pub(crate) fn choices(card: &Value) -> Vec<Choice> {
     let kind = text(card, "kind");
     let prompt = InteractivePrompt::parse(card.get("prompt"));
     let notice = TerminalNotice::parse(card.get("notice"));
@@ -186,7 +190,7 @@ fn choices(card: &Value) -> Vec<Choice> {
 }
 
 /// What the card shows above its buttons: `(header, title, source, code, code label, reason)`.
-fn body(card: &Value) -> (String, String, String, String, String, Value) {
+pub(crate) fn body(card: &Value) -> (String, String, String, String, String, Value) {
     let kind = text(card, "kind");
     let prompt = InteractivePrompt::parse(card.get("prompt"));
     let raw_notice = card.get("notice").cloned().unwrap_or(Value::Null);

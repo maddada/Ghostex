@@ -79,8 +79,11 @@ pub struct QuestionsState {
     /// The approval answer on its way, which keeps its card drawn dimmed until the prompt is gone
     /// (`crate::questions::pending_approval`).
     pub pending_approval: Option<crate::questions::pending_approval::PendingApproval>,
-    /// The "Approved" / "Denied" line an answered approval left, until the next prompt.
+    /// The "Approved" / "Denied" row an answered approval left in the dock, until
+    /// `settled_until` (`extras::dock_approvals`).
     pub settled_approval: Option<serde_json::Value>,
+    /// When the settled row leaves, stamped the first time the dock saw it.
+    pub settled_until: Option<f64>,
     /// Whether the notice card is on screen, kept true by [`crate::questions::sync`] after every
     /// event.
     ///
