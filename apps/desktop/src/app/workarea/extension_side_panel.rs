@@ -87,7 +87,9 @@ impl GhostexGpuiApp {
             .min_w_0()
             .min_h_0()
             .overflow_y_scroll()
-            .bg(titlebar_background())
+            // CDXC:Theming 2026-11-20: clear under glass so the column's own tint shows instead of
+            // an opaque chrome slab.
+            .bg(glass_clear(titlebar_background()))
             .text_color(appearance.foreground)
             .text_size(px(
                 crate::app::native_sidebar::appearance::SIDEBAR_TEXT_SIZE * appearance.scale,

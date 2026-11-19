@@ -334,7 +334,9 @@ fn render_browser_device_frame(
         .items_center()
         .px(px(16.0))
         .pb(px(16.0))
-        .bg(chrome_color(0x161616, 0xe5e5e5))
+        // CDXC:Theming 2026-11-20: under glass the frame around the device is an ink wash, not a
+        // #161616 slab.
+        .bg(glass_card(chrome_color(0x161616, 0xe5e5e5).into(), 2.0))
         .child(
             div()
                 .flex_shrink_0()

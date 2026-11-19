@@ -227,18 +227,44 @@ pub(crate) fn workspace_drop_split_feedback_color() -> Hsla {
     rgb(0x58b7ff).opacity(0.18).into()
 }
 
+/// CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): the drop label pill floats over the pane
+/// it is dropped on, so under glass it is the work area's colour lifted (`glass_lifted_surface`),
+/// keeping the accent hairline (`workspace_drop_feedback_border_color`). In light mode it is a pale
+/// accent-tinted surface with dark navy text instead of a navy slab. Dark, glass off, unchanged.
 pub(crate) fn workspace_drop_feedback_label_color(zone: WorkspaceDropZone) -> Hsla {
-    match zone {
+    if chrome_uses_light_appearance() {
+        return glass_lifted_surface(rgb(0xeef6ff).opacity(0.96).into());
+    }
+    glass_lifted_surface(match zone {
         WorkspaceDropZone::Center => rgb(0x122235).opacity(0.96).into(),
         WorkspaceDropZone::Left
         | WorkspaceDropZone::Right
         | WorkspaceDropZone::Top
         | WorkspaceDropZone::Bottom => rgb(0x0c2948).opacity(0.96).into(),
-    }
+    })
 }
 
 pub(crate) fn workspace_drop_feedback_text_color() -> Hsla {
-    rgb(0xe7f3ff).into()
+    // CDXC:Theming 2026-11-20: dark text on the light-mode pill.
+    chrome_color(0xe7f3ff, 0x0c2948).into()
+}
+
+/// CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): the refused-drop pill in the middle of a
+/// pane is lifted under glass, and a white pill with dark text in light mode. Dark, glass off,
+/// keeps #1d1d1d.
+pub(crate) fn workspace_drop_refusal_pill_color() -> Hsla {
+    if chrome_uses_light_appearance() {
+        return glass_lifted_surface(rgb(0xffffff).opacity(0.96).into());
+    }
+    glass_lifted_surface(rgb(0x1d1d1d).opacity(0.94).into())
+}
+
+pub(crate) fn workspace_drop_refusal_pill_border_color() -> Hsla {
+    chrome_ink().opacity(0.14).into()
+}
+
+pub(crate) fn workspace_drop_refusal_pill_text_color() -> Hsla {
+    chrome_color(0xe5e5e5, 0x262626).into()
 }
 
 /// CDXC:Theming 2026-09-28 DECISION:
@@ -262,16 +288,29 @@ pub(crate) fn terminal_search_count_label(search: &GpuiTerminalSearchState) -> S
     }
 }
 
+/// CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): the Cmd+F find bar floats over terminal
+/// and page text, so under glass its row is the work area's colour lifted, its field and buttons
+/// take the ink wash and its divider the faint glass line. Glass off, unchanged.
 pub(crate) fn terminal_search_bar_row_color() -> Hsla {
-    chrome_color(0x000000, 0xffffff).into()
+    glass_lifted_surface(chrome_color(0x000000, 0xffffff).into())
 }
 
 pub(crate) fn terminal_search_bar_divider_color() -> Hsla {
-    rgb(0x202020).into()
+    glass_divider(rgb(0x202020).into())
+}
+
+/// The find bar's field and buttons under glass (CDXC:Theming 2026-11-20): an ink wash times
+/// `strength` on the lifted row, `fallback` glass off.
+fn terminal_search_bar_wash(fallback: Hsla, strength: f32) -> Hsla {
+    if window_glass_active() {
+        glass_wash(chrome_uses_light_appearance(), strength)
+    } else {
+        fallback
+    }
 }
 
 pub(crate) fn terminal_search_bar_background_color() -> Hsla {
-    chrome_color(0x000000, 0xffffff).into()
+    terminal_search_bar_wash(chrome_color(0x000000, 0xffffff).into(), 1.0)
 }
 
 pub(crate) fn terminal_search_bar_border_color() -> Hsla {
@@ -291,11 +330,11 @@ pub(crate) fn terminal_search_bar_button_color() -> Hsla {
 }
 
 pub(crate) fn terminal_search_bar_button_background_color() -> Hsla {
-    chrome_color(0x000000, 0xffffff).into()
+    terminal_search_bar_wash(chrome_color(0x000000, 0xffffff).into(), 1.0)
 }
 
 pub(crate) fn terminal_search_bar_button_hover_color() -> Hsla {
-    chrome_color(0x343434, 0xe5e5e5).into()
+    terminal_search_bar_wash(chrome_color(0x343434, 0xe5e5e5).into(), 2.5)
 }
 
 /// CDXC:Theming 2026-09-13 DECISION:
@@ -814,8 +853,14 @@ pub(crate) fn command_terminal_placeholder_color() -> Hsla {
     glass_clear(workspace_terminal_placeholder_color())
 }
 
+/// CDXC:Theming 2026-11-20 (helpers/chrome_palette.rs): the delayed-send countdown badge floats
+/// over a command terminal's text, so under glass it is the work area's colour lifted, and in
+/// light mode a white badge (with the darker amber text below). Dark, glass off, unchanged.
 pub(crate) fn command_pane_delayed_send_badge_background_color() -> Hsla {
-    rgb(0x0d0d0d).opacity(0.78).into()
+    if chrome_uses_light_appearance() {
+        return glass_lifted_surface(rgb(0xffffff).opacity(0.92).into());
+    }
+    glass_lifted_surface(rgb(0x0d0d0d).opacity(0.78).into())
 }
 
 pub(crate) fn command_pane_delayed_send_badge_border_color() -> Hsla {
@@ -823,7 +868,8 @@ pub(crate) fn command_pane_delayed_send_badge_border_color() -> Hsla {
 }
 
 pub(crate) fn command_pane_delayed_send_badge_text_color() -> Hsla {
-    rgb(0xf6c945).into()
+    // CDXC:Theming 2026-11-20: the yellow countdown is a dark amber on the light-mode badge.
+    chrome_color(0xf6c945, 0x8a5a00).into()
 }
 
 pub(crate) fn gpui_combined_presentation_session_id(project_id: &str, session_id: &str) -> String {

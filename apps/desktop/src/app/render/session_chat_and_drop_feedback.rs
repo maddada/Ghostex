@@ -379,7 +379,8 @@ impl GhostexGpuiApp {
             .flex()
             .items_center()
             .justify_center()
-            .bg(gpui::black().opacity(0.45))
+            // CDXC:Theming 2026-11-20: under glass the scrim is a veil of the work area's colour.
+            .bg(glass_veil(gpui::black().opacity(0.45)))
             .child(
                 div()
                     .flex()
@@ -387,12 +388,14 @@ impl GhostexGpuiApp {
                     .items_center()
                     .rounded(px(5.0))
                     .border_1()
-                    .border_color(gpui::white().opacity(0.14))
-                    .bg(gpui::rgb(0x1d1d1d).opacity(0.94))
+                    // CDXC:Theming 2026-11-20: lifted under glass, light in light mode
+                    // (helpers/project/colors.rs).
+                    .border_color(workspace_drop_refusal_pill_border_color())
+                    .bg(workspace_drop_refusal_pill_color())
                     .px(px(12.0))
                     .text_size(px(12.0))
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(gpui::rgb(0xe5e5e5))
+                    .text_color(workspace_drop_refusal_pill_text_color())
                     .child(reason),
             )
             .into_any_element()
