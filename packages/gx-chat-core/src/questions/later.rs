@@ -26,6 +26,9 @@ pub struct LaterState {
     /// The stars set or taken off here that the wire has not confirmed yet, by page id: whether it
     /// is starred, and the call that set it (`star`).
     pub starring: BTreeMap<String, (bool, u64)>,
+    /// The pages opened here that the wire has not confirmed yet, by page id, and the call that
+    /// set them (`seen_on_open`).
+    pub opening: BTreeMap<String, u64>,
 }
 
 /// The forms and pages put off For later: gxserver's list with this client's changes on top.
@@ -385,8 +388,8 @@ pub fn mark_answered(state: &mut ChatState, id: &str) -> Vec<Effect> {
 /// them already read): the dock gets Mark all seen, on the desktop and the phone. A page cleared
 /// this way reads Seen on its card, as one marked seen on the page does.
 ///
-/// Only a page still waiting to be seen is cleared, so a client may send any page it opens
-/// ([`seen_on_open`]): one that asks questions keeps waiting for its answers.
+/// Only a page still waiting to be seen is cleared: one that asks questions keeps waiting for its
+/// answers.
 pub fn mark_seen(state: &mut ChatState, ids: &[&str]) -> Vec<Effect> {
     let unseen: Vec<String> = crate::questions::open_questions::waiting(state)
         .into_iter()
@@ -400,30 +403,70 @@ pub fn mark_seen(state: &mut ChatState, ids: &[&str]) -> Vec<Effect> {
     unseen.iter().flat_map(|id| remove(state, id)).collect()
 }
 
-/// Opening a page that waits only to be looked at marks it seen, as the dock's Mark all seen does
-/// (silently, on every client): the dock, the Work panel, a Q-tag link, a chat link to it or its
-/// card, on the desktop or the phone. `target` is the page's id or any address that names it.
+/// The pages that wait only to be looked at which the reader opened: gxserver's list with this
+/// client's opens on top. Their dock rows and Work panel cards stay, but they no longer count as
+/// unseen (the Work badge, the dock's header, gxserver's count behind the bell and the sidebar).
+pub fn opened_page_ids(state: &ChatState) -> BTreeSet<String> {
+    state
+        .session
+        .opened_page_ids
+        .iter()
+        .chain(state.questions.later.opening.keys())
+        .map(|id| id.to_ascii_lowercase())
+        .collect()
+}
+
+/// Whether a page that waits only to be looked at was opened ([`opened_page_ids`]).
+pub fn page_opened(state: &ChatState, id: &str) -> bool {
+    opened_page_ids(state).contains(&id.to_ascii_lowercase())
+}
+
+/// Opening a page that waits only to be looked at marks it opened (`pageOpened`, kept by gxserver
+/// for every client): the dock, the Work panel, a Q-tag link, a chat link to it or its card, on the
+/// desktop or the phone. It keeps its dock row and card until the reader dismisses it or marks it
+/// seen (the page's own Mark as seen, the dock's Mark all seen), but leaves every unseen count.
+/// Nothing reaches the agent, and a call that fails is dropped without a word: the reader only
+/// opened a page. `target` is the page's id or any address that names it.
 ///
 /// CDXC:Coordinators 2026-11-19 DECISION:
 /// User, of a dock row "ClickHouse demo notes: what we record and ask (not seen yet)": "i see
 /// "(not seen)" here but i actually opened and went thro this, just want to keep it here. we
 /// shouldn't show "(not seen)" like this". Only the page's own Mark as seen (at its very end)
 /// counted, so a page read but not pressed at its end kept counting as not seen on the bell and
-/// badges. Opening it now counts; the row reads no "(not seen yet)" any more.
+/// badges. Opening it now counts as seen for the counts, and the row stays where he kept it.
 pub fn seen_on_open(state: &mut ChatState, target: &str) -> Vec<Effect> {
     let target = target.trim();
     if target.is_empty() {
         return Vec::new();
     }
     let lower = target.to_ascii_lowercase();
+    let opened = opened_page_ids(state);
     let ids: Vec<String> = crate::questions::open_questions::waiting(state)
         .into_iter()
         .filter(|asker| asker.seen_only && !asker.id.is_empty())
         .filter(|asker| lower.contains(&asker.id.to_ascii_lowercase()))
+        .filter(|asker| !opened.contains(&asker.id.to_ascii_lowercase()))
         .map(|asker| asker.id.clone())
         .collect();
-    let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
-    mark_seen(state, &ids)
+    let mut effects = Vec::new();
+    for id in ids {
+        let request_id = state.core.allocate_request_id();
+        state.questions.later.opening.insert(id.clone(), request_id);
+        effects.push(Effect::SendRpc {
+            request_id,
+            method: ChatRpcMethod::AnswerSessionChatPrompt,
+            params: Box::new(json!({
+                "kind": "pageOpened",
+                "questionId": id,
+                "projectId": state.identity.project_id,
+                "sessionId": state.identity.session_id,
+            })),
+        });
+    }
+    if !effects.is_empty() {
+        state.core.request_publish();
+    }
+    effects
 }
 
 /// `questionsReply {id, text}`: the reader's own words on a whole form or page, from its dock
@@ -483,6 +526,25 @@ pub fn rpc_settled(
         .iter()
         .find(|(_, (_, request))| *request == request_id)
         .map(|(id, _)| id.clone());
+    // A page's open is silent either way (`seen_on_open`): a refusal only drops it, so the page
+    // counts as unseen again.
+    let opened = state
+        .questions
+        .later
+        .opening
+        .iter()
+        .find(|(_, request)| **request == request_id)
+        .map(|(id, _)| id.clone());
+    if let Some(id) = opened {
+        if matches!(outcome, RpcOutcome::Err { .. }) {
+            state.questions.later.opening.remove(&id);
+            // Claimed, so the chat box shows no error card for it either (an older gxserver
+            // refuses the kind).
+            state.core.refusal_claimed = true;
+            state.core.request_publish();
+        }
+        return Some(Vec::new());
+    }
     if marked.is_none() && removed.is_none() && star.is_none() {
         return None;
     }
@@ -551,6 +613,27 @@ fn settle_stars(state: &mut ChatState) {
 pub fn settle(state: &mut ChatState) {
     if !state.questions.later.starring.is_empty() {
         settle_stars(state);
+    }
+    if !state.questions.later.opening.is_empty() {
+        let wire: BTreeSet<String> = state
+            .session
+            .opened_page_ids
+            .iter()
+            .map(|id| id.to_ascii_lowercase())
+            .collect();
+        if state
+            .questions
+            .later
+            .opening
+            .keys()
+            .any(|id| wire.contains(&id.to_ascii_lowercase()))
+        {
+            state
+                .questions
+                .later
+                .opening
+                .retain(|id, _| !wire.contains(&id.to_ascii_lowercase()));
+        }
     }
     let wire = &state.session.later_question_ids;
     let removed = &state.session.removed_question_ids;
@@ -650,10 +733,11 @@ mod tests {
         assert!(!removed_ids(&state).contains("form-a"));
     }
 
-    /// Opening a page that waits only to be looked at marks it seen, by its id or any address
-    /// naming it; a page that asks questions, or one already seen, is left alone.
+    /// Opening a page that waits only to be looked at marks it opened, by its id or any address
+    /// naming it, and keeps it listed; a page that asks questions, or one already opened, is left
+    /// alone.
     #[test]
-    fn opening_a_page_that_waits_to_be_seen_marks_it_seen() {
+    fn opening_a_page_that_waits_to_be_seen_keeps_it_listed_but_counts_it_seen() {
         use crate::transcript::open_questions::{Asker, AskerKind};
         let page = |id: &str, seen_only: bool, tags: Vec<String>| Asker {
             id: id.to_string(),
@@ -688,8 +772,7 @@ mod tests {
             seen_on_open(&mut state, &format!("http://127.0.0.1:1/visual/{asks}")).is_empty(),
             "a page that asks questions keeps waiting for its answers"
         );
-        assert!(mark_seen(&mut state, &[asks]).is_empty());
-        assert!(!removed_ids(&state).contains(asks));
+        assert!(!page_opened(&state, asks));
 
         let effects = seen_on_open(
             &mut state,
@@ -698,8 +781,48 @@ mod tests {
                 unseen.to_uppercase()
             ),
         );
-        assert_eq!(effects.len(), 1, "one call to gxserver");
-        assert!(removed_ids(&state).contains(unseen));
-        assert!(seen_on_open(&mut state, unseen).is_empty(), "already seen");
+        let [Effect::SendRpc {
+            request_id, params, ..
+        }] = effects.as_slice()
+        else {
+            panic!("one call to gxserver: {effects:?}");
+        };
+        assert_eq!(params["kind"], "pageOpened");
+        assert!(page_opened(&state, unseen));
+        assert!(
+            !removed_ids(&state).contains(unseen),
+            "it keeps its dock row: opened is not removed"
+        );
+        assert!(
+            crate::questions::open_questions::waiting(&state)
+                .iter()
+                .any(|asker| asker.id == unseen),
+            "still listed until dismissed or marked seen"
+        );
+        assert!(
+            seen_on_open(&mut state, unseen).is_empty(),
+            "already opened"
+        );
+
+        // A refusal is dropped without a toast: the reader only opened a page.
+        let effects = rpc_settled(
+            &mut state,
+            *request_id,
+            &RpcOutcome::Err {
+                code: None,
+                message: "no".to_string(),
+                endpoint: None,
+            },
+        );
+        assert_eq!(effects, Some(Vec::new()));
+        assert!(state.core.refusal_claimed, "no error card in the chat box");
+        assert!(!page_opened(&state, unseen));
+
+        // Once the wire carries it, the local mark is settled into gxserver's list.
+        seen_on_open(&mut state, unseen);
+        state.session.opened_page_ids = vec![unseen.to_string()];
+        settle(&mut state);
+        assert!(state.questions.later.opening.is_empty());
+        assert!(page_opened(&state, unseen));
     }
 }

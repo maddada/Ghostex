@@ -1204,6 +1204,11 @@ fn question_rows_of(
                     row["count"] = json!(page_count(state, &asker));
                     // The dock's Mark all seen clears these (`dock_with`).
                     row["seenOnly"] = json!(asker.seen_only);
+                    // Opened, it keeps its row but no longer counts as unseen: the dock's header
+                    // and the Work panel leave it out of Needs you (`questions::later::seen_on_open`).
+                    if asker.seen_only && crate::questions::later::page_opened(state, &asker.id) {
+                        row["opened"] = json!(true);
+                    }
                 }
                 row["buttons"] = json!([]);
                 // A page that asks nothing waits to be marked seen (`Asker::seen_only`), unlabelled.

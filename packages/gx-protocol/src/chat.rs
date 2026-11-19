@@ -451,6 +451,11 @@ pub struct ChatSideState {
     /// star on their cards. Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub starred_page_ids: Option<Vec<String>>,
+    /// The pages that wait only to be looked at which the reader opened (page ids,
+    /// server/src/session_chat_open_questions.rs `set_opened`): they keep their dock row but no
+    /// longer count as unseen. Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opened_page_ids: Option<Vec<String>>,
     /// When each snoozed form or page comes back (epoch ms, by id; one put off For later with no
     /// end is not in it), server/src/session_chat_open_questions.rs `LATER_UNTIL_KEY`: the dock's
     /// Snoozed row. Absent means unchanged.

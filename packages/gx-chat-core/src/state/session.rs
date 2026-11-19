@@ -48,6 +48,10 @@ pub struct SessionState {
     /// (`questions::later::starred_page_ids` adds this client's changes and follows each star to
     /// the newest version of its file).
     pub starred_page_ids: Vec<String>,
+    /// The pages that wait only to be looked at which the reader opened, as gxserver keeps them
+    /// (`questions::later::opened_page_ids` adds this client's opens): they keep their dock row
+    /// but leave the unseen counts.
+    pub opened_page_ids: Vec<String>,
     /// When each snoozed form or page comes back (epoch ms, by id), as gxserver keeps it: the
     /// dock's Snoozed row (`extras::work_cards::dock`).
     pub later_question_until: std::collections::BTreeMap<String, i64>,
@@ -201,6 +205,7 @@ impl Default for SessionState {
             removed_question_ids: Default::default(),
             retired_page_ids: Vec::new(),
             starred_page_ids: Vec::new(),
+            opened_page_ids: Vec::new(),
             later_question_until: Default::default(),
             resource_index: Default::default(),
             async_questions_since: None,

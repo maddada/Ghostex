@@ -204,6 +204,14 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 field("text"),
             ));
         }
+        // A page the desktop floated itself (page_card.rs): the core never saw it open.
+        ActionKind::PageOpened => {
+            let id = action
+                .param("pageId")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            effects.extend(crate::questions::later::seen_on_open(state, id));
+        }
         ActionKind::MarkPagesSeen => {
             let ids: Vec<&str> = action
                 .param("ids")

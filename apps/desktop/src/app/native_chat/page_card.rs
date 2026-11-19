@@ -207,7 +207,7 @@ impl NativeChatView {
             // waits only to be looked at counts as seen (gx-chat-core `questions/later.rs`
             // `seen_on_open`; the core leaves any other page alone).
             if let Some(page_id) = page_id.as_deref().filter(|id| !id.is_empty()) {
-                self.invoke(json!({"type": "markPagesSeen", "ids": [page_id]}), cx);
+                self.invoke(json!({"type": "pageOpened", "pageId": page_id}), cx);
             }
             cx.emit(super::state::NativeChatEvent::Host(json!({
                 "type": "open",

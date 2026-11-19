@@ -335,6 +335,7 @@ pub(crate) mod tests {
             removed_question_ids: Some(vec![format!("removed {tag}")]),
             retired_page_ids: Some(vec![format!("retired page {tag}")]),
             starred_page_ids: Some(vec![format!("starred page {tag}")]),
+            opened_page_ids: Some(vec![format!("opened page {tag}")]),
             later_question_until: Some([(format!("snoozed {tag}"), 1)].into_iter().collect()),
             resource_index: Some(vec![json!(tag)].into()),
         };

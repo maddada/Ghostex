@@ -1138,7 +1138,17 @@ pub fn coordinator_board_with(
                 }
             }
             asked = questions.len();
-            total += questions.len();
+            // A page that waits only to be looked at and was opened keeps its card but leaves the
+            // count (`questions::later::seen_on_open`).
+            total += questions
+                .iter()
+                .filter(|question| {
+                    !question
+                        .key
+                        .strip_prefix("question:")
+                        .is_some_and(|id| crate::questions::later::page_opened(state, id))
+                })
+                .count();
             rows.splice(0..0, questions);
         }
         for row in &mut rows {
@@ -1310,6 +1320,8 @@ pub struct BoardInputs {
     resource_index: Stamped<crate::questions::resource_index::ResourceIndex>,
     later_question_ids: Stamped<Vec<String>>,
     removed_question_ids: Stamped<Vec<String>>,
+    /// The opened pages that wait only to be seen: they leave the Needs you count.
+    opened_page_ids: Vec<String>,
     /// Where the rows' Show in chat point (`work_cards::turns_mark`).
     turns: (usize, String, String, Option<String>),
 }
@@ -1326,6 +1338,7 @@ impl BoardInputs {
             resource_index: state.session.resource_index.clone(),
             later_question_ids: state.session.later_question_ids.clone(),
             removed_question_ids: state.session.removed_question_ids.clone(),
+            opened_page_ids: state.session.opened_page_ids.clone(),
         }
     }
 
@@ -1343,6 +1356,7 @@ impl BoardInputs {
             resource_index,
             later_question_ids,
             removed_question_ids,
+            opened_page_ids,
             turns: mark,
         } = self;
         *mark == crate::extras::work_cards::turns_mark(turns)
@@ -1354,6 +1368,7 @@ impl BoardInputs {
             && resource_index.same_as(&state.session.resource_index)
             && later_question_ids.same_as(&state.session.later_question_ids)
             && removed_question_ids.same_as(&state.session.removed_question_ids)
+            && *opened_page_ids == state.session.opened_page_ids
     }
 }
 

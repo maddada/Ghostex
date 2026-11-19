@@ -87,6 +87,9 @@ pub fn apply_state_frame(
     if let Some(ids) = frame.state.starred_page_ids.clone() {
         state.session.starred_page_ids = ids;
     }
+    if let Some(ids) = frame.state.opened_page_ids.clone() {
+        state.session.opened_page_ids = ids;
+    }
     if let Some(until) = frame.state.later_question_until.clone() {
         state.session.later_question_until = until;
     }
@@ -208,6 +211,7 @@ pub fn apply_agent_identity(state: &mut ChatState, patch: &AgentIdentity) {
         *session.removed_question_ids = Vec::new();
         session.retired_page_ids = Vec::new();
         session.starred_page_ids = Vec::new();
+        session.opened_page_ids = Vec::new();
         session.later_question_until = Default::default();
         *session.resource_index = Default::default();
     }
@@ -659,6 +663,9 @@ pub fn apply_authoritative(
     }
     if let Some(ids) = result.state.starred_page_ids.clone() {
         state.session.starred_page_ids = ids;
+    }
+    if let Some(ids) = result.state.opened_page_ids.clone() {
+        state.session.opened_page_ids = ids;
     }
     if let Some(until) = result.state.later_question_until.clone() {
         state.session.later_question_until = until;

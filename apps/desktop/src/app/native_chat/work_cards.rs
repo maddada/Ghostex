@@ -869,7 +869,12 @@ impl NativeChatView {
                 .map(|id| (id, count_of(id)))
                 .collect()
         } else {
-            let needs = rows.iter().filter(|row| row["needs"] == true).count() as u64;
+            // An opened page that waits only to be seen keeps its row but not its count
+            // (gx-chat-core `questions/later.rs` `seen_on_open`).
+            let needs = rows
+                .iter()
+                .filter(|row| row["needs"] == true && row["opened"] != true)
+                .count() as u64;
             let blocked = rows.iter().filter(|row| row["kind"] == "blocked").count() as u64;
             vec![("needs", needs), ("blocked", blocked)]
         };

@@ -158,6 +158,8 @@ pub struct SessionChatQueueSnapshot {
     pub retired_page_ids: Vec<String>,
     /// The pages starred in this chat (`session_chat_open_questions::read_starred_page_ids`).
     pub starred_page_ids: Vec<String>,
+    /// The pages opened that wait only to be seen (`session_chat_open_questions::read_opened_page_ids`).
+    pub opened_page_ids: Vec<String>,
     /// The session's resource index (`session_chat_resources::frame_index`), set only where a
     /// frame or read result is built (`with_resource_index`): the list is large and the snapshot
     /// is read in many places that never send it.
@@ -203,6 +205,7 @@ impl SessionChatQueueSnapshot {
         );
         target.insert("retiredPageIds".to_string(), json!(self.retired_page_ids));
         target.insert("starredPageIds".to_string(), json!(self.starred_page_ids));
+        target.insert("openedPageIds".to_string(), json!(self.opened_page_ids));
         if !self.resource_index.is_empty() {
             target.insert("resourceIndex".to_string(), json!(*self.resource_index));
         }
@@ -258,6 +261,7 @@ impl SessionChatQueueSnapshot {
         revision.push_str(&serde_json::to_string(&self.removed_question_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.retired_page_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.starred_page_ids).unwrap_or_default());
+        revision.push_str(&serde_json::to_string(&self.opened_page_ids).unwrap_or_default());
         revision.push_str(&self.resource_epoch.to_string());
         if let Some(queue_version) = self.queue_version {
             revision.push(':');
@@ -1200,6 +1204,9 @@ fn read_snapshot(
                 db, project_id, session_id,
             ),
             starred_page_ids: crate::session_chat_open_questions::read_starred_page_ids(
+                db, project_id, session_id,
+            ),
+            opened_page_ids: crate::session_chat_open_questions::read_opened_page_ids(
                 db, project_id, session_id,
             ),
             resource_index: Default::default(),

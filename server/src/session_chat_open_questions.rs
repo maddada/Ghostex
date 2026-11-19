@@ -91,6 +91,13 @@ const REMOVED_LIMIT: usize = 500;
 const STARRED_KEY: &str = "sessionChatPagesStarred";
 /// How many starred pages a session keeps at most; the oldest stars are dropped first.
 const STARRED_LIMIT: usize = 500;
+/// Where the pages that wait only to be looked at (`awaitsSeen`) which the reader opened are kept
+/// (page ids). They keep their dock row and Work panel card until dismissed or marked seen, but
+/// leave the count, so no pink dot, bell or notification for them (gx-chat-core
+/// questions/later.rs `seen_on_open`, where the decision lives).
+const OPENED_KEY: &str = "sessionChatPagesOpened";
+/// How many opened pages a session keeps at most; the oldest are dropped first.
+const OPENED_LIMIT: usize = 500;
 /// How many For later marks a session keeps at most; answered ones are dropped as they settle.
 const LATER_LIMIT: usize = 500;
 /// The agent's last words reach its transcript a moment after the turn-end hook.
@@ -532,6 +539,52 @@ pub(crate) fn set_starred(
         }
     }
     write_id_list(state, &db, project_id, session_id, STARRED_KEY, &ids)
+}
+
+/// The pages that wait only to be seen which the reader opened (`OPENED_KEY`), for the chat's
+/// frames (`openedPageIds`).
+pub(crate) fn read_opened_page_ids(
+    db: &rusqlite::Connection,
+    project_id: &str,
+    session_id: &str,
+) -> Vec<String> {
+    read_id_list(db, project_id, session_id, OPENED_KEY)
+}
+
+/// The opened pages as last recorded on the session.
+fn opened_ids(session: &Value) -> Vec<String> {
+    session
+        .pointer(&format!("/runtimeSettings/{OPENED_KEY}"))
+        .and_then(Value::as_array)
+        .map(|ids| {
+            ids.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// `answerSessionChatPrompt` with `kind: "pageOpened"`: the reader opened a page that waits only
+/// to be looked at. It stays listed but leaves the count. Nothing reaches the agent. Blocking.
+pub(crate) fn set_opened(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    page_id: &str,
+) -> anyhow::Result<()> {
+    let db = open_gxserver_database(&state.paths)?;
+    let mut ids = read_opened_page_ids(&db, project_id, session_id);
+    if ids.iter().any(|known| known.eq_ignore_ascii_case(page_id)) {
+        return Ok(());
+    }
+    ids.push(page_id.to_string());
+    if ids.len() > OPENED_LIMIT {
+        ids.drain(..ids.len() - OPENED_LIMIT);
+    }
+    write_id_list(state, &db, project_id, session_id, OPENED_KEY, &ids)?;
+    refresh(state, project_id, session_id, None);
+    Ok(())
 }
 
 /// When this session was forked from another, in epoch ms: the time Ghostex created it. The chat
@@ -1290,6 +1343,8 @@ pub(crate) fn refresh(
     // question was answered, withdrawn or asked again is forgotten; a snooze still running is
     // kept until its end whatever this reading says (`leave_out_later`).
     let (open, newly) = leave_out_removed(open, newly, &removed_ids(&session));
+    // An opened page that waits only to be seen is still listed by every client, but not counted.
+    let (open, newly) = leave_out_removed(open, newly, &opened_ids(&session));
     let later = later_ids(&session);
     let snoozed = snoozes_running(session.pointer(&format!("/runtimeSettings/{LATER_UNTIL_KEY}")));
     let (open, newly, still) = leave_out_later(open, newly, &later, &snoozed);
@@ -1676,6 +1731,19 @@ mod tests {
             vec!["p1".to_string(), "f2".to_string()]
         );
         assert!(removed_ids(&json!({})).is_empty());
+    }
+
+    /// An opened page that waits only to be seen stays listed by the clients but leaves the count
+    /// (`set_opened`, `refresh`).
+    #[test]
+    fn an_opened_page_leaves_the_count() {
+        let session = json!({"runtimeSettings": {OPENED_KEY: ["p1", 3]}});
+        assert_eq!(opened_ids(&session), vec!["p1".to_string()]);
+        let open = vec![asker("p1", 1), asker("f2", 2)];
+        let (counted, notify) =
+            leave_out_removed(open, vec![asker("p1", 1)], &opened_ids(&session));
+        assert_eq!(counted.iter().map(OpenAsker::count).sum::<usize>(), 2);
+        assert!(notify.is_empty());
     }
 
     #[test]
