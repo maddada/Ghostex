@@ -13,9 +13,11 @@
 //!
 //! CDXC:Projects 2026-11-20 WHY: `pathState` was only read when a project was published, so a
 //! folder renamed or a drive unplugged while gxserver ran stayed "available" until something else
-//! touched the project. The watch reads every listed project's folder every 15 seconds (a stat
-//! each; the diagnosis only for a missing one) and publishes a project only when its state or
-//! cause changed, so a quiet machine sends nothing.
+//! touched the project. The watch reads listed projects' folders every 15 seconds (a stat each;
+//! the diagnosis only for a missing one) and publishes a project only when its state or cause
+//! changed, so a quiet machine sends nothing. Which folders it may read, so that it never wakes a
+//! sleeping disk or hangs on a dead share, is project_folder_mounts.rs; a terminal refused for a
+//! missing folder has its project read at once (`recheck_project_folder`).
 //!
 //! CDXC:Projects 2026-11-20 DECISION: Opening a session of such a project says so in its pane, not
 //! in a pop-up: the pass puts a card on the chat of each of its sessions ("This session's folder is
@@ -29,6 +31,7 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Map, Value};
 
 use crate::domain::{project_path_state, DomainRepository, ProjectPathState};
+use crate::project_folder_mounts::WatchRead;
 use crate::server::AppState;
 use crate::session_chat_notice::{
     SessionChatTerminalNotice, SessionChatTerminalNoticeSeverity, SessionChatTerminalNoticeSource,
@@ -108,6 +111,29 @@ pub(crate) fn published_path_problem(project: &Value) -> Option<Value> {
     }
 }
 
+/// The projects a refused terminal asked the watch to read on its next pass, whatever disk their
+/// folder is on (the user just asked for it, so a read is expected), and the bell that runs that
+/// pass now.
+fn rechecks() -> &'static Mutex<HashSet<String>> {
+    static RECHECKS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    RECHECKS.get_or_init(Default::default)
+}
+
+fn recheck_bell() -> &'static tokio::sync::Notify {
+    static BELL: OnceLock<tokio::sync::Notify> = OnceLock::new();
+    BELL.get_or_init(tokio::sync::Notify::new)
+}
+
+/// A terminal of `project_id` could not start because its folder is gone (`restoreBlocked` in
+/// zmx/endpoint.rs): read the project's folder now, so its header gets the mark even on a disk the
+/// watch otherwise leaves alone.
+pub(crate) fn recheck_project_folder(project_id: &str) {
+    if let Ok(mut asked) = rechecks().lock() {
+        asked.insert(project_id.to_string());
+    }
+    recheck_bell().notify_one();
+}
+
 /// Starts the watch that republishes projects whose folder changed state or cause.
 pub(crate) fn start_project_folder_watch(state: Arc<AppState>) {
     let mut shutdown = state.shutdown_tx.subscribe();
@@ -117,6 +143,7 @@ pub(crate) fn start_project_folder_watch(state: Arc<AppState>) {
             tokio::select! {
                 _ = shutdown.recv() => break,
                 _ = clock.tick() => {}
+                _ = recheck_bell().notified() => {}
             }
             let checking = state.clone();
             let _ = tokio::task::spawn_blocking(move || check(&checking)).await;
@@ -135,6 +162,18 @@ fn check(state: &AppState) {
     };
     let mut seen = HashMap::new();
     let mut missing: HashMap<String, String> = HashMap::new();
+    // What may be read without waking a sleeping disk or hanging on a dead share
+    // (project_folder_mounts.rs), what was published last, and the projects a refused terminal
+    // asked to be read now.
+    let mounts = crate::project_folder_mounts::mounts();
+    let last = published()
+        .lock()
+        .map(|last| last.clone())
+        .unwrap_or_default();
+    let asked: HashSet<String> = rechecks()
+        .lock()
+        .map(|mut asked| std::mem::take(&mut *asked))
+        .unwrap_or_default();
     for project in &projects {
         if !crate::presentation::should_include_presentation_project(project) {
             continue;
@@ -142,6 +181,34 @@ fn check(state: &AppState) {
         let Some(project_id) = project.get("projectId").and_then(Value::as_str) else {
             continue;
         };
+        let title = project
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let was = last.get(project_id);
+        let was_missing = was.is_some_and(|was| was["state"] != json!("available"));
+        let read = asked.contains(project_id)
+            || match project_path(project) {
+                None => true,
+                Some(path) => {
+                    match crate::project_folder_mounts::watch_read(path, mounts.as_deref()) {
+                        WatchRead::Read => true,
+                        WatchRead::WhileMissing => was_missing,
+                        WatchRead::Never => false,
+                    }
+                }
+            };
+        if !read {
+            // Left as last published; a client reading the project reads its folder itself.
+            if let Some(was) = was {
+                seen.insert(project_id.to_string(), was.clone());
+                if was_missing {
+                    missing.insert(project_id.to_string(), title);
+                }
+            }
+            continue;
+        }
         let path_state = project_path_state(project);
         let problem = match path_state {
             ProjectPathState::Missing | ProjectPathState::NotDirectory => {
@@ -153,11 +220,6 @@ fn check(state: &AppState) {
             path_state,
             ProjectPathState::Missing | ProjectPathState::NotDirectory
         ) {
-            let title = project
-                .get("name")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string();
             missing.insert(project_id.to_string(), title);
         }
         seen.insert(
@@ -240,10 +302,9 @@ fn mark_sessions(
             let Some(session_id) = session.get("sessionId").and_then(Value::as_str) else {
                 continue;
             };
-            let showing = crate::session_chat_notice::session_chat_watchdog_notice(
-                project_id, session_id,
-            )
-            .is_some_and(|notice| notice.kind == NOTICE_KIND);
+            let showing =
+                crate::session_chat_notice::session_chat_watchdog_notice(project_id, session_id)
+                    .is_some_and(|notice| notice.kind == NOTICE_KIND);
             if !showing {
                 crate::session_chat_notice::set_session_chat_watchdog_notice(
                     project_id,

@@ -87,6 +87,7 @@ pub mod previous_session_restore;
 pub(crate) mod program_status;
 pub mod project_docs;
 pub(crate) mod project_file_search;
+pub(crate) mod project_folder_mounts;
 pub mod project_git_remote;
 pub(crate) mod project_folder_problem;
 pub mod project_git_state;

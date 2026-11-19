@@ -115,13 +115,10 @@ pub fn clear_session_chat_send_verdict(
     let key = session_chat_notice_key(project_id, session_id);
     {
         let notices = watchdog_notices().lock().ok()?;
-        if notices
-            .get(&key)
-            .is_some_and(|stored| {
-                stored.notice.kind == crate::memory_guard::NOTICE_KIND
-                    || stored.notice.kind == crate::project_folder_problem::NOTICE_KIND
-            })
-        {
+        if notices.get(&key).is_some_and(|stored| {
+            stored.notice.kind == crate::memory_guard::NOTICE_KIND
+                || stored.notice.kind == crate::project_folder_problem::NOTICE_KIND
+        }) {
             return None;
         }
     }

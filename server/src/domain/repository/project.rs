@@ -375,20 +375,28 @@ impl<'a> DomainRepository<'a> {
     /// (`restoreBlocked`), so the project looked fixed while each of its terminals still failed.
     /// A session whose folder still exists stays where it is. The `relocatedProjectSession` marker
     /// makes a Codex resume name the new folder (`with_codex_moved_cwd` in agents/resume_plan.rs).
+    ///
+    /// CDXC:Projects 2026-11-20 DECISION: Security review: `/api/relocateProject` is for a project
+    /// whose folder is missing, so an agent, the CLI or another computer can't re-root a healthy
+    /// project at another folder (its sessions would follow). Unless `allow_present_folder` (the
+    /// owner's own app), a project whose folder is still there is refused with `conflict`, inside
+    /// the same transaction as the move, so `ghostex relocate-project` does what its help says.
     pub fn relocate_project_moving_sessions(
         &self,
         params: &Map<String, Value>,
+        allow_present_folder: bool,
     ) -> DomainResult<RelocatedProject> {
         // One transaction for the project and its sessions, so a failure leaves the old folder
         // everywhere and a retry starts from the same state; a caller already inside one owns it.
         if !self.db.is_autocommit() {
-            return self.relocate_project_moving_sessions_in_transaction(params);
+            return self
+                .relocate_project_moving_sessions_in_transaction(params, allow_present_folder);
         }
         let transaction =
             rusqlite::Transaction::new_unchecked(self.db, rusqlite::TransactionBehavior::Immediate)
                 .map_err(sql_error)?;
         let relocated = DomainRepository::new(&transaction, self.server_id.as_str())
-            .relocate_project_moving_sessions_in_transaction(params)?;
+            .relocate_project_moving_sessions_in_transaction(params, allow_present_folder)?;
         transaction.commit().map_err(sql_error)?;
         Ok(relocated)
     }
@@ -396,11 +404,28 @@ impl<'a> DomainRepository<'a> {
     fn relocate_project_moving_sessions_in_transaction(
         &self,
         params: &Map<String, Value>,
+        allow_present_folder: bool,
     ) -> DomainResult<RelocatedProject> {
         let project_id = read_unvalidated_project_lookup_id(params);
-        let old_path = self
-            .get_project_without_session_history(&project_id)?
-            .and_then(|project| read_optional_text(project.get("path")));
+        let old_project = self.get_project_without_session_history(&project_id)?;
+        if !allow_present_folder {
+            if let Some(project) = old_project.as_ref() {
+                if crate::domain::project_path_state(project)
+                    == crate::domain::ProjectPathState::Available
+                {
+                    let name =
+                        read_optional_text(project.get("name")).unwrap_or(project_id.clone());
+                    let path = read_optional_text(project.get("path")).unwrap_or_default();
+                    return Err(DomainStateError {
+                        code: "conflict",
+                        message: format!(
+                            "{name}'s folder is still there ({path}), so Ghostex leaves the project where it is. Relocating is only for a project whose folder is missing."
+                        ),
+                    });
+                }
+            }
+        }
+        let old_path = old_project.and_then(|project| read_optional_text(project.get("path")));
         let project = self.relocate_project(params)?;
         let mut relocated = RelocatedProject {
             project,

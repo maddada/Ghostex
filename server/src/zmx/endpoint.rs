@@ -373,6 +373,14 @@ pub fn dispatch_zmx_lifecycle_endpoint(
             let mut attach =
                 create_attach_session_metadata(repository, params, context, agent_settings)?;
             let restore_blocked = attach.get("restoreBlocked").is_some();
+            // Its folder is gone: the folder watch reads the project now, so its header gets the
+            // missing folder's mark even on a disk it otherwise leaves alone
+            // (project_folder_problem.rs).
+            if restore_blocked {
+                if let Some(project_id) = params.get("projectId").and_then(Value::as_str) {
+                    crate::project_folder_problem::recheck_project_folder(project_id);
+                }
+            }
             if endpoint_path == "/api/wakeSession"
                 && !restore_blocked
                 && wake_requires_session_provider_start(&attach)
