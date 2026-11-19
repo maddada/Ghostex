@@ -84,6 +84,23 @@ impl SessionChatReadResolution {
     }
 }
 
+/// The session's transcript as the chat reads it (its family and its file), for readers outside
+/// this route: `ghostex message show` and the numbering of older messages
+/// (chat_message_numbers.rs). Blocking.
+pub(crate) fn session_transcript(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> Option<(
+    crate::session_chat::SessionChatTranscriptAgent,
+    std::path::PathBuf,
+)> {
+    let resolution = resolve_session_chat_read_state(state, project_id, session_id, None).ok()?;
+    let agent =
+        crate::session_chat::resolve_session_chat_transcript_agent(resolution.agent.as_deref())?;
+    Some((agent, resolution.transcript_path?))
+}
+
 pub(crate) fn resolve_session_chat_read_state(
     state: &AppState,
     project_id: &str,

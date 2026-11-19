@@ -30,6 +30,7 @@ pub(crate) fn remove_session_row(
         .security
         .revoke_session_token(&project_id, &session_id);
     crate::session_chat_queue::forget_session_chat_queue(db, &project_id, Some(&session_id))?;
+    crate::chat_message_numbers::forget(db, &project_id, Some(&session_id));
     // CDXC:Collab 2026-11-08 DECISION: User (#495): "A share ends when its chat is deleted."
     crate::collab_shim::chat_deleted(&project_id, &session_id);
     crate::session_chat_queue_attachments::sweep(&state.paths, db);

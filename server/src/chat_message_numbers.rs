@@ -30,8 +30,8 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
 use ghostex_gx_chat_core::transcript::message_numbers::{
-    is_own_prompt, message_ref, parse_message_ref, preview, referenced_messages, shown_text,
-    with_quotes, QuotedMessage,
+    is_own_prompt, message_ref, parse_message_ref, preview, quote_prefix, quote_totals,
+    referenced_messages, shown_text, with_quotes, QuotedMessage,
 };
 use ghostex_gx_protocol::ChatMessage;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -42,8 +42,10 @@ use crate::storage::open_gxserver_database;
 
 /// The `metadata` key holding when this gxserver started numbering messages (epoch ms).
 const SINCE_KEY: &str = "chatMessageNumbersSince";
-/// The most of a message's words kept for `ghostex message show`.
-const STORED_TEXT_MAX_BYTES: usize = 64 * 1024;
+/// How many pages of a transcript `ghostex message show` reads back to find a message, at
+/// [`SHOW_PAGE_ROWS`] rows each.
+const SHOW_PAGES: usize = 400;
+const SHOW_PAGE_ROWS: usize = 200;
 /// `/api/chatMessages`: `ghostex message show` and `list`.
 pub(crate) const CHAT_MESSAGES_ENDPOINT: &str = "/api/chatMessages";
 
@@ -125,6 +127,46 @@ fn since_ms(db: &Connection) -> i64 {
 fn text_hash(text: &str) -> String {
     use sha2::{Digest, Sha256};
     hex::encode(&Sha256::digest(text.as_bytes())[..16])
+}
+
+/// Forgets every number of a removed session (`session_id`) or of every session of a removed
+/// project (`None`): the words kept for quotes go with their chat. Called beside
+/// `forget_session_chat_queue` wherever sessions are deleted.
+///
+/// CDXC:SessionChat 2026-11-20 WHY:
+/// The review of the first build found the kept words outlived deleted sessions and their
+/// transcripts. Only the start of each message is kept now (gx-chat-core `quote_prefix`), and it
+/// goes when the session does.
+pub(crate) fn forget(db: &Connection, project_id: &str, session_id: Option<&str>) {
+    let _ = match session_id {
+        Some(session_id) => db.execute(
+            "DELETE FROM chat_message_numbers WHERE projectId = ?1 AND sessionId = ?2",
+            params![project_id, session_id],
+        ),
+        None => db.execute(
+            "DELETE FROM chat_message_numbers WHERE projectId = ?1",
+            params![project_id],
+        ),
+    };
+    if let Ok(mut all) = known().lock() {
+        all.retain(|key, _| {
+            key.0 != project_id || session_id.is_some_and(|session| key.1 != session)
+        });
+    }
+}
+
+/// The number this chat already gave the message sent at `sent_at` with these words: a resumed
+/// conversation that copied it under a new id is the same message.
+fn number_in_chat(db: &Connection, key: &ChatKey, sent_at: i64, hash: &str) -> Option<u32> {
+    db.query_row(
+        "SELECT number FROM chat_message_numbers \
+         WHERE projectId = ?1 AND sessionId = ?2 AND sentAt = ?3 AND textHash = ?4",
+        params![key.0, key.1, sent_at, hash],
+        |row| row.get(0),
+    )
+    .optional()
+    .ok()
+    .flatten()
 }
 
 fn load_known(db: &Connection, key: &ChatKey) -> Known {
@@ -260,22 +302,22 @@ fn annotate_with(db: &Connection, messages: &mut [Value], project_id: &str, sess
     candidates.sort_by_key(|candidate| candidate.order);
     for candidate in candidates {
         let hash = text_hash(&candidate.text);
+        // The same message again under another id (a resumed conversation's copy).
+        if let Some(number) = number_in_chat(db, &key, candidate.sent_at, &hash) {
+            known.by_id.insert(candidate.id, number);
+            stamped.push((candidate.index, number));
+            continue;
+        }
         let taken = |number: u32| known.by_id.values().any(|given| *given == number);
         let number = copied_number(db, &key, candidate.sent_at, &hash)
             .filter(|number| !taken(*number))
             .unwrap_or(known.highest + 1);
-        let mut text = candidate.text;
-        if text.len() > STORED_TEXT_MAX_BYTES {
-            let mut cut = STORED_TEXT_MAX_BYTES;
-            while !text.is_char_boundary(cut) {
-                cut -= 1;
-            }
-            text.truncate(cut);
-        }
+        let (lines, chars) = quote_totals(&candidate.text);
         let written = db.execute(
             "INSERT INTO chat_message_numbers \
-             (projectId, sessionId, number, messageId, sentAt, textHash, text, createdAt) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             (projectId, sessionId, number, messageId, sentAt, textHash, quote, lineCount, \
+              charCount, createdAt) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 key.0,
                 key.1,
@@ -283,15 +325,18 @@ fn annotate_with(db: &Connection, messages: &mut [Value], project_id: &str, sess
                 candidate.id,
                 candidate.sent_at,
                 hash,
-                text,
+                quote_prefix(&candidate.text),
+                lines,
+                chars,
                 chrono::Utc::now().to_rfc3339()
             ],
         );
         if written.is_err() {
             // Another gxserver process, or a row this run's cache missed: read what is stored.
             *known = load_known(db, &key);
-            if let Some(number) = known.by_id.get(&candidate.id) {
-                stamped.push((candidate.index, *number));
+            if let Some(number) = number_in_chat(db, &key, candidate.sent_at, &hash) {
+                known.by_id.insert(candidate.id, number);
+                stamped.push((candidate.index, number));
             }
             continue;
         }
@@ -311,18 +356,23 @@ fn annotate_with(db: &Connection, messages: &mut [Value], project_id: &str, sess
     }
 }
 
-/// One stored message.
+/// One stored message: its number, where it is in the transcript, and the start of its words.
 struct Stored {
     project_id: String,
     session_id: String,
     number: u32,
-    sent_at: Option<i64>,
-    text: String,
+    message_id: String,
+    sent_at: i64,
+    text_hash: String,
+    /// The start of its words (gx-chat-core `quote_prefix`).
+    quote: String,
+    /// The whole message's lines and characters (`quote_totals`).
+    totals: (usize, usize),
 }
 
 impl Stored {
     fn sent_label(&self) -> Option<String> {
-        let at = chrono::DateTime::from_timestamp_millis(self.sent_at?)?;
+        let at = chrono::DateTime::from_timestamp_millis(self.sent_at)?;
         Some(
             at.with_timezone(&chrono::Local)
                 .format("%Y-%m-%d %H:%M")
@@ -330,7 +380,7 @@ impl Stored {
         )
     }
 
-    fn json(&self, full: bool) -> Value {
+    fn json(&self, text: Value) -> Value {
         json!({
             "ref": message_ref(&self.session_id, self.number),
             "id": format!("M{}", self.number),
@@ -339,18 +389,24 @@ impl Stored {
             "sessionId": self.session_id,
             "sentAt": self.sent_at,
             "sent": self.sent_label(),
-            "text": if full { self.text.clone() } else { preview(&self.text, 120) },
+            "text": text,
         })
     }
 }
+
+const STORED_COLUMNS: &str =
+    "projectId, sessionId, number, messageId, sentAt, textHash, quote, lineCount, charCount";
 
 fn read_stored(row: &rusqlite::Row<'_>) -> rusqlite::Result<Stored> {
     Ok(Stored {
         project_id: row.get(0)?,
         session_id: row.get(1)?,
         number: row.get(2)?,
-        sent_at: row.get(3)?,
-        text: row.get(4)?,
+        message_id: row.get(3)?,
+        sent_at: row.get(4)?,
+        text_hash: row.get(5)?,
+        quote: row.get(6)?,
+        totals: (row.get(7)?, row.get(8)?),
     })
 }
 
@@ -363,8 +419,10 @@ fn find(
     number: u32,
 ) -> Option<Stored> {
     db.query_row(
-        "SELECT projectId, sessionId, number, sentAt, text FROM chat_message_numbers \
-         WHERE sessionId = ?1 AND number = ?2 AND (?3 IS NULL OR projectId = ?3) LIMIT 1",
+        &format!(
+            "SELECT {STORED_COLUMNS} FROM chat_message_numbers \
+             WHERE sessionId = ?1 AND number = ?2 AND (?3 IS NULL OR projectId = ?3) LIMIT 1"
+        ),
         params![session_id, number, project_id],
         read_stored,
     )
@@ -412,16 +470,122 @@ fn quote_with(
             QuotedMessage {
                 reference: reference.written(),
                 sent_at: stored.as_ref().and_then(Stored::sent_label),
-                text: stored.map(|stored| stored.text),
+                totals: stored.as_ref().map(|stored| stored.totals),
+                text: stored.map(|stored| stored.quote),
             }
         })
         .collect();
     with_quotes(text, &quotes, &unquoted)
 }
 
+/// The whole of a stored message, read back from its session's transcript: the row with its id,
+/// or with its send time and words (a resumed conversation's copy). `None` when the transcript no
+/// longer has it. Blocking.
+fn whole_text(state: &crate::server::AppState, stored: &Stored) -> Option<String> {
+    let (agent, path) = crate::session_chat_read::session_transcript(
+        state,
+        &stored.project_id,
+        &stored.session_id,
+    )?;
+    let mut before: Option<u64> = None;
+    for _ in 0..SHOW_PAGES {
+        let page = crate::session_chat_fork_stitch::read_session_chat_tail_page_stitched(
+            agent,
+            &path,
+            SHOW_PAGE_ROWS,
+            before,
+        )
+        .ok()?;
+        let crate::session_chat::SessionChatTailPage::Page {
+            messages,
+            has_more,
+            before_offset,
+            ..
+        } = page.page
+        else {
+            return None;
+        };
+        for message in messages.iter().rev() {
+            if message.role != crate::session_chat::SessionChatRole::User {
+                continue;
+            }
+            let same_id = message.id == stored.message_id;
+            let same_time = message.timestamp == Some(stored.sent_at);
+            if !same_id && !same_time {
+                continue;
+            }
+            let Ok(parsed) =
+                serde_json::to_value(message).and_then(serde_json::from_value::<ChatMessage>)
+            else {
+                continue;
+            };
+            let text = shown_text(&parsed);
+            if same_id || text_hash(&text) == stored.text_hash {
+                return Some(text);
+            }
+        }
+        // Older than the message: it is not further back.
+        if !has_more
+            || messages
+                .first()
+                .and_then(|message| message.timestamp)
+                .is_some_and(|at| at < stored.sent_at)
+        {
+            return None;
+        }
+        before = Some(before_offset);
+    }
+    None
+}
+
+/// `/api/chatMessages`, off the async workers: it reads the database and, for `show`, the
+/// session's transcript.
+pub(crate) async fn handle_chat_messages_http(
+    state: std::sync::Arc<crate::server::AppState>,
+    endpoint_path: String,
+    request_id: String,
+    body: Value,
+) -> crate::server::RoutedResponse {
+    let params = match crate::domain::read_domain_rpc_params(&body) {
+        Ok(params) => params,
+        Err(error) => {
+            return crate::server::domain_error_response(endpoint_path, request_id, error)
+        }
+    };
+    let answer = tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&state.paths).map_err(|error| {
+            crate::domain::DomainStateError {
+                code: "internalError",
+                message: format!("SQLite gxserver state error: {error}"),
+            }
+        })?;
+        handle_chat_messages_request(Some(&state), &db, &params)
+    })
+    .await;
+    match answer {
+        Ok(Ok(value)) => crate::server::routed_json(
+            Some(endpoint_path),
+            axum::http::StatusCode::OK,
+            crate::protocol::rpc_success(request_id, value),
+        ),
+        Ok(Err(error)) => crate::server::domain_error_response(endpoint_path, request_id, error),
+        Err(error) => crate::server::domain_error_response(
+            endpoint_path,
+            request_id,
+            crate::domain::DomainStateError {
+                code: "internalError",
+                message: error.to_string(),
+            },
+        ),
+    }
+}
+
 /// `/api/chatMessages {projectId, sessionId, op}`: `show` (`ref`: `M12` or `G9jt7.M12`) prints a
-/// message whole; `list` (`last`, `grep`) the chat's messages with their first line, newest first.
-pub(crate) fn handle_chat_messages_request(
+/// message whole (from the transcript; the kept start when the transcript no longer has it, or
+/// with no `state`); `list` (`last`, `grep`) the chat's messages with their first line, newest
+/// first, `grep` matching the start that is kept.
+fn handle_chat_messages_request(
+    state: Option<&crate::server::AppState>,
     db: &Connection,
     params: &Map<String, Value>,
 ) -> Result<Value, crate::domain::DomainStateError> {
@@ -451,7 +615,16 @@ pub(crate) fn handle_chat_messages_request(
                 _ => find(db, Some(&project_id), &session_id, reference.number),
             };
             match stored {
-                Some(stored) => Ok(json!({ "message": stored.json(true) })),
+                Some(stored) => {
+                    let text = match state.and_then(|state| whole_text(state, &stored)) {
+                        Some(text) => json!(text),
+                        None => json!(format!(
+                            "{}\n\n(Only its start: the transcript no longer has this message.)",
+                            stored.quote
+                        )),
+                    };
+                    Ok(json!({ "message": stored.json(text) }))
+                }
                 None => Err(crate::domain::DomainStateError {
                     code: "notFound",
                     message: format!("No message {} here.", reference.written()),
@@ -470,10 +643,10 @@ pub(crate) fn handle_chat_messages_request(
                 .filter(|word| !word.is_empty())
                 .collect();
             let mut statement = db
-                .prepare(
-                    "SELECT projectId, sessionId, number, sentAt, text FROM chat_message_numbers \
-                     WHERE projectId = ?1 AND sessionId = ?2 ORDER BY number DESC",
-                )
+                .prepare(&format!(
+                    "SELECT {STORED_COLUMNS} FROM chat_message_numbers \
+                     WHERE projectId = ?1 AND sessionId = ?2 ORDER BY number DESC"
+                ))
                 .map_err(|error| crate::domain::DomainStateError {
                     code: "internalError",
                     message: error.to_string(),
@@ -488,12 +661,12 @@ pub(crate) fn handle_chat_messages_request(
                 .flatten()
                 .filter(|stored| {
                     words.is_empty() || {
-                        let lower = stored.text.to_lowercase();
+                        let lower = stored.quote.to_lowercase();
                         words.iter().any(|word| lower.contains(word))
                     }
                 })
                 .take(last as usize)
-                .map(|stored| stored.json(false))
+                .map(|stored| stored.json(json!(preview(&stored.quote, 120))))
                 .collect();
             Ok(json!({ "messages": messages }))
         }
@@ -612,7 +785,9 @@ mod tests {
         assert!(sent.starts_with("same as [M1](message:M1) and #M9\n\n<ghostex-system>"));
         assert!(sent.contains("> make them 30px\n> and use the accent colour"));
         assert!(sent.contains("M9: Ghostex has no message with this ID."));
+        // With no transcript to read, `show` gives the start it keeps and says so.
         let shown = handle_chat_messages_request(
+            None,
             &db,
             json!({ "projectId": "P1", "sessionId": "G1e", "op": "show", "ref": "G1e.M1" })
                 .as_object()
@@ -622,7 +797,30 @@ mod tests {
         assert_eq!(shown["message"]["ref"], "G1e.M1");
         assert_eq!(
             shown["message"]["text"],
-            "make them 30px\nand use the accent colour"
+            "make them 30px\nand use the accent colour\n\n(Only its start: the transcript no longer has this message.)"
         );
+        // Only the start of a long message is kept, with its size for the quote's note.
+        let long = format!("{}end", "a line\n".repeat(400));
+        let mut rows = vec![user("b", 2_000, &long)];
+        annotate_with(&db, &mut rows, "P1", "G1e");
+        let (kept, lines): (String, i64) = db
+            .query_row(
+                "SELECT quote, lineCount FROM chat_message_numbers WHERE sessionId = 'G1e' AND number = 2",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(kept.chars().count(), 1_000);
+        assert_eq!(lines, 401);
+        let text = "#M2";
+        let sent = quote_with(&db, "P1", "G1e", text, &referenced_messages(text));
+        assert!(sent.contains("(the first 6 of 401 lines;"));
+        // A resumed conversation's copy of a message (new id, same time and words) keeps its number.
+        let mut resumed = vec![user("b-copy", 2_000, &long)];
+        annotate_with(&db, &mut resumed, "P1", "G1e");
+        assert_eq!(numbers(&resumed), vec![Some(2)]);
+        // The numbers go with their session.
+        forget(&db, "P1", Some("G1e"));
+        assert!(find(&db, Some("P1"), "G1e", 1).is_none());
     }
 }

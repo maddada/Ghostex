@@ -435,6 +435,7 @@ pub(crate) fn remove_worktree_project_row(
     // The worktree's sessions went with its project; so do their queued prompts
     // (`forget_session_chat_queue`, as for /api/removeProject).
     crate::session_chat_queue::forget_session_chat_queue(&db, project_id, None)?;
+    crate::chat_message_numbers::forget(&db, project_id, None);
     crate::session_chat_queue_attachments::sweep(&state.paths, &db);
     Ok(project)
 }
