@@ -73,7 +73,6 @@ struct SettledKey {
     line_breaks: AgentLineBreaks,
     agent_path: String,
     working_directory: Option<String>,
-    session_directory_revision: u64,
     tool_cards: bool,
     /// Agent work is Reduced or Quiet: the chunks' finished turns are folded into `grouped-work` rows.
     grouped_work: bool,
@@ -163,6 +162,7 @@ struct Chunk {
 
 /// What a check of the chunks' names reads ([`SettledPrefix::checked_names`]).
 type NamesRead = (
+    u64,
     u64,
     Option<serde_json::Value>,
     Option<serde_json::Value>,
@@ -493,7 +493,6 @@ impl SettledPrefix {
             line_breaks: line_breaks(state),
             agent_path: view.agent_path.clone(),
             working_directory: view.working_directory.clone(),
-            session_directory_revision: view.session_directory_revision,
             tool_cards: view.effective_tool_cards(),
             grouped_work: view.grouped_work(),
             hidden_work: view.hidden_work(),
@@ -983,13 +982,19 @@ impl SettledPrefix {
         }
         let read = (
             self.names_revision,
+            scope.session_directory_revision,
             scope.agent_fleet.cloned(),
             scope.agent_message_deliveries.cloned(),
             tail_learned.clone(),
         );
         if rebuilt_names || self.checked_names.as_ref() != Some(&read) {
             let layers = [&self.names, tail_learned];
-            let check = NameCheck::new(scope.agent_fleet, &layers, scope.agent_message_deliveries);
+            let check = NameCheck::new(
+                scope.agent_fleet,
+                &layers,
+                scope.agent_message_deliveries,
+                scope.session_directory,
+            );
             let stale: Vec<usize> = self
                 .chunks
                 .iter()
@@ -1241,6 +1246,7 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
         approval_wait: crate::transcript::approval_wait::approval_wait(state),
         agent_fleet: state.session.agent_fleet.as_ref(),
         session_directory: &view.session_directory,
+        session_directory_revision: view.session_directory_revision,
         question_tags,
         askers,
         agent_message_deliveries: state.session.agent_message_deliveries.as_ref(),

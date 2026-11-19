@@ -318,7 +318,10 @@ pub fn project_message(
         }
         card
     });
-    projected.insert("pageAnswers".to_string(), cards.next().unwrap_or(Value::Null));
+    projected.insert(
+        "pageAnswers".to_string(),
+        cards.next().unwrap_or(Value::Null),
+    );
     let extra_cards: Vec<Value> = cards.collect();
     if !extra_cards.is_empty() {
         projected.insert("extraPageAnswers".to_string(), Value::Array(extra_cards));
@@ -706,6 +709,9 @@ pub struct ProjectionScope<'a> {
     pub agent_fleet: Option<&'a Value>,
     /// The host's session list, which names the other session on a message between agents.
     pub session_directory: &'a [crate::event::KnownSession],
+    /// [`TranscriptViewState::session_directory_revision`]: moves when [`Self::session_directory`]
+    /// names a session differently, which is when the settled chunks check their names again.
+    pub session_directory_revision: u64,
     /// The forms and question pages these messages hold, before their answers are read
     /// (`open_questions.rs`), and the tags a reply's words link to.
     pub askers: Vec<Asker>,
@@ -808,6 +814,7 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
         approval_wait: crate::transcript::approval_wait::approval_wait(state),
         agent_fleet: state.session.agent_fleet.as_ref(),
         session_directory: &view.session_directory,
+        session_directory_revision: view.session_directory_revision,
         question_tags: linkable_tags(&found),
         askers: found,
         agent_message_deliveries: state.session.agent_message_deliveries.as_ref(),
@@ -1596,11 +1603,8 @@ fn turn_items(
                             .final_message
                             .as_ref()
                             .map(|reply| calls_not_in(reply, &work));
-                        let rows: Vec<&ChatMessage> = work
-                            .iter()
-                            .map(|row| &**row)
-                            .chain(reply.iter())
-                            .collect();
+                        let rows: Vec<&ChatMessage> =
+                            work.iter().map(|row| &**row).chain(reply.iter()).collect();
                         (
                             tool_call_count(&rows),
                             crate::transcript::work_summary::sent_call_count(&rows),
