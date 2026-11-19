@@ -770,8 +770,9 @@ impl SidebarViewModel {
             super::thread_fold::fold_cross_project_threads(&mut plans, &mut drawn_focus);
         }
 
-        // Chief of Staff's row joins the home's group wherever its session lives (`chief.rs`).
-        super::chief::lift_chief_into_home(&mut plans);
+        // Chief of Staff's row and Ask Ghostex AI's chats join the home's group wherever their
+        // sessions live (`chief.rs`).
+        super::chief::lift_into_home(&mut plans);
 
         // Every machine's projects in this one list (`merged.rs`), unless Separate by machine.
         let mut project_copies = std::collections::BTreeMap::new();
@@ -1300,6 +1301,7 @@ pub(super) fn project_context(
             && project.work_tracker.as_deref() == Some("github"),
         work_tracker_github: project.work_tracker.as_deref() == Some("github"),
         is_home: project.is_home,
+        is_help_home: project.is_help_home,
         gbot: project.gbots_bot.clone(),
     })
 }

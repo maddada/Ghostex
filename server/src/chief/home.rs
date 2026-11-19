@@ -87,3 +87,20 @@ pub(super) fn home_project(
     schedule_presentation_project_delta(state, db, repository, &project_id, "projectAdded")?;
     Ok(project)
 }
+
+/// CDXC:Chief 2026-11-19 DECISION:
+/// User: "i dont like that we're showing ask ghostex here in this folder [the "ghostex" project]", then "i want it to show main hub when i ask a question like this pls even if main hub disabled". Ask Ghostex AI's chats (and Settings > Cloud Boxes' setup chat) still run in the Ghostex config folder's project (titlebar/help_menu.rs), which is never drawn as a project of its own any more: while Main Hub is off it is drawn as Main Hub (`isHome`), under the Spaces bar and only while it holds a chat, listing only its chats, never Chief of Staff (hidden while off, presentation.rs); while Main Hub is on its chats are listed in the home project's Main Hub (gx-core `lift_into_home`), so turning Main Hub on moves nothing. The chats keep their folder, so none of them starts at ~ and the home folder's secret-folder guard (agents/home_secret_folders.rs) is not involved; nothing is moved or deleted, and Chief of Staff's chat started there before 2026-11-08 stays.
+/// SEE-ALSO: packages/gx-core/src/sidebar_view/chief.rs (`lift_into_home`), sidebar_view/assemble.rs (an empty one is not drawn), ghostex_cli/sessions/mobile_summary.rs (the phone).
+pub(crate) fn is_help_home_project(project: &Value) -> bool {
+    crate::workspaces::project_in_every_workspace(project)
+}
+
+/// Whether `project` is drawn as Main Hub: the home project while Main Hub is on, Ask Ghostex
+/// AI's project while it is off.
+pub(crate) fn presents_as_home(project: &Value) -> bool {
+    if super::chief_shown() {
+        is_home_project(project)
+    } else {
+        is_help_home_project(project)
+    }
+}

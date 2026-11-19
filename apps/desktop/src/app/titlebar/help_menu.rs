@@ -279,7 +279,8 @@ impl GhostexGpuiApp {
     fn open_ghostex_help_chat(&mut self, prompt: String, cx: &mut gpui::Context<Self>) {
         // Help chats live in one project rooted at the Ghostex config folder
         // (OS-specific, resolved by ghostex_paths), not in a fresh Quick
-        // project per question.
+        // project per question. The sidebar draws them under Main Hub, even
+        // with Main Hub off (CDXC:Chief 2026-11-19 in server/src/chief/home.rs).
         let project_dir = shared_settings::ghostex_storage_paths().config_dir.clone();
         let project_path = project_dir.to_string_lossy().to_string();
         let background = cx.background_executor().clone();

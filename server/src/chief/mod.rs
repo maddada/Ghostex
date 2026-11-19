@@ -30,7 +30,7 @@ pub(crate) use feature::{
     chief_off_message, chief_on, chief_shown, refuses_message, remember_chief_shown,
 };
 pub(crate) use head::settle_principal;
-pub(crate) use home::{is_home_folder, is_home_project};
+pub(crate) use home::{is_help_home_project, is_home_folder, presents_as_home};
 pub(crate) use presentation::{
     chief_home_session_trusted, insert_chief_presentation_payload, insert_chief_session_projection,
 };

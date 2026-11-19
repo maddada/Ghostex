@@ -176,12 +176,16 @@ fn chief_row_for(
 
 /// Moves the Chief of Staff row into the home project's group when its session lives in another
 /// project: a Chief started before the home existed runs in the Ghostex config folder's project
-/// until its next New Chat, and its row still belongs at the top of Main Hub.
-pub(crate) fn lift_chief_into_home(plans: &mut [super::groups::GroupPlan]) {
-    let Some(home) = plans.iter().position(|plan| {
+/// until its next New Chat, and its row still belongs at the top of Main Hub. Ask Ghostex AI's
+/// chats, which live in that same project (`is_help_home`), join the home group of their computer
+/// too while Main Hub is on, so turning it on moves nothing (CDXC:Chief 2026-11-19 in
+/// server/src/chief/home.rs); while it is off that project is the home itself.
+pub(crate) fn lift_into_home(plans: &mut [super::groups::GroupPlan]) {
+    let is_home_plan = |plan: &super::groups::GroupPlan| {
         plan.kind == super::groups::GroupKind::Project
             && plan.project.as_ref().is_some_and(|project| project.is_home)
-    }) else {
+    };
+    let Some(home) = plans.iter().position(is_home_plan) else {
         return;
     };
     for index in 0..plans.len() {
@@ -191,7 +195,35 @@ pub(crate) fn lift_chief_into_home(plans: &mut [super::groups::GroupPlan]) {
         if let Some(at) = plans[index].rows.iter().position(|row| row.row.is_chief) {
             let row = plans[index].rows.remove(at);
             plans[home].rows.insert(0, row);
-            return;
+            break;
         }
+    }
+    for index in 0..plans.len() {
+        let plan = &plans[index];
+        let lifts = plan.kind == super::groups::GroupKind::Project
+            && plan
+                .project
+                .as_ref()
+                .is_some_and(|project| project.is_help_home && !project.is_home)
+            && !plan.rows.is_empty();
+        if !lifts {
+            continue;
+        }
+        let machine = plan
+            .remote_machine
+            .as_ref()
+            .map(|remote| remote.machine_id.clone());
+        let Some(target) = plans.iter().position(|candidate| {
+            is_home_plan(candidate)
+                && candidate
+                    .remote_machine
+                    .as_ref()
+                    .map(|remote| remote.machine_id.clone())
+                    == machine
+        }) else {
+            continue;
+        };
+        let rows = std::mem::take(&mut plans[index].rows);
+        plans[target].rows.extend(rows);
     }
 }

@@ -231,6 +231,12 @@ pub struct PresentationProject {
     /// (server/src/chief/home.rs). Absent for every other project and from an older daemon.
     #[serde(default, skip_serializing_if = "is_false")]
     pub is_home: bool,
+    /// Ask Ghostex AI's project (the Ghostex config folder's), never drawn as a project of its
+    /// own: it is Main Hub while Main Hub is off (with `is_home`), and its chats are listed in
+    /// Main Hub while it is on (CDXC:Chief 2026-11-19 in server/src/chief/home.rs). Absent for
+    /// every other project and from an older daemon.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub is_help_home: bool,
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub title: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

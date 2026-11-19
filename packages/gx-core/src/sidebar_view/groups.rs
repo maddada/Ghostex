@@ -57,6 +57,9 @@ pub(crate) struct ProjectContextInput {
     pub(crate) work_tracker_github: bool,
     /// The home project (`PresentationProject::is_home`), drawn under Main Hub's row.
     pub(crate) is_home: bool,
+    /// Ask Ghostex AI's project (`PresentationProject::is_help_home`): its chats are listed in
+    /// Main Hub (`chief.rs` `lift_into_home`) and its own group is never drawn empty.
+    pub(crate) is_help_home: bool,
     /// The GBot this project is the folder of (`PresentationProject::gbots_bot`), drawn as the
     /// bot's row in Main Hub's GBots section (gbots.rs).
     pub(crate) gbot: Option<ghostex_gx_protocol::presentation::PresentationGbotsBot>,

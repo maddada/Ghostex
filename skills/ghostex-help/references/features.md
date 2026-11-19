@@ -4474,7 +4474,10 @@ is an alias that runs the same commands.
 Main Hub is a beta extension, off until you turn it on in **Settings >
 Extensions > Main Hub**. Only you can switch it, not an agent. While it is off,
 your home folder's project (if you have one) is an ordinary project and nothing
-here applies.
+here applies, except one thing: the chats you start with **Ask Ghostex AI** (the
+sidebar menu row) show under a **Main Hub** row at the top of the sidebar, only
+while you have one, with just those chats and no Chief of Staff. They run in
+Ghostex's settings folder, never in your home folder.
 
 Turned on, the project at your home folder (`~`, `C:\Users\<name>` on
 Windows) becomes **Main Hub**, with the Ghostex flower on its header: the home
@@ -4516,6 +4519,9 @@ itself ("what's stuck?", "how do I pair my phone?").
 - **Several computers**: with computers combined, every computer's home is one
   Main Hub, each computer's Chief of Staff pinned at the top and other
   computers' chats marked with their computer's name.
+- **Ask Ghostex AI's chats** (when Chief of Staff isn't running to take the
+  question) are listed in Main Hub too, so turning Main Hub on or off never
+  moves them out of it.
 - **Turning it off again** hides Main Hub and Chief of Staff, puts Chief of
   Staff's agent to sleep and takes away its control over your other agents; its
   chat and memory are kept for when you turn it back on.

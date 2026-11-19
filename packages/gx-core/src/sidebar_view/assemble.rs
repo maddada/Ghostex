@@ -412,6 +412,18 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
         if !input.ui.show_hidden && input.ui.hidden_items.group_ids.contains(&plan.group_id) {
             continue;
         }
+        // Ask Ghostex AI's project is drawn only while it holds a chat: as Main Hub while Main Hub
+        // is off, and never once its chats are listed in Main Hub (CDXC:Chief 2026-11-19 in
+        // server/src/chief/home.rs, `chief.rs` `lift_into_home`).
+        if plan.kind == GroupKind::Project
+            && plan
+                .project
+                .as_ref()
+                .is_some_and(|project| project.is_help_home)
+            && build.store_rows.is_empty()
+        {
+            continue;
+        }
         // The home group is Main Hub's row: it stays with no loose sessions.
         if hiding_on
             && plan.project.is_some()

@@ -460,13 +460,17 @@ impl GhostexGpuiApp {
                 "checked": on(SHOW_ON_ALL_SPACES_SETTING, false),
                 "command": { "type": "chief", "op": "toggleSetting", "key": SHOW_ON_ALL_SPACES_SETTING },
             }));
-            items.push(json!({
-                "label": "Ask Before New Chat",
-                "checked": on(CONFIRM_NEW_CHAT_SETTING, true),
-                "command": { "type": "chief", "op": "toggleSetting", "key": CONFIRM_NEW_CHAT_SETTING },
-            }));
-            if cfg!(not(ghostex_web)) {
-                items.push(json!({ "label": "Folders Agents Can't Read…", "icon": "lock", "command": chief_command("homeSettings", machine_id) }));
+            // While Main Hub is off its header is Ask Ghostex AI's project, which has no Chief of
+            // Staff and is not the home folder (CDXC:Chief 2026-11-19 in server/src/chief/home.rs).
+            if chief_on() {
+                items.push(json!({
+                    "label": "Ask Before New Chat",
+                    "checked": on(CONFIRM_NEW_CHAT_SETTING, true),
+                    "command": { "type": "chief", "op": "toggleSetting", "key": CONFIRM_NEW_CHAT_SETTING },
+                }));
+                if cfg!(not(ghostex_web)) {
+                    items.push(json!({ "label": "Folders Agents Can't Read…", "icon": "lock", "command": chief_command("homeSettings", machine_id) }));
+                }
             }
         }
         json!(items)

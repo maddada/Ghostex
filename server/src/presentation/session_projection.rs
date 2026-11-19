@@ -73,9 +73,15 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
     );
     output.insert("isFavorite".to_string(), value_field(project, "isFavorite"));
     output.insert("isPinned".to_string(), value_field(project, "isPinned"));
-    // The home project, whose header is Main Hub's row (chief/home.rs). Present only when true.
-    if crate::chief::is_home_project(project) && crate::chief::chief_shown() {
+    // The project whose header is Main Hub's row (chief/home.rs `presents_as_home`): the home
+    // project, or Ask Ghostex AI's while Main Hub is off. Present only when true.
+    if crate::chief::presents_as_home(project) {
         output.insert("isHome".to_string(), Value::Bool(true));
+    }
+    // Ask Ghostex AI's project, never drawn as a project of its own (CDXC:Chief 2026-11-19 in
+    // chief/home.rs).
+    if crate::chief::is_help_home_project(project) {
+        output.insert("isHelpHome".to_string(), Value::Bool(true));
     }
     insert_optional_value(&mut output, "path", project.get("path").cloned());
     output.insert(
