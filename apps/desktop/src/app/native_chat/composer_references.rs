@@ -363,7 +363,7 @@ impl NativeChatView {
             if event.click_count >= 2
                 && let Some(id) = super::boosts::boost_id(&reference.path)
             {
-                self.invoke(json!({"type": "openBoostEditor", "id": id}), cx);
+                self.open_boost_settings(Some(format!("boost:{id}")), None, cx);
             }
             return true;
         }

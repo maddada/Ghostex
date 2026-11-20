@@ -34,7 +34,6 @@ impl NativeChatView {
                 .into_any_element()
         });
         let lines: Vec<AnyElement> = [
-            self.render_boost_hint(p, cx),
             self.render_secret_send_warning(p),
             self.render_draft_kept_note(p),
             typing,

@@ -37,6 +37,7 @@ pub fn handle_with_ids(
         ActionKind::ToggleBoost
         | ActionKind::SetBoostTab
         | ActionKind::RefreshBoosts
+        | ActionKind::SaveAsBoost
         | ActionKind::DismissBoostHint => {
             crate::extras::boosts::handle(state, action, &mut next_request_id)
         }

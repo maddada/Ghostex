@@ -551,9 +551,8 @@ impl NativeChatView {
         if let Some(note) = self.render_note(p, window, cx) {
             waiting.push(note.into_any_element());
         }
-        if let Some(editor) = self.render_boost_editor(p, window, cx) {
-            waiting.push(editor);
-        }
+        // The callout's Show me asked for the Boost menu (boosts.rs).
+        self.open_requested_boost_menu(window, cx);
         if let Some(card) = self.render_catch_up(p, window, cx) {
             waiting.push(card.into_any_element());
         }
@@ -707,7 +706,9 @@ impl NativeChatView {
                         .on_mouse_down(
                             gpui::MouseButton::Right,
                             cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
-                                if this.show_composer_reference_menu(event, window, cx) {
+                                if this.show_composer_reference_menu(event, window, cx)
+                                    || this.show_composer_selection_menu(event, window, cx)
+                                {
                                     cx.stop_propagation();
                                 }
                             }),

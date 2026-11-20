@@ -1,39 +1,61 @@
-//! Boosts in the chat box (gx-chat-core `extras/boosts.rs` has the user's decision and the rules):
-//! the Boost pill at the right of the pill strip and its menu, the Boost pill's prompt in the
-//! message's hover and its double click, the prompt editor that opens where the session note does,
-//! the one-time hint inside the chat box, and "Try a Boost" on a new chat's welcome.
+//! Boosts in the chat (gx-chat-core `extras/boosts.rs` has the user's decisions and the rules): the
+//! Boost pill at the right of the pill strip; its menu, a 280px list in Show, Do, Work and Custom
+//! tabs with every description in full and a preview card beside it; the one-time callout bubble
+//! above the pill; the Boost pills' hover and double click; "Try a Boost" on a new chat; and Save as
+//! Boost. Editing is Settings > Boosts (window/settings_modal/tabs/boosts.rs), which the menu's
+//! Edit Boosts row, a pill's double click and Save as Boost open.
 //!
-//! The core's `boosts` document key holds it all; `null` (an older gxserver, or before it
-//! answered) draws none of it.
+//! The core's `boosts` document key holds it all; `null` (an older gxserver, no answer yet, or
+//! Boosts switched off) draws none of it.
 //!
 //! CDXC:Boosts 2026-11-20 WHY:
 //! The pill rides in its own key rather than `chatPills` because the phone draws every `chatPills`
-//! entry and opens row menus only for the pills it knows: a Boost pill there would open an empty
-//! sheet on the phones already out. The strip's own pills keep their order; the Boost pill sits
-//! after them, before Links, and never folds into "+N" (it is the one way in).
+//! entry and opens row menus only for the pills it knows. The pill sits after the panel pills,
+//! before Links, and never folds into "+N" (it is the one way in). The preview is a panel of the
+//! menu one level down (option_menu's side panel, as the model menu's lists are), so it opens beside
+//! the menu on the side with room; the callout is a frosted window of its own
+//! (frosted_overlay_window.rs), which floats over the transcript without taking the keyboard.
 //! SEE-ALSO: packages/gx-chat-core/src/extras/boosts.rs, server/src/boosts.rs.
 
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, AppContext as _, Bounds, Context, Focusable as _, Hsla, InteractiveElement as _,
-    IntoElement, ParentElement as _, Pixels, StatefulInteractiveElement as _, Styled as _, Window,
-    canvas, div, px, rgb, svg,
+    AnyElement, Bounds, Context, FontWeight, Hsla, InteractiveElement as _, IntoElement,
+    ParentElement as _, Pixels, StatefulInteractiveElement as _, Styled as _, Window, canvas, div,
+    px, relative, rgb, svg,
 };
-use gpui_component::input::{InputEvent, Textarea, TextareaState};
 use serde_json::{Value, json};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
-/// The Boost pill's menu-toggle key (menu_toggle.rs) and its menu's width, unscaled.
+/// The Boost pill's menu-toggle key (menu_toggle.rs), its menu's and preview's ids among the pill
+/// menus (chat_pills.rs), and their widths (unscaled).
 pub(super) const BOOST_TRIGGER: &str = "chat-pill-boost";
-const MENU_WIDTH: f32 = 430.0;
+pub(super) const BOOST_MENU: &str = "boostMenu";
+pub(super) const BOOST_PREVIEW: &str = "boostPreview";
+pub(super) const BOOST_MENU_WIDTH: f32 = 280.0;
+pub(super) const BOOST_PREVIEW_WIDTH: f32 = 236.0;
+/// The preview card's content height.
+const PREVIEW_HEIGHT: f32 = 172.0;
+/// The menu's tab bar, its footer row, a row's padding and the width a description wraps in
+/// (the menu less its 6px padding and border, the row's 10px sides, the 14px icon and its gap).
+const TABS_HEIGHT: f32 = 30.0;
+const FOOTER_HEIGHT: f32 = 40.0;
+const ROW_PAD_Y: f32 = 8.0;
+const LABEL_LINE: f32 = 18.0;
+const DETAIL_LINE: f32 = 16.0;
+const DETAIL_WIDTH: f32 = BOOST_MENU_WIDTH - 14.0 - 20.0 - 14.0 - 8.0;
+/// About how wide a character of a 12px description is; a little over, so a row never clips.
+const DETAIL_CHAR: f32 = 6.2;
+/// The callout bubble's size (unscaled).
+const CALLOUT_WIDTH: f32 = 372.0;
+const CALLOUT_HEIGHT: f32 = 54.0;
 
-/// The Boosts' accent: the ember of the design page, readable on the dark and the light chat.
-fn accent(p: &ChatAppearance) -> Hsla {
-    rgb(if p.light { 0xb75d2a } else { 0xe7a47a }).into()
+/// The Boosts' accent, the ember of the design pages.
+pub(super) fn accent(light: bool) -> Hsla {
+    rgb(if light { 0xb75d2a } else { 0xe7a47a }).into()
 }
 
 thread_local! {
@@ -45,17 +67,28 @@ thread_local! {
 /// The hover words of the Boost pill whose link points at `href` (`boost:live-page`): its prompt,
 /// then "Double click to edit prompt".
 pub(super) fn pill_tooltip(href: &str) -> String {
-    let Some(boost) = ghostex_gx_chat_core::extras::boosts::boost_of_href(href) else {
+    let Some(id) = ghostex_gx_chat_core::extras::boosts::boost_id_of_href(href) else {
         return href.to_string();
     };
     TOOLTIPS
-        .with(|tips| tips.borrow().get(boost.id).cloned())
-        .unwrap_or_else(|| ghostex_gx_chat_core::extras::boosts::pill_tooltip(boost.prompt))
+        .with(|tips| tips.borrow().get(id).cloned())
+        .or_else(|| {
+            ghostex_gx_chat_core::extras::boosts::boost(id)
+                .map(|boost| ghostex_gx_chat_core::extras::boosts::pill_tooltip(boost.prompt))
+        })
+        .unwrap_or_else(|| "Your Boost\n\nDouble click to edit prompt".to_string())
 }
 
 /// The Boost a chat box pill's link names, for its double click.
-pub(super) fn boost_id(href: &str) -> Option<&'static str> {
-    ghostex_gx_chat_core::extras::boosts::boost_of_href(href).map(|boost| boost.id)
+pub(super) fn boost_id(href: &str) -> Option<String> {
+    ghostex_gx_chat_core::extras::boosts::boost_id_of_href(href).map(str::to_string)
+}
+
+/// How many lines `text` takes in a menu row.
+fn detail_lines(text: &str) -> f32 {
+    (text.chars().count() as f32 * DETAIL_CHAR / DETAIL_WIDTH)
+        .ceil()
+        .max(1.0)
 }
 
 impl NativeChatView {
@@ -67,6 +100,21 @@ impl NativeChatView {
     /// Whether the strip has the Boost pill.
     pub(super) fn boost_pill_shown(&self) -> bool {
         self.boosts().is_some()
+    }
+
+    /// The menu's rows: the open tab's Boosts.
+    fn boost_tab_rows(&self) -> Vec<Value> {
+        let Some(boosts) = self.boosts() else {
+            return Vec::new();
+        };
+        let tab = text(boosts, "tab");
+        boosts["list"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|row| row["category"] == tab.as_str())
+            .cloned()
+            .collect()
     }
 
     /// Keeps the chat box pills' hover words current with this chat's Boosts (edited prompts).
@@ -83,20 +131,48 @@ impl NativeChatView {
         }
     }
 
+    /// Opens Settings > Boosts; `section` opens one Boost's editor (`boost:<id>`) or a new Boost
+    /// (`newBoost`, holding `text`).
+    pub(super) fn open_boost_settings(
+        &mut self,
+        section: Option<String>,
+        text: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let mut open = json!({"type": "open", "modal": "settings", "initialTab": "boosts"});
+        if let Some(section) = section {
+            open["initialSection"] = json!(section);
+        }
+        if let Some(text) = text {
+            open["initialBoostText"] = json!(text);
+        }
+        self.close_pill_menu(cx);
+        cx.emit(super::state::NativeChatEvent::Host(open));
+    }
+
     /// The Boost pill: the sparkles and "Boost" in the accent, a fill while the message has a
-    /// Boost. A click opens the menu of Boosts against it.
+    /// Boost or its menu is open. A click opens the menu against it. Its paint also places the
+    /// one-time callout above it.
     pub(super) fn boost_strip_pill(
         &self,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        let pill = &self.boosts()?["pill"];
+        let boosts = self.boosts()?;
+        let pill = &boosts["pill"];
         let s = p.scale;
-        let tone = accent(p);
+        let tone = accent(p.light);
         let open = self.chat_menu_is_open(BOOST_TRIGGER);
         let active = pill["active"] == true;
         let bounds: Rc<Cell<Bounds<Pixels>>> = self.boost_pill_bounds.clone();
         let measured = bounds.clone();
+        // The callout, while it has not been seen and nothing covers the pane.
+        let hint_wanted = boosts["hint"].is_object()
+            && !self.frosted_overlay_covered(
+                super::frosted_overlay_window::FrostedOverlay::BoostHint,
+                cx,
+            );
+        let chat = cx.weak_entity();
         Some(
             div()
                 .id(BOOST_TRIGGER)
@@ -120,11 +196,13 @@ impl NativeChatView {
                 .chat_cursor_pointer()
                 .when(active || open, |pill| pill.bg(tone.opacity(0.14)))
                 .hover(|style| style.bg(tone.opacity(0.1)))
-                .tooltip(|window, cx| {
-                    gpui_component::tooltip::Tooltip::new(
-                        "Boosts: the agent answers with a Live page, a chart or a map",
-                    )
-                    .build(window, cx)
+                .when(!open, |pill| {
+                    pill.tooltip(|window, cx| {
+                        gpui_component::tooltip::Tooltip::new(
+                            "Boosts: the agent answers with a page, a chart, a browser run and more",
+                        )
+                        .build(window, cx)
+                    })
                 })
                 .child(
                     svg()
@@ -139,93 +217,380 @@ impl NativeChatView {
                     this.open_boost_menu(bounds.get(), window, cx);
                 }))
                 .child(
-                    canvas(move |bounds, _, _| measured.set(bounds), |_, _, _, _| {})
-                        .absolute()
-                        .inset(px(-s)),
+                    canvas(
+                        move |bounds, window, cx| {
+                            measured.set(bounds);
+                            let frame = (hint_wanted
+                                && super::child_window::bounds_inside_content_mask(window, bounds))
+                            .then(|| callout_frame(bounds, s));
+                            let chat = chat.clone();
+                            cx.defer(move |cx| {
+                                let _ = chat.update(cx, |chat, cx| {
+                                    chat.place_frosted_overlay(
+                                        super::frosted_overlay_window::FrostedOverlay::BoostHint,
+                                        frame,
+                                        cx,
+                                    );
+                                });
+                            });
+                        },
+                        |_, _, _, _| {},
+                    )
+                    .absolute()
+                    .inset(px(-s)),
                 )
                 .into_any_element(),
         )
     }
 
-    /// The menu of Boosts, in the sidebar menu's style: each Boost with its line, ticked while it
-    /// is in the message; a pick puts it in or takes it out.
-    fn open_boost_menu(
+    /// Opens (or shuts) the Boost menu against the pill, and reads the Boosts again: Settings may
+    /// have changed them since this chat opened. Opening it is what the callout asked for.
+    pub(super) fn open_boost_menu(
         &mut self,
         pill: Bounds<Pixels>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.chat_menu_toggled_shut(BOOST_TRIGGER, cx) {
-            return;
-        }
-        let Some(rows) = self
+        if self
             .boosts()
-            .and_then(|boosts| boosts["pill"]["menu"].as_array().cloned())
-        else {
-            return;
-        };
-        let (anchor, side) = self.pills_strip.menu_anchor(pill);
-        self.menu_side = Some(side);
-        self.show_chat_menu(rows, anchor, MENU_WIDTH, window, cx);
+            .is_some_and(|boosts| boosts["hint"].is_object())
+        {
+            self.invoke(json!({"type": "dismissBoostHint"}), cx);
+        }
+        self.boost_preview = None;
+        self.invoke(json!({"type": "refreshBoosts"}), cx);
+        self.toggle_pill_menu(BOOST_MENU, pill, window, cx);
     }
 
-    /// The one-time hint, a line inside the chat box (box_notes.rs) with Got it.
-    pub(super) fn render_boost_hint(
-        &self,
+    /// The callout's Show me, from its own window: the menu opens on the chat's next frame, which
+    /// has the chat's window.
+    pub(super) fn request_boost_menu(&mut self, cx: &mut Context<Self>) {
+        self.invoke(json!({"type": "dismissBoostHint"}), cx);
+        self.boost_menu_requested = true;
+        cx.notify();
+    }
+
+    /// Opens the menu a callout asked for, now that this frame has the chat's window.
+    pub(super) fn open_requested_boost_menu(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if std::mem::take(&mut self.boost_menu_requested) {
+            let pill = self.boost_pill_bounds.get();
+            self.boost_preview = None;
+            self.invoke(json!({"type": "refreshBoosts"}), cx);
+            self.toggle_pill_menu(BOOST_MENU, pill, window, cx);
+        }
+    }
+
+    /// The menu's content height (unscaled): the tabs, the open tab's rows with their full
+    /// descriptions, and Edit Boosts.
+    pub(super) fn boost_menu_height(&self) -> Option<f32> {
+        self.boosts()?;
+        let rows: f32 = self
+            .boost_tab_rows()
+            .iter()
+            .map(|row| {
+                ROW_PAD_Y * 2.0
+                    + LABEL_LINE
+                    + detail_lines(&text(row, "description")) * DETAIL_LINE
+                    + 2.0
+            })
+            .sum();
+        Some(TABS_HEIGHT + 6.0 + rows + FOOTER_HEIGHT)
+    }
+
+    /// The preview card's content height, while there is a Boost to preview.
+    pub(super) fn boost_preview_height(&self) -> Option<f32> {
+        self.boosts()?;
+        Some(PREVIEW_HEIGHT)
+    }
+
+    /// The menu: the tabs, the open tab's Boosts (icon, name, the full description, a tick while
+    /// in the message) and Edit Boosts. A row under the pointer shows its preview beside the menu;
+    /// a click puts it in the message or takes it out. `window` is the menu's own.
+    pub(super) fn boost_menu_body(
+        &mut self,
         p: &ChatAppearance,
-        cx: &Context<Self>,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        let hint = self.boosts()?["hint"].as_str()?.to_string();
+        let boosts = self.boosts()?.clone();
         let s = p.scale;
-        let tone = accent(p);
+        let tone = accent(p.light);
+        let tab = text(&boosts, "tab");
+        let tabs = div()
+            .flex()
+            .flex_shrink_0()
+            .gap(px(2.0 * s))
+            .p(px(2.0 * s))
+            .h(px(TABS_HEIGHT * s))
+            .rounded(px(8.0 * s))
+            .bg(p.foreground.opacity(0.06))
+            .children(
+                boosts["tabs"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|entry| {
+                        let id = text(entry, "id");
+                        let on = id == tab;
+                        div()
+                            .id(gpui::ElementId::Name(format!("boost-tab-{id}").into()))
+                            .role(gpui::Role::Tab)
+                            .aria_label(text(entry, "label"))
+                            .aria_selected(on)
+                            .flex_1()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(px(6.0 * s))
+                            .text_size(px(12.0 * s))
+                            .text_color(if on { p.foreground } else { p.card_muted })
+                            .chat_cursor_pointer()
+                            .when(on, |tab| tab.bg(p.foreground.opacity(0.1)))
+                            .hover(|style| style.text_color(p.foreground))
+                            .child(text(entry, "label"))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.invoke(json!({"type": "setBoostTab", "tab": id}), cx);
+                            }))
+                    }),
+            );
+        let draft = self.draft.clone();
+        let preview = self.boost_preview.clone();
+        let rows = div()
+            .id("boost-menu-rows")
+            .flex()
+            .flex_col()
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .gap(px(2.0 * s))
+            .children(self.boost_tab_rows().into_iter().map(|row| {
+                let id = text(&row, "id");
+                let in_draft = row["inDraft"] == true;
+                let hovered = preview.as_deref() == Some(id.as_str());
+                let hover_id = id.clone();
+                let click_id = id.clone();
+                let draft = draft.clone();
+                div()
+                    .id(gpui::ElementId::Name(format!("boost-row-{id}").into()))
+                    .role(gpui::Role::MenuItem)
+                    .aria_label(format!(
+                        "{}. {}",
+                        text(&row, "label"),
+                        text(&row, "description")
+                    ))
+                    .flex()
+                    .items_start()
+                    .flex_shrink_0()
+                    .gap(px(8.0 * s))
+                    .px(px(10.0 * s))
+                    .py(px(ROW_PAD_Y * s))
+                    .rounded(px(6.0 * s))
+                    .chat_cursor_pointer()
+                    .when(hovered, |row| row.bg(p.foreground.opacity(0.07)))
+                    .hover(|style| style.bg(p.foreground.opacity(0.07)))
+                    .child(
+                        svg()
+                            .path(text(&row, "iconPath"))
+                            .mt(px(2.0 * s))
+                            .size(px(14.0 * s))
+                            .flex_shrink_0()
+                            .text_color(tone),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_1()
+                            .min_w_0()
+                            .child(
+                                div()
+                                    .text_size(px(13.0 * s))
+                                    .line_height(px(LABEL_LINE * s))
+                                    .text_color(p.foreground)
+                                    .child(text(&row, "label")),
+                            )
+                            .child(
+                                div()
+                                    .w_full()
+                                    .text_size(px(12.0 * s))
+                                    .line_height(px(DETAIL_LINE * s))
+                                    .text_color(p.card_muted)
+                                    .child(text(&row, "description")),
+                            ),
+                    )
+                    .when(in_draft, |row| {
+                        row.child(
+                            svg()
+                                .path("titlebar/check.svg")
+                                .mt(px(2.0 * s))
+                                .size(px(14.0 * s))
+                                .flex_shrink_0()
+                                .text_color(p.foreground),
+                        )
+                    })
+                    .on_hover(cx.listener(move |this, hovered: &bool, window, cx| {
+                        if *hovered {
+                            this.preview_boost(&hover_id, window, cx);
+                        }
+                    }))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.invoke(
+                            json!({"type": "toggleBoost", "id": click_id, "text": draft}),
+                            cx,
+                        );
+                        this.close_pill_menu(cx);
+                    }))
+            }));
+        let footer = div()
+            .id("boost-menu-edit")
+            .role(gpui::Role::MenuItem)
+            .aria_label("Edit Boosts")
+            .flex()
+            .flex_shrink_0()
+            .items_center()
+            .gap(px(8.0 * s))
+            .mt(px(4.0 * s))
+            .h(px((FOOTER_HEIGHT - 6.0) * s))
+            .px(px(10.0 * s))
+            .border_t_1()
+            .border_color(p.foreground.opacity(0.08))
+            .text_size(px(12.5 * s))
+            .text_color(p.card_muted)
+            .chat_cursor_pointer()
+            .hover(|style| style.text_color(p.foreground))
+            .child(
+                svg()
+                    .path("titlebar/settings.svg")
+                    .size(px(14.0 * s))
+                    .text_color(p.card_muted),
+            )
+            .child("Edit Boosts\u{2026}")
+            .on_click(cx.listener(|this, _, _, cx| this.open_boost_settings(None, None, cx)));
         Some(
             div()
-                .id("boost-hint")
-                .role(gpui::Role::Status)
-                .aria_label(hint.clone())
-                .w_full()
-                .min_w_0()
+                .size_full()
                 .flex()
-                .items_start()
+                .flex_col()
                 .gap(px(6.0 * s))
-                .text_size(px(12.0 * s))
-                .line_height(px(16.0 * s))
-                .text_color(p.muted)
-                .child(
-                    svg()
-                        .path("titlebar/sparkles.svg")
-                        .mt(px(2.0 * s))
-                        .size(px(12.0 * s))
-                        .flex_shrink_0()
-                        .text_color(tone),
-                )
-                .child(div().flex_1().min_w_0().child(hint))
+                .child(tabs)
+                .child(rows)
+                .child(footer)
+                .into_any_element(),
+        )
+    }
+
+    /// A row of the menu went under the pointer: its preview shows beside the menu, opening the
+    /// side panel the first time.
+    fn preview_boost(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if self.boost_preview.as_deref() == Some(id) {
+            return;
+        }
+        self.boost_preview = Some(id.to_string());
+        cx.notify();
+        let Some(menu) = self.option_menu.clone() else {
+            return;
+        };
+        if menu.read(cx).has_side_panel() {
+            return;
+        }
+        let height = PREVIEW_HEIGHT;
+        let anchor = window.bounds();
+        menu.update(cx, |menu, cx| {
+            menu.open_side_panel(
+                vec![json!({"pillMenu": {"id": BOOST_PREVIEW, "height": height}})],
+                anchor,
+                BOOST_PREVIEW_WIDTH,
+                cx,
+            );
+        });
+    }
+
+    /// The preview card: the Boost's name, a small picture of what the agent sends back, and what
+    /// a click does.
+    pub(super) fn boost_preview_body(&self, p: &ChatAppearance) -> Option<AnyElement> {
+        let id = self.boost_preview.clone()?;
+        let row = self.boosts()?["list"]
+            .as_array()?
+            .iter()
+            .find(|row| row["id"] == id.as_str())?
+            .clone();
+        let s = p.scale;
+        let tone = accent(p.light);
+        let custom = row["custom"] == true;
+        Some(
+            div()
+                .size_full()
+                .flex()
+                .flex_col()
+                .gap(px(8.0 * s))
+                .p(px(4.0 * s))
                 .child(
                     div()
-                        .id("boost-hint-dismiss")
-                        .role(gpui::Role::Button)
-                        .aria_label("Got it")
-                        .flex_shrink_0()
-                        .text_color(tone)
-                        .chat_cursor_pointer()
-                        .child("Got it")
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.invoke(json!({"type": "dismissBoostHint"}), cx)
-                        })),
+                        .flex()
+                        .items_center()
+                        .gap(px(6.0 * s))
+                        .text_size(px(13.0 * s))
+                        .child(
+                            svg()
+                                .path(text(&row, "iconPath"))
+                                .size(px(14.0 * s))
+                                .text_color(tone),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(p.foreground)
+                                .child(text(&row, "label")),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(11.0 * s))
+                                .text_color(p.card_muted)
+                                .child(if custom { "Your Boost" } else { "Boost" }),
+                        ),
+                )
+                .child(preview_art(
+                    &text(&row, "preview"),
+                    &text(&row, "prompt"),
+                    p,
+                ))
+                .child(
+                    div()
+                        .text_size(px(11.5 * s))
+                        .line_height(px(15.0 * s))
+                        .text_color(p.card_muted)
+                        .child(if row["inDraft"] == true {
+                            "In your message. Click to take it out."
+                        } else {
+                            "Click to add it to your message."
+                        }),
                 )
                 .into_any_element(),
         )
     }
 
-    /// "Try a Boost" under a new chat's headline: a chip per Boost; a click puts it in the message.
+    /// "Try a Boost" under a new chat's headline: a chip per Show Boost; a click puts it in the
+    /// message.
     pub(super) fn render_try_a_boost(
         &self,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> Option<AnyElement> {
-        let list = self.boosts()?["list"].as_array()?.clone();
+        let list: Vec<Value> = self.boosts()?["list"]
+            .as_array()?
+            .iter()
+            .filter(|row| row["category"] == "show")
+            .cloned()
+            .collect();
         let s = p.scale;
-        let tone = accent(p);
+        let tone = accent(p.light);
         Some(
             div()
                 .id("try-a-boost")
@@ -297,175 +662,481 @@ impl NativeChatView {
         )
     }
 
-    /// The prompt editor a double click on a Boost pill opens, where the session note opens: the
-    /// Boost's prompt in a field, Reset to default when it was edited, Cancel and Save. Escape
-    /// cancels, Cmd+Enter (Ctrl+Enter off a Mac) saves.
-    pub(super) fn render_boost_editor(
+    /// Right click in the chat box with words selected: a small menu with Save as Boost. Returns
+    /// whether it opened.
+    pub(super) fn show_composer_selection_menu(
         &mut self,
-        p: &ChatAppearance,
+        event: &gpui::MouseDownEvent,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
-        let editor = self
-            .boosts()
-            .map(|boosts| boosts["editor"].clone())
-            .filter(Value::is_object);
-        let Some(editor) = editor else {
-            self.boost_editor_input = None;
-            self.boost_editor_subscription = None;
-            return None;
-        };
-        let id = text(&editor, "id");
-        let value = text(&editor, "value");
-        let fresh = self
-            .boost_editor_input
-            .as_ref()
-            .is_none_or(|(editing, _)| *editing != id);
-        if fresh {
-            let input = cx.new(|cx| {
-                TextareaState::new(window, cx)
-                    .auto_grow(3, 10)
-                    .auto_text_direction(true)
-                    .placeholder("What the agent is told when this Boost is in a message")
-                    .default_value(value.clone())
-            });
-            self.boost_editor_subscription = Some(cx.subscribe_in(
-                &input,
-                window,
-                |this, input, event: &InputEvent, _, cx| {
-                    if let InputEvent::Change = event {
-                        this.invoke(
-                            json!({"type": "editBoostPrompt", "text": input.read(cx).value().to_string()}),
-                            cx,
-                        );
-                    }
-                },
-            ));
-            input.read(cx).focus_handle(cx).focus(window, cx);
-            self.boost_editor_input = Some((id.clone(), input));
+    ) -> bool {
+        if self.boosts().is_none() {
+            return false;
         }
-        let input = self.boost_editor_input.as_ref()?.1.clone();
-        let s = p.scale;
-        let tone = accent(p);
-        let edited = editor["edited"] == true;
-        let button = |id: &'static str, label: &'static str, command: Value, strong: bool| {
-            div()
-                .id(id)
-                .role(gpui::Role::Button)
-                .aria_label(label)
-                .chat_cursor_pointer()
-                .px(px(10.0 * s))
-                .py(px(3.0 * s))
-                .rounded_full()
-                .border(px(s))
-                .border_color(if strong {
-                    tone.opacity(0.6)
-                } else {
-                    p.foreground.opacity(0.12)
-                })
-                .when(strong, |button| button.bg(tone.opacity(0.16)))
-                .text_color(if strong { tone } else { p.foreground })
-                .hover(|style| style.bg(p.foreground.opacity(0.06)))
-                .child(label)
-                .on_click(cx.listener(move |this, _, _, cx| this.invoke(command.clone(), cx)))
+        let Some(input) = self.input.clone() else {
+            return false;
         };
-        Some(
+        let range = input.read(cx).selected_range();
+        let Some(selected) = self
+            .draft
+            .get(range)
+            .map(str::trim)
+            .filter(|selected| !selected.is_empty())
+            .map(str::to_string)
+        else {
+            return false;
+        };
+        let rows = vec![json!({
+            "label": "Save as Boost",
+            "iconPath": "titlebar/sparkles.svg",
+            "command": {"type": "saveAsBoost", "text": selected},
+        })];
+        self.show_chat_menu_at(rows, event.position, 200.0, window, cx);
+        true
+    }
+}
+
+/// Where the callout bubble goes for the pill painted at `pill`: above it, its right edge on the
+/// pill's.
+fn callout_frame(pill: Bounds<Pixels>, s: f32) -> Bounds<Pixels> {
+    let size = gpui::size(px(CALLOUT_WIDTH * s), px(CALLOUT_HEIGHT * s));
+    let origin = gpui::point(
+        (pill.right() - size.width).max(px(8.0 * s)),
+        pill.top() - size.height - px(10.0 * s),
+    );
+    Bounds::new(origin, size)
+}
+
+/// The callout bubble, drawn in its own frosted window (frosted_overlay_window.rs): the sparkles,
+/// "New: Boosts" and one line, Show me and an x.
+pub(super) fn boost_callout(
+    chat: gpui::WeakEntity<NativeChatView>,
+    hint: &Value,
+    p: &ChatAppearance,
+) -> AnyElement {
+    let s = p.scale;
+    let tone = accent(p.light);
+    let show = chat.clone();
+    let close = chat;
+    div()
+        .id("boost-callout")
+        .role(gpui::Role::Status)
+        .aria_label(format!("{}. {}", text(hint, "title"), text(hint, "text")))
+        .size_full()
+        .flex()
+        .items_center()
+        .gap(px(10.0 * s))
+        .px(px(12.0 * s))
+        .rounded(px(12.0 * s))
+        .border(px(s))
+        .border_color(p.foreground.opacity(0.12))
+        .child(
+            svg()
+                .path("titlebar/sparkles.svg")
+                .size(px(18.0 * s))
+                .flex_shrink_0()
+                .text_color(tone),
+        )
+        .child(
             div()
-                .id("boost-editor")
-                .role(gpui::Role::Group)
-                .aria_label(format!("{} Boost prompt", text(&editor, "label")))
-                .w_full()
                 .flex()
                 .flex_col()
-                .gap(px(6.0 * s))
-                .px(px(12.0 * s))
-                .pt(px(8.0 * s))
-                .pb(px(10.0 * s))
-                .border_1()
-                .border_color(p.border)
-                .rounded(px(16.0 * s))
-                .bg(p.input)
+                .flex_1()
+                .min_w_0()
                 .child(
                     div()
-                        .flex()
-                        .items_center()
-                        .gap(px(6.0 * s))
-                        .text_size(px(12.0 * s))
-                        .text_color(p.muted)
-                        .child(
-                            svg()
-                                .path(text(&editor, "iconPath"))
-                                .size(px(14.0 * s))
-                                .text_color(tone),
-                        )
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .child(format!(
-                                    "{} Boost prompt{}",
-                                    text(&editor, "label"),
-                                    if edited { " (edited)" } else { "" }
-                                )),
-                        )
-                        .child(self.icon_command(
-                            "close-boost-editor",
-                            "Close without saving",
-                            "titlebar/x.svg",
-                            json!({"type": "closeBoostEditor"}),
-                            p,
-                            cx,
-                        )),
-                )
-                .child(
-                    Textarea::new(&input)
-                        .appearance(false)
-                        .bordered(false)
-                        .caret_color(p.foreground)
-                        .text_size(px(13.0 * s)),
+                        .text_size(px(13.0 * s))
+                        .line_height(px(17.0 * s))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(p.foreground)
+                        .child(text(hint, "title")),
                 )
                 .child(
                     div()
-                        .flex()
-                        .items_center()
-                        .gap(px(6.0 * s))
+                        .truncate()
                         .text_size(px(12.0 * s))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .text_color(p.muted)
-                                .child("Saved on this computer for every chat. Reset goes back to Ghostex's prompt."),
-                        )
-                        .when(edited, |row| {
-                            row.child(button(
-                                "reset-boost-prompt",
-                                "Reset to default",
-                                json!({"type": "resetBoostPrompt"}),
-                                false,
-                            ))
-                        })
-                        .child(button(
-                            "save-boost-prompt",
-                            "Save",
-                            json!({"type": "saveBoostPrompt"}),
-                            true,
-                        )),
-                )
-                .capture_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
-                    let key = &event.keystroke;
-                    let save =
-                        key.key == "enter" && (key.modifiers.platform || key.modifiers.control);
-                    if key.key == "escape" || save {
-                        this.invoke(
-                            json!({"type": if save { "saveBoostPrompt" } else { "closeBoostEditor" }}),
-                            cx,
-                        );
-                        cx.stop_propagation();
-                        window.prevent_default();
-                    }
-                }))
-                .into_any_element(),
+                        .line_height(px(16.0 * s))
+                        .text_color(p.card_muted)
+                        .child(text(hint, "text")),
+                ),
         )
-    }
+        .child(
+            div()
+                .id("boost-callout-show")
+                .role(gpui::Role::Button)
+                .aria_label("Show me")
+                .flex_shrink_0()
+                .px(px(10.0 * s))
+                .py(px(4.0 * s))
+                .rounded_full()
+                .bg(tone.opacity(0.18))
+                .text_size(px(12.5 * s))
+                .text_color(tone)
+                .chat_cursor_pointer()
+                .hover(|style| style.bg(tone.opacity(0.26)))
+                .child("Show me")
+                .on_click(move |_, _, cx| {
+                    let _ = show.update(cx, |chat, cx| chat.request_boost_menu(cx));
+                }),
+        )
+        .child(
+            div()
+                .id("boost-callout-close")
+                .role(gpui::Role::Button)
+                .aria_label("Close")
+                .flex_shrink_0()
+                .size(px(22.0 * s))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded_full()
+                .chat_cursor_pointer()
+                .hover(|style| style.bg(p.foreground.opacity(0.08)))
+                .child(
+                    svg()
+                        .path("titlebar/x.svg")
+                        .size(px(13.0 * s))
+                        .text_color(p.card_muted),
+                )
+                .on_click(move |_, _, cx| {
+                    let _ = close.update(cx, |chat, cx| {
+                        chat.invoke(json!({"type": "dismissBoostHint"}), cx)
+                    });
+                }),
+        )
+        .into_any_element()
+}
+
+/// A small picture of what a Boost sends back, in the chat's own colours: shapes only, no words but
+/// a few labels. `kind` is the Boost's `preview`; a user's Boost shows the start of its prompt.
+fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
+    let s = p.scale;
+    let tone = accent(p.light);
+    let strong = p.foreground.opacity(0.22);
+    let soft = p.foreground.opacity(0.1);
+    let line = move |width: f32, height: f32, color: Hsla| {
+        div()
+            .w(relative(width))
+            .h(px(height * s))
+            .flex_shrink_0()
+            .rounded(px(2.0 * s))
+            .bg(color)
+    };
+    let tile = move || {
+        div()
+            .flex_1()
+            .min_w_0()
+            .rounded(px(5.0 * s))
+            .bg(soft)
+            .p(px(5.0 * s))
+            .flex()
+            .flex_col()
+            .gap(px(4.0 * s))
+    };
+    let small = move |label: &'static str, color: Hsla| {
+        div()
+            .text_size(px(8.5 * s))
+            .line_height(px(11.0 * s))
+            .text_color(color)
+            .child(label)
+    };
+    let bar = move |label: Option<&'static str>| {
+        div()
+            .flex()
+            .items_center()
+            .gap(px(3.0 * s))
+            .h(px(12.0 * s))
+            .px(px(5.0 * s))
+            .bg(soft)
+            .children((0..3).map(|_| div().size(px(4.0 * s)).rounded_full().bg(strong)))
+            .when_some(label, |bar, label| {
+                bar.child(div().ml(px(4.0 * s)).child(small(label, p.card_muted)))
+            })
+    };
+    let body: AnyElement = match kind {
+        "page" | "app" | "browser" => div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .child(bar(Some(match kind {
+                "app" => "Finder",
+                "browser" => "ghostex browser",
+                _ => "onboarding.html",
+            })))
+            .child(
+                div()
+                    .flex_1()
+                    .flex()
+                    .gap(px(6.0 * s))
+                    .p(px(7.0 * s))
+                    .when(kind == "app", |body| {
+                        body.child(
+                            div()
+                                .w(relative(0.28))
+                                .flex()
+                                .flex_col()
+                                .gap(px(4.0 * s))
+                                .children((0..4).map(|_| line(1.0, 5.0, soft))),
+                        )
+                    })
+                    .child(
+                        div()
+                            .flex_1()
+                            .flex()
+                            .flex_col()
+                            .gap(px(5.0 * s))
+                            .child(line(0.45, 7.0, strong))
+                            .child(line(0.7, 5.0, soft))
+                            .child(div().flex().gap(px(5.0 * s)).h(px(26.0 * s)).children(
+                                (0..3).map(|n| {
+                                    tile().when(n == 1 && kind == "browser", |tile| {
+                                        tile.border(px(s)).border_color(tone)
+                                    })
+                                }),
+                            )),
+                    ),
+            )
+            .into_any_element(),
+        "chart" => div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .gap(px(6.0 * s))
+            .p(px(7.0 * s))
+            .child(
+                div()
+                    .flex()
+                    .gap(px(5.0 * s))
+                    .child(
+                        tile()
+                            .child(small("Signups", p.card_muted))
+                            .child(small("1,284", p.foreground)),
+                    )
+                    .child(
+                        tile()
+                            .child(small("Week", p.card_muted))
+                            .child(small("+18%", p.foreground)),
+                    ),
+            )
+            .child(
+                div().flex_1().flex().items_end().gap(px(4.0 * s)).children(
+                    [0.34_f32, 0.52, 0.44, 0.7, 0.62, 0.88, 0.76]
+                        .into_iter()
+                        .enumerate()
+                        .map(|(n, height)| {
+                            div()
+                                .flex_1()
+                                .h(relative(height))
+                                .rounded_t(px(2.0 * s))
+                                .bg(if n == 5 { tone } else { strong })
+                        }),
+                ),
+            )
+            .into_any_element(),
+        "compare" | "triage" | "second" => div()
+            .size_full()
+            .flex()
+            .gap(px(5.0 * s))
+            .p(px(7.0 * s))
+            .children((0..if kind == "second" { 2 } else { 3 }).map(|n| {
+                let pick = (kind == "compare" && n == 1) || (kind == "second" && n == 1);
+                tile()
+                    .child(small(
+                        match (kind, n) {
+                            ("compare", 0) => "A",
+                            ("compare", 1) => "B",
+                            ("compare", _) => "C",
+                            ("triage", 0) => "#412",
+                            ("triage", 1) => "#415",
+                            ("triage", _) => "GX-88",
+                            (_, 0) => "Your agent",
+                            _ => "Second agent",
+                        },
+                        p.foreground,
+                    ))
+                    .child(line(0.85, 4.0, strong))
+                    .child(line(0.6, 4.0, strong))
+                    .child(div().flex_1())
+                    .child(
+                        div()
+                            .px(px(4.0 * s))
+                            .rounded(px(3.0 * s))
+                            .when(pick, |chip| chip.bg(p.foreground.opacity(0.85)))
+                            .when(!pick, |chip| chip.border(px(s)).border_color(strong))
+                            .child(small(
+                                match kind {
+                                    "triage" => "Merge",
+                                    "second" if n == 1 => "Checked",
+                                    "second" => "Answer",
+                                    _ => "Pick",
+                                },
+                                if pick { p.background } else { p.card_muted },
+                            )),
+                    )
+            }))
+            .into_any_element(),
+        "map" | "workers" | "worktree" => div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap(px(8.0 * s))
+            .p(px(7.0 * s))
+            .child(
+                div()
+                    .px(px(7.0 * s))
+                    .py(px(3.0 * s))
+                    .rounded(px(5.0 * s))
+                    .bg(soft)
+                    .border(px(s))
+                    .border_color(if kind == "map" { strong } else { tone })
+                    .child(small(
+                        match kind {
+                            "workers" => "Coordinator",
+                            "worktree" => "main",
+                            _ => "Chat box",
+                        },
+                        p.foreground,
+                    )),
+            )
+            .child(div().w(px(1.0)).h(px(10.0 * s)).bg(strong))
+            .child(
+                div().flex().gap(px(8.0 * s)).children(
+                    match kind {
+                        "workers" => vec!["Worker 1", "Worker 2", "Worker 3"],
+                        "worktree" => vec!["boost/onboarding"],
+                        _ => vec!["gxserver", "Agent"],
+                    }
+                    .into_iter()
+                    .map(|label| {
+                        div()
+                            .px(px(7.0 * s))
+                            .py(px(3.0 * s))
+                            .rounded(px(5.0 * s))
+                            .bg(soft)
+                            .border(px(s))
+                            .border_color(strong)
+                            .child(small(label, p.foreground))
+                    }),
+                ),
+            )
+            .into_any_element(),
+        "form" | "steps" => div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .gap(px(5.0 * s))
+            .p(px(7.0 * s))
+            .child(line(0.55, 6.0, strong))
+            .children((0..3).map(|n| {
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0 * s))
+                    .h(px(15.0 * s))
+                    .px(px(5.0 * s))
+                    .rounded(px(4.0 * s))
+                    .bg(soft)
+                    .child(
+                        div()
+                            .size(px(7.0 * s))
+                            .rounded(px(if kind == "form" { 4.0 } else { 2.0 } * s))
+                            .border(px(1.5 * s))
+                            .border_color(strong)
+                            .when(n == 0, |dot| dot.bg(p.foreground)),
+                    )
+                    .child(line(0.4, 4.0, strong))
+                    .child(div().flex_1())
+                    .when(kind == "steps", |row| {
+                        row.child(small("Done", p.card_muted))
+                    })
+                    .when(kind == "form" && n == 0, |row| {
+                        row.child(small("Recommended", p.card_muted))
+                    })
+            }))
+            .into_any_element(),
+        "shots" => div()
+            .size_full()
+            .flex()
+            .gap(px(6.0 * s))
+            .p(px(7.0 * s))
+            .children(["Before", "After"].into_iter().map(|label| {
+                tile()
+                    .child(small(label, p.card_muted))
+                    .child(line(0.7, 5.0, strong))
+                    .child(div().flex_1().rounded(px(3.0 * s)).bg(if label == "After" {
+                        tone.opacity(0.35)
+                    } else {
+                        strong
+                    }))
+            }))
+            .into_any_element(),
+        "docs" => div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .gap(px(5.0 * s))
+            .p(px(9.0 * s))
+            .child(small("onboarding-plan.md", p.card_muted))
+            .child(line(0.5, 7.0, strong))
+            .child(line(0.9, 4.0, soft))
+            .child(line(0.82, 4.0, soft))
+            .child(line(0.88, 4.0, soft))
+            .child(line(0.35, 6.0, strong))
+            .child(line(0.75, 4.0, soft))
+            .into_any_element(),
+        "notify" => div()
+            .size_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .p(px(8.0 * s))
+            .child(
+                div()
+                    .w_full()
+                    .flex()
+                    .items_center()
+                    .gap(px(7.0 * s))
+                    .p(px(7.0 * s))
+                    .rounded(px(7.0 * s))
+                    .bg(soft)
+                    .border(px(s))
+                    .border_color(strong)
+                    .child(
+                        svg()
+                            .path("titlebar/bell.svg")
+                            .size(px(14.0 * s))
+                            .text_color(tone),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .child(small("Onboarding plan", p.foreground))
+                            .child(small("Done: 3 pages and a report", p.card_muted)),
+                    ),
+            )
+            .into_any_element(),
+        _ => div()
+            .size_full()
+            .p(px(9.0 * s))
+            .text_size(px(11.0 * s))
+            .line_height(px(15.0 * s))
+            .text_color(p.card_muted)
+            .overflow_hidden()
+            .child(prompt.chars().take(170).collect::<String>())
+            .into_any_element(),
+    };
+    div()
+        .w_full()
+        .h(px(100.0 * s))
+        .flex_shrink_0()
+        .rounded(px(8.0 * s))
+        .border(px(s))
+        .border_color(p.foreground.opacity(0.1))
+        .bg(p.foreground.opacity(0.03))
+        .overflow_hidden()
+        .child(body)
+        .into_any_element()
 }

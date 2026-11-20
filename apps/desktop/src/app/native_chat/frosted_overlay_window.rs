@@ -47,22 +47,26 @@ pub(crate) fn set_app_modal_over_chat(open: bool, cx: &mut gpui::App) {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::app::native_chat) enum FrostedOverlay {
     ScrollBottom,
+    /// The Boosts' one-time callout above the Boost pill (boosts.rs).
+    BoostHint,
 }
 
 impl FrostedOverlay {
-    const ALL: [FrostedOverlay; 1] = [FrostedOverlay::ScrollBottom];
+    const ALL: [FrostedOverlay; 2] = [FrostedOverlay::ScrollBottom, FrostedOverlay::BoostHint];
 }
 
 /// The windows of every floating control, one each.
 #[derive(Default)]
 pub(in crate::app::native_chat) struct FrostedOverlayWindows {
     scroll_bottom: FrostedOverlayWindowState,
+    boost_hint: FrostedOverlayWindowState,
 }
 
 impl FrostedOverlayWindows {
     fn state(&mut self, overlay: FrostedOverlay) -> &mut FrostedOverlayWindowState {
         match overlay {
             FrostedOverlay::ScrollBottom => &mut self.scroll_bottom,
+            FrostedOverlay::BoostHint => &mut self.boost_hint,
         }
     }
 
@@ -73,6 +77,7 @@ impl FrostedOverlayWindows {
     ) -> Rc<Cell<Option<Bounds<Pixels>>>> {
         match overlay {
             FrostedOverlay::ScrollBottom => self.scroll_bottom.measured.clone(),
+            FrostedOverlay::BoostHint => self.boost_hint.measured.clone(),
         }
     }
 }
@@ -220,6 +225,7 @@ fn apply_frosted_overlay(
     };
     let radius = match overlay {
         FrostedOverlay::ScrollBottom => frame.size.height / 2.0,
+        FrostedOverlay::BoostHint => frame.size.height.min(px(24.0)) / 2.0,
     };
     let display_id = owner.display_for(Bounds::new(origin + frame.origin, frame.size), cx);
     let result = cx.open_window(
@@ -306,6 +312,10 @@ impl Render for FrostedOverlayView {
             gpui::white().opacity(0.11)
         };
         match self.overlay {
+            FrostedOverlay::BoostHint => {
+                let hint = chat.read(cx).snapshot["boosts"]["hint"].clone();
+                super::boosts::boost_callout(self.chat.clone(), &hint, &p)
+            }
             FrostedOverlay::ScrollBottom => match chat.read(cx).pill_toast() {
                 Some(toast) => pill_toast(toast, &p),
                 None => {

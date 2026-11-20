@@ -100,6 +100,7 @@ action_kinds! {
     ToggleBoost => "toggleBoost",
     SetBoostTab => "setBoostTab",
     RefreshBoosts => "refreshBoosts",
+    SaveAsBoost => "saveAsBoost",
     DismissBoostHint => "dismissBoostHint",
     DismissCoordinatorQuality => "dismissCoordinatorQuality",
     SetCollabGuest => "setCollabGuest",

@@ -431,6 +431,8 @@ pub struct BoostsState {
     pub unsupported: bool,
     /// The menu's open tab, the one used last in this chat.
     pub tab: Option<String>,
+    /// The name of a Boost Save as Boost is saving, for the toast once gxserver has it.
+    pub saving: Option<String>,
 }
 
 impl BoostsState {
@@ -592,10 +594,31 @@ pub fn settle_rpc(
     state.core.claim_refusal();
     state.extras.boosts.request = None;
     match outcome {
-        RpcOutcome::Ok { result } => apply_answer(state, result),
-        // A read that fails (an older gxserver has no `/api/boosts`) leaves the chat without
-        // Boosts, quietly.
-        RpcOutcome::Err { .. } => {
+        RpcOutcome::Ok { result } => {
+            apply_answer(state, result);
+            if let Some(label) = state.extras.boosts.saving.take() {
+                state.core.request_publish();
+                return Some(vec![Effect::Toast {
+                    level: "info".to_string(),
+                    message: format!(
+                        "Saved as a Boost: {label}. It is in the Boost menu's Custom tab; Settings > Boosts on your computer edits it."
+                    ),
+                }]);
+            }
+        }
+        // Save as Boost says why it could not; a read that fails (an older gxserver has no
+        // `/api/boosts`) leaves the chat without Boosts, quietly.
+        RpcOutcome::Err { message, .. } => {
+            if state.extras.boosts.saving.take().is_some() {
+                return Some(vec![Effect::Toast {
+                    level: "error".to_string(),
+                    message: if message.is_empty() {
+                        "Couldn't save the Boost.".to_string()
+                    } else {
+                        message.clone()
+                    },
+                }]);
+            }
             if state.extras.boosts.hint_seen.is_none() {
                 state.extras.boosts.unsupported = true;
             }
@@ -663,6 +686,28 @@ pub fn handle(
                 return Vec::new();
             }
             vec![read(state, next_request_id(), json!({ "op": "list" }))]
+        }
+        // The computer's renderers name it in Settings > Boosts instead; a phone saves it at once,
+        // named by its first words.
+        ActionKind::SaveAsBoost => {
+            let text = param(action, "text").unwrap_or_default().trim().to_string();
+            if text.is_empty() || state.extras.boosts.request.is_some() {
+                return Vec::new();
+            }
+            let label: String = text
+                .split_whitespace()
+                .take(4)
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .take(40)
+                .collect();
+            state.extras.boosts.saving = Some(label.clone());
+            vec![read(
+                state,
+                next_request_id(),
+                json!({ "op": "addCustom", "label": label, "prompt": text }),
+            )]
         }
         ActionKind::DismissBoostHint => {
             if state.extras.boosts.hint_seen == Some(true) {

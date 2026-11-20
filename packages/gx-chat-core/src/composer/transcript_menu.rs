@@ -16,6 +16,8 @@ pub enum TranscriptMenuItemId {
     Copy,
     AddToChat,
     Reply,
+    /// Save the selected words as one of the user's Boosts (`extras/boosts.rs`).
+    SaveAsBoost,
 }
 
 /// One selection row, before its command is attached.
@@ -50,6 +52,14 @@ pub fn transcript_menu_items(
             disabled: question_active,
         });
         items.push(reply_item(question_active));
+        // CDXC:Boosts 2026-11-20 DECISION: User (Q4261 "A"): selected words become a Boost of
+        // their own with "Save as Boost" (extras/boosts.rs has the decision).
+        items.push(TranscriptMenuItem {
+            id: TranscriptMenuItemId::SaveAsBoost,
+            label: "Save as Boost",
+            icon_path: "titlebar/sparkles.svg",
+            disabled: false,
+        });
     }
     items
 }
@@ -154,6 +164,10 @@ pub fn transcript_menu_rows(
                 TranscriptMenuItemId::Reply => ordered! {
                     "quote": transcript_quote(selection),
                     "type": "replyToSelection",
+                },
+                TranscriptMenuItemId::SaveAsBoost => ordered! {
+                    "text": selection,
+                    "type": "saveAsBoost",
                 },
             },
             icon_path: item.icon_path.to_string(),

@@ -463,6 +463,23 @@ impl ChatOptionMenu {
         self.open_panel_at(rows, anchor, width, depth, false, false, cx);
     }
 
+    /// A side panel beside the open menu, one level down (the Boost menu's preview,
+    /// native_chat/boosts.rs): right of `anchor` when there is room, else left of it.
+    pub(in crate::app::native_chat) fn open_side_panel(
+        &mut self,
+        rows: Vec<Value>,
+        anchor: Bounds<Pixels>,
+        width: f32,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_panel(rows, anchor, width, 1, cx);
+    }
+
+    /// Whether a side panel is open beside the menu.
+    pub(in crate::app::native_chat) fn has_side_panel(&self) -> bool {
+        self.windows.len() > 1
+    }
+
     /// A select's list: below its trigger (above when there is no room), left edges aligned.
     pub(super) fn open_dropdown(
         &mut self,

@@ -122,6 +122,7 @@ impl Render for SuggestionPanel {
                 Some("slash") => "Slash commands",
                 Some("skill") => "Available skills",
                 Some("session") => "Agents",
+                Some("boost") => "Boosts",
                 _ => "Project files",
             })
             .size_full()
