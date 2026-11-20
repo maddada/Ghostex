@@ -129,7 +129,9 @@ impl GhostexGpuiApp {
                 .detach();
             }
             NotificationFeedCommand::DeferAndJumpNext => self.gx_store_defer_notification(cx),
-            NotificationFeedCommand::MarkAllRead | NotificationFeedCommand::ClearAll => {
+            NotificationFeedCommand::MarkAllRead
+            | NotificationFeedCommand::MarkFinishedSeen
+            | NotificationFeedCommand::ClearAll => {
                 let Some(action) = command.update_action() else {
                     return;
                 };

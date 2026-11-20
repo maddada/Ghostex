@@ -45,6 +45,8 @@ pub enum NotificationFeedCommand {
     MarkRead,
     MarkUnread,
     MarkAllRead,
+    /// The bell panel opened: the "finished" rows go read, nothing that still needs the user does.
+    MarkFinishedSeen,
     ClearAll,
     JumpToLatestUnread,
     DeferAndJumpNext,
@@ -58,6 +60,7 @@ impl NotificationFeedCommand {
             "markRead" => Self::MarkRead,
             "markUnread" => Self::MarkUnread,
             "markAllRead" => Self::MarkAllRead,
+            "markFinishedSeen" => Self::MarkFinishedSeen,
             "clearAll" => Self::ClearAll,
             "jumpToLatestUnread" => Self::JumpToLatestUnread,
             "deferAndJumpNext" => Self::DeferAndJumpNext,
@@ -72,12 +75,13 @@ impl NotificationFeedCommand {
             Self::MarkRead => "markRead",
             Self::MarkUnread => "markUnread",
             Self::MarkAllRead => "markAllRead",
+            Self::MarkFinishedSeen => "markFinishedSeen",
             Self::ClearAll => "clearAll",
             _ => return None,
         })
     }
 
-    /// Whether the update names one row. `markAllRead` and `clearAll` take nothing, and a
+    /// Whether the update names one row. `markAllRead`, `markFinishedSeen` and `clearAll` take nothing, and a
     /// row command without a row id does nothing at all.
     pub fn takes_notification_id(self) -> bool {
         matches!(

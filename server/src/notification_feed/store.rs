@@ -348,6 +348,17 @@ pub(crate) fn mark_notification_read(db: &Connection, id: &str) -> DomainResult<
     .map_err(sql_error)
 }
 
+/// CDXC:Notifications 2026-11-20 DECISION:
+/// User: "make the notifications thingy lose the dot shown there if it's just a completion dot when I click to see the content there (marks as read)". Opening the bell reads the "finished" rows, the blue turn-done ones, so its badge goes; anything that still needs the user (a question, an approval, a failure, a message not sent) keeps counting until it is handled.
+/// Rows pushed back with deferUnread stay unread. Unlike `markRead`, this does not acknowledge the rows' sessions: a session's blue "finished, not seen" dot clears when the session is opened, not when the bell is.
+pub(crate) fn mark_finished_notifications_seen(db: &Connection) -> DomainResult<usize> {
+    db.execute(
+        "UPDATE notification_feed SET readAt = ?1 WHERE readAt IS NULL AND deferredAt IS NULL AND kind = ?2",
+        params![now_iso(), NOTIFICATION_FEED_KIND_FINISHED],
+    )
+    .map_err(sql_error)
+}
+
 pub(crate) fn mark_notification_unread(db: &Connection, id: &str) -> DomainResult<usize> {
     db.execute(
         "UPDATE notification_feed SET readAt = NULL, deferredAt = NULL WHERE id = ?1",

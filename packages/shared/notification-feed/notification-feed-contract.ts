@@ -100,6 +100,7 @@ export const EMPTY_NOTIFICATION_FEED_STATE: NotificationFeedState = {
  * markSessionRead takes `sessionId` and reads every row of that session.
  * deferUnread takes `sessionId`: the session's newest row becomes unread and moves to the back of the unread queue, so a jump lands on it last.
  * markAllRead and clearAll take nothing.
+ * markFinishedSeen takes nothing: it reads the "finished" rows (not deferred ones) without acknowledging their sessions; a client sends it when its bell panel opens.
  */
 export type NotificationFeedUpdateAction =
   | 'markRead'
@@ -108,6 +109,7 @@ export type NotificationFeedUpdateAction =
   | 'markSessionRead'
   | 'deferUnread'
   | 'markAllRead'
+  | 'markFinishedSeen'
   | 'clearAll';
 
 export type NotificationFeedUpdateParams = {
