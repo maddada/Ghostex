@@ -67,13 +67,13 @@ pub fn looks_like_secret(text: &str) -> bool {
     if text.contains("PRIVATE KEY-----") {
         return true;
     }
-    judged_tokens(text).any(|(token, path)| {
-        known_prefix(token) || aws_key_id(token) || (!path && random_token(token))
-    })
+    tokens(text).any(|token| known_prefix(token) || aws_key_id(token) || random_token(token))
 }
 
 /// The words of `text` (`tokens`), each with whether it is a piece of a path written with spaces in
-/// it. Only a key's prefix or an AWS key id counts in such a piece, not how random it looks.
+/// it. Such a piece is not judged as what is left of a key (`random_fragment`, 16 characters); a
+/// whole random token (`random_token`, 32) still counts in it, as do a key's prefix and an AWS key
+/// id.
 ///
 /// A path starts at a word that starts with `/` or `~` (a word that does is never judged random
 /// either) and goes on through each word one space after the last that has a `/` and a folder
@@ -86,10 +86,13 @@ pub fn looks_like_secret(text: &str) -> bool {
 /// Rust/attachments/04170605…4d1c/2026-11-19_Google Chrome_19-33-36@2x.png)` reference split at its
 /// spaces, and the piece `Rust/attachments/04170605…/2026-11-19_Google` read as a random token: the
 /// 64-character content hash made the long run and `Rust` and `Google` the upper case. The chat
-/// box then held its Send and kept the draft off other devices. Every such reference Ghostex
-/// writes for an attachment starts with `/` or `~` (or a drive, whose `\` no key holds), so this
-/// covers them and a path the user pastes alike. A key one space after a path and holding a `/`
-/// and a word is the one thing this lets by, and only when it has no known prefix.
+/// box then held its Send and kept the draft off other devices. The Send warning is fixed by the
+/// long run needing both cases (`longest_random_run`), so a whole random token still counts in a
+/// path's piece: a security review found that exempting it there let a base64 key typed one space
+/// after a path or link (`cat /tmp/notes <key>`) go unwarned. Only the draft's 16-character
+/// fragment check skips the piece, as `2026-11-19_Google` alone is long and mixed enough to be
+/// one. Every reference Ghostex writes for an attachment starts with `/` or `~` (or a drive,
+/// whose `\` no key holds), so this covers them and a path the user pastes alike.
 fn judged_tokens(text: &str) -> impl Iterator<Item = (&str, bool)> {
     let mut in_path = false;
     let mut previous_end = 0;
@@ -240,9 +243,9 @@ fn mask_private_key_blocks(text: &str) -> (String, bool) {
 /// characters after it (a body of words is not one, after a prefix ordinary words can follow),
 /// `AKIA`/`ASIA` with at least 8 capitals or digits, or a random run of 16 characters or more.
 /// Ordinary words, links and paths stay out (`not_a_fragment` in the fixture); a piece of a path
-/// with spaces in it (`path`, `judged_tokens`) is not judged on how random it looks.
+/// with spaces in it (`path`, `judged_tokens`) is not judged as a random fragment.
 fn key_fragment(token: &str, path: bool) -> bool {
-    if known_prefix(token) || aws_key_id(token) || (!path && random_token(token)) {
+    if known_prefix(token) || aws_key_id(token) || random_token(token) {
         return true;
     }
     let prefixed = PREFIXES.iter().any(|known| {
