@@ -296,6 +296,7 @@ pub(crate) fn unrecorded_failure(state: &ChatState, transcript: &[ChatRow]) -> O
         custom_message: None,
         message_number: None,
         message_ref: None,
+        held_notes: None,
     })
 }
 

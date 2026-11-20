@@ -116,6 +116,7 @@ impl NativeChatView {
                     .child(frame)
                     // "Image is being uploaded" while it waits for its picture, on its own side.
                     .children(self.attaching_line(id, false, p))
+                    .children(self.held_notes_line(id, message, false, p, cx))
                     .children(failed_delivery)
                     .children(actions),
             )

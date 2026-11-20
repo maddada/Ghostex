@@ -239,6 +239,12 @@ pub struct ChatMessage {
     /// the number. Present exactly when `message_number` is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message_ref: Option<String>,
+    /// On a user row the chat shows: the messages `ghostex agents send --with-next` held for it,
+    /// which went to the agent inside its `<ghostex-system>` block (gx-chat-core
+    /// `session::appended_notes::held_notes`). Never on the wire: the chat core fills it as it
+    /// takes the block out of the row, and draws "2 held notes went in with this message".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held_notes: Option<Vec<String>>,
 }
 
 /// An OMP custom message's type (`advisor`, `async-result`, `irc:incoming`, …) and its details.

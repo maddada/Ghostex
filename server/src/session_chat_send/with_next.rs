@@ -280,22 +280,14 @@ pub(crate) fn held_note_message(note: &Value) -> String {
 }
 
 /// The held `notes` as the one note that goes in the releasing message's `<ghostex-system>` block
-/// (Claude Code), `None` for none.
+/// (Claude Code), `None` for none. Each note sits between the tags the chat finds it by, to draw
+/// "2 held notes went in with this message" (gx-chat-core `appended_notes::held_notes_note`).
 pub(crate) fn held_notes_block(notes: &[Value]) -> Option<String> {
     let texts: Vec<&str> = notes
         .iter()
         .filter_map(|note| note["text"].as_str())
-        .map(str::trim)
-        .filter(|text| !text.is_empty())
         .collect();
-    if texts.is_empty() {
-        return None;
-    }
-    Some(format!(
-        "Held until this message (`ghostex agents send --with-next`); read {} with it, in this turn:\n\n{}",
-        if texts.len() == 1 { "it" } else { "them" },
-        texts.join("\n\n---\n\n")
-    ))
+    ghostex_gx_chat_core::session::appended_notes::held_notes_note(&texts)
 }
 
 /// A held message dropped because its recipient was closed: who to tell, and what.

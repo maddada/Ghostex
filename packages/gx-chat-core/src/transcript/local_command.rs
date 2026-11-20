@@ -402,6 +402,7 @@ pub fn with_live_shell_output(
         custom_message: None,
         message_number: None,
         message_ref: None,
+        held_notes: None,
     };
     pending.push(std::sync::Arc::new(shell_command_message(
         &template,
