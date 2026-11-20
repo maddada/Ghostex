@@ -22,6 +22,8 @@ USAGE
   ghostex agents switch-account <session-ref> --account <number|email>
                                [--force] [--json]
   ghostex agents reload <session-ref> [--json]
+  ghostex agents link | unlink | links  Only when the user asks for sessions to report to you:
+                                       ghostex agents link --help
 
 QUICK START
   ghostex agents whoami --json

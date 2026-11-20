@@ -156,7 +156,9 @@ pub(super) fn nest_unified_rows(
         .enumerate()
         .map(|(index, row)| {
             let session = &row.session.row;
-            if detached(session, settings, now_ms) {
+            // A lead's linked sessions stay their own cards here: a lead has no hat to fold or
+            // unfold them (CDXC:LeadLinks 2026-11-20 in server/src/agents/lead_links/mod.rs).
+            if detached(session, settings, now_ms) || session.lead_linked {
                 return None;
             }
             session

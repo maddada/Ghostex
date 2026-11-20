@@ -556,6 +556,15 @@ fn coordinator_rows(row: &SessionRow, stale: bool, has_inactive_threads: bool) -
             "coordinator-crown-points",
             children,
         ));
+    } else if row.lead_linked {
+        // CDXC:LeadLinks 2026-11-20 SEE-ALSO: server/src/agents/lead_links/mod.rs (the user: "Unlink
+        // is fine to add but I don't want linking sessions to be a context menu item at all"). A
+        // linked session is an ordinary session: Unlink only, never Mark Thread Done.
+        rows.push(MenuItem::row(
+            "Unlink from Lead",
+            "unlink",
+            MenuCommand::coordinator_session(id, "unlinkLead"),
+        ));
     } else if row.coordinator_parent.is_some() {
         let state = row.thread_state.as_deref();
         if state == Some("done") {
@@ -574,6 +583,18 @@ fn coordinator_rows(row: &SessionRow, stale: bool, has_inactive_threads: bool) -
                 .with_disabled(matches!(state, Some("working" | "waiting"))),
             );
         }
+    }
+    if row.is_lead && !row.is_coordinator && row.lead_link_count > 0 {
+        let count = row.lead_link_count;
+        rows.push(MenuItem::row(
+            &if count == 1 {
+                "Stop leading 1 session".to_string()
+            } else {
+                format!("Stop leading {count} sessions")
+            },
+            "unlink",
+            MenuCommand::coordinator_session(id, "stopLeading"),
+        ));
     }
     if rows.len() == 1 {
         return Vec::new();

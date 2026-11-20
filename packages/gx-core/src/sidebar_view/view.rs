@@ -862,8 +862,17 @@ pub struct SessionRow {
     /// "Make main coordinator".
     pub is_main_coordinator: bool,
     /// The coordinator this session is a thread of: on the same machine, or (for a thread a
-    /// coordinator started on another computer) the coordinator's machine.
+    /// coordinator started on another computer) the coordinator's machine. A session linked to a
+    /// lead (`lead_linked`) carries its lead here, so it nests the same way.
     pub coordinator_parent: Option<SessionKey>,
+    /// The session leads others through lead links (gxserver `isLead`, server/src/agents/lead_links):
+    /// its linked sessions nest under it, and its row shows the link count.
+    pub is_lead: bool,
+    /// How many sessions are linked to this lead.
+    pub lead_link_count: u16,
+    /// `coordinator_parent` is a lead, not a coordinator: the row is an ordinary session (no Mark
+    /// Thread Done) whose menu offers Unlink from its lead.
+    pub lead_linked: bool,
     /// A thread's state: `waiting`, `working`, `finished`, `sleeping`, `closed` or `done`.
     pub thread_state: Option<String>,
     /// A coordinator's threads on other computers, which the list nests under it from those

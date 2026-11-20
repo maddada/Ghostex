@@ -363,6 +363,7 @@ impl GhostexGpuiApp {
                 // CDXC:Sidebar 2026-10-29 DECISION: User: "please swap the order of these 2 things (the threads one for orchestrator with the link tag)". The links badge comes before a coordinator's workers badge; the phone's SessionRow.tsx follows.
                 .when(!buttons_shown, |row| row.children(self.render_native_session_links_badge(session, appearance)))
                 .when(!buttons_shown && !clock_fold, |row| row.children(super::threads::coordinator_badge(session, appearance)))
+                .when(!buttons_shown, |row| row.children(super::threads::lead_badge(session, appearance)))
                 // A Unified coordinator whose hat a clock owns folds from its count, idle or hovered too.
                 .when(clock_fold, |row| row.children(self.render_unified_crew_count(session, appearance, cx)))
                 .when(!buttons_shown, |row| row.children(super::gbots_rows::opened_by_chief_tag(session, appearance)))

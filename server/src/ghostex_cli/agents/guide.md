@@ -59,6 +59,8 @@ of its threads. When the user wants a separate session they chat to directly, ad
 `--standalone` (not linked, no reports to the coordinator), and use
 `ghostex coordinator unlink <thread-ref>` to turn an existing thread into one
 (both need 10.24.0 or later).
+Only if the user asks for sessions to report to you without making you a
+coordinator: `ghostex agents guide leads`.
 
 ## Other computers
 

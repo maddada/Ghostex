@@ -81,6 +81,16 @@ pub(crate) async fn handle_send_session_chat_message_from(
             }
             if let Some(key) = &target {
                 crate::server::request_report_retry(key);
+                // A lead's message to a session linked to it: the turn it starts is owed a report
+                // (CDXC:LeadLinks 2026-11-20 in agents/lead_links/mod.rs).
+                let (lead_state, lead_caller, lead_target) =
+                    (state.clone(), attempt_caller.clone(), key.clone());
+                let _ = tokio::task::spawn_blocking(move || {
+                    if let Ok(db) = open_gxserver_database(&lead_state.paths) {
+                        crate::agents::lead_links::note_lead_send(&db, &lead_caller, &lead_target);
+                    }
+                })
+                .await;
             }
             edit_result(response, |result| result.extend(fields)).await
         },

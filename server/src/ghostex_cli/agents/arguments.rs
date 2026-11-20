@@ -52,6 +52,9 @@ pub(super) struct Arguments {
     /// `send --as-user`: the user's own terminal (or Grok Bot on this computer) sends as the user;
     /// refused inside any Ghostex session (identity.rs `sender`).
     pub as_user: bool,
+    /// `--lead <session-ref|self>`: create and link make the session report to that lead
+    /// (agents/lead_links in gxserver).
+    pub lead: Option<String>,
     pub flags: Flags,
 }
 
@@ -76,6 +79,7 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
         main_coordinator: false,
         if_none: None,
         as_user: false,
+        lead: None,
         flags: Flags::default(),
     };
     let mut args = args.iter();
@@ -119,7 +123,7 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                 };
             }
             "--body-file" | "--server" | "--computer" | "--task" | "--title" | "--project-id"
-            | "--path" | "--request-id" | "--account" => {
+            | "--path" | "--request-id" | "--account" | "--lead" => {
                 let value = args
                     .next()
                     .filter(|value| !value.starts_with("--") && !value.is_empty())
@@ -132,6 +136,7 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                     "--path" => Some(&mut parsed.path),
                     "--request-id" => Some(&mut parsed.request_id),
                     "--account" => Some(&mut parsed.account),
+                    "--lead" => Some(&mut parsed.lead),
                     _ => None,
                 };
                 if let Some(slot) = slot {
@@ -173,6 +178,24 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
     {
         return Err(CliError::Other(
             "--request-id must be 1 to 128 characters.".into(),
+        ));
+    }
+    if parsed.lead.is_some()
+        && !matches!(parsed.command.as_str(), "create" | "link")
+        && !(parsed.command == "unlink" && parsed.all)
+    {
+        return Err(CliError::Other(
+            "--lead is only available for create, link and unlink --all.".into(),
+        ));
+    }
+    if parsed.lead.is_some() && parsed.standalone {
+        return Err(CliError::Other(
+            "Choose --lead or --standalone, not both.".into(),
+        ));
+    }
+    if parsed.lead.is_some() && parsed.flags.contains("computer") {
+        return Err(CliError::Other(
+            "Lead links work on this computer only: --lead can't go with --computer.".into(),
         ));
     }
     if parsed.as_user && parsed.command != "send" {
@@ -315,6 +338,31 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                 return Err(CliError::Other(
                     "Creating on another computer needs --project-id: one of its projects (ghostex sessions --computer <name> lists them with their ids).".into(),
                 ));
+            }
+        }
+        "link" | "unlink" | "links" => {
+            if parsed.body_file.is_some() || parsed.delivery != Delivery::Normal {
+                return Err(CliError::Other(format!(
+                    "{} does not accept a message or a delivery flag. See ghostex agents link --help.",
+                    parsed.command
+                )));
+            }
+            let usage = match parsed.command.as_str() {
+                "link" if parsed.positional.len() != 1 || parsed.lead.is_none() || parsed.all => {
+                    Some("ghostex agents link <session-ref> --lead <session-ref|self>")
+                }
+                "unlink" if (parsed.positional.len() == 1) == parsed.all
+                    || parsed.positional.len() > 1 =>
+                {
+                    Some("ghostex agents unlink <session-ref> (or --all for every session linked to you)")
+                }
+                "links" if !parsed.positional.is_empty() => Some("ghostex agents links [--all] [--json]"),
+                _ => None,
+            };
+            if let Some(usage) = usage {
+                return Err(CliError::Other(format!(
+                    "Usage: {usage}. See ghostex agents link --help."
+                )));
             }
         }
         "switch-account" | "reload" => {

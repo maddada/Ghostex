@@ -1,4 +1,4 @@
-use super::{arguments, delivery, identity, lifecycle, main_coordinator};
+use super::{arguments, delivery, identity, leads, lifecycle, main_coordinator};
 use crate::ghostex_cli::{output::print_json, rpc::CliResult, sessions};
 use serde_json::json;
 
@@ -8,14 +8,31 @@ use serde_json::json;
 /// User (Q4262 "B"): Ghostex's own skills are retired for CLI help. The `ghostex-agents` skill's habits (Copy Details, other computers, stuck sessions, reading another thread, renaming, the final report) live here now, with the title rules of the retired `ghostex-auto-rename-session` and the Codex fork steps of `ghostex-move-codex-session`; `ghostex agents --help` keeps the verbs.
 pub(crate) const AGENTS_GUIDE_MD: &str = include_str!("guide.md");
 
+/// `ghostex agents guide leads`: lead links, read only when the user asks for a lead.
+///
+/// CDXC:LeadLinks 2026-11-20 DECISION:
+/// User, building #678: "I want to avoid agents using the lead things unless the user really asks
+/// for this, and agents shouldn't have unneeded info/context about this." So lead links are taught
+/// only here and in `ghostex agents link --help`, never in the always-read `ghostex agent-guide`
+/// or the `ghostex` skill; `ghostex agents guide` names the topic in one line and `agents --help`
+/// in one usage line.
+pub(crate) const AGENTS_GUIDE_LEADS_MD: &str = include_str!("guide_leads.md");
+
 pub(crate) fn run(args: &[String]) -> CliResult<()> {
     if args.first().map(String::as_str) == Some("guide") {
-        print!("{AGENTS_GUIDE_MD}");
+        match args.get(1).map(String::as_str) {
+            Some("leads") => print!("{AGENTS_GUIDE_LEADS_MD}"),
+            _ => print!("{AGENTS_GUIDE_MD}"),
+        }
         return Ok(());
     }
     let args = arguments::parse(args)?;
     if args.help {
-        print!("{}", include_str!("help.txt"));
+        if matches!(args.command.as_str(), "link" | "unlink" | "links") {
+            print!("{}", include_str!("help_link.txt"));
+        } else {
+            print!("{}", include_str!("help.txt"));
+        }
         return Ok(());
     }
     match args.command.as_str() {
@@ -103,6 +120,20 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         }
         "close" => {
             print_json(&lifecycle::close(&args)?);
+        }
+        "link" => {
+            print_json(&leads::link(&args)?);
+        }
+        "unlink" => {
+            print_json(&leads::unlink(&args)?);
+        }
+        "links" => {
+            let result = leads::links(&args)?;
+            if args.json {
+                print_json(&result);
+            } else {
+                leads::print_links(&result);
+            }
         }
         "switch-account" => {
             let result = lifecycle::switch_account(&args)?;

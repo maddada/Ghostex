@@ -1223,6 +1223,17 @@ pub struct PresentationSession {
     /// nests those computers' rows under the coordinator (server/src/coordinators/remote_threads.rs).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coordinator_remote_threads: Option<Vec<PresentationRemoteThread>>,
+    /// The lead this ordinary session reports to through a lead link (server/src/agents/lead_links);
+    /// the client nests it under the lead. Absent otherwise and from an older gxserver.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead_project_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead_session_id: Option<String>,
+    /// The session leads others through lead links; `lead_link_count` says how many.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub is_lead: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead_link_count: Option<u32>,
     /// The main session this session is a side chat of (server/src/side_chats/); a side chat is
     /// left out of every session list and shown from its main chat's Side chats pill.
     #[serde(default, skip_serializing_if = "Option::is_none")]

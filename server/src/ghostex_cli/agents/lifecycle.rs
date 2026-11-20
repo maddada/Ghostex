@@ -93,7 +93,21 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
     let mut result = json!({"ok": true, "status": "created", "globalRef": reference, "session": identity::summary(live_session)});
     // CDXC:Coordinators 2026-09-30 WHY: a coordinator that starts a worker the `$ghostex-agents` way still gets it as a tracked thread; for any other caller the link is a no-op.
     // CDXC:Coordinators 2026-10-15 DECISION: User: "a new thread ... that i just chat to about this ... maybe could be a thread not actually under you but separate in the sidebar, better." `--standalone` skips the link, so the session is a plain sidebar row that reports to nobody.
-    if args.standalone {
+    if let Some(lead) = &args.lead {
+        // `--lead`: a lead link instead of a coordinator thread (agents/lead_links in gxserver),
+        // made before the task is queued so the turn the task starts is the lead's.
+        match super::leads::link_session(live_session, lead, body.is_some(), &args.flags) {
+            Ok(linked) => {
+                result["lead"] = linked["leadGlobalRef"].clone();
+                result["leadTitle"] = linked["leadTitle"].clone();
+            }
+            Err(error) => {
+                result["leadLinkError"] = json!(format!(
+                    "Created {reference}, but linking it to the lead failed: {error}. Link it with ghostex agents link {reference} --lead {lead}; do not create another session."
+                ));
+            }
+        }
+    } else if args.standalone {
         result["coordinatorThread"] = json!(false);
     } else if let (true, Some(caller)) = (
         flags.contains("computer"),

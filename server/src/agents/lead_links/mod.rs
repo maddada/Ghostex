@@ -1,0 +1,312 @@
+//! Lead links: an ordinary session that reports to another ordinary session, its lead, the way a
+//! coordinator's thread reports to its coordinator, without the coordinator role.
+//!
+//! CDXC:LeadLinks 2026-11-20 DECISION:
+//! GitHub #678 (WangAxerold leads work from ordinary sessions and polls the host with a watcher to
+//! learn when the sessions it started finish or go quiet). From the design page the user picked the
+//! minimal version (Q4277 A): `ghostex agents create --lead`, `agents link`, `agents unlink`; the
+//! final message of each turn THE LEAD started is forwarded to it (turns the user starts in a linked
+//! session stay between them), and the lead is told when a linked session waits on an answer, goes
+//! quiet or is closed. The lead stays an ordinary session: no playbook, no reply format, it keeps
+//! its own work items, and a linked session keeps its own and can still `agents send` its lead.
+//! Consent (Q4282, the user's note): "agent asks but I don't need to allow; Unlink is fine to add but
+//! I don't want linking sessions to be a context menu item at all; it's a niche use case, keep the
+//! lead thing in the guide", and "agents shouldn't have unneeded info/context about this". So there
+//! is no approval step and no Link menu item; the app offers only Unlink and Stop leading, and agents
+//! learn about leads only from `ghostex agents guide leads`, which opens with "Only when the user
+//! asks for it". A session may only make itself a lead; the user's own terminal or the app may link
+//! any two. One level only: a lead can't be linked, a linked session can't lead, and neither side
+//! may be a coordinator or a coordinator's thread (those have threads).
+//! SEE-ALSO: server/src/server/lead_runtime.rs (the watcher), server/src/storage/migrations/0084_lead_links.sql,
+//! server/src/ghostex_cli/agents/guide_leads.md, packages/gx-core/src/sidebar_view/rows.rs (nesting).
+
+mod records;
+
+pub(crate) use records::*;
+
+use rusqlite::Connection;
+use serde_json::{json, Map, Value};
+
+use crate::coordinators::SessionKey;
+use crate::domain::{DomainRepository, DomainStateError};
+use crate::ids::create_global_session_ref;
+use crate::security::Principal;
+
+pub const LEAD_LINKS_ENDPOINT: &str = "/api/leadLinks";
+
+fn text(params: &Map<String, Value>, key: &str) -> Option<String> {
+    params
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn ids(
+    params: &Map<String, Value>,
+    project_key: &str,
+    session_key: &str,
+) -> Result<SessionKey, DomainStateError> {
+    match (text(params, project_key), text(params, session_key)) {
+        (Some(project_id), Some(session_id)) => Ok((project_id, session_id)),
+        _ => Err(DomainStateError::bad_request(format!(
+            "This lead link request needs {project_key} and {session_key}."
+        ))),
+    }
+}
+
+/// The calling session, when an agent session's own token made the call.
+fn calling_session(caller: &Principal) -> Option<SessionKey> {
+    match caller {
+        Principal::Session {
+            project_id,
+            session_id,
+            ..
+        } => Some((project_id.clone(), session_id.clone())),
+        _ => None,
+    }
+}
+
+fn is_coordinator_or_thread(db: &Connection, key: &SessionKey) -> bool {
+    crate::coordinators::read_coordinator(db, &key.0, &key.1)
+        .ok()
+        .flatten()
+        .is_some()
+        || crate::coordinators::read_thread(db, &key.0, &key.1)
+            .ok()
+            .flatten()
+            .is_some()
+}
+
+fn session_title(repository: &DomainRepository<'_>, key: &SessionKey) -> String {
+    repository
+        .get_session(&key.0, &key.1)
+        .ok()
+        .flatten()
+        .and_then(|session| {
+            session
+                .get("title")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_default()
+}
+
+/// What an endpoint answered, plus the sessions whose sidebar rows changed.
+pub struct LeadLinksOutput {
+    pub result: Value,
+    pub changed_sessions: Vec<SessionKey>,
+}
+
+pub fn handle_lead_links_endpoint(
+    caller: &Principal,
+    db: &Connection,
+    repository: &DomainRepository<'_>,
+    server_id: &str,
+    params: &Map<String, Value>,
+) -> Result<LeadLinksOutput, DomainStateError> {
+    let caller_session = calling_session(caller);
+    let global_ref = |key: &SessionKey| create_global_session_ref(server_id, &key.0, &key.1);
+    match text(params, "op").as_deref().unwrap_or("list") {
+        "link" => {
+            let linked = ids(params, "projectId", "sessionId")?;
+            let lead = ids(params, "leadProjectId", "leadSessionId")?;
+            if let Some(caller) = &caller_session {
+                if caller != &lead {
+                    return Err(DomainStateError::bad_request(
+                        "A session can only link sessions to itself (--lead self). Only the user can link a session to another lead.",
+                    ));
+                }
+            }
+            if linked == lead {
+                return Err(DomainStateError::bad_request(
+                    "A session can't be its own lead.",
+                ));
+            }
+            for (key, what) in [(&linked, "session to link"), (&lead, "lead")] {
+                if repository.get_session(&key.0, &key.1)?.is_none() {
+                    return Err(DomainStateError::not_found(format!(
+                        "The {what} was not found on this computer."
+                    )));
+                }
+            }
+            if is_coordinator_or_thread(db, &lead) {
+                return Err(DomainStateError::bad_request(
+                    "A coordinator or a coordinator's thread can't be a lead: a coordinator has threads (ghostex coordinator start-thread).",
+                ));
+            }
+            if is_coordinator_or_thread(db, &linked) {
+                return Err(DomainStateError::bad_request(
+                    "That session is a coordinator or a coordinator's thread, so it can't be linked to a lead.",
+                ));
+            }
+            if read_lead_link(db, &lead.0, &lead.1)?.is_some() {
+                return Err(DomainStateError::bad_request(
+                    "The lead is itself linked to a lead; links are one level deep.",
+                ));
+            }
+            if is_lead(db, &linked.0, &linked.1) {
+                return Err(DomainStateError::bad_request(
+                    "That session leads other sessions, so it can't be linked to a lead; links are one level deep.",
+                ));
+            }
+            let before = read_lead_link(db, &linked.0, &linked.1)?;
+            let owed = params.get("owed").and_then(Value::as_bool) == Some(true);
+            write_lead_link(db, &linked, &lead, owed)?;
+            let mut changed = vec![linked.clone(), lead.clone()];
+            if let Some(previous) = before.map(|link| link.lead_key()) {
+                if previous != lead {
+                    changed.push(previous);
+                }
+            }
+            Ok(LeadLinksOutput {
+                result: json!({
+                    "linked": true,
+                    "globalRef": global_ref(&linked),
+                    "leadGlobalRef": global_ref(&lead),
+                    "leadTitle": session_title(repository, &lead),
+                    "owed": owed,
+                }),
+                changed_sessions: changed,
+            })
+        }
+        "unlink" => {
+            let linked = ids(params, "projectId", "sessionId")?;
+            let Some(link) = read_lead_link(db, &linked.0, &linked.1)? else {
+                return Err(DomainStateError::not_found(
+                    "That session is not linked to a lead.",
+                ));
+            };
+            if let Some(caller) = &caller_session {
+                if caller != &link.lead_key() && caller != &linked {
+                    return Err(DomainStateError::bad_request(
+                        "Only its lead, the session itself or the user can unlink it.",
+                    ));
+                }
+            }
+            remove_lead_link(db, &linked.0, &linked.1)?;
+            Ok(LeadLinksOutput {
+                result: json!({
+                    "unlinked": true,
+                    "globalRef": global_ref(&linked),
+                    "leadGlobalRef": global_ref(&link.lead_key()),
+                }),
+                changed_sessions: vec![linked, link.lead_key()],
+            })
+        }
+        "stopLeading" => {
+            let lead = ids(params, "leadProjectId", "leadSessionId")?;
+            if let Some(caller) = &caller_session {
+                if caller != &lead {
+                    return Err(DomainStateError::bad_request(
+                        "Only the lead itself or the user can end its links.",
+                    ));
+                }
+            }
+            let mut changed = remove_links_of_lead(db, &lead.0, &lead.1)?;
+            let count = changed.len();
+            changed.push(lead);
+            Ok(LeadLinksOutput {
+                result: json!({ "unlinked": count }),
+                changed_sessions: changed,
+            })
+        }
+        "list" => {
+            let links = match (text(params, "leadProjectId"), text(params, "leadSessionId")) {
+                (Some(project_id), Some(session_id)) => {
+                    links_of_lead(db, &project_id, &session_id)?
+                }
+                _ => list_lead_links(db)?,
+            };
+            let rows = links
+                .iter()
+                .map(|link| {
+                    json!({
+                        "globalRef": global_ref(&link.key()),
+                        "title": session_title(repository, &link.key()),
+                        "leadGlobalRef": global_ref(&link.lead_key()),
+                        "leadTitle": session_title(repository, &link.lead_key()),
+                        "reportOwed": link.owed_since.is_some(),
+                        "linkedAt": link.created_at,
+                    })
+                })
+                .collect::<Vec<_>>();
+            Ok(LeadLinksOutput {
+                result: json!({ "links": rows }),
+                changed_sessions: Vec::new(),
+            })
+        }
+        other => Err(DomainStateError::bad_request(format!(
+            "Unknown lead link op \"{other}\": use link, unlink, stopLeading or list."
+        ))),
+    }
+}
+
+/// The lead sent one of its linked sessions a message (`/api/sendSessionChatMessage` from the
+/// lead's own session): the turn that message starts is owed a report.
+pub fn note_lead_send(db: &Connection, caller: &Principal, target: &SessionKey) {
+    let Some(caller) = calling_session(caller) else {
+        return;
+    };
+    let Ok(Some(link)) = read_lead_link(db, &target.0, &target.1) else {
+        return;
+    };
+    if link.lead_key() == caller {
+        let _ = mark_lead_send(db, target);
+    }
+}
+
+fn session_key(object: &Map<String, Value>) -> SessionKey {
+    let text = |key: &str| {
+        object
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
+    (text("projectId"), text("sessionId"))
+}
+
+/// Present-only keys, like the coordinator fields: `leadProjectId` / `leadSessionId` on a linked
+/// session (clients nest it under its lead), and `isLead` with `leadLinkCount` on a lead.
+fn insert_projection(session: &mut Value, links: &[LeadLink]) {
+    let Some(object) = session.as_object_mut() else {
+        return;
+    };
+    let key = session_key(object);
+    if let Some(link) = links.iter().find(|link| link.key() == key) {
+        object.insert("leadProjectId".to_string(), json!(link.lead_project_id));
+        object.insert("leadSessionId".to_string(), json!(link.lead_session_id));
+    }
+    let count = links.iter().filter(|link| link.lead_key() == key).count();
+    if count > 0 {
+        object.insert("isLead".to_string(), json!(true));
+        object.insert("leadLinkCount".to_string(), json!(count));
+    }
+}
+
+/// Adds the lead link fields to every session of a presentation snapshot.
+pub fn insert_lead_presentation_payload(snapshot: &mut Value, db: &Connection) {
+    let Ok(links) = list_lead_links(db) else {
+        return;
+    };
+    if links.is_empty() {
+        return;
+    }
+    let Some(sessions) = snapshot.get_mut("sessions").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for session in sessions {
+        insert_projection(session, &links);
+    }
+}
+
+/// The same fields on one presentation session (a delta).
+pub fn insert_lead_session_projection(session: &mut Value, db: &Connection) {
+    if let Ok(links) = list_lead_links(db) {
+        if !links.is_empty() {
+            insert_projection(session, &links);
+        }
+    }
+}

@@ -946,6 +946,13 @@ fn build_session(
     if row.is_main_coordinator {
         details.insert("isMainCoordinator".to_string(), Value::Bool(true));
     }
+    // A lead's link count (lead links): its row's link badge (native_sidebar/threads.rs `lead_badge`).
+    if row.is_lead && row.lead_link_count > 0 {
+        details.insert(
+            "leadLinkCount".to_string(),
+            Value::from(row.lead_link_count),
+        );
+    }
     insert_coordinator_nesting(&mut details, row, &session.nesting);
     insert_optional(&mut details, "threadState", row.thread_state.clone());
     // The computer a coordinator's thread runs on, drawn by native_sidebar/threads.rs.

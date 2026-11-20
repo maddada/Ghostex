@@ -916,6 +916,12 @@ fn to_mobile_session_summary(session: &Value) -> Value {
         "coordinatorThreadState",
         &[s("coordinatorThreadState")],
     );
+    // The same trap for lead links (server/src/agents/lead_links): the phone nests a linked
+    // session under its lead and draws the lead's link count.
+    insert_js(&mut map, "leadProjectId", &[s("leadProjectId")]);
+    insert_js(&mut map, "leadSessionId", &[s("leadSessionId")]);
+    insert_js(&mut map, "isLead", &[s("isLead")]);
+    insert_js(&mut map, "leadLinkCount", &[s("leadLinkCount")]);
     // CDXC:Sidebar 2026-11-09 SEE-ALSO: the same second-whitelist trap: the coordinator's threads
     // on other computers, which the phone's Unified list nests under it (cli_session.rs), each named
     // by the `globalRef` its own computer gives it, so that computer's summary carries it too.

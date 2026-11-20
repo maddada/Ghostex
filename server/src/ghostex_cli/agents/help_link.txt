@@ -1,0 +1,21 @@
+Lead links: sessions that report to a lead. Use them only when the user asked
+for sessions to report to you; read `ghostex agents guide leads` first.
+
+USAGE
+  ghostex agents create <agent-id> --lead <session-ref|self> [--task <text>] …
+  ghostex agents link <session-ref> --lead <session-ref|self>
+  ghostex agents links [--all] [--json]
+  ghostex agents unlink <session-ref>
+  ghostex agents unlink --all [--lead <session-ref>]
+
+  A linked session's final message reaches its lead at the end of each turn
+  the lead started with a message (ghostex agents send), and the lead hears
+  when it waits for an answer, goes quiet for 8 minutes or is closed during
+  such a turn. Turns the user starts in it are not forwarded.
+
+  --lead self is the calling session; a session can only link others to
+  itself. From the user's own terminal, --lead takes any session ref.
+  links lists the sessions linked to you (--all: every link on this computer).
+  unlink --all ends every link to you (from your own terminal, to the lead
+  --lead names). Both sessions must be on this computer;
+  a coordinator or a coordinator's thread can't be linked or lead.
