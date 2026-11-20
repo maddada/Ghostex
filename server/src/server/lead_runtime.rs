@@ -108,6 +108,9 @@ struct Delivery {
     link: LeadLink,
     report: LeadReport,
     sender: crate::coordinators::MessageSender,
+    /// The linked session's row is gone (deleted, or restored under a new id before the restore
+    /// carried links): the link ends once this report is delivered.
+    ends_link: bool,
 }
 
 pub(crate) fn start_lead_runtime(state: Arc<AppState>) {
@@ -218,13 +221,28 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
         {
             continue;
         }
+        let session = repository.get_session(&key.0, &key.1).ok().flatten();
+        // CDXC:LeadLinks 2026-11-20 FIX: Opus review of #678, finding 7: a link whose linked
+        // session's row is gone stayed for good (the lead's count, its Stop leading label, and an
+        // unlink by a ref that no longer resolves). It ends now: at once when nothing is owed,
+        // after its "closed" report when a turn is.
+        let gone = session.is_none();
         // Only a turn the lead started is reported; the user's own turns stay with them.
         let Some(owed_ms) = link.owed_since.as_deref().and_then(iso_ms) else {
             memory.idle_since.remove(&key);
             memory.closed_since.remove(&key);
+            if gone {
+                let _ = remove_lead_link(&db, &key.0, &key.1);
+                let _ = schedule_presentation_session_delta(
+                    state,
+                    &db,
+                    &repository,
+                    &lead_key.0,
+                    &lead_key.1,
+                );
+            }
             continue;
         };
-        let session = repository.get_session(&key.0, &key.1).ok().flatten();
         let lifecycle = session
             .as_ref()
             .map(effective_lifecycle_state)
@@ -252,6 +270,7 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
                     link,
                     report: LeadReport::Closed,
                     sender,
+                    ends_link: gone,
                 });
             }
             continue;
@@ -332,6 +351,7 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
                 link,
                 report,
                 sender,
+                ends_link: false,
             });
         }
     }
@@ -401,6 +421,7 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<WatchMemory>>, delivery
         let settle_state = state.clone();
         let link = delivery.link.clone();
         let report = delivery.report;
+        let ends_link = delivery.ends_link;
         let _ = tokio::task::spawn_blocking(move || {
             let Ok(db) = open_gxserver_database(&settle_state.paths) else {
                 return;
@@ -414,6 +435,20 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<WatchMemory>>, delivery
                 return;
             }
             let key = link.key();
+            if ends_link {
+                let _ = remove_lead_link(&db, &key.0, &key.1);
+                let repository =
+                    DomainRepository::new(&db, settle_state.metadata.server_id.as_str());
+                let lead = link.lead_key();
+                let _ = schedule_presentation_session_delta(
+                    &settle_state,
+                    &db,
+                    &repository,
+                    &lead.0,
+                    &lead.1,
+                );
+                return;
+            }
             let _ = match &report {
                 LeadReport::Finished { .. } | LeadReport::Closed => settle_finished(&db, &key),
                 LeadReport::Waiting { key: prompt, .. } => settle_waiting(&db, &key, prompt),
