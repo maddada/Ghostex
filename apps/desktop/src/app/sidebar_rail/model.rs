@@ -4,7 +4,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 #[cfg(not(ghostex_web))]
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use gpui::{Bounds, Hsla, Pixels};
 
@@ -14,9 +14,14 @@ pub(crate) const RAIL_WIDTH: f32 = 40.0;
 pub(crate) const RAIL_BUTTON: f32 = 32.0;
 /// An outline icon's box (the user's "20px icons").
 pub(crate) const RAIL_ICON: f32 = 20.0;
-/// The Meet the rail intro's window (app/sidebar_rail/intro.rs).
-pub(crate) const RAIL_INTRO_MODAL_WIDTH: f32 = 480.0;
-pub(crate) const RAIL_INTRO_MODAL_INITIAL_HEIGHT: f32 = 460.0;
+/// Meet the rail's window size, for the app modal kinds (model/app_modal_kind.rs). The pop-up is
+/// the desktop's (app/window/rail_intro_modal.rs); the web build never opens it.
+#[cfg(not(ghostex_web))]
+pub(crate) use crate::app::window::{RAIL_INTRO_MODAL_INITIAL_HEIGHT, RAIL_INTRO_MODAL_WIDTH};
+#[cfg(ghostex_web)]
+pub(crate) const RAIL_INTRO_MODAL_WIDTH: f32 = 0.0;
+#[cfg(ghostex_web)]
+pub(crate) const RAIL_INTRO_MODAL_INITIAL_HEIGHT: f32 = 0.0;
 /// Between two buttons.
 pub(crate) const RAIL_GAP: f32 = 2.0;
 pub(crate) const RAIL_BUTTON_RADIUS: f32 = 8.0;
@@ -30,18 +35,20 @@ pub(crate) fn sidebar_rail_on() -> bool {
 /// The layout the settings chose when last read: 0 not read yet, 1 rail, 2 classic.
 #[cfg(not(ghostex_web))]
 static SIDEBAR_LAYOUT_SEEN: AtomicU8 = AtomicU8::new(0);
-/// The next layout change was made by the Meet the rail intro (app/sidebar_rail/intro.rs).
+/// The pop-up's Switch changed the layout to `rail`: counted here, with its source, and noted as
+/// seen so the settings read that follows does not count it again as a Settings change. Each
+/// Switch counts, however quickly they follow each other.
 #[cfg(not(ghostex_web))]
-static SIDEBAR_LAYOUT_FROM_INTRO: AtomicBool = AtomicBool::new(false);
-
-/// Marks the next layout change as the intro's, for its analytics source.
-#[cfg(not(ghostex_web))]
-pub(crate) fn note_sidebar_layout_change_from_intro() {
-    SIDEBAR_LAYOUT_FROM_INTRO.store(true, Ordering::Relaxed);
+pub(crate) fn note_sidebar_layout_switched_from_intro(rail: bool) {
+    SIDEBAR_LAYOUT_SEEN.store(if rail { 1 } else { 2 }, Ordering::Relaxed);
+    crate::app::helpers::telemetry::record_gpui_sidebar_layout_changed_telemetry(
+        if rail { "rail" } else { "classic" },
+        "intro",
+    );
 }
 
-/// Called whenever the settings are read: a change of layout after the first read is a switch,
-/// counted once whichever way it was made (Settings, the intro, `ghostex settings`).
+/// Called whenever the settings are read: a change of layout after the first read is a switch from
+/// Settings or `ghostex settings`, counted once.
 #[cfg(not(ghostex_web))]
 pub(crate) fn note_sidebar_layout(settings: &serde_json::Map<String, serde_json::Value>) {
     let rail = ghostex_gx_core::sidebar_rail::rail_layout_on(settings);
@@ -50,11 +57,8 @@ pub(crate) fn note_sidebar_layout(settings: &serde_json::Map<String, serde_json:
     if before == 0 || before == now {
         return;
     }
-    let source = if SIDEBAR_LAYOUT_FROM_INTRO.swap(false, Ordering::Relaxed) {
-        "intro"
-    } else {
-        "settings"
-    };
+    // Switches from the Meet the rail pop-up are counted by the pop-up itself.
+    let source = "settings";
     crate::app::helpers::telemetry::record_gpui_sidebar_layout_changed_telemetry(
         if rail { "rail" } else { "classic" },
         source,

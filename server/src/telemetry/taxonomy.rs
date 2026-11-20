@@ -361,20 +361,22 @@ pub const EVENT_EXTENSION_DISABLED: &str = "extension.disabled";
 pub const EVENT_BOOSTS_USED: &str = "boosts.used";
 pub const EVENT_SETTINGS_SNAPSHOT: &str = "settings.snapshot";
 pub const EVENT_SIDEBAR_LAYOUT_CHANGED: &str = "sidebar_layout.changed";
+pub const EVENT_RAIL_INTRO_SHOWN: &str = "rail_intro.shown";
 pub const EVENT_RAIL_INTRO_ANSWERED: &str = "rail_intro.answered";
 
 /*
 CDXC:Telemetry 2026-11-20:
 User (rail build brief): "PostHog: which layout each install uses, switches,
-and the intro's outcome (tried which, accepted which)". The layout itself rides
-the daily `settings.snapshot` (`sidebar_layout`, also on the person); a switch
-says which layout it went to and where from; the one-time "Meet the rail" intro
-says which layouts were tried in it and which was kept. Nothing else about the
-rail (its pins, clicks or order) is sent.
+and the intro's outcome"; then, for the Meet the rail pop-up: "record the
+starting layout, every Switch, and the layout kept on Done". The layout itself
+rides the daily `settings.snapshot` (`sidebar_layout`, also on the person);
+`sidebar_layout.changed` says which layout a switch went to and whether it came
+from Settings or the pop-up's Switch; `rail_intro.shown` carries the layout the
+pop-up opened on and `rail_intro.answered` the one kept on Done. Nothing else
+about the rail (its pins, clicks or order) is sent.
 */
 pub const SIDEBAR_LAYOUTS: &[&str] = &["rail", "classic"];
 pub const SIDEBAR_LAYOUT_SOURCES: &[&str] = &["settings", "intro"];
-pub const RAIL_INTRO_TRIED: &[&str] = &["none", "rail", "classic", "both"];
 
 /// PostHog's person-properties key. Overwrite semantics (`$set`), not
 /// `$set_once`: the person record should always show the install's CURRENT
@@ -389,6 +391,7 @@ pub const CLIENT_PING_EVENTS: &[&str] = &[
     EVENT_SURFACE_OPENED,
     EVENT_CLIENT_CONNECTED,
     EVENT_SIDEBAR_LAYOUT_CHANGED,
+    EVENT_RAIL_INTRO_SHOWN,
     EVENT_RAIL_INTRO_ANSWERED,
 ];
 
@@ -475,6 +478,7 @@ pub fn is_known_event(event: &str) -> bool {
             | EVENT_BOOSTS_USED
             | EVENT_SETTINGS_SNAPSHOT
             | EVENT_SIDEBAR_LAYOUT_CHANGED
+            | EVENT_RAIL_INTRO_SHOWN
             | EVENT_RAIL_INTRO_ANSWERED
     )
 }
@@ -683,7 +687,7 @@ fn event_property_spec(event: &str, key: &str) -> Option<PropertySpec> {
         (EVENT_SIDEBAR_LAYOUT_CHANGED, "source") => {
             Some(PropertySpec::Enum(SIDEBAR_LAYOUT_SOURCES))
         }
-        (EVENT_RAIL_INTRO_ANSWERED, "tried") => Some(PropertySpec::Enum(RAIL_INTRO_TRIED)),
+        (EVENT_RAIL_INTRO_SHOWN, "layout") => Some(PropertySpec::Enum(SIDEBAR_LAYOUTS)),
         (EVENT_RAIL_INTRO_ANSWERED, "chose") => Some(PropertySpec::Enum(SIDEBAR_LAYOUTS)),
         (EVENT_SETTINGS_SNAPSHOT, PERSON_SET_KEY) => Some(PropertySpec::PersonSet),
         (EVENT_SETTINGS_SNAPSHOT, key) => super::settings_snapshot::property_spec(key),
