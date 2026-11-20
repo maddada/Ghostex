@@ -175,7 +175,11 @@ fn relayed_card_refusal(
                 && crate::coordinators::thread_card_waits_on_user(project_id, session_id))
             .then_some(RELAYED_CARD_ONLY_YOU)
         }
-        "/api/sendSessionText" | "/api/sendSessionEnter" | "/api/sendSessionMessage" => {
+        // clear-command types the agent's own `/clear` and Enter (session_clear_http.rs).
+        "/api/sendSessionText"
+        | "/api/sendSessionEnter"
+        | "/api/sendSessionMessage"
+        | "/api/clearSessionConversation" => {
             let typed = params
                 .get("text")
                 .and_then(Value::as_str)
