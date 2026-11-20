@@ -54,5 +54,27 @@ pub fn carry_coordinator_to_restored_session(
     if coordinator_moved > 0 {
         super::playbook::carry_guide_records(&transaction, from, to)?;
     }
+    // CDXC:LeadLinks 2026-11-20 FIX: Opus review of #678, finding 7: a restored lead lost every
+    // link and a restored linked session left its link on the deleted id for good (agents/lead_links,
+    // keyed by session like the tables above). Both sides move here, in the same transaction.
+    transaction
+        .execute(
+            r#"
+            UPDATE lead_links SET leadProjectId = ?3, leadSessionId = ?4, updatedAt = ?5
+            WHERE leadProjectId = ?1 AND leadSessionId = ?2
+            "#,
+            params![from.0, from.1, to.0, to.1, timestamp],
+        )
+        .map_err(sql_error)?;
+    transaction
+        .execute(
+            r#"
+            UPDATE lead_links SET projectId = ?3, sessionId = ?4, updatedAt = ?5
+            WHERE projectId = ?1 AND sessionId = ?2
+              AND NOT EXISTS (SELECT 1 FROM lead_links WHERE projectId = ?3 AND sessionId = ?4)
+            "#,
+            params![from.0, from.1, to.0, to.1, timestamp],
+        )
+        .map_err(sql_error)?;
     transaction.commit().map_err(sql_error)
 }
