@@ -5,7 +5,7 @@
 //!
 //! SEE-ALSO: packages/core-ui/group-session-summary.ts (deleted 2026-10-01).
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use crate::keys::SessionKey;
@@ -353,12 +353,19 @@ pub(crate) fn lay_out_group_rows(
         })
         .collect();
     let tag_filtered_out = !ui.selected_tag_filters.is_empty() && sessions.is_empty();
+    // A coordinator is folded unless the user unfolded it during this run.
+    let folded_coordinators: BTreeSet<String> = sessions
+        .iter()
+        .filter(|session| session.row.is_coordinator)
+        .map(|session| session.row.sidebar_session_id.clone())
+        .filter(|id| !ui.collapse.expanded_coordinators.contains(id))
+        .collect();
     let (sessions, section_by_session) = nest_threads(
         sessions,
         settings.enable_session_parking,
         settings.group_working_sessions,
         &held,
-        &ui.collapse.collapsed_coordinators,
+        &folded_coordinators,
         &ui.collapse.expanded_coordinator_older_threads,
         now_ms,
     );

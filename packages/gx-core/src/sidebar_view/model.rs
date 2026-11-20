@@ -48,7 +48,7 @@ struct GroupKey {
     group_working_sessions: bool,
     collapsed: bool,
     hover_actions_expanded: bool,
-    /// The group's coordinator rows whose threads the user folded, by position.
+    /// The group coordinator rows whose threads are folded (every one not unfolded this run), by position.
     collapsed_coordinators: Vec<usize>,
     /// The group's coordinator rows whose older threads the user listed, by position.
     coordinators_showing_older: Vec<usize>,
@@ -1366,10 +1366,10 @@ fn group_key(
             .enumerate()
             .filter(|(_, row)| {
                 row.row.is_coordinator
-                    && inputs
+                    && !inputs
                         .ui
                         .collapse
-                        .collapsed_coordinators
+                        .expanded_coordinators
                         .contains(&row.row.sidebar_session_id)
             })
             .map(|(index, _)| index)

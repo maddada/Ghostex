@@ -104,10 +104,6 @@ pub fn collapse_into_storage(state: &SidebarCollapseState, existing: Option<&str
         flag_map(&state.expanded_hover_actions),
     );
     object.insert(
-        "collapsedCoordinatorsById".to_string(),
-        flag_map(&state.collapsed_coordinators),
-    );
-    object.insert(
         "expandedCoordinatorOlderThreadsById".to_string(),
         flag_map(&state.expanded_coordinator_older_threads),
     );
@@ -220,7 +216,8 @@ fn normalize_collapse_state(state: Option<&Value>) -> SidebarCollapseState {
         collapsed_groups: flag_set(state.get("collapsedGroupsById")),
         collapsed_collections: flag_set(state.get("collapsedProjectCollectionsByKey")),
         expanded_hover_actions: flag_set(state.get("expandedSessionCardHoverActionsById")),
-        collapsed_coordinators: flag_set(state.get("collapsedCoordinatorsById")),
+        // Coordinators start folded on every launch; nothing is read back.
+        expanded_coordinators: Default::default(),
         expanded_coordinator_older_threads: flag_set(
             state.get("expandedCoordinatorOlderThreadsById"),
         ),

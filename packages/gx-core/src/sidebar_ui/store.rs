@@ -211,10 +211,11 @@ impl SidebarUiStore {
             }
             SidebarUiIntent::ToggleCoordinatorCollapsed { sidebar_session_id } => {
                 toggle(
-                    &mut self.state.collapse.collapsed_coordinators,
+                    &mut self.state.collapse.expanded_coordinators,
                     sidebar_session_id,
                 );
-                changed(SidebarPersistSet::collapse())
+                // Never stored: coordinators start folded on every launch.
+                outcome(true, SidebarPersistSet::default())
             }
             SidebarUiIntent::ToggleCoordinatorOlderThreads { sidebar_session_id } => {
                 toggle(
