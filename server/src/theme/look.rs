@@ -10,8 +10,12 @@ use serde_json::{json, Map, Value};
 
 use crate::ghostex_cli::settings::{self as catalog, CatalogEntry};
 
-/// The Settings page the look settings are on (Settings > Interface).
-const LOOK_TAB: &str = "theme";
+/// The Settings pages the look settings are on: the Interface group's Themes, Text & Fonts,
+/// Size & Zoom and Window & Layout.
+///
+/// CDXC:Theming 2026-11-20 WHY:
+/// Interface became four pages on 2026-11-18 (CDXC:Settings in the desktop's settings_modal/model.rs), which moved the pane outline, its colour, the work area frame, the pane gap, text strength, fonts and sizes off the `theme` page. Checking only `theme` then refused them, so every agent-made look in Settings > Themes failed with "is not a look setting" (user report 2026-11-20). A look is anything on the Interface pages.
+const LOOK_TABS: &[&str] = &["theme", "textFonts", "sizeZoom", "windowLayout"];
 
 /// The groups `ghostex theme read` lists the look settings in. A key in none of them is a
 /// Transparency setting when it starts with `windowGlass`, else a Window one.
@@ -85,7 +89,7 @@ pub(crate) fn look_entries(settings: &Map<String, Value>) -> Vec<&'static Catalo
                 .settings
                 .iter()
                 .filter(|entry| {
-                    entry.tab == LOOK_TAB
+                    LOOK_TABS.contains(&entry.tab.as_str())
                         && entry.agent_writable
                         && !catalog::hidden_here(entry, settings)
                 })
@@ -100,7 +104,7 @@ pub(crate) fn look_entry(
     settings: &Map<String, Value>,
 ) -> Result<&'static CatalogEntry, String> {
     let entry = catalog::find_entry(key).map_err(|error| error.to_string())?;
-    if entry.tab != LOOK_TAB {
+    if !LOOK_TABS.contains(&entry.tab.as_str()) {
         return Err(format!(
             "\"{}\" ({}) is not a look setting. Change it with `ghostex settings set {} <value>`.",
             entry.title, entry.key, entry.key
