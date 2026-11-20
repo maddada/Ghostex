@@ -313,9 +313,9 @@ pub(super) fn feedback_agent_prompt(
         .map(|path| format!(" --image \"{}\"", path.display()))
         .collect::<String>();
     let posting = if FEEDBACK_AGENT_ASKS_BEFORE_POSTING {
-        "7. Show the user the whole draft here: the title, the full body, and the screenshots you will attach. Ask whether to post it, apply any changes they ask for, and post only after they say yes."
+        "8. Show the user the whole draft here: the title, the full body, and the screenshots you will attach. Ask whether to post it, apply any changes they ask for, and post only after they say yes."
     } else {
-        "7. Post the issue when the draft is complete."
+        "8. Post the issue when the draft is complete."
     };
     format!(
         r#"A Ghostex user is reporting a bug or giving feedback with Send Bug / Feedback, and asked you to collect the details that help the Ghostex team fix it, then file it as a GitHub issue on the Ghostex repository.
@@ -330,14 +330,15 @@ What they wrote:
 {screenshots}
 
 What to do:
-1. Read `ghostex guide` (the overview) and `ghostex guide features` for how the part of Ghostex they describe is meant to work, so the issue says what was expected.
-2. Gather what helps us fix it from this computer: the Ghostex version (`ghostex server status --json`), the operating system, the settings that touch this feature (`ghostex settings list`, `ghostex settings get <key>`), the recent gxserver and app logs around it (`ghostex logs --lines 200`, `ghostex logs --grep <text>`), and the sessions involved (`ghostex sessions`).
-3. Debug it, and reproduce it where you can do that safely, to find what goes wrong and, if you can, why.
-4. Change nothing on this computer: do not change settings, files, projects or sessions, do not restart Ghostex or its background service, and do not install anything. The only files you write are your notes and the draft, in this report's folder: {report_folder}
-5. Keep private things out of the issue: no tokens, keys, passwords, cookies, email addresses or account names other than @{username}, and no contents of the user's own files. Shorten paths in their home folder to ~, and quote only the log lines that matter.
-6. Draft the issue: a short title, and a body with What happened, What was expected, Steps to reproduce, What you found (Ghostex version, operating system, relevant settings, log excerpts) and the likely cause if you found one.
+1. Check the version first. Run `ghostex app-update check`; its JSON says `updateAvailable` and `availableVersion` when a newer Ghostex than the installed `appVersion` is out. If one is, stop here: tell the user "You're on <appVersion>; <availableVersion> is out. Please update first: it may already be fixed.", say they can update from Settings > Updates (or the Update button in the top bar), and ask whether to update first or carry on anyway. Do not install it yourself. Carry on with the steps below only once they say to carry on; if they update, the report waits for them to come back on the new version. When the check says nothing is available, or cannot tell (an error, no network, `updateAvailable` missing), say nothing about it and go on.
+2. Read `ghostex guide` (the overview) and `ghostex guide features` for how the part of Ghostex they describe is meant to work, so the issue says what was expected.
+3. Gather what helps us fix it from this computer: the Ghostex version (`ghostex server status --json`), the operating system, the settings that touch this feature (`ghostex settings list`, `ghostex settings get <key>`), the recent gxserver and app logs around it (`ghostex logs --lines 200`, `ghostex logs --grep <text>`), and the sessions involved (`ghostex sessions`).
+4. Debug it, and reproduce it where you can do that safely, to find what goes wrong and, if you can, why.
+5. Change nothing on this computer: do not change settings, files, projects or sessions, do not restart Ghostex or its background service, and do not install anything. The only files you write are your notes and the draft, in this report's folder: {report_folder}
+6. Keep private things out of the issue: no tokens, keys, passwords, cookies, email addresses or account names other than @{username}, and no contents of the user's own files. Shorten paths in their home folder to ~, and quote only the log lines that matter.
+7. Draft the issue: a short title, and a body with What happened, What was expected, Steps to reproduce, What you found (Ghostex version, operating system, relevant settings, log excerpts) and the likely cause if you found one.
 {posting}
-8. Post it: write the body to a file in {report_folder}, then run
+9. Post it: write the body to a file in {report_folder}, then run
    ghostex feedback send --title "<title>" --body-file <file> --github-user {username}{image_flags}
    It adds "Reported by @{username}" at the top so GitHub tells them about the issue, and Ghostex adds a line with its version and the operating system. Run it with --dry-run first if you want to see exactly what will be sent. Then give the user the issue link it prints."#
     )

@@ -32,10 +32,19 @@ impl GhostexGpuiApp {
             offline_diagnostics: None,
             scrub_context: feedback_scrub_context(),
             collect_with_agent,
+            #[cfg(not(ghostex_web))]
+            newer_version: self.newer_ghostex_for_feedback(),
+            #[cfg(ghostex_web)]
+            newer_version: None,
         };
         let host = self.native_app_modal_host(cx, |app, command, cx| match command {
             FeedbackModalCommand::Closed => {
                 app.release_native_app_modal_window(GpuiAppModalKind::Feedback, cx)
+            }
+            FeedbackModalCommand::UpdateNow => {
+                app.release_native_app_modal_window(GpuiAppModalKind::Feedback, cx);
+                #[cfg(not(ghostex_web))]
+                app.update_ghostex_from_feedback(cx);
             }
             FeedbackModalCommand::OpenSession {
                 remote_machine_id: Some(machine_id),
@@ -78,6 +87,43 @@ impl GhostexGpuiApp {
             move |window, cx| cx.new(|cx| GpuiFeedbackModalWindow::new(config, host, window, cx)),
             cx,
         );
+    }
+
+    /// The newer Ghostex the Updates list knows of for this computer, if any: the "app" item
+    /// says `available` with both versions. Nothing while that list is empty or unsure (offline).
+    #[cfg(not(ghostex_web))]
+    fn newer_ghostex_for_feedback(&self) -> Option<FeedbackNewerVersion> {
+        let item = self.updates_items().into_iter().find(|item| {
+            item["id"] == "app"
+                && item["computer"].as_str() == Some(crate::app::updates::THIS_COMPUTER)
+        })?;
+        if item["state"] != "available" {
+            return None;
+        }
+        let version = |key: &str| {
+            item[key]
+                .as_str()
+                .map(str::trim)
+                .filter(|version| !version.is_empty())
+                .map(str::to_string)
+        };
+        let (installed, latest) = (version("installed")?, version("latest")?);
+        (installed != latest).then_some(FeedbackNewerVersion { installed, latest })
+    }
+
+    /// Update now: starts the update where this build can run it, else opens Settings > Updates.
+    #[cfg(not(ghostex_web))]
+    fn update_ghostex_from_feedback(&mut self, cx: &mut gpui::Context<Self>) {
+        let can_update = self.updates_items().into_iter().any(|item| {
+            item["id"] == "app"
+                && item["computer"].as_str() == Some(crate::app::updates::THIS_COMPUTER)
+                && item["canUpdate"] == true
+        });
+        if can_update {
+            self.install_updates(vec!["app".to_string()], cx);
+        } else {
+            self.run_gpui_titlebar_updates(false, None, cx);
+        }
     }
 
     /// The remote machine the session being reported runs on: the focused session's, else the

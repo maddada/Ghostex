@@ -27,6 +27,8 @@ const FEEDBACK_AGENT_NOT_READY: &str = "feedbackAgentNotReady";
 /// What the pop-up asks its host to do. The pop-up removes its own window before sending it.
 pub(crate) enum FeedbackModalCommand {
     Closed,
+    /// The "Update now" button of the newer-version line (`FeedbackNewerVersion`).
+    UpdateNow,
     /// gxserver started the feedback agent in this session; the host opens it. The ids are that
     /// machine's own: `remote_machine_id` names the remote machine it runs on, `None` this computer.
     OpenSession {
@@ -52,6 +54,16 @@ pub(crate) struct FeedbackAgentMachine {
     pub(crate) agent_id: Option<String>,
 }
 
+/// A newer Ghostex than this computer's is out.
+///
+/// CDXC:Feedback 2026-11-20 DECISION:
+/// User: "we need to recommend to people that they update to the latest version before they can post a bug using the Send Bug thingy. If they're not on the latest version, ask them to please upgrade before sending it, to make sure the issue isn't fixed on latest." The Compose step says "You're on X; Y is out. Please update first: it may already be fixed." with an Update now button, and Review / Start Agent stay possible but turn secondary (neutral). The version comes from what the app already knows (the Updates list's Ghostex item, gxserver's own check); while that is unknown (offline, never checked) the dialog says nothing. The feedback agent's brief checks the version first too (server/src/feedback/agent.rs).
+#[derive(Clone)]
+pub(crate) struct FeedbackNewerVersion {
+    pub(crate) installed: String,
+    pub(crate) latest: String,
+}
+
 pub(crate) type FeedbackModalHost = Rc<dyn Fn(FeedbackModalCommand, &mut App)>;
 
 pub(crate) struct FeedbackModalConfig {
@@ -72,6 +84,8 @@ pub(crate) struct FeedbackModalConfig {
     pub(crate) scrub_context: FeedbackScrubContext,
     /// Open with "Collect more data with an agent" on (the chat's Copy Report).
     pub(crate) collect_with_agent: bool,
+    /// Set when a newer Ghostex is out; `None` when this one is current or that is not known.
+    pub(crate) newer_version: Option<FeedbackNewerVersion>,
 }
 
 /// Client storage's `feedbackGithubUser` store: the GitHub username the last feedback named.
@@ -123,6 +137,7 @@ pub(crate) struct GpuiFeedbackModalWindow {
     /// "Collect more data with an agent": the primary button starts the feedback agent instead of
     /// the Review step.
     pub(super) collect_with_agent: bool,
+    pub(super) newer_version: Option<FeedbackNewerVersion>,
     pub(super) agent_id: Option<String>,
     pub(super) agent_machine: Option<FeedbackAgentMachine>,
     /// Pasted images still being checked (and shrunk when too large).
@@ -226,6 +241,7 @@ impl GpuiFeedbackModalWindow {
             github_input,
             github,
             collect_with_agent: config.collect_with_agent,
+            newer_version: config.newer_version,
             agent_id: config.agent_id,
             agent_machine: config.agent_machine,
             pending_images: 0,
@@ -305,6 +321,12 @@ impl GpuiFeedbackModalWindow {
     pub(super) fn close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         window.remove_window();
         (self.host)(FeedbackModalCommand::Closed, cx);
+    }
+
+    /// "Update now": the host starts the update (or opens Settings > Updates) and this closes.
+    pub(super) fn update_now(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        window.remove_window();
+        (self.host)(FeedbackModalCommand::UpdateNow, cx);
     }
 
     /// Compose → Review: gxserver turns the message into the issue the relay would post, and the

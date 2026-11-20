@@ -115,12 +115,44 @@ impl GpuiFeedbackModalWindow {
             "Tell us what is broken, confusing or missing. You review the issue before it is \
              posted publicly on the Ghostex GitHub."
         };
-        vec![
-            modal_header(&p, "Send Bug / Feedback", Some(subtitle)),
-            github,
-            message,
-            agent,
-        ]
+        let mut content = vec![modal_header(&p, "Send Bug / Feedback", Some(subtitle))];
+        content.extend(self.render_newer_version(cx));
+        content.extend([github, message, agent]);
+        content
+    }
+
+    /// The line that asks for the update first (CDXC:Feedback 2026-11-20 on `FeedbackNewerVersion`).
+    fn render_newer_version(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let p = self.palette;
+        let newer = self.newer_version.as_ref()?;
+        Some(
+            modal_panel(&p)
+                .flex_shrink_0()
+                .p(px(12.0))
+                .gap(px(10.0))
+                .child(
+                    div()
+                        .text_size(px(13.0))
+                        .line_height(px(19.0))
+                        .text_color(hsla(p.foreground))
+                        .child(format!(
+                            "You're on {}; {} is out. Please update first: it may already be \
+                             fixed.",
+                            newer.installed, newer.latest
+                        )),
+                )
+                .child(div().flex().w(px(140.0)).child(modal_action_button(
+                    &p,
+                    "feedback-update-now",
+                    "Update now",
+                    None,
+                    ModalButtonTone::Primary,
+                    self.busy,
+                    |this, window, cx| this.update_now(window, cx),
+                    cx,
+                )))
+                .into_any_element(),
+        )
     }
 
     fn render_review(&self, window: &Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
@@ -226,6 +258,12 @@ impl GpuiFeedbackModalWindow {
 
     fn render_footer(&self, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
+        // Sending stays possible while a newer Ghostex is out, but Update now is the primary action.
+        let compose_tone = if self.newer_version.is_some() {
+            ModalButtonTone::Neutral
+        } else {
+            ModalButtonTone::Primary
+        };
         let spinner = || self.busy.then(|| modal_spinner(p.primary_button_text()));
         let buttons = match &self.step {
             FeedbackStep::Compose => vec![
@@ -245,7 +283,7 @@ impl GpuiFeedbackModalWindow {
                         "feedback-start-agent",
                         "Start Agent",
                         spinner(),
-                        ModalButtonTone::Primary,
+                        compose_tone,
                         !self.can_review(),
                         |this, window, cx| this.start_agent(window, cx),
                         cx,
@@ -256,7 +294,7 @@ impl GpuiFeedbackModalWindow {
                         "feedback-review",
                         "Review",
                         spinner(),
-                        ModalButtonTone::Primary,
+                        compose_tone,
                         !self.can_review(),
                         |this, window, cx| this.review(window, cx),
                         cx,
