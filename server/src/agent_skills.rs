@@ -179,7 +179,10 @@ fn install_agent_skills_blocking(
             "Agent skill installs copy from a local skills directory; remote package sources are not supported.",
         ));
     }
-    let agent_ids = normalize_agent_skill_agent_ids(read_string_array(params, "agentIds")?);
+    let agent_ids = match read_string_array(params, "agentIds")? {
+        Some(named) if !named.is_empty() => normalize_agent_skill_agent_ids(Some(named)),
+        _ => present_agent_skill_agent_ids(paths.agent_config_home_dir()),
+    };
     let target_roots = agent_skill_install_target_roots(paths.agent_config_home_dir(), &agent_ids)?;
     let remote_requested = params
         .get("remote")
@@ -451,14 +454,14 @@ fn place_skill(
 
 /// Installs a skill folder that is not one of Ghostex's own (an extension's, extensions/skills.rs)
 /// into the same folders a bundled skill goes to with no agents named: `~/.agents/skills`, linked
-/// into every agent that doesn't read it itself.
+/// into every agent on this computer that doesn't read it itself.
 pub(crate) fn install_skill_folder(
     home_dir: &Path,
     source_dir: &Path,
     skill_name: &str,
 ) -> Result<Vec<String>, DomainStateError> {
     let target_roots =
-        agent_skill_install_target_roots(home_dir, &normalize_agent_skill_agent_ids(None))?;
+        agent_skill_install_target_roots(home_dir, &present_agent_skill_agent_ids(home_dir))?;
     place_skill(source_dir, skill_name, &target_roots)
 }
 
@@ -520,6 +523,30 @@ pub fn agent_skill_global_dir(home_dir: &Path, agent_id: &str) -> Option<PathBuf
         _ => return None,
     };
     Some(home_dir.join(relative))
+}
+
+/// The agents an install that names none goes to: those whose home folder (the one that holds
+/// their skills folder, such as `~/.kiro` or `~/.gemini/antigravity`) already exists.
+///
+/// CDXC:AgentSkills 2026-11-21 DECISION:
+/// User (GitHub #696, Q4327 "A"): an install that names no agents (Settings sync re-installing in
+/// the background, an extension's skill) used to link into all known agents and make their
+/// folders, so `~/.qoder`, `~/.rovodev` and `~/.kiro` came back for people who never had those
+/// agents. It now links only into agents that are present and never makes an agent's home folder;
+/// making the `skills` folder inside an existing home is fine. An agent whose CLI is installed but
+/// that never made its home gets the link from the next install after it does, since linking now
+/// would mean making that home. Installs that name agents keep going to exactly those agents, and
+/// nothing already in place is removed.
+pub(crate) fn present_agent_skill_agent_ids(home_dir: &Path) -> Vec<String> {
+    GHOSTEX_SKILLS_CLI_AGENT_IDS
+        .iter()
+        .filter(|agent_id| {
+            agent_skill_global_dir(home_dir, agent_id)
+                .and_then(|skills_dir| skills_dir.parent().map(Path::is_dir))
+                .unwrap_or(false)
+        })
+        .map(|agent_id| (*agent_id).to_string())
+        .collect()
 }
 
 /// True when the agent loads `~/.agents/skills` itself, so a link in its own
@@ -1564,6 +1591,36 @@ mod tests {
         let fresh = temp.path().join("agent").join("ghostex-cli");
         replace_with_link(&fresh, |link| symlink_dir(&canonical, link)).expect("linked");
         assert!(ghostex_agent_sync::fsx::is_symlink(&fresh));
+    }
+
+    #[test]
+    fn an_install_naming_no_agents_links_only_into_agents_that_are_present() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let home = temp.path().join("home");
+        fs::create_dir_all(home.join(".kiro")).expect("kiro home");
+        fs::create_dir_all(home.join(".factory")).expect("droid home");
+        let source = temp.path().join("source").join("thread-brief");
+        write_skill(&source, "thread-brief");
+        install_skill_folder(&home, &source, "thread-brief").expect("installed");
+        assert!(home.join(".agents/skills/thread-brief/SKILL.md").is_file());
+        // Present agents get the link, the skills folder inside their home made for them.
+        assert!(ghostex_agent_sync::fsx::is_symlink(
+            &home.join(".kiro/skills/thread-brief")
+        ));
+        assert!(ghostex_agent_sync::fsx::is_symlink(
+            &home.join(".factory/skills/thread-brief")
+        ));
+        // No home folder is made for an agent that isn't there.
+        for absent in [".qoder", ".rovodev", ".codebuddy", ".claude", ".gemini", ".pi"] {
+            assert!(!home.join(absent).exists(), "{absent} was made");
+        }
+        // Naming an agent still installs for it, home included.
+        let target_roots =
+            agent_skill_install_target_roots(&home, &["qoder".to_string()]).expect("roots");
+        place_skill(&source, "thread-brief", &target_roots).expect("placed");
+        assert!(ghostex_agent_sync::fsx::is_symlink(
+            &home.join(".qoder/skills/thread-brief")
+        ));
     }
 
     #[tokio::test]
