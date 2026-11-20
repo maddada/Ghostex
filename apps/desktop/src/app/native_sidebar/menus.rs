@@ -1240,6 +1240,9 @@ impl GhostexGpuiApp {
                     .as_str()
                     .and_then(|color| u32::from_str_radix(color.trim_start_matches('#'), 16).ok())
                     .map(gpui::rgb);
+                // A workspace row draws its icon on a disc of its colour (`badge`), not as a glyph.
+                let badge = item["badge"] == true;
+                let icon = icon.filter(|_| !badge);
                 let disabled = item["disabled"] == true;
                 let heading = item["heading"] == true;
                 let selected = panel.selected == Some(item_index);
@@ -1312,19 +1315,12 @@ impl GhostexGpuiApp {
                             row.child(gpui::img(image).size(px(16.0 * scale)).flex_shrink_0())
                         })
                         .when_some(color, |row, color| {
-                            if item["dot"] == true {
-                                // The workspace menu's colour dot, in the 14px icon box.
-                                row.child(
-                                    div()
-                                        .size(px(14.0 * scale))
-                                        .flex_shrink_0()
-                                        .flex()
-                                        .items_center()
-                                        .justify_center()
-                                        .child(
-                                            div().size(px(8.0 * scale)).rounded_full().bg(color),
-                                        ),
-                                )
+                            if badge {
+                                row.child(super::workspace_tile::workspace_badge(
+                                    item["icon"].as_str().unwrap_or("home"),
+                                    color.into(),
+                                    16.0 * scale,
+                                ))
                             } else {
                                 row.child(div().size(px(14.0 * scale)).rounded_full().bg(color))
                             }

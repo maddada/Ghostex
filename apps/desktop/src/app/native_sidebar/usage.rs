@@ -1,6 +1,5 @@
 // The bottom of the sidebar: the account usage strip, which is the last thing in it, the small
-// handle that brings the strip back while it is hidden, and the workspace button's line above
-// them. The meters themselves are the shared renderer in app/titlebar/account_usage.rs; this
+// handle that brings the strip back while it is hidden. The meters themselves are the shared renderer in app/titlebar/account_usage.rs; this
 // module owns only the strip around them.
 
 use gpui::prelude::FluentBuilder as _;
@@ -41,14 +40,8 @@ const SIDEBAR_USAGE_INSET: f32 = super::navigation::SIDEBAR_SIDE_INSET;
 /// pads one character less, while under-estimating would let a card overflow its column.
 const SIDEBAR_USAGE_BADGE_ADVANCE: f32 = 0.65;
 
-/// The line the workspace button sits in, above the strip: its button's height, the space above
-/// it, and the space under it while the line is the sidebar's last (the strip hidden or absent).
-const SIDEBAR_BOTTOM_LINE_BUTTON_HEIGHT: f32 = 28.0;
-const SIDEBAR_BOTTOM_LINE_TOP_PADDING: f32 = 5.0;
-const SIDEBAR_BOTTOM_LINE_BOTTOM_PADDING: f32 = 6.0;
-
-/// The line that holds only the handle, while the strip is hidden and there is no workspace
-/// button: the handle and the space under it.
+/// The line that holds only the handle, while the strip is hidden: the handle and the space
+/// under it.
 const SIDEBAR_USAGE_HANDLE_LINE_HEIGHT: f32 = 24.0;
 const SIDEBAR_USAGE_HANDLE_BOTTOM_PADDING: f32 = 6.0;
 
@@ -66,8 +59,7 @@ const SIDEBAR_USAGE_HANDLE_HEIGHT: f32 = 16.0;
 
 /// A meter card's height, before the zoom scale.
 pub(super) const SIDEBAR_USAGE_METER_HEIGHT: f32 = 26.0;
-/// A usage card's corner radius. The workspace switcher (native_sidebar/workspace_tile.rs) uses it
-/// too, so it reads as the same surface as the cards.
+/// A usage card's corner radius.
 pub(super) const SIDEBAR_USAGE_CARD_RADIUS: f32 = 7.0;
 
 /// The strip's space above its first row of cards and below its last.
@@ -517,27 +509,17 @@ impl GhostexGpuiApp {
     }
 
     /// The height of the line the handle sits in, and how far down from the line's top the
-    /// handle's hitbox starts (both before the zoom): the workspace button's line when that
-    /// button shows, else a short line of its own.
+    /// handle's hitbox starts (both before the zoom). The workspace button left this bottom for the
+    /// Spaces row (CDXC:Workspaces 2026-11-20 in workspace_tile.rs), so it is the handle's own line.
     fn native_sidebar_usage_handle_line(&self) -> (f32, f32) {
-        if self.native_sidebar_footer_workspace_tile_shown() {
-            (
-                SIDEBAR_BOTTOM_LINE_TOP_PADDING
-                    + SIDEBAR_BOTTOM_LINE_BUTTON_HEIGHT
-                    + SIDEBAR_BOTTOM_LINE_BOTTOM_PADDING,
-                SIDEBAR_BOTTOM_LINE_TOP_PADDING,
-            )
-        } else {
-            (SIDEBAR_USAGE_HANDLE_LINE_HEIGHT, 0.0)
-        }
+        (SIDEBAR_USAGE_HANDLE_LINE_HEIGHT, 0.0)
     }
 
-    /// The bottom of the sidebar: the workspace button's line (only while Workspaces is on), then
-    /// the usage strip, which is the last thing in the sidebar; or, while the strip is hidden, the
-    /// handle that brings it back, at the right end of that line.
+    /// The bottom of the sidebar: the usage strip, which is the last thing in the sidebar; or, while
+    /// the strip is hidden, the handle that brings it back, at the right end of a short line.
     ///
     /// CDXC:Sidebar 2026-11-11 DECISION:
-    /// User (sidebar bottom page, Q2530 A): "want usage to be bottom fully, not have buttons there below them when they are shown". The row of three buttons under the usage meters is gone, on every sidebar (docked and floating). Commands is a row of the sidebar's menu (Q2531) and keeps its hotkey; Settings is that menu's last row and keeps its hotkey, so there is no gear at the bottom; the chart button is a small handle at the bottom right that shows only while the meters are hidden and works as the button did (point at it to peek at the meters, click it to pin them), and a right-click on the pinned meters offers Hide account usage. The workspace button (only while Workspaces is on) sits at the left of a line of its own above the meters. This supersedes the 2026-09-21 rules that put Commands and the Settings gear in a bottom bar, the 2026-09-22 rule that the peek sits exactly where the pinned strip does (it sits on the handle's line, so the handle stays clickable under it), and the place of the 2026-10-11 workspace button (bottom left still, on its own line now).
+    /// User (sidebar bottom page, Q2530 A): "want usage to be bottom fully, not have buttons there below them when they are shown". The row of three buttons under the usage meters is gone, on every sidebar (docked and floating). Commands is a row of the sidebar's menu (Q2531) and keeps its hotkey; Settings is that menu's last row and keeps its hotkey, so there is no gear at the bottom; the chart button is a small handle at the bottom right that shows only while the meters are hidden and works as the button did (point at it to peek at the meters, click it to pin them), and a right-click on the pinned meters offers Hide account usage. The workspace button that sat on a line of its own above the meters moved to the Spaces row on 2026-11-20 (workspace_tile.rs). This supersedes the 2026-09-21 rules that put Commands and the Settings gear in a bottom bar, the 2026-09-22 rule that the peek sits exactly where the pinned strip does (it sits on the handle's line, so the handle stays clickable under it), and the place of the 2026-10-11 workspace button (bottom left still, on its own line now).
     pub(crate) fn render_native_sidebar_bottom(
         &self,
         appearance: &SidebarAppearance,
@@ -547,7 +529,6 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let scale = appearance.scale;
-        let tile = self.render_native_sidebar_footer_workspace_tile(appearance, cx);
         // The handle exists only once an account is starred, and only while its meters are hidden.
         let hidden = meter_count > 0 && !self.sidebar_usage_visible;
         let handle =
@@ -573,45 +554,22 @@ impl GhostexGpuiApp {
                     }
                 }))
         });
-        let line = if let Some(tile) = tile {
-            Some(
-                h_flex()
-                    .w_full()
-                    .flex_shrink_0()
-                    .pt(px(SIDEBAR_BOTTOM_LINE_TOP_PADDING * scale))
-                    // The strip under it brings its own space above its cards.
-                    .when(hidden || meter_count == 0, |line| {
-                        line.pb(px(SIDEBAR_BOTTOM_LINE_BOTTOM_PADDING * scale))
-                    })
-                    .pl(px(SIDEBAR_USAGE_INSET * scale))
-                    .pr(px(self.native_sidebar_usage_inset_right(scale) * scale))
-                    // CDXC:Workspaces 2026-10-11 DECISION: User: the workspace picker sits at the
-                    // bottom left of the app, a little in from the sidebar's edge (10px, as it
-                    // was in the bottom bar) so it lines up with the account cards under it.
-                    // The line's own inset is that 10pt since 2026-11-20 (navigation.rs).
-                    .child(div().flex_shrink_0().child(tile))
-                    .child(div().flex_1())
-                    .children(handle)
-                    .into_any_element(),
-            )
-        } else {
-            handle.map(|handle| {
-                h_flex()
-                    .w_full()
-                    .flex_shrink_0()
-                    .h(px(SIDEBAR_USAGE_HANDLE_LINE_HEIGHT * scale))
-                    .pl(px(SIDEBAR_USAGE_INSET * scale))
-                    .pr(px(self.native_sidebar_usage_inset_right(scale) * scale))
-                    .justify_end()
-                    .child(handle)
-                    .into_any_element()
-            })
-        };
+        let line = handle.map(|handle| {
+            h_flex()
+                .w_full()
+                .flex_shrink_0()
+                .h(px(SIDEBAR_USAGE_HANDLE_LINE_HEIGHT * scale))
+                .pl(px(SIDEBAR_USAGE_INSET * scale))
+                .pr(px(self.native_sidebar_usage_inset_right(scale) * scale))
+                .justify_end()
+                .child(handle)
+                .into_any_element()
+        });
         v_flex()
             .relative()
             .w_full()
             .flex_shrink_0()
-            // The star request sits above the workspace line and the meters (github_star.rs).
+            // The star request sits above the meters (github_star.rs).
             .children(self.render_native_sidebar_star_request(appearance, cx))
             // Under the line, so the handle in it is above the zone and takes its own hover.
             .children(zone)
@@ -640,13 +598,7 @@ impl GhostexGpuiApp {
             || self.native_sidebar.usage_frosted_hovered
             || self.native_sidebar_usage_stop_focused(USAGE_HANDLE_STOP, window, cx);
         let tooltip_delay = appearance.tooltip_delay;
-        let (line_height, top) = self.native_sidebar_usage_handle_line();
-        let in_button_line = top > 0.0;
-        let height = if in_button_line {
-            SIDEBAR_BOTTOM_LINE_BUTTON_HEIGHT
-        } else {
-            line_height
-        };
+        let (height, _) = self.native_sidebar_usage_handle_line();
         // CDXC:Sidebar 2026-09-22 WHY:
         // A GPUI element holds one hover listener, and the managed tooltip installs its own, so an
         // `on_hover` on the chip itself is silently replaced in release builds (debug asserts).
@@ -656,15 +608,8 @@ impl GhostexGpuiApp {
             .flex()
             .flex_shrink_0()
             .h(px(height * scale))
-            .map(|wrapper| {
-                if in_button_line {
-                    wrapper.items_center()
-                } else {
-                    wrapper
-                        .items_end()
-                        .pb(px(SIDEBAR_USAGE_HANDLE_BOTTOM_PADDING * scale))
-                }
-            })
+            .items_end()
+            .pb(px(SIDEBAR_USAGE_HANDLE_BOTTOM_PADDING * scale))
             .on_hover(cx.listener(|app, hovered: &bool, _, cx| {
                 if app.native_sidebar.usage_pin_hovered != *hovered {
                     app.native_sidebar.usage_pin_hovered = *hovered;

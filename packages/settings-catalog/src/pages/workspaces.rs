@@ -20,12 +20,17 @@ pub(crate) fn workspaces() -> Section {
             row(
                 "workspaceName",
                 "Workspace name",
-                "The name shown on the workspace switcher at the bottom left of the sidebar.",
+                "The workspace's name in its menu and on the workspace tile's tooltip.",
             ),
             row(
                 "workspaceColor",
                 "Workspace color",
-                "The color of the workspace's dot in the switcher and its menu.",
+                "The color of the disc behind the workspace's icon, on its tile and in its menu.",
+            ),
+            row(
+                "workspaceIcon",
+                "Workspace icon",
+                "The icon on the workspace tile, the first tile of the Spaces row, and in the workspace menu.",
             ),
             row(
                 "workspaceKind",

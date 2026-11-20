@@ -1,4 +1,4 @@
-//! The workspaces document: the list of workspaces (name, color, letter, kind, Claude account) in
+//! The workspaces document: the list of workspaces (name, color, letter, icon, kind, Claude account) in
 //! the metadata table, normalized on every read and write like the Spaces document.
 
 use rusqlite::{Connection, OptionalExtension};
@@ -229,7 +229,7 @@ pub(crate) fn assign_remote_project_workspace_in(
     Ok(normalize_sidebar_workspaces_state(&next))
 }
 
-/// Adds a workspace built from `params` (`name`, optional `color`, `letter`, `kind`) and returns
+/// Adds a workspace built from `params` (`name`, optional `color`, `letter`, `icon`, `kind`) and returns
 /// its id with the new document.
 pub(crate) fn create_workspace_in(
     state: &Value,
@@ -249,7 +249,14 @@ pub(crate) fn create_workspace_in(
     let mut workspace = Map::new();
     workspace.insert("workspaceId".into(), json!(workspace_id));
     workspace.insert("name".into(), json!(name));
-    for key in ["color", "letter", "kind", "claudeAccountId", "tracker"] {
+    for key in [
+        "color",
+        "letter",
+        "icon",
+        "kind",
+        "claudeAccountId",
+        "tracker",
+    ] {
         if let Some(value) = params.get(key) {
             workspace.insert(key.into(), value.clone());
         }
@@ -272,8 +279,8 @@ pub(crate) fn create_workspace_in(
     Ok((workspace_id, normalize_sidebar_workspaces_state(&next)))
 }
 
-/// Applies `params` (`name`, `color`, `letter`, `kind`, `claudeAccountId`, `tracker`; `null`
-/// clears the account or the tracker) to one workspace.
+/// Applies `params` (`name`, `color`, `letter`, `icon`, `kind`, `claudeAccountId`, `tracker`;
+/// `null` clears the icon, the account or the tracker) to one workspace.
 pub(crate) fn update_workspace_in(
     state: &Value,
     workspace_id: &str,
@@ -294,6 +301,7 @@ pub(crate) fn update_workspace_in(
         "name",
         "color",
         "letter",
+        "icon",
         "kind",
         "claudeAccountId",
         "tracker",
@@ -406,6 +414,16 @@ pub fn normalize_sidebar_workspaces_state(state: &Value) -> Value {
         workspace.insert("name".into(), json!(name));
         workspace.insert("color".into(), json!(color));
         workspace.insert("letter".into(), json!(letter));
+        // The icon picked in Settings (gx-protocol `WORKSPACE_ICONS`); anything else is dropped,
+        // so the sidebar draws the kind's default (`SidebarWorkspace::icon_id`).
+        if let Some(icon) = source
+            .get("icon")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|icon| ghostex_gx_protocol::WORKSPACE_ICONS.contains(icon))
+        {
+            workspace.insert("icon".into(), json!(icon));
+        }
         workspace.insert("kind".into(), json!(kind.as_wire()));
         if let Some(account_id) = bounded_text(source.get("claudeAccountId"), MAX_ID_CHARS) {
             workspace.insert("claudeAccountId".into(), json!(account_id));

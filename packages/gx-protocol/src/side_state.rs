@@ -132,9 +132,13 @@ pub struct SidebarWorkspace {
     /// Lowercase `#rrggbb`.
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub color: String,
-    /// One character drawn on the workspace tile.
+    /// One character, kept for phones and desktops older than the workspace icons.
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub letter: String,
+    /// The icon picked in Settings > Workspaces, one of [`WORKSPACE_ICONS`]; empty = the kind's
+    /// default ([`SidebarWorkspace::icon_id`]).
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub icon: String,
     /// `work` or `personal`; sets the work-mode default of the workspace's projects.
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub kind: String,
@@ -147,9 +151,40 @@ pub struct SidebarWorkspace {
     pub tracker: Option<String>,
 }
 
+/// The icons a workspace can wear (Settings > Workspaces > Icon), in the picker's order. None of
+/// them is a Space icon (the desktop's `SPACE_EDITOR_ICONS`), and the sidebar draws them on a
+/// filled disc in the workspace's colour, where a Space is an outline glyph on a hairline tile.
+///
+/// CDXC:Workspaces 2026-11-20 DECISION:
+/// User picked "F. The first tile of the Spaces row" (Q4296): "each workspace gets its own ICON (not just a colour dot), and those icons must look different from the Spaces icons (e.g. a distinct shape/frame or a different icon set, picked per workspace in Settings)". Both: a set of its own (places and roles, no developer glyphs) and a shape of its own (the glyph on a disc in the workspace's colour). The ids are Tabler icon names, the desktop's `assets/titlebar/<id>.svg` and the phone's `COMMAND_ICONS`.
+pub const WORKSPACE_ICONS: [&str; 12] = [
+    "home",
+    "briefcase",
+    "building",
+    "user",
+    "users",
+    "coffee",
+    "camera",
+    "music",
+    "palette",
+    "plane",
+    "leaf",
+    "moon",
+];
+
 impl SidebarWorkspace {
     pub fn is_work(&self) -> bool {
         self.kind == "work"
+    }
+
+    /// The icon to draw: the one picked when it is still one of [`WORKSPACE_ICONS`], else
+    /// `briefcase` for a work workspace and `home` for a personal one.
+    pub fn icon_id(&self) -> &str {
+        match WORKSPACE_ICONS.iter().find(|icon| **icon == self.icon) {
+            Some(icon) => icon,
+            None if self.is_work() => "briefcase",
+            None => "home",
+        }
     }
 }
 

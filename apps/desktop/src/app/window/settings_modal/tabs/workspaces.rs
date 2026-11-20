@@ -400,7 +400,7 @@ impl WorkspacesTab {
             p,
             name_id.clone(),
             RowSpec::new("Name")
-                .description("Shown on the workspace switcher at the bottom left of the sidebar."),
+                .description("Shown in the workspace menu and on the workspace tile's tooltip."),
             None,
             settings_text_input(p, &name_input, Some(220.0), false, window, cx),
             cx,
@@ -436,6 +436,47 @@ impl WorkspacesTab {
             RowSpec::new("Color"),
             None,
             swatches.into_any_element(),
+            cx,
+        ));
+
+        // Icon: the workspace icons (gx-protocol `WORKSPACE_ICONS`) as they draw on the tile, on
+        // the workspace's colour; the one in use (picked, or the kind's default) is ringed.
+        let disc = hex(&color);
+        let current_icon =
+            serde_json::from_value::<ghostex_gx_protocol::SidebarWorkspace>(workspace.clone())
+                .map(|workspace| workspace.icon_id().to_string())
+                .unwrap_or_default();
+        let icons = h_flex().flex_wrap().gap(px(6.0)).children(
+            ghostex_gx_protocol::WORKSPACE_ICONS.iter().map(|icon| {
+                let selected = *icon == current_icon;
+                let target = workspace_id.clone();
+                div()
+                    .id(SharedString::from(format!(
+                        "workspace-icon-{workspace_id}-{icon}"
+                    )))
+                    .p(px(2.0))
+                    .rounded_full()
+                    .border_2()
+                    .border_color(if selected {
+                        gpui::Hsla::from(p.foreground)
+                    } else {
+                        gpui::transparent_black()
+                    })
+                    .cursor_pointer()
+                    .child(icon_disc(icon, disc, 22.0))
+                    .on_click(cx.listener(move |page, _, _, cx| {
+                        page.update_workspace(&target, json!({ "icon": icon }), cx);
+                    }))
+            }),
+        );
+        rows.push(setting_row(
+            p,
+            format!("workspace-icon-{workspace_id}"),
+            RowSpec::new("Icon").description(
+                "On the workspace tile, the first tile of the Spaces row, and in the workspace menu.",
+            ),
+            None,
+            icons.into_any_element(),
             cx,
         ));
 
@@ -868,6 +909,26 @@ fn text(value: &Value, key: &str) -> String {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string()
+}
+
+/// A workspace icon as the sidebar draws it (`workspace_badge` in native_sidebar/workspace_tile.rs,
+/// which the native-modal demo this tab also builds into does not have): the icon in white on a
+/// disc of the workspace's colour. The icon ids are their own `assets/titlebar/` file names.
+fn icon_disc(icon: &str, color: gpui::Hsla, size: f32) -> gpui::AnyElement {
+    div()
+        .size(px(size))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded_full()
+        .bg(color)
+        .child(
+            gpui::svg()
+                .path(SharedString::from(format!("titlebar/{icon}.svg")))
+                .size(px((size * 0.62).round()))
+                .text_color(gpui::white()),
+        )
+        .into_any_element()
 }
 
 fn hex(color: &str) -> gpui::Hsla {
