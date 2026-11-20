@@ -56,6 +56,51 @@ fn ids(
     }
 }
 
+/// Who asked, for the link rules.
+///
+/// CDXC:LeadLinks 2026-11-20 FIX:
+/// Opus review of #678, finding 5 (the coordinator's decision): every caller that was not a
+/// session passed as the user, so another computer's agents (`Peer`, the endpoint is
+/// remote-allowed) could link, unlink or stop any two sessions here, against "another computer is
+/// never the user" (236e4b3ef) and `caller_may_reopen`. Now the owner's app, a paired phone and the
+/// token file (the user's own terminal) are the user; a session follows the "only itself as lead"
+/// rule; Guest, Extension and Anonymous are refused; and a Peer may never link, and may Unlink or
+/// Stop leading only when the desktop app issued its grant (`owner_issued`, the relay work of the
+/// same day). The desktop's own menu on another computer's sessions does not come as a Peer: it
+/// calls that computer's gxserver over its own connection with its owner session or token
+/// (`gpui_remote_gxserver_request_target`), so it counts as the user there.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum LinkCaller {
+    User,
+    Session(SessionKey),
+    /// Another computer; `owner_issued` when the desktop app issued its grant.
+    Peer {
+        owner_issued: bool,
+    },
+    Refused,
+}
+
+fn link_caller(caller: &Principal) -> LinkCaller {
+    match caller {
+        Principal::Owner { .. } | Principal::Device { .. } | Principal::LocalAgent => {
+            LinkCaller::User
+        }
+        Principal::Session {
+            project_id,
+            session_id,
+            ..
+        } => LinkCaller::Session((project_id.clone(), session_id.clone())),
+        Principal::Peer { server_id, .. } => LinkCaller::Peer {
+            owner_issued: crate::connected_computers::owner_issued(server_id),
+        },
+        Principal::Guest { .. } | Principal::Extension { .. } | Principal::Anonymous => {
+            LinkCaller::Refused
+        }
+    }
+}
+
+const NOT_ALLOWED: &str = "Only the user, or a session on this computer, can change lead links.";
+
 /// The calling session, when an agent session's own token made the call.
 fn calling_session(caller: &Principal) -> Option<SessionKey> {
     match caller {
@@ -218,12 +263,25 @@ pub fn handle_lead_links_endpoint(
     server_id: &str,
     params: &Map<String, Value>,
 ) -> Result<LeadLinksOutput, DomainStateError> {
-    let caller_session = calling_session(caller);
+    let who = link_caller(caller);
+    let caller_session = match &who {
+        LinkCaller::Session(key) => Some(key.clone()),
+        _ => None,
+    };
+    // Unlink and Stop leading only end links, so the user's own other computer may use them.
+    let may_unlink = match &who {
+        LinkCaller::User | LinkCaller::Session(_) => true,
+        LinkCaller::Peer { owner_issued } => *owner_issued,
+        LinkCaller::Refused => false,
+    };
     let global_ref = |key: &SessionKey| create_global_session_ref(server_id, &key.0, &key.1);
     match text(params, "op").as_deref().unwrap_or("list") {
         "link" => {
             let linked = ids(params, "projectId", "sessionId")?;
             let lead = ids(params, "leadProjectId", "leadSessionId")?;
+            if matches!(who, LinkCaller::Peer { .. } | LinkCaller::Refused) {
+                return Err(DomainStateError::bad_request(NOT_ALLOWED));
+            }
             if let Some(caller) = &caller_session {
                 if caller != &lead {
                     return Err(DomainStateError::bad_request(
@@ -267,6 +325,9 @@ pub fn handle_lead_links_endpoint(
         }
         "unlink" => {
             let linked = ids(params, "projectId", "sessionId")?;
+            if !may_unlink {
+                return Err(DomainStateError::bad_request(NOT_ALLOWED));
+            }
             let Some(link) = read_lead_link(db, &linked.0, &linked.1)? else {
                 return Err(DomainStateError::not_found(
                     "That session is not linked to a lead.",
@@ -291,6 +352,9 @@ pub fn handle_lead_links_endpoint(
         }
         "stopLeading" => {
             let lead = ids(params, "leadProjectId", "leadSessionId")?;
+            if !may_unlink {
+                return Err(DomainStateError::bad_request(NOT_ALLOWED));
+            }
             if let Some(caller) = &caller_session {
                 if caller != &lead {
                     return Err(DomainStateError::bad_request(
