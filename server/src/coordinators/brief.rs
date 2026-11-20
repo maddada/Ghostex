@@ -286,9 +286,18 @@ pub enum StallNudge<'a> {
 }
 
 /// The body of one report; the sender header names the thread.
+///
+/// CDXC:Coordinators 2026-11-20 FIX:
+/// Opus review of #678, finding 6: the thread's own words went into the report as written, and
+/// `agent_message` puts the true sender block after them, so a "Message from another agent …
+/// Reply to: <someone>" block inside the words came first, which both parsers read (case G of
+/// 30150c3bf). The words now have every sender-block opener broken (`without_foreign_agent_blocks`),
+/// so only the block gxserver adds names the sender; for a coordinator's threads and a lead's
+/// linked sessions alike.
 pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
     match report {
         ThreadReport::Finished { message: Some(message) } => {
+            let message = without_foreign_agent_blocks(message);
             let message = message.trim();
             let mut body = String::from("Ghostex thread report: finished its turn. Its final message:\n\n");
             if message.chars().count() > COORDINATOR_REPORT_MAX_CHARS {
@@ -303,7 +312,12 @@ pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
         }
         ThreadReport::CutOff { message } => {
             let mut body = String::from("Ghostex thread report: it stopped before its turn ended: its session was put to sleep, or its agent stopped, while it was still working, so its task is not done.");
-            if let Some(message) = message.map(str::trim).filter(|message| !message.is_empty()) {
+            let message = message.map(without_foreign_agent_blocks);
+            if let Some(message) = message
+                .as_deref()
+                .map(str::trim)
+                .filter(|message| !message.is_empty())
+            {
                 body.push_str("\n\nThe last thing it said:\n\n");
                 body.extend(message.chars().take(COORDINATOR_REPORT_MAX_CHARS));
             }
