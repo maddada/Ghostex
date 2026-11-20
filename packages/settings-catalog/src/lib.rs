@@ -318,6 +318,28 @@ pub fn add_hub_secret_folders(settings: &mut serde_json::Map<String, serde_json:
     changed
 }
 
+/// Keeps Classic (today's sidebar, no rail) for someone who already had a settings file when the rail
+/// became the default, and marks their one-time "Meet the rail" intro as pending. Returns whether it
+/// changed anything; a saved layout (either way) is left alone.
+///
+/// CDXC:Sidebar 2026-11-20 WHY: stored settings leave a key out until it is saved, so an existing user would get the rail without asking. The desktop runs this once, behind a marker file, at start-up when the settings file already exists (`migrate_sidebar_rail_default_once`); a new install has no file then, so it starts on Rail and sees no intro.
+pub fn keep_classic_sidebar_for_existing_settings(
+    settings: &mut serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    if settings.contains_key("sidebarLayout") {
+        return false;
+    }
+    settings.insert(
+        "sidebarLayout".to_string(),
+        serde_json::Value::String("classic".to_string()),
+    );
+    settings.insert(
+        "sidebarRailIntro".to_string(),
+        serde_json::Value::String("pending".to_string()),
+    );
+    true
+}
+
 /// Writes `workAreaFrame` false into the settings of someone who already had a settings file when the
 /// frame became on by default, so their work area keeps the edge-to-edge look it had. Returns whether it
 /// changed anything; a saved choice (either way) is left alone.

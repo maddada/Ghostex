@@ -476,6 +476,7 @@ pub fn exports(module: &str, platform: Platform) -> Vec<(&'static str, Json)> {
                 SIDEBAR_SPACE_SWITCH_BEHAVIOR_OPTIONS.to_json(),
             ),
             ("SIDEBAR_VIEW_OPTIONS", SIDEBAR_VIEW_OPTIONS.to_json()),
+            ("SIDEBAR_LAYOUT_OPTIONS", SIDEBAR_LAYOUT_OPTIONS.to_json()),
             (
                 "PINNED_SESSION_ORDER_OPTIONS",
                 PINNED_SESSION_ORDER_OPTIONS.to_json(),
