@@ -753,8 +753,11 @@ from the sidebar menu or the command palette still opens in its own window. At
 the rail's foot are your workspace (with two or more workspaces: click to
 switch, right-click for the workspace menu) and the account usage switch (once
 an account is starred): one click shows or hides the usage tiles at the bottom
-of the sidebar. With the rail on, Search and the bell leave the sidebar's top
-row, Hermes leaves the Spaces row, the workspace tile leaves the Spaces row and
+of the sidebar. Toggle sidebar is the rail's last button, in its bottom corner,
+so it stays in the same place whether the sidebar is shown or hidden (the
+Toggle Sidebar hotkey, Cmd+B on macOS, still works). With the rail on, Search and the bell leave the sidebar's top
+row, Toggle sidebar leaves the sidebar's top row and the work area header,
+Hermes leaves the Spaces row, the workspace tile leaves the Spaces row and
 Claude and Grok Bot leave the work area header. Pick Rail or Classic (the
 sidebar without the rail) in Settings > Sidebar > Sidebar layout
 (`sidebarLayout`: `rail` or `classic`). New installs start on Rail. If you had
