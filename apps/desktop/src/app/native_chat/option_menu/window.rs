@@ -85,6 +85,8 @@ pub(in crate::app::native_chat) struct ChatOptionMenu {
     /// A panel is being reopened in place (`reopen`): the same panel growing, not an open, so it
     /// does not fade in again.
     reopening: bool,
+    /// A side panel is opening (`open_side_panel`): it goes left of the menu when there is room.
+    side_left: bool,
     /// Where each depth's panel was anchored, so a panel can reopen in place.
     /// Each open panel's anchor, width, whether it drops below its trigger, and whether a dropped
     /// list lines its right edge up with the trigger's instead of its left.
@@ -464,7 +466,10 @@ impl ChatOptionMenu {
     }
 
     /// A side panel beside the open menu, one level down (the Boost menu's preview,
-    /// native_chat/boosts.rs): right of `anchor` when there is room, else left of it.
+    /// native_chat/boosts.rs): left of `anchor` when there is room, else right of it.
+    /// CDXC:Boosts 2026-11-20 DECISION: User: the Boost menu's preview card "should appear to the
+    /// LEFT of the Boost menu, not the right" (the pill sits at the strip's right end, so the menu
+    /// and its preview read right to left toward the chat).
     pub(in crate::app::native_chat) fn open_side_panel(
         &mut self,
         rows: Vec<Value>,
@@ -472,7 +477,9 @@ impl ChatOptionMenu {
         width: f32,
         cx: &mut Context<Self>,
     ) {
+        self.side_left = true;
         self.open_panel(rows, anchor, width, 1, cx);
+        self.side_left = false;
     }
 
     /// Whether a side panel is open beside the menu.
@@ -600,6 +607,10 @@ impl ChatOptionMenu {
             anchor.left()
         } else if depth == 0 {
             anchor.right() - width
+        } else if self.side_left
+            && anchor.left() - px(4.0 * scale) - width >= available.left() + margin
+        {
+            anchor.left() - width - px(4.0 * scale)
         } else if anchor.right() + px(4.0 * scale) + width < available.right() - margin {
             anchor.right() + px(4.0 * scale)
         } else {
@@ -1099,6 +1110,7 @@ impl NativeChatView {
             opening: false,
             closed: false,
             reopening: false,
+            side_left: false,
             anchors: vec![],
             parent,
             compact: below,
