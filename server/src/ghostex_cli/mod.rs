@@ -29,6 +29,7 @@ mod connectors;
 mod connectors_executor;
 mod connectors_mcp;
 mod coordinator;
+mod debug;
 pub mod diagnostics;
 pub mod editors;
 pub mod extension_panel;
@@ -536,6 +537,7 @@ fn is_known_command(name: &str) -> bool {
         "assert-card",
         "wait-for",
         "screenshot",
+        "debug",
         "logs",
         "hookless-activity",
         "bundle",
@@ -1142,6 +1144,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         }
         "wait-for" => run_bridge_action("waitFor", Parser::WaitFor, assert_ok, args),
         "screenshot" => diagnostics::screenshot_command(args),
+        "debug" => debug::debug_command(args),
         "logs" => diagnostics::logs_command(args),
         "hookless-activity" => hookless_activity::hookless_activity_command(args),
         "bundle" => diagnostics::bundle_command(args),

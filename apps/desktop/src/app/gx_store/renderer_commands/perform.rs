@@ -269,6 +269,17 @@ impl GhostexGpuiApp {
                 };
                 Ok(json!({ "accepted": true, "action": action, "moved": moved, "ok": true }))
             }
+            #[cfg(not(ghostex_web))]
+            RendererVerb::ShowDebugModal { name } => {
+                match name.as_str() {
+                    "rail-intro" => self.open_sidebar_rail_intro_preview(cx),
+                    _ => return Err(RendererCommandError::UnknownDebugModal),
+                }
+                Ok(json!({ "ok": true, "modal": name }))
+            }
+            // `ghostex debug show-modal` is for the desktop app on the user's own computer.
+            #[cfg(ghostex_web)]
+            RendererVerb::ShowDebugModal { .. } => Err(RendererCommandError::Unsupported),
             RendererVerb::ToggleSidebarCollapsed => {
                 // With Claude on, showing the sidebar leaves Claude (app/claude_web/takeover.rs).
                 self.toggle_sidebar_from_user(cx);

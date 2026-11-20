@@ -179,6 +179,17 @@ pub(super) async fn route_agents_http(
             response
         }
         "/api/dispatchRendererCommand" => {
+            if !debug_modal_caller_allowed(&caller, &body_json) {
+                return Ok(routed_json(
+                    Some(endpoint.path),
+                    StatusCode::FORBIDDEN,
+                    rpc_error(
+                        "forbidden",
+                        "ghostex debug show-modal opens a pop-up in this computer's own Ghostex app, so only this computer can ask for it, not a phone or another computer.",
+                        Some(request_id),
+                    ),
+                ));
+            }
             handle_renderer_command_http(&state, endpoint.path, request_id, &body_json).await
         }
         _ => {
@@ -192,4 +203,18 @@ pub(super) async fn route_agents_http(
             })
         }
     })
+}
+
+/// `showDebugModal` (`ghostex debug show-modal`) puts a pop-up on the app's window here, for the
+/// user's own checks: the app's owner, the CLI with this computer's token file, or a session on
+/// this computer may ask; a phone, another computer, a Collab guest or an extension may not.
+/// Every other renderer command keeps its own rules.
+fn debug_modal_caller_allowed(caller: &crate::security::Principal, body: &Value) -> bool {
+    use crate::security::Principal;
+    let action = body.pointer("/params/action").and_then(Value::as_str);
+    action != Some("showDebugModal")
+        || matches!(
+            caller,
+            Principal::Owner { .. } | Principal::LocalAgent | Principal::Session { .. }
+        )
 }

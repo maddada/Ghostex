@@ -766,7 +766,9 @@ Meet the rail once: what the rail gives you, a Switch button that flips the
 window between Rail and Classic as often as you like (it says which way it goes),
 and Done, which keeps the layout on screen. It opens once per computer, never
 again after you close it however you close it, and another computer never shows
-it because of this one. The pinned icons are saved per computer
+it because of this one. To see it again (for a check or a screenshot),
+`ghostex debug show-modal rail-intro` opens it on this computer's window as a
+preview: Switch only flips the pop-up, and nothing is saved. The pinned icons are saved per computer
 (`sidebarRailPins`). The web app shows the rail with the items a browser can
 open; pinning, dragging and moving icons are on the computer only.
 

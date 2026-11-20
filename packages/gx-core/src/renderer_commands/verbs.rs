@@ -28,6 +28,19 @@ use crate::keys::MachineId;
 use crate::sidebar_view::text::{js_trim, utf16_len, utf16_prefix};
 use crate::workspace_groups::{SessionGroupOp, SessionGroupRequest};
 
+/// The pop-ups `ghostex debug show-modal <name>` opens on the app's window, named like their
+/// `native-modal-demo` previews (apps/desktop/src/bin/native_modal_demo.rs).
+///
+/// CDXC:AppModal 2026-11-20 DECISION:
+/// User, after the 11.12.0 smoke run: "To see Meet the rail again I quit the app, edited the
+/// settings file and moved the marker aside, twice"; a `ghostex debug show-modal rail-intro` opens
+/// the one-time pop-up on the real window for checks and screenshots without touching its
+/// once-only marker or any setting. Only pop-ups whose preview acts on nothing are listed: the
+/// others' buttons pair devices, install updates or write settings for real.
+/// SEE-ALSO: apps/desktop/src/app/sidebar_rail/intro.rs (`open_sidebar_rail_intro_preview`),
+/// server/src/ghostex_cli/debug.rs.
+pub const DEBUG_SHOW_MODALS: [&str; 1] = ["rail-intro"];
+
 /// The tabs `ghostex settings open --tab` may name, each a `SettingsTabId` id
 /// (apps/desktop/src/app/window/settings_modal/model.rs). Keep in lockstep with
 /// `SETTINGS_MODAL_TABS` in server/src/ghostex_cli/settings.rs, which checks `--tab` first.
@@ -184,6 +197,11 @@ pub enum RendererVerb {
     AppUpdate(AppUpdateOp),
     /// `sessionGroups`: the `ghostex` session group verbs (`workspace_groups/verb_edits.rs`).
     SessionGroups(SessionGroupRequest),
+    /// `showDebugModal` (`ghostex debug show-modal <name>`): one of [`DEBUG_SHOW_MODALS`] as a
+    /// preview that writes nothing.
+    ShowDebugModal {
+        name: String,
+    },
 }
 
 fn string<'a>(payload: &'a Value, key: &str) -> Option<&'a str> {
@@ -358,6 +376,10 @@ pub fn plan_renderer_command(
             _ => Err(RendererCommandError::Unsupported),
         },
         "sessionGroups" => session_groups(core, payload).map(RendererVerb::SessionGroups),
+        "showDebugModal" => trimmed(payload, "name")
+            .filter(|name| DEBUG_SHOW_MODALS.contains(&name.as_str()))
+            .map(|name| RendererVerb::ShowDebugModal { name })
+            .ok_or(RendererCommandError::UnknownDebugModal),
         _ => Err(RendererCommandError::Unsupported),
     }
 }
