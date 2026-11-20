@@ -16,6 +16,48 @@ fn pi_inline_image_block(record: &Map<String, Value>) -> Option<SessionChatBlock
     })
 }
 
+/// The pictures a tool result shows in the chat: each one the tool returned as bytes, kept as a
+/// file on this machine and sent by its path (`tool_picture_path`).
+///
+/// CDXC:SessionChat 2026-11-20 WHY:
+/// A `read` result's picture is the file its call names, which the chat already draws on the call's
+/// row (`read_images.rs` in gx-chat-core), so it is not shown a second time. A picture that cannot
+/// be kept stays the "Pasted image" chip it was.
+fn pi_tool_result_pictures(
+    content: Option<&Value>,
+    tool_name: Option<&str>,
+) -> Vec<SessionChatBlock> {
+    let Some(Value::Array(items)) = content else {
+        return Vec::new();
+    };
+    let reads_a_file = tool_name.is_some_and(|name| name.eq_ignore_ascii_case("read"));
+    items
+        .iter()
+        .filter_map(Value::as_object)
+        .filter(|record| record.get("type").and_then(Value::as_str) == Some("image"))
+        .filter_map(|record| {
+            let data = record
+                .get("data")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if data.trim().is_empty() {
+                return image_ref_block(record);
+            }
+            if reads_a_file {
+                return None;
+            }
+            match crate::session_chat_files::tool_picture_path(data) {
+                Some(path) => Some(SessionChatBlock::ImageRef {
+                    path: Some(path.to_string_lossy().into_owned()),
+                    url: None,
+                    alt: None,
+                }),
+                None => pi_inline_image_block(record),
+            }
+        })
+        .collect()
+}
+
 fn pi_message_content(content: Option<&Value>) -> (Vec<SessionChatBlock>, Vec<SessionChatBlock>) {
     let mut visible = Vec::new();
     let mut reasoning = Vec::new();
@@ -331,11 +373,10 @@ fn decode_pi_record(record: &Map<String, Value>, fallback_id: &str) -> Option<Se
                 call_id: extract_string(message.get("toolCallId")),
                 patch,
             }];
-            tool_blocks.extend(
-                blocks
-                    .into_iter()
-                    .filter(|block| matches!(block, SessionChatBlock::ImageRef { .. })),
-            );
+            tool_blocks.extend(pi_tool_result_pictures(
+                message.get("content"),
+                extract_string(message.get("toolName")).as_deref(),
+            ));
             Some(transcript_message(
                 SessionChatRole::Tool,
                 tool_blocks,

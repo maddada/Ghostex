@@ -242,8 +242,14 @@ pub(super) async fn route_chat_http(
         }
         "/api/readSessionChatImage" => {
             let (fallback_path, fallback_id) = (endpoint.path.clone(), request_id.clone());
+            let state = state.clone();
             tokio::task::spawn_blocking(move || {
-                handle_read_session_chat_image_http(endpoint.path, request_id, &body_json)
+                handle_read_session_chat_image_http(
+                    endpoint.path,
+                    request_id,
+                    &body_json,
+                    |params| crate::session_chat_files::session_chat_folder(&state, params),
+                )
             })
             .await
             .unwrap_or_else(|_| {
