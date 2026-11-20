@@ -274,3 +274,11 @@ pub unsafe extern "C" fn gx_beads_bead(
     };
     finish(ghostex_gx_core::beads_view::json_api::bead(arguments))
 }
+
+/// The one session menu's layout (`ghostex_gx_core::session_menu_layout::layout_json`): every row's
+/// name and icon and each spot's order, which the phone's long-press, chat and terminal menus
+/// assemble from (apps/mobile/app/src/session-menu/layout.ts).
+#[no_mangle]
+pub extern "C" fn gx_session_menu_layout() -> *const u8 {
+    finish(ghostex_gx_core::session_menu_layout::layout_json().to_string())
+}

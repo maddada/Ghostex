@@ -52,6 +52,8 @@
     beadsTree      [args]           -> the Beads view's Tree for the phone ({"ok": ...}), packages/gx-core
                                        `beads_view::json_api::tree` (args is a JSON text)
     beadsBead      [args]           -> one bead as the phone's Bead screen shows it, `json_api::bead`
+    sessionMenuLayout               -> the one session menu's layout (rows' names and icons, each
+                                       spot's order), packages/gx-core `session_menu_layout::layout_json`
   A core answer of {"error":{...}} (bad event, panicked core...) arrives as ok:false with that
   error, as the native module's `checked` throws it. Any op on a handle that was disposed or never
   created answers {"code":"disposed"}, as the native module's calls throw after dispose(). A success
@@ -173,6 +175,8 @@
         return { raw: callText('gx_beads_tree', [], [str(args[0])]) };
       case 'beadsBead':
         return { raw: callText('gx_beads_bead', [], [str(args[0])]) };
+      case 'sessionMenuLayout':
+        return { raw: callText('gx_session_menu_layout', [], []) };
       default:
         return { error: { code: 'unknownOp', message: 'No op named ' + JSON.stringify(op) + '.' } };
     }
