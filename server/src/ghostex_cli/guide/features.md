@@ -765,7 +765,11 @@ Toggle sidebar stays at the top left of the sidebar's top bar (right after the
 window buttons on macOS) and the bell sits on that bar's right, as in Classic;
 while the sidebar is hidden the work area header shows Toggle sidebar with the
 bell beside it. The rail has no border of its own: with the sidebar hidden the
-work area starts right at the rail's edge. Search leaves the sidebar's top row, Hermes leaves the Spaces
+work area starts right at the rail's edge. While the sidebar is hidden, resting
+the pointer on the rail's top half for a moment slides the sidebar out beside
+it, as hovering the window's left edge does; move onto it to use it, and it
+slides away when the pointer leaves both. A quick click on an icon opens only
+that icon. Search leaves the sidebar's top row, Hermes leaves the Spaces
 row, the workspace tile leaves the Spaces row and
 Claude and Grok Bot leave the work area header. Pick Rail or Classic (the
 sidebar without the rail) in Settings > Sidebar > Sidebar layout
