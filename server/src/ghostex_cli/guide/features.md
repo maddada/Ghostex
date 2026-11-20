@@ -4549,7 +4549,7 @@ version of the Projects features in Cursor and Claude Code.
   Needs you comes last and threads' approvals show; and on a Mac, let threads
   test in real windows with SpaceO and cua-driver. Tick **Don't show again** in
   the tips to remove the pill from every coordinator on that computer's Ghostex
-  (the phone and every window follow); this Help keeps the tips. Only you see
+  (the phone and every window follow); Ask Ghostex AI in the sidebar's menu still explains them. Only you see
   them: the coordinator's own first message is unchanged.
 - **Just ask**: "run these three as separate threads", "use worktrees", "give me
   a status of every thread", "use a cheaper model for threads", "don't merge
@@ -7072,8 +7072,9 @@ no uncommitted changes, no files git ignores outside build folders (such as `.en
 changes git status hides, and no commits outside the merged PR. It keeps the branch.
 Clean up and Clean up all keep such worktrees too and say why, and the banner says
 "N kept: <why>". A cleaned-up thread stays where it was: waking it or messaging it is
-refused, never moved onto your own checkout; Undo, where the banner offers
-it, puts the worktree back on its branch and the thread can run again. The banner
+refused (a message to it too, with what to do), never moved onto your own
+checkout; Undo in the banner puts the worktree back on its branch and the thread
+can run again, whether Ghostex cleaned it up or you did. The banner
 says "Cleaned up N worktrees" with Undo (`ghostex issues cleanup-threads <coordinator>
 undo`, or `dismiss` to hide the line); anything it could not clean up stays in the
 banner. Finished threads (PR merged, nothing running or waiting) fold behind the
@@ -8467,7 +8468,7 @@ the same option.
 
 ## Sending feedback
 
-Send Bug / Feedback, under Help in the sidebar's menu right under Join Discord,
+Send Bug / Feedback, in the sidebar's menu right under Join Discord,
 opens the feedback pop-up. Enter your GitHub username first ("name" or "@name");
 it is required, the issue starts with "Reported by @name" so GitHub tells you
 when it is fixed, and Ghostex remembers it for next time. Then write what is

@@ -423,6 +423,15 @@ pub fn handle_session_chat_queue_endpoint(
             (snapshot_value(&snapshot), false)
         }
         "/api/queueSessionChatPrompt" => {
+            // Never queued for a coordinator's thread whose worktree was cleaned up: it can't run
+            // (`cleaned_thread_wake_refusal` in work_mode/cleanup.rs).
+            if let Some(refusal) = DomainRepository::new(&db, server_id)
+                .get_session(&project_id, &session_id)?
+                .as_ref()
+                .and_then(crate::work_mode::cleaned_thread_wake_refusal)
+            {
+                return Err(DomainStateError::bad_request(refusal));
+            }
             let transaction =
                 rusqlite::Transaction::new_unchecked(&db, rusqlite::TransactionBehavior::Immediate)
                     .map_err(sql_error)?;

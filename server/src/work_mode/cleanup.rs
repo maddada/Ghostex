@@ -108,11 +108,17 @@ pub(crate) fn work_cleanup_record(session: &Value) -> Option<&Map<String, Value>
 /// A cleanup gxserver did by itself that the coordinator's banner still reports: not dismissed,
 /// and less than a day old. `{ "at", "undo" }`, `undo` when the worktree can be put back (its
 /// branch or its last commit is known).
+///
+/// A coordinator's thread the user cleaned up (Clean up, Clean up all) is reported the same way, with
+/// Undo, since it keeps its place and can't run until its worktree is back (`cleaned_thread_holds_place`).
+/// Only while the worktree folder is really gone.
 pub(crate) fn presentation_auto_cleaned(session: &Value, now_ms: i64) -> Option<Value> {
     let record = work_cleanup_record(session)?;
-    if record.get("answer").and_then(Value::as_str) != Some(AUTO_CLEAN_UP_ANSWER)
-        || record.get("dismissed").and_then(Value::as_bool) == Some(true)
-    {
+    if !reports_cleanup(record) || record.get("dismissed").and_then(Value::as_bool) == Some(true) {
+        return None;
+    }
+    let folder = record.get("worktreePath").and_then(Value::as_str)?;
+    if Path::new(folder).exists() {
         return None;
     }
     let at = record.get("answeredAt").and_then(Value::as_str)?;
@@ -132,6 +138,16 @@ pub(crate) fn presentation_auto_cleaned(session: &Value, now_ms: i64) -> Option<
         "at": at,
         "undo": text("worktreePath") && (text("branch") || text("head")),
     }))
+}
+
+/// A cleanup the banner reports and Undo can reverse: one the pass did by itself, or the user's
+/// Clean up of a coordinator's thread.
+pub(crate) fn reports_cleanup(record: &Map<String, Value>) -> bool {
+    match record.get("answer").and_then(Value::as_str) {
+        Some(AUTO_CLEAN_UP_ANSWER) => true,
+        Some("cleanUp") => record.get("thread").and_then(Value::as_bool) == Some(true),
+        _ => false,
+    }
 }
 
 /// Whether the session's worktree was cleaned up for its merged PR, by the user or by itself.

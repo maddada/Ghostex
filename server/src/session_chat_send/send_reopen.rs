@@ -30,6 +30,16 @@ pub(crate) async fn handle_send_session_chat_message_from(
     // `agents send --with-next`: held for the session's next message, not typed (with_next.rs).
     // A lead's `--with-next` note owes no turn: it rides in whatever message the session gets next,
     // usually the user's (CDXC:LeadLinks 2026-11-20 in agents/lead_links `note_lead_send_body`).
+    // A coordinator's thread whose worktree was cleaned up can't run, so a message to it is refused
+    // now, with what to do, instead of waiting in its queue for a wake that is refused every time
+    // (CDXC:WorkMode 2026-11-20 at `cleaned_thread_wake_refusal` in work_mode/cleanup.rs).
+    if let Some(refusal) = target_key(body).and_then(|key| cleaned_thread_refusal(state, &key)) {
+        return crate::server::domain_error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError::bad_request(refusal),
+        );
+    }
     if let Some(held) = hold_with_next_response(state, caller, &endpoint_path, &request_id, body) {
         return held;
     }
@@ -252,6 +262,15 @@ fn sent_message(body: &Value, sent_ms: i64) -> Option<(String, Option<String>, i
         .and_then(Value::as_str)
         .map(str::to_string);
     Some((message_text(body), send_id, sent_ms))
+}
+
+/// The refusal for a message to a cleaned-up coordinator thread, when `key` is one.
+fn cleaned_thread_refusal(state: &AppState, key: &SessionKey) -> Option<String> {
+    let db = open_gxserver_database(&state.paths).ok()?;
+    let session = crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str())
+        .get_session(&key.0, &key.1)
+        .ok()??;
+    crate::work_mode::cleaned_thread_wake_refusal(&session)
 }
 
 fn target_key(body: &Value) -> Option<SessionKey> {

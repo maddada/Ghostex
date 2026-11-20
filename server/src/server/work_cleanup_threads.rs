@@ -205,10 +205,8 @@ async fn undo_auto_cleanup(
             .as_ref()
             .and_then(work_cleanup_record)
             .cloned()
-            .filter(|record| {
-                record.get("answer").and_then(Value::as_str) == Some(AUTO_CLEAN_UP_ANSWER)
-            })
-            .ok_or_else(|| "Nothing was cleaned up by itself here.".to_string())?
+            .filter(|record| crate::work_mode::reports_cleanup(record))
+            .ok_or_else(|| "Nothing here was cleaned up for a merged PR.".to_string())?
     };
     let field = |key: &str| {
         record
