@@ -175,6 +175,13 @@ fn create(parsed: &ParsedArgs) -> CliResult<()> {
 /// project has none) and answers what `create --json` prints. `--computer <name>` creates it on
 /// that connected computer.
 pub(crate) fn create_coordinator(parsed: &ParsedArgs) -> CliResult<Value> {
+    create_coordinator_from(parsed, None)
+}
+
+/// `create_coordinator`, with `via` when its task is the user's own message sent with `agents send
+/// --as-user` (gxserver labels it "Sent via Grok Bot" or "Sent from the terminal" only from the
+/// token file; session_chat_send/sender_mark.rs `label_coordinator_first_request`).
+pub(crate) fn create_coordinator_from(parsed: &ParsedArgs, via: Option<&str>) -> CliResult<Value> {
     let mut base = server_flags(&parsed.flags);
     if let Some(computer) = flag_text(&parsed.flags, "computer") {
         base.insert_text("computer", &computer);
@@ -252,6 +259,9 @@ pub(crate) fn create_coordinator(parsed: &ParsedArgs) -> CliResult<Value> {
         });
     if let Some(folder) = &folder {
         create["projectPath"] = json!(folder);
+    }
+    if let (Some(via), false) = (via, task.trim().is_empty()) {
+        create["coordinator"]["via"] = json!(via);
     }
     // Its first message waits in the agent's box for Start unless `--start` sends it at once
     // (CDXC:Coordinators 2026-11-18 in server/src/session_chat_first_message.rs). An older gxserver
@@ -616,6 +626,9 @@ fn next_tag(parsed: &ParsedArgs) -> CliResult<()> {
 /// CDXC:GrokBot 2026-11-19 WHY: Grok Bot runs `ghostex` in a plain shell outside any session,
 /// where "the calling coordinator" means nothing. `--project-id <id>` (with `--computer <name>`
 /// for another computer's) reads that project's main coordinator, alongside `--coordinator <ref>`.
+/// CDXC:GrokBot 2026-11-20 WHY: status only reads, so outside a session it needs no flag when
+/// there is one choice: the only main coordinator (on `--computer`, when given). With several, it
+/// names each one's exact command instead of guessing.
 fn status_target(parsed: &ParsedArgs) -> CliResult<(Value, Flags)> {
     let named = ["coordinator", "orchestrator", "session"]
         .iter()
@@ -623,21 +636,18 @@ fn status_target(parsed: &ParsedArgs) -> CliResult<(Value, Flags)> {
     // A named coordinator, or the calling session, wins as before; `--project-id` picks the main
     // coordinator only when neither is there.
     let outside_session = |error: &CliError| matches!(error, CliError::Other(message) if message.starts_with("Cannot identify the caller"));
-    let project_id = match target_coordinator(parsed) {
-        Ok(found) => return Ok(found),
-        Err(error) if named || !outside_session(&error) => return Err(error),
-        Err(error) => match flag_text(&parsed.flags, "projectId") {
-            Some(project_id) => project_id,
-            None => {
-                let _ = error;
-                return Err(CliError::Other("Outside an agent session, name the coordinator: --coordinator <ref>, or --project-id <id> for that project's main coordinator (ghostex projects --json lists ids).".into()));
-            }
-        },
-    };
     let mut base = server_flags(&parsed.flags);
     if let Some(computer) = flag_text(&parsed.flags, "computer") {
         base.insert_text("computer", &computer);
     }
+    let project_id = match target_coordinator(parsed) {
+        Ok(found) => return Ok(found),
+        Err(error) if named || !outside_session(&error) => return Err(error),
+        Err(_) => match flag_text(&parsed.flags, "projectId") {
+            Some(project_id) => project_id,
+            None => return only_main_coordinator(&base),
+        },
+    };
     let listed = call_gxserver_rpc(
         "/api/listCoordinators",
         &json!({ "projectId": project_id }),
@@ -671,6 +681,38 @@ fn status_target(parsed: &ParsedArgs) -> CliResult<(Value, Flags)> {
         }));
     };
     resolve_session(agents::text(main, "globalRef"), &base)
+}
+
+/// `coordinator status` outside a session with no coordinator named: the only main coordinator, or
+/// an error naming the command for each.
+fn only_main_coordinator(base: &Flags) -> CliResult<(Value, Flags)> {
+    let listed = call_gxserver_rpc("/api/listCoordinators", &json!({}), base)?;
+    let mains = listed["coordinators"]
+        .as_array()
+        .map(|rows| {
+            rows.iter()
+                .filter(|row| row["isMainCoordinator"] == json!(true))
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    match mains.as_slice() {
+        [main] => resolve_session(agents::text(main, "globalRef"), base),
+        [] => Err(CliError::Other("Outside an agent session, name the coordinator: no project has a main coordinator, so pass --coordinator <ref> (ghostex coordinator list --json lists them).".into())),
+        _ => Err(CliError::Other(format!(
+            "Outside an agent session, name the coordinator: {} projects have a main coordinator. Run one of: {}. (--coordinator <ref> reads any coordinator; ghostex projects --json names the projects.)",
+            mains.len(),
+            mains
+                .iter()
+                .map(|main| format!(
+                    "ghostex coordinator status --project-id {} ({})",
+                    agents::text(main, "projectId"),
+                    agents::text(main, "title")
+                ))
+                .collect::<Vec<_>>()
+                .join("; ")
+        ))),
+    }
 }
 
 fn status(parsed: &ParsedArgs) -> CliResult<()> {

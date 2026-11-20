@@ -427,12 +427,8 @@ pub(crate) fn label_as_user_send(
     via: Option<&str>,
     params: &mut Map<String, Value>,
 ) -> Option<String> {
-    let label = match via {
-        Some("grokBot") => VIA_GROK_BOT,
-        Some("terminal") => FROM_TERMINAL,
-        _ => return None,
-    };
-    if !matches!(caller, Principal::LocalAgent) || params.contains_key("draftVersion") {
+    let label = as_user_label(caller, via)?;
+    if params.contains_key("draftVersion") {
         return None;
     }
     let text = param(params, "text").to_string();
@@ -444,27 +440,86 @@ pub(crate) fn label_as_user_send(
         param(params, "projectId"),
         param(params, "sessionId"),
     );
+    record_send_as_user(
+        format!(
+            "Sent a message into {target}'s chat as you ({})",
+            label.to_lowercase()
+        ),
+        target,
+    );
+    let labelled = with_as_user_label(text, label);
+    params.insert("text".to_string(), json!(labelled));
+    Some(labelled)
+}
+
+/// The label for an `--as-user` send's `via`, only from the token file.
+fn as_user_label(caller: &Principal, via: Option<&str>) -> Option<&'static str> {
+    let label = match via {
+        Some("grokBot") => VIA_GROK_BOT,
+        Some("terminal") => FROM_TERMINAL,
+        _ => return None,
+    };
+    matches!(caller, Principal::LocalAgent).then_some(label)
+}
+
+fn record_send_as_user(description: String, target: String) {
     crate::audit::record(
-        crate::audit::Action::new(
-            "chat.sendAsUser",
-            format!(
-                "Sent a message into {target}'s chat as you ({})",
-                label.to_lowercase()
-            ),
-        )
-        .target(target.clone()),
+        crate::audit::Action::new("chat.sendAsUser", description).target(target),
         crate::audit::Actor::current(),
         crate::audit::Outcome::Done,
         None,
     );
-    // A `/` or `!` command from the user's own terminal still runs as one.
-    let labelled = if text.trim_start().starts_with(['/', '!']) {
+}
+
+/// `text` with the label as its last line. A `/` or `!` command from the user's own terminal still
+/// runs as one, so it stays as it is.
+fn with_as_user_label(text: String, label: &str) -> String {
+    if text.trim_start().starts_with(['/', '!']) {
         text
     } else {
         format!("{}\n\n{label}", text.trim_end())
+    }
+}
+
+/// `ghostex agents send --as-user --main-coordinator --if-none create`: the new coordinator's first
+/// request (`coordinator.firstRequest` of `/api/createAgentSession`) is the user's message, so it
+/// gets the same label and security log entry as any `--as-user` send. `coordinator.via` is
+/// honoured only from the token file and is always removed.
+pub(crate) fn label_coordinator_first_request(
+    server_id: &str,
+    caller: &Principal,
+    params: &mut Map<String, Value>,
+) {
+    let project_id = param(params, "projectId").to_string();
+    let Some(coordinator) = params.get_mut("coordinator").and_then(Value::as_object_mut) else {
+        return;
     };
-    params.insert("text".to_string(), json!(labelled));
-    Some(labelled)
+    let via = coordinator
+        .remove("via")
+        .and_then(|value| value.as_str().map(str::to_string));
+    let Some(label) = as_user_label(caller, via.as_deref()) else {
+        return;
+    };
+    let text = coordinator
+        .get("firstRequest")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    if text.trim().is_empty() {
+        return;
+    }
+    let target = format!("{server_id}:{project_id}");
+    record_send_as_user(
+        format!(
+            "Started a coordinator in project {target} with your message as its first request ({})",
+            label.to_lowercase()
+        ),
+        target,
+    );
+    coordinator.insert(
+        "firstRequest".to_string(),
+        json!(with_as_user_label(text, label)),
+    );
 }
 
 /// The flag a relay sets on a message one of the user's own callers sent through it to another

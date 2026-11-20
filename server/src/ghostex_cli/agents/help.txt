@@ -128,7 +128,8 @@ SENDER BLOCK
   agents send --as-user sends as you, with no block, labelled "Sent from the
   terminal" (or "Sent via Grok Bot") and recorded in the security log. It is
   refused inside any Ghostex session; without it, a send with no session is
-  refused ("Cannot identify the caller").
+  refused ("Cannot identify the caller"), and from outside every session the
+  refusal names the --as-user command to run instead.
 
 THREADS AND THEIR ORCHESTRATOR
   A thread reports by ending its turn: Ghostex forwards its final message to

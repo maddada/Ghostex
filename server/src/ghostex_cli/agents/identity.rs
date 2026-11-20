@@ -47,7 +47,11 @@ pub(crate) fn inventory_flags(flags: &Flags, reference: &str) -> CliResult<Flags
 /// CDXC:Coordinators 2026-10-06 WHY:
 /// Empryo 3.9.0-beta's shell tool runs commands without any GHOSTEX_* or ZMX_* variable (probed 2026-10-06: `env` printed none of them), so an Empryo coordinator or thread running `ghostex coordinator status` or `ghostex agents send` had no identity. With none of the variables set, the caller is read from the process tree the way Empryo's hooks find their session: the `zmx run` daemon above the `empryo` process names it. Anything else still fails rather than guessing.
 pub(crate) fn caller() -> CliResult<Value> {
-    match lookup_caller()? {
+    agent_from(lookup_caller()?)
+}
+
+fn agent_from(lookup: CallerLookup) -> CliResult<Value> {
+    match lookup {
         CallerLookup::Agent(caller) => Ok(caller),
         CallerLookup::NoSession => Err(CliError::Other("Cannot identify the caller. Run inside a Ghostex agent session with GHOSTEX_GLOBAL_SESSION_REF or GHOSTEX_SESSION_ID set.".into())),
         CallerLookup::NotOneAgent { key, reference } | CallerLookup::PlainSession { key, reference } => Err(CliError::Other(format!("Cannot identify one agent session from {key}={reference}. Run ghostex sessions --json to inspect the session; identity was not guessed."))),
@@ -68,7 +72,17 @@ pub(crate) enum Sender {
 /// The sender of an `agents send`: the calling agent session, or the user when `as_user`.
 pub(crate) fn sender(as_user: bool) -> CliResult<Sender> {
     if !as_user {
-        return caller().map(Sender::Agent);
+        let lookup = lookup_caller()?;
+        // Only where `--as-user` would be accepted (the checks below).
+        let holds_session_token = std::env::var(crate::security::SESSION_TOKEN_ENV)
+            .is_ok_and(|value| !value.trim().is_empty());
+        if matches!(lookup, CallerLookup::NoSession)
+            && !holds_session_token
+            && !crate::agent_hooks::caller_ancestry().in_session_pane
+        {
+            return Err(CliError::Other(NO_SESSION_SEND.into()));
+        }
+        return agent_from(lookup).map(Sender::Agent);
     }
     let refuse = |why: String| {
         CliError::Other(format!(
@@ -94,6 +108,11 @@ pub(crate) fn sender(as_user: bool) -> CliResult<Sender> {
         },
     })
 }
+
+/// `agents send` without `--as-user` from outside every Ghostex session (your own terminal, Grok
+/// Bot): what to run instead.
+/// CDXC:GrokBot 2026-11-20 WHY: Grok Bot ran `agents send <ref> "<text>"` without `--as-user` and got only "Run inside a Ghostex agent session", which it can't do, so it could not pass the user's answers on or start a coordinator. Outside every session pane the refusal names the command that works; it still refuses, since sending as the user stays explicit (the 2026-11-19 decision on [`Sender`]). Under a session pane (an agent that lost its variables) the old error stands.
+const NO_SESSION_SEND: &str = "Cannot identify the caller: no Ghostex session runs this command, so it can't send as an agent. To send as yourself from your own terminal or Grok Bot, add --as-user: ghostex agents send --as-user <ref> \"<text>\" (or ghostex agents send --as-user --main-coordinator --project-id <id> --if-none create \"<text>\"). The message arrives as yours, labelled \"Sent via Grok Bot\" (from a terminal, \"Sent from the terminal\").";
 
 /// The session variables [`lookup_caller`] reads, in its order.
 const SESSION_VARIABLES: [&str; 4] = [
