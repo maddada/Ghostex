@@ -82,9 +82,9 @@ pub(super) fn first_message(bot: &Bot, family: &str, task: Option<&str>) -> Stri
     } else {
         format!("{}, {}", bot.name, bot.title)
     };
-    // CDXC:AgentSkills 2026-11-20 DECISION: User (Q4262 "B"): Ghostex's own skills are retired for CLI help, so the playbook comes from `ghostex gbots guide` (gbots/playbook.md) instead of the `ghostex-gbots` skill. A chat this computer opens on another computer runs that computer's `ghostex`, which is older when it predates the guide; such a computer still installs the skill for a visiting chat (gbots/skill.rs), so the line names it as the way back there.
     let mut text = format!(
-        "Read and adhere to this skill: run `ghostex gbots guide` and follow what it prints for the whole session. If this Ghostex says `guide` is not a gbots command, read the {skill} skill instead.\n\nYou are {who}. Before your first reply, and again after any context compaction, run `ghostex gbots guide` and `ghostex gbots brief`."
+        "{}\n\nYou are {who}. Before your first reply, and again after any context compaction, run `ghostex gbots guide` and `ghostex gbots brief`.",
+        gbots_guide_line(&skill)
     );
     match task.map(str::trim).filter(|task| !task.is_empty()) {
         Some(task) => {
@@ -94,6 +94,72 @@ pub(super) fn first_message(bot: &Bot, family: &str, task: Option<&str>) -> Stri
         None => text.push_str(" Then say in one short line that you're ready and wait."),
     }
     text
+}
+
+/// The first line of every GBot chat: the playbook from `ghostex gbots guide`, naming the retired
+/// skill (`skill`, in the agent's spelling) only for an older computer that predates the guide.
+///
+/// CDXC:AgentSkills 2026-11-20 DECISION: User (Q4262 "B"): Ghostex's own skills are retired for CLI help, so the playbook comes from `ghostex gbots guide` (gbots/playbook.md) instead of the `ghostex-gbots` skill. A chat this computer opens on another computer runs that computer's `ghostex`, which is older when it predates the guide; such a computer still installs the skill for a visiting chat (gbots/skill.rs), so the line names it as the way back there.
+fn gbots_guide_line(skill: &str) -> String {
+    format!("{}run `ghostex gbots guide` and follow what it prints for the whole session. If this Ghostex says `guide` is not a gbots command, read the {skill} skill instead.", ghostex_gx_chat_core::composer::skill_invocation::SKILL_LINE_PREFIX)
+}
+
+/// `text` with the old GBot first line ("Read and adhere to this skill: $ghostex-gbots", in any
+/// agent's spelling) replaced by [`gbots_guide_line`]; `None` when it has none.
+pub(crate) fn with_current_gbots_line(text: &str) -> Option<String> {
+    use ghostex_gx_chat_core::composer::skill_invocation::{skill_invocation, SKILL_LINE_PREFIX};
+    for agent in ["claude", "codex", "pi", "opencode"] {
+        let skill = skill_invocation(GBOTS_SKILL, Some(agent));
+        let Some(rest) = text.strip_prefix(&format!("{SKILL_LINE_PREFIX}{skill}")) else {
+            continue;
+        };
+        if rest.is_empty() || rest.starts_with(['\n', '\r']) {
+            return Some(format!("{}{rest}", gbots_guide_line(&skill)));
+        }
+    }
+    None
+}
+
+/// Rewrites, at startup before any queue sends, the GBot first messages still waiting in a chat
+/// queue that start with the old skill line; returns how many changed.
+///
+/// CDXC:AgentSkills 2026-11-20 WHY:
+/// Opus review, finding 4: a GBot chat opened just before the update keeps its first message in
+/// the queue until its agent takes it, and that message named `$ghostex-gbots`, which the first
+/// start after the update removes. The brief (brief.rs) tells chats already running.
+pub(crate) fn rewrite_queued_gbots_first_lines(
+    db: &rusqlite::Connection,
+) -> rusqlite::Result<usize> {
+    let prefix = format!(
+        "{}{}",
+        ghostex_gx_chat_core::composer::skill_invocation::SKILL_LINE_PREFIX,
+        "%"
+    );
+    let rows: Vec<(String, String, String)> = {
+        let mut statement = db.prepare(
+            "SELECT DISTINCT projectId, sessionId, text FROM session_chat_queued_prompts WHERE text LIKE ?1",
+        )?;
+        let rows = statement
+            .query_map(rusqlite::params![prefix], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows
+    };
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let mut changed = 0;
+    for (project_id, session_id, text) in rows {
+        let Some(current) = with_current_gbots_line(&text) else {
+            continue;
+        };
+        let version = crate::session_chat_queue::bump_queue_version(db, &project_id, &session_id)
+            .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+        changed += db.execute(
+            "UPDATE session_chat_queued_prompts SET text = ?4, updatedAt = ?5, version = ?6 WHERE projectId = ?1 AND sessionId = ?2 AND text = ?3",
+            rusqlite::params![project_id, session_id, text, current, now, version as i64],
+        )?;
+    }
+    Ok(changed)
 }
 
 /// A chat's title: the first line of its task (cut to 60 characters), else the bot's name. Kept

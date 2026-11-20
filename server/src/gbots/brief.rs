@@ -50,11 +50,11 @@ impl Team {
 
 const GENERATED_NOTE: &str = "<!-- Written by Ghostex from this GBot's settings and memory, and rewritten when they change: edits here are lost. Change the GBot's instructions in Ghostex (`ghostex gbots edit`); keep facts with `ghostex gbots memory add`. -->";
 
-/// How a bot keeps its memory, in every brief (the `ghostex-gbots` skill says the same at more
+/// How a bot keeps its memory, in every brief (`ghostex gbots guide` says the same at more
 /// length).
 const KEEPING_MEMORY: &str = "## Keeping your memory\n\n- Save a fact worth keeping between chats: `ghostex gbots memory add \"<fact>\"` (add `--until YYYY-MM-DD` when it stops being true then). Keep each note short; when MEMORY.md fills up, Ghostex moves the oldest notes to memory/archive.md.\n- Longer detail goes in a topic: `ghostex gbots memory add --topic <name> \"<text>\"`; read one with `ghostex gbots memory topic <name>`.\n- Remove a note that is no longer true: `ghostex gbots memory forget \"<words of it>\"`.\n- Never edit MEMORY.md, the topics or this file with your own file tools: Ghostex keeps a journal of every change so the user can undo it, and keeps keys and passwords out of these files.\n- What you did each day is in memory/log/ (Ghostex writes it): `ghostex gbots memory log --days 3`.\n\n";
 
-/// How a bot starts work outside its folder, in every brief (the `ghostex-gbots` skill says the
+/// How a bot starts work outside its folder, in every brief (`ghostex gbots guide` says the
 /// same at more length).
 ///
 /// CDXC:GBots 2026-11-09 WHY:
@@ -77,6 +77,11 @@ pub(crate) fn brief_text(paths: &GxserverPaths, bot: &Bot, team: &Team) -> Strin
         format!(", {}", bot.title)
     };
     out.push_str(&format!("# You are {}{role}\n\n", bot.name));
+    // CDXC:AgentSkills 2026-11-20 WHY: chats started before the skills were retired for CLI help
+    // (Q4262) were told to read the `ghostex-gbots` skill, which the update removes; after a
+    // compaction they run only this brief, so it names the playbook's new home (Opus review,
+    // finding 4).
+    out.push_str("Your playbook is `ghostex gbots guide` (the `ghostex-gbots` skill is retired): read it before your first reply and again after any context compaction.\n\n");
     out.push_str(&format!(
         "You are a GBot: one of the user's own bots in Ghostex, led by Chief of Staff. You keep this name, these instructions and your memory in every chat you have; several of your chats may be open at once, all sharing this folder ({}). Your working files go in `files/`.\n\n",
         folder.display()

@@ -106,6 +106,7 @@ pub(crate) use routine_runs::{
     routine_folder, routine_gate, routine_run_settled, start_routine_run, RoutineGate,
     SettledRoutineRun,
 };
+pub(crate) use session::rewrite_queued_gbots_first_lines;
 pub(crate) use skill::install_for_visiting_chat as install_gbots_skill_for_visiting_chat;
-pub(crate) use skill::retired_gbots_skill_files_written_by_this_build;
+pub(crate) use skill::{is_gbots_skill_openai_yaml, is_unedited_gbots_skill_md};
 pub(crate) use sweep::start_gbots_sweep;

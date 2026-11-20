@@ -1230,9 +1230,16 @@ fn file_matches_shipped_retired_skill_content(path: &Path) -> bool {
         || RETIRED_FOR_CLI_HELP_SHIPPED_SHA256
             .lines()
             .any(|line| line.trim() == digest)
-        || crate::gbots::retired_gbots_skill_files_written_by_this_build()
-            .iter()
-            .any(|text| text.as_bytes() == bytes.as_slice())
+        || std::str::from_utf8(&bytes).is_ok_and(|text| {
+            crate::gbots::is_unedited_gbots_skill_md(text)
+                || crate::gbots::is_gbots_skill_openai_yaml(text)
+        })
+}
+
+/// Whether the file at `path` is a revision of a retired skill's SKILL.md or openai.yaml that
+/// Ghostex shipped or wrote, unedited (gbots/skill.rs refreshes such a copy).
+pub(crate) fn matches_shipped_retired_skill_file(path: &Path) -> bool {
+    file_matches_shipped_retired_skill_content(path)
 }
 
 /// True when the directory holds exactly the files Ghostex shipped for a
