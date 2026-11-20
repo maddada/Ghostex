@@ -543,24 +543,28 @@ mod tests {
     /// has, resolved ones included, each with the thread it came from.
     #[test]
     fn a_coordinators_index_adds_the_pages_its_threads_posted() {
+        // Ids no other test uses: the composed index is cached process-wide by project and session.
         let (_temp, db) = database();
-        crate::coordinators::link_thread(&db, "p", "thread-a", "p", "coord", "task a").unwrap();
-        crate::coordinators::link_thread(&db, "p", "thread-b", "p", "coord", "task b").unwrap();
-        crate::coordinators::set_thread_resolved(&db, "p", "thread-b", true).unwrap();
-        crate::coordinators::link_thread(&db, "p", "stranger", "p", "other-coord", "").unwrap();
+        crate::coordinators::link_thread(&db, "cip", "ci-thread-a", "cip", "ci-coord", "task a")
+            .unwrap();
+        crate::coordinators::link_thread(&db, "cip", "ci-thread-b", "cip", "ci-coord", "task b")
+            .unwrap();
+        crate::coordinators::set_thread_resolved(&db, "cip", "ci-thread-b", true).unwrap();
+        crate::coordinators::link_thread(&db, "cip", "ci-stranger", "cip", "ci-other-coord", "")
+            .unwrap();
         let mut none = None;
         merge_and_write(
             &db,
-            "p",
-            "coord",
+            "cip",
+            "ci-coord",
             &mut none,
             vec![entry("mine", "form", "answered", 1)],
         );
         let mut a = None;
         merge_and_write(
             &db,
-            "p",
-            "thread-a",
+            "cip",
+            "ci-thread-a",
             &mut a,
             vec![
                 entry("a-page", "page", "other", 2),
@@ -571,21 +575,21 @@ mod tests {
         let mut b = None;
         merge_and_write(
             &db,
-            "p",
-            "thread-b",
+            "cip",
+            "ci-thread-b",
             &mut b,
             vec![entry("b-page", "page", "other", 5)],
         );
         let mut other = None;
         merge_and_write(
             &db,
-            "p",
-            "stranger",
+            "cip",
+            "ci-stranger",
             &mut other,
             vec![entry("x-page", "page", "other", 6)],
         );
 
-        let index = frame_index(&db, "p", "coord");
+        let index = frame_index(&db, "cip", "ci-coord");
         let ids: Vec<&str> = index.iter().filter_map(|v| v["id"].as_str()).collect();
         assert_eq!(
             ids,
@@ -599,25 +603,25 @@ mod tests {
                 .and_then(|v| v["thread"]["sessionId"].as_str())
                 .map(str::to_string)
         };
-        assert_eq!(thread_of("a-page").as_deref(), Some("thread-a"));
-        assert_eq!(thread_of("b-page").as_deref(), Some("thread-b"));
+        assert_eq!(thread_of("a-page").as_deref(), Some("ci-thread-a"));
+        assert_eq!(thread_of("b-page").as_deref(), Some("ci-thread-b"));
         assert_eq!(thread_of("mine"), None);
         // A thread's own chat lists its own entries and nothing else.
-        assert_eq!(frame_index(&db, "p", "thread-a").len(), 3);
+        assert_eq!(frame_index(&db, "cip", "ci-thread-a").len(), 3);
         assert_eq!(
-            *frame_index(&db, "p", "coord"),
+            *frame_index(&db, "cip", "ci-coord"),
             *index,
             "read again, the same list"
         );
         let mut c = None;
         merge_and_write(
             &db,
-            "p",
-            "thread-a",
+            "cip",
+            "ci-thread-a",
             &mut c,
             vec![entry("a-page-2", "page", "other", 7)],
         );
-        assert_eq!(frame_index(&db, "p", "coord").len(), 4);
+        assert_eq!(frame_index(&db, "cip", "ci-coord").len(), 4);
     }
 
     /// The digest the long poll's fingerprint holds moves for this session's own index (and a
