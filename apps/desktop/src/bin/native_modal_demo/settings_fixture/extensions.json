@@ -288,7 +288,6 @@
       {
         "canReinstall": true,
         "id": "code",
-        "sizeBytes": 157286400,
         "status": "installed",
         "statusLabel": "Installed",
         "version": "6f3e4df1e6b8-p2-2dbe7754240c2a59f76ef13c11d2bfd240d0e313f144446ced3e2413eecb60d1"
@@ -296,7 +295,6 @@
       {
         "canReinstall": true,
         "id": "cef",
-        "sizeBytes": 419430400,
         "status": "installed",
         "statusLabel": "Installed",
         "version": "141.0.6-g6c347eb-chromium-141.0.7390.65"

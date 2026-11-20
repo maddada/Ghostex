@@ -118,16 +118,6 @@ fn remove_component_store_path(path: &Path) -> io::Result<()> {
     }
 }
 
-pub fn path_size_bytes(path: &Path) -> Result<u64, String> {
-    if path.is_file() {
-        return path
-            .metadata()
-            .map(|metadata| metadata.len())
-            .map_err(|error| format!("Could not read component file size: {error}"));
-    }
-    directory_size(path)
-}
-
 impl ComponentStore {
     pub fn from_manifest(manifest: OnDemandManifest) -> Result<Self, String> {
         let root = component_store_root()?;
@@ -271,25 +261,7 @@ impl ComponentStore {
         version: &str,
         platform: &str,
     ) -> Result<InstalledComponent, String> {
-        require_identifier(name, "component name")?;
-        require_identifier(version, "component version")?;
-        require_identifier(platform, "component platform")?;
-        let path = self
-            .root
-            .join(name)
-            .join(component_version_dir_name(name, version))
-            .join(platform);
-        let expected_sha256 = self
-            .manifest
-            .components
-            .get(name)
-            .filter(|component| component.component_version == version)
-            .and_then(|component| component.platforms.get(platform))
-            .map(|asset| asset.sha256.as_str());
-        let installed = installed_marker_matches(&path, name, version, platform, expected_sha256)?;
-        if installed && name == CODE_SERVER_COMPONENT_NAME && platform.starts_with("windows-") {
-            verify_installed_windows_code_server(&path, version, platform)?;
-        }
+        let (installed, path) = self.installed_at(name, version, platform)?;
         let size_bytes = if installed { directory_size(&path)? } else { 0 };
         Ok(InstalledComponent {
             installed,
@@ -311,6 +283,32 @@ impl ComponentStore {
         name: &str,
         platform: &str,
     ) -> Result<InstalledComponent, String> {
+        let component = self.current_component(name, platform)?;
+        self.query_for_platform(&component.name, &component.component_version, platform)
+    }
+
+    /// Whether the current version is installed, checked as `query_current` checks it but
+    /// without measuring its folder: for the plugin status rows, which never show a size.
+    pub fn installed_current(&self, name: &str) -> Result<bool, String> {
+        self.installed_current_for_platform(name, &current_platform()?)
+    }
+
+    /// `installed_current` for `platform`.
+    pub fn installed_current_for_platform(
+        &self,
+        name: &str,
+        platform: &str,
+    ) -> Result<bool, String> {
+        let component = self.current_component(name, platform)?;
+        self.installed_at(&component.name, &component.component_version, platform)
+            .map(|(installed, _)| installed)
+    }
+
+    fn current_component(
+        &self,
+        name: &str,
+        platform: &str,
+    ) -> Result<&ComponentDefinition, String> {
         require_identifier(platform, "component platform")?;
         let component = self
             .manifest
@@ -323,7 +321,37 @@ impl ComponentStore {
                 component.name, component.component_version
             ));
         }
-        self.query_for_platform(&component.name, &component.component_version, platform)
+        Ok(component)
+    }
+
+    /// Whether `version` is installed on `platform` (its marker matches, and a Windows
+    /// code-server's payload checks out), and its folder.
+    fn installed_at(
+        &self,
+        name: &str,
+        version: &str,
+        platform: &str,
+    ) -> Result<(bool, PathBuf), String> {
+        require_identifier(name, "component name")?;
+        require_identifier(version, "component version")?;
+        require_identifier(platform, "component platform")?;
+        let path = self
+            .root
+            .join(name)
+            .join(component_version_dir_name(name, version))
+            .join(platform);
+        let expected_sha256 = self
+            .manifest
+            .components
+            .get(name)
+            .filter(|component| component.component_version == version)
+            .and_then(|component| component.platforms.get(platform))
+            .map(|asset| asset.sha256.as_str());
+        let installed = installed_marker_matches(&path, name, version, platform, expected_sha256)?;
+        if installed && name == CODE_SERVER_COMPONENT_NAME && platform.starts_with("windows-") {
+            verify_installed_windows_code_server(&path, version, platform)?;
+        }
+        Ok((installed, path))
     }
 
     /// The current version's folder on this platform when its install marker matches, without

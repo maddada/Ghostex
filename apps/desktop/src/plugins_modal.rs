@@ -43,20 +43,70 @@ enum PluginsModalAction {
 #[derive(Clone)]
 struct PluginsModalRow {
     actions: Vec<PluginsModalAction>,
-    size_bytes: u64,
     status: PluginsModalStatus,
     version: String,
 }
 
+/// What the plugin rows read from the app, taken on the UI thread so that the rows, which read
+/// the disk, can be built off it (`publish_plugin_settings_status`).
+#[derive(Clone)]
+struct PluginStatusAppState {
+    code_installing: bool,
+    code_failure: Option<SourceCodeServerRuntimeFailure>,
+    code_install_progress: Option<component_store::ComponentStoreProgressPhase>,
+    code_view_hidden: bool,
+    action_progress: HashMap<&'static str, component_store::ComponentStoreProgressPhase>,
+    action_errors: HashMap<&'static str, String>,
+    web_runtime_started_in_process: bool,
+}
+
+impl PluginStatusAppState {
+    fn read(app: &GhostexGpuiApp) -> Self {
+        Self {
+            code_installing: app.source_code_server_runtime.state
+                == SourceCodeServerRuntimeLaunchState::Installing,
+            code_failure: app.source_code_server_runtime.failure,
+            code_install_progress: app.source_code_server_runtime.install_progress,
+            code_view_hidden: gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Source),
+            action_progress: app.plugin_settings_action_progress.clone(),
+            action_errors: app.plugin_settings_action_errors.clone(),
+            web_runtime_started_in_process: app.web_runtime_started_in_process(),
+        }
+    }
+}
+
+/// The latest `publish_plugin_settings_status`: an older one finishing later is dropped.
+static PLUGIN_STATUS_GENERATION: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
 impl GhostexGpuiApp {
     pub(super) fn refresh_gpui_plugins_modal(&mut self, cx: &mut gpui::Context<Self>) {
-        let status = plugin_settings_status_message(self);
-        self.dispatch_open_gpui_app_modal_sidebar_state_payload(status, cx);
+        self.publish_plugin_settings_status(cx);
     }
 
     pub(super) fn request_plugin_settings_status(&mut self, cx: &mut gpui::Context<Self>) {
-        let status = plugin_settings_status_message(self);
-        self.dispatch_open_gpui_app_modal_sidebar_state_payload(status, cx);
+        self.publish_plugin_settings_status(cx);
+    }
+
+    /// CDXC:Settings 2026-11-20 WHY:
+    /// User, on Windows: Settings opened on its Extensions page showed only its blurred background for about 0.7 s. That page asks for this status when it is built, and the status was built on the UI thread, before Settings' first frame: it walked the code-server and web runtime folders for sizes no Settings page shows any more (6,217 files for the bundled code-server), and a managed Windows code-server's check hashes its archive. The rows are now built on a background thread from what they read of the app (`PluginStatusAppState`) and published when ready, and they carry no sizes. This supersedes the 2026-11-19 note that the Plugins page still measured them.
+    fn publish_plugin_settings_status(&mut self, cx: &mut gpui::Context<Self>) {
+        use std::sync::atomic::Ordering;
+        let state = PluginStatusAppState::read(self);
+        let generation = PLUGIN_STATUS_GENERATION.fetch_add(1, Ordering::Relaxed) + 1;
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let status = background
+                .spawn(async move { plugin_settings_status(&state) })
+                .await;
+            if PLUGIN_STATUS_GENERATION.load(Ordering::Relaxed) != generation {
+                return;
+            }
+            let _ = this.update(cx, |app, cx| {
+                app.dispatch_open_gpui_app_modal_sidebar_state_payload(status, cx)
+            });
+        })
+        .detach();
     }
 
     pub(super) fn reinstall_plugin_from_settings(
@@ -115,23 +165,20 @@ impl GhostexGpuiApp {
 }
 
 fn code_server_row(
-    app: &GhostexGpuiApp,
+    app: &PluginStatusAppState,
     store: Option<&component_store::ComponentStore>,
     warning: &mut Option<String>,
-    measure_sizes: bool,
 ) -> PluginsModalRow {
-    let installing =
-        app.source_code_server_runtime.state == SourceCodeServerRuntimeLaunchState::Installing;
+    let installing = app.code_installing;
     if let Some(
         failure @ (SourceCodeServerRuntimeFailure::InstallDownload
         | SourceCodeServerRuntimeFailure::InstallIntegrity
         | SourceCodeServerRuntimeFailure::InstallOther),
-    ) = app.source_code_server_runtime.failure
+    ) = app.code_failure
     {
         set_first_warning(warning, failure.placeholder_message().to_string());
     }
     let mut actions = Vec::new();
-    let mut size_bytes = 0;
     let mut version = "Unavailable".to_string();
     let mut installed = false;
     let mut managed_component = false;
@@ -142,11 +189,10 @@ fn code_server_row(
     {
         managed_component = true;
         version = component.component_version.clone();
-        match source_code_server_query_local_component(store) {
-            Ok(component) => {
-                installed = component.installed;
-                managed_installed = component.installed;
-                size_bytes = component.size_bytes;
+        match source_code_server_local_component_installed(store) {
+            Ok(component_installed) => {
+                installed = component_installed;
+                managed_installed = component_installed;
             }
             Err(error) => set_first_warning(warning, error),
         }
@@ -161,14 +207,11 @@ fn code_server_row(
             version = source_code_server_checkout_version(&path)
                 .unwrap_or_else(|| "Source checkout".to_string());
         }
-        if measure_sizes {
-            size_bytes = component_store::path_size_bytes(&path).unwrap_or(0);
-        }
     }
 
-    let status = if app.plugin_settings_action_errors.contains_key("code")
+    let status = if app.action_errors.contains_key("code")
         || matches!(
-            app.source_code_server_runtime.failure,
+            app.code_failure,
             Some(
                 SourceCodeServerRuntimeFailure::InstallDownload
                     | SourceCodeServerRuntimeFailure::InstallIntegrity
@@ -178,8 +221,7 @@ fn code_server_row(
         PluginsModalStatus::Failed
     } else if installing {
         PluginsModalStatus::Installing(
-            app.source_code_server_runtime
-                .install_progress
+            app.code_install_progress
                 .unwrap_or(component_store::ComponentStoreProgressPhase::Checking),
         )
     } else if installed {
@@ -195,17 +237,14 @@ fn code_server_row(
             PluginsModalAction::InstallCodeServer
         });
     }
-    actions.push(
-        if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Source) {
-            PluginsModalAction::ShowCodeViewTab
-        } else {
-            PluginsModalAction::HideCodeViewTab
-        },
-    );
+    actions.push(if app.code_view_hidden {
+        PluginsModalAction::ShowCodeViewTab
+    } else {
+        PluginsModalAction::HideCodeViewTab
+    });
 
     PluginsModalRow {
         actions,
-        size_bytes,
         status,
         version,
     }
@@ -225,39 +264,33 @@ fn source_code_server_checkout_version(repo_root: &Path) -> Option<String> {
     (!version.is_empty()).then(|| version.to_string())
 }
 
-pub(super) fn plugin_settings_status_message(app: &GhostexGpuiApp) -> serde_json::Value {
-    plugin_settings_status(app, true)
-}
-
-/// The same rows without their sizes, for the Updates list, which reads only their state.
+/// The same rows built now, for the Updates list, which reads only their state.
 ///
-/// CDXC:Updates 2026-11-19 WHY: a row's size comes from walking its folder on disk, and the
+/// CDXC:Updates 2026-11-19 WHY: a row's size came from walking its folder on disk, and the
 /// Updates list was built on the UI thread every time it was published (its watch every few
 /// seconds while a computer's list moved, and twice whenever Settings opened). On Windows the
 /// bundled code-server folder is 6,217 files: one walk froze the window for over a second
-/// (a profile of the user's app had it at 64% of a two-second spike).
-pub(super) fn plugin_settings_status_without_sizes(app: &GhostexGpuiApp) -> serde_json::Value {
-    plugin_settings_status(app, false)
+/// (a profile of the user's app had it at 64% of a two-second spike). The rows carry no sizes
+/// since 2026-11-20 (`publish_plugin_settings_status`).
+pub(super) fn plugin_settings_status_now(app: &GhostexGpuiApp) -> serde_json::Value {
+    plugin_settings_status(&PluginStatusAppState::read(app))
 }
 
-fn plugin_settings_status(app: &GhostexGpuiApp, measure_sizes: bool) -> serde_json::Value {
+fn plugin_settings_status(app: &PluginStatusAppState) -> serde_json::Value {
     let store_result = on_demand_component_store();
     let mut warning = store_result.as_ref().err().cloned();
     let store = store_result.ok().flatten();
     let rows = [
-        (
-            "code",
-            code_server_row(app, store.as_ref(), &mut warning, measure_sizes),
-        ),
-        ("cef", cef_row(store.as_ref(), &mut warning, measure_sizes)),
+        ("code", code_server_row(app, store.as_ref(), &mut warning)),
+        ("cef", cef_row(store.as_ref(), &mut warning)),
     ];
     let plugins = rows
         .into_iter()
         .map(|(id, mut row)| {
-            if let Some(progress) = app.plugin_settings_action_progress.get(id).copied() {
+            if let Some(progress) = app.action_progress.get(id).copied() {
                 row.status = PluginsModalStatus::Installing(progress);
             }
-            let mut error_message = app.plugin_settings_action_errors.get(id).cloned();
+            let mut error_message = app.action_errors.get(id).cloned();
             // The web runtime's row keeps the state it reads (a refused Uninstall does not make it
             // "failed"); a failed install or start shows its message.
             if id == "cef" {
@@ -280,7 +313,7 @@ fn plugin_settings_status(app: &GhostexGpuiApp, measure_sizes: bool) -> serde_js
                 .contains(&PluginsModalAction::UninstallWebRuntime)
                 && pending_change.is_none()
                 && (crate::app::helpers::web_runtime_pending::PENDING_CHANGES_SUPPORTED
-                    || !app.web_runtime_started_in_process());
+                    || !app.web_runtime_started_in_process);
             let can_reinstall = match id {
                 "code" => store
                     .as_ref()
@@ -299,7 +332,6 @@ fn plugin_settings_status(app: &GhostexGpuiApp, measure_sizes: bool) -> serde_js
                 "errorMessage": error_message,
                 "pendingChange": pending_change.map(|change| change.wire()),
                 "id": id,
-                "sizeBytes": row.size_bytes,
                 "status": status,
                 "statusLabel": status_label,
                 "version": row.version,
@@ -335,13 +367,11 @@ fn plugin_settings_status_wire(status: PluginsModalStatus) -> (&'static str, Str
 fn cef_row(
     store: Option<&component_store::ComponentStore>,
     warning: &mut Option<String>,
-    measure_sizes: bool,
 ) -> PluginsModalRow {
     use crate::app::helpers::web_runtime::{WebRuntimeState, web_runtime_state};
     let state = web_runtime_state();
     let bundled_path = bundled_cef_runtime_path();
     let mut version = compiled_cef_version();
-    let mut size_bytes = 0;
     let mut managed_installed = false;
     let managed = store
         .and_then(|store| store.component(CEF_COMPONENT))
@@ -350,22 +380,10 @@ fn cef_row(
         && let Some(component) = store.component(CEF_COMPONENT)
     {
         version = component.component_version.clone();
-        match store.query_current(CEF_COMPONENT) {
-            Ok(installed) => {
-                managed_installed = installed.installed;
-                size_bytes = installed.size_bytes;
-            }
+        match store.installed_current(CEF_COMPONENT) {
+            Ok(installed) => managed_installed = installed,
             Err(error) => set_first_warning(warning, error),
         }
-    }
-    if measure_sizes
-        && !managed_installed
-        && let Some(path) = bundled_path.as_deref()
-    {
-        size_bytes = component_store::path_size_bytes(path).unwrap_or_else(|error| {
-            set_first_warning(warning, error);
-            0
-        });
     }
     let status = match state {
         WebRuntimeState::Installing(phase) => PluginsModalStatus::Installing(phase),
@@ -384,7 +402,6 @@ fn cef_row(
     }
     PluginsModalRow {
         actions,
-        size_bytes,
         status,
         version,
     }

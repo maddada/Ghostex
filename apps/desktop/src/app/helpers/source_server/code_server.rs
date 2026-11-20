@@ -177,6 +177,19 @@ pub(crate) fn source_code_server_query_local_component(
     }
 }
 
+/// Whether `source_code_server_query_local_component` finds it installed, without measuring its
+/// folder (plugins_modal.rs's status row).
+pub(crate) fn source_code_server_local_component_installed(
+    store: &component_store::ComponentStore,
+) -> Result<bool, String> {
+    match source_code_server_local_component_platform() {
+        Some(platform) => {
+            store.installed_current_for_platform(SOURCE_CODE_SERVER_COMPONENT_NAME, &platform)
+        }
+        None => store.installed_current(SOURCE_CODE_SERVER_COMPONENT_NAME),
+    }
+}
+
 /// CDXC:CodeEditor 2026-09-23 WHY:
 /// Windows seals the Linux editor inside its WSL component archive; remote Linux uses that same verified archive so POSIX modes and links never pass through NTFS extraction.
 pub(crate) fn source_code_server_component_store_platform(
