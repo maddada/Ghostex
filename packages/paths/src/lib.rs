@@ -152,7 +152,9 @@ impl GhostexPaths {
     /// Written once the rail's on-by-default change has run over an existing settings file
     /// (`migrate_sidebar_rail_default_once` in the desktop app).
     pub fn sidebar_rail_default_marker_file(&self) -> PathBuf {
-        self.state_dir.join("sidebar-rail-default-migrated")
+        // v2: the step switches to Rail (it kept Classic in a build of the same day, which wrote the
+        // first marker).
+        self.state_dir.join("sidebar-rail-default-migrated-v2")
     }
 
     pub fn hub_secret_folders_marker_file(&self) -> PathBuf {

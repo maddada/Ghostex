@@ -698,7 +698,7 @@ pub const SIDEBAR_VIEW_OPTIONS: &[Opt] = &[
 ];
 
 /// CDXC:Sidebar 2026-11-20 DECISION:
-/// User (rail page, Q4297 C, then for 11.12.0): the sidebar gets a narrow rail of pinnable icons at the window's left that stays when the sidebar hides. New installs start on Rail; anyone who already had a settings file keeps Classic (today's sidebar, no rail) and sees a one-time "Meet the rail" intro with a live Rail/Classic switch (`keep_classic_sidebar_for_existing_settings`). Either can be picked here any time.
+/// User (rail page, Q4297 C, then for 11.12.0): the sidebar gets a narrow rail of pinnable icons at the window's left that stays when the sidebar hides. New installs start on Rail; anyone who already had a settings file is switched to Rail on the first start of 11.12.0 and sees a one-time "Meet the rail" pop-up whose Switch flips to Classic and back (`switch_existing_settings_to_rail`). Either can be picked here any time.
 pub const SIDEBAR_LAYOUT_OPTIONS: &[Opt] = &[opt("Rail", "rail"), opt("Classic", "classic")];
 
 pub const SIDEBAR_THEME_SETTING_OPTIONS: &[Opt] = &[

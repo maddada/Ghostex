@@ -622,7 +622,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
             J::Str("grok"),
         ]),
     ),
-    // "pending" while an existing user's one-time "Meet the rail" intro has not been answered; set by `keep_classic_sidebar_for_existing_settings`. No Settings row.
+    // "pending" while an existing user's one-time "Meet the rail" intro has not been answered; set by `switch_existing_settings_to_rail`, "done" once it has opened. No Settings row.
     ("sidebarRailIntro", J::Str("")),
     ("unifiedWorkingSection", J::Bool(true)),
     ("unifiedGroupByProject", J::Bool(false)),
