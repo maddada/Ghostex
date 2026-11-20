@@ -145,6 +145,26 @@ pub(crate) fn link_checked(
     Ok(before)
 }
 
+/// How new a session may be for a link to say its first task is the lead's (`owed`).
+const FRESH_SESSION_MS: i64 = 60_000;
+
+/// Whether a link's `owed` is honoured: only for a session just created (`agents create --lead
+/// --task`, which links before it queues the task) that has not replied to anything yet.
+///
+/// CDXC:LeadLinks 2026-11-20 FIX:
+/// Opus review of #678, finding 2: `owed` came from the request, so a session could link an
+/// existing session under itself with `"owed": true` and get the user's own next turn there
+/// forwarded to it. A session that already exists starts owing nothing; its first reported turn
+/// is the one the lead starts with a message.
+pub(crate) fn honours_owed(session: &Value, now_ms: i64, has_reply: bool) -> bool {
+    let created_ms = session
+        .get("createdAt")
+        .and_then(Value::as_str)
+        .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+        .map(|at| at.timestamp_millis());
+    !has_reply && created_ms.is_some_and(|created| now_ms - created <= FRESH_SESSION_MS)
+}
+
 /// What an endpoint answered, plus the sessions whose sidebar rows changed.
 pub struct LeadLinksOutput {
     pub result: Value,
@@ -178,7 +198,17 @@ pub fn handle_lead_links_endpoint(
                     )));
                 }
             }
-            let owed = params.get("owed").and_then(Value::as_bool) == Some(true);
+            let owed = params.get("owed").and_then(Value::as_bool) == Some(true)
+                && repository
+                    .get_session(&linked.0, &linked.1)?
+                    .is_some_and(|session| {
+                        honours_owed(
+                            &session,
+                            chrono::Utc::now().timestamp_millis(),
+                            crate::notification_feed::body::last_assistant_message(&session)
+                                .is_some(),
+                        )
+                    });
             let previous = link_checked(db, caller_session.is_some(), &linked, &lead, owed)?;
             let mut changed = vec![linked.clone(), lead.clone()];
             if let Some(previous) = previous.filter(|previous| *previous != lead) {
