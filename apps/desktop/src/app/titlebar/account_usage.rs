@@ -97,6 +97,12 @@ fn distinct_account_copies(accounts: &[Value]) -> Vec<Vec<&Value>> {
 /// (`connectionStopped`, [`flag_stopped_machine_accounts`]) is not either: its state is from before
 /// the connection ended, so it reads as a computer that can't be reached.
 fn signed_out(account: &Value) -> bool {
+    needs_sign_in(account) && account["signInIgnored"] != true
+}
+
+/// [`signed_out`] before the user's "Don't use on <computer>" (`signInIgnored`, gxserver's
+/// `SavedAccount::sign_in_ignored`): a copy that needs a sign-in the user said it won't get.
+fn needs_sign_in(account: &Value) -> bool {
     if account["connectionStopped"] == true {
         return false;
     }
@@ -232,6 +238,8 @@ fn meter_state(label: &str, copies: &[&Value]) -> (MeterSignIn, bool, Option<Str
         for copy in copies {
             let state = if signed_out(copy) {
                 "signed out"
+            } else if needs_sign_in(copy) {
+                "signed out, not used there"
             } else if unreachable(copy) {
                 "can't reach it, showing its last reading"
             } else {
@@ -259,7 +267,8 @@ fn meter_state(label: &str, copies: &[&Value]) -> (MeterSignIn, bool, Option<Str
 
 /// The account the usage popup `key` opens on, with every computer's copy of it listed in
 /// `signInComputers`: `{machine, name, here, shown, state}`, `state` being `signedOut`,
-/// `unreachable` or `signedIn`, the card's first.
+/// `ignored` (signed out, and the user said it isn't used there), `unreachable` or `signedIn`,
+/// the card's first.
 ///
 /// CDXC:AgentProviders 2026-11-20 DECISION:
 /// User, of an amber card whose popup said nothing about it: "I see it's yellow so it's not
@@ -282,6 +291,8 @@ pub(crate) fn usage_popup_account(accounts: &[Value], key: &str) -> Option<Value
             };
             let state = if signed_out(copy) {
                 "signedOut"
+            } else if needs_sign_in(copy) {
+                "ignored"
             } else if copy["machineUnreachable"] == true {
                 "unreachable"
             } else {

@@ -33,6 +33,59 @@ impl GhostexGpuiApp {
         });
     }
 
+    /// A usage popup's "Don't use on <computer>" (`ignored`) and its Undo: tells `machine`'s
+    /// gxserver (`setSignInIgnored`, `SavedAccount::sign_in_ignored`), which keeps it for every
+    /// client reading that computer, the phone too. The card and the popup change at once; the
+    /// next read brings that computer's own answer, so a computer too old to keep it shows the
+    /// warning again.
+    pub(crate) fn set_account_sign_in_ignored(
+        &mut self,
+        account_id: String,
+        machine: String,
+        ignored: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let target = if machine == "local" {
+            Some(None)
+        } else {
+            self.remote_gxserver_connections
+                .get(&machine)
+                .map(|connection| Some(connection.request_target()))
+        };
+        let Some(target) = target else {
+            return;
+        };
+        for account in self.titlebar_accounts.iter_mut().filter(|account| {
+            account["id"].as_str() == Some(account_id.as_str())
+                && account["titlebarMachine"].as_str().unwrap_or("local") == machine
+        }) {
+            account["signInIgnored"] = json!(ignored);
+        }
+        self.titlebar_accounts_revision = self.titlebar_accounts_revision.wrapping_add(1);
+        self.sync_titlebar_account_privacy(cx);
+        cx.notify();
+        let params = json!({"operation": "setSignInIgnored", "id": account_id, "ignored": ignored});
+        cx.spawn(async move |this, cx| {
+            let _ = cx
+                .background_executor()
+                .spawn(async move {
+                    let timeout = Duration::from_secs(30);
+                    match target {
+                        Some(target) => gpui_remote_gxserver_rpc_result(
+                            &target,
+                            "/api/agentAccounts",
+                            &params,
+                            timeout,
+                        ),
+                        None => gpui_gxserver_rpc_result("/api/agentAccounts", &params, timeout),
+                    }
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| this.refresh_titlebar_accounts(cx));
+        })
+        .detach();
+    }
+
     /// The usage panel's Refresh now: reads the account's usage again on the gxserver that owns it
     /// (`readUsageNow`), then refreshes every account button and tells the panel.
     pub(crate) fn refresh_account_usage_now(
