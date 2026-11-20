@@ -25,13 +25,17 @@
 //! Then, on the menu and hint page (Q4257 to Q4261): the menu is a 280px list with every
 //! description in full and a preview card beside it (A); the first-time hint is a one-time callout
 //! bubble pointing at the Boost pill, nothing inside the chat box (C); the gallery holds Show, Do,
-//! Work and Custom tabs over that list (A), Computer use and Browser use telling the agent to read
+//! Work and Custom tabs over that list (A), Computer & Browser use telling the agent to read
 //! the `cua-driver` skill; `*` at the start of any word opens the Boost picker and a space right
 //! after it closes it (A); the user's own Boosts come from "Save as Boost" on selected text and
 //! the Custom tab (A). Plus "a new Settings page for Boosts, where editing happens (every Boost's
 //! prompt, reset, custom Boosts: add/edit/delete/reorder, maybe turn Boosts on/off); the menu's
 //! edit actions open it". Supersedes the prompt editor that opened inside the chat box and the
 //! two-line hint inside it.
+//! CDXC:Boosts 2026-11-20 DECISION:
+//! User, on the built menu: "Computer use" is "Computer & Browser use" (Cua Driver: desktop apps,
+//! and Chrome or another browser), its prompt pointing at the cua-driver skill; "Browser use" is
+//! "Embedded Browser use" (Ghostex's own browser), its prompt pointing at `ghostex browser --help`.
 //! SEE-ALSO: server/src/boosts.rs (the prompts, the user's Boosts, `/api/boosts`, the block under
 //! the message), apps/desktop/src/app/native_chat/boosts.rs (pill, menu, preview, callout, Try a
 //! Boost), apps/desktop/src/app/window/settings_modal/tabs/boosts.rs (Settings > Boosts),
@@ -129,21 +133,21 @@ pub const BOOSTS: [Boost; 15] = [
     },
     Boost {
         id: "computer-use",
-        label: "Computer use",
+        label: "Computer & Browser use",
         icon: "titlebar/device-desktop.svg",
         category: "do",
-        description: "The agent drives a desktop app for you with Cua Driver and shows what it did.",
+        description: "The agent drives your desktop apps and Chrome or another browser with Cua Driver, and shows what it did.",
         preview: "app",
-        prompt: "Do this by driving the app yourself with computer use. Read the cua-driver skill first and follow it (if it isn't installed, `ghostex computer-use install-skill` adds it), then show me what you did with a screenshot.",
+        prompt: "Do this by driving the apps or the browser (Chrome or another one) on my computer yourself with Cua Driver. Read the cua-driver skill first and follow it (if it isn't installed, `ghostex computer-use install-skill` adds it), then show me what you did with a screenshot.",
     },
     Boost {
         id: "browser-use",
-        label: "Browser use",
+        label: "Embedded Browser use",
         icon: "titlebar/world.svg",
         category: "do",
-        description: "The agent opens and drives pages in Ghostex's own browser: clicks, forms, screenshots.",
+        description: "The agent opens and drives pages in Ghostex's embedded browser: clicks, forms, screenshots.",
         preview: "browser",
-        prompt: "Do this in a browser yourself. Read the cua-driver skill first and follow it (if it isn't installed, `ghostex browser-use install-skill` adds it); open pages in Ghostex's browser with `ghostex browser open <url>`, and show me what you did with a screenshot.",
+        prompt: "Do this yourself in Ghostex's embedded browser. Run `ghostex browser --help` first and follow it: open pages with `ghostex browser open <url>` and drive them with the tools it describes, then show me what you did with a screenshot.",
     },
     Boost {
         id: "screenshots",
