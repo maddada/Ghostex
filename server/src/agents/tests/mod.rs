@@ -4,6 +4,7 @@ mod activity_and_ownership;
 mod first_prompt;
 mod fixtures;
 mod hook_and_state_events;
+mod lead_links;
 mod live_process_identity;
 mod metadata_title_reconcile;
 mod settings_and_launch_plans;

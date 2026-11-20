@@ -93,6 +93,58 @@ fn session_title(repository: &DomainRepository<'_>, key: &SessionKey) -> String 
         .unwrap_or_default()
 }
 
+/// The link rules and the write: `linked` reports to `lead` from now on. Returns the lead it had
+/// before, if any. `by_session` says an agent session asked (it may only make itself the lead,
+/// checked by the caller); the user (the app, the phone, their own terminal) may also move a
+/// session from one lead to another.
+///
+/// CDXC:LeadLinks 2026-11-20 FIX:
+/// Opus review of #678, finding 1: a session could take a session already linked to another lead
+/// with `agents link X --lead self`, and the report owed to that lead then went to it. A session
+/// already linked elsewhere is now refused to an agent ("only the user can move it"), and any
+/// change of lead starts the link afresh (records.rs `write_lead_link`).
+pub(crate) fn link_checked(
+    db: &Connection,
+    by_session: bool,
+    linked: &SessionKey,
+    lead: &SessionKey,
+    owed: bool,
+) -> Result<Option<SessionKey>, DomainStateError> {
+    if linked == lead {
+        return Err(DomainStateError::bad_request(
+            "A session can't be its own lead.",
+        ));
+    }
+    if is_coordinator_or_thread(db, lead) {
+        return Err(DomainStateError::bad_request(
+            "A coordinator or a coordinator's thread can't be a lead: a coordinator has threads (ghostex coordinator start-thread).",
+        ));
+    }
+    if is_coordinator_or_thread(db, linked) {
+        return Err(DomainStateError::bad_request(
+            "That session is a coordinator or a coordinator's thread, so it can't be linked to a lead.",
+        ));
+    }
+    if read_lead_link(db, &lead.0, &lead.1)?.is_some() {
+        return Err(DomainStateError::bad_request(
+            "The lead is itself linked to a lead; links are one level deep.",
+        ));
+    }
+    if is_lead(db, &linked.0, &linked.1) {
+        return Err(DomainStateError::bad_request(
+            "That session leads other sessions, so it can't be linked to a lead; links are one level deep.",
+        ));
+    }
+    let before = read_lead_link(db, &linked.0, &linked.1)?.map(|link| link.lead_key());
+    if by_session && before.as_ref().is_some_and(|previous| previous != lead) {
+        return Err(DomainStateError::bad_request(
+            "That session is linked to another lead; only the user can move it.",
+        ));
+    }
+    write_lead_link(db, linked, lead, owed)?;
+    Ok(before)
+}
+
 /// What an endpoint answered, plus the sessions whose sidebar rows changed.
 pub struct LeadLinksOutput {
     pub result: Value,
@@ -119,11 +171,6 @@ pub fn handle_lead_links_endpoint(
                     ));
                 }
             }
-            if linked == lead {
-                return Err(DomainStateError::bad_request(
-                    "A session can't be its own lead.",
-                ));
-            }
             for (key, what) in [(&linked, "session to link"), (&lead, "lead")] {
                 if repository.get_session(&key.0, &key.1)?.is_none() {
                     return Err(DomainStateError::not_found(format!(
@@ -131,34 +178,11 @@ pub fn handle_lead_links_endpoint(
                     )));
                 }
             }
-            if is_coordinator_or_thread(db, &lead) {
-                return Err(DomainStateError::bad_request(
-                    "A coordinator or a coordinator's thread can't be a lead: a coordinator has threads (ghostex coordinator start-thread).",
-                ));
-            }
-            if is_coordinator_or_thread(db, &linked) {
-                return Err(DomainStateError::bad_request(
-                    "That session is a coordinator or a coordinator's thread, so it can't be linked to a lead.",
-                ));
-            }
-            if read_lead_link(db, &lead.0, &lead.1)?.is_some() {
-                return Err(DomainStateError::bad_request(
-                    "The lead is itself linked to a lead; links are one level deep.",
-                ));
-            }
-            if is_lead(db, &linked.0, &linked.1) {
-                return Err(DomainStateError::bad_request(
-                    "That session leads other sessions, so it can't be linked to a lead; links are one level deep.",
-                ));
-            }
-            let before = read_lead_link(db, &linked.0, &linked.1)?;
             let owed = params.get("owed").and_then(Value::as_bool) == Some(true);
-            write_lead_link(db, &linked, &lead, owed)?;
+            let previous = link_checked(db, caller_session.is_some(), &linked, &lead, owed)?;
             let mut changed = vec![linked.clone(), lead.clone()];
-            if let Some(previous) = before.map(|link| link.lead_key()) {
-                if previous != lead {
-                    changed.push(previous);
-                }
+            if let Some(previous) = previous.filter(|previous| *previous != lead) {
+                changed.push(previous);
             }
             Ok(LeadLinksOutput {
                 result: json!({

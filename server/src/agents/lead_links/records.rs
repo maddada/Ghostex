@@ -110,7 +110,9 @@ pub fn is_lead(db: &Connection, project_id: &str, session_id: &str) -> bool {
 }
 
 /// Links a session to a lead (moving it when it had another). `owed` says the lead handed it a
-/// task with the link, so the turn that task starts is reported.
+/// task with the link, so the turn that task starts is reported. Linking it again to the same lead
+/// keeps what is owed and reported; a new lead starts afresh, so nothing owed to the old lead (a
+/// turn it started, a question or quiet stretch it was told about) carries over to the new one.
 pub fn write_lead_link(
     db: &Connection,
     linked: &SessionKey,
@@ -127,9 +129,23 @@ pub fn write_lead_link(
         )
         VALUES (?1, ?2, ?3, ?4, ?5, 0, NULL, NULL, NULL, ?6, ?6)
         ON CONFLICT(projectId, sessionId) DO UPDATE SET
+          owedSince = CASE WHEN lead_links.leadProjectId = excluded.leadProjectId
+                             AND lead_links.leadSessionId = excluded.leadSessionId
+            THEN COALESCE(excluded.owedSince, lead_links.owedSince) ELSE excluded.owedSince END,
+          observedWorking = CASE WHEN lead_links.leadProjectId = excluded.leadProjectId
+                                   AND lead_links.leadSessionId = excluded.leadSessionId
+            THEN lead_links.observedWorking ELSE 0 END,
+          reportedAt = CASE WHEN lead_links.leadProjectId = excluded.leadProjectId
+                              AND lead_links.leadSessionId = excluded.leadSessionId
+            THEN lead_links.reportedAt ELSE NULL END,
+          reportedPromptKey = CASE WHEN lead_links.leadProjectId = excluded.leadProjectId
+                                     AND lead_links.leadSessionId = excluded.leadSessionId
+            THEN lead_links.reportedPromptKey ELSE NULL END,
+          reportedQuietSince = CASE WHEN lead_links.leadProjectId = excluded.leadProjectId
+                                      AND lead_links.leadSessionId = excluded.leadSessionId
+            THEN lead_links.reportedQuietSince ELSE NULL END,
           leadProjectId = excluded.leadProjectId,
           leadSessionId = excluded.leadSessionId,
-          owedSince = COALESCE(excluded.owedSince, lead_links.owedSince),
           updatedAt = excluded.updatedAt
         "#,
         params![linked.0, linked.1, lead.0, lead.1, owed_since, now],
