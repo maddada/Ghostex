@@ -34,55 +34,86 @@ fn first_ids_path() -> std::path::PathBuf {
         .join("computer-first-server-ids.json")
 }
 
-fn with_first_ids<R>(run: impl FnOnce(&mut BTreeMap<String, FirstRegistration>) -> R) -> R {
+/// The kept first ids, read once. A file that is there but can't be read or parsed is never taken
+/// as empty, which would let any entry count as first registered with any id (Fable 5.2's re-check):
+/// `run` then gets `None`, nothing is written over it, and it is read again next time. A missing
+/// file is an empty record (nothing registered yet).
+fn with_first_ids<R>(run: impl FnOnce(Option<&mut BTreeMap<String, FirstRegistration>>) -> R) -> R {
     let mut cache = FIRST_IDS
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let ids = cache.get_or_insert_with(|| {
-        std::fs::read_to_string(first_ids_path())
-            .ok()
-            .and_then(|text| serde_json::from_str(&text).ok())
-            .unwrap_or_default()
-    });
-    run(ids)
+    if cache.is_none() {
+        let read = match std::fs::read_to_string(first_ids_path()) {
+            Ok(text) => serde_json::from_str(&text).ok(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Some(BTreeMap::new()),
+            Err(_) => None,
+        };
+        if read.is_none() {
+            log::warn!(
+                "the first server ids of connected computers couldn't be read: none is taken over"
+            );
+        }
+        *cache = read;
+    }
+    run(cache.as_mut())
+}
+
+/// Writes `ids` whole: a temporary file beside it, then a rename, so a crash never leaves half a
+/// record. `false` when it couldn't.
+fn save_first_ids(ids: &BTreeMap<String, FirstRegistration>) -> bool {
+    let path = first_ids_path();
+    let Some(parent) = path.parent() else {
+        return false;
+    };
+    let _ = std::fs::create_dir_all(parent);
+    let Ok(text) = serde_json::to_string_pretty(ids) else {
+        return false;
+    };
+    let temporary = path.with_extension(format!("json.{}.tmp", std::process::id()));
+    if std::fs::write(&temporary, text).is_err() {
+        let _ = std::fs::remove_file(&temporary);
+        return false;
+    }
+    if std::fs::rename(&temporary, &path).is_err() {
+        let _ = std::fs::remove_file(&temporary);
+        return false;
+    }
+    true
 }
 
 /// A connected computer's registration learned `server_id` for entry `machine_id`, named `name`:
-/// the first id is kept for good, and the name while it answers with that id.
+/// the first id is kept for good, and the name while it answers with that id. Nothing changes
+/// while the record can't be read ([`with_first_ids`]), and memory keeps a change only once it is
+/// saved.
 pub(crate) fn note_registered(machine_id: &str, server_id: &str, name: &str) {
     if !machine_id.starts_with(REMOTE_ENTRY_PREFIX) || server_id.is_empty() {
         return;
     }
-    let changed = with_first_ids(|ids| match ids.get_mut(machine_id) {
-        None => {
-            ids.insert(
-                machine_id.to_string(),
-                FirstRegistration {
-                    server_id: server_id.to_string(),
-                    name: name.to_string(),
-                },
-            );
-            Some(ids.clone())
+    with_first_ids(|ids| {
+        let ids = ids?;
+        let mut next = ids.clone();
+        match next.get_mut(machine_id) {
+            None => {
+                next.insert(
+                    machine_id.to_string(),
+                    FirstRegistration {
+                        server_id: server_id.to_string(),
+                        name: name.to_string(),
+                    },
+                );
+            }
+            Some(first) if first.server_id == server_id && first.name != name => {
+                first.name = name.to_string();
+            }
+            Some(_) => return None,
         }
-        Some(first) if first.server_id == server_id && first.name != name => {
-            first.name = name.to_string();
-            Some(ids.clone())
-        }
-        Some(_) => None,
+        // Kept in memory only once it is on disk.
+        save_first_ids(&next).then(|| *ids = next)
     });
-    if let Some(ids) = changed {
-        let path = first_ids_path();
-        if let Some(parent) = path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        if let Ok(text) = serde_json::to_string_pretty(&ids) {
-            let _ = std::fs::write(path, text);
-        }
-    }
 }
 
 fn first_registration(machine_id: &str) -> Option<FirstRegistration> {
-    with_first_ids(|ids| ids.get(machine_id).cloned())
+    with_first_ids(|ids| ids.and_then(|ids| ids.get(machine_id).cloned()))
 }
 
 /// The machine ids in Settings > Remote now; `None` when the settings say nothing about remote
