@@ -203,6 +203,10 @@ pub fn thread_brief(coordinator: &BriefContext<'_>, task: &str) -> String {
     brief.push_str(
         "\n- Never end your turn mid-task to wait for something you can wait on in the background (a build, a test run, a job). If you do end your turn while a background job still runs, say so plainly in your last line, so the coordinator does not take it as finished.\n- Before your final report, stop every background command or wait you no longer need (one waiting on a subagent that already reported, a watcher): one that ends after your report wakes you for a new turn, and that turn's last message reaches the coordinator as another report.\n- Your final report is a handover: start each relevant section of it with one of the markers, only for sections that have something. Status sections first: ✅ Done, 🚀 Shipped, 📣 Comms, 🛫 Kicked off, 🔄 In progress, ⏸️ Parked, 📦 Held for release, 🧪 Untested. Actionable sections last: ⚠️ Read this, 🛑 Blocked, 💡 Suggestions, then ❓ Needs you at the very end. Start every bullet and sub-bullet with a capital letter, even when it continues a lead-in sentence.",
     );
+    // CDXC:Coordinators 2026-11-20 WHY: user: "people really love screenshots ... when a coordinator has a worker use cua-driver (or test a website, any GUI work), it should tell the worker to take screenshots". The coordinator playbook asks for them in its brief; this line makes the thread do it even when the brief forgot, but only when it already drives a GUI, where they cost nothing.
+    brief.push_str(
+        "\n- If you drove an app or a browser (cua-driver, the embedded browser, Playwright or headless Chrome), save screenshots of the key moments under `~/.local/share/ghostex/i/` and link them in your final report, so the coordinator can show them to the user. Take none when you did no GUI work.",
+    );
     brief
 }
 
