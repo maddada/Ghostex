@@ -43,7 +43,12 @@ pub enum SuggestionKind {
     Session,
     /// The `#M` list of the user's earlier messages in this chat (`message_numbers.rs`).
     Message,
+    /// The `*` list of Boosts (`extras/boosts.rs`).
+    Boost,
 }
+
+/// The heading above the composer's `*` Boost list.
+pub const BOOST_SUGGESTION_HEADING: &str = "Boosts";
 
 /// The heading above the composer's `#M` message list.
 pub const MESSAGE_SUGGESTION_HEADING: &str = "Your messages";
@@ -123,6 +128,8 @@ pub struct SuggestionSources {
     pub sessions: Vec<SessionChoice>,
     /// The `#M` list: this chat's numbered messages that are loaded, newest first.
     pub messages: Vec<crate::transcript::message_numbers::MessageChoice>,
+    /// The Boosts the `*` list offers: `(id, label, description)` (`extras/boosts.rs`).
+    pub boosts: Vec<(String, String, String)>,
     /// The agent the skills list was read for, so a switch re-reads it.
     pub skills_agent: Option<String>,
     /// The skills read in flight, so a late answer to a retired one is dropped.
@@ -153,6 +160,7 @@ impl Default for SuggestionSources {
             files_loading: false,
             sessions: Vec::new(),
             messages: Vec::new(),
+            boosts: Vec::new(),
             skills_agent: None,
             skills_request: None,
             files_request: None,
@@ -178,6 +186,7 @@ pub struct SuggestionDismissals {
     pub file: bool,
     pub session: bool,
     pub message: bool,
+    pub boost: bool,
 }
 
 /// What the three filters produced for one draft and caret.
@@ -204,6 +213,8 @@ pub struct SuggestionMatches {
     pub session_open: bool,
     pub message_matches: Vec<crate::transcript::message_numbers::MessageChoice>,
     pub message_open: bool,
+    pub boost_matches: Vec<(String, String, String)>,
+    pub boost_open: bool,
 }
 
 /// Which of the two mention pickers the draft has open, without filtering either catalog.
@@ -324,6 +335,17 @@ pub fn composer_suggestions(
         _ => Vec::new(),
     };
     let message_open = !message_matches.is_empty();
+    // The `*` list opens only while a Boost matches, so `*italics*` typed as text stays text.
+    let boost_matches: Vec<(String, String, String)> = match &trigger {
+        Some(trigger) if trigger.kind == TriggerKind::Boost && !dismissed.boost && !slash_open => {
+            crate::extras::boosts::filter_choices(&sources.boosts, &trigger.query)
+                .into_iter()
+                .cloned()
+                .collect()
+        }
+        _ => Vec::new(),
+    };
+    let boost_open = !boost_matches.is_empty();
     SuggestionMatches {
         slash_query,
         slash_skills,
@@ -343,6 +365,8 @@ pub fn composer_suggestions(
         session_open,
         message_matches,
         message_open,
+        boost_matches,
+        boost_open,
     }
 }
 
@@ -603,6 +627,8 @@ pub fn suggestion_popup(
         SuggestionKind::Session
     } else if matches.message_open {
         SuggestionKind::Message
+    } else if matches.boost_open {
+        SuggestionKind::Boost
     } else {
         return None;
     };
@@ -612,7 +638,9 @@ pub fn suggestion_popup(
         SuggestionKind::Slash => sections(&slash, sources),
         SuggestionKind::Skill => sections(&skill_rows, sources),
         SuggestionKind::Session => session_sections(&matches.session_matches),
-        SuggestionKind::File | SuggestionKind::Message => (None, Vec::new()),
+        SuggestionKind::File | SuggestionKind::Message | SuggestionKind::Boost => {
+            (None, Vec::new())
+        }
     };
     let row_label = |row: &SlashRow| match row {
         SlashRow::Skill(skill) => (format!("/{}", skill.name), skill_detail(skill)),
@@ -643,6 +671,11 @@ pub fn suggestion_popup(
             .message_matches
             .iter()
             .map(|choice| (format!("M{}", choice.number), choice.preview.clone()))
+            .collect(),
+        SuggestionKind::Boost => matches
+            .boost_matches
+            .iter()
+            .map(|(_, label, description)| (label.clone(), description.clone()))
             .collect(),
     };
     let choice = |row_index: usize| {
@@ -693,6 +726,7 @@ pub fn suggestion_popup(
                 section_heading.unwrap_or_else(|| SESSION_SUGGESTION_HEADING.to_string())
             }
             SuggestionKind::Message => MESSAGE_SUGGESTION_HEADING.to_string(),
+            SuggestionKind::Boost => BOOST_SUGGESTION_HEADING.to_string(),
         },
         status: match kind {
             SuggestionKind::Skill => {
@@ -723,7 +757,10 @@ pub fn suggestion_popup(
         loading: match kind {
             SuggestionKind::Skill => sources.skills_loading,
             SuggestionKind::File => count == 0,
-            SuggestionKind::Slash | SuggestionKind::Session | SuggestionKind::Message => false,
+            SuggestionKind::Slash
+            | SuggestionKind::Session
+            | SuggestionKind::Message
+            | SuggestionKind::Boost => false,
         },
     })
 }
@@ -771,6 +808,10 @@ pub fn suggestion_replacement(
                 },
             )
         }),
+        SuggestionKind::Boost => matches
+            .boost_matches
+            .get(index)
+            .map(|(id, label, _)| crate::extras::boosts::boost_link(id, label)),
     }
 }
 

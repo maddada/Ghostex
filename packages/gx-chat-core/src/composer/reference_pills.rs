@@ -789,10 +789,10 @@ pub fn composer_references(text: &str) -> Vec<ComposerReference> {
             continue;
         }
         // A Boost for this message: its name in a pill (`extras/boosts.rs`).
-        if let Some(boost) = crate::extras::boosts::boost_of_href(&destination.path) {
+        if let Some(id) = crate::extras::boosts::boost_id_of_href(&destination.path) {
             references.push(ComposerReference {
                 end: indexed.offset(destination.end),
-                identity: format!("boost:{}", boost.id),
+                identity: format!("boost:{id}"),
                 kind: ReferenceKind::Boost,
                 label,
                 path: destination.path.trim().to_string(),

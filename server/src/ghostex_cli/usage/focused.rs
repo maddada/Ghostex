@@ -657,7 +657,7 @@ Usage:
   gx visual check <page.html> [--width N] [--text-scale P] [--light] [--out file.png]
   gx visual export <file.html|page id|page URL> [--out file.html] [--json]
   gx visual guide <visuals|forms|pages|example|all>
-  gx visual boosts [list|show <id>|set <id> <prompt|->|reset <id>] [--json]
+  gx visual boosts [list|show <id>|set <id> <prompt|->|reset <id>|on|off] [--json]
   gx visual install-skill [--json]
 
 Guide:
@@ -669,10 +669,12 @@ Guide:
 
 Boosts:
   A Boost is a pill the user adds to a chat message (Live page, Chart it,
-  Side by side, Map it, Triage requests). Ghostex adds its prompt under that
-  message in a <ghostex-system> block; do what it asks in your answer, after
-  reading the guide it names. `gx visual boosts` lists them and edits or
-  resets their prompts.
+  Side by side, Map it, Ask me in a form; Computer use, Browser use, Show
+  screenshots, Second opinion; Triage requests, Plan with workers, Try it in
+  a worktree, Save to Docs, Steps for me, Tell me when done; or their own).
+  Ghostex adds its prompt under that message in a <ghostex-system> block; do
+  what it asks in your answer, after reading the guide it names.
+  `gx visual boosts` lists them and edits or resets their prompts.
 
 Names:
   Ghostex visuals (gx visuals): charts, stats and tables, a ```visual block.

@@ -35,11 +35,8 @@ pub fn handle_with_ids(
         }
         ActionKind::WherePill => crate::extras::where_pill::handle(state, action),
         ActionKind::ToggleBoost
-        | ActionKind::OpenBoostEditor
-        | ActionKind::EditBoostPrompt
-        | ActionKind::SaveBoostPrompt
-        | ActionKind::ResetBoostPrompt
-        | ActionKind::CloseBoostEditor
+        | ActionKind::SetBoostTab
+        | ActionKind::RefreshBoosts
         | ActionKind::DismissBoostHint => {
             crate::extras::boosts::handle(state, action, &mut next_request_id)
         }
