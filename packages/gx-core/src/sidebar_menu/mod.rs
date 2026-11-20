@@ -27,6 +27,7 @@ mod header;
 mod host;
 mod hover;
 mod item;
+mod layout;
 mod link_menu;
 #[cfg(test)]
 mod make_coordinator_tests;
@@ -60,6 +61,12 @@ pub use hover::{
     HoverSlot, HoverStrip,
 };
 pub use item::{menu_to_json, MenuItem, MenuSecondary, MenuSplit};
+pub use layout::entry as session_menu_entry;
+pub use layout::{
+    assemble_session_menu, session_menu_layout, session_menu_layout_json, tidy_separators,
+    LayoutNode, SessionMenuEntry, SessionMenuSpot, ENTRIES as SESSION_MENU_ENTRIES,
+    MORE as SESSION_MENU_MORE,
+};
 pub use menus::SidebarMenus;
 pub use navigation::{
     ADD_PROJECT_ACTION, COMMANDS_ACTION, MENU_PANEL_DEV_SERVERS, MENU_PANEL_EXTENSIONS,
