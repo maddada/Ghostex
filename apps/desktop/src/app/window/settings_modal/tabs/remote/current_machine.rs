@@ -87,14 +87,21 @@ pub(super) fn this_computer_icon_tile(
         .map(|icon| icon.asset)
         .or_else(|| tab.computer_icons.default_asset(id))
         .unwrap_or(ICON_DEVICE_DESKTOP);
-    // Another computer the sidebar shows: a saved one that is on and isn't this one again.
-    let several = tab.remote_machines(cx).iter().any(|machine| {
-        machine.get("disabled").and_then(serde_json::Value::as_bool) != Some(true)
-            && machine
-                .get("id")
-                .and_then(serde_json::Value::as_str)
-                .is_some_and(|machine_id| !tab.this_computer.contains(machine_id))
-    });
+    // Another computer the sidebar shows is connected (a saved one that is on, isn't this one
+    // again, and answers), and Mark the computer you're on is on: the sidebar's rule
+    // (gx_store/remote_clients.rs).
+    let several = tab.store.read(cx).value("markComputerYouAreOn").as_bool() != Some(false)
+        && tab.remote_machines(cx).iter().any(|machine| {
+            machine.get("disabled").and_then(serde_json::Value::as_bool) != Some(true)
+                && machine
+                    .get("id")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|machine_id| {
+                        !tab.this_computer.contains(machine_id)
+                            && tab.connect_states.get(machine_id).map(String::as_str)
+                                == Some("connected")
+                    })
+        });
     const SIZE: f32 = 18.0;
     super::machines::tile_frame(t)
         .child(

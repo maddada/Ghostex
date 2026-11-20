@@ -893,7 +893,7 @@ impl NativeChatView {
             // (native_sidebar/computer_mark.rs `with_here_dot`).
             let here = row["icon"] == "computer"
                 && self.config.machine_id == ghostex_gx_core::LOCAL_MACHINE_ID
-                && crate::app::gx_chat::session_directory::several_computers();
+                && crate::app::gx_chat::session_directory::mark_this_computer();
             let leading = icon.map(|icon| {
                 crate::app::native_sidebar::computer_mark::with_here_dot(
                     svg()

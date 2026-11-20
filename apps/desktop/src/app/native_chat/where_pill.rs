@@ -152,7 +152,7 @@ fn here(pill: &Value) -> bool {
     !matches!(
         pill["machine"]["kind"].as_str(),
         Some("cloudBox" | "box" | "remote")
-    ) && crate::app::gx_chat::session_directory::several_computers()
+    ) && crate::app::gx_chat::session_directory::mark_this_computer()
 }
 
 fn branch_icon(pill: &Value) -> String {
