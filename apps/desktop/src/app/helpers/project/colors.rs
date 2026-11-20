@@ -102,8 +102,15 @@ pub(crate) fn refresh_gpui_visual_settings(
             == Some(true),
         Ordering::Relaxed,
     );
+    // A file that saved no outline colour takes the catalog's (the default dark look's accent
+    // since 2026-11-21), not a copy of an older default.
+    let outline_default = ghostex_settings_catalog::default_value("workspaceActivePaneBorderColor")
+        .and_then(ghostex_settings_catalog::J::as_str)
+        .map(|hex| serde_json::Value::String(hex.to_string()));
     ACTIVE_PANE_OUTLINE_RGB.store(
-        gpui_settings_hex_rgb(object.get("workspaceActivePaneBorderColor")).unwrap_or(0x3b82f6),
+        gpui_settings_hex_rgb(object.get("workspaceActivePaneBorderColor"))
+            .or_else(|| gpui_settings_hex_rgb(outline_default.as_ref()))
+            .unwrap_or(0x3b82f6),
         Ordering::Relaxed,
     );
     SHOW_FINISHED_WORK_BORDER.store(

@@ -35,9 +35,6 @@ pub(crate) fn sidebar_titlebar_tint_direction(base: [f32; 3]) -> [f32; 3] {
 pub(crate) const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_RGB: u32 =
     ghostex_settings_catalog::theme_colours::DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_RGB;
 
-pub(crate) const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB: u32 =
-    ghostex_settings_catalog::theme_colours::DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB;
-
 pub(crate) const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT: f64 = ghostex_settings_catalog::theme_colours::DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT;
 
 pub(crate) const MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT: f64 = ghostex_settings_catalog::theme_colours::MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT;

@@ -1,23 +1,36 @@
 //! The user's own dark look became the default on 2026-11-20 (Black, 88 tints, a 4 point blur,
-//! Kanagawa Dragon, the dark theme colours, Ink, pane gap 6, menu blur 17). This keeps the old look
-//! for everyone who already had Ghostex set up.
+//! Kanagawa Dragon, the dark theme colours, Ink, pane gap 6, menu blur 17), and their Windows look
+//! replaced it on 2026-11-21 (a Custom #46506a, Inkstone's theme colours, Live Ink glass). This
+//! keeps the look they had for everyone who already had Ghostex set up.
 
 use std::{fs, path::Path};
 
 use super::*;
 use serde_json::Value;
 
-/// Writes the old default of each look setting whose default changed on 2026-11-20 into an
-/// existing settings file that does not carry it, once.
+/// Runs each keep-old-look step of `DARK_LOOK_STEPS`, oldest first, once: writes the old default of
+/// each look setting whose default changed that day into an existing settings file that does not
+/// carry it.
 ///
 /// CDXC:Theming 2026-11-20 WHY:
 /// User (Q4290): long-time users keep their current look. Stored settings leave a key out until it is saved, so an existing user who never touched one of these settings would otherwise get the new value on update. Existing means the settings file is there at the first start of this version and setup is finished (the onboarding state says it completed, or gxserver has a project, the same test that decides whether setup opens again). A new install has no settings file at that start and gets the new defaults; a settings file left by a setup that never finished (onboarding in progress) counts as new too, so setup goes on in the new look. The marker file records that this has run, whatever it decided, so it never runs twice and a new install that saves settings later is never taken for an existing one. A file that cannot be read or saved is left as it is and no marker is written, so the next start tries again. This runs before anything reads the settings file.
-/// SEE-ALSO: `keep_old_dark_look_for_existing_settings` in packages/settings-catalog/src/lib.rs, sidebar_rail_default.rs (the same pattern).
+/// SEE-ALSO: `keep_old_look_for_existing_settings` and `DARK_LOOK_STEPS` in packages/settings-catalog/src/lib.rs, sidebar_rail_default.rs (the same pattern).
 pub fn keep_old_dark_look_once() {
+    for (day, old_defaults) in ghostex_settings_catalog::DARK_LOOK_STEPS {
+        // A step that could not finish leaves the later ones for the next start, so they never
+        // run over a file the earlier one has not filled yet.
+        if !keep_old_look_once(day, old_defaults) {
+            return;
+        }
+    }
+}
+
+/// One step of `keep_old_dark_look_once`. Returns whether it has run (now or before).
+fn keep_old_look_once(day: &str, old_defaults: &[(&str, ghostex_settings_catalog::J)]) -> bool {
     let paths = ghostex_storage_paths();
-    let marker = paths.dark_look_default_marker_file();
+    let marker = paths.dark_look_default_marker_file(day);
     if marker.exists() {
-        return;
+        return true;
     }
     let settings_file = shared_sidebar_settings_path();
     let outcome = match ghostex_paths::settings_file::read(&settings_file) {
@@ -31,7 +44,10 @@ pub fn keep_old_dark_look_once() {
                 "settings from an unfinished setup, new dark look"
             }
             Some(mut object) => {
-                if ghostex_settings_catalog::keep_old_dark_look_for_existing_settings(&mut object) {
+                if ghostex_settings_catalog::keep_old_look_for_existing_settings(
+                    &mut object,
+                    old_defaults,
+                ) {
                     let saved = serde_json::to_vec_pretty(&Value::Object(object))
                         .map_err(std::io::Error::other)
                         .and_then(|bytes| {
@@ -45,8 +61,8 @@ pub fn keep_old_dark_look_once() {
                             "existing settings, old dark look kept"
                         }
                         Err(error) => {
-                            eprintln!("Ghostex could not keep the old dark look: {error}");
-                            return;
+                            eprintln!("Ghostex could not keep the old dark look ({day}): {error}");
+                            return false;
                         }
                     }
                 } else {
@@ -58,8 +74,10 @@ pub fn keep_old_dark_look_once() {
             None => "no settings file, new dark look",
         },
         Err(error) => {
-            eprintln!("Ghostex could not read its settings to keep the old dark look: {error}");
-            return;
+            eprintln!(
+                "Ghostex could not read its settings to keep the old dark look ({day}): {error}"
+            );
+            return false;
         }
     };
     if let Some(parent) = marker.parent() {
@@ -72,7 +90,9 @@ pub fn keep_old_dark_look_once() {
             "Ghostex could not record that the old dark look step ran ({}): {error}",
             marker.display()
         );
+        return false;
     }
+    true
 }
 
 /// Whether first-run setup would open again: it never completed and gxserver has no project

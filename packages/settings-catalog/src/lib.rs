@@ -405,19 +405,62 @@ pub const DARK_LOOK_2026_11_20_OLD_DEFAULTS: &[(&str, J)] = &[
     ("windowGlassMenuBlurRadius", J::Num(20.0)),
 ];
 
-/// Writes the old default of every look setting in `DARK_LOOK_2026_11_20_OLD_DEFAULTS` that the
-/// settings of an existing user do not carry, so their window keeps the look it had. Returns
+/// The look settings whose default changed on 2026-11-21 (the user's Windows look, Inkstone's
+/// colours on a Custom `#46506a` with Live Ink glass, replaced the Black look), each with the
+/// default it had on 2026-11-20. Every key here not also in `DARK_LOOK_2026_11_20_OLD_DEFAULTS`
+/// had that same default before 2026-11-20 too.
+pub const DARK_LOOK_2026_11_21_OLD_DEFAULTS: &[(&str, J)] = &[
+    ("darkThemePreset", J::Str("black")),
+    (
+        "customSidebarTitlebarBackgroundTintColor",
+        J::Str("#808080"),
+    ),
+    (
+        "themeRoles",
+        J::Obj(&[(
+            "dark",
+            J::Obj(&[
+                ("userMessage", J::Str("#0000006b")),
+                ("border", J::Str("#3e3e3e6b")),
+            ]),
+        )]),
+    ),
+    ("workspaceActivePaneBorderColor", J::Str("#3b82f6")),
+    ("windowGlassSource", J::Str("desktopAndWindows")),
+    ("windowGlassLiveSpeed", J::Num(1.0)),
+    ("windowGlassLiveBrightness", J::Num(60.0)),
+];
+
+/// The keep-old-look steps, oldest first: the day a dark look became the default and the
+/// defaults it replaced. The desktop runs each once, in this order, behind its own marker file
+/// (`keep_old_dark_look_once` in apps/desktop/src/shared_settings/dark_look_default.rs), so a
+/// file the first step filled is not touched again by the second for the same key.
+pub const DARK_LOOK_STEPS: &[(&str, &[(&str, J)])] = &[
+    ("2026-11-20", DARK_LOOK_2026_11_20_OLD_DEFAULTS),
+    ("2026-11-21", DARK_LOOK_2026_11_21_OLD_DEFAULTS),
+];
+
+/// Writes the old default of every look setting in `old_defaults` (one of `DARK_LOOK_STEPS`) that
+/// the settings of an existing user do not carry, so their window keeps the look it had. Returns
 /// whether it changed anything; a saved value (whatever it is) is left alone.
 ///
 /// CDXC:Theming 2026-11-20 DECISION:
 /// User (Q4290), on whether long-time users who never touched these settings should get the new dark look on update: keep their current look. Stored settings leave a key out until it is saved, so without this every existing user with a key missing would switch to Black, 88 tints, a 4 point blur, Kanagawa Dragon, the dark theme colours, Ink, pane gap 6 and menu blur 17 on update. The desktop runs this once, behind a marker file, at start-up and only for a settings file that already exists from a finished setup (`keep_old_dark_look_once` in apps/desktop/src/shared_settings/dark_look_default.rs); a new install, or one whose setup never finished, gets the new defaults.
 /// Three keys need more than their old default (Opus review of ce6b86fa1): Same for light and dark is worked out from the dark and light pairs when it was never saved, and the dark tints and Live background this adds would set them apart and turn it off, so its current answer is saved first. A file with no preset whose Custom colour was changed shows that colour (`dark_chrome_raw_controls`), so it gets "custom", not Gray. A work area tint is left out where the retired `windowGlassMainOpacity*` key still decides it (`store_work_area_glass_percent` in window_glass.rs).
-pub fn keep_old_dark_look_for_existing_settings(
+/// CDXC:Theming 2026-11-21 WHY:
+/// The 2026-11-21 step (the user's Windows look as the default) follows the same rule for the same reason: a long-time user, and anyone set up on the Black look of 2026-11-20, keeps the look they had. Before both steps a Custom colour with no tint saved drew Graphite's #808080, so "changed" is judged against that tint, not today's default.
+pub fn keep_old_look_for_existing_settings(
     settings: &mut serde_json::Map<String, serde_json::Value>,
+    old_defaults: &[(&str, J)],
 ) -> bool {
     use crate::json::ToJson;
     let mut changed = false;
-    if !settings.contains_key("windowGlassSameForLightAndDark") {
+    let sets_a_glass_pair = old_defaults.iter().any(|(key, _)| {
+        WINDOW_GLASS_LIGHT_DARK_PAIRS
+            .iter()
+            .any(|(dark, light)| key == dark || key == light)
+    });
+    if sets_a_glass_pair && !settings.contains_key("windowGlassSameForLightAndDark") {
         let same = window_glass_same_for_light_and_dark(settings);
         settings.insert(
             "windowGlassSameForLightAndDark".to_string(),
@@ -425,12 +468,14 @@ pub fn keep_old_dark_look_for_existing_settings(
         );
         changed = true;
     }
-    let custom_colour_changed = theme_colours::custom_dark_chrome_controls(settings)
-        != (
-            theme_colours::DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
-            theme_colours::DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB,
-        );
-    for (key, old_default) in DARK_LOOK_2026_11_20_OLD_DEFAULTS {
+    let custom_colour_changed = theme_colours::custom_dark_chrome_controls_with_tint(
+        settings,
+        theme_colours::DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB,
+    ) != (
+        theme_colours::DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
+        theme_colours::DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB,
+    );
+    for (key, old_default) in old_defaults {
         if settings.contains_key(*key) {
             continue;
         }
@@ -558,13 +603,24 @@ mod chat_view_default_tests {
 #[cfg(test)]
 mod dark_look_tests {
     use super::{
-        default_value, keep_old_dark_look_for_existing_settings, theme_colours,
-        window_glass_light_key, window_glass_same_for_light_and_dark, ToJson,
+        default_value, keep_old_look_for_existing_settings, theme_colours, window_glass_light_key,
+        window_glass_same_for_light_and_dark, ToJson,
     };
     use serde_json::{json, Map, Value};
 
     fn settings(value: Value) -> Map<String, Value> {
         serde_json::from_value(value).unwrap()
+    }
+
+    fn keep_old_dark_look_for_existing_settings(settings: &mut Map<String, Value>) -> bool {
+        keep_old_look_for_existing_settings(settings, super::DARK_LOOK_2026_11_20_OLD_DEFAULTS)
+    }
+
+    /// Every step in order, as the desktop runs them over one file.
+    fn every_step(settings: &mut Map<String, Value>) {
+        for (_, old_defaults) in super::DARK_LOOK_STEPS {
+            keep_old_look_for_existing_settings(settings, old_defaults);
+        }
     }
 
     /// The tint a key reads as: its saved value, else the catalog default.
@@ -631,6 +687,83 @@ mod dark_look_tests {
             theme_colours::dark_chrome_raw_controls(&after),
             theme_colours::custom_dark_chrome_controls(&before)
         );
+    }
+
+    /// A new install (nothing saved) draws the 2026-11-21 look: the Custom #46506a at depth 96.
+    #[test]
+    fn a_new_install_draws_the_windows_look() {
+        assert_eq!(
+            theme_colours::dark_chrome_raw_controls(&Map::new()),
+            (96.0, 0x46506a)
+        );
+        assert_eq!(theme_colours::default_custom_dark_tint_rgb(), 0x46506a);
+    }
+
+    /// A file set up on the 2026-11-20 Black look (its first step already ran) keeps Black, its
+    /// two theme colours, the blue pane outline and Desktop and windows glass.
+    #[test]
+    fn a_file_from_the_black_look_keeps_it() {
+        let mut after = settings(json!({"sidebarWidth": 320}));
+        keep_old_look_for_existing_settings(&mut after, super::DARK_LOOK_2026_11_21_OLD_DEFAULTS);
+        let black =
+            theme_colours::dark_chrome_raw_controls(&settings(json!({"darkThemePreset": "black"})));
+        assert_eq!(theme_colours::dark_chrome_raw_controls(&after), black);
+        assert_eq!(
+            after.get("themeRoles"),
+            Some(&json!({"dark": {"userMessage": "#0000006b", "border": "#3e3e3e6b"}}))
+        );
+        assert_eq!(
+            after.get("windowGlassSource"),
+            Some(&json!("desktopAndWindows"))
+        );
+        assert_eq!(after.get("windowGlassLiveBrightness"), Some(&json!(60)));
+        assert_eq!(after.get("windowGlassLiveSpeed"), Some(&json!(1)));
+        assert_eq!(
+            after.get("workspaceActivePaneBorderColor"),
+            Some(&json!("#3b82f6"))
+        );
+        // No glass pair changes, so Same for light and dark is left to be worked out as before.
+        assert!(!after.contains_key("windowGlassSameForLightAndDark"));
+    }
+
+    /// A file from before 2026-11-20 runs both steps at one start and keeps Gray, no theme
+    /// colours and Desktop and windows glass: the first step's values win for the keys both name.
+    #[test]
+    fn a_file_from_before_both_looks_keeps_gray() {
+        let mut after = settings(json!({"sidebarWidth": 320}));
+        every_step(&mut after);
+        assert_eq!(after.get("darkThemePreset"), Some(&json!("gray")));
+        assert_eq!(after.get("themeRoles"), Some(&json!({})));
+        assert_eq!(
+            after.get("windowGlassSource"),
+            Some(&json!("desktopAndWindows"))
+        );
+        assert_eq!(
+            after.get("customSidebarTitlebarBackgroundTintColor"),
+            Some(&json!("#808080"))
+        );
+        assert_eq!(tints(&after), [94.0; 4]);
+    }
+
+    /// A Custom colour picked with no tint saved drew Graphite's #808080 before 2026-11-21; it
+    /// still does after the steps, and an untouched Custom with no preset is not taken for one.
+    #[test]
+    fn a_custom_preset_without_a_tint_keeps_graphite() {
+        let mut after = settings(json!({"darkThemePreset": "custom"}));
+        every_step(&mut after);
+        assert_eq!(
+            theme_colours::dark_chrome_raw_controls(&after),
+            (
+                96.0,
+                theme_colours::DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB
+            )
+        );
+        let mut untouched = settings(json!({"sidebarWidth": 320}));
+        keep_old_look_for_existing_settings(
+            &mut untouched,
+            super::DARK_LOOK_2026_11_21_OLD_DEFAULTS,
+        );
+        assert_eq!(untouched.get("darkThemePreset"), Some(&json!("black")));
     }
 }
 

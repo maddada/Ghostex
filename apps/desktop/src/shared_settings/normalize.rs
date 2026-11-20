@@ -340,7 +340,7 @@ pub fn is_valid_agentbox_remote_docker_alias(alias: &str) -> bool {
 }
 
 // Same for light and dark is read in the settings catalog, so its one-time steps read it as the app
-// does (`keep_old_dark_look_for_existing_settings`).
+// does (`keep_old_look_for_existing_settings`).
 pub use ghostex_settings_catalog::{
     WINDOW_GLASS_LIGHT_DARK_PAIRS, window_glass_light_key, window_glass_same_for_light_and_dark,
 };

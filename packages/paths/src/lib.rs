@@ -138,10 +138,16 @@ impl GhostexPaths {
         self.state_dir.join("terminal-ghostty-config-migrated")
     }
 
-    /// Written once the 2026-11-20 dark look's one-time step has run over the settings file
-    /// (`keep_old_dark_look_once` in the desktop app).
-    pub fn dark_look_default_marker_file(&self) -> PathBuf {
-        self.state_dir.join("dark-look-default-migrated")
+    /// Written once the keep-old-look step of the dark look that became the default on `day`
+    /// (`DARK_LOOK_STEPS` in the settings catalog) has run over the settings file
+    /// (`keep_old_dark_look_once` in the desktop app). The first step, 2026-11-20, keeps the name
+    /// it shipped with.
+    pub fn dark_look_default_marker_file(&self, day: &str) -> PathBuf {
+        if day == "2026-11-20" {
+            return self.state_dir.join("dark-look-default-migrated");
+        }
+        self.state_dir
+            .join(format!("dark-look-default-{day}-migrated"))
     }
 
     /// Written once the rail's on-by-default change has run over an existing settings file

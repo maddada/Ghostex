@@ -802,9 +802,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     //
     // Background Contrast and Background Tint are always-active Theming controls.
     ("customSidebarTitlebarForegroundColor", J::Str("#d8d8d8")),
+    // Since 2026-11-21 the default dark look's colour (see `darkThemePreset`); Graphite keeps #808080.
     (
         "customSidebarTitlebarBackgroundTintColor",
-        J::Str("#808080"),
+        J::Str("#46506a"),
     ),
     (
         "customSidebarTitlebarBackgroundDarknessPercent",
@@ -812,8 +813,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ),
     ("customSidebarTitlebarBackgroundColor", J::Str("#0b0b0b")),
     // CDXC:Theming 2026-11-20 DECISION:
-    // User: "make my current theme values the default for Ghostex in dark mode, with transparency and all that." Out of the box dark mode is their look: the Black colour square, glass tinted 88 in the sidebar and the work area (Strength 20), a 4 point blur, the Ghostex Kanagawa Dragon terminal palette, faint borders (`#3e3e3e6b`) and dark message bubbles (`#0000006b`), and Ink as the Live background. Light mode keeps its own defaults (its light tints move to 93 only so the one Strength slider reads 20; light mode is solid out of the box, so they change nothing there). Their App font is not shipped with Ghostex, so the App font stays App default; Terminal background stays Black / white (the CDXC:Theming 2026-09-28 decision in terminal_gpui_engine.rs), which in dark mode with Black looks the same. Supersedes Gray (2026-07-22), Strength 10 (2026-10-23) and the GitHub Dark dark palette (2026-10-14) as defaults. Then (Q4290) long-time users keep their current look: `keep_old_dark_look_for_existing_settings` (lib.rs) writes the old defaults into an existing settings file once.
-    ("darkThemePreset", J::Str("black")),
+    // User: "make my current theme values the default for Ghostex in dark mode, with transparency and all that." Out of the box dark mode is their look: the Black colour square, glass tinted 88 in the sidebar and the work area (Strength 20), a 4 point blur, the Ghostex Kanagawa Dragon terminal palette, faint borders (`#3e3e3e6b`) and dark message bubbles (`#0000006b`), and Ink as the Live background. Light mode keeps its own defaults (its light tints move to 93 only so the one Strength slider reads 20; light mode is solid out of the box, so they change nothing there). Their App font is not shipped with Ghostex, so the App font stays App default; Terminal background stays Black / white (the CDXC:Theming 2026-09-28 decision in terminal_gpui_engine.rs), which in dark mode with Black looks the same. Supersedes Gray (2026-07-22), Strength 10 (2026-10-23) and the GitHub Dark dark palette (2026-10-14) as defaults. Then (Q4290) long-time users keep their current look: `keep_old_look_for_existing_settings` (lib.rs) writes the old defaults into an existing settings file once. Superseded on 2026-11-21 by their Windows look (above).
+    // CDXC:Theming 2026-11-21 DECISION:
+    // User: "can u please make the current theme i have on windows now the default dark theme for people when they first install ghostex? i dont like the fully black one we have." Out of the box dark mode is their Windows look (the agent-made Inkstone look without its fonts): the Custom colour #46506a at depth 96, the Inkstone theme colours (paper-white text #ece4d6, grey text #9b968d, a cinnabar accent and focus ring #d8664f, borders 8% and dividers 6%, cards, controls, menus and the chat box in near-neutral blue-blacks, selection 9%, hover 5%, muted success, warning and danger), the cinnabar pane outline colour, and Live glass behind the window: Ink at speed 0.3 and brightness 25. Live draws the same on macOS, Windows and Linux (no system blur), so the look matches across platforms; Blur stays 4 because Live is not blurred by it on macOS, and Blur on Windows stays Acrylic for Desktop and windows. Kept as they were: transparency off by default on Windows (the 2026-10-04 decision in availability.rs) and one tint for the sidebar and the work area (88, the 2026-10-23 Strength decision; their Windows sidebar is 82). Fonts are not part of a look (their Windows fonts are the defaults anyway). Supersedes the 2026-11-20 Black look below. Long-time users keep their current look (`DARK_LOOK_2026_11_21_OLD_DEFAULTS` in lib.rs).
+    ("darkThemePreset", J::Str("custom")),
     ("lightThemePreset", J::Str("gray")),
     ("themeSidebarContrast", J::Num(0.0)),
     ("themeWorkAreaContrast", J::Num(0.0)),
@@ -822,8 +825,22 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
         J::Obj(&[(
             "dark",
             J::Obj(&[
-                ("userMessage", J::Str("#0000006b")),
-                ("border", J::Str("#3e3e3e6b")),
+                ("accent", J::Str("#d8664f")),
+                ("focusRing", J::Str("#d8664f")),
+                ("border", J::Str("8%")),
+                ("divider", J::Str("6%")),
+                ("text", J::Str("#ece4d6")),
+                ("mutedText", J::Str("#9b968d")),
+                ("userMessage", J::Str("#24272e")),
+                ("chatBox", J::Str("#15171bcc")),
+                ("surface", J::Str("#181a1fcc")),
+                ("control", J::Str("#1e2026cc")),
+                ("menu", J::Str("#141519f2")),
+                ("selection", J::Str("9%")),
+                ("hover", J::Str("5%")),
+                ("success", J::Str("#9cbf8c")),
+                ("warning", J::Str("#d9b46a")),
+                ("danger", J::Str("#e06c75")),
             ]),
         )]),
     ),
@@ -1037,12 +1054,14 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
         ]),
     ),
     ("showActivePaneOutline", J::Bool(false)),
-    ("workspaceActivePaneBorderColor", J::Str("#3b82f6")),
+    // The default dark look's accent since 2026-11-21 (see `darkThemePreset`); #3b82f6 before.
+    ("workspaceActivePaneBorderColor", J::Str("#d8664f")),
     // CDXC:Settings 2026-11-08 DECISION: User: "to show traffic lights on macos when sidebar is collapsed (default to yes)". On: the window's buttons stay with the sidebar collapsed, as they did before the 2026-11-06 floating-sidebar change (GitHub #432), which off restores.
     ("showWindowButtonsWhenSidebarCollapsed", J::Bool(true)),
     ("closeButtonsOnRight", J::Bool(false)),
     ("windowGlass", J::Str("auto")),
-    ("windowGlassSource", J::Str("desktopAndWindows")),
+    // Live since 2026-11-21, the default dark look's glass (see `darkThemePreset`); Desktop and windows before.
+    ("windowGlassSource", J::Str("live")),
     ("windowGlassImagePlacement", J::Str("static")),
     ("windowGlassSameForLightAndDark", J::Bool(true)),
     ("windowGlassImageDark", J::Str("")),
@@ -1052,8 +1071,9 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("windowGlassVideoOnlyOnPower", J::Bool(true)),
     ("windowGlassLiveStyleDark", J::Str("ink")),
     ("windowGlassLiveStyleLight", J::Str("drift")),
-    ("windowGlassLiveSpeed", J::Num(1.0)),
-    ("windowGlassLiveBrightness", J::Num(60.0)),
+    // 0.3 and 25 since 2026-11-21 (see `darkThemePreset`); 1 and 60 before.
+    ("windowGlassLiveSpeed", J::Num(0.3)),
+    ("windowGlassLiveBrightness", J::Num(25.0)),
     ("windowGlassBlurRadius", J::Num(4.0)),
     ("windowGlassWindowsBlur", J::Str("acrylic")),
     // CDXC:Theming 2026-11-20 DECISION: User (Q4288): "yes, make pane gap 6 and menu blur 17 defaults too", from their own look (see `darkThemePreset`). Menu blur applies in light mode too. Supersedes 20.

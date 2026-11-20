@@ -329,9 +329,17 @@ pub(crate) fn refresh_window_glass(object: &serde_json::Map<String, serde_json::
         WORK_AREA_GLASS_ALPHA_LIGHT,
         &WORK_AREA_GLASS_PERCENT_LIGHT,
     );
+    // Unsaved, it is the catalog's default (Live since 2026-11-21).
     let source = object
         .get("windowGlassSource")
-        .and_then(serde_json::Value::as_str);
+        .and_then(serde_json::Value::as_str)
+        .or_else(|| {
+            ghostex_settings_catalog::availability::default_value_on(
+                ghostex_settings_catalog::Platform::current(),
+                "windowGlassSource",
+            )
+            .and_then(ghostex_settings_catalog::J::as_str)
+        });
     // The wallpaper, picture and Live backdrops are drawn by the macOS, Windows and Linux window
     // backends (gpui_macos window_wallpaper.rs / window_live.rs, gpui_windows directx_backdrop.rs,
     // gpui_linux); Settings offers them only there.
