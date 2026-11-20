@@ -331,6 +331,37 @@ fn send_error(error: crate::session_chat_send::SessionChatSendError) -> DomainSt
     }
 }
 
+/// The security log entry for a clear, with its caller (the request's actor: the session, the
+/// token file, or your own device), so a clear an agent or the token file did is on record (Fable
+/// review of 6d5889f7f, finding 5).
+fn record_clear(
+    state: &AppState,
+    caller: &Principal,
+    project_id: &str,
+    session_id: &str,
+    command: &str,
+) {
+    let target = crate::ids::create_global_session_ref(
+        state.metadata.server_id.as_str(),
+        project_id,
+        session_id,
+    );
+    crate::audit::record(
+        crate::audit::Action::new(
+            "chat.clearConversation",
+            format!("Cleared {target}'s conversation with its {command} (ghostex clear-command)"),
+        )
+        .target(target.clone()),
+        crate::audit::Actor::current(),
+        crate::audit::Outcome::Done,
+        None,
+    );
+    eprintln!(
+        "[gxserver] clear-command: {target} {command} by {}",
+        caller.kind()
+    );
+}
+
 /// `/api/clearSessionConversation`. The checks run off the async workers; the command is then
 /// typed by an awaited job that is never run again (Fable review of 6d5889f7f, finding 3: the
 /// queued job with its retry step answered "sent" before typing, and a job a prompt refused typed
@@ -365,10 +396,7 @@ pub(crate) async fn handle_clear_session_http(
                 crate::session_chat_app_command::record_session_chat_app_command(
                     project_id, session_id, command,
                 );
-                eprintln!(
-                    "[gxserver] clear-command: {project_id}:{session_id} {command} by {}",
-                    caller.kind()
-                );
+                record_clear(state, caller, project_id, session_id, command);
                 Ok(result)
             }
             Err(error) => Err(send_error(error)),
