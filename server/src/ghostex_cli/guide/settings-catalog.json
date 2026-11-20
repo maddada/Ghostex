@@ -763,6 +763,28 @@
       "agentWritable": true
     },
     {
+      "key": "sidebarLayout",
+      "title": "Sidebar layout",
+      "subtitle": "Rail adds a narrow column of icons at the window's left edge for Search, notifications, Main Hub, Agents Hub, All Automations, Hermes, Claude and Grok Bot, with everything else under its ⋯ menu, where you pin, unpin and drag icons into your own order. It stays when the sidebar is hidden. Classic is the sidebar without the rail, with Search and the bell in its top row.",
+      "tab": "sidebar",
+      "tabTitle": "Sidebar & Sessions",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "enum",
+      "default": "rail",
+      "options": [
+        {
+          "label": "Rail",
+          "value": "rail"
+        },
+        {
+          "label": "Classic",
+          "value": "classic"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
       "key": "sidebarSeparateByMachine",
       "title": "Separate by machine",
       "subtitle": "Show one computer at a time, each with its own tab, project list and Spaces. Off (the default): one list for every connected computer, where a project on several computers is one entry with the sessions of all of them, and Spaces and project groups are shared by all of them.",
@@ -9604,6 +9626,39 @@
       "type": "string",
       "default": "",
       "advanced": true,
+      "agentWritable": false
+    },
+    {
+      "key": "sidebarRailPins",
+      "title": "sidebarRailPins",
+      "subtitle": "App-managed state saved with the settings; not a user preference.",
+      "tab": "about",
+      "tabTitle": "About",
+      "section": "internalState",
+      "sectionTitle": "Internal state (not user settings)",
+      "type": "json",
+      "default": [
+        "search",
+        "notifications",
+        "mainHub",
+        "agentsHub",
+        "allAutomations",
+        "hermes",
+        "claude",
+        "grok"
+      ],
+      "agentWritable": false
+    },
+    {
+      "key": "sidebarRailIntro",
+      "title": "sidebarRailIntro",
+      "subtitle": "App-managed state saved with the settings; not a user preference.",
+      "tab": "about",
+      "tabTitle": "About",
+      "section": "internalState",
+      "sectionTitle": "Internal state (not user settings)",
+      "type": "string",
+      "default": "",
       "agentWritable": false
     },
     {

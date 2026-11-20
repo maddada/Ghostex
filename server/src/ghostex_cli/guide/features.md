@@ -730,6 +730,38 @@ Settings > Extensions.
 
 ## Sidebar
 
+### The rail (the column of icons at the window's left)
+
+The rail is a narrow column of icons at the window's left edge, left of the
+sidebar. It stays when you hide the sidebar. By default it holds Search,
+Notifications (with the unread count), Main Hub, Agents Hub, All Automations,
+Hermes, Claude and Grok Bot (each only while its feature is on), then ⋯. Its ⋯
+menu lists everything else too: Commands, Voice Call, Files, Changes, Browser,
+Project Board, Dev servers, Resources, Extensions, Connect a Phone and Settings.
+Point at a row and click its pin to put it on the rail; click the filled pin to
+take it off. Drag icons on the rail into your own order, or right-click one to
+move it up or down or unpin it. Clicking a row you have not pinned opens it at
+once, and its icon shows on the rail under a dashed line, in an outline, while
+it is open, then leaves when you go elsewhere. Agents Hub and All Automations open across the
+whole window like Claude and Grok Bot: the sidebar, the side panel and the
+Commands pane step aside, and clicking the lit icon again (or showing the
+sidebar, or opening a session) brings them back as they were. Agents Hub opened
+from the sidebar menu or the command palette still opens in its own window. At
+the rail's foot are your workspace (with two or more workspaces: click to
+switch, right-click for the workspace menu) and the account usage switch (once
+an account is starred): one click shows or hides the usage tiles at the bottom
+of the sidebar. With the rail on, Search and the bell leave the sidebar's top
+row, Hermes leaves the Spaces row, the workspace tile leaves the Spaces row and
+Claude and Grok Bot leave the work area header. Pick Rail or Classic (the
+sidebar without the rail) in Settings > Sidebar > Sidebar layout
+(`sidebarLayout`: `rail` or `classic`). New installs start on Rail; if you had
+Ghostex before the rail, you keep Classic and see Meet the rail once, where you
+can try both and keep one. The pinned icons are saved per computer
+(`sidebarRailPins`). The web app shows the rail with the items a browser can
+open, without pins of its own.
+
+### Project and Unified sidebars
+
 There are two sidebars, picked in Settings > Sidebar & Sessions > Sidebar
 (`sidebarView`: `project`, the default, or `unified`) or with Switch to Unified
 View / Switch to Project View in the sidebar menu's Sort & Filter. The Project sidebar,
@@ -1066,7 +1098,7 @@ Linear API key, Claude account and Browser sign-ins (cookies), and a window
 shows one workspace at a time. Every install starts with one workspace,
 Personal, holding all your projects and Spaces. Once you have two or more, the
 workspace tile is the first tile of the Spaces row (after your computers, if you
-have several): the workspace's icon in white on a disc of its colour. Workspace
+have several), or, with the rail on, at the foot of the rail: the workspace's icon in white on a disc of its colour. Workspace
 icons are their own set (home, briefcase, building, people, coffee, camera and
 more), never a Space icon; pick each workspace's icon and colour in Settings >
 Workspaces (Personal starts as a house, a Work workspace as a briefcase). Click
@@ -8479,6 +8511,9 @@ What is collected, all of it anonymous:
   Lean Codex workers. Numbers such as tints, zoom and sidebar width are sent as
   ranges, and a background picture or video only as "set or not".
 - Accounts: how many Claude, Codex, Cursor, Gemini and Copilot accounts you have,
+- The sidebar layout: Rail or Classic (also in the daily setup), when you switch
+  it and whether from Settings or Meet the rail, and in Meet the rail which
+  layouts you tried and which you kept; never your pinned icons or their order.
   and the plan Claude and Codex report for them (such as Pro, Max, Team or Plus).
 
 Never sent: prompts or messages, file paths, project, session or workspace names,
