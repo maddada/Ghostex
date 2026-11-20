@@ -147,7 +147,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     // User, asked "Where do you start a voice call about one session on the computer?", picked the header headset's arrow; every entry point also gets a hotkey with no key set (the question's note). Voice Call About This Session starts a voice call limited to the session the work area shows, or moves the open call to it.
     HotkeyDefinition {
         id: "voiceCallAboutSession",
-        title: "Voice Call About This Session",
+        title: "Session: Voice Call",
         description: "Start a voice call about the session you are looking at, or move the open call to it.",
         default_key: "",
         windows_linux_default_key: None,
@@ -428,7 +428,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     // Ctrl+R is reverse history search in the terminal.
     HotkeyDefinition {
         id: "renameActiveSession",
-        title: "Rename Active Session",
+        title: "Session: Rename",
         description: "Rename the focused session.",
         default_key: "cmd+r",
         windows_linux_default_key: Some("cmd+shift+r"),
@@ -658,8 +658,8 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     },
     HotkeyDefinition {
         id: "delayedSend",
-        title: "Delayed Actions",
-        description: "Open delayed actions for the focused terminal session.",
+        title: "Session: Delayed Send",
+        description: "Open Delayed Send for the focused terminal session.",
         default_key: "ctrl+shift+s",
         windows_linux_default_key: Some("cmd+alt+s"),
         alternate_default_keys: &[],
@@ -710,7 +710,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     },
     HotkeyDefinition {
         id: "sessionNote",
-        title: "Session Note",
+        title: "Session: Note",
         description: "Open the note attached to the focused agent conversation.",
         default_key: "cmd+alt+n",
         windows_linux_default_key: None,
@@ -849,7 +849,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     },
     HotkeyDefinition {
         id: "forkSession",
-        title: "Fork Session",
+        title: "Session: Fork",
         description: "Fork the focused session.",
         default_key: "cmd+ctrl+shift+f",
         windows_linux_default_key: Some("cmd+alt+shift+f"),
@@ -859,8 +859,8 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     },
     HotkeyDefinition {
         id: "reloadSession",
-        title: "Reload Session",
-        description: "Reload the focused session.",
+        title: "Session: Full Reload",
+        description: "Fully reload the focused session.",
         default_key: "",
         windows_linux_default_key: None,
         alternate_default_keys: &[],
@@ -870,7 +870,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     // Option+Shift+S also sleeps it: `sleepFocusedSessionSecondKey`, its own row since 2026-10-27.
     HotkeyDefinition {
         id: "sleepFocusedSession",
-        title: "Sleep Focused Session",
+        title: "Session: Sleep",
         description: "Sleep the focused terminal session.",
         default_key: "cmd+shift+a",
         windows_linux_default_key: None,
@@ -882,7 +882,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     // Wake is the inverse focused-session lifecycle command. Keep it unassigned by default but available in Hotkeys and command palette so sleeping focused tabs can be restored without a row-specific sidebar click.
     HotkeyDefinition {
         id: "wakeFocusedSession",
-        title: "Wake Focused Session",
+        title: "Session: Wake",
         description: "Wake the focused sleeping terminal session.",
         default_key: "",
         windows_linux_default_key: None,
@@ -894,7 +894,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     // Close is already available from pane/tab chrome and Cmd+W, and it is bindable and runnable from the command palette. Its Cmd+Shift+Backspace default follows CDXC:Hotkeys 2026-09-25 on createAgentSession.
     HotkeyDefinition {
         id: "closeFocusedSession",
-        title: "Close Focused Session",
+        title: "Session: Close",
         description: "Close the focused pane or session.",
         default_key: "cmd+shift+backspace",
         windows_linux_default_key: None,
@@ -904,13 +904,26 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     },
     HotkeyDefinition {
         id: "popOutPane",
-        title: "Open in a Popup",
+        title: "Session: Popout",
         description: "Open the focused pane's session in a popup, or bring it back.",
         default_key: "ctrl+shift+o",
         windows_linux_default_key: Some("cmd+alt+o"),
         alternate_default_keys: &[],
         retired_default_keys: &[],
         action: J::Obj(&[("focusedPaneAction", J::Str("popOutPane")), ("id", J::Str("popOutPane")), ("kind", J::Str("focusedPaneAction"))]),
+    },
+    // CDXC:ContextMenus 2026-11-20 DECISION:
+    // User (Q4292 "Apply as shown"): Generate Title left the session menus for the command palette, as a focused-session command with no key set. It asks gxserver to name the focused session from its recent prompts, as the Rename dialog's Generate Name does.
+    // SEE-ALSO: packages/gx-core/src/sidebar_menu/layout.rs, apps/desktop/src/app/delayed_send/app_modal_sidebar_command/hotkey_action.rs.
+    HotkeyDefinition {
+        id: "generateSessionTitle",
+        title: "Session: Generate Title",
+        description: "Name the focused session from its recent prompts.",
+        default_key: "",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("focusedPaneAction", J::Str("generateSessionTitle")), ("id", J::Str("generateSessionTitle")), ("kind", J::Str("focusedPaneAction"))]),
     },
     // CDXC:Navigation 2026-09-19 DECISION:
     // User: Back/Forward take Cmd+[ and Cmd+] so they match Chrome, and Previous/Next Group give
@@ -1691,7 +1704,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     },
     HotkeyDefinition {
         id: "sleepFocusedSessionSecondKey",
-        title: "Sleep Focused Session (Second Key)",
+        title: "Session: Sleep (Second Key)",
         description: "A second key that sleeps the focused terminal session.",
         default_key: "alt+shift+s",
         windows_linux_default_key: None,

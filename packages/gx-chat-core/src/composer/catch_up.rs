@@ -153,7 +153,7 @@ pub fn settle(state: &mut ChatState, request_id: u64, outcome: &RpcOutcome) -> O
         // An older gxserver has no `catchUpSession` and refuses it without a sentence (`{}`).
         RpcOutcome::Err { message, .. } if !message.chars().any(char::is_alphabetic) => {
             catch_up.error = Some(
-                "Ghostex on this computer is too old for Catch me up. Update it and try again."
+                "Ghostex on this computer is too old for Catch Me Up. Update it and try again."
                     .to_string(),
             );
         }

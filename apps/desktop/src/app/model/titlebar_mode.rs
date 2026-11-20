@@ -130,7 +130,7 @@ impl TitlebarMode {
             Self::Terminal => "Terminal",
             Self::BotFeed => "Automations",
             Self::Work => "Issues",
-            Self::SideChat => "Side chat",
+            Self::SideChat => "Side Chat",
             Self::Extension(id) => id.as_str(),
         }
     }

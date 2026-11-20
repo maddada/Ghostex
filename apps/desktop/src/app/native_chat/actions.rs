@@ -1,4 +1,4 @@
-use super::{state::NativeChatView, transcript::text};
+use super::state::NativeChatView;
 use gpui::{Context, Window};
 use serde_json::{Value, json};
 
@@ -13,19 +13,51 @@ pub(super) const MORE_ACTIONS_TRIGGER: &str = "chat-more-actions";
 const SEND_ACTIONS_TRIGGER: &str = "chat-send-actions";
 const SWITCH_ACCOUNT_TRIGGER: &str = "chat-notice-switch-account";
 
-/// More actions row icons, ported from `HOST_ACTION_ICONS` and the Sleep moon in the React chat's
-/// `session-chat-composer-actions.tsx`.
-fn host_action_icon(id: &str) -> Option<&'static str> {
-    Some(match id {
-        "delayedActions" => "titlebar/clock-check.svg",
-        "fork" => "titlebar/git-fork.svg",
-        "fullReload" => "titlebar/refresh.svg",
-        "rename" => "titlebar/pencil.svg",
-        "sleep" => "titlebar/moon.svg",
-        "switchAccount" => "titlebar/switch-horizontal.svg",
-        "viewPlaybook" => "titlebar/book.svg",
-        _ => return None,
-    })
+/// A row of the chat box ⋯ under the one session menu's name and icon for its place (gx-core
+/// sidebar_menu/layout.rs).
+fn named_row(place: &str, mut row: Value) -> Value {
+    if let Some(entry) = ghostex_gx_core::session_menu_layout::entry(place)
+        && !entry.label.is_empty()
+    {
+        row["label"] = json!(entry.label);
+        row["iconPath"] = json!(format!("titlebar/{}.svg", entry.icon));
+        if entry.danger {
+            row["danger"] = json!(true);
+        }
+    }
+    row
+}
+
+/// One of the sidebar menu's rows for this session (gx-core `MenuItem` JSON) as a chat menu row:
+/// its command goes back to the sidebar's dispatcher (`sidebarMenu`, handled in `handle_action`).
+fn sidebar_row_to_chat(item: &Value) -> Value {
+    if item["separator"] == true {
+        return json!({"separator": true});
+    }
+    if item["heading"] == true {
+        return json!({"heading": true, "label": item["label"]});
+    }
+    let mut row = json!({ "label": item["label"] });
+    if let Some(icon) = item["icon"].as_str() {
+        row["iconPath"] = json!(
+            crate::app::helpers::gpui_sidebar_command_icon_asset_path(Some(icon)).to_string()
+        );
+    }
+    if let Some(hotkey) = item["hotkey"].as_str() {
+        row["hotkeyAction"] = json!(hotkey);
+    }
+    for flag in ["checked", "disabled", "danger"] {
+        if item[flag] == true {
+            row[flag] = json!(true);
+        }
+    }
+    if let Some(children) = item["children"].as_array() {
+        row["children"] = Value::Array(children.iter().map(sidebar_row_to_chat).collect());
+        row["openOnHover"] = json!(false);
+    } else if let Some(command) = item.get("command") {
+        row["command"] = json!({"type": "sidebarMenu", "command": command});
+    }
+    row
 }
 
 impl NativeChatView {
@@ -151,7 +183,7 @@ impl NativeChatView {
         let read_aloud = &self.snapshot["readAloud"];
         (read_aloud["available"] == true && read_aloud["speaking"] == true).then(|| {
             json!({
-                "label":"Stop reading","iconPath":"titlebar/player-stop.svg",
+                "iconPath":"titlebar/player-stop.svg",
                 "hotkeyAction":"readAloudStop","command":{"type":"readAloudStop"},
             })
         })
@@ -164,7 +196,7 @@ impl NativeChatView {
     fn files_links_menu_row(&self) -> Option<Value> {
         self.composer_control_available("files").then(|| {
             json!({
-                "label":"Files and links","iconPath":"titlebar/link.svg",
+                "iconPath":"titlebar/link.svg",
                 "hotkeyAction":"toggleChatFilesLinks",
                 "checked":self.snapshot["filesLinks"]["open"] == true,
                 "command":{"type":"composerHost","action":"filesLinks"},
@@ -179,7 +211,7 @@ impl NativeChatView {
     fn stash_menu_row(&self) -> Option<Value> {
         self.composer_control_available("stash").then(|| {
             json!({
-                "label":"Stash prompt","iconPath":"titlebar/stack-push.svg",
+                "iconPath":"titlebar/stack-push.svg",
                 "hotkeyAction":"stashPrompt",
                 "badge":self.snapshot["composerChrome"]["stashBadge"],
                 "command":{"type":"composerHost","action":"stashPrompt"},
@@ -209,6 +241,11 @@ impl NativeChatView {
         json!({"label":"Skills","iconPath":"titlebar/sparkles.svg","openOnHover":false,"children":skills})
     }
 
+    /// The chat box ⋯: the one session menu (gx-core sidebar_menu/layout.rs) as the chat box fills
+    /// it. The shared rows the chat core has no action for (Coordinator, Mark Thread Done, Copy,
+    /// Tag As, Close After Done, Handoff / Export, Link to, Make Coordinator, Postpone By, Close)
+    /// are the sidebar menu's own rows for this session, read from the store, so both menus run
+    /// the same commands; the store is read after this click, never while the app is mid-update.
     pub(crate) fn show_actions(
         &mut self,
         position: gpui::Point<gpui::Pixels>,
@@ -218,14 +255,149 @@ impl NativeChatView {
         if self.chat_menu_toggled_shut(MORE_ACTIONS_TRIGGER, cx) {
             return;
         }
-        /*
-        CDXC:SessionChat 2026-11-12 DECISION:
-        User picked layout A of the "phone chat menu cleanup" page (Q2723) for the chat box's More actions, on the phone and here, then which rows go (Q2725). The first level holds the rows a chat uses (the folded chat-box controls, Files and links, Side chat, View, and Stop reading while this chat is read), then Agent (the session's actions with their hotkeys, then Delayed actions, View playbook, Session note and Branches) and More (Stash prompt, Skills, and the folded Context window and Options). Auto-read moved into View. Close After Done and Handoff / Export left (gx-chat-core `composer/host_actions.rs` no longer offers them here; the sidebar's session menu and the hotkeys keep them). Interrupt & Send and Compact & Send stay in Send's right-click menu. Every row, submenu and value row has its own icon. The phone's sheet (apps/mobile/app/src/chat/native/composer/menus.ts) adds its phone-only rows: Search conversation, the voice call, Prompt editor, Catch me up, Project and Kill session.
-        */
+        let Some(app) = self.config.app.clone() else {
+            self.open_actions(Vec::new(), position, window, cx);
+            return;
+        };
+        let key = self.links_session_key();
+        cx.spawn_in(window, async move |chat, cx| {
+            let places = app
+                .update(cx, |app, _| app.gx_store_session_menu_places(&key))
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+            let _ = chat.update_in(cx, |chat, window, cx| {
+                chat.open_actions(places, position, window, cx)
+            });
+        })
+        .detach();
+    }
+
+    fn open_actions(
+        &mut self,
+        places: Vec<(String, Vec<Value>)>,
+        position: gpui::Point<gpui::Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        use ghostex_gx_core::session_menu_layout::{
+            LayoutNode, MORE, SessionMenuSpot, layout, tidy_separators,
+        };
+        let shared: std::collections::HashMap<String, Vec<Value>> = places.into_iter().collect();
+        let is_separator = |row: &Value| row["separator"] == true;
+        let mut rows = Vec::new();
+        for node in layout(SessionMenuSpot::ChatBox) {
+            match node {
+                LayoutNode::Separator => rows.push(json!({"separator":true})),
+                LayoutNode::Row(place) => rows.extend(self.chat_box_place(place, &shared)),
+                LayoutNode::Tiles(places) => {
+                    let tiles: Vec<Value> = places
+                        .iter()
+                        .flat_map(|place| self.chat_box_place(place, &shared))
+                        .filter(|tile| tile.get("command").is_some())
+                        .collect();
+                    if !tiles.is_empty() {
+                        rows.push(json!({ "quick": tiles }));
+                    }
+                }
+                LayoutNode::More(children) => {
+                    let more: Vec<Value> = children
+                        .iter()
+                        .flat_map(|child| match child {
+                            LayoutNode::Row(place) => self.chat_box_place(place, &shared),
+                            _ => vec![json!({"separator":true})],
+                        })
+                        .collect();
+                    let more = tidy_separators(more, is_separator);
+                    if !more.is_empty() {
+                        rows.push(json!({
+                            "label": MORE.label,
+                            "iconPath": format!("titlebar/{}.svg", MORE.icon),
+                            "openOnHover": false,
+                            "children": more,
+                        }));
+                    }
+                }
+            }
+        }
+        let rows = tidy_separators(rows, is_separator);
+        // Lined up with the More actions button, not the point it was clicked at.
+        self.menu_side = Some(super::option_menu::MenuSide::Right);
+        let trigger = super::toolbar::button_trigger(
+            self.composer_button_bounds.more_actions.get(),
+            position,
+        );
+        self.show_chat_menu(rows, trigger, 240.0, window, cx);
+    }
+
+    /// What the chat box shows at one place of the one session menu.
+    fn chat_box_place(
+        &self,
+        place: &str,
+        shared: &std::collections::HashMap<String, Vec<Value>>,
+    ) -> Vec<Value> {
+        let named = |row: Value| -> Value { named_row(place, row) };
+        match place {
+            // The chat core's own session actions, with their hotkeys: the core offers each only
+            // where this chat's agent can do it (Fork only for agents gxserver can fork).
+            "rename" | "sleep" | "fork" | "fullReload" | "delayedSend" => {
+                let id = if place == "delayedSend" {
+                    "delayedActions"
+                } else {
+                    place
+                };
+                self.host_action(id)
+                    .map(|action| {
+                        named(json!({
+                            "hotkeyAction": action["hotkey"],
+                            "command": {"type":"host","action":id},
+                        }))
+                    })
+                    .into_iter()
+                    .collect()
+            }
+            "switchAccount" => self.switch_account_row().into_iter().collect(),
+            "note" => self.note_row().map(named).into_iter().collect(),
+            "filesLinks" => self.files_links_menu_row().map(named).into_iter().collect(),
+            // Side chat: the core offers it only for agents that take `/btw` (composer/side_chat.rs).
+            "sideChat" => self.snapshot["sideChat"]
+                .as_str()
+                .map(|prefix| {
+                    named(json!({
+                        "checked": self.draft.starts_with(prefix),
+                        "command": {"type":"toggleSideChat","text":self.draft},
+                    }))
+                })
+                .into_iter()
+                .collect(),
+            "chatToolbar" => self.folded_toolbar_rows(),
+            "view" => vec![self.view_modes_row()],
+            "stopReading" => self.stop_reading_row().map(named).into_iter().collect(),
+            "branches" => self.branches_row().into_iter().collect(),
+            "stashPrompt" => self.stash_menu_row().map(named).into_iter().collect(),
+            "skills" => vec![self.skills_row()],
+            "chatOptions" => self.folded_option_rows(),
+            _ => shared
+                .get(place)
+                .map(|items| items.iter().map(sidebar_row_to_chat).collect())
+                .unwrap_or_default(),
+        }
+    }
+
+    fn host_action(&self, id: &str) -> Option<&Value> {
+        self.snapshot["hostActions"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|action| action["id"] == id)
+    }
+
+    /// The chat box controls that overflowed its toolbar fold in here, on top. A folded Session
+    /// Note is the menu's Note row instead.
+    fn folded_toolbar_rows(&self) -> Vec<Value> {
         let mut rows = Vec::new();
         for (id, action, label, icon) in super::toolbar::COMPOSER_CONTROLS {
-            // An overflowed control folds into this menu only when the host gave it a handler; a
-            // folded Session note joins the Agent submenu below.
+            // An overflowed control folds into this menu only when the host gave it a handler.
             if id != "note"
                 && self.composer_control_overflowed(id)
                 && self.composer_control_available(id)
@@ -254,170 +426,135 @@ impl NativeChatView {
                 }
             }
         }
-        rows.extend(self.files_links_menu_row());
-        // Side chat: the core offers it only for agents that take `/btw` (composer/side_chat.rs).
-        if let Some(prefix) = self.snapshot["sideChat"].as_str() {
-            rows.push(json!({"label":"Side chat","iconPath":"titlebar/message-circle.svg","checked":self.draft.starts_with(prefix),"command":{"type":"toggleSideChat","text":self.draft}}));
+        rows
+    }
+
+    /// Switch Account, opened on click only.
+    fn switch_account_row(&self) -> Option<Value> {
+        self.host_action("switchAccount")?;
+        let icon = format!(
+            "titlebar/{}.svg",
+            ghostex_gx_core::session_menu_layout::entry("switchAccount")?.icon
+        );
+        /*
+        CDXC:AgentProviders 2026-09-18 DECISION:
+        User: Switch Account in GPUI chat works like React chat. Claude and Codex
+        sessions open the Accounts & limits panel (SessionAccountsPanel); other
+        agents keep the daemon's switchable-agent rows. Either submenu opens on
+        click only, per the 2026-09-12 decision below.
+        */
+        // CDXC:AgentProviders 2026-09-06 DECISION: User requested the Claude and Codex account controls under More actions > Switch Account as a submenu, replacing the standalone composer Accounts button and the old account row.
+        // CDXC:AgentProviders 2026-09-12 DECISION: User: opening Switch Account under the chat's More actions requires a click; hovering must not open either version of the account submenu.
+        if self.snapshot["accountPanel"].is_object() {
+            return Some(named_row(
+                "switchAccount",
+                json!({"iconPath":icon,"openOnHover":false,"children":[{"accounts":self.snapshot["accountPanel"]}]}),
+            ));
         }
-        rows.push(self.view_modes_row());
-        rows.extend(self.stop_reading_row());
-        let host_row = |action: &Value| {
-            json!({
-                "label":action["label"],"hotkeyAction":action["hotkey"],
-                "iconPath":host_action_icon(action["id"].as_str().unwrap_or_default()),
-                "command":{"type":"host","action":action["id"]},
-            })
-        };
-        let actions: Vec<_> = self.snapshot["hostActions"]
+        let accounts: Vec<_> = self.snapshot["switchableAgents"]
             .as_array()
             .into_iter()
             .flatten()
-            .collect();
-        // Agent: every host action the core offers here (gx-chat-core `composer/host_actions.rs`),
-        // the session's own first, then the ones about this chat.
-        const AGENT_FIRST: [&str; 5] = ["rename", "sleep", "fork", "fullReload", "switchAccount"];
-        let ordered = AGENT_FIRST
-            .iter()
-            .flat_map(|id| actions.iter().filter(move |action| action["id"] == *id))
-            .chain(
-                actions
-                    .iter()
-                    .filter(|action| !AGENT_FIRST.contains(&text(action, "id").as_str())),
-            );
-        let mut session_rows = Vec::new();
-        let mut chat_rows = Vec::new();
-        for action in ordered {
-            let into = if AGENT_FIRST.contains(&text(action, "id").as_str()) {
-                &mut session_rows
-            } else {
-                &mut chat_rows
-            };
-            if action["id"] == "switchAccount" {
-                /*
-                CDXC:AgentProviders 2026-09-18 DECISION:
-                User: Switch Account in GPUI chat works like React chat. Claude and Codex
-                sessions open the Accounts & limits panel (SessionAccountsPanel); other
-                agents keep the daemon's switchable-agent rows. Either submenu opens on
-                click only, per the 2026-09-12 decision below.
-                */
-                // CDXC:AgentProviders 2026-09-06 DECISION: User requested the Claude and Codex account controls under More actions > Switch Account as a submenu, replacing the standalone composer Accounts button and the old account row.
-                // CDXC:AgentProviders 2026-09-12 DECISION: User: opening Switch Account under the chat's More actions requires a click; hovering must not open either version of the account submenu.
-                if self.snapshot["accountPanel"].is_object() {
-                    into.push(json!({"label":"Switch Account","iconPath":host_action_icon("switchAccount"),"openOnHover":false,"children":[{"accounts":self.snapshot["accountPanel"]}]}));
-                    continue;
-                }
-                let accounts: Vec<_> = self.snapshot["switchableAgents"].as_array().into_iter().flatten().map(|account| json!({
+            .map(|account| {
+                json!({
                     "label":account["name"],"icon":account["icon"],
                     "command":{"type":"host","action":"switchAccount","agentId":account["agentId"]},
-                })).collect();
-                if !accounts.is_empty() {
-                    into.push(json!({"label":"Switch Account","iconPath":host_action_icon("switchAccount"),"openOnHover":false,"children":accounts}));
-                }
-            } else {
-                into.push(host_row(action));
-            }
-        }
-        /*
-        CDXC:SessionChat 2026-10-29 DECISION:
-        User, on the terminal view's More actions menu matching the chat's (Q729, "Yes, add it"): the chat's More actions menu gets a Session note row after Close After Done, opening the same note dialog the terminal row opens, with the same "1" badge when a note exists, on the computer and the phone (apps/mobile/app/src/chat/native/composer/menus.ts). The note toolbar button is never offered (the core's `composerActions.note` is off), so this row is the only way in unless the control folded here itself. Layout A (2026-11-12, above) puts it in the Agent submenu.
-        */
+                })
+            })
+            .collect();
+        (!accounts.is_empty()).then(|| {
+            named_row(
+                "switchAccount",
+                json!({"iconPath":icon,"openOnHover":false,"children":accounts}),
+            )
+        })
+    }
+
+    /*
+    CDXC:SessionChat 2026-10-29 DECISION:
+    User, on the terminal view's More actions menu matching the chat's (Q729, "Yes, add it"): the chat's More actions menu gets a Session note row, opening the same note dialog the terminal row opens, with the same "1" badge when a note exists, on the computer and the phone (apps/mobile/app/src/chat/native/composer/menus.ts). The note toolbar button is never offered (the core's `composerActions.note` is off), so this row is the only way in unless the control folded here itself. The one session menu (2026-11-20, gx-core sidebar_menu/layout.rs) names it Note and puts it in More.
+    */
+    fn note_row(&self) -> Option<Value> {
         // Only while Session notes is on (Settings > Extensions; CDXC:SessionNotes 2026-10-30).
         let note_folded =
             self.composer_control_overflowed("note") && self.composer_control_available("note");
         if note_folded {
-            chat_rows.push(json!({
-                "label":"Session note","iconPath":"titlebar/note.svg","checked":self.snapshot["note"]["open"],
+            return Some(json!({
+                "checked":self.snapshot["note"]["open"],
                 "command":{"type":"composerHost","action":"sessionNote"},
             }));
-        } else if crate::app::session_notes::session_notes_on()
-            && self.composer_control_available("files")
-        {
-            let mut row = json!({
-                "label":"Session note","iconPath":"titlebar/note.svg","hotkeyAction":"sessionNote",
-                "command":{"type":"host","action":"sessionNote"},
-            });
-            if self.snapshot["composerChrome"]["notePresence"] == true {
-                row["badge"] = json!("1");
-            }
-            chat_rows.push(row);
         }
-        if let Some(mut branches) = self.fork_branches_row() {
-            // Each fork gets the Branches glyph before its lifecycle dot.
-            if let Some(children) = branches["children"].as_array_mut() {
-                for child in children.iter_mut() {
-                    if child["heading"] != true
-                        && child["separator"] != true
-                        && child.get("iconPath").is_none()
-                    {
-                        child["iconPath"] = json!("titlebar/git-branch.svg");
-                    }
+        if !crate::app::session_notes::session_notes_on()
+            || !self.composer_control_available("files")
+        {
+            return None;
+        }
+        let mut row = json!({"command":{"type":"host","action":"sessionNote"}});
+        if self.snapshot["composerChrome"]["notePresence"] == true {
+            row["badge"] = json!("1");
+        }
+        Some(row)
+    }
+
+    /// Branches: this conversation's forks, each with the Branches glyph before its lifecycle dot.
+    fn branches_row(&self) -> Option<Value> {
+        let mut branches = self.fork_branches_row()?;
+        if let Some(children) = branches["children"].as_array_mut() {
+            for child in children.iter_mut() {
+                if child["heading"] != true
+                    && child["separator"] != true
+                    && child.get("iconPath").is_none()
+                {
+                    child["iconPath"] = json!("titlebar/git-branch.svg");
                 }
             }
-            branches["openOnHover"] = json!(false);
-            chat_rows.push(branches);
         }
-        let mut agent_rows = session_rows;
-        if !chat_rows.is_empty() {
-            if !agent_rows.is_empty() {
-                agent_rows.push(json!({"separator":true}));
-            }
-            agent_rows.extend(chat_rows);
-        }
+        branches["openOnHover"] = json!(false);
+        Some(named_row("branches", branches))
+    }
 
-        // More: Stash prompt, Skills, then the option settings when they overflow.
-        let mut more_rows = Vec::new();
-        more_rows.extend(self.stash_menu_row());
-        more_rows.push(self.skills_row());
+    /// Context window and the option settings, when they overflow the chat box.
+    fn folded_option_rows(&self) -> Vec<Value> {
+        let mut rows = Vec::new();
         let ring_off_row = self.snapshot["composerRow"]["hideContextRing"] == true;
-        if self.snapshot["composerOverflow"]["optionsOverflowed"] == true || ring_off_row {
-            // CDXC:SessionDetails 2026-11-12 DECISION: where the chat has the Session details panel, its first
-            // tab's Context card and its second tab carry this (Q2763, option A); the row stays for a chat
-            // without one.
-            if self.snapshot["contextMeter"].is_object() && !self.session_details_available() {
-                more_rows.push(json!({"label":"Context window","iconPath":"titlebar/circle-half.svg","detail":self.snapshot["contextMeter"]["percentage"],"openOnHover":false,"children":self.context_menu_rows()}));
-            }
-            if self.snapshot["composerOverflow"]["optionsOverflowed"] == true
-                && self.snapshot["optionLabels"]["showOptions"] == true
-                && !self.snapshot["modelMenu"].is_object()
-            {
-                let options: Vec<Value> = self.snapshot["optionMenus"]["options"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .map(|row| {
-                        let mut row = row.clone();
-                        if row["heading"] != true
-                            && row["separator"] != true
-                            && row.get("iconPath").is_none()
-                        {
-                            row["iconPath"] = json!("titlebar/brain.svg");
-                        }
-                        row
-                    })
-                    .collect();
-                more_rows.push(json!({
-                    "label": self.snapshot["optionLabels"]["optionsTitle"].as_str().unwrap_or("Options"),
-                    "iconPath":"titlebar/adjustments-horizontal.svg",
-                    "detail":self.snapshot["optionLabels"]["options"],
-                    "disabled":self.snapshot["optionLabels"]["options"].as_str().is_none_or(str::is_empty),
-                    "openOnHover":false,
-                    "children":options,
-                }));
-            }
+        if self.snapshot["composerOverflow"]["optionsOverflowed"] != true && !ring_off_row {
+            return rows;
         }
-
-        rows.push(json!({"separator":true}));
-        if !agent_rows.is_empty() {
-            rows.push(json!({"label":"Agent","iconPath":"titlebar/robot.svg","openOnHover":false,"children":agent_rows}));
+        // CDXC:SessionDetails 2026-11-12 DECISION: where the chat has the Session details panel, its first
+        // tab's Context card and its second tab carry this (Q2763, option A); the row stays for a chat
+        // without one.
+        if self.snapshot["contextMeter"].is_object() && !self.session_details_available() {
+            rows.push(json!({"label":"Context window","iconPath":"titlebar/circle-half.svg","detail":self.snapshot["contextMeter"]["percentage"],"openOnHover":false,"children":self.context_menu_rows()}));
         }
-        rows.push(json!({"label":"More","iconPath":"titlebar/dots.svg","openOnHover":false,"children":more_rows}));
-        // Lined up with the More actions button, not the point it was clicked at.
-        self.menu_side = Some(super::option_menu::MenuSide::Right);
-        let trigger = super::toolbar::button_trigger(
-            self.composer_button_bounds.more_actions.get(),
-            position,
-        );
-        self.show_chat_menu(rows, trigger, 240.0, window, cx);
+        if self.snapshot["composerOverflow"]["optionsOverflowed"] == true
+            && self.snapshot["optionLabels"]["showOptions"] == true
+            && !self.snapshot["modelMenu"].is_object()
+        {
+            let options: Vec<Value> = self.snapshot["optionMenus"]["options"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|row| {
+                    let mut row = row.clone();
+                    if row["heading"] != true
+                        && row["separator"] != true
+                        && row.get("iconPath").is_none()
+                    {
+                        row["iconPath"] = json!("titlebar/brain.svg");
+                    }
+                    row
+                })
+                .collect();
+            rows.push(json!({
+                "label": self.snapshot["optionLabels"]["optionsTitle"].as_str().unwrap_or("Options"),
+                "iconPath":"titlebar/adjustments-horizontal.svg",
+                "detail":self.snapshot["optionLabels"]["options"],
+                "disabled":self.snapshot["optionLabels"]["options"].as_str().is_none_or(str::is_empty),
+                "openOnHover":false,
+                "children":options,
+            }));
+        }
+        rows
     }
 
     /// The notice card's Switch account button: the same panel as More actions > Switch Account.
@@ -511,7 +648,10 @@ impl NativeChatView {
         } else if action.command["type"] == "saveAsBoost" {
             // Save as Boost on selected words (gx-chat-core `composer/transcript_menu.rs`): a new
             // Boost holding them, named in Settings > Boosts (tabs/boosts.rs).
-            let text = action.command["text"].as_str().unwrap_or_default().to_string();
+            let text = action.command["text"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
             // CDXC:Boosts 2026-11-20 WHY: the web page has no Settings ("Settings is not available
             // in the browser"), so there Save as Boost saves at once through the core, named by its
             // first words, as the phone does; Settings > Boosts on the computer renames it.
@@ -537,6 +677,11 @@ impl NativeChatView {
             );
         } else if action.command["type"] == "replyToSelection" {
             self.open_reply_popover(&action.command, window, cx);
+        } else if action.command["type"] == "sidebarMenu" {
+            cx.emit(super::state::NativeChatEvent::Host(json!({
+                "type": "sidebarMenuCommand",
+                "command": action.command["command"],
+            })));
         } else if action.command["type"] == "host" {
             self.host(
                 action.command["action"].as_str().unwrap_or_default(),

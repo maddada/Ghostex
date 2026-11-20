@@ -31,7 +31,7 @@ const DEFINITIONS: &[Definition] = &[
     },
     Definition {
         id: "delayedActions",
-        label: "Delayed actions",
+        label: "Delayed Send",
         hotkey: Some("delayedSend"),
     },
     Definition {
@@ -41,7 +41,7 @@ const DEFINITIONS: &[Definition] = &[
     },
     Definition {
         id: "fork",
-        label: "Fork Session",
+        label: "Fork",
         hotkey: Some("forkSession"),
     },
     Definition {
@@ -56,12 +56,12 @@ const DEFINITIONS: &[Definition] = &[
     },
     Definition {
         id: "promptEditor",
-        label: "Prompt editor",
+        label: "Prompt Editor",
         hotkey: Some("promptEditor"),
     },
     Definition {
         id: "stashPrompt",
-        label: "Stash prompt",
+        label: "Stash Prompt",
         hotkey: Some("stashPrompt"),
     },
     Definition {
@@ -85,7 +85,7 @@ const DEFINITIONS: &[Definition] = &[
     // it (composer/document.rs).
     Definition {
         id: "viewPlaybook",
-        label: "View playbook",
+        label: "View Playbook",
         hotkey: None,
     },
 ];

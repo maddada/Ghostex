@@ -37,6 +37,8 @@ const PANE_ACTION_COMMAND_IDS: &[&str] = &[
     "wakeFocusedSession",
     "closeFocusedSession",
     "popOutPane",
+    // Left the session menus for the palette (CDXC:ContextMenus 2026-11-20 in sidebar_menu/layout.rs).
+    "generateSessionTitle",
 ];
 
 /// `(commandId, modal, searchText, title)`.
@@ -630,13 +632,15 @@ fn focused_pane_icon(action: &str) -> &'static str {
         "openBrowserPane" => "browser",
         "rotatePanesClockwise" => "rotate-clockwise",
         "mergeAllTabs" => "window-maximize",
-        "delayedSend" | "closeAfterDone" => "clock",
+        "delayedSend" => "clock-check",
+        "closeAfterDone" => "clock",
         "forkSession" => "git-fork",
         "reloadSession" => "refresh",
         "sleepFocusedSession" => "moon",
         "wakeFocusedSession" => "player-play",
         "closeFocusedSession" => "x",
         "popOutPane" => "external-link",
+        "generateSessionTitle" => "sparkles",
         _ => "layout-sidebar-right-expand",
     }
 }

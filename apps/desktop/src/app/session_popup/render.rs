@@ -810,13 +810,13 @@ impl GhostexGpuiApp {
         if session.agent_icon == Some("browser") {
             return None;
         }
-        let tooltip = titlebar_tooltip_label("Open in a Popup", "popOutPane");
+        let tooltip = titlebar_tooltip_label("Popout", "popOutPane");
         let color = titlebar_icon_color();
         Some(
             div()
                 .id("ghostex-gpui-workarea-header-session-popup")
                 .role(gpui::Role::Button)
-                .aria_label("Open in a Popup")
+                .aria_label("Popout")
                 .flex()
                 .flex_shrink_0()
                 .items_center()

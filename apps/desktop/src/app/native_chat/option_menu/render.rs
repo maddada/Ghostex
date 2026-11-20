@@ -20,7 +20,11 @@ impl ChatOptionMenuPanel {
         let Some(row) = self.rows.get(index) else {
             return;
         };
-        if row["disabled"] == true || row["heading"] == true || row["separator"] == true {
+        if row["disabled"] == true
+            || row["heading"] == true
+            || row["separator"] == true
+            || row["quick"].is_array()
+        {
             return;
         }
         if let Some(children) = row["children"].as_array() {
@@ -89,6 +93,87 @@ impl ChatOptionMenuPanel {
                     .update(cx, |menu, cx| menu.close(Some(command), cx));
             }
         }
+    }
+
+    /// A tile of the session menu's quick row (gx-core sidebar_menu/layout.rs) runs its own command.
+    fn activate_quick(&mut self, index: usize, tile: usize, cx: &mut Context<Self>) {
+        let Some(button) = self.rows.get(index).and_then(|row| row["quick"].get(tile)) else {
+            return;
+        };
+        if button["disabled"] == true {
+            return;
+        }
+        if let Some(command) = button.get("command").cloned() {
+            self.menu
+                .update(cx, |menu, cx| menu.close(Some(command), cx));
+        }
+    }
+
+    /// The quick row: tiles side by side, an icon over a label of up to two lines (the sidebar
+    /// menu's tiles, native_sidebar/menus.rs).
+    fn render_quick_row(
+        &self,
+        index: usize,
+        tiles: &[serde_json::Value],
+        foreground: gpui::Rgba,
+        hover: gpui::Hsla,
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement {
+        let scale = self.menu.read(cx).appearance.scale;
+        let mut strip = div()
+            .flex_shrink_0()
+            .flex()
+            .w_full()
+            .h(px(self.heights[index] * scale))
+            .gap(px(super::geometry::QUICK_TILE_GAP * scale))
+            .pb(px(4.0 * scale));
+        for (tile_index, tile) in tiles.iter().enumerate() {
+            let label = tile["label"].as_str().unwrap_or_default().to_owned();
+            let disabled = tile["disabled"] == true;
+            let icon_path = tile["iconPath"].as_str().map(str::to_owned);
+            strip = strip.child(
+                div()
+                    .id(format!("option-menu-tile-{index}-{tile_index}"))
+                    .role(gpui::Role::Button)
+                    .aria_label(label.clone())
+                    .flex_1()
+                    .min_w_0()
+                    .h_full()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .justify_center()
+                    .gap(px(4.0 * scale))
+                    .px(px(4.0 * scale))
+                    .rounded(px(6.0 * scale))
+                    .bg(hover.opacity(0.5))
+                    .when(!disabled, |tile| tile.hover(|tile| tile.bg(hover)))
+                    .when(disabled, |tile| tile.opacity(0.42))
+                    .when_some(icon_path, |tile, path| {
+                        tile.child(
+                            svg()
+                                .path(path)
+                                .flex_shrink_0()
+                                .size(px(16.0 * scale))
+                                .text_color(foreground),
+                        )
+                    })
+                    .child(
+                        div()
+                            .max_w_full()
+                            .text_center()
+                            .line_clamp(2)
+                            .text_size(px(super::geometry::QUICK_TILE_TEXT * scale))
+                            .line_height(px(14.0 * scale))
+                            .child(label),
+                    )
+                    .on_click(cx.listener(move |this, _, _window, cx| {
+                        cx.stop_propagation();
+                        this.activate_quick(index, tile_index, cx);
+                    })),
+            );
+        }
+        strip.into_any_element()
     }
 
     fn hover(&mut self, index: usize, _window: &mut Window, cx: &mut Context<Self>) {
@@ -209,6 +294,7 @@ impl ChatOptionMenuPanel {
                         row["heading"] != true
                             && row["separator"] != true
                             && row["disabled"] != true
+                            && !row["quick"].is_array()
                     })
                     .map(|(index, _)| index)
                     .collect();
@@ -304,6 +390,10 @@ impl Render for ChatOptionMenuPanel {
                 );
                 continue;
             }
+            if let Some(tiles) = row["quick"].as_array() {
+                body = body.child(self.render_quick_row(index, tiles, foreground, hover, cx));
+                continue;
+            }
             let label = row["label"].as_str().unwrap_or_default().to_owned();
             let description = row["description"].as_str().map(str::to_owned);
             let badge = row["badge"].as_str().map(str::to_owned);
@@ -366,6 +456,11 @@ impl Render for ChatOptionMenuPanel {
                     (true, false) => 0.42,
                 })
                 .when(selected, |item| item.bg(hover))
+                .when(row["danger"] == true, |item| {
+                    item.text_color(crate::app::helpers::chrome_palette::chrome_color(
+                        0xff7b72, 0xd32f2f,
+                    ))
+                })
                 .on_mouse_move(cx.listener(move |this, _, window, cx| {
                     if !disabled {
                         this.hover(index, window, cx);
@@ -380,12 +475,19 @@ impl Render for ChatOptionMenuPanel {
                     .map(|icon| format!("agent-icons/{icon}.svg"))
             });
             if let Some(icon_path) = icon_path {
+                let ink = if row["danger"] == true {
+                    gpui::Hsla::from(crate::app::helpers::chrome_palette::chrome_color(
+                        0xff7b72, 0xd32f2f,
+                    ))
+                } else {
+                    gpui::Hsla::from(foreground)
+                };
                 item = item.child(
                     svg()
                         .path(icon_path)
                         .flex_shrink_0()
                         .size(px(m.icon * scale))
-                        .text_color(foreground),
+                        .text_color(ink),
                 );
             }
             // A lifecycle dot instead of a glyph (the fork branch list).

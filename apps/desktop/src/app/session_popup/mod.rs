@@ -1,5 +1,5 @@
-//! Sessions in popups: windows of their own. Open in a Popup (the session's right-click menu, the
-//! work area header's button, the split-pane grip's menu, the Open in a Popup hotkey, or
+//! Sessions in popups: windows of their own. Popout (the session's right-click menu, the
+//! work area header's button, the split-pane grip's menu, the Popout hotkey, or
 //! Option-click on the sidebar row) moves a chat or terminal session out of its pane into a plain
 //! top-level window drawn on the same app state; the pane shows a card with Show Window and Bring
 //! Back, and closing the window puts its sessions back. A popup holds several sessions as tabs
@@ -18,8 +18,8 @@
 //! centred on the Ghostex window. The pop-ups that were open come back at the next launch. Chats
 //! and terminals only; browser tabs not yet.
 //!
-//! CDXC:SessionPopup 2026-11-17 DECISION:
-//! User: every place that offers a session's own window says "Open in a Popup" (title case where the menu uses title case, "Open in a popup" in sentence case): the session menu, the work area header button's tooltip and label, the split-pane grip's menu, and the hotkey's name in Settings > Keyboard and Quick Access. The hotkey id `popOutPane` and its setting keys stay. Supersedes the name Open in New Window above; the Project board's own Open in New Window is not a session's and keeps its name.
+//! CDXC:SessionPopup 2026-11-20 DECISION:
+//! User, picking one name per session action (Q4292, the one session menu in gx-core sidebar_menu/layout.rs): every place that offers a session's own window says "Popout": the session menu's quick row, the work area header button's tooltip and label, the header's ⋯, the split-pane grip's menu, and the hotkey's name in Settings > Keyboard and Quick Access ("Session: Popout"). The hotkey id `popOutPane` and its setting keys stay. Supersedes "Open in a Popup" (2026-11-17) and Open in New Window above; the Project board's own Open in New Window is not a session's and keeps its name.
 //!
 //! CDXC:SessionPopup 2026-11-16 WHY:
 //! It follows the Kanban board's pop-out (native_kanban/window.rs): the session's chat view and
@@ -215,9 +215,9 @@ impl SessionPopups {
     }
 }
 
-/// The row's right-click menu with Open in a Popup added under Move to Group (or above
-/// Advanced). Added here, where the desktop answers the menu, so the menu the phone builds never
-/// has it.
+/// The row's right-click menu with Popout added (above More; `popup_row_into_quick_row` then moves
+/// it into the quick row). Added here, where the desktop answers the menu, so the phone, which has
+/// no popups, never gets it.
 pub(crate) fn with_open_in_new_window_row(
     mut items: Vec<serde_json::Value>,
     row_id: &str,
@@ -225,9 +225,11 @@ pub(crate) fn with_open_in_new_window_row(
     if items.is_empty() || SessionKey::parse_sidebar_session_id(row_id).is_none() {
         return items;
     }
+    let entry = ghostex_gx_core::session_menu_layout::entry("popout").expect("popout entry");
     let row = serde_json::json!({
-        "label": "Open in a Popup",
-        "icon": "external-link",
+        "label": entry.label,
+        "icon": entry.icon,
+        "hotkey": entry.hotkey,
         "checked": false,
         "disabled": false,
         "command": {
@@ -236,11 +238,10 @@ pub(crate) fn with_open_in_new_window_row(
             "action": OPEN_IN_NEW_WINDOW_ACTION,
         },
     });
+    let more = ghostex_gx_core::session_menu_layout::MORE.label;
     let at = items
         .iter()
-        .position(|item| item["label"] == "Move to Group")
-        .map(|index| index + 1)
-        .or_else(|| items.iter().position(|item| item["label"] == "Advanced"))
+        .position(|item| item["label"] == more)
         .unwrap_or(items.len());
     items.insert(at, row);
     items

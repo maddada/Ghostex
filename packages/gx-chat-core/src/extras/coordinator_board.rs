@@ -740,7 +740,7 @@ fn card_menu(row: &BoardRow, work: bool) -> Vec<BoardMenuItem> {
     }
     if row.set_tag.is_object() {
         menu.push(BoardMenuItem {
-            label: "Tags".to_string(),
+            label: "Tag As".to_string(),
             icon: "tag".to_string(),
             submenu: "tags".to_string(),
             ..BoardMenuItem::default()
@@ -748,7 +748,14 @@ fn card_menu(row: &BoardRow, work: bool) -> Vec<BoardMenuItem> {
     }
     if row.done.is_object() {
         menu.push(BoardMenuItem {
-            label: "Mark done".to_string(),
+            // The session menus' one name for a thread (sidebar_menu/layout.rs); a link card is no
+            // thread.
+            label: if row.open_thread.is_object() {
+                "Mark Thread Done"
+            } else {
+                "Mark Done"
+            }
+            .to_string(),
             icon: "circle-check".to_string(),
             command: row.done.clone(),
             ..BoardMenuItem::default()
@@ -2576,8 +2583,8 @@ mod tests {
             vec![
                 "Open PR #214",
                 "Mention in chat",
-                "Tags",
-                "Mark done",
+                "Tag As",
+                "Mark Done",
                 "Remove from board"
             ]
         );

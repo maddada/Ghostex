@@ -317,6 +317,29 @@ impl GhostexGpuiApp {
                             GpuiFocusedPaneRuntimeAction::PopOutPane => {
                                 self.toggle_session_popup_for_focused_pane(cx);
                             }
+                            // The session menus' old Generate Title row: the sidebar's own
+                            // `renameSession` message (gx-core sidebar_menu/commands.rs
+                            // `generate_session_title`). The row's text, the saved first prompt,
+                            // never reaches this client, so it goes empty and gxserver names the
+                            // session from its recent prompts (gx_store/terminal_lifecycle/
+                            // session_edits.rs). No focused agent session: nothing, like Fork.
+                            GpuiFocusedPaneRuntimeAction::GenerateSessionTitle => {
+                                self.prune_local_workspace_session_mappings();
+                                if let Some(session) = self
+                                    .focused_agents_or_companion_shell_session_id()
+                                    .and_then(|id| self.workspace_terminal_session_key(id))
+                                {
+                                    self.dispatch_native_sidebar_command(
+                                        serde_json::json!({
+                                            "type": "renameSession",
+                                            "sessionId": session.to_sidebar_session_id(),
+                                            "title": "",
+                                            "shouldGenerateTitle": true,
+                                        }),
+                                        cx,
+                                    );
+                                }
+                            }
                         }
                         return;
                     }

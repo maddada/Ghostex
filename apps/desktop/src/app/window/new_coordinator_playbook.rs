@@ -19,7 +19,7 @@ pub(crate) const OVERRIDES_DESCRIPTION: &str = "Your own instructions for every 
 pub(crate) const OVERRIDES_HINT: &str =
     "Every coordinator, existing ones too, follows them from its next message.";
 const EDIT: &str = "Edit";
-pub(crate) const VIEW_PLAYBOOK: &str = "View playbook";
+pub(crate) const VIEW_PLAYBOOK: &str = "View Playbook";
 pub(crate) const PLAYBOOK_VIEW_TITLE: &str = "Coordinator playbook";
 pub(crate) const PLAYBOOK_VIEW_DESCRIPTION: &str = "What every coordinator reads, top to bottom: Ghostex's playbook with the reply format you chose, then your overrides, which take precedence. Ghostex's part comes with Ghostex and updates with it.";
 pub(crate) const EDIT_OVERRIDES: &str = "Edit overrides";

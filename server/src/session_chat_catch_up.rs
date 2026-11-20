@@ -111,7 +111,7 @@ async fn catch_up(state: &AppState, body: &Value) -> Result<Value, DomainStateEr
     if !catch_up_enabled(&state.paths) {
         return Err(failure(
             "disabled",
-            "Catch me up is off. Turn it on in Settings > Chat.",
+            "Catch Me Up is off. Turn it on in Settings > Chat.",
         ));
     }
     let (session, project_path) = {
@@ -486,7 +486,7 @@ async fn run_agent(
     let missing = || {
         failure(
             "agentUnavailable",
-            format!("Catch me up uses {label} (`{binary}`), which isn't installed on this computer. Install it, or pick another Title Generation Agent in Settings > Agents."),
+            format!("Catch Me Up uses {label} (`{binary}`), which isn't installed on this computer. Install it, or pick another Title Generation Agent in Settings > Agents."),
         )
     };
     let mut process = child.spawn().map_err(|_| missing())?;

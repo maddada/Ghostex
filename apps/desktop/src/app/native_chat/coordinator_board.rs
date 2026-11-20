@@ -2426,7 +2426,7 @@ impl NativeChatView {
             panel = panel.child(
                 item(
                     "chat-board-card-menu-back".to_string(),
-                    "Tags".to_string(),
+                    "Tag As".to_string(),
                     Some(("titlebar/chevron-left.svg".to_string(), foreground)),
                     false,
                 )

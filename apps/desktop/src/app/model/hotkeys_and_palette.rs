@@ -53,6 +53,7 @@ pub(crate) enum GpuiFocusedPaneRuntimeAction {
     ForkSession,
     ReloadSession,
     PopOutPane,
+    GenerateSessionTitle,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -222,6 +223,9 @@ pub(crate) fn gpui_focused_pane_hotkey_action(
         )),
         "popOutPane" => Some(GpuiFocusedPaneHotkeyAction::RuntimeNoOp(
             GpuiFocusedPaneRuntimeAction::PopOutPane,
+        )),
+        "generateSessionTitle" => Some(GpuiFocusedPaneHotkeyAction::RuntimeNoOp(
+            GpuiFocusedPaneRuntimeAction::GenerateSessionTitle,
         )),
         _ => gpui_command_pane_focused_session_hotkey_action(action_id)
             .map(GpuiFocusedPaneHotkeyAction::CommandSession),

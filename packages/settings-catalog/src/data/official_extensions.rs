@@ -338,7 +338,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     // User: "please make session notes a built in extension in the extensions page so i can toggle it on and off and if it's off then hide it from the sessions context menu and from the more actions menu in the chat composer and everywhere (should be disabled by default)". A whole-feature entry with a new key (`sessionNotesHidden`, default on = hidden), so it starts off for new and existing users. Off removes the Note row of a session's menu and its hover button, the note dot and the note line in the card's tooltip, the Session note row of the chat's and the terminal bar's More actions, the note dialog, the Session Note hotkey and its Quick Access row, and `ghostex session-note`; the phone follows through `builtInFeaturesOff`. Saved notes are kept and come back when it is turned on.
     // SEE-ALSO: packages/gx-core/src/sidebar_view/inputs.rs (`session_notes_enabled`), apps/desktop/src/app/session_notes.rs, apps/gpui-web/src/app/session_notes.rs, apps/mobile/app/src/sessions/sessionNotesSwitch.ts.
     J::Obj(&[
-        ("description", J::Str("Attach a note to an agent conversation, such as what to do next when you come back to it: Note in a session's menu, Session note in the chat's More actions, and a dot on the session's card while it has one. Notes you wrote are kept while this is off.")),
+        ("description", J::Str("Attach a note to an agent conversation, such as what to do next when you come back to it: Note in a session's menus (the sidebar and the chat box), and a dot on the session's card while it has one. Notes you wrote are kept while this is off.")),
         ("category", J::Str("features")),
         ("id", J::Str("sessionNotes")),
         ("placement", J::Str("feature")),

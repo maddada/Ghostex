@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 /// CDXC:SessionChat 2026-10-20 DECISION:
 /// User: "Please make the dictation button always show up here. At the bottom right next to the send button." Dictate is not in this list: `render_toolbar` draws it right before Send and it never folds into More actions. The phone does the same (apps/mobile/app/src/chat/native/composer/menus.ts).
 pub(super) const COMPOSER_CONTROLS: [(&str, &str, &str, &str); 4] = [
-    ("note", "sessionNote", "Session note", "titlebar/note.svg"),
+    ("note", "sessionNote", "Note", "titlebar/note.svg"),
     (
         "attach",
         "attachPath",

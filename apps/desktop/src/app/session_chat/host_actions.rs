@@ -146,6 +146,14 @@ impl GhostexGpuiApp {
             self.receive_gpui_app_toast_bridge_message(&message, cx);
             return;
         }
+        // A shared row of the chat box ⋯ (Copy, Tag As, Close, …): the sidebar menu's own row for
+        // this session, run as the sidebar runs it (gx-core sidebar_menu/layout.rs).
+        if message.get("type").and_then(serde_json::Value::as_str) == Some("sidebarMenuCommand") {
+            if let Some(command) = message.get("command") {
+                self.dispatch_native_sidebar_ui(command.clone(), cx);
+            }
+            return;
+        }
         // CDXC:Settings 2026-09-06 WHY: The chat bridge previously dropped Settings opens as unknown chat actions, so the account settings shortcut did nothing. Route this modal through the existing native modal owner.
         // CDXC:SessionChat 2026-09-06 WHY:
         // Transcript diagrams use the shared modal launcher; their expand requests must reach the native diagram window instead of being discarded as unknown chat actions.

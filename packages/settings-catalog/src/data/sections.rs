@@ -276,6 +276,7 @@ pub const HOTKEY_SETTINGS_SECTIONS: J = J::Arr(&[
                 J::Str("closeFocusedSession"),
                 J::Str("closeFocusedSurface"),
                 J::Str("popOutPane"),
+                J::Str("generateSessionTitle"),
                 J::Str("splitMore"),
                 J::Str("splitMoreDown"),
             ]),

@@ -20,7 +20,7 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | New Chat: Where It Runs | `alt+w` |  | none |  | While a new chat's message box has focus, open where it runs (This folder, New worktree, Existing, Cloud Box) in the bar above it; 1 to 4 pick. It takes Option+W from the message box on a Mac (no ∑ there): if your keyboard types a letter with Option+W, pick another key. | `newChatPickWhere` |
 | New Chat: Branch | `alt+b` |  | none |  | While a new chat's message box has focus, open the last part of the bar above it: This folder's branch, a new worktree's base branch, the existing worktree, or the Cloud Box pick. It takes Option+B from the message box on a Mac (no ∫ there): if your keyboard types a letter with Option+B, pick another key. | `newChatPickBranch` |
 | Toggle Voice Agent | `ctrl+alt+v` | `cmd+alt+shift+v` | `ctrl+alt+v` | `cmd+alt+shift+v` | Start a spoken conversation with the voice agent, or end the one that is running. | `toggleVoiceAgent` |
-| Voice Call About This Session | unassigned |  | unassigned |  | Start a voice call about the session you are looking at, or move the open call to it. | `voiceCallAboutSession` |
+| Session: Voice Call | unassigned |  | unassigned |  | Start a voice call about the session you are looking at, or move the open call to it. | `voiceCallAboutSession` |
 | Hold to Talk | unassigned |  | unassigned |  | During a voice call, hold to talk to the voice agent and let go to send; in a muted Regular call, hold to unmute. Works even while you're typing. | `holdToTalk` |
 | Dictate | `ctrl+alt+space` |  | none |  | Dictate into the chat box of the chat session you are in. Tap to start and tap again to stop, or hold it and it stops when you let go (Settings > Voice > Hotkey mode). | `toggleDictation` |
 | Read Last Reply Aloud | unassigned |  | none |  | Read the agent's newest reply in the chat you are looking at aloud, from the start. | `readAloudLastReply` |
@@ -43,7 +43,7 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Toggle View Panel | `cmd+alt+b` |  | `cmd+alt+b` |  | Open or close the view panel beside your sessions. | `toggleViewPanel` |
 | Expand Side Panel | `cmd+ctrl+e` |  | `cmd+ctrl+e` |  | Expand the side panel over the Agents Panel, or bring the Agents Panel back. | `expandViewPanel` |
 | Expand Side Panel Fully | `cmd+ctrl+shift+e` |  | `cmd+ctrl+shift+e` |  | Expand the side panel over the Agents Panel and hide the sidebar, or bring both back. | `expandViewPanelFully` |
-| Rename Active Session | `cmd+r` | `cmd+shift+r` | `cmd+r` | `cmd+shift+r` | Rename the focused session. | `renameActiveSession` |
+| Session: Rename | `cmd+r` | `cmd+shift+r` | `cmd+r` | `cmd+shift+r` | Rename the focused session. | `renameActiveSession` |
 | Open Browser Pane | `cmd+t` |  | `cmd+t` | `cmd+shift+l` | Open a browser tab beside the focused tab. | `openBrowserPane` |
 | Switch to Agents | unassigned |  | unassigned |  | Switch to Agents view. | `switchAgentsView` |
 | Switch to VS Code | unassigned |  | unassigned |  | Switch to VS Code view. | `switchSourceView` |
@@ -64,12 +64,12 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Switch to View Tab 9 | `alt+9` |  | `alt+9` |  | Open tab 9 in the view panel's tab strip. | `switchTitlebarView9` |
 | Rotate Panes Clockwise | `ctrl+shift+l` | `cmd+alt+l` | `ctrl+shift+l` | `cmd+alt+l` | Rotate panes clockwise in the focused group. | `rotatePanesClockwise` |
 | Merge All Tabs | `ctrl+shift+m` | `cmd+alt+m` | `ctrl+shift+m` | `cmd+alt+m` | Merge the focused group's panes into one tabbed pane. | `mergeAllTabs` |
-| Delayed Actions | `ctrl+shift+s` | `cmd+alt+s` | `ctrl+shift+s` | `cmd+alt+s` | Open delayed actions for the focused terminal session. | `delayedSend` |
+| Session: Delayed Send | `ctrl+shift+s` | `cmd+alt+s` | `ctrl+shift+s` | `cmd+alt+s` | Open Delayed Send for the focused terminal session. | `delayedSend` |
 | Close After Done | unassigned |  | unassigned |  | Toggle Close After Done for the focused terminal session. | `closeAfterDone` |
 | Model & Effort Picker | `alt+p` |  | `alt+p` |  | Open the model picker: arrows choose a model and its reasoning, Enter saves it as the default, Option+Enter uses it in this session only. | `openModelPicker` |
 | Prompt Editor | `ctrl+g` | `cmd+shift+g` | `ctrl+g` | `cmd+shift+g` | Open the prompt editor for the focused terminal, or maximize the chat box of the chat you are in (press again to restore it). | `promptEditor` |
 | Attach File or Folder | `cmd+alt+p` |  | `cmd+alt+p` |  | Attach a file or folder to the focused terminal. | `attachFileOrFolder` |
-| Session Note | `cmd+alt+n` |  | `cmd+alt+n` |  | Open the note attached to the focused agent conversation. | `sessionNote` |
+| Session: Note | `cmd+alt+n` |  | `cmd+alt+n` |  | Open the note attached to the focused agent conversation. | `sessionNote` |
 | Stash Prompt | `alt+s` |  | `alt+s` |  | Stash the current prompt in the focused agent terminal. | `stashPrompt` |
 | Saved Prompts | `cmd+alt+s` | `cmd+shift+s` | `cmd+alt+s` | `cmd+shift+s` | Open saved prompts for the focused agent session. | `stashedPrompts` |
 | Handoff / Export | unassigned |  | unassigned |  | Export the focused agent session's transcript and hand it off to another agent. | `exportTranscript` |
@@ -80,12 +80,13 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Scroll Terminal to Top | unassigned |  | unassigned |  | Scroll the focused terminal to the top. | `scrollTerminalToTop` |
 | Scroll Terminal to Bottom | unassigned |  | unassigned |  | Scroll the focused terminal to the bottom. | `scrollTerminalToBottom` |
 | Split Right | `alt+shift+d` |  | `alt+shift+d` |  | Move the focused session into a pane to the right. | `splitSessionRight` |
-| Fork Session | `cmd+ctrl+shift+f` | `cmd+alt+shift+f` | `cmd+ctrl+shift+f` | `cmd+alt+shift+f` | Fork the focused session. | `forkSession` |
-| Reload Session | unassigned |  | unassigned |  | Reload the focused session. | `reloadSession` |
-| Sleep Focused Session | `cmd+shift+a` |  | `cmd+shift+a` | unassigned | Sleep the focused terminal session. | `sleepFocusedSession` |
-| Wake Focused Session | unassigned |  | unassigned |  | Wake the focused sleeping terminal session. | `wakeFocusedSession` |
-| Close Focused Session | `cmd+shift+backspace` |  | `cmd+shift+backspace` |  | Close the focused pane or session. | `closeFocusedSession` |
-| Open in a Popup | `ctrl+shift+o` | `cmd+alt+o` | `ctrl+shift+o` | `cmd+alt+o` | Open the focused pane's session in a popup, or bring it back. | `popOutPane` |
+| Session: Fork | `cmd+ctrl+shift+f` | `cmd+alt+shift+f` | `cmd+ctrl+shift+f` | `cmd+alt+shift+f` | Fork the focused session. | `forkSession` |
+| Session: Full Reload | unassigned |  | unassigned |  | Fully reload the focused session. | `reloadSession` |
+| Session: Sleep | `cmd+shift+a` |  | `cmd+shift+a` | unassigned | Sleep the focused terminal session. | `sleepFocusedSession` |
+| Session: Wake | unassigned |  | unassigned |  | Wake the focused sleeping terminal session. | `wakeFocusedSession` |
+| Session: Close | `cmd+shift+backspace` |  | `cmd+shift+backspace` |  | Close the focused pane or session. | `closeFocusedSession` |
+| Session: Popout | `ctrl+shift+o` | `cmd+alt+o` | `ctrl+shift+o` | `cmd+alt+o` | Open the focused pane's session in a popup, or bring it back. | `popOutPane` |
+| Session: Generate Title | unassigned |  | unassigned |  | Name the focused session from its recent prompts. | `generateSessionTitle` |
 | Previous Group | unassigned |  | unassigned |  | Focus the previous group. | `focusPreviousGroup` |
 | Next Group | unassigned |  | unassigned |  | Focus the next group. | `focusNextGroup` |
 | Back | `cmd+[` | `cmd+alt+shift+[` | `cmd+[` | `cmd+alt+shift+[` | Go back to the previously active session or project. | `navigateHistoryBack` |
@@ -159,7 +160,7 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Browser History | `cmd+y` | `cmd+h` | none |  | Show the history of the browser page you are on. | `openBrowserHistory` |
 | Reload Page | `cmd+r` |  | none |  | Reload the browser page you are on (F5 also reloads it). | `reloadBrowserPage` |
 | Annotate | `cmd+ctrl+a` | `alt+shift+a` | none |  | Turn Annotate on or off for the HTML file in Files or the Browser page you are on, or comment on the text you selected in a Markdown file in Files. | `toggleAnnotate` |
-| Sleep Focused Session (Second Key) | `alt+shift+s` |  | `alt+shift+s` |  | A second key that sleeps the focused terminal session. | `sleepFocusedSessionSecondKey` |
+| Session: Sleep (Second Key) | `alt+shift+s` |  | `alt+shift+s` |  | A second key that sleeps the focused terminal session. | `sleepFocusedSessionSecondKey` |
 | Unfocus Terminal | terminal only |  | `cmd+shift+m` |  | Take the keyboard out of the terminal, so the hotkeys that apply outside a terminal work next. | `unfocusTerminal` |
 | Focus Last Terminal | `cmd+shift+m` |  | none |  | Put the keyboard back in the terminal that had it last, bringing its session forward if it is not on screen. | `focusLastTerminal` |
 | Focus Sidebar | `cmd+shift+j` |  | `cmd+shift+j` |  | Move the keyboard to the sidebar's session list, showing the sidebar if it is hidden: arrow keys move through the sessions and Enter opens one. Escape or the same key gives the keyboard back. | `focusSidebar` |

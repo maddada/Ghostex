@@ -139,7 +139,7 @@ const TERMINAL_AGENT_BAR_DICTATE_ICON: &str = "titlebar/microphone.svg";
 const TERMINAL_AGENT_BAR_STOP_DICTATING_ICON: &str = "titlebar/player-stop.svg";
 const TERMINAL_AGENT_BAR_TRANSCRIBING_ICON: &str = "titlebar/loader2.svg";
 const TERMINAL_AGENT_BAR_EXPORT_TRANSCRIPT_ICON: &str = "titlebar/file-export.svg";
-const TERMINAL_AGENT_BAR_SWITCH_ACCOUNT_ICON: &str = "titlebar/user-circle.svg";
+const TERMINAL_AGENT_BAR_SWITCH_ACCOUNT_ICON: &str = "titlebar/switch-horizontal.svg";
 const TERMINAL_AGENT_BAR_SKILLS_ICON: &str = "titlebar/sparkles.svg";
 const TERMINAL_AGENT_BAR_SUBMENU_CHEVRON_ICON: &str = "titlebar/chevron-right.svg";
 /// The Switch Account flyout: bottom-aligned with the menu (its row sits near the window's bottom,
@@ -232,8 +232,8 @@ impl TerminalAgentBarAction {
     fn label_and_hotkey_action_id(self) -> (&'static str, &'static str) {
         match self {
             Self::ToggleMenu => ("More actions", "toggleAgentActions"),
-            Self::SessionNote => ("Session note", "sessionNote"),
-            Self::StashPrompt => ("Stash prompt", "stashPrompt"),
+            Self::SessionNote => ("Note", "sessionNote"),
+            Self::StashPrompt => ("Stash Prompt", "stashPrompt"),
             Self::StashedPrompts => ("Saved prompts", "stashedPrompts"),
             Self::AttachPath => ("Attach a file or folder", "attachFileOrFolder"),
             Self::Maximize => (
@@ -242,13 +242,13 @@ impl TerminalAgentBarAction {
             ),
             Self::Dictate => ("Dictate", ""),
             Self::ToggleChatView => ("Chat View", "toggleChatView"),
-            Self::PromptEditor => ("Prompt editor", "promptEditor"),
+            Self::PromptEditor => ("Prompt Editor", "promptEditor"),
             Self::VerboseMode => ("Verbose mode", ""),
-            Self::DelayedActions => ("Delayed actions", "delayedSend"),
+            Self::DelayedActions => ("Delayed Send", "delayedSend"),
             Self::CloseAfterDone => ("Close After Done", "closeAfterDone"),
             Self::Rename => ("Rename", "renameActiveSession"),
             Self::Sleep => ("Sleep", "sleepFocusedSession"),
-            Self::Fork => ("Fork Session", "forkSession"),
+            Self::Fork => ("Fork", "forkSession"),
             Self::FullReload => ("Full Reload", "reloadSession"),
             Self::SwitchAccount => ("Switch Account", ""),
             Self::Skills => ("Skills", ""),
