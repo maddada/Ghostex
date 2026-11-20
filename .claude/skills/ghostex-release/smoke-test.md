@@ -5,14 +5,21 @@ Written 2026-11-17 from the user's picks on the checklist page
 (`docs/2026-11-17/smoke-test/index.html`, Q3734 to Q3736). The page shows the
 checklist; this file is what a thread follows.
 
-Nothing here has been run yet. The first real run is a trial: where a selector,
-a column or a command below turns out wrong, fix it in this file in the
-after-release commit (see "Keeping the list").
+It has run on every release since 11.9.0. Where a selector, a column or a
+command below turns out wrong, fix it in this file in the after-release commit
+(see "Keeping the list").
+
+**The script does the CLI half.** `scripts/smoke.sh` (beside this file) makes
+the 2.1, 2.2, 3.1, 3.2 and 4.1 sessions, sends their messages, waits for the
+replies, takes the crash baseline, publishes the 5.3 page, puts Claude's and
+Codex's defaults back after 6.1 and 6.2, and cleans up, with every ref in one
+`$W/refs.json`. The agent does only the GUI presses. `smoke.sh help` lists its
+commands; each step below says which one to run.
 
 ## The rules (the user's decisions, 2026-11-17)
 
-- **An agent runs every step**, including the two that only need eyes (1.4 and
-  5.3), driving the GUI with the `cua-driver` skill. The user does none of them
+- **An agent runs every step**, including the one that only needs eyes (5.3),
+  driving the GUI with the `cua-driver` skill. The user does none of them
   ("no man i won't do 1.4 5.3, you do those too using /cua-driver").
 - **The agent may restart the app itself** ("u can restart fam"). Sessions live
   in zmx, so they survive an app restart. This overrides AGENTS.md's "never run
@@ -31,8 +38,17 @@ after-release commit (see "Keeping the list").
 - **Crash checks stay for three releases (Q3734)**, then are dropped. See
   "Keeping the list".
 - **A fix means a whole new run.** If anything stops the release: the release
-  stops, the fault is fixed and pushed, the app is rebuilt, and all 16 steps run
+  stops, the fault is fixed and pushed, the app is rebuilt, and every step runs
   again. Warnings alone never stop it, and don't need a rerun.
+- **Press only what a `query` read returned** (user, 2026-11-20, after the
+  11.12.0 run: `run_steps` matched a bare "Open" to "Start your last agent in
+  the open project" and started a new agent). Find every control with
+  `get_window_state({pid, window_id, query:"<exact name>"})` and press its
+  `element_token`; never pass a bare word to a press or a `run_steps` step.
+  Name the exact control: a page card's `Open page …` button, the coordinator
+  card's `Start` (not the sidebar's `Start your last agent …`). Read the
+  matched row's name before pressing; if the query returned more than one, or
+  the wrong one, narrow the query instead of guessing.
 
 ## Where, when, who
 
@@ -42,29 +58,69 @@ after-release commit (see "Keeping the list").
   pushed (step 2 and 3 of SKILL.md are done: `HEAD == origin/main`).
 - **Who:** one thread, started by the Main Coordinator. Not the coordinator
   itself.
-- **How long:** about 15 minutes after the build (the build adds about 1 to 6).
+- **How long:** about 10 minutes after the build (the build adds about 1 to 6,
+  the typecheck before it about 1 to 3).
+- **Windows and Linux** run a short GUI pass of their own in parallel (see
+  "Windows pass" and "Linux pass" below), and the phone gets its own step (7).
 
 ## Before the first step
 
 1. `git rev-parse HEAD` is the release point. Write it in the report.
-2. Rebuild and relaunch the app from it. In the background:
+   The coordinator may build from a release worktree
+   (`~/.local/share/agent-work/Ghostex/release-<X>/ghostex`, see `git worktree
+   list`) while the main checkout's `main` has drifted from `origin/main`
+   (11.11.1 run: ahead 73, behind 79). Then the release point is that
+   worktree's HEAD, not the main checkout's. To prove the installed app is
+   that build, find a string literal that only one of the two trees has
+   (`git diff --stat <main-HEAD> <release>`, then grep a removed or added
+   file) and `LC_ALL=C grep -c -a '<string>'
+   /Applications/Ghostex.app/Contents/MacOS/Ghostex`.
+2. **Typecheck first, then rebuild.** In the release point's tree (the release
+   worktree when it builds from there), run `cargo xtask typecheck` before the
+   rebuild. It also fails on unformatted app-owned files and stale generated
+   Help files, which the prepare step (SKILL.md step 3) would otherwise find
+   only after the smoke passed (11.12.0: 10 unformatted files, a formatting
+   commit on top of the smoked build). If it fails, don't rebuild: report it to
+   the coordinator, who commits the fix (`cargo xtask format` for formatting)
+   and pushes; that commit is the new release point, and the smoke starts
+   again from step 1. Then rebuild and relaunch the app from it, in the
+   background:
    `cargo xtask rebuild` (committed code only, log under
    `~/.local/share/agent-work/Ghostex/rebuilds/`). It is a fast dev build
    (opt-level 0), not the signed release build; say so in the report. Add
    `--optimized` (check `cargo xtask help` for how `rebuild` passes it) only
    when the user asks for a build closer to what ships. If it exits 3 (can't
    sign), run it from a shell started since the last login, or ask the user.
-3. Record the baseline for crash detection:
-   `ls ~/.local/state/ghostex/logs/crashes > $W/crashes-before.txt`,
-   `wc -l ~/.local/state/ghostex/logs/gpui-crash-reports.log` and
-   `ls ~/Library/Logs/DiagnosticReports | grep -i ghostex`, and (from 11.9.0)
-   `ls -la ~/.local/state/ghostex/logs/crash-reports/`. `$W` is
-   `~/.local/share/agent-work/Ghostex/smoke/<release-commit-short>-run<N>/`.
    The dev build carries no commit stamp and still reports the previous version
    (the version bump is the prepare commit), so match the release point by the
    rebuild log's start time against the commit time.
-4. Resolve your project: `ghostex agents whoami --json` (project id `$P`).
-5. Name every session you create `smoke-<step>-run<N>`. Clean up at the end.
+3. **Start the script:** `S=.claude/skills/ghostex-release/scripts/smoke.sh;
+   SMOKE_RELEASE=<release point> $S run` (from the main checkout; leave
+   `SMOKE_RELEASE` out when the release point is this checkout's HEAD). It
+   picks `$W` (`~/.local/share/agent-work/Ghostex/smoke/<release-short>-run<N>/`,
+   the next free N, remembered for the later commands), resolves your project
+   (`ghostex agents whoami --json`), reads the latest models, saves the crash
+   baseline (`crashes/`, the panic log's line count, Ghostex's
+   DiagnosticReports, `crash-reports/`) and copies of
+   `~/.claude/settings.json` and `~/.codex/config.toml`, creates the 2.1, 2.2,
+   3.1, 3.2 and 4.1 sessions (named `smoke-<step>-run<N>`), skips Codex's
+   update picker where it shows, and sends 2.1's, 2.2's and 4.1's first
+   message. It prints every ref; `$S show` prints them again. Anything the GUI
+   steps make by hand goes in the same file for the clean-up: `$S add session
+   <ref>`, `$S add page <id>`, `$S add tab <devtools-port> <target-id>`, `$S add
+   project <id>`. The crash checks run with `$S check crash` (any time; the
+   default `$S check` includes it).
+4. **Size the window and the capture once, now** (11.12.0 run: mixing the
+   default 1366 px capture with full-size ones sent a click to the wrong
+   place, because cua-driver maps pixels to the last screenshot's scale).
+   Write the main window's frame down (`list_windows({pid})`, into
+   `$W/window-frame-before.txt`), then `set_window_frame` it to **1680 by
+   1024**, and pass `max_image_dimension: 0` (full size) on **every**
+   `get_window_state` and screenshot for the whole run, never the default.
+   That also meets the 1650 by 962 screenshot rule. Put the frame back at
+   the end.
+5. Name every session you create by hand `smoke-<step>-run<N>` and record it
+   with `$S add session <ref>`.
 6. Look at what the cua-driver skill says first (`list_windows({app:"Ghostex"})`
    gives the `pid` and `window_id`; read narrowly with `get_window_state` and a
    `query`; act with `run_steps`; check with `verify_state`). Work in the
@@ -130,8 +186,9 @@ after-release commit (see "Keeping the list").
      often turned into an AX press of whatever the hit-test finds ("PX
      hit-test pressed the background element via AX") and then misses
      controls that have no press.
-   - **Presses added after 11.11.0** (2026-11-19, first in the release after
-     it; an older build still needs the `drag` below): the header `Work`
+   - **Presses added after 11.11.0** (2026-11-19, first in 11.11.1, where
+     the run confirmed the Work button, the menu rows and the Close Group
+     dialog; an older build still needs the `drag` below): the header `Work`
      button (main window and a popup's), every frosted sidebar menu row
      (role MenuItem, labelled with its text: `Snooze`, `Park`, `Advanced`,
      `Move to New Group`, a group's `Ungroup` and `Close`), the Needs you
@@ -144,7 +201,22 @@ after-release commit (see "Keeping the list").
      `Close`, the command's `Copy` and `Run in terminal`) already answered a
      press; the panel is its own window, so `list_windows({pid})` for its
      window_id first. Pressing an answer there closes the panel as a mouse
-     press does.
+     press does. On a session's menu, `Move to New Group` and `Move to Group`
+     (a submenu of group names) sit under `Advanced`, which opens as a
+     second menu window. A group's `Close` asks only when the group holds
+     two or more sessions; with one it closes the group and its session at
+     once (`sidebar_menu/project.rs`). The Close Group dialog is its own
+     window (about 460 by 167): read it by window_id, not with a `Cancel`
+     query on the main window, which only matches menu-bar items.
+   - **Not in the tree yet (11.11.1):** the header ⋯ menu (`More header
+     controls`) lists its rows as unlabelled `AXMenuItem`s, the pin on each
+     row is an invisible 24 px target at the row's right end that answers
+     mouse-down only (`header_pins_look.rs`), a pinned header control shows
+     as a button with no press, and its right-click menu's `Unpin from
+     header` is one unlabelled `AXMenuItem` (pressing it works). Read the ⋯
+     menu from its screenshot, pin with a zero-length `drag` about 26 px in
+     from the row's right edge (window pixels of the menu window), and open
+     the Unpin menu with a pixel `right_click` on the pinned control.
    - **Real pointer events: a zero-length background `drag`.** `drag` is
      pixel-only (no AX substitute), so it delivers a real mouse down/up to
      the window in the background, and it takes `modifier`:
@@ -153,12 +225,23 @@ after-release commit (see "Keeping the list").
      `get_window_state` screenshot of that window. Seen working on the
      11.11.0 follow-up: it collapsed the chat's Needs you dock (a GPUI
      control) and pressed the native red close button of a second window.
-     Use it for a Cmd+click (`modifier:["cmd"]`, the Files table link), and
+     Use it for a Cmd+click (`modifier:["cmd"]`, the Files table link;
+     confirmed on 11.11.1: it opened the linked file. `ghostex open <file>`
+     switches the window to that file's project Space and opens Files
+     beside that Space's open chat; close the Files tab with a zero-length
+     `drag` on its ×, which isn't in the tree, and switch back with the
+     sidebar's `Space <name>` button), and
      on a build from before the presses above for the header Work button
      and the frosted sidebar menu rows. Read the result from the
      accessibility tree too: the Work panel shows as an element labelled
      `Work` about 380 wide at the chat's right edge, and the button carries
-     `aria_expanded`.
+     `aria_expanded`. Some windows' screenshots don't line up with where a
+     pixel lands (11.11.1 run: Settings, the Search palette, page and menu
+     windows return a picture of a larger area): take pixel targets from
+     `get_window_state` with `tree_format:"elements"`, whose
+     `screenshot_frame` is in the coordinates `drag` and `click` use, not
+     from what the picture shows. A drag aimed by the picture at Settings'
+     Session notes card toggled Voice agent instead (put back at once).
    - **Check the window is on screen before trusting a screenshot**:
      `list_windows({pid})` `is_on_screen` and `on_current_space` for the
      main window. If the user moves to another Space, the window keeps
@@ -191,127 +274,97 @@ after-release commit (see "Keeping the list").
      "Update Codex to …? Answer it in chat before sending". Press Escape in
      each Codex session (`ghostex send-key <ref> escape`, which picks Skip;
      never "Update now") and resend with the `--request-id` it printed. The
-     coordinator's First message card survives it.
+     coordinator's First message card survives it. `smoke.sh` does this
+     itself for the sessions it makes (after creating them, before each
+     send and before each reply wait); do it by hand only for a Codex
+     session you made yourself.
 7. **A crash at any time** (the app disappears from `list_apps`, a new file in
    `crashes/`, a new panic line, a new DiagnosticReport, or `ghostex sessions`
    hangs more than 15 seconds) is a **Stop**, whichever step was running. Log it
-   with the step number and carry on only to gather evidence.
+   with the step number and carry on only to gather evidence. `$S check crash`
+   compares all four against the baseline and times `ghostex sessions`; run
+   it after any step that looked wrong, and once at the end.
 
 ## The steps
 
 "Latest" model: the first non-alias entry per agent in
-`ghostex coordinator options --json` (today `claude-fable-5-2` for Claude; read
-the Codex one the same way) and say which you used. `$ref` is the `globalRef`
-from the create result.
+`ghostex coordinator options --json` (11.12.0: `claude-fable-5-2` for Claude,
+`gpt-6.2-sol` for Codex). `smoke.sh run` reads them and prints which it used;
+say them in the report. `$ref` is a step's `globalRef` (`$S show`).
 
 | Step | On failure |
 | --- | --- |
-| 1.1 to 1.3 | Stop |
-| 1.4 | Warn |
+| 1.x crash checks | none at the moment (see "Keeping the list") |
 | 2.1, 2.2 | Warn |
 | 3.1, 3.2 | Warn |
 | 4.1, 4.2 | Stop if keys don't land; otherwise Warn |
 | 5.1 to 5.4 | Stop |
 | 6.1, 6.2 | Stop if stray text is left in the input box; otherwise Warn |
+| 7 Phone | to be written (see step 7) |
 
 ### 1. The last crash (crash checks; see "Keeping the list")
 
-**1.1 Chat ending in one-click answers.** Fix `f95220d0d` (v11.8.2; #638, #640, #642).
-1. `ghostex agents create claude --project-id $P --title smoke-1.1-runN --task 'Reply with one line, then these two links on their own line: [Yes](ghostex-answer:Q9001) [No](ghostex-answer:Q9001)'`
-   (`create-agent` has no `--title`). The agent's auto title replaces the
-   `--title` within a minute (a Claude one may copy the sender's session name),
-   so track every session by its `$ref`, not its title.
-2. Wait until `ghostex read-session-chat $ref --limit 3 --json` shows the reply.
-3. Open that chat so it is the front chat (`ghostex focus $ref`), quit Ghostex
-   (menu Ghostex > Quit), start it again (cua-driver `launch_app`, then
-   `spaceo_adopt_app` if you use SpaceO), and check the same chat is open.
-4. **Pass:** the app is running again with the chat open, the Yes and No buttons
-   show (`get_window_state` with `query:"Yes"`), and the crash baseline from step
-   3 is unchanged. **Stop** on a quit, a panic, or no buttons.
-
-**1.2 Restart with a coordinator chat open.** Fix `71d23ed20`, `4f9c7dcc6` (v11.8.1, v11.8.2).
-1. Use the coordinator that step 3.1 makes (do 3.1 first if it helps, or make
-   one: `ghostex coordinator create --agent claude --title smoke-1.2-runN --task "say hello"`).
-   Open its chat in the app.
-2. Restart the app: quit and `launch_app`, as in 1.1.
-3. Within 15 seconds of the window appearing: `ghostex sessions --json` returns,
-   and a click on the sidebar row and on the chat's transcript still works
-   (`click`, then `verify_state`). A coordinator that hasn't started yet (see
-   3.1) shows only the welcome screen, which has no element to press; press
-   its card's Edit/Start area or, once it has replied, a transcript button
-   such as `Worked for … · N tool calls` (`spaceo_find "Worked for"`).
-   To keep inside the 15 seconds, do quit, launch and both presses in one
-   `run_script` (`cua.launch("/Applications/Ghostex.app")`, poll
-   `cua.listWindows({pid})` for the big layer-0 window, `app.query({role:
-   "row", name})` then `app.click(token)`, `app.query({name: "Worked for"})`
-   and click it) and return the times; then time `ghostex sessions --json`.
-4. **Pass:** all three answer. **Stop** if any hangs (the freeze).
-
-**1.3 A chat with no saved Reply draft.** Fixes `dbcb1b304`, `52100362b` (v11.8.0).
-1. `ghostex agents create codex --project-id $P --title smoke-1.3-runN` (no task,
-   so it never had a Reply draft).
-2. Click its row in the sidebar to open its chat.
-3. **Pass:** the chat opens with its transcript or an empty chat, the app stays
-   up, no new crash file or panic line. **Stop** otherwise.
-
-**1.4 Ghostex's notes stay hidden.** Fixes `275b1fc7d`, `71d23ed20` (#627; v11.8.0, v11.8.2).
-1. Send the coordinator from 1.2 a message: `ghostex agents send $coord 'Reply with: smoke-note-ok'`.
-2. `ghostex read-session-chat $coord --limit 6 --json`: the assistant reply must
-   contain `smoke-note-ok`.
-3. With cua-driver, `get_window_state` on that chat and also take a screenshot:
-   no text containing `ghostex-system`, `<ghostex-` or a raw note block shows in
-   the transcript.
-4. **Pass:** the reply is there and no note text is visible. **Warn** otherwise.
+None at the moment. 1.1 to 1.4 (one-click answers, restart with a coordinator
+chat, no saved Reply draft, notes hidden) passed in three smoke-tested
+releases and were dropped after 11.12.0; the table under "Keeping the list"
+has their record. When a release fixes a crash, its check goes here as 1.1
+with the same columns, and `smoke.sh` gets its session if the check needs one.
 
 ### 2. Threads
 
-**2.1 Latest Claude.** `ghostex create-agent claude --project-id $P --model <latest Claude> --effort low`
-(no `--title` there: `ghostex rename-session <sessionId> smoke-2.1-runN`, which
-the auto title may replace again), then `ghostex agents send $ref 'Reply with exactly: smoke-ok-2.1'`.
-**Pass:** within 120 seconds `ghostex read-session-chat $ref --limit 4 --json`
-has that text from the assistant. **Warn** otherwise (say if it is the account:
-`ghostex accounts`).
-
-**2.2 Latest Codex.** The same with `create-agent codex --model <latest Codex>`
-and `smoke-ok-2.2`.
+**2.1 Latest Claude, 2.2 latest Codex.** `smoke.sh run` made them
+(`create-agent <agent> --model <latest> --effort low`, renamed
+`smoke-2.x-runN`; the auto title may replace that, so go by `$ref`) and sent
+each `Reply with exactly: smoke-ok-2.x`. Run `$S check 2.1 2.2` (the default
+`$S check` includes them): it waits for each reply side by side and prints
+PASS with the seconds since the send, or WARN.
+**Pass:** within 120 seconds the assistant's reply has that text. **Warn**
+otherwise (say if it is the account: `ghostex accounts`). A message that could
+not be sent at all (the agent didn't start) shows as WARN with the send's
+error.
 
 ### 3. Coordinators
 
-**3.1 With Claude.** `ghostex coordinator create --project-id $P --agent claude --title smoke-3.1-runN --task 'Reply with exactly: smoke-ok-3.1'`.
-From 11.10.0 a new coordinator does not start by itself: its first message
-(the skill line plus `--task`) waits as a "First message" card in its chat box
-with Edit and Start. Open its chat (`ghostex focus $ref`) and press the card's
-Start (`spaceo_find "Start"` role Button; not the sidebar's "Start your last
-agent" one), or send it any message. Time the 120 seconds from Start.
-**Pass:** it shows in the sidebar (`ghostex coordinator list --project-id $P --json`
-lists it) and `read-session-chat` has the reply within 120 seconds. **Warn**
-otherwise.
-
-**3.2 With Codex.** The same with `--agent codex` and `smoke-ok-3.2`.
+**3.1 With Claude, 3.2 with Codex.** `smoke.sh run` made them with
+`coordinator create --task 'Reply with exactly: smoke-ok-3.x'`. From 11.10.0 a
+new coordinator does not start by itself: its first message (the skill line
+plus `--task`) waits as a "First message" card in its chat box with Edit and
+Start. Open its chat (`ghostex focus $ref`), read the card's `Start` button by
+query (role Button; not the sidebar's `Start your last agent …`) and press its
+token, then straight away `$S check 3.1` (or `3.2`): the 120 seconds run from
+that call. Without the GUI, `$S run --start-coordinators` starts them at
+creation instead (a test server).
+**Pass:** it shows in the sidebar (the check also finds it in `ghostex
+coordinator list`) and the reply comes within 120 seconds. **Warn** otherwise.
 
 ### 4. Terminal and browser
 
 **4.1 Terminal command.**
-1. `ghostex create-session smoke-4.1-runN --start --project-id $P` (its
-   `session.globalRef` is the id). Not `ghostex terminal`: run from `$W` it adds
-   a new project named after that folder, and its terminal never starts.
-2. `ghostex send-text <id> 'echo smoke-ok-4.1'` and `ghostex send-enter <id>`.
-3. `ghostex focus <id>` (keyboard focus to the pane), then type a second
-   command with real keys (`spaceo_type` `echo smoke-keys-4.1` with submit, or
+1. `smoke.sh run` made the terminal (`create-session smoke-4.1-runN --start`;
+   not `ghostex terminal`, which run from `$W` adds a new project named after
+   that folder) and sent `echo smoke-ok-4.1` with `send-text` and
+   `send-enter`.
+2. `ghostex focus $ref` (keyboard focus to the pane), then type a second
+   command with real keys: `echo smoke-keys-4.1` (`spaceo_type` with submit, or
    cua-driver `type_text` and `press_key` Return), so real keys are tested, not
    only the CLI. Without SpaceO, `type_text` with only pid/window is refused
    (`no_focused_text_input`); pass the token of the `AXTextArea "Terminal"`
-   row (`get_window_state` query `Terminal`). Also paste one line: save the
-   user's clipboard, put the line on it, cua-driver `hotkey` cmd+v on
+   row (`get_window_state` query `Terminal`). Press Return with `press_key`
+   on pid and window_id, not on that token (refused: "the addressed element
+   did not acquire keyboard focus"). Then paste `echo smoke-paste-4.1`: save
+   the user's clipboard, put the line on it, cua-driver `hotkey` cmd+v on
    the window (it runs Edit > Paste), Return, then restore the clipboard.
    `pbpaste` saves text only: when `osascript -e 'clipboard info'` shows an
    image or HTML, save and restore every type with
    `~/.local/share/agent-work/Ghostex/smoke/scripts/pbarchive save|restore
    <file>` (Swift, NSPasteboard; `cmp` a second save against the first to
    prove the restore).
-4. **Pass:** `ghostex read-text <id> --lines 20` shows `smoke-ok-4.1` and
-   `smoke-keys-4.1`, and the paste lands with no "can't be delivered" message.
-   **Stop** if typed keys or the paste don't arrive (`dd5fd7d46`, next release).
+3. `$S check 4.1` reads the terminal: PASS when all three lines echoed
+   (`smoke-ok-4.1`, `smoke-keys-4.1`, `smoke-paste-4.1`), PENDING when only the
+   CLI line is there yet, STOP when a typed line is missing after the GUI part
+   or "can't be delivered" shows.
+4. **Pass:** all three echoed and no "can't be delivered" message.
+   **Stop** if typed keys or the paste don't arrive (`dd5fd7d46`).
 
 **4.2 Browser: open it and search.**
 1. Open a browser pane: `ghostex browser open https://duckduckgo.com --project-id $P --reuse none`.
@@ -335,7 +388,10 @@ read from the accessibility tree, compare a zoomed screenshot (`zoom`).
 **5.1 A Settings field.** Open Settings (`spaceo_menu ["Ghostex","Settings…"]`;
 if Ghostex takes activation and SpaceO pauses, `spaceo_session_resume` and open
 it again; on the 11.10.0 run it opened as window `[focused]` with no pause, so
-check `spaceo_list_windows` first). There is no General name box. The field that takes background
+check `spaceo_list_windows` first). Without SpaceO: `invoke_menu
+["Ghostex","Settings…"]`; Settings is its own window (about 1188 by 876,
+`list_windows({pid})`), with a 24 by 24 companion window whose `Close`
+button closes it (Escape only clears the search). There is no General name box. The field that takes background
 focus is Settings' own search box (others, like Accounts > Name, need a real
 click). Type `smoke-field-5.1`.
 **Pass:** the same text reads back (`spaceo_find` TextField shows its value).
@@ -357,33 +413,28 @@ as stray text (clear them and check `read-session-chat-queue` `.draft`).
 although the field offers SetValue and a SetValue fires the same change
 event typing does (gpui-component `handle_accessibility_set_value`; the web
 build's mirror lists `Focus SetValue` on its text boxes); the cause wasn't
-found. Next run, try first: Cmd+P, then
-`get_window_state({pid, window_id:<palette>, query:"Search sessions"})`,
-`set_value({element_token, value:"term"})`, and read the box back with
-`since:"latest"` (its value, and whether the rows narrowed). Then, on screen: open it with Cmd+P, press its
-box with the zero-length background `drag` (a pixel press makes the
-target window key for event routing), then `type_text` on the box's
-element token and read the value back. If that is still refused with
-`window_not_key`, the app needs the palette to accept input while Ghostex
-is in the background (it closes when a key event goes to the main window).
-Until then mark that half NOT RUN (tool route) and say so; Settings'
-search, the chat box (5.4) and the terminal (4.1) still cover native
-typing.
+found. **What works (11.11.1 run):** `hotkey` cmd+p on the main window,
+`list_windows({pid})` for the palette (about 692 by 510), then straight
+away `get_window_state({pid, window_id:<palette>, query:"Search sessions",
+tree_format:"elements"})`, `set_value({element_token, value:"term"})`: the
+box read back `term` and the list narrowed to matching sessions. Clear it
+with `set_value` `""` and close the palette with the `Close` button of its
+24 by 24 companion window. Don't try `type_text` first: it is still refused
+(`window_not_key`, also after a zero-length `drag` on the box) and the
+palette closes after the refusal. Report this half as PASS (AX SetValue,
+not keystrokes); Settings' search, the chat box (5.4) and the terminal
+(4.1) cover native typing.
 
 **5.3 An inline HTML page with inputs.**
-1. Write a throwaway page to `$W/smoke-page.html` from the `ghostex-visuals`
-   skeleton (`<meta name="ghostex-page" content="v2">`): a `gx-questions` page
-   with one text question (`type="text"`) and one choice question. It is a test
-   fixture, not a page for the user: publish it with
-   `ghostex show $W/smoke-page.html --no-check --json` and retire it at the end with
-   `ghostex page retire <page>`, so nothing stays open. (Builds of 11.8.0 to
-   11.8.2, and 11.9.0 builds older than the fix, answer "No gxserver endpoint
-   for POST /api/retireVisualPages"; there, closing the session that shows
-   the card clears its open questions.)
-2. Open the page window in the app: the card needs to be in a chat, so have
-   the 2.1 session echo the ```visual block (`agents send $ref --body-file`
-   with "Reply with exactly the following block and nothing else"), open that
-   chat and press the card's Open. Then click into the text box, type
+1. `$S page`: it writes the throwaway fixture `$W/smoke-page.html` (the
+   `ghostex-visuals` skeleton, a `gx-questions` page with one text question and
+   one choice question), publishes it (`ghostex show … --no-check --json`),
+   records it for the clean-up's `ghostex page retire`, asks the 2.1 chat to
+   echo its ```visual block, and waits until the card is there. It is a test
+   fixture, not a page for the user.
+2. Open the page window in the app: open the 2.1 chat, read the card's button
+   by query (`Open page`) and press that token, never a bare "Open" (see the
+   rules). Then click into the text box, type
    `smoke-page-5.3`, pick a choice. Background input never reaches the page
    window's web view (clicks, keys, Tab and the a/b shortcuts all do nothing),
    and neither does a DevTools click (`ghostex browser mcp`
@@ -433,39 +484,185 @@ typing.
 
 Fixes `5b865f3db` (Claude) and `73f6975d9` (Codex), both in the next release.
 
-**6.1 Claude.** Open the 2.1 chat. Click the model picker in the chat view
-(`get_window_state` query `model`), pick a different model than the current one.
+**6.1 Claude.** Open the 2.1 chat. Press the model picker in the chat view
+(`get_window_state` query `Model:`), pick a different model than the current
+one, then `$S check 6.1` at once.
 Check: the picker label and the transcript show the new model, the input box is
-empty (no `/model` text left), and one message afterwards gets an answer
+empty (no `/model` text left), and the message the check sends gets an answer
 (`smoke-ok-6.1`). CLI cross-check: `ghostex read-session-chat $ref --limit 3 --json`.
 **Stop** if stray text sits in the input box; **Warn** if the model doesn't
 change or the next message gets no answer.
 
-**6.2 Codex.** The same on the 2.2 chat, `smoke-ok-6.2`. Codex writes no
-"Set model" line into the transcript; check the picker label and the next
-reply's `"model"` in `read-session-chat $ref --limit 4 --json`.
+**6.2 Codex.** The same on the 2.2 chat, then `$S check 6.2`. Codex writes no
+"Set model" line into the transcript; check the picker label and the reply
+model the check prints.
 
 The picker is a button `Model: <name>` (`spaceo_find "Model:"`); its list is a
-separate window with the models as MenuItems. Picking a model also changes the
+separate window with the models as MenuItems. Read that window with a query
+naming the models (`Fable|Opus|Sonnet|Haiku`, `GPT`): a query of
+`AXMenuItem` also returns the whole menu bar. Picking a model also changes the
 agent's saved default: Claude's `/model` writes `model` in
 `~/.claude/settings.json` ("saved as your default for new sessions"), and
-Codex writes `model_reasoning_effort` in `~/.codex/config.toml`. Copy both
-files to `$W` before 6.1 and put the old values back after 6.2.
+Codex writes `model` and `model_reasoning_effort` in `~/.codex/config.toml`.
+`smoke.sh run` copied both files to `$W`. **Right after each pick**, run
+`$S check 6.1` (or `6.2`): it first puts that agent's saved default back
+(only those keys, so anything else changed in the files meanwhile stays),
+then sends `Reply with exactly: smoke-ok-6.x` to the chat and waits for the
+answer, printing the reply's model. On the 11.12.0 run the defaults waited
+until the clean-up and every new Claude session in between ran on Haiku.
+The picker label and the empty input box are still yours to read in the GUI.
+
+### 7. Phone (Android emulator on Arch Chungus)
+
+*Placeholder: the coordinator brings this step's text and script from Arch
+Chungus.* Every release ships an over-the-air phone update and nothing above
+opens the phone app. The step runs on the Android emulator on the Arch machine,
+not on the Mac: open a chat, send a message, see the reply. Its On failure
+column, commands and pass check go here when they arrive.
+
+### Windows pass: steps 2, 4 and 5 (runs beside the Mac smoke)
+
+*From Win Chungus's trial; its text, with the script paths changed to the
+repo's.*
+
+Tried once for real on 2026-11-20 on M7-Desktop against the installed 11.12.0.
+SpaceO is macOS only, so the GUI parts run on a **throwaway portable copy** of
+the app on the main display, driven with background cua-driver (0.34) only. The
+user's own Ghostex window and sessions are never clicked, focused or typed into.
+Scripts: `.claude\skills\ghostex-release\scripts\windows\win-*.ps1` in the
+Ghostex checkout on that machine (run them from there or by full path; the
+names below are those files).
+
+**Before the steps**
+- Step 2 runs on the user's real gxserver by CLI, exactly as on the Mac
+  (`create-agent … --model <latest> --effort low`, `rename-session`,
+  `agents send`, `read-session-chat $ref --all --last 3 --format text`;
+  pass = a `· assistant ──` row with the token), then `ghostex agents close`
+  both. It needs the real accounts, which the test copy doesn't have.
+- Start the test copy: `win-launch-test-copy.ps1 -Root <run>\gx` (copies
+  `%LOCALAPPDATA%\Ghostex\current`, or `-From <staged release build>`; adds
+  `.portable`; points GHOSTEX_HOME, USERPROFILE, HOME and CODEX_HOME inside the
+  run folder, so its gxserver's skill/hook installs never touch the user's
+  `~\.claude` or `~\.codex`). It prints the app pid. Find the main window with
+  `list_windows({pid})` (the one wider than 600).
+- Run its CLI only through `win-gx.ps1 -Root <run>\gx <args>`; it strips this
+  session's GHOSTEX_*/WMX_* variables, so nothing reaches the real server.
+  Add a project: `add-project <run>\smoke-project --name smoke-win`.
+- **GPUI takes the foreground whenever it opens or focuses a window** (app
+  start, `browser open`, `settings open`, the Search palette), even when it was
+  started with SW_SHOWNOACTIVATE. Wrap every such step in
+  `win-keep-fg.ps1 -TestPid <pid> -Run { … }`; it hands the foreground back to
+  whatever had it. Before any step that needs the foreground, wait until
+  `GetLastInputInfo` shows the user idle for 5 s or more.
+- Pass the same `session` label on every cua-driver call: a pixel `click`
+  without an earlier `get_window_state` in that session fails with
+  `screenshot_context_missing`. Screenshots at full size:
+  `get_window_state({…, max_image_dimension: 0, screenshot_out_file})`;
+  native size is about 1922x1230 for a 1924x1232 window, and occluded windows
+  capture fine.
+- What works in the background on Windows: UIA presses (Close buttons, sidebar
+  rows by `element_token`), a pixel `click` (PostMessage) to move GPUI focus,
+  then `type_text` with pid and window_id only (it posts WM_CHAR, "unverifiable",
+  so read the result back) and `press_key` return/escape/backspace. What doesn't:
+  key combinations (`hotkey ctrl+v` arrives as a plain `v`) and the sidebar's
+  `Sidebar menu` button (its menu never opens from a press).
+
+**4.1 Terminal.** `create-session smoke-4.1-runN --start --project-id $P`,
+`send-text` and `send-enter`; the pane opens in the test window. Background
+`click` inside the pane (focuses it), `type_text "echo smoke-keys-4.1"`,
+`press_key return`. **Paste:** `win-clipboard.ps1 save <run>\clip`, then
+`win-clipboard.ps1 set "echo smoke-paste-4.1"`. `right_click` in the pane opens
+a "Ghostex Menu" window (Copy, Paste: empty-labelled MenuItems, Paste is the
+second). Press it by token, then `win-clipboard.ps1 restore <run>\clip`. Check
+the restore by saving again and comparing (the PNG matched byte for byte), then
+`press_key return`. **Pass:** `read-text <id> --lines 20` shows
+`smoke-ok-4.1`, `smoke-keys-4.1` and `smoke-paste-4.1`.
+
+**4.2 Browser.** In `win-keep-fg`: `browser open https://duckduckgo.com
+--project-id $P --reuse none`. Background `click` on DuckDuckGo's box (about
+x 1300, y 241 in the split), `type_text "ghostex terminal"`, `press_key
+return`. **Pass:** the screenshot shows every letter, and a results page loads
+(the tab title and address change).
+
+**5.1 Settings field.** In `win-keep-fg`: `win-gx … settings open --json`.
+This opens window "Ghostex Settings", with search box `Edit "Search settings"`
+focused. `type_text "smoke-field-5.1"` (no token). **Pass:** the Edit's
+`value` reads back `smoke-field-5.1`. `press_key escape` empties it. Close
+Settings with its `Close` button (UIA).
+
+**5.2 Search boxes.** In Settings, `type_text "font"`. **Pass:** the value
+reads `font` and the page list narrows (four pages). Escape. **Search
+palette:** a background pixel `click` on the sidebar's search icon (about
+x 30, y 84) opens "Ghostex Quick Access". It takes the foreground, and it
+**closes as soon as it loses it**, so do it in one burst while the user is
+idle: click, `type_text "term"` on the palette's window, `get_window_state`
+(the `Search sessions...` Edit reads `term`), `press_key escape`, then give the
+foreground back. That took 6.8 s on the trial; keep it short. In a test copy
+whose sessions are all named `smoke-*`, type `smoke` so the list visibly
+narrows to rows rather than to "No sessions match".
+
+**5.3 Live page.** NOT RUN on the trial. It needs an agent in the test copy to
+show the page's card. Claude and Codex have no logins there, and OpenCode's
+background service doesn't start in the isolated home ("serviceUnreachable",
+"OpenCode's background service did not start").
+
+**5.4 Chat box.** On the trial: open an agent's chat by pressing its sidebar
+row (UIA `select`), background `click` in the box (about x 700, y 1062),
+`type_text`, then `read-session-chat-queue <ref> --json` `.draft.content` holds
+the text. `press_key return` empties the box and the message shows in the
+transcript. Typing passed; sending failed for the reason in 5.3 (OpenCode).
+With a working agent, pass is as on the Mac.
+
+**Clean up.** `win-gx … kill all`, `win-gx … server stop-all`, then stop the
+processes whose path is under `<run>\gx` (the app's Close leaves it running)
+and delete `<run>\gx`. Close the real step 2 threads with
+`ghostex agents close`. Delete the saved clipboard folder.
+
+**Open on Windows (2026-11-20).** 5.3 and the send half of 5.4 need an agent
+that answers inside the test copy, which has no Claude or Codex logins (and
+OpenCode's background service doesn't start in its isolated home). Until the
+user picks how they run there (copy the logins into the test copy for the run,
+use the installed app while the user is away, or leave them to the Mac run),
+report them `NOT RUN` with that reason. Whether a Windows failure or `NOT RUN`
+stops the release isn't decided yet either: report the Windows lines under the
+Mac's and say which they are.
+
+### Linux pass (Arch Chungus)
+
+*Placeholder: the coordinator brings this text and its scripts from Arch
+Chungus.* Steps 2, 4 and 5 on the Arch machine, in parallel with the Mac run,
+reported in the same format as the Windows pass.
+
+### One-time pop-ups (extras)
+
+A release with a one-time pop-up (Meet the rail in 11.12.0) gets its screenshot
+and checks without replaying the upgrade: never edit the settings file or move
+the shown-once marker aside and restart (11.12.0 did that twice). Run
+`ghostex debug show-modal rail-intro`; it opens the pop-up on the real window
+as it shows after the upgrade, without touching its shown-once state.
+`ghostex debug show-modal --list` lists the others it can open (the
+remaining `native-modal-demo` previews act for real, so they open only in the
+preview binary). Screenshot it at the run's window size, press
+its buttons by query like any other, and close it with its own button.
 
 ### Clean up
 
-Close every `smoke-*-runN` session (`ghostex agents close <ref>` for threads and
-coordinators, which then stay in `coordinator list` as `stopped`; `ghostex kill`
-for terminals), retire the test page and close its page window (its `Close`
-button is in the tree), close the browser tabs you opened (the tab's x; it
-isn't in the accessibility tree and File > Close Pane stays disabled, so
-without SpaceO close its DevTools target: `curl
-http://127.0.0.1:9334/json/close/<id>` with the id from `/json/list`, which
-drops the tab and the split cleanly), remove any project a step added (`ghostex remove-project --project-id <id>`),
-put any setting you touched back (Claude and Codex defaults, the clipboard),
-and end the SpaceO session (`spaceo_session_destroy` with `keep_apps`; a
-hover tooltip left on its display blocks that until Ghostex next restarts). List what you removed in the report (AGENTS.md:
-"Clean up what you create to test").
+`$S cleanup`: it closes every session the script made or you recorded with
+`$S add session` (`ghostex agents close` for threads and coordinators, which
+then stay in `coordinator list` as `stopped`; `ghostex kill` for terminals),
+retires the 5.3 page and any you added, closes the browser tabs you recorded
+(`$S add tab <port> <id>` with the DevTools target from `/json/list`: closing
+the target drops the tab and the split cleanly, since the tab's x isn't in the
+accessibility tree and File > Close Pane stays disabled), removes recorded
+projects, puts back any Claude or Codex default not already restored by
+`$S check 6.x`, and then checks none of those sessions still runs. It prints
+what it removed (keep the list for the report) and exits 1 if anything was
+left. Then, by hand: close the page window (its `Close` button is in the
+tree), restore the clipboard, put the window frame back from
+`$W/window-frame-before.txt`, and end the SpaceO session if you used one
+(`spaceo_session_destroy` with `keep_apps`; a hover tooltip left on its
+display blocks that until Ghostex next restarts). List what you removed in
+the report (AGENTS.md: "Clean up what you create to test").
 
 ## The report
 
@@ -475,12 +672,12 @@ release report (step 9 of SKILL.md). One line per step, and a verdict first.
 ```text
 Smoke test for X.Y.Z: PASS | PASS WITH WARNINGS | STOP
 Release point: <commit>   App: rebuilt <time>, dev build / optimized   Run: N   Took: NN min
-1.1 PASS
-1.2 PASS
-1.3 PASS
-1.4 WARN  note text "<...>" visible in the transcript (screenshot: $W/1.4.png)
+Typecheck: PASS (before the rebuild)   Models: Claude <model>, Codex <model>
+2.1 PASS  smoke-ok-2.1 9 s after the send
+2.2 WARN  no smoke-ok-2.2 120 s after the send (account #2 at its limit)
 ...
 6.2 PASS
+7 (phone), Windows, Linux: <their lines, or NOT RUN: why>
 Crashes: none | <step, file or panic line>
 Stops: none | <step list>     Warnings: none | <step list>
 Cleaned up: <sessions, page, browser pane>
@@ -501,22 +698,34 @@ then is dropped, because every crash fix adds a step and the run only grows.
 
 | Check | Fix shipped in | First smoke-tested in | Drop after |
 | --- | --- | --- | --- |
-| 1.1 One-click answers (`f95220d0d`) | v11.8.2 | next release after v11.8.2 | its third smoke-tested release |
-| 1.2 Restart with a coordinator chat (`4f9c7dcc6`, `71d23ed20`) | v11.8.1, v11.8.2 | same | same |
-| 1.3 No saved Reply draft (`dbcb1b304`, `52100362b`) | v11.8.0 | same | same |
-| 1.4 Ghostex's notes hidden (`275b1fc7d`, `71d23ed20`) | v11.8.0, v11.8.2 | same | same |
+| (none at the moment) | | | |
+
+**Dropped** (from the run reports under `~/.local/share/agent-work/Ghostex/smoke/`;
+the 11.9.0 run, `3c8beb4b2-run1`, left screenshots but no report, so it isn't
+counted; 11.11.0's run, `d7fcee755-run1`, was a formal STOP over 5.2's Search
+palette half, so it doesn't count either, though all four checks passed in it):
+
+| Check | Fix shipped in | Passed in (smoke-tested releases) | Dropped |
+| --- | --- | --- | --- |
+| 1.1 One-click answers (`f95220d0d`) | v11.8.2 | 11.10.0, 11.11.1, 11.12.0 | after 11.12.0 (2026-11-20) |
+| 1.2 Restart with a coordinator chat (`4f9c7dcc6`, `71d23ed20`) | v11.8.1, v11.8.2 | 11.10.0, 11.11.1, 11.12.0 | after 11.12.0 |
+| 1.3 No saved Reply draft (`dbcb1b304`, `52100362b`) | v11.8.0 | 11.10.0, 11.11.1, 11.12.0 | after 11.12.0 |
+| 1.4 Ghostex's notes hidden (`275b1fc7d`, `71d23ed20`) | v11.8.0, v11.8.2 | 11.10.0, 11.11.1, 11.12.0 | after 11.12.0 |
 
 - "Smoke-tested" counts a release whose run reached PASS or PASS WITH WARNINGS.
   A STOP run doesn't count.
 - When a release is out, fill in "First smoke-tested in" for any check that was
   just run for the first time, and delete rows whose third release was this one
-  (also delete the step and renumber the rest). The page and counts in the
+  (also delete the step, renumber the rest of section 1, and move the row to
+  the Dropped table; sections 2 to 7 keep their numbers). The page and counts in the
   chips (`docs/2026-11-17/smoke-test/index.html`) are a snapshot; this file is
   the source.
 - **Do it after the release, in its own commit** (`chore: smoke test list`),
   never in the prepare commit, which changes only `package.json` and
   `CHANGELOG.md`, and never before the dispatch, which needs a clean tree.
 - A crash fixed in a release adds a step in section 1 with the same columns.
-  Steps 2 to 6 are permanent: the user's list.
+  Steps 2 to 6 are permanent: the user's list. Step 7 and the Windows and
+  Linux pass are coverage the user added (2026-11-20), not crash checks, so
+  they don't expire either.
 - The model-change, terminal-paste and long-message fixes live in 4.1, 5.4, 6.1
   and 6.2, which stay because they are the user's permanent list.

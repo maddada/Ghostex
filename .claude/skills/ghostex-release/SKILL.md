@@ -300,15 +300,21 @@ git rev-parse HEAD        # record: the release point
 ### 3a. Smoke test on macOS before dispatch
 
 Before `release:actions` runs for real, the release commit gets a smoke test on
-the user's Mac (user decision 2026-11-17, Q3734 to Q3736). A thread rebuilds the
-app from the release point with `cargo xtask rebuild`, then runs all 16 steps
-itself with the `cua-driver` skill and the `ghostex` CLI: the last crash's
-fixes, threads and coordinators with the latest Claude and Codex, a terminal
-command, a browser search, typing in fields, an inline page and the chat box,
-and a model change on both. It may restart the app itself. A crash or a typing
-failure **stops** the release (fix, rebuild, run all 16 again); every other
-failed step is a **warning** in the report, and a warning does not stop the
-dispatch. Crash checks stay for three releases. It takes about 15 minutes.
+the user's Mac (user decision 2026-11-17, Q3734 to Q3736). A thread runs
+`cargo xtask typecheck` on the release point (so formatting and generated
+files are settled before the smoke, not after it), rebuilds the app from it
+with `cargo xtask rebuild`, then runs every step itself: `scripts/smoke.sh`
+does the CLI half (sessions, messages, reply waits, the crash baseline, the
+5.3 page, the defaults after a model pick, the clean-up) and the thread does
+the GUI presses with the `cua-driver` skill. The steps: any current crash
+checks (none since 11.12.0), threads and coordinators with the latest Claude
+and Codex, a terminal command, a browser search, typing in fields, an inline
+page and the chat box, a model change on both, and (once their text lands)
+a phone step and a Windows and Linux pass. It may restart the app itself. A
+crash or a typing failure **stops** the release (fix, rebuild, run every step
+again); every other failed step is a **warning** in the report, and a warning
+does not stop the dispatch. Crash checks stay for three releases. It takes
+about 10 minutes after the build.
 
 The runbook, with every command, pass check, stop or warn call, the report format
 and the three-release rule, is [smoke-test.md](smoke-test.md). Put its verdict
