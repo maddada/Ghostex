@@ -1,6 +1,6 @@
 //! Drawing the rail: a 40pt column at the window's left, the room under the window buttons at its
 //! top, the pinned icons, an unpinned item while its view shows (under a dashed line), ⋯, and at
-//! its foot the account usage toggle.
+//! its foot the workspace, the account usage toggle and Toggle sidebar.
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -170,6 +170,7 @@ impl GhostexGpuiApp {
             )
             .children(workspace)
             .children(usage)
+            .child(self.render_sidebar_rail_sidebar_toggle(&appearance, cx))
             .into_any_element()
     }
 
@@ -512,6 +513,50 @@ impl GhostexGpuiApp {
             .on_click(cx.listener(|app, _, _, cx| {
                 cx.stop_propagation();
                 app.toggle_native_sidebar_usage_visible(cx);
+            }))
+            .managed_tooltip_with_placement(ManagedTooltipPlacement::Right, move |window, cx| {
+                crate::app::native_sidebar::link_chips::sidebar_style_tooltip(
+                    tooltip.to_string(),
+                    window,
+                    cx,
+                )
+            })
+            .into_any_element()
+    }
+
+    /// Toggle sidebar, in the rail's bottom corner.
+    ///
+    /// CDXC:Sidebar 2026-11-20 DECISION:
+    /// User, after 11.12.0: "pls move the left sidebar collapse expand to the new rail when rail is enabled and keep the notification on the top left of the sidebar". With the rail on, Toggle sidebar is the rail's last button, at its foot, so it stays in one place whether the sidebar is shown or hidden (the rail stays when the sidebar hides), and the bell and Search keep their places at the rail's top. The sidebar's top row and the hidden sidebar's header (and Claude's copy of that row) draw no toggle then (native_sidebar/navigation.rs, render/workarea_header/breadcrumb.rs). Same action, hotkey and tooltip as the header's (`render_sidebar_collapse_button`). Classic is unchanged.
+    fn render_sidebar_rail_sidebar_toggle(
+        &self,
+        appearance: &SidebarAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let hover = appearance.hover;
+        let tooltip = titlebar_tooltip_label("Toggle sidebar", "toggleSidebarCollapsed");
+        div()
+            .id("ghostex-gpui-sidebar-rail-sidebar-toggle")
+            .role(gpui::Role::Button)
+            .aria_label("Toggle sidebar")
+            .mt(px(RAIL_GAP))
+            .flex_shrink_0()
+            .size(px(RAIL_BUTTON))
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(RAIL_BUTTON_RADIUS))
+            .cursor_default()
+            .hover(move |button| button.bg(hover))
+            .child(titlebar_svg_icon(
+                crate::app::consts::TITLEBAR_ICON_LAYOUT_SIDEBAR,
+                RAIL_ICON,
+                appearance.chrome_icon,
+            ))
+            .on_click(cx.listener(|app, _, _, cx| {
+                cx.stop_propagation();
+                // With Claude on, showing the sidebar leaves Claude (app/claude_web/takeover.rs).
+                app.toggle_sidebar_from_user(cx);
             }))
             .managed_tooltip_with_placement(ManagedTooltipPlacement::Right, move |window, cx| {
                 crate::app::native_sidebar::link_chips::sidebar_style_tooltip(

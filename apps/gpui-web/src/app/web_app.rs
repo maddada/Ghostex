@@ -229,6 +229,13 @@ impl GhostexGpuiApp {
         div()
     }
 
+    /// Toggle sidebar on the rail's foot (app/sidebar_rail/render.rs): the page has no Claude to
+    /// leave, so it only shows or hides the sidebar, as the page header's own toggle does.
+    pub(crate) fn toggle_sidebar_from_user(&mut self, cx: &mut Context<Self>) {
+        self.sidebar_collapsed = !self.sidebar_collapsed;
+        cx.notify();
+    }
+
     /// The bell is never shown here (`titlebar_notification_bell_visible`), so neither is its dropdown.
     pub(crate) fn toggle_gpui_titlebar_notifications_popup(
         &mut self,
