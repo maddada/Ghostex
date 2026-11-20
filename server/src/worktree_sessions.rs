@@ -412,7 +412,26 @@ const REBUILDABLE_FOLDERS: &[&str] = &[
     ".venv",
     "__pycache__",
     ".turbo",
+    ".pytest_cache",
+    "coverage",
+    ".cache",
 ];
+
+/// Ignored files that hold nothing of the user's: Finder's folder settings and TypeScript's build
+/// info. Never `.env` or a database, which only count as rebuildable inside a build folder.
+const HARMLESS_FILES: &[&str] = &[".DS_Store"];
+const HARMLESS_SUFFIXES: &[&str] = &[".tsbuildinfo"];
+
+/// An ignored path removing the worktree may delete: inside a rebuildable folder, or a harmless file.
+fn is_rebuildable(path: &str) -> bool {
+    let parts: Vec<&str> = path.trim_end_matches('/').split('/').collect();
+    let name = parts.last().copied().unwrap_or_default();
+    parts.iter().any(|part| REBUILDABLE_FOLDERS.contains(part))
+        || HARMLESS_FILES.contains(&name)
+        || HARMLESS_SUFFIXES
+            .iter()
+            .any(|suffix| name.ends_with(suffix))
+}
 
 /// What `git worktree remove` would delete without `--force` though `git status --porcelain`
 /// shows nothing.
@@ -463,12 +482,7 @@ pub fn worktree_hidden_work(worktree_path: &str) -> Option<Option<WorktreeHidden
         .lines()
         .filter_map(|line| line.strip_prefix("!! "))
         .map(|path| path.trim().trim_matches('"').to_string())
-        .filter(|path| {
-            !path
-                .trim_end_matches('/')
-                .split('/')
-                .any(|part| REBUILDABLE_FOLDERS.contains(&part))
-        })
+        .filter(|path| !is_rebuildable(path))
         .collect();
     if !ignored.is_empty() {
         return Some(Some(WorktreeHiddenWork::Ignored(first_paths(ignored))));

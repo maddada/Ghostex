@@ -7069,7 +7069,11 @@ coordinator started (never one it adopted, and never a coordinator or your own s
 quiet for at least 20 minutes, not open on screen, with no message from its coordinator
 still on its way, on its branch's own merged PR, and with nothing a removal would lose:
 no uncommitted changes, no files git ignores outside build folders (such as `.env`), no
-changes git status hides, and no commits outside the merged PR. It keeps the branch.
+changes git status hides, and no commits outside the merged PR. Build and cache folders
+(`node_modules`, `target`, `dist`, `build`, `.next`, `.venv`, `__pycache__`, `.turbo`,
+`.pytest_cache`, `coverage`, `.cache`) and `.DS_Store` and `*.tsbuildinfo` files count as
+rebuildable and may go, so a local database kept inside `build/`, `dist/` or `target/` is
+removed with them; keep it elsewhere in the worktree to have the worktree kept. It keeps the branch.
 Clean up and Clean up all keep such worktrees too and say why, and the banner says
 "N kept: <why>". A cleaned-up thread stays where it was: waking it or messaging it is
 refused (a message to it too, with what to do), never moved onto your own
