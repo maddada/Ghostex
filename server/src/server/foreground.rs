@@ -169,6 +169,24 @@ pub async fn run_gxserver_foreground(
             details: Some(moved),
         });
     }
+    // A GBot chat's first message still waiting in its queue names `ghostex gbots guide` instead of
+    // the retired skill (gbots/session.rs `rewrite_queued_gbots_first_lines`).
+    if let Ok(db) = crate::storage::open_gxserver_database(&paths) {
+        if let Ok(rewritten) = crate::gbots::rewrite_queued_gbots_first_lines(&db) {
+            if rewritten > 0 {
+                let _ = logger.log(GxserverLogInput {
+                    level: crate::logging::LogLevel::Info,
+                    event: "queuedGbotsSkillLinesRewritten".to_string(),
+                    server_id: None,
+                    request_id: None,
+                    client: None,
+                    duration_ms: None,
+                    error: None,
+                    details: Some(json!({ "rewritten": rewritten })),
+                });
+            }
+        }
+    }
     // A coordinator's first message still waiting in its queue names the skill's new name too.
     match crate::storage::open_gxserver_database(&paths)
         .map_err(|error| error.to_string())

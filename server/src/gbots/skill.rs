@@ -28,16 +28,18 @@ use super::session::GBOTS_SKILL;
 /// (computer/remote_chat.rs `HOME_KEY`).
 const HOME_KEY: &str = "gbotHome";
 
-/// The skill's front matter: manual-only, like every Ghostex skill (2026-11-17, Q1 "C").
-const SKILL_FRONT_MATTER: &str = "---
+/// The skill's front matter before the body's sha256: manual-only, like every Ghostex skill
+/// (2026-11-17, Q1 "C").
+const SKILL_FRONT_MATTER_HEAD: &str = "---
 name: ghostex-gbots
 description: >-
   The GBot playbook. Use it only in a GBot's own chat in Ghostex, when your
   first message names this skill and says who you are.
 disable-model-invocation: true
----
-
 ";
+/// The front matter line that carries the body's sha256, so any later Ghostex knows an unedited
+/// copy is its own whatever playbook it was written from.
+const BODY_SHA256_LINE: &str = "# ghostex-body-sha256: ";
 const SKILL_OPENAI_YAML: &str = "interface:
   display_name: 'Ghostex GBot'
   short_description: 'How a GBot works in Ghostex: its brief, memory, team and reports'
@@ -47,26 +49,69 @@ policy:
   allow_implicit_invocation: false
 ";
 
-/// The skill's files as [`ensure_gbots_skill_installed`] writes them, so the startup pass for
-/// retired skills knows such a copy is Ghostex's (agent_skills.rs).
-pub(crate) fn retired_gbots_skill_files_written_by_this_build() -> [String; 2] {
-    [
-        format!("{SKILL_FRONT_MATTER}{}", super::GBOT_PLAYBOOK_MD),
-        SKILL_OPENAI_YAML.to_string(),
-    ]
+fn sha256_hex(text: &str) -> String {
+    use sha2::{Digest, Sha256};
+    hex::encode(Sha256::digest(text.as_bytes()))
 }
 
-/// Installs the GBot playbook as a skill for `family` when it is missing.
+/// SKILL.md as this build writes it: the front matter, the body's sha256, then the playbook.
+fn skill_md() -> String {
+    let body = super::GBOT_PLAYBOOK_MD;
+    format!(
+        "{SKILL_FRONT_MATTER_HEAD}{BODY_SHA256_LINE}{}\n---\n\n{body}",
+        sha256_hex(body)
+    )
+}
+
+/// Whether `text` is a SKILL.md some Ghostex wrote here for a visiting chat and nobody edited:
+/// its front matter is this one and its body still has the sha256 the front matter names.
+///
+/// CDXC:AgentSkills 2026-11-20 WHY:
+/// Opus review, finding 4: the copy used to match only this build's playbook, so once
+/// gbots/playbook.md changed, a later build neither refreshed it nor removed it with the retired
+/// skills. The sha256 line lets any build recognise its own unedited copy.
+pub(crate) fn is_unedited_gbots_skill_md(text: &str) -> bool {
+    let Some(rest) = text.strip_prefix(SKILL_FRONT_MATTER_HEAD) else {
+        return false;
+    };
+    let Some(rest) = rest.strip_prefix(BODY_SHA256_LINE) else {
+        return false;
+    };
+    let Some((sha, body)) = rest.split_once("\n---\n\n") else {
+        return false;
+    };
+    sha == sha256_hex(body)
+}
+
+/// Whether `text` is the openai.yaml written beside it.
+pub(crate) fn is_gbots_skill_openai_yaml(text: &str) -> bool {
+    text == SKILL_OPENAI_YAML
+}
+
+/// Installs the GBot playbook as a skill for `family`: written when missing, and written again
+/// when the copy there is an older one Ghostex wrote or shipped and nobody edited.
 fn ensure_gbots_skill_installed(
     paths: &GxserverPaths,
     family: &str,
 ) -> Result<PathBuf, DomainStateError> {
-    let [skill_md, _] = retired_gbots_skill_files_written_by_this_build();
+    let current = skill_md();
+    let skill_file = paths
+        .agent_config_home_dir()
+        .join(crate::agent_skills::CANONICAL_AGENT_SKILLS_DIR)
+        .join(GBOTS_SKILL)
+        .join("SKILL.md");
+    if let Ok(existing) = std::fs::read_to_string(&skill_file) {
+        let ours = is_unedited_gbots_skill_md(&existing)
+            || crate::agent_skills::matches_shipped_retired_skill_file(&skill_file);
+        if ours && existing != current {
+            let _ = std::fs::remove_file(&skill_file);
+        }
+    }
     crate::coordinators::ensure_bundled_skill_installed(
         paths,
         family,
         GBOTS_SKILL,
-        &skill_md,
+        &current,
         SKILL_OPENAI_YAML,
     )
 }
