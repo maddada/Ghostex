@@ -3067,13 +3067,15 @@ Session details panel (beta): a built-in extension, on by default; turn it off
 in Settings > Extensions. While it is on, a Claude chat shows a small
 context ring with its percentage at the top right of the window, next to the ⋯
 menu; click it to show or hide the panel of the chat you are in (one switch for
-the whole app, remembered across restarts). When the chat is wide enough the
-panel sits beside it as its own column and the conversation moves over to make
-room; when it is too narrow the panel opens as a floating card under the ring,
-and a click on the chat closes it. On the phone the same ring sits in the chat's
+the whole app, remembered across restarts). It opens in the same spot as the
+Work panel, at the same width: when the chat is wide enough the panel sits on
+its right as its own column and the conversation moves over to make room; when
+it is too narrow the panel opens as a floating card under the ring, and a click
+on the chat closes it. Opening Session details while the Work panel is open
+swaps one for the other in place. On the phone the same ring sits in the chat's
 header and opens the cards as a sheet (Changes opens the phone's Changes view).
 The panel has two tabs, Overview and Limits, the same on the computer and on the
-phone. The chat box's context ring opens it too, on Overview at the Context
+phone; on the computer they stay at the top while the cards scroll. The chat box's context ring opens it too, on Overview at the Context
 card, so there is no separate Context window popover any more (a chat without
 the panel keeps it).
 
@@ -4480,8 +4482,10 @@ version of the Projects features in Cursor and Claude Code.
   when you press it.
 - **The Work panel**: on the computer, the **Work** button in the window's header
   opens it, with a count of what waits on you; it sits beside Session details,
-  and the two share the spot beside the chat, one at a time (opening one puts
-  the other away). The counts in the bar above the chat box open it at their
+  and the two share the spot on the chat's right, one at a time, at the same
+  width (opening one swaps the other out in place). Where the chat is too
+  narrow for it, it opens as a floating card under the button, as Session
+  details does. The counts in the bar above the chat box open it at their
   group; on the phone the **Work** pill opens it, reading
   "Work · 2 need you · 4 in progress" while the row has room. At the top of the
   panel, the **Topic** says in one line what the session is about: click it to
