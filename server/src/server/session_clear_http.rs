@@ -191,13 +191,24 @@ fn screen_refusal(
             None => "Its input box is not ready (it may still be starting).".into(),
         });
     }
-    if crate::session_chat_composer::session_chat_composer_input(agent, &capture.text)
-        .is_some_and(|input| !input.is_empty())
-    {
-        return Some(refused(
-            "agentBusy",
-            "The conversation was not cleared. Its input box holds unsent text. Send or remove it first.",
-        ));
+    // A box that can't be read counts as holding a draft, not as empty: the job's clear burst
+    // would erase whatever is there (Fable review of 6d5889f7f, finding 7; the coordinator
+    // runtime's Empryo role check reads its box the same way).
+    let input = crate::session_chat_composer::session_chat_composer_input(agent, &capture.text);
+    match input {
+        None => {
+            return not_ready("Its input box could not be read. Try again in a moment.".into())
+        }
+        Some(input) if input.text_unreadable() => {
+            return not_ready("The text in its input box could not be read, so it may hold a draft. Try again in a moment.".into())
+        }
+        Some(input) if !input.is_empty() => {
+            return Some(refused(
+                "agentBusy",
+                "The conversation was not cleared. Its input box holds unsent text. Send or remove it first.",
+            ))
+        }
+        Some(_) => {}
     }
     None
 }
