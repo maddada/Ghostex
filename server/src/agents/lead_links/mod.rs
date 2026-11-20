@@ -469,9 +469,14 @@ pub fn note_lead_send(db: &Connection, caller: &Principal, target: &SessionKey) 
     }
 }
 
-/// `note_lead_send` for a message route's body (its `projectId` and `sessionId`), from the
-/// routes that take a message without typing it now: `agents send --queue`
-/// (`/api/queueSessionChatPrompt`) and `--with-next` (held for the session's next message).
+/// `note_lead_send` for a message route's body (its `projectId` and `sessionId`), from the route
+/// that takes a message without typing it now: `agents send --queue` (`/api/queueSessionChatPrompt`).
+///
+/// CDXC:LeadLinks 2026-11-20 FIX:
+/// Opus re-review of #678: a `--with-next` note never starts a turn of its own; it rides in the
+/// next message someone else sends, usually the user's, so marking that turn owed either sent the
+/// lead the user's turn or left a turn owed that never came. Only a plain send and `--queue` owe a
+/// turn now; `agents guide leads` says so.
 ///
 /// CDXC:LeadLinks 2026-11-20 FIX:
 /// Opus review of #678, finding 4: only a plain send marked the lead's turn owed, so a lead that

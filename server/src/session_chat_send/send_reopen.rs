@@ -28,12 +28,9 @@ pub(crate) async fn handle_send_session_chat_message_from(
     body: &Value,
 ) -> RoutedResponse {
     // `agents send --with-next`: held for the session's next message, not typed (with_next.rs).
+    // A lead's `--with-next` note owes no turn: it rides in whatever message the session gets next,
+    // usually the user's (CDXC:LeadLinks 2026-11-20 in agents/lead_links `note_lead_send_body`).
     if let Some(held) = hold_with_next_response(state, caller, &endpoint_path, &request_id, body) {
-        // A lead's note held for its linked session owes the turn it rides in
-        // (agents/lead_links `note_lead_send_body`).
-        if held.response.status().is_success() {
-            crate::agents::lead_links::note_lead_send_body(&state.paths, caller, body);
-        }
         return held;
     }
     let started_ms = chrono::Utc::now().timestamp_millis();

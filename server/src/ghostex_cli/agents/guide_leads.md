@@ -41,9 +41,10 @@ ghostex agents unlink --all                                 # end every link to 
 
 A session can only link others to itself (`--lead self`); only the user (from
 their own terminal or the app) can link a session to another lead. Send the
-linked session its work with `ghostex agents send <ref> "..."` (`--queue` and
-`--with-next` too): the turn that message starts is reported. Don't wait in a
-loop for reports: each arrives as a message when the turn ends.
+linked session its work with `ghostex agents send <ref> "..."` (or `--queue`):
+the turn that message starts is reported. A `--with-next` note starts no turn
+of its own, so it is not reported. Don't wait in a loop for reports: each
+arrives as a message when the turn ends.
 
 ## Undoing
 
