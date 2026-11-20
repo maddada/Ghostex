@@ -21,12 +21,17 @@ pub fn detect_session_chat_selection(
     let claude_footer_rule = (agent == SessionChatOptionAgent::Claude)
         .then(|| claude_footer_rule(&scanned_lines))
         .flatten();
+    let codex_footer_prompt = (agent == SessionChatOptionAgent::Codex)
+        .then(|| codex_footer_prompt(&scanned_lines))
+        .flatten();
     let mut found = SessionChatDetectedSelection::default();
     // Index of the topmost line that supplied any value; the footer capture
     // starts there.
     let mut topmost_match: Option<usize> = None;
     for (index, scanned) in scanned_lines.iter().enumerate().rev() {
-        if claude_footer_rule.is_some_and(|rule| index <= rule) {
+        if claude_footer_rule.is_some_and(|rule| index <= rule)
+            || codex_footer_prompt.is_some_and(|prompt| index <= prompt)
+        {
             break;
         }
         match agent {
@@ -251,6 +256,15 @@ pub fn detect_session_chat_selection(
         }
     }
     Some(found)
+}
+
+/// Bottom-most Codex composer prompt row (`›` or `»`), so footer detection never climbs into chat
+/// prose above the input box when the real status line is unrecognized.
+fn codex_footer_prompt(lines: &[String]) -> Option<usize> {
+    lines.iter().rposition(|line| {
+        let trimmed = line.trim_start();
+        trimmed.starts_with('›') || trimmed.starts_with('»')
+    })
 }
 
 /// Where Claude's subagent block starts in the scanned footer, when one is on screen.

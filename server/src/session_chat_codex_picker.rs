@@ -451,13 +451,9 @@ fn row_key(row: &PickerRow, step: &str) -> Result<String, DomainStateError> {
     }
 }
 
+/// How many of Codex's change lines for this pick the screen shows:
 /// `• Model changed to gpt-6-luna low`, or with ` for this conversation` after a session pick,
 /// which is the only proof that `s` applied it without saving the default.
-fn changed_line_present(screen: &str, model: &str, effort: &str, session_only: bool) -> bool {
-    changed_line_count(screen, model, effort, session_only) > 0
-}
-
-/// How many of Codex's change lines for this pick the screen shows.
 fn changed_line_count(screen: &str, model: &str, effort: &str, session_only: bool) -> usize {
     let expected = format!("{CODEX_MODEL_CHANGED_PREFIX}{model} {effort}");
     screen_lines(screen)
@@ -470,7 +466,12 @@ fn changed_line_count(screen: &str, model: &str, effort: &str, session_only: boo
             rest.trim_start_matches(['•', ' '])
                 .strip_prefix(&expected)
                 .is_some_and(|tail| {
-                    !session_only || CODEX_SESSION_CHANGED_SUFFIXES.contains(&tail.trim())
+                    let tail = tail.trim();
+                    if session_only {
+                        CODEX_SESSION_CHANGED_SUFFIXES.contains(&tail)
+                    } else {
+                        !CODEX_SESSION_CHANGED_SUFFIXES.contains(&tail)
+                    }
                 })
         })
         .count()
@@ -1236,12 +1237,18 @@ impl PickerDriver<'_> {
             // which names no effort: the `/model` list below picks the model and effort rows
             // explicitly instead of failing the pick as unreadable.
             if let Some(effort) = selection.effort.as_ref() {
-                if effort.value == plan.effort {
+                // Only a session-only pick can short-circuit on the current footer: a default pick
+                // must still go through `/model` so Codex saves it as its default even when the
+                // session temporarily matches.
+                if plan.session_only && effort.value == plan.effort {
                     return Ok(());
                 }
                 // A session pick always goes through the list's `s`: the reasoning shortcut is not
                 // known to leave the saved default alone.
-                if !plan.session_only && !matches!(plan.effort.as_str(), "max" | "ultra") {
+                if !plan.session_only
+                    && effort.value != plan.effort
+                    && !matches!(plan.effort.as_str(), "max" | "ultra")
+                {
                     return self.change_effort(plan, &effort.value).await;
                 }
             }
@@ -1340,15 +1347,20 @@ impl PickerDriver<'_> {
 
         self.wait_for("confirm", |screen| {
             let selection = detect_session_chat_selection(SessionChatOptionAgent::Codex, screen)?;
-            // Earlier visits can leave the same confirmation line in scrollback.
-            let changed = if footer_names_effort {
-                changed_line_present(screen, &plan.model, &plan.effort, plan.session_only)
-                    && selection.effort.as_ref()?.value == plan.effort
-            } else {
+            // Earlier visits can leave the same confirmation line in scrollback, so require a new
+            // confirmation line (plus matching effort whenever the footer names one).
+            let fresh_change =
                 changed_line_count(screen, &plan.model, &plan.effort, plan.session_only)
-                    > changed_before
-            };
-            (changed && !any_picker_open(screen) && selection.model.as_ref()?.value == plan.model)
+                    > changed_before;
+            let effort_ok = !footer_names_effort
+                || selection
+                    .effort
+                    .as_ref()
+                    .is_some_and(|effort| effort.value == plan.effort);
+            (fresh_change
+                && effort_ok
+                && !any_picker_open(screen)
+                && selection.model.as_ref()?.value == plan.model)
                 .then_some(())
         })
         .await

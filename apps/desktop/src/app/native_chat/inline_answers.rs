@@ -202,7 +202,17 @@ impl NativeChatView {
         } else {
             match phase {
                 "sending" => Some((format!("Sending{words}…"), None)),
-                "queued" => Some((format!("Queued{words} ·"), Some("Change"))),
+                "queued" => {
+                    let reason = text(form, "queuedStatus");
+                    let label = if reason.is_empty()
+                        || reason == "Queued: it goes to the agent after this turn ends."
+                    {
+                        format!("Queued{words} ·")
+                    } else {
+                        format!("{reason}{words} ·")
+                    };
+                    Some((label, Some("Change")))
+                }
                 // A Ghostex Collab guest's answer the chat's owner has not approved yet.
                 "held" => Some((
                     format!("Waiting for {}{words}", text(form, "heldFor")),

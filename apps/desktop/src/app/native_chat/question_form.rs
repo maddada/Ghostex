@@ -581,7 +581,14 @@ impl NativeChatView {
         let can_send = form["canSend"] == true;
         let status = match phase.as_str() {
             "answered" => "Sent to the agent.".to_string(),
-            "queued" => "Queued: it goes to the agent after this turn ends.".to_string(),
+            "queued" => {
+                let queued = text(form, "queuedStatus");
+                if queued.is_empty() {
+                    "Queued: it goes to the agent after this turn ends.".to_string()
+                } else {
+                    queued
+                }
+            }
             "held" => format!("Sent. Waiting for {held_for} to approve your answers."),
             // gx-chat-core `questions/unreachable_retry.rs`: the answers wait for gxserver to come back.
             "sending" if form["reconnecting"] == true => {

@@ -163,7 +163,7 @@ pub(super) fn match_claude_mode(segment: &str) -> Option<SessionChatDetectedChoi
 // ---------------------------------------------------------------------------
 // Codex grammar
 //   <Title> · gpt-5.6-sol high fast · 225K used · … · Context 26% used · …
-// Model + effort (+ the `fast` modifier) live in ONE segment.
+// Model, effort and the optional speed label live in one segment.
 // ---------------------------------------------------------------------------
 
 /// Mirrors the Codex efforts in the published agent model catalog
@@ -258,9 +258,14 @@ pub(super) fn match_codex_segment(segment: &str) -> Option<SessionChatDetectedSe
     } else if next.is_some_and(|token| token.eq_ignore_ascii_case(CODEX_DEFAULT_EFFORT_WORD)) {
         next = tokens.next();
     }
-    if next.is_some_and(|token| token.eq_ignore_ascii_case("fast")) {
-        selection.fast = Some(true);
-        next = tokens.next();
+    match next {
+        Some(speed) if speed.eq_ignore_ascii_case("fast") => {
+            selection.fast = Some(true);
+            next = tokens.next();
+        }
+        // Codex has a separate /ultrafast command. Only /fast's tier proves Fast is on.
+        Some(speed) if speed.eq_ignore_ascii_case("ultrafast") => next = tokens.next(),
+        _ => {}
     }
     // Anything left over means this was prose that merely started with an id.
     next.is_none().then_some(selection)
