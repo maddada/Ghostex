@@ -59,6 +59,10 @@ to and the threads have nobody to report to.
   the user can see the change). Ask for careful proof (reproduce it first, a test server, more
   platforms) on dangerous work: security or approvals, a release or anything published to users, a
   data migration or deletion, a phone app build.
+- When the brief has the thread drive an app or a browser (cua-driver, the embedded browser,
+  Playwright or headless Chrome, a test server's web build), ask it to save screenshots of the key
+  moments under `~/.local/share/ghostex/i/` and link them in its report. Never ask for them when
+  the thread does no GUI work.
 - One task per message. A thread reports only by ending its turn, so when you send several, say
   "finish all, then report" or "report after the first and wait for me".
 - Ghostex adds the goal, standing instructions and reporting rules, and the thread reads the
@@ -145,6 +149,7 @@ arrives is the Escape Ghostex types to deliver it, not the user pausing you: ret
    before that is pushed or published; pass those caveats on plainly. A thread whose background job
    still runs has not finished: when a report reads unfinished, read its chat before you call the
    work done.
+   Screenshots the report links: show them to the user in your reply (as images or links).
 2. Do not re-test or re-verify the work yourself. For dangerous work you may start a separate thread
    to review or test it, and you do whenever the user asks for a check.
 3. Commit the thread's work yourself, path-scoped to its files, never sweeping in other changes.
