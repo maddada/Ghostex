@@ -192,8 +192,12 @@ impl GhostexGpuiApp {
 
     /// The strip is the collapsed sidebar's place in the body row. Docked, the sidebar's own left
     /// 10px is the trigger instead (`handle_floating_reveal_sidebar_edge_move`).
+    ///
+    /// With the rail on, the rail is the window's left edge and stays when the sidebar hides, so the
+    /// strip is not there: it would cover the rail's buttons and float the sidebar out each time the
+    /// pointer reached the rail (app/sidebar_rail/).
     pub(crate) fn floating_reveal_edge_strip_visible(&self) -> bool {
-        self.sidebar_collapsed
+        self.sidebar_collapsed && !self.sidebar_rail_shown()
     }
 
     /// The sidebar's left 10px arms the reveal of a folded sessions column while the sidebar is
@@ -201,7 +205,8 @@ impl GhostexGpuiApp {
     pub(crate) fn handle_floating_reveal_sidebar_edge_move(&mut self, x: f32) {
         let armed = !self.sidebar_collapsed
             && self.floating_reveal_available().agents_column
-            && x < FLOATING_REVEAL_EDGE_WIDTH;
+            // The sidebar starts right of the rail, when it shows (app/sidebar_rail/).
+            && (0.0..FLOATING_REVEAL_EDGE_WIDTH).contains(&(x - self.sidebar_rail_width()));
         if armed && self.floating_reveal.panel.is_none() {
             self.floating_reveal.want = FloatingRevealContent {
                 sidebar: false,

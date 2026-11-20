@@ -77,8 +77,16 @@ impl GhostexGpuiApp {
                         },
                     },
                 });
+                // The agents' coloured logos, as the agent launcher draws them.
                 if let Some(agent_icon) = agent_icon {
                     row["agentIcon"] = json!(agent_icon);
+                    if let Some(logo) = ghostex_gx_core::colored_agent_logo(agent_icon) {
+                        row["imageDataUrl"] = json!(logo);
+                        // The logo stands in for the glyph; a row draws both when it has both.
+                        if let Some(row) = row.as_object_mut() {
+                            row.remove("icon");
+                        }
+                    }
                 }
                 if cfg!(ghostex_web) {
                     if let Some(row) = row.as_object_mut() {

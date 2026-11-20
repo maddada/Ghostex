@@ -131,6 +131,10 @@ impl GhostexGpuiApp {
             .items_center()
             .pb(px(8.0))
             .bg(sidebar_chrome_fill(appearance.glass, 180.0))
+            // A hairline on its right edge, so the rail reads as a column of its own beside the
+            // sidebar and beside the work area when the sidebar is hidden.
+            .border_r_1()
+            .border_color(appearance.foreground.opacity(0.06))
             .child(crate::app::render::window_drag_region::window_drag_region(
                 div()
                     .id("ghostex-gpui-sidebar-rail-top")
