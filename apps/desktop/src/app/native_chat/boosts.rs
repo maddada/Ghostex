@@ -454,7 +454,12 @@ impl NativeChatView {
             .items_center()
             .gap(px(8.0 * s))
             .mt(px(4.0 * s))
-            .h(px((FOOTER_HEIGHT - 6.0) * s))
+            // CDXC:Boosts 2026-11-20 WHY: User: the "Edit Boosts…" row "isn't vertically centred
+            // in its footer". The menu's own 6px padding sat under the row, so the text was 6px
+            // nearer the line above it than the menu's bottom edge; the row reaches down over that
+            // padding (same height in the layout) so its text sits halfway between the two.
+            .h(px(FOOTER_HEIGHT * s))
+            .mb(px(-6.0 * s))
             .px(px(10.0 * s))
             .border_t_1()
             .border_color(p.foreground.opacity(0.08))
