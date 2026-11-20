@@ -1,9 +1,9 @@
 //! `ghostex visual`: draw a ```visual block to a PNG so an agent can look at it before replying
-//! (`check`), write a page as an exported page (`export`, visual_export.rs), and install the
-//! `$ghostex-visuals` skill (`install-skill`).
+//! (`check`), write a page as an exported page (`export`, visual_export.rs), and print the guide
+//! (`guide`, visual_guide.rs).
 //!
 //! CDXC:SessionChat 2026-10-06 SEE-ALSO:
-//! The block is laid out by packages/gx-visual, the same crate every chat client draws with (apps/desktop/src/app/native_chat/visual.rs, apps/mobile/app/src/chat/native/transcript/VisualBlock.tsx), so the check shows what the reader will see. skills/ghostex-visuals/SKILL.md tells agents to run it.
+//! The block is laid out by packages/gx-visual, the same crate every chat client draws with (apps/desktop/src/app/native_chat/visual.rs, apps/mobile/app/src/chat/native/transcript/VisualBlock.tsx), so the check shows what the reader will see. server/src/ghostex_cli/visual_guide.md tells agents to run it.
 
 use std::{
     collections::hash_map::DefaultHasher,

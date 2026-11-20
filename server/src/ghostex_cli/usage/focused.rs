@@ -290,10 +290,6 @@ pub fn board_usage() -> String {
             "board associate <bead-id> [--session-id id] [--project-id id] [--json]",
             "Show this session on the bead's card; without --session-id it links the calling session",
         ),
-        format_help_command(
-            "board install-skill [--agent id]",
-            "Install the bundled Project Board beads skill for agents",
-        ),
     ]
     .join("\n");
 
@@ -397,10 +393,6 @@ pub fn browser_usage() -> String {
             "Run the stdio MCP server for CEF DevTools control",
         ),
         format_help_command(
-            "browser install-skill [--json]",
-            "Install the $ghostex-embedded-browser-use skill with the external skills CLI",
-        ),
-        format_help_command(
             "browser open [url] [project/reuse flags]",
             "Open or reuse an embedded browser pane",
         ),
@@ -454,7 +446,6 @@ pub fn browser_usage() -> String {
 Usage:
   gx browser --help
   gx browser mcp [--port n] [--target id|--page id] [--timeout ms]
-  gx browser install-skill [--json]
   gx browser open [url] [--project-path path|--project-id id] [--reuse similar|exact|none]
   gx browser open-pane [url] [--project-path path|--project-id id] [--reuse similar|exact|none]
 Agent MCP config:
@@ -500,7 +491,6 @@ Outside Ghostex's browser:
 
 Legacy aliases:
   browser-devtools-mcp and browser-mcp still run the MCP server.
-  install-browser-skill still installs the skill, but new docs should use browser install-skill.
 "
     )
 }
@@ -631,7 +621,7 @@ the same steps.
 }
 
 pub fn visuals_usage() -> String {
-    "Ghostex Visuals - check Ghostex visuals, forms and pages, and install the agent skill
+    "Ghostex Visuals - check Ghostex visuals, forms and pages, and read their guide
 
 Usage:
   gx visual --help
@@ -640,7 +630,6 @@ Usage:
   gx visual export <file.html|page id|page URL> [--out file.html] [--json]
   gx visual guide <visuals|forms|pages|example|all>
   gx visual boosts [list|show <id>|set <id> <prompt|->|reset <id>|on|off] [--json]
-  gx visual install-skill [--json]
 
 Guide:
   `gx visual guide pages` (or visuals, forms) prints the whole guide to that
@@ -972,7 +961,6 @@ pub fn secret_usage() -> String {
   ghostex secret providers add --name <text> --account <1Password account>
   ghostex secret providers remove <id>
   ghostex secret providers check --provider <id> --reference op://vault/item/field
-  ghostex secret install-skill
 
 request: shows a private card in the calling session's chat (or --session's) asking the user for a secret
 (a password, API key or token) and waits for the answer (10 minutes unless --timeout-minutes,

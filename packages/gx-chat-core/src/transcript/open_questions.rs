@@ -13,7 +13,7 @@
 //! User (Q81 = C, Q82): a "Previous question" pill beside Scroll to bottom steps through the unanswered question forms and question pages, and Q-tags (Q80, Q81…) in the agent's messages are links to the form or page that asked that tag (the latest one, answered or not). Questions the agent marks obsolete drop off the count: a later form or page asking the same tags supersedes the earlier one, and a later ```questions block can withdraw tags with `"withdraw": ["Q40"]`.
 //!
 //! CDXC:SessionChat 2026-10-14 SEE-ALSO:
-//! questions/open_questions.rs steps the pill and lands the jumps (the document's `openQuestions`); apps/desktop/src/app/native_chat/open_questions.rs and apps/mobile/app/src/chat/native/transcript/OpenQuestions.tsx draw the pill and the highlight; server/src/ghostex_cli/show.rs writes a page block's `"questions"`; skills/ghostex-visuals/SKILL.md teaches tags and `withdraw`. Change them together.
+//! questions/open_questions.rs steps the pill and lands the jumps (the document's `openQuestions`); apps/desktop/src/app/native_chat/open_questions.rs and apps/mobile/app/src/chat/native/transcript/OpenQuestions.tsx draw the pill and the highlight; server/src/ghostex_cli/show.rs writes a page block's `"questions"`; server/src/ghostex_cli/visual_guide.md teaches tags and `withdraw`. Change them together.
 
 use crate::state::ChatRow;
 use std::collections::{HashMap, HashSet};

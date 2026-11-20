@@ -107,4 +107,5 @@ pub(crate) use routine_runs::{
     SettledRoutineRun,
 };
 pub(crate) use skill::install_for_visiting_chat as install_gbots_skill_for_visiting_chat;
+pub(crate) use skill::retired_gbots_skill_files_written_by_this_build;
 pub(crate) use sweep::start_gbots_sweep;

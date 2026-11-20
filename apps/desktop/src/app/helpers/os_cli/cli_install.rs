@@ -72,29 +72,17 @@ pub(crate) fn gpui_finish_desktop_control_setup(
             Err(_) => " The Cua Driver skill could not be installed; install it from Settings.",
         }
     };
-    match gpui_install_bundled_ghostex_skill(
-        &["computer-use", "install-skill"],
-        "Ghostex Computer Use",
-    ) {
-        Ok(_) => Ok(if was_update {
-            format!(
-                "Fast Computer & Browser Use is up to date. Ghostex Computer Use is ready.{skill_note}"
-            )
-        } else {
-            // Accessibility and Screen Recording are macOS grants; Windows and X11 ask nothing.
-            if cfg!(target_os = "macos") {
-                format!(
-                    "Fast Computer & Browser Use installed. Grant accessibility and screen recording permissions if needed.{skill_note}"
-                )
-            } else {
-                format!("Fast Computer & Browser Use installed.{skill_note}")
-            }
-        }),
-        Err(message) => Err(format!(
-            "Fast Computer & Browser Use {}, but Ghostex Computer Use skill could not be installed. {message}",
-            if was_update { "updated" } else { "installed" }
-        )),
-    }
+    // CDXC:AgentSkills 2026-11-20: the Ghostex Computer Use wrapper skill is retired (Q4262), so only the cua-driver skill above follows the driver.
+    Ok(if was_update {
+        format!("Fast Computer & Browser Use is up to date.{skill_note}")
+    } else if cfg!(target_os = "macos") {
+        // Accessibility and Screen Recording are macOS grants; Windows and X11 ask nothing.
+        format!(
+            "Fast Computer & Browser Use installed. Grant accessibility and screen recording permissions if needed.{skill_note}"
+        )
+    } else {
+        format!("Fast Computer & Browser Use installed.{skill_note}")
+    })
 }
 
 pub(crate) fn gpui_repair_ghostex_cli_commands() -> Result<String, String> {

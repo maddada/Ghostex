@@ -121,7 +121,7 @@ pub(crate) fn gpui_ghostex_cli_probe() -> Result<GpuiGhostexCliProbe, String> {
         gx_usable,
         move_codex_session_skill_path: skill_path("ghostex-move-codex-session"),
         help_skill_path: skill_path("ghostex-help"),
-        agent_guide_skill_path: skill_path("ghostex-agent-guide"),
+        agent_guide_skill_path: skill_path("ghostex"),
         visuals_skill_path: skill_path("ghostex-visuals"),
         secrets_skill_path: skill_path("ghostex-secrets"),
     })

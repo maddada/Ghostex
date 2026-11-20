@@ -9,7 +9,7 @@
 //! CDXC:SessionChat 2026-10-06 DECISION:
 //! User: build both kinds of chat visuals together: charts, stats and tables drawn natively in the chat from a ```visual block (charts in a strict Vega-Lite subset), and HTML pages for what a block cannot express, which open from a card rather than running inside the chat. No JavaScript engine is added to the desktop for either.
 //! CDXC:SessionChat 2026-10-06 SEE-ALSO:
-//! The marks come from packages/gx-chat-core/src/transcript/native_markdown.rs (`NATIVE_VISUAL_OPEN`); the layout is packages/gx-visual; the phone draws the same scene as SVG in apps/mobile/app/src/chat/native/transcript/VisualBlock.tsx; pages are published by `ghostex show` (server/src/ghostex_cli/) and agents learn both from skills/ghostex-visuals/SKILL.md.
+//! The marks come from packages/gx-chat-core/src/transcript/native_markdown.rs (`NATIVE_VISUAL_OPEN`); the layout is packages/gx-visual; the phone draws the same scene as SVG in apps/mobile/app/src/chat/native/transcript/VisualBlock.tsx; pages are published by `ghostex show` (server/src/ghostex_cli/) and agents learn both from server/src/ghostex_cli/visual_guide.md.
 
 use super::{
     appearance::ChatAppearance, fonts::CHAT_MONO, rich_markdown::PROSE_SIZE, state::NativeChatView,

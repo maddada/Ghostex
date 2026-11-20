@@ -223,10 +223,6 @@ fn browser_usage() -> String {
             "Run the stdio MCP server for CEF DevTools control",
         ),
         format_help_command(
-            "browser install-skill [--json]",
-            "Install the $ghostex-embedded-browser-use skill with the external skills CLI",
-        ),
-        format_help_command(
             "browser open [url] [project/reuse flags]",
             "Open or reuse an embedded browser pane",
         ),
@@ -280,7 +276,6 @@ fn browser_usage() -> String {
 Usage:
   gx browser --help
   gx browser mcp [--port n] [--target id|--page id] [--project-path path|--project-id id] [--timeout ms]
-  gx browser install-skill [--json]
   gx browser open [url] [--project-path path|--project-id id] [--reuse similar|exact|none]
   gx browser open-pane [url] [--project-path path|--project-id id] [--reuse similar|exact|none]
 Agent MCP config:
@@ -331,7 +326,6 @@ Outside Ghostex's browser:
 
 Legacy aliases:
   browser-devtools-mcp and browser-mcp still run the MCP server.
-  install-browser-skill still installs the skill, but new docs should use browser install-skill.
 "#
     )
 }

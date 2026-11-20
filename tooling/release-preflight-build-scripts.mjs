@@ -27,7 +27,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
  packages/core-ui/styles/shadcn.generated.css, generate-chat-agents.mjs regenerates the
  committed chat agent list inside the apps/mobile/app submodule, and
  generate-settings-search-words.mjs regenerates the phone Settings search's copy of the
- desktop's words for each setting (from skills/ghostex-help/references/settings-catalog.json
+ desktop's words for each setting (from server/src/ghostex_cli/guide/settings-catalog.json
  and packages/settings-catalog/src/search_keywords.rs), also inside the submodule. All three
  builds are deterministic (verified by rebuilding twice), so on a release-ready tree they
  are no-ops on disk. Every tracked output is snapshotted before its command runs;

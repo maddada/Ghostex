@@ -68,7 +68,7 @@ pub(crate) async fn dispatch(
                 .and_then(Value::as_str)
                 .ok_or_else(|| error("Choose install, update, reinstall or uninstall."))?
                 .to_string();
-            start(tool, &operation, &home, gx_paths.clone()).await
+            start(tool, &operation, &home).await
         }
         _ => Err(error("Unknown tool action.")),
     }
@@ -218,12 +218,7 @@ pub(crate) fn state(tool: ToolId, home: &Path, fresh: bool) -> Value {
     value
 }
 
-async fn start(
-    tool: ToolId,
-    operation: &str,
-    home: &Path,
-    gx_paths: GxserverPaths,
-) -> Result<Value, DomainStateError> {
+async fn start(tool: ToolId, operation: &str, home: &Path) -> Result<Value, DomainStateError> {
     let current = read(tool, home, false).await?;
     let allowed = current["actions"]
         .as_array()
@@ -244,24 +239,13 @@ async fn start(
     tokio::spawn(async move {
         let _turn = jobs::INSTALL_LOCK.lock().await;
         jobs::set_status(tool.id(), "running");
-        let log = jobs::log_for(tool.id());
-        let job_log = log.clone();
-        let uninstall = operation == "uninstall";
-        let mut result = tokio::task::spawn_blocking(move || {
+        let job_log = jobs::log_for(tool.id());
+        // CDXC:AgentSkills 2026-11-20: a desktop-control tool no longer brings a Ghostex skill (Ghostex Computer Use and SpaceO are retired for CLI help, Q4262): agents read the cua-driver skill this install adds, and `ghostex spaceo guide`.
+        let result = tokio::task::spawn_blocking(move || {
             run_operation(tool, &operation, &owned_home, &job_log)
         })
         .await
         .unwrap_or_else(|error| Err(error.to_string()));
-        // A desktop-control tool brings its Ghostex skill, as this computer's own rows do.
-        if result.is_ok() && !uninstall && desktop_control::is_desktop_control(tool) {
-            let skill = desktop_control::ghostex_skill(tool);
-            result = crate::machine_integrations::install_bundled_skill(&gx_paths, skill)
-                .await
-                .map(|()| log.line(&format!("Installed the {skill} skill.")))
-                .map_err(|error| {
-                    format!("Installed, but the {skill} skill could not be installed: {error}")
-                });
-        }
         jobs::finish(tool.id(), &result);
     });
     read(tool, home, false).await

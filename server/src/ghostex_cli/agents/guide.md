@@ -307,7 +307,7 @@ which starts a separate session that keeps the conversation:
 - Control sessions through the Ghostex CLI only, never raw zmx or tmux.
 - Never restart Ghostex or its server to "fix" a delivery problem.
 - For anything else in the CLI (automations, quick actions, the project board,
-  prompt history), use `$ghostex-cli`.
+  prompt history), read `ghostex --help` and the focused help it points to.
 
 ## Final report
 

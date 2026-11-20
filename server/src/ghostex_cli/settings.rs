@@ -15,7 +15,7 @@ use crate::ghostex_cli::usage;
 
 /// The agent-facing settings catalog, rendered from the Settings catalog crate
 /// (`packages/settings-catalog`), the same text `cargo xtask help-generate` writes to
-/// skills/ghostex-help/references/settings-catalog.json. Built in, so the installed CLI
+/// server/src/ghostex_cli/guide/settings-catalog.json. Built in, so the installed CLI
 /// validates against the catalog of its own build.
 pub(super) fn settings_catalog_json() -> &'static str {
     static JSON: OnceLock<String> = OnceLock::new();

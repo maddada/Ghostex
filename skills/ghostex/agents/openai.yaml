@@ -1,7 +1,7 @@
 interface:
-  display_name: 'Ghostex Agent Guide'
+  display_name: 'Ghostex'
   short_description: 'What Ghostex can do for this session, through ghostex agent-guide'
-  default_prompt: 'Use $ghostex-agent-guide to run ghostex agent-guide and follow it.'
+  default_prompt: 'Use $ghostex to run ghostex agent-guide and follow it.'
 
 policy:
   allow_implicit_invocation: false

@@ -2,7 +2,7 @@ use crate::ghostex_cli::rpc::{CliError, CliResult};
 use crate::ghostex_cli::{skills, usage};
 
 /// CDXC:AgentSkills 2026-09-09 WHY:
-/// The guide chapters are embedded from `skills/ghostex-help/references/` at
+/// The guide chapters are embedded from `server/src/ghostex_cli/guide/` at
 /// build time so `ghostex guide` from an installed binary always prints the
 /// docs that match its own CLI and settings catalog, even when the copy of the
 /// skill folder in the user's global skills directory is stale.
@@ -10,22 +10,22 @@ const GUIDE_CHAPTERS: &[(&str, &str, &str)] = &[
     (
         "overview",
         "What Ghostex is, its modes, and how the Help skill works",
-        include_str!("../../../skills/ghostex-help/references/overview.md"),
+        include_str!("guide/overview.md"),
     ),
     (
         "features",
         "Every user-facing feature and where to find it",
-        include_str!("../../../skills/ghostex-help/references/features.md"),
+        include_str!("guide/features.md"),
     ),
     (
         "settings",
         "Every setting with its key, type, default, and meaning",
-        include_str!("../../../skills/ghostex-help/references/settings.md"),
+        include_str!("guide/settings.md"),
     ),
     (
         "hotkeys",
         "Every hotkey action with its default binding",
-        include_str!("../../../skills/ghostex-help/references/hotkeys.md"),
+        include_str!("guide/hotkeys.md"),
     ),
 ];
 

@@ -5,7 +5,7 @@
 //! CDXC:Docs 2026-09-15 DECISION:
 //! User: format feedback the way Herdr Annotate and plannotator-tui do, one numbered section per annotation in document order with the line span, a short quote, and the note as a blockquote, instead of the old bullets that grouped every redline before every comment and pasted the whole selection.
 //! Deleted text stays complete inside a fence so the agent knows exactly what to remove; everything else quotes at most the first 160 characters because the line number does the anchoring.
-//! SEE-ALSO: apps/desktop/src/app/docs_annotation_feedback.rs (delivery), skills/ghostex-help/references/features.md (the Docs paragraph).
+//! SEE-ALSO: apps/desktop/src/app/docs_annotation_feedback.rs (delivery), server/src/ghostex_cli/guide/features.md (the Docs paragraph).
 
 use super::anchoring::first_annotation_match;
 use super::model::{

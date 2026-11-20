@@ -13,8 +13,9 @@ pub(super) const HIDDEN_SCREEN_TITLE: &str = "Computer use on a hidden screen";
 pub(super) const EMBEDDED_BROWSER_TITLE: &str = "Embedded browser";
 
 /// Says where the skills that left the Agent skills list went; its deep links land on that list.
-pub(super) const TOOL_SKILLS_POINTER: &str =
-    "The computer use and browser skills sit with their tools below.";
+///
+/// CDXC:AgentSkills 2026-11-20: the Ghostex computer use, browser and SpaceO skills are retired (Q4262), so the note says where agents look now.
+pub(super) const TOOL_SKILLS_POINTER: &str = "For computer and browser use, agents read the cua-driver skill, which Fast Computer & Browser Use below installs.";
 
 /// The section a bundled skill's row sits in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -150,7 +151,7 @@ mod tests {
     use super::super::super::super::search::extra_tab_search;
     use super::*;
 
-    /// Every skill Settings lists has one home, and the four tool skills sit with their tools.
+    /// Every skill Settings lists has one home.
     #[test]
     fn a_tool_skill_sits_with_its_tool() {
         let skills = catalog_skills(true);
@@ -161,24 +162,12 @@ mod tests {
                 .map(|skill| skill.id.as_str())
                 .collect()
         };
-        assert_eq!(
-            in_home(SkillHome::ComputerBrowserUse),
-            ["computerUse", "browserUse"]
-        );
-        assert_eq!(in_home(SkillHome::HiddenScreen), ["spaceo"]);
-        assert_eq!(in_home(SkillHome::EmbeddedBrowser), ["embeddedBrowserUse"]);
-        assert_eq!(
-            in_home(SkillHome::AgentSkills),
-            [
-                "cli",
-                "help",
-                "agentGuide",
-                "visuals",
-                "secrets",
-                "agentsOrchestration",
-                "manageBeads"
-            ]
-        );
+        // Only the `ghostex` skill is still bundled (CDXC:AgentSkills 2026-11-20, Q4262): the tool
+        // sections hold no skill rows, and Agent skills holds that one.
+        assert!(in_home(SkillHome::ComputerBrowserUse).is_empty());
+        assert!(in_home(SkillHome::HiddenScreen).is_empty());
+        assert!(in_home(SkillHome::EmbeddedBrowser).is_empty());
+        assert_eq!(in_home(SkillHome::AgentSkills), ["agentGuide"]);
     }
 
     /// Search still reaches every moved row through the catalog row that gates it.
@@ -187,10 +176,6 @@ mod tests {
         let cases: &[(&str, &str)] = &[
             ("Fast Computer", "bundledAgentSkills"),
             ("cua-driver", "bundledAgentSkills"),
-            ("Ghostex Computer Use", "bundledAgentSkills"),
-            ("ghostex-browser-use", "bundledAgentSkills"),
-            ("Ghostex Embedded Browser Use", "bundledAgentSkills"),
-            ("ghostex-spaceo", "bundledAgentSkills"),
             ("Fast Computer & Browser Use Permissions", "cuaPermissions"),
             ("Chromium runtime", "webRuntime"),
         ];

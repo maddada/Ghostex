@@ -213,7 +213,7 @@ pub(super) async fn deliver(
 /// The message the publishing agent receives.
 ///
 /// CDXC:SessionChat 2026-10-11 SEE-ALSO:
-/// The envelope is parsed by packages/gx-chat-core/src/transcript/page_answers.rs (the answers card and the page card's Answered state) and described to agents in skills/ghostex-visuals/SKILL.md. Change them together.
+/// The envelope is parsed by packages/gx-chat-core/src/transcript/page_answers.rs (the answers card and the page card's Answered state) and described to agents in server/src/ghostex_cli/visual_guide.md. Change them together.
 pub(super) fn answers_message(id: &str, title: &str, answers: &Value) -> String {
     ghostex_gx_visual::questions::page_answers_message(id, title, answers)
 }

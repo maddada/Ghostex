@@ -28,7 +28,7 @@
 //! User: questions an agent asks are answered in a form inside the chat itself (desktop and phone), not one question at a time and not by typing letters: all questions at once, selectable choices with nothing preselected (clicking again clears), the automatic "Other / none of these" with a note box, text questions, and one Send button. Any agent writes it as a ```questions block, the answers go back as a message, and the form then shows as answered. Pages (gx-questions) stay only for questions that need visuals.
 //!
 //! CDXC:SessionChat 2026-10-11 SEE-ALSO:
-//! packages/gx-chat-core/src/transcript/native_markdown.rs marks the fence with this id; packages/gx-chat-core/src/questions/forms.rs keeps the reader's picks and sends them; apps/desktop/src/app/native_chat/question_form.rs and apps/mobile/app/src/chat/native/transcript/QuestionForm.tsx draw it; server/src/ghostex_cli/visual.rs checks a block; skills/ghostex-visuals/SKILL.md teaches the grammar. Change them together.
+//! packages/gx-chat-core/src/transcript/native_markdown.rs marks the fence with this id; packages/gx-chat-core/src/questions/forms.rs keeps the reader's picks and sends them; apps/desktop/src/app/native_chat/question_form.rs and apps/mobile/app/src/chat/native/transcript/QuestionForm.tsx draw it; server/src/ghostex_cli/visual.rs checks a block; server/src/ghostex_cli/visual_guide.md teaches the grammar. Change them together.
 
 use serde::Serialize;
 use serde_json::{Map, Value};

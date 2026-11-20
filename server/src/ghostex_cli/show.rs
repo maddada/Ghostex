@@ -250,7 +250,7 @@ fn attribute(head: &str, name: &str) -> Option<String> {
 }
 
 /// CDXC:SessionChat 2026-10-06 SEE-ALSO:
-/// The page block `{"page":{"title","url","file","open","questions"}}` is a contract with the chat's visual parser in packages/gx-visual, which draws it as a card whose Open button opens the URL, and with skills/ghostex-visuals/SKILL.md, which tells agents to paste it exactly as printed.
+/// The page block `{"page":{"title","url","file","open","questions"}}` is a contract with the chat's visual parser in packages/gx-visual, which draws it as a card whose Open button opens the URL, and with server/src/ghostex_cli/visual_guide.md, which tells agents to paste it exactly as printed.
 /// CDXC:SessionChat 2026-10-09 DECISION:
 /// User: the agent gives its HTML link "some mark so when we click to open it it's intended to be opened floating", so the agent can show a card for its page in the chat. The mark is `"open": "popup"`, printed by default; `--browser` leaves it out. Superseded in part on 2026-10-26, user: "My setting wins for every page": the desktop opens every card where Settings > Chat > Open Ghostex pages in says and ignores the mark, which only steers Ghostex apps older than that (they open an unmarked card in the browser). `--browser` stays accepted so agents and scripts written for older apps keep working.
 fn visual_page_block(

@@ -1988,7 +1988,6 @@ pub(crate) fn start_orchestrator_role(
     family: &str,
     params: &Map<String, Value>,
 ) -> std::result::Result<(), DomainStateError> {
-    coordinators::ensure_coordinator_skill_installed(&state.paths, family)?;
     if let Some(line) = coordinator_model_line(family, params) {
         queue_session_chat_prompt(state, project_id, session_id, &line, true)?;
     }
@@ -2101,12 +2100,9 @@ pub(crate) async fn handle_promote_coordinator_http(
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
     // The coordinator record is committed, so a failure from here on is reported, not raised.
-    let playbook_error = match promoted.skill_error {
-        Some(error) => Some(error),
-        None => send_playbook_now(state, &promoted.key, &promoted.playbook_message)
-            .await
-            .err(),
-    };
+    let playbook_error = send_playbook_now(state, &promoted.key, &promoted.playbook_message)
+        .await
+        .err();
     let (project_id, session_id) = &promoted.key;
     routed_json(
         Some(endpoint_path),
@@ -2130,8 +2126,6 @@ struct PromotedCoordinator {
     key: SessionKey,
     title: String,
     playbook_message: String,
-    /// Why the orchestrator skill could not be installed (then no message is sent).
-    skill_error: Option<String>,
 }
 
 fn promote_coordinator(
@@ -2147,15 +2141,10 @@ fn promote_coordinator(
     )?;
     let (project_id, session_id) = &promotion.key;
     schedule_presentation_session_delta(state, db, repository, project_id, session_id)?;
-    let skill_error =
-        coordinators::ensure_coordinator_skill_installed(&state.paths, &promotion.family)
-            .err()
-            .map(|error| error.message);
     Ok(PromotedCoordinator {
         key: promotion.key,
         title: promotion.title,
         playbook_message: promotion.playbook_message,
-        skill_error,
     })
 }
 

@@ -31,14 +31,20 @@ struct RenamedSkill {
     new_files: &'static [(&'static str, &'static str)],
 }
 
+/// CDXC:AgentSkills 2026-11-20 DECISION:
+/// User (Q4262 "B"): Ghostex's own skills are retired for CLI help, keeping one tiny skill named
+/// `ghostex`, which is `ghostex-agent-guide` renamed. A machine with the old name gets `ghostex`
+/// the way the coordinator rename did it. The coordinator skill itself is retired now (both its
+/// names are in agent_skills.rs `RETIRED_GHOSTEX_AGENT_SKILL_NAMES`), so its rename is gone from
+/// this list.
 const RENAMED_SKILLS: &[RenamedSkill] = &[RenamedSkill {
-    old_names: crate::coordinators::COORDINATOR_SKILL_OLD_NAMES,
-    new: crate::coordinators::COORDINATOR_SKILL_NAME,
+    old_names: &["ghostex-agent-guide"],
+    new: "ghostex",
     new_files: &[
-        ("SKILL.md", crate::coordinators::COORDINATOR_SKILL_MD),
+        ("SKILL.md", include_str!("../../skills/ghostex/SKILL.md")),
         (
             "agents/openai.yaml",
-            crate::coordinators::COORDINATOR_SKILL_OPENAI_YAML,
+            include_str!("../../skills/ghostex/agents/openai.yaml"),
         ),
     ],
 }];
@@ -48,7 +54,7 @@ const RENAMED_SKILLS: &[RenamedSkill] = &[RenamedSkill {
 /// download). A copy under an old name with no entry here counts as the user's and is kept.
 /// To add a name: `git log --all --format=%H -- skills/<name>/<file>` and hash each revision's file.
 const OLD_SKILL_SHIPPED_SHA256: &[(&str, &[&str])] =
-    &[("ghostex-orchestrator", ORCHESTRATOR_SHIPPED_SHA256)];
+    &[("ghostex-agent-guide", AGENT_GUIDE_SHIPPED_SHA256)];
 
 fn shipped_sha256(old_name: &str) -> &'static [&'static str] {
     OLD_SKILL_SHIPPED_SHA256
@@ -57,58 +63,16 @@ fn shipped_sha256(old_name: &str) -> &'static [&'static str] {
         .map_or(&[], |(_, hashes)| hashes)
 }
 
-/// `ghostex-orchestrator` SKILL.md and agents/openai.yaml, every revision in the repository.
-const ORCHESTRATOR_SHIPPED_SHA256: &[&str] = &[
+/// `ghostex-agent-guide` SKILL.md and agents/openai.yaml, every revision in the repository.
+const AGENT_GUIDE_SHIPPED_SHA256: &[&str] = &[
     // SKILL.md
-    "076e970ca97a0e095b8e40d9d5ef41cfce1dd736b1292bd692d14b87dd998b39",
-    "078af2c0157cf5c734aca3a3ace62a341e5634e24d40f035289679d951457c9a",
-    "0bc3ab186a027e5227270ddab1b75a69e7dcb1aa6a45d70f979695905cb6568e",
-    "0c882a7121cf90e7822686d58f4bdbca749af5b5c9204c30023d83247a13c52f",
-    "10ae8295fe7cd7c9b5b5b789cf70636ced9d7722487ed4acfd0a1336bca6f057",
-    "119e4a9ba673a428f42bcf330b70639e502f41e550fdd0743b6691956502eb40",
-    "19fc10b6e57756ab9a522064116627bc8e85b73d7395700013dfa66f1d31a19c",
-    "1f8adefac0b8221fe36bb234015d55742a0525540f56bc36a52fa40e15868be0",
-    "20fc6028952f94702f87b67e23f3e0d17734c06fa243939835f0c9918be94f1d",
-    "2456a7141af0ffe905aed1716a12b3f9316d4fb0223fa04cfea988583bcf43a3",
-    "374da00e358d070928e9f0689f17c93ec17b78d7b29779b8b4f5d400f6957112",
-    "3ea0ffcf02ba61cd6c7cde37536bac1111bdd4c9598607826912eaab19a0aa7d",
-    "3fa5a60e9247571b02dc16841086697877e197fb34ab32cb0d32017d481877a5",
-    "4230be6a17cc81bc629e40166cd00ab5cd4c1dc7750402bc7e4c04276bece1fa",
-    "4274f9f878e7f800436d2b1329ac990ab210e21366526519d131ada33e7187b4",
-    "4a78e1e0ce2d29a44c739a609d5b6e0085a8fa65ce27f309f371f6de001c617c",
-    "522de3699297777f08a3a3ef544f0b764ece9647f1a031f8b448cb016321c9a8",
-    "5a5c9505f0524e2d7b9f922270f9a440cdedaebac8b0e9d9440dce79bce1de67",
-    "6636af6c5d16f492088ae5ff3c71032349fcab1c3159d8d70e9a76ca4673cd95",
-    "6907e220ff052bc285094d61224e0fdc33d99fb88e16994131fa990eedaffc44",
-    "7116e1d99d332f4ce53d3be4af87671360d5b65fc31ece5f686754238f89bf89",
-    "71b60fedb5ab6b4f7a48c36cd982d5fbde9b8f1087804c8d580033aa4dd85c7e",
-    "8b5966bbba0d4e4a53c03a0966c6edc14f2e6cc07dffad0b077c691379468271",
-    "92a9950828d35d07cc6a2f185c8a80a4c06a9a9ede8e99efe2e62007756d4878",
-    "976506de92bf272e01992a8c5c10a31c9b07ef1bcb86995a44c1660a2775e275",
-    "999366ae30ced11e0e7ccf100734926b17492c307645d0093d8c10d596979966",
-    "a15305ed73f880b05ea70899bec593709f2c2a5d4ebf969d4a73cbe83e0e059b",
-    "a53fb829b92abe8cad0dfa02439a090c60ae87c19efdb20c89be89e21d931482",
-    "a89b0557f2ead9761c12568858e4c57f27a8e8e1178b81854b239386c39007f6",
-    "ae21d2f7f83b4366a3ec94b93089fca40a89fec47b4a84759ab0da1ee63c8612",
-    "b0cc1df8d758b4dfdee3ee10c05f0a1ac4681169e4a6337f30065fa241cea372",
-    "be8ed6575c22eb7d7676ad4209a267ef02e8ec7906001c0c0e0ab6b6f7459774",
-    "c19401bdaa6a3dd34ae593ef11a145f4b6a5d85858abaf65d4aed4b0c132a792",
-    "ca1fa662e509639422d7b6247a93faf80f4b21c521fc87d76e2f0fb04800a870",
-    "ceabf993fc30d358ef44d9e5f3d30f7ba85fc289dfe7c55120fc929848fd36c2",
-    "cfbf36a59f49a9ab5b15e3666311f1aaf29fa224f2cd5de0a0b2fcbb922c45bc",
-    "d4f060fd70a467b3482589aff33e09e66bc1a5ab3339b6c30c1b9c1bc6f9dd8d",
-    "d5d60d7a5902c381978345e0af2a38e9208d8afdfdf33fe9deaf15b3c0c12424",
-    "d7320f297aed811ff972cee86beefe781376192b154e84a3e3b8be0db52a0d3c",
-    "dc512c998c3a3da11dfb2ce0b7978d636e514585ca4793399e79f8938856c0e6",
-    "eddf33bbd0b1af56be052048ba070f7f8efee29677c73a5926dfa4313afc85cf",
-    "eecb57226afe8aef8a9734c385e3f0c2bb51c0723994c89a3f2235c8cb4b7856",
-    "ef7258981b9a5ae0945d333b63de7af2ba34cc6f75cc2997735ff469d3fe3688",
-    "f019e6b24967eaa1a7c548d1af5b2e74badf9f75b5555c47133fff4d9e4710f0",
-    "f1188ed34b108ad334dfbd79ad5f04d67633014e0340faa38320ad56285c41ab",
-    "fdf53e3a08b142a37c9ac2db110fe1036482438842915b8eaa2fff225d1f5803",
+    "29a01ff3e22ad40724b6d4bae3c441fb0d696aeae5791920cf299a9e649bdd33",
+    "30f6f3d6a8c77db5674525307d5760defc0973804af06f0794fcc64f1e5a5653",
+    "617875154f1cc034f7ad8b33d670e975e897ab92d52a91bf86b6e77a360fc90a",
+    "8ca24e71c86d1017324e952eb823f99ae274759aff981bcb9f8d593d4f53204e",
+    "b23e81113dad3179c39702dd3a528013960f6a2c084d55601806261c382540cf",
     // agents/openai.yaml
-    "d892999cf5e0f577d2213c25b8f5cc2c4fa52eb1e4c14f116e110d98a498e6ef",
-    "e54d93e7414e18e5d22edb0205b20a77c18d8e3af8ecd7adae988b2fcc238b0c",
+    "56105dabf7d64743559aca47db681402e3c36d9f15e637d0ffd70f1a4713eb61",
 ];
 
 /// What one start did, for the log line.

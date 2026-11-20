@@ -1,7 +1,0 @@
-interface:
-  display_name: 'Ghostex Visuals'
-  short_description: 'Ghostex visuals, forms and Live pages in the Ghostex chat'
-  default_prompt: 'Use $ghostex-visuals to show the result as Ghostex visuals (a chart, table or stats in a ```visual block), or as a Live page published with ghostex show.'
-
-policy:
-  allow_implicit_invocation: false

@@ -1,4 +1,5 @@
-//! The GBot playbook (`skills/ghostex-gbots/`), installed for the agent a GBot chat runs on.
+//! The GBot playbook as a skill, for a chat another computer opens here whose first message still
+//! names `ghostex-gbots` (a computer whose Ghostex predates `ghostex gbots guide`).
 //!
 //! CDXC:GBots 2026-11-09 WHY:
 //! Every GBot chat starts with "Read and adhere to this skill: $ghostex-gbots" (session.rs
@@ -9,7 +10,10 @@
 //! (computer/remote_chat.rs marks it `gbotHome`; the `/api/createAgentSession` route calls
 //! [`install_for_visiting_chat`]), since that computer's agent reads its own skills folder. A chat
 //! on a Cloud Box needs none: its first message carries the whole brief (computer/cloud_box.rs).
-//! SEE-ALSO: server/src/agent_skills.rs (`GBOT_ONLY_GHOSTEX_AGENT_SKILL_NAMES`).
+//!
+//! CDXC:AgentSkills 2026-11-20 DECISION:
+//! User (Q4262 "B", "make sure we don't break stuff"): Ghostex's own skills are retired for CLI help, so a GBot chat started here reads its playbook with `ghostex gbots guide` and nothing installs the skill for it. A chat that an older home computer opens here still says "$ghostex-gbots", so a visiting chat keeps getting the skill, written from this build's playbook (gbots/playbook.md) with the skill's front matter; the startup pass removes it again with the other retired skills.
+//! SEE-ALSO: server/src/agent_skills.rs (`RETIRED_GHOSTEX_AGENT_SKILL_NAMES`).
 
 use std::path::PathBuf;
 
@@ -24,19 +28,45 @@ use super::session::GBOTS_SKILL;
 /// (computer/remote_chat.rs `HOME_KEY`).
 const HOME_KEY: &str = "gbotHome";
 
-const SKILL_MD: &str = include_str!("../../../skills/ghostex-gbots/SKILL.md");
-const SKILL_OPENAI_YAML: &str = include_str!("../../../skills/ghostex-gbots/agents/openai.yaml");
+/// The skill's front matter: manual-only, like every Ghostex skill (2026-11-17, Q1 "C").
+const SKILL_FRONT_MATTER: &str = "---
+name: ghostex-gbots
+description: >-
+  The GBot playbook. Use it only in a GBot's own chat in Ghostex, when your
+  first message names this skill and says who you are.
+disable-model-invocation: true
+---
 
-/// Installs the GBot playbook for `family` when it is missing.
-pub(crate) fn ensure_gbots_skill_installed(
+";
+const SKILL_OPENAI_YAML: &str = "interface:
+  display_name: 'Ghostex GBot'
+  short_description: 'How a GBot works in Ghostex: its brief, memory, team and reports'
+  default_prompt: 'Use $ghostex-gbots to work as this GBot: run ghostex gbots brief first and follow it.'
+
+policy:
+  allow_implicit_invocation: false
+";
+
+/// The skill's files as [`ensure_gbots_skill_installed`] writes them, so the startup pass for
+/// retired skills knows such a copy is Ghostex's (agent_skills.rs).
+pub(crate) fn retired_gbots_skill_files_written_by_this_build() -> [String; 2] {
+    [
+        format!("{SKILL_FRONT_MATTER}{}", super::GBOT_PLAYBOOK_MD),
+        SKILL_OPENAI_YAML.to_string(),
+    ]
+}
+
+/// Installs the GBot playbook as a skill for `family` when it is missing.
+fn ensure_gbots_skill_installed(
     paths: &GxserverPaths,
     family: &str,
 ) -> Result<PathBuf, DomainStateError> {
+    let [skill_md, _] = retired_gbots_skill_files_written_by_this_build();
     crate::coordinators::ensure_bundled_skill_installed(
         paths,
         family,
         GBOTS_SKILL,
-        SKILL_MD,
+        &skill_md,
         SKILL_OPENAI_YAML,
     )
 }

@@ -14,20 +14,9 @@ use crate::app::helpers::*;
 use crate::*;
 
 pub(crate) fn gpui_bundled_agent_skill_name(skill_id: &str) -> Option<&'static str> {
+    // CDXC:AgentSkills 2026-11-20: only the `ghostex` skill (catalog id `agentGuide`) is still bundled (Q4262).
     match skill_id {
-        "browserUse" => Some("ghostex-browser-use"),
-        "computerUse" => Some("ghostex-computer-use"),
-        "spaceo" => Some("ghostex-spaceo"),
-        "embeddedBrowserUse" => Some("ghostex-embedded-browser-use"),
-        "cli" => Some("ghostex-cli"),
-        "help" => Some("ghostex-help"),
-        "agentGuide" => Some("ghostex-agent-guide"),
-        "agentsOrchestration" => Some("ghostex-agents"),
-        "manageBeads" => Some("ghostex-manage-beads"),
-        "generateTitle" => Some("ghostex-auto-rename-session"),
-        "moveCodexSession" => Some("ghostex-move-codex-session"),
-        "visuals" => Some("ghostex-visuals"),
-        "secrets" => Some("ghostex-secrets"),
+        "agentGuide" => Some("ghostex"),
         _ => None,
     }
 }

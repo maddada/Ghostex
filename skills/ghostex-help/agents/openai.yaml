@@ -1,7 +1,0 @@
-interface:
-  display_name: 'Ghostex Help'
-  short_description: 'Explain Ghostex features and change settings'
-  default_prompt: 'Use $ghostex-help to answer from the built-in Ghostex guide and help with the requested setting.'
-
-policy:
-  allow_implicit_invocation: false

@@ -18,7 +18,7 @@
 //! removes it from all of them (Q1472); a session made a coordinator gets it as well (Q1475); only
 //! the user sees it, the agent's first message is unchanged (Q1473); clicking an example puts it in
 //! the chat box (Q1474); no setting (Q1476); a macOS tip names SpaceO and cua-driver (Q1477). Help
-//! has the same tips (skills/ghostex-help/references/features.md, Coordinators). The names are the
+//! has the same tips (server/src/ghostex_cli/guide/features.md, Coordinators). The names are the
 //! user's pick on Q1480 (gx form and gx visuals) and, since 2026-11-19, Live page for what Q1480
 //! called a gx page (Q4207, Q4208).
 
