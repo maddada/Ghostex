@@ -201,6 +201,7 @@ pub const FIELDS: &[Field] = &[
     field("animations", "panelAnimationSpeed", Kind::Choice),
     // Sidebar.
     field("sidebar_view", "sidebarView", Kind::Choice),
+    field("sidebar_layout", "sidebarLayout", Kind::Choice),
     field("sidebar_preset", "sidebarSettingsPreset", Kind::Choice),
     field(
         "sidebar_width",
@@ -337,6 +338,7 @@ pub const PERSON_KEYS: &[&str] = &[
     "appearance",
     "transparency",
     "sidebar_view",
+    "sidebar_layout",
     "linux_distro",
     "linux_desktop",
     "claude_top_plan",

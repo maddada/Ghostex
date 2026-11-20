@@ -27,6 +27,27 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
+        match self.takeover_page_on() {
+            Some(super::place::TakeoverPage::AgentsHub) => {
+                let hub = self.agents_hub_takeover_view(window, cx);
+                return self.render_takeover_native_column(
+                    "ghostex-gpui-agents-hub-takeover",
+                    gpui::AnyView::from(hub).into_any_element(),
+                    layout,
+                    window,
+                );
+            }
+            Some(super::place::TakeoverPage::AllAutomations) => {
+                let automate = self.render_native_automate_all_projects_surface(window, cx);
+                return self.render_takeover_native_column(
+                    "ghostex-gpui-all-automations-takeover",
+                    automate,
+                    layout,
+                    window,
+                );
+            }
+            Some(super::place::TakeoverPage::Web(_)) | None => {}
+        }
         if let Some(place) = self.web_place_on() {
             if place.enabled() && self.titlebar_mode_available(place.mode()) {
                 if place == WebPlace::Grok {
@@ -124,6 +145,59 @@ impl GhostexGpuiApp {
 }
 
 impl GhostexGpuiApp {
+    /// A native page of the rail's (Agents Hub, All Automations) in the sessions column's place,
+    /// below the floating header like Claude's page, sized as Claude's column is.
+    fn render_takeover_native_column(
+        &self,
+        id: &'static str,
+        page: AnyElement,
+        layout: AgentsWorkspaceLayout,
+        window: &Window,
+    ) -> AnyElement {
+        let outer_rail_edges = self.main_workspace_outer_rail_edges(window);
+        let rail_edges = match layout {
+            AgentsWorkspaceLayout::Column { .. } => RailFacingEdges {
+                right: true,
+                ..outer_rail_edges
+            },
+            _ => outer_rail_edges,
+        };
+        let column = v_flex()
+            .id(id)
+            .pt(px(self.workarea_header_column_top_inset(false)))
+            .min_h_0()
+            .overflow_hidden()
+            .bg(workspace_nested_background());
+        let column = match layout {
+            AgentsWorkspaceLayout::FullWidth | AgentsWorkspaceLayout::Floating => {
+                column.flex_1().min_w_0()
+            }
+            AgentsWorkspaceLayout::Column { split_ratio } => column
+                .flex_grow(split_ratio)
+                .flex_shrink_1()
+                .flex_basis(relative(0.0))
+                .h_full()
+                .min_w(px(WORKAREA_AGENTS_COLUMN_MIN_WIDTH)),
+        };
+        let pane = div()
+            .flex()
+            .flex_1()
+            .w_full()
+            .min_w_0()
+            .min_h_0()
+            .overflow_hidden()
+            .child(page);
+        column
+            .child(rail_aware_pane_border(
+                pane,
+                rail_edges,
+                workspace_pane_border_color(),
+                workspace_pane_border_color(),
+                None,
+            ))
+            .into_any_element()
+    }
+
     /// The bar above Claude's or Grok's page: Claude's accounts or Grok's logins.
     pub(crate) fn render_web_place_bar(
         &self,

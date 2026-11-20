@@ -156,7 +156,8 @@ impl GhostexGpuiApp {
             return false;
         }
         let x = position.x.as_f32();
-        let (start_x, end_x) = gpui_sidebar_divider_x_bounds(self.sidebar_width);
+        let (start_x, end_x) =
+            gpui_sidebar_divider_x_bounds(self.sidebar_width + self.sidebar_rail_width());
 
         // CDXC:Sidebar 2026-09-20 WHY:
         // The divider used to start below the titlebar row. That row is gone, so the body row and

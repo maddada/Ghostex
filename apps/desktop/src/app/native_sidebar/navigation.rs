@@ -155,6 +155,12 @@ const WINDOW_CORNER_CENTER_Y: f32 = 18.5;
 ///
 /// CDXC:Sidebar 2026-10-31 WHY:
 /// GitHub #375: the sidebar zoom shrinks this row, so at 90% a padding that scaled with it put the buttons 1.85pt above the traffic lights and the workarea header's own buttons, whatever their size. The lights and the header do not zoom, so this row holds their centre line instead of scaling away from it.
+/// The docked top row's height in the window's corner: where the rail's first icon starts below
+/// (app/sidebar_rail/).
+pub(crate) fn sidebar_corner_row_height(scale: f32) -> f32 {
+    corner_row_top_padding(scale) + TITLEBAR_CONTROL_HEIGHT * scale + 3.0 * scale
+}
+
 fn corner_row_top_padding(scale: f32) -> f32 {
     (WINDOW_CORNER_CENTER_Y - TITLEBAR_CONTROL_HEIGHT * scale / 2.0).max(0.0)
 }
@@ -284,11 +290,13 @@ impl GhostexGpuiApp {
         still read one value, `sidebar_toggle_leading_x`.
         */
         // With Spaces on, the Hermes button is the Space row's last slot instead.
-        let bots_toggle =
-            (snapshot.bots_enabled && !snapshot.spaces_enabled).then_some(snapshot.bots_mode);
+        // With the rail on, Hermes, Search and the bell are the rail's (app/sidebar_rail/).
+        let rail_on = self.sidebar_rail_shown();
+        let bots_toggle = (snapshot.bots_enabled && !snapshot.spaces_enabled && !rail_on)
+            .then_some(snapshot.bots_mode);
         // Each sidebar extension with a mode has its button here, after Bots (extension_panel/).
         let extension_modes = self.native_extension_sidebar_view().modes;
-        let bell_visible = self.titlebar_notification_bell_visible();
+        let bell_visible = self.titlebar_notification_bell_visible() && !rail_on;
         let tooltip_label: gpui::SharedString = match shortcut.as_deref() {
             Some(shortcut) if !shortcut.is_empty() => format!("{label} ({shortcut})").into(),
             _ => label.into(),
@@ -296,8 +304,13 @@ impl GhostexGpuiApp {
         let tooltip_delay = appearance.tooltip_delay;
         // The toggle's window x while this row owns the corner: past the traffic lights where the
         // window draws them, at the edge strip's width otherwise (sidebar hidden, full screen).
+        // With the rail on, the sidebar starts the rail's width in from the window's edge (the rail
+        // sits left of it, app/sidebar_rail/), so the same window x is that much less in this row.
+        let rail = self.sidebar_rail_shown();
         let corner_toggle_x = owns_window_corner.then(|| {
-            crate::app::helpers::sidebar_toggle_leading_x(self.window_controls_reserved())
+            (crate::app::helpers::sidebar_toggle_leading_x(self.window_controls_reserved())
+                - self.sidebar_rail_width())
+            .max(5.0 * scale)
         });
         // The floating sidebar's top row while the panel carries the traffic lights at its start
         // (`floating_sidebar_lights_row`). Its buttons stay right-aligned as they are; the row keeps
@@ -353,7 +366,8 @@ impl GhostexGpuiApp {
             } else {
                 self.native_sidebar_side_insets(scale).right
             };
-            let buttons = 3
+            let buttons = 2
+                + usize::from(!rail)
                 + usize::from(bell_visible)
                 + usize::from(bots_toggle.is_some())
                 + extension_modes.len();
@@ -438,55 +452,58 @@ impl GhostexGpuiApp {
                 self.render_native_sidebar_extension_mode_button(button, appearance, cx)
             }))
             // The Claude and Grok Bot buttons are not in this row or the bottom bar: they are in the workarea header, left of the Voice button (CDXC:Extensions 2026-11-10 in app/claude_web/header_buttons.rs).
-            .child(
-                div()
-                    .id(format!("native-sidebar-{label}"))
-                    .role(gpui::Role::Button)
-                    .aria_label(tooltip_label.clone())
-                    .when(cfg!(target_os = "windows"), |button| button.occlude())
-                    .h(px(SIDEBAR_TOP_ROW_BUTTON_HEIGHT * scale))
-                    .w(px(SIDEBAR_TOP_ROW_BUTTON_WIDTH * scale))
-                    .rounded(px(SIDEBAR_TOP_ROW_BUTTON_RADIUS * scale))
-                    .flex()
-                    .flex_shrink(1.0)
-                    .min_w(px(SIDEBAR_TOP_ROW_BUTTON_MIN_WIDTH * scale))
-                    .items_center()
-                    .justify_center()
-                    .cursor_default()
-                    .hover(|row| row.bg(appearance.hover))
-                    .child(titlebar_svg_icon(
-                        BROWSER_ICON_SEARCH,
-                        15.0 * scale,
-                        appearance.chrome_icon,
-                    ))
-                    .on_click(cx.listener(move |app, _, _, cx| {
-                        cx.stop_propagation();
-                        app.dispatch_native_sidebar_ui(
-                            json!({"type": "sidebarAction", "action": "sessions"}),
-                            cx,
-                        );
-                    }))
-                    .map(|button| {
-                        self.sidebar_focus_stop(
-                            button,
-                            format!("navigation:{label}"),
-                            super::focus_order::SidebarStopPlace::Fixed,
-                            appearance,
-                            cx,
-                        )
-                    })
-                    .managed_discrete_tooltip_with_placement(
-                        ManagedTooltipPlacement::Right,
-                        tooltip_delay,
-                        move |window, cx| {
-                            super::tooltips::sidebar_style_tooltip(
-                                tooltip_label.to_string(),
-                                window,
+            // With the rail on, Search is the rail's (app/sidebar_rail/).
+            .when(!rail, |row| {
+                row.child(
+                    div()
+                        .id(format!("native-sidebar-{label}"))
+                        .role(gpui::Role::Button)
+                        .aria_label(tooltip_label.clone())
+                        .when(cfg!(target_os = "windows"), |button| button.occlude())
+                        .h(px(SIDEBAR_TOP_ROW_BUTTON_HEIGHT * scale))
+                        .w(px(SIDEBAR_TOP_ROW_BUTTON_WIDTH * scale))
+                        .rounded(px(SIDEBAR_TOP_ROW_BUTTON_RADIUS * scale))
+                        .flex()
+                        .flex_shrink(1.0)
+                        .min_w(px(SIDEBAR_TOP_ROW_BUTTON_MIN_WIDTH * scale))
+                        .items_center()
+                        .justify_center()
+                        .cursor_default()
+                        .hover(|row| row.bg(appearance.hover))
+                        .child(titlebar_svg_icon(
+                            BROWSER_ICON_SEARCH,
+                            15.0 * scale,
+                            appearance.chrome_icon,
+                        ))
+                        .on_click(cx.listener(move |app, _, _, cx| {
+                            cx.stop_propagation();
+                            app.dispatch_native_sidebar_ui(
+                                json!({"type": "sidebarAction", "action": "sessions"}),
+                                cx,
+                            );
+                        }))
+                        .map(|button| {
+                            self.sidebar_focus_stop(
+                                button,
+                                format!("navigation:{label}"),
+                                super::focus_order::SidebarStopPlace::Fixed,
+                                appearance,
                                 cx,
                             )
-                        },
-                    ),
-            )
+                        })
+                        .managed_discrete_tooltip_with_placement(
+                            ManagedTooltipPlacement::Right,
+                            tooltip_delay,
+                            move |window, cx| {
+                                super::tooltips::sidebar_style_tooltip(
+                                    tooltip_label.to_string(),
+                                    window,
+                                    cx,
+                                )
+                            },
+                        ),
+                )
+            })
             // Add project, right of Search (CDXC:Sidebar 2026-11-11 DECISION at the top of this
             // file); it folds into the menu while the row is too narrow for it (`top_row_fit`).
             .when(add_project, |row| {

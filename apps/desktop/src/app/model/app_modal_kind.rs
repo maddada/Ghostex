@@ -53,6 +53,8 @@ pub(crate) enum GpuiAppModalKind {
     NewGbot,
     /// Name, description and Start from of a new Hermes bot (new_bot_modal_lifecycle.rs).
     NewBot,
+    /// The one-time Meet the rail intro (app/sidebar_rail/intro.rs).
+    RailIntro,
     /// A GBot's Profile, Instructions and Memory, from its row (gbot_settings_modal_lifecycle.rs).
     GbotSettings,
     /// Import Team… and Export Team… from Main Hub's GBots heading (gbot_team_modal_lifecycle.rs).
@@ -128,6 +130,7 @@ impl GpuiAppModalKind {
             "newCoordinator" => Some(Self::NewCoordinator),
             "newGbot" => Some(Self::NewGbot),
             "newBot" => Some(Self::NewBot),
+            "railIntro" => Some(Self::RailIntro),
             "gbotSettings" => Some(Self::GbotSettings),
             "gbotTeam" => Some(Self::GbotTeam),
             "makeCoordinator" => Some(Self::MakeCoordinator),
@@ -183,6 +186,7 @@ impl GpuiAppModalKind {
             Self::NewCoordinator => "newCoordinator",
             Self::NewGbot => "newGbot",
             Self::NewBot => "newBot",
+            Self::RailIntro => "railIntro",
             Self::GbotSettings => "gbotSettings",
             Self::GbotTeam => "gbotTeam",
             Self::MakeCoordinator => "makeCoordinator",
@@ -235,6 +239,7 @@ impl GpuiAppModalKind {
             Self::NewCoordinator => "Ghostex New Coordinator",
             Self::NewGbot => "Ghostex New GBot",
             Self::NewBot => "Ghostex New Bot",
+            Self::RailIntro => "Ghostex Meet the Rail",
             Self::GbotSettings => "Ghostex GBot Settings",
             Self::GbotTeam => "Ghostex GBots Team",
             Self::MakeCoordinator => "Ghostex Make Coordinator",
@@ -424,6 +429,10 @@ impl GpuiAppModalKind {
                 px(crate::app::window::NEW_BOT_MODAL_WIDTH),
                 px(crate::app::window::NEW_BOT_MODAL_INITIAL_HEIGHT),
             ),
+            Self::RailIntro => size(
+                px(crate::app::sidebar_rail::RAIL_INTRO_MODAL_WIDTH),
+                px(crate::app::sidebar_rail::RAIL_INTRO_MODAL_INITIAL_HEIGHT),
+            ),
             Self::GbotSettings => size(
                 px(crate::app::window::GBOT_SETTINGS_MODAL_WIDTH),
                 px(crate::app::window::GBOT_SETTINGS_MODAL_INITIAL_HEIGHT),
@@ -576,6 +585,7 @@ impl GpuiAppModalKind {
             | Self::Feedback
             | Self::NewGbot
             | Self::NewBot
+            | Self::RailIntro
             | Self::TerminalPasteConfirm
             | Self::CloseSessionsConfirm
             | Self::ChiefNewChat

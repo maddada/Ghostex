@@ -152,6 +152,12 @@ pub fn quick_projectless_payload() -> Value {
     })
 }
 
+/// The All Automations overview's Automate board id, which its requests carry; the rail's All
+/// Automations takeover shows the overview without making it the active project.
+pub fn quick_automations_board_id() -> String {
+    project_editor_surface_id(QUICK_AUTOMATIONS_PROJECT_ID, "automate")
+}
+
 /// `nativeProjectEditorSurfaceId`: `project-editor:<encodeURIComponent(projectId)>:<mode>`.
 fn project_editor_surface_id(project_id: &str, mode: &str) -> String {
     format!(

@@ -163,7 +163,11 @@ pub(crate) fn record_gpui_app_launched_telemetry(background: &gpui::BackgroundEx
     these variables itself, which is why the app sends them.
     */
     if cfg!(target_os = "linux") {
-        let env = |name: &str| std::env::var(name).ok().filter(|value| !value.trim().is_empty());
+        let env = |name: &str| {
+            std::env::var(name)
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        };
         if let Some(desktop) = env("XDG_CURRENT_DESKTOP").or_else(|| env("XDG_SESSION_DESKTOP")) {
             properties["linux_desktop"] = serde_json::Value::String(desktop);
         }
@@ -202,6 +206,41 @@ pub(crate) fn record_gpui_surface_opened_telemetry(
         return;
     }
     record_gpui_client_event("surface.opened", surface.properties(), background);
+}
+
+/// The sidebar's layout changed: `layout` is "rail" or "classic", `source` "settings" or "intro"
+/// (gxserver re-checks both, server/src/telemetry/taxonomy.rs `SIDEBAR_LAYOUTS`).
+pub(crate) fn record_gpui_sidebar_layout_changed_telemetry(
+    layout: &'static str,
+    source: &'static str,
+) {
+    record_gpui_client_event_on_thread(
+        "sidebar_layout.changed",
+        serde_json::json!({ "layout": layout, "source": source }),
+    );
+}
+
+/// The one-time Meet the rail intro was answered: `tried` is "none", "rail", "classic" or
+/// "both", `chose` the layout kept.
+pub(crate) fn record_gpui_rail_intro_answered_telemetry(tried: &'static str, chose: &'static str) {
+    record_gpui_client_event_on_thread(
+        "rail_intro.answered",
+        serde_json::json!({ "tried": tried, "chose": chose }),
+    );
+}
+
+/// `record_gpui_client_event` from where no executor is at hand (a settings read): the same body,
+/// posted from a short-lived thread.
+fn record_gpui_client_event_on_thread(event: &'static str, properties: serde_json::Value) {
+    let body = if gpui_analytics_off_at_launch() {
+        serde_json::json!({ "event": "analytics.off" })
+    } else {
+        serde_json::json!({ "event": event, "properties": properties })
+    }
+    .to_string();
+    let _ = std::thread::Builder::new()
+        .name("ghostex-analytics-ping".to_string())
+        .spawn(move || post_gpui_client_event_body(&body));
 }
 
 /// Started with the analytics launch option: `GHOSTEX_TELEMETRY_DISABLED=1`, `DO_NOT_TRACK=1`, or

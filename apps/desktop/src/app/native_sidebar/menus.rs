@@ -1493,6 +1493,9 @@ impl GhostexGpuiApp {
                             let icon_path =
                                 gpui_sidebar_command_icon_asset_path(secondary["icon"].as_str());
                             let armed = panel.row_is_armed(item);
+                            // A button only the row under the pointer or the keyboard shows (the
+                            // rail's ⋯ menu pins an unpinned row with it, app/sidebar_rail/menu.rs).
+                            let hover_only = secondary["hoverOnly"] == true && !selected;
                             // Painted over its column rather than added and removed, so no row
                             // changes size as it appears.
                             let revealed = !confirm || armed || selected || row_menu_open;
@@ -1588,6 +1591,11 @@ impl GhostexGpuiApp {
                                         }
                                     })
                                     .when(!icon_only, |button| button.child(label))
+                                    .when(hover_only, |button| {
+                                        button.opacity(0.0).group_hover(MENU_ROW_GROUP, |button| {
+                                            button.opacity(1.0)
+                                        })
+                                    })
                                     .on_click(cx.listener(move |app, _, _, cx| {
                                         cx.stop_propagation();
                                         app.activate_native_sidebar_menu_secondary(

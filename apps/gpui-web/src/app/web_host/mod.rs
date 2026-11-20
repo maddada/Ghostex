@@ -18,6 +18,7 @@ mod path_links;
 mod project_path_actions;
 mod session_links;
 mod side_chat;
+mod sidebar_rail;
 mod toasts;
 mod work_view;
 mod workspace;

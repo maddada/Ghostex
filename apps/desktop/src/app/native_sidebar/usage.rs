@@ -530,7 +530,8 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         let scale = appearance.scale;
         // The handle exists only once an account is starred, and only while its meters are hidden.
-        let hidden = meter_count > 0 && !self.sidebar_usage_visible;
+        // With the rail on, the rail's chart button is the switch instead (app/sidebar_rail/).
+        let hidden = meter_count > 0 && !self.sidebar_usage_visible && !self.sidebar_rail_shown();
         let handle =
             hidden.then(|| self.render_native_sidebar_usage_handle(appearance, window, cx));
         // While the meters are hidden, the bottom of the sidebar as tall as the meters were is

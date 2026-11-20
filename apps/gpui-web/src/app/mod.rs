@@ -34,6 +34,8 @@ pub(crate) mod owner_security;
 #[allow(dead_code)]
 #[path = "../../../desktop/src/app/panel_motion/tween.rs"]
 pub(crate) mod panel_motion;
+/// The rail at the window's left edge (the desktop's files; `web_host/sidebar_rail.rs` is its host).
+pub(crate) mod sidebar_rail;
 #[allow(dead_code, unused_imports)]
 pub(crate) mod native_app_modal_lifecycle {
     use crate::app::helpers::*;

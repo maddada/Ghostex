@@ -36,6 +36,10 @@ impl GhostexGpuiApp {
     /// here, and pinned or showing its page (render/workarea_header/header_pins.rs).
     fn web_bot_buttons(&self) -> Vec<WebBotButton> {
         // Grok Bot first, then Claude (the user, 2026-11-10, after seeing the header: "just swap them").
+        // With the rail on, Claude and Grok Bot are the rail's (app/sidebar_rail/).
+        if self.sidebar_rail_shown() {
+            return Vec::new();
+        }
         [WebPlace::Grok, WebPlace::Claude]
             .into_iter()
             .filter(|place| place.enabled() && self.titlebar_mode_available(place.mode()))

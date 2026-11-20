@@ -11,7 +11,7 @@
 use gpui::Window;
 use serde_json::{Value, json};
 
-use super::place::WebPlace;
+use super::place::{TakeoverPage, WebPlace};
 use crate::*;
 
 /// The side panel as Claude found it.
@@ -155,7 +155,7 @@ impl ClaudePlace {
 pub(crate) struct ClaudeTakeover {
     before: ClaudeLayout,
     place: Option<ClaudePlace>,
-    view: WebPlace,
+    view: TakeoverPage,
 }
 
 impl ClaudeTakeover {
@@ -165,7 +165,7 @@ impl ClaudeTakeover {
             Self {
                 before: current,
                 place: Some(place),
-                view: WebPlace::Claude,
+                view: TakeoverPage::Web(WebPlace::Claude),
             },
             ClaudeLayout::CLAUDE_ALONE,
         )
@@ -191,13 +191,13 @@ impl ClaudeTakeover {
         self.place.as_ref()
     }
 
-    /// Which page is on: Claude or Grok.
-    pub(crate) fn view(&self) -> WebPlace {
+    /// Which page is on: Claude, Grok, Agents Hub or All Automations.
+    pub(crate) fn view(&self) -> TakeoverPage {
         self.view
     }
 
-    /// Switching from one page to the other keeps the layout and place from before either.
-    pub(crate) fn set_view(&mut self, view: WebPlace) {
+    /// Switching from one page to another keeps the layout and place from before either.
+    pub(crate) fn set_view(&mut self, view: TakeoverPage) {
         self.view = view;
     }
 
@@ -221,8 +221,8 @@ impl ClaudeTakeover {
             view: value
                 .get("view")
                 .and_then(Value::as_str)
-                .and_then(WebPlace::from_slug)
-                .unwrap_or(WebPlace::Claude),
+                .and_then(TakeoverPage::from_slug)
+                .unwrap_or(TakeoverPage::Web(WebPlace::Claude)),
         })
     }
 }
@@ -274,6 +274,11 @@ impl GhostexGpuiApp {
 
     /// Which of Claude and Grok is on.
     pub(crate) fn web_place_on(&self) -> Option<WebPlace> {
+        self.takeover_page_on().and_then(TakeoverPage::web)
+    }
+
+    /// Which page the takeover shows, if one is on.
+    pub(crate) fn takeover_page_on(&self) -> Option<TakeoverPage> {
         self.claude_takeover.as_ref().map(ClaudeTakeover::view)
     }
 
@@ -395,29 +400,63 @@ impl GhostexGpuiApp {
     /// Turns `place` on, or with it on wakes and focuses its page. With the other page on, switches
     /// to this one and keeps the layout from before either. Returns whether it is on.
     pub(crate) fn show_web_place(&mut self, place: WebPlace, cx: &mut gpui::Context<Self>) -> bool {
-        let id = place.view_id();
-        let mode = TitlebarMode::Extension(id);
-        if !place.enabled() || !self.titlebar_mode_available(mode) {
+        self.show_takeover_page(TakeoverPage::Web(place), cx)
+    }
+
+    /// A rail icon's takeover (Claude, Grok, Agents Hub, All Automations): on, or off when it is
+    /// the page on screen.
+    pub(crate) fn toggle_takeover_page(
+        &mut self,
+        page: TakeoverPage,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        match page {
+            TakeoverPage::Web(place) => self.toggle_web_place(place, window, cx),
+            TakeoverPage::AgentsHub | TakeoverPage::AllAutomations => {
+                if self.takeover_page_on() == Some(page) {
+                    self.turn_claude_off(cx);
+                } else {
+                    self.show_takeover_page(page, cx);
+                }
+            }
+        }
+    }
+
+    /// Turns `page` on, or switches the takeover on screen to it. Returns whether it is on.
+    pub(crate) fn show_takeover_page(
+        &mut self,
+        page: TakeoverPage,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let mode = page.web().map(WebPlace::mode);
+        if let Some(place) = page.web()
+            && (!place.enabled() || !self.titlebar_mode_available(place.mode()))
+        {
             return false;
         }
         if let Some(takeover) = self
             .claude_takeover
             .as_mut()
-            .filter(|takeover| takeover.view() != place)
+            .filter(|takeover| takeover.view() != page)
         {
-            takeover.set_view(place);
-            self.open_views.retain(|tab| *tab != mode);
+            takeover.set_view(page);
+            if let Some(mode) = mode {
+                self.open_views.retain(|tab| *tab != mode);
+            }
         }
         if self.claude_takeover.is_none() {
             // A Claude tab saved by an older build leaves the side panel, and so does the Open a
             // view picker, which Claude may just have been picked from: neither comes back after.
-            if self.active_mode == mode || self.view_picker_open() {
+            if mode.is_some_and(|mode| self.active_mode == mode) || self.view_picker_open() {
                 self.close_view_panel(cx);
             }
-            self.open_views.retain(|tab| *tab != mode);
+            if let Some(mode) = mode {
+                self.open_views.retain(|tab| *tab != mode);
+            }
             let (mut takeover, alone) =
                 ClaudeTakeover::turn_on(self.claude_layout_now(), self.claude_place_now());
-            takeover.set_view(place);
+            takeover.set_view(page);
             self.claude_takeover = Some(takeover);
             self.apply_claude_layout(alone, cx);
         } else if self.view_picker_open() {
@@ -427,10 +466,13 @@ impl GhostexGpuiApp {
             // An expanded side panel covers Claude's column.
             self.toggle_view_panel_maximized(cx);
         }
-        self.mark_project_editor_mode_awake(mode, cx);
-        self.ensure_extension_view_runtime_for_current_context(id, cx);
-        self.ensure_project_workarea_runtime_cef_surfaces_for_current_context(cx);
-        self.focus_shell_target(ShellFocusTarget::ProjectEditorSurface(mode), cx);
+        if let Some(place) = page.web() {
+            let mode = place.mode();
+            self.mark_project_editor_mode_awake(mode, cx);
+            self.ensure_extension_view_runtime_for_current_context(place.view_id(), cx);
+            self.ensure_project_workarea_runtime_cef_surfaces_for_current_context(cx);
+            self.focus_shell_target(ShellFocusTarget::ProjectEditorSurface(mode), cx);
+        }
         // The sessions column just left the screen, so its terminals and chats hide.
         self.update_active_mode_cef_child_visibility(cx);
         self.persist_shell_layout_state();

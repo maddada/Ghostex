@@ -435,6 +435,10 @@ impl Render for GhostexGpuiApp {
         // An entry waiting in a sidebar that was just hidden ends at once (native_sidebar/keyboard.rs).
         self.check_native_sidebar_keyboard_entry(cx);
         let sidebar = (!self.sidebar_collapsed).then(|| self.render_native_sidebar(window, cx));
+        // The rail, left of the sidebar; it stays when the sidebar hides (app/sidebar_rail/).
+        let rail = self
+            .sidebar_rail_shown()
+            .then(|| self.render_sidebar_rail(window, cx));
         let status = self.gx_store.status.clone();
         let open = self.open_session.clone();
         let shows_terminal = open
@@ -543,6 +547,7 @@ impl Render for GhostexGpuiApp {
                     app.handle_native_sidebar_action(action, window, cx)
                 }),
             )
+            .children(rail)
             .when_some(sidebar, |shell, sidebar| {
                 shell
                     .child(

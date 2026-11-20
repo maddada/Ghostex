@@ -223,7 +223,9 @@ impl GhostexGpuiApp {
                 } else {
                     WebPlace::Grok
                 };
-                state.available = shown(HeaderControl::WebBots)
+                // With the rail on, Claude and Grok Bot are the rail's (app/sidebar_rail/).
+                state.available = !self.sidebar_rail_shown()
+                    && shown(HeaderControl::WebBots)
                     && place.enabled()
                     && self.titlebar_mode_available(place.mode());
                 if self.web_place_on() == Some(place) {

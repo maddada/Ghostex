@@ -20,7 +20,10 @@ use serde_json::Value;
 use super::{
     capture::{self, ClientPlatform},
     extensions::{self, ExtensionRef},
-    taxonomy::{self, EVENT_APP_LAUNCHED, EVENT_CLIENT_CONNECTED, EVENT_SURFACE_OPENED},
+    taxonomy::{
+        self, EVENT_APP_LAUNCHED, EVENT_CLIENT_CONNECTED, EVENT_RAIL_INTRO_ANSWERED,
+        EVENT_SIDEBAR_LAYOUT_CHANGED, EVENT_SURFACE_OPENED,
+    },
 };
 
 /// Handle one `{"event": "...", "properties": {...}}` body. Never fails: the
@@ -46,8 +49,34 @@ pub fn record_client_event(body: &Value) {
         EVENT_APP_LAUNCHED => record_app_launched(properties),
         EVENT_SURFACE_OPENED => record_surface_opened(properties),
         EVENT_CLIENT_CONNECTED => record_client_connected(properties),
+        EVENT_SIDEBAR_LAYOUT_CHANGED => {
+            let layout = enum_property(properties, "layout", taxonomy::SIDEBAR_LAYOUTS);
+            let source = enum_property(properties, "source", taxonomy::SIDEBAR_LAYOUT_SOURCES);
+            if let (Some(layout), Some(source)) = (layout, source) {
+                capture::sidebar_layout_changed(layout, source);
+            }
+        }
+        EVENT_RAIL_INTRO_ANSWERED => {
+            let tried = enum_property(properties, "tried", taxonomy::RAIL_INTRO_TRIED);
+            let chose = enum_property(properties, "chose", taxonomy::SIDEBAR_LAYOUTS);
+            if let (Some(tried), Some(chose)) = (tried, chose) {
+                capture::rail_intro_answered(tried, chose);
+            }
+        }
         _ => {}
     }
+}
+
+/// `properties[key]` when it is one of `allowed`.
+fn enum_property(
+    properties: Option<&Value>,
+    key: &str,
+    allowed: &'static [&'static str],
+) -> Option<&'static str> {
+    properties
+        .and_then(|properties| properties.get(key))
+        .and_then(Value::as_str)
+        .and_then(|value| taxonomy::match_enum(allowed, value))
 }
 
 fn record_app_launched(properties: Option<&Value>) {

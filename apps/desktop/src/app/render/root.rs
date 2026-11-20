@@ -212,6 +212,8 @@ impl Render for GhostexGpuiApp {
         self.note_screen_for_crash_report();
         // The Focus Sidebar hotkey's entry ends at once when its sidebar is no longer drawn.
         self.check_native_sidebar_keyboard_entry(cx);
+        // Meet the rail, once, for someone who had Ghostex before the rail (app/sidebar_rail/intro.rs).
+        self.maybe_open_sidebar_rail_intro(cx);
         crate::app::workspace_windows::sync_workspace_window_title(window, &self.project_name, cx);
         self.sync_main_window_glass(window, cx);
         crate::app::window::frosted_host::sync_frosted_tooltip_presenter(window, cx);
@@ -272,6 +274,9 @@ impl Render for GhostexGpuiApp {
         // Collapsing or expanding, the sidebar and its divider slide at their full width inside a
         // clip that tweens (panel_motion.rs).
         let sidebar_frame = self.panel_motion.sidebar.frame();
+        let rail = self
+            .sidebar_rail_shown()
+            .then(|| self.render_sidebar_rail(window, cx));
         // The work area frame (helpers/work_area_frame.rs, decision there). Off, every branch below
         // takes today's path and the element tree is unchanged.
         let work_area_frame = work_area_frame_active();
@@ -1437,6 +1442,9 @@ impl Render for GhostexGpuiApp {
                             .size_0()
                             .track_focus(&self.root_action_focus_handle),
                     )
+                    // The rail, left of the sidebar; it stays when the sidebar hides
+                    // (app/sidebar_rail/).
+                    .children(rail)
                     .when(sidebar_frame.animating, |this| {
                         this.child(
                             crate::app::panel_motion::clip_panel_horizontally(

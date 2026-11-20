@@ -373,6 +373,11 @@ pub struct GhostexGpuiApp {
     /// Claude is on in this window, with the layout to put back when it goes off
     /// (`app/claude_web/takeover.rs`).
     pub(crate) claude_takeover: Option<crate::app::claude_web::ClaudeTakeover>,
+    /// The Agents Hub the rail's takeover draws in the sessions column, made the first time it shows
+    /// (agents_hub_modal_lifecycle.rs `agents_hub_takeover_view`).
+    pub(crate) agents_hub_takeover: Option<Entity<crate::app::window::GpuiAgentsHubModalWindow>>,
+    /// Where the rail's buttons were painted (app/sidebar_rail/).
+    pub(crate) sidebar_rail: crate::app::sidebar_rail::SidebarRailState,
     /// The picker's scroll position, so a long list is reachable in a short panel.
     pub(crate) view_picker_scroll: ScrollHandle,
     /// Where a tab being dragged along the view panel's strip would land, as an index into the
