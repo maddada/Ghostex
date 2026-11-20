@@ -64,7 +64,9 @@ to and the threads have nobody to report to.
   state of the UI as it changes (before, each step, after) under `~/.local/share/ghostex/i/` and
   link them in its report. Never tiny: at least 1650x962 points, so size the window or viewport
   first (`--window-size=1650,962` or larger, cua-driver `set_window_frame`). Never ask for them
-  when the thread does no GUI work.
+  when the thread does no GUI work. For a desktop app, also ask for a full-screen screenshot every
+  once in a while (the whole app on the desktop, wallpaper and glass included, not just its window),
+  saved with `-fullscreen` in the name, so the user can post it.
 - One task per message. A thread reports only by ending its turn, so when you send several, say
   "finish all, then report" or "report after the first and wait for me".
 - Ghostex adds the goal, standing instructions and reporting rules, and the thread reads the
