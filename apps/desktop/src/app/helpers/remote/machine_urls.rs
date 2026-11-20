@@ -110,3 +110,37 @@ pub(crate) fn gpui_remote_machine_url(
     }
     GpuiRemoteMachineUrl::Gxserver(parsed.to_string())
 }
+
+/// Where a link inside a remote machine's page opens, the page shown through this computer's tunnel
+/// to the machine's gxserver (`GpuiRemoteMachineUrl::Gxserver`): an address on that tunnel stays
+/// on it, any other one is sorted as a session's address is (`gpui_remote_machine_url`).
+///
+/// CDXC:RemoteMachines 2026-11-20 WHY:
+/// A page loaded through the tunnel resolves its links against the tunnel's address
+/// (`http://127.0.0.1:<tunnel port>/visual/<other id>`), a port only this computer has. Sorted as the
+/// machine's own loopback, such a link opened in the Browser on the machine's network, which dialled
+/// that port on the remote computer and found nothing there.
+pub(crate) fn gpui_remote_machine_page_link_url(
+    url: &str,
+    target: &GpuiRemoteGxserverRequestTarget,
+) -> GpuiRemoteMachineUrl {
+    let on_tunnel = normalize_address(url)
+        .and_then(|url| Url::parse(&url).ok())
+        .is_some_and(|parsed| {
+            parsed.scheme() == "http"
+                && parsed
+                    .host_str()
+                    .map(|host| host.trim_matches(['[', ']']).to_ascii_lowercase())
+                    .is_some_and(|host| {
+                        host == "localhost"
+                            || host
+                                .parse::<std::net::IpAddr>()
+                                .is_ok_and(|ip| ip.is_loopback())
+                    })
+                && parsed.port_or_known_default() == Some(target.local_port)
+        });
+    if on_tunnel {
+        return GpuiRemoteMachineUrl::Gxserver(url.to_string());
+    }
+    gpui_remote_machine_url(url, target)
+}

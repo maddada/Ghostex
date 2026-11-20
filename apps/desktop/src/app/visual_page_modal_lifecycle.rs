@@ -179,14 +179,16 @@ impl GhostexGpuiApp {
             self.gpui_remote_gxserver_request_target(&remote_project.remote_machine_id)
         });
         let url = match (remote_project, target) {
-            (Some(remote_project), Some(target)) => match gpui_remote_machine_url(&url, &target) {
-                GpuiRemoteMachineUrl::Gxserver(url) => url,
-                GpuiRemoteMachineUrl::MachineLoopback => {
-                    self.open_remote_machine_loopback_link(&url, remote_project, cx);
-                    return;
+            (Some(remote_project), Some(target)) => {
+                match gpui_remote_machine_page_link_url(&url, &target) {
+                    GpuiRemoteMachineUrl::Gxserver(url) => url,
+                    GpuiRemoteMachineUrl::MachineLoopback => {
+                        self.open_remote_machine_loopback_link(&url, remote_project, cx);
+                        return;
+                    }
+                    GpuiRemoteMachineUrl::AsWritten => url,
                 }
-                GpuiRemoteMachineUrl::AsWritten => url,
-            },
+            }
             (Some(_), None) if gpui_remote_link_is_loopback(&url) => return,
             _ => url,
         };
@@ -456,7 +458,7 @@ impl GhostexGpuiApp {
                 });
                 match (remote_project, target) {
                     (Some(remote_project), Some(target)) => {
-                        match gpui_remote_machine_url(&url, &target) {
+                        match gpui_remote_machine_page_link_url(&url, &target) {
                             GpuiRemoteMachineUrl::Gxserver(url) => url,
                             GpuiRemoteMachineUrl::MachineLoopback => {
                                 // It opens in the app's Browser, so the page steps aside.
