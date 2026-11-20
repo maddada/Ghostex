@@ -150,11 +150,13 @@ impl EventStreamMode {
 /// CDXC:Notifications 2026-10-31 WHY:
 /// The phone keeps one socket open per paired computer only to learn when to reread the notification feed; on the full hub it would receive every presentation delta and catalog frame over its SSH forward. A notification socket gets the handshake, `notificationFeedChanged` and the daemon's start and stop, and its client commands are ignored, so a subscription cannot start a presentation snapshot or a chat follower on it. It shares the bounded client queue and overflow disconnect of every event socket.
 /// SEE-ALSO: `GXSERVER_EVENTS_STREAM_NOTIFICATIONS` in packages/gx-protocol/src/lib.rs, `ENDPOINT_CAPABILITIES` in server/src/cli.rs.
+/// CDXC:Security 2026-11-20 FIX: an approval request made, approved, denied or lapsed here (`approvalRequestsChanged`) passes too, so the phone shows a live card for it (apps/mobile/app/src/security/approvalAlerts.ts) instead of only on that computer's Approvals page; every full event socket gets the same frame already. A phone from before it ignores frames it doesn't know.
 fn notification_event_matches(event: &Value) -> bool {
     matches!(
         event.get("type").and_then(Value::as_str),
         Some(
             crate::notification_feed::NOTIFICATION_FEED_CHANGED_EVENT_TYPE
+                | crate::server::security_http::APPROVALS_CHANGED_EVENT_TYPE
                 | "serverStarted"
                 | "serverStopping"
         )
