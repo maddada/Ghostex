@@ -234,6 +234,14 @@ impl RemoteSkillsCatalog {
         self.files_by_skill.contains_key(skill_name)
     }
 
+    /// The SHA-256 of every file the signed list has for `skill_name`.
+    pub fn skill_sha256s(&self, skill_name: &str) -> Vec<String> {
+        self.files_by_skill
+            .get(skill_name)
+            .map(|files| files.iter().map(|file| file.sha256.clone()).collect())
+            .unwrap_or_default()
+    }
+
     /// True when the folder on disk holds exactly the published files, byte for
     /// byte, so a refresh has nothing to do.
     pub fn local_dir_matches(&self, skill_name: &str, dir: &Path) -> bool {
@@ -526,6 +534,7 @@ pub fn refresh_installed_bundled_skills(paths: &GxserverPaths) -> Result<Value, 
     let mut updated = Vec::new();
     let mut linked = Vec::new();
     let mut removed = Vec::new();
+    let mut kept = Vec::new();
     let mut failed = Vec::new();
     // Agents that load `~/.agents/skills` themselves need no copy and no link in their own folder.
     let native_reader_roots: HashSet<PathBuf> = GHOSTEX_SKILLS_CLI_AGENT_IDS
@@ -539,6 +548,19 @@ pub fn refresh_installed_bundled_skills(paths: &GxserverPaths) -> Result<Value, 
             continue;
         }
         let canonical_dir = canonical_root.join(skill_name);
+        // A `ghostex` of the user's own is never replaced (CDXC:AgentSkills 2026-11-20,
+        // agent_skills.rs `is_own_ghostex_skill`), nor are the agents' folders linked to it.
+        let ghostex = *skill_name == crate::agent_skills::GHOSTEX_SKILL_NAME;
+        let shipped = catalog.skill_sha256s(skill_name);
+        let users = |entry: &Path| {
+            ghostex && crate::agent_skills::is_users_ghostex_entry(entry, &canonical_dir, &shipped)
+        };
+        if users(&canonical_dir)
+            && !fs::symlink_metadata(&canonical_dir).is_ok_and(|meta| meta.file_type().is_symlink())
+        {
+            kept.push(json!({ "path": path_string(&canonical_dir), "reason": "Not the skill Ghostex installed." }));
+            continue;
+        }
         let is_real_dir = |dir: &Path| {
             fs::symlink_metadata(dir)
                 .map(|metadata| !metadata.file_type().is_symlink() && metadata.is_dir())
@@ -563,7 +585,12 @@ pub fn refresh_installed_bundled_skills(paths: &GxserverPaths) -> Result<Value, 
                 }
             };
             match copy_skill_directory_into_place(&source_dir, &canonical_dir) {
-                Ok(true) => updated.push(path_string(&canonical_dir)),
+                Ok(true) => {
+                    if ghostex {
+                        crate::agent_skills::record_own_ghostex_skill(&canonical_dir);
+                    }
+                    updated.push(path_string(&canonical_dir))
+                }
                 Ok(false) => {}
                 Err(error) => {
                     failed.push(json!({
@@ -579,6 +606,10 @@ pub fn refresh_installed_bundled_skills(paths: &GxserverPaths) -> Result<Value, 
             continue;
         }
         for destination in agent_copies {
+            if users(&destination) {
+                kept.push(json!({ "path": path_string(&destination), "reason": "Not the skill Ghostex installed." }));
+                continue;
+            }
             let reads_canonical = destination
                 .parent()
                 .is_some_and(|root| native_reader_roots.contains(root));
@@ -606,6 +637,7 @@ pub fn refresh_installed_bundled_skills(paths: &GxserverPaths) -> Result<Value, 
     }
     Ok(json!({
         "failed": failed,
+        "kept": kept,
         "linked": linked,
         "ref": AGENT_SKILLS_REMOTE_REF,
         "removed": removed,

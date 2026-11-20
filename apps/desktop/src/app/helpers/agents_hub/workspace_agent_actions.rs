@@ -259,6 +259,16 @@ pub(crate) fn gpui_uninstall_bundled_agent_skill(skill_name: &str) -> Result<boo
             );
         }
     };
+    // CDXC:AgentSkills 2026-11-20 DECISION: a `ghostex` folder that is not Ghostex's own copy (the
+    // user's own skill of that name) is kept: only one whose every file is this build's or one
+    // gxserver recorded writing (server/src/agent_skills.rs `is_own_ghostex_skill`) goes.
+    if skill_name == "ghostex"
+        && metadata.is_dir()
+        && !metadata.file_type().is_symlink()
+        && !gpui_ghostex_skill_is_own(&skill_path)
+    {
+        return Ok(false);
+    }
     // A link (on Windows also a folder link or junction, CDXC:AgentSync 2026-10-27) goes as a link.
     let remove_result = if metadata.file_type().is_symlink() {
         ghostex_agent_sync::fsx::remove_link(&skill_path)
@@ -273,4 +283,50 @@ pub(crate) fn gpui_uninstall_bundled_agent_skill(skill_name: &str) -> Result<boo
         "Bundled Ghostex skill uninstall failed. Current integration status was refreshed."
             .to_string()
     })
+}
+
+/// Whether the `ghostex` skill folder at `dir` is Ghostex's own unedited copy: every file is this
+/// build's or one gxserver recorded writing in `~/.agents/skills/.ghostex-own-skill-sha256`.
+fn gpui_ghostex_skill_is_own(dir: &std::path::Path) -> bool {
+    use sha2::{Digest, Sha256};
+    let bundled = [
+        include_str!("../../../../../../skills/ghostex/SKILL.md"),
+        include_str!("../../../../../../skills/ghostex/agents/openai.yaml"),
+    ]
+    .map(|text| hex::encode(Sha256::digest(text.as_bytes())));
+    let recorded = dir
+        .parent()
+        .and_then(|root| fs::read_to_string(root.join(".ghostex-own-skill-sha256")).ok())
+        .unwrap_or_default();
+    fn files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) -> bool {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return false;
+        };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else {
+                return false;
+            };
+            if kind.is_dir() {
+                if !files(&entry.path(), out) {
+                    return false;
+                }
+            } else if kind.is_file() {
+                if entry.file_name() != ".DS_Store" {
+                    out.push(entry.path());
+                }
+            } else {
+                return false;
+            }
+        }
+        true
+    }
+    let mut found = Vec::new();
+    dir.join("SKILL.md").is_file()
+        && files(dir, &mut found)
+        && found.iter().all(|file| {
+            fs::read(file).is_ok_and(|bytes| {
+                let sha = hex::encode(Sha256::digest(&bytes));
+                bundled.contains(&sha) || recorded.lines().any(|line| line.trim() == sha)
+            })
+        })
 }
