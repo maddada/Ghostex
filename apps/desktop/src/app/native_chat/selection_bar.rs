@@ -6,10 +6,19 @@
 //! User: "Add the ability to reply or add to chat any part of the text by just selecting it in the chat transcript. We need to show buttons just like the ones we show when we hover over a command." A drag, double or triple click that leaves text selected in the main transcript (replies, the user's own messages, tool output, code) shows the bar by the point the press was released. Its buttons are the core's selection rows (`transcript_menu_rows` in packages/gx-chat-core/src/composer/transcript_menu.rs), so they run exactly what the menu's rows run and are left out when the menu disables them. It goes when the selection is cleared (any press outside it), the transcript scrolls, or on Escape; it never takes Cmd+C or the drag itself.
 //!
 //! CDXC:SessionChat 2026-11-13 WHY:
+//! CDXC:Boosts 2026-11-20 DECISION:
+//! User: "selecting text in the chat box doesn't show 'Save as Boost' until right-click ... Make
+//! Save as Boost appear for a chat-box selection the same way as for transcript selections". A
+//! drag, double or triple click that leaves words selected in the chat box shows the same bar
+//! above the release point with one labelled button, Save as Boost (only while Boosts are on); it
+//! goes when the selection collapses (typing, a click, an arrow key) or on Escape.
+//!
+//! CDXC:SessionChat 2026-11-13 WHY:
 //! It is drawn in the chat's own window, like the command bar, and not as a frosted child window: a press on it then clears the window's selection as any press does (the selection layer clears on capture), so the bar keeps the text it was shown for and acts on that, and stays up until the release, unless the press began outside it.
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
     Anchor, AnyElement, Context, InteractiveElement as _, IntoElement, KeyDownEvent, MouseButton,
     MouseDownEvent, MouseUpEvent, ParentElement as _, Pixels, Point, ScrollEvent,
@@ -25,6 +34,8 @@ pub(in crate::app::native_chat) struct SelectionBarState {
     open: Option<OpenBar>,
     /// The left press now held began in the main transcript, so its release may leave a selection.
     press_in_transcript: bool,
+    /// The left press now held began in the chat box, so its release may leave words selected there.
+    press_in_composer: bool,
     /// The left press now held began on the bar: the selection it cleared keeps the bar up until
     /// the release, which may be the bar's own click.
     press_on_bar: bool,
@@ -35,6 +46,8 @@ struct OpenBar {
     rows: Vec<Value>,
     /// The release point, in window coordinates.
     at: Point<Pixels>,
+    /// The selection is the chat box's (Save as Boost), not the transcript's.
+    composer: bool,
 }
 
 impl NativeChatView {
@@ -54,6 +67,8 @@ impl NativeChatView {
                     let _ = down.update(cx, |chat, _| {
                         chat.selection_bar.press_in_transcript =
                             chat.in_main_transcript(event.position);
+                        chat.selection_bar.press_in_composer =
+                            chat.composer_bounds.get().contains(&event.position);
                     });
                 });
                 let up = chat.clone();
@@ -96,10 +111,27 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) {
         let from_transcript = std::mem::take(&mut self.selection_bar.press_in_transcript);
+        let from_composer = std::mem::take(&mut self.selection_bar.press_in_composer);
         if std::mem::take(&mut self.selection_bar.press_on_bar) {
             // The bar's click, if the release is on it, runs after this and closes it; a render
             // without a selection closes it otherwise.
             cx.notify();
+            return;
+        }
+        if from_composer && !from_transcript {
+            if let Some(text) = self.composer_selection_for_boost(cx) {
+                let rows = vec![json!({
+                    "label": "Save as Boost",
+                    "iconPath": "titlebar/sparkles.svg",
+                    "command": {"type": "saveAsBoost", "text": text},
+                })];
+                self.selection_bar.open = Some(OpenBar {
+                    rows,
+                    at,
+                    composer: true,
+                });
+                cx.notify();
+            }
             return;
         }
         if !from_transcript || self.snapshot["subagent"].is_object() {
@@ -129,7 +161,11 @@ impl NativeChatView {
         if rows.is_empty() {
             return;
         }
-        self.selection_bar.open = Some(OpenBar { rows, at });
+        self.selection_bar.open = Some(OpenBar {
+            rows,
+            at,
+            composer: false,
+        });
         cx.notify();
     }
 
@@ -156,9 +192,13 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let open = self.selection_bar.open.as_ref()?;
-        if !self.selection_bar.press_on_bar
-            && !gpui_component::TextSelection::has_selection(window, cx)
-        {
+        let composer = open.composer;
+        let selected = if composer {
+            self.composer_selection_for_boost(cx).is_some()
+        } else {
+            gpui_component::TextSelection::has_selection(window, cx)
+        };
+        if !self.selection_bar.press_on_bar && !selected {
             self.selection_bar.open = None;
             return None;
         }
@@ -172,7 +212,9 @@ impl NativeChatView {
             open.at.x.clamp(viewport.left(), viewport.right()),
             open.at.y.clamp(viewport.top(), viewport.bottom()),
         );
-        let below = at.y + clearance + height <= viewport.bottom();
+        // The chat box's bar goes above the release, over the transcript, never below the box.
+        let at = if composer { open.at } else { at };
+        let below = !composer && at.y + clearance + height <= viewport.bottom();
         let position = if below {
             point(at.x, at.y + clearance)
         } else {
@@ -197,16 +239,28 @@ impl NativeChatView {
                 div()
                     .id(("chat-selection-bar-action", index))
                     .role(gpui::Role::Button)
-                    .aria_label(label)
+                    .aria_label(label.clone())
                     .flex()
                     .items_center()
                     .justify_center()
-                    .size(look.button_size)
+                    .h(look.button_size)
+                    .map(|button| {
+                        if composer {
+                            // One button alone reads as a word, not a bare icon.
+                            button.gap(px(5.0 * s)).px(px(7.0 * s))
+                        } else {
+                            button.w(look.button_size)
+                        }
+                    })
                     .rounded(look.button_radius)
                     .chat_cursor_pointer()
                     .hover(move |style| style.bg(look.button_hover_background))
-                    .tooltip(move |window, cx| {
-                        gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
+                    // The chat box's button names itself; the icon-only ones say it on hover.
+                    .when(!composer, |button| {
+                        button.tooltip(move |window, cx| {
+                            gpui_component::tooltip::Tooltip::new(tooltip.clone())
+                                .build(window, cx)
+                        })
                     })
                     .child(
                         svg()
@@ -215,6 +269,15 @@ impl NativeChatView {
                             .text_color(look.icon_color)
                             .flex_shrink_0(),
                     )
+                    .when(composer, |button| {
+                        button.child(
+                            div()
+                                .text_size(px(12.0 * s))
+                                .text_color(look.icon_color)
+                                .whitespace_nowrap()
+                                .child(label.clone()),
+                        )
+                    })
                     .on_click(cx.listener(move |chat, _, window, cx| {
                         cx.stop_propagation();
                         chat.selection_bar.open = None;

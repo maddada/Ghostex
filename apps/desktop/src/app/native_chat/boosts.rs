@@ -667,37 +667,67 @@ impl NativeChatView {
         )
     }
 
-    /// Right click in the chat box with words selected: a small menu with Save as Boost. Returns
-    /// whether it opened.
-    pub(super) fn show_composer_selection_menu(
-        &mut self,
-        event: &gpui::MouseDownEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> bool {
-        if self.boosts().is_none() {
-            return false;
-        }
-        let Some(input) = self.input.clone() else {
-            return false;
-        };
-        let range = input.read(cx).selected_range();
-        let Some(selected) = self
-            .draft
+    /// The words selected in the chat box, trimmed, while Boosts are on and some are selected.
+    pub(super) fn composer_selection_for_boost(&self, cx: &gpui::App) -> Option<String> {
+        self.boosts()?;
+        let range = self.input.as_ref()?.read(cx).selected_range();
+        self.draft
             .get(range)
             .map(str::trim)
             .filter(|selected| !selected.is_empty())
             .map(str::to_string)
-        else {
-            return false;
-        };
-        let rows = vec![json!({
-            "label": "Save as Boost",
-            "iconPath": "titlebar/sparkles.svg",
-            "command": {"type": "saveAsBoost", "text": selected},
-        })];
-        self.show_chat_menu_at(rows, event.position, 200.0, window, cx);
-        true
+    }
+
+    /// The chat box's right-click menu: the text field's own Cut, Copy, Paste and Select All, and
+    /// Save as Boost under them while words are selected.
+    /// CDXC:Boosts 2026-11-20 DECISION: User: right-click on a chat-box selection showed "the
+    /// default Cut/Copy/Paste menu" (with the chat's own Save as Boost menu opening behind it), and
+    /// Save as Boost belongs "in the chat box's right-click menu properly". The field's menu is the
+    /// one menu now, built here so it carries Save as Boost; the row runs the chat's own
+    /// `saveAsBoost` command, as the transcript's row and the selection bar (selection_bar.rs) do.
+    pub(super) fn composer_context_menu(
+        chat: gpui::WeakEntity<Self>,
+    ) -> impl Fn(
+        gpui_component::native_menu::NativeMenu,
+        &mut Window,
+        &mut gpui::App,
+    ) -> gpui_component::native_menu::NativeMenu
+    + 'static {
+        move |menu, _, cx| {
+            let Some(chat) = chat.upgrade() else {
+                return menu;
+            };
+            let chat = chat.read(cx);
+            let has_selection = chat
+                .input
+                .as_ref()
+                .is_some_and(|input| !input.read(cx).selected_range().is_empty());
+            let boost = chat.composer_selection_for_boost(cx);
+            // Paste is offered without peeking at the clipboard, as GPUI Kit's own edit menu does.
+            let menu = menu
+                .menu_with_disabled(
+                    "Cut",
+                    !has_selection,
+                    Box::new(gpui_component::input::Cut),
+                )
+                .menu_with_disabled(
+                    "Copy",
+                    !has_selection,
+                    Box::new(gpui_component::input::Copy),
+                )
+                .menu("Paste", Box::new(gpui_component::input::Paste))
+                .separator()
+                .menu("Select All", Box::new(gpui_component::input::SelectAll));
+            match boost {
+                Some(text) => menu.separator().menu(
+                    "Save as Boost",
+                    Box::new(super::actions::NativeChatAction {
+                        command: json!({"type": "saveAsBoost", "text": text}),
+                    }),
+                ),
+                None => menu,
+            }
+        }
     }
 }
 

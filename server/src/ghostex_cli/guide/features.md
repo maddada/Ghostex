@@ -2379,8 +2379,8 @@ to your message; pick it again, or delete the pill, to take it out. A Boost last
 one message. Point at the pill in the chat box to read the instruction the agent gets;
 double-click it to change that instruction. Settings > Boosts turns Boosts on or off,
 edits or resets the instruction of every Boost, and adds, edits, reorders and deletes
-your own Boosts; select words in a message or the chat box and choose Save as Boost to
-start one from them. All of it is kept on this computer for every chat and device that
+your own Boosts; select words in a message or the chat box and choose Save as Boost (on
+the small bar by the selection, or in the right-click menu) to start one from them. All of it is kept on this computer for every chat and device that
 uses it. `ghostex visual boosts` lists them, and `ghostex visual boosts reset <id>`
 resets one (`on` or `off` shows or hides Boosts).
 For a Live page the chat shows a card with a small preview
