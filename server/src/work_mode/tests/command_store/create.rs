@@ -700,6 +700,7 @@ fn a_create_past_its_deadline_at_the_spawn_runs_nothing() {
         )
     );
     assert!(calls(&store, "create-a").is_empty());
-    // The slot and the writer lock were let go.
-    assert!(hold_work_source_writer_within(Duration::from_millis(100)).is_some());
+    // The slot and the writer lock were let go. The lock is one per process, so another test's
+    // change may hold it for a while; a create that kept it would hold it for good.
+    assert!(hold_work_source_writer_within(Duration::from_secs(20)).is_some());
 }

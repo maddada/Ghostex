@@ -496,17 +496,24 @@ mod tests {
                 folder
             })
             .collect();
-        let before = open_descriptors();
-        let watches: Vec<FolderWatch> = folders
-            .iter()
-            .map(|folder| FolderWatch::new(std::slice::from_ref(folder)).unwrap())
-            .collect();
-        let during = open_descriptors();
-        drop(watches);
-        // Other tests running at the same time may open a few files of their own.
-        assert!(
-            during <= before + 4,
-            "{before} open before, {during} with 20 watches"
-        );
+        // The count is the whole process's, and tests running at the same time open and close files
+        // of their own in bursts. A watch that held a descriptor would hold 20 of them in every
+        // attempt; a burst passes, so the test passes when any attempt shows no growth.
+        let mut seen = Vec::new();
+        for _ in 0..10 {
+            let before = open_descriptors();
+            let watches: Vec<FolderWatch> = folders
+                .iter()
+                .map(|folder| FolderWatch::new(std::slice::from_ref(folder)).unwrap())
+                .collect();
+            let during = open_descriptors();
+            drop(watches);
+            if during <= before + 4 {
+                return;
+            }
+            seen.push((before, during));
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        panic!("(open before, open with 20 watches) in every attempt: {seen:?}");
     }
 }
