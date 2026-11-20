@@ -2389,15 +2389,16 @@ UI mockup, a comparison or a small interactive tool. Ask for them by name
 ("give me a Live page for this", "ask me in a gx form", "show it as gx
 visuals"); agents still understand the older words Ghostex page, gx page,
 inline HTML, inline questions and inline graphs. **Boosts** ask for these, and more, in one click. The Boost pill at the right
-of the strip on top of the chat box opens a short menu in tabs: Show (Live page, Chart it,
+of the strip on top of the chat box opens one list of them in sections: Show (Live page, Chart it,
 Side by side, Map it, Ask me in a form), Actions (Computer & Browser use, where the agent
 drives your apps and Chrome or another browser itself with Cua Driver; Embedded Browser
 use, where it drives pages in Ghostex's own browser; Show screenshots; Second opinion, where another agent
 checks the answer), Work (Triage requests, which explains issues, pull requests or tickets
 one by one on a Live page with a decision for each; Plan with workers; Try it in a
 worktree; Save to Docs; Steps for me, which lists what only you can do under Needs you;
-Tell me when done) and Custom, your own. Pointing at a Boost in the menu shows a small
-preview of what comes back. You can also type `*` at the start of a word in the chat box
+Tell me when done) and Custom, your own. The chips at the bottom of the menu jump to a
+section, and Edit… beside them opens Settings > Boosts. Pointing at a Boost shows a small
+preview of what comes back, with its whole description. You can also type `*` at the start of a word in the chat box
 to pick one (`*ch` finds Chart it; a space right after the `*` closes the list, so lists
 and sums type as before), and a new chat offers "Try a Boost". A pick adds a Boost pill
 to your message; pick it again, or delete the pill, to take it out. A Boost lasts that

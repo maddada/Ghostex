@@ -1,9 +1,9 @@
 //! Boosts in the chat (gx-chat-core `extras/boosts.rs` has the user's decisions and the rules): the
-//! Boost pill at the right of the pill strip; its menu, a 280px list in Show, Actions, Work and Custom
-//! tabs with every description in full and a preview card beside it; the one-time callout bubble
+//! Boost pill at the right of the pill strip; its menu, one 460px list in Show, Actions, Work and
+//! Custom sections with section chips and Edit… at its bottom, and a preview card beside it; the one-time callout bubble
 //! above the pill; the Boost pills' hover and double click; "Try a Boost" on a new chat; and Save as
 //! Boost. Editing is Settings > Boosts (window/settings_modal/tabs/boosts.rs), which the menu's
-//! Edit Boosts row, a pill's double click and Save as Boost open.
+//! Edit… button, a pill's double click and Save as Boost open.
 //!
 //! The core's `boosts` document key holds it all; `null` (an older gxserver, no answer yet, or
 //! Boosts switched off) draws none of it.
@@ -35,23 +35,24 @@ use std::rc::Rc;
 pub(super) const BOOST_TRIGGER: &str = "chat-pill-boost";
 pub(super) const BOOST_MENU: &str = "boostMenu";
 pub(super) const BOOST_PREVIEW: &str = "boostPreview";
-pub(super) const BOOST_MENU_WIDTH: f32 = 280.0;
+pub(super) const BOOST_MENU_WIDTH: f32 = 460.0;
 pub(super) const BOOST_PREVIEW_WIDTH: f32 = 236.0;
 /// The Boosts "Try a Boost" offers on a new chat, in order (the phone's `TRY_A_BOOST` in
 /// cards/Boosts.tsx is the same list).
 const TRY_A_BOOST: [&str; 4] = ["live-page", "chart", "compare", "computer-use"];
-/// The preview card's content height.
-const PREVIEW_HEIGHT: f32 = 172.0;
-/// The menu's tab bar, its footer row, a row's padding and the width a description wraps in
-/// (the menu less its 6px padding and border, the row's 10px sides, the 14px icon and its gap).
-const TABS_HEIGHT: f32 = 30.0;
-const FOOTER_HEIGHT: f32 = 40.0;
-const ROW_PAD_Y: f32 = 8.0;
+/// The preview card's content height: its title, the picture, the description (up to
+/// three lines) and what a click does.
+const PREVIEW_HEIGHT: f32 = 228.0;
+/// The menu's parts (unscaled): a section header, a row (its padding, the name's line and the
+/// one-line description), the gap between rows, and the bottom bar of section chips and Edit….
+const SECTION_HEIGHT: f32 = 26.0;
+const ROW_PAD_Y: f32 = 7.0;
 const LABEL_LINE: f32 = 18.0;
 const DETAIL_LINE: f32 = 16.0;
-const DETAIL_WIDTH: f32 = BOOST_MENU_WIDTH - 14.0 - 20.0 - 14.0 - 8.0;
-/// About how wide a character of a 12px description is; a little over, so a row never clips.
-const DETAIL_CHAR: f32 = 6.2;
+const ROW_GAP: f32 = 2.0;
+const FOOTER_HEIGHT: f32 = 40.0;
+/// The tallest the list gets before it scrolls, so the menu never stands taller than this.
+const MENU_MAX_HEIGHT: f32 = 420.0;
 /// The callout bubble's size (unscaled).
 const CALLOUT_WIDTH: f32 = 372.0;
 const CALLOUT_HEIGHT: f32 = 54.0;
@@ -97,12 +98,6 @@ pub(super) fn boost_id(href: &str) -> Option<String> {
 }
 
 /// How many lines `text` takes in a menu row.
-fn detail_lines(text: &str) -> f32 {
-    (text.chars().count() as f32 * DETAIL_CHAR / DETAIL_WIDTH)
-        .ceil()
-        .max(1.0)
-}
-
 impl NativeChatView {
     fn boosts(&self) -> Option<&Value> {
         let boosts = &self.snapshot["boosts"];
@@ -114,18 +109,27 @@ impl NativeChatView {
         self.boosts().is_some()
     }
 
-    /// The menu's rows: the open tab's Boosts.
-    fn boost_tab_rows(&self) -> Vec<Value> {
+    /// The menu's sections in order (Show, Actions, Work, then Custom once there is one), each
+    /// with its name and its Boosts.
+    fn boost_sections(&self) -> Vec<(String, String, Vec<Value>)> {
         let Some(boosts) = self.boosts() else {
             return Vec::new();
         };
-        let tab = text(boosts, "tab");
-        boosts["list"]
+        let list = boosts["list"].as_array().cloned().unwrap_or_default();
+        boosts["tabs"]
             .as_array()
             .into_iter()
             .flatten()
-            .filter(|row| row["category"] == tab.as_str())
-            .cloned()
+            .map(|tab| {
+                let id = text(tab, "id");
+                let rows: Vec<Value> = list
+                    .iter()
+                    .filter(|row| row["category"] == id.as_str())
+                    .cloned()
+                    .collect();
+                (id, text(tab, "label"), rows)
+            })
+            .filter(|(_, _, rows)| !rows.is_empty())
             .collect()
     }
 
@@ -296,32 +300,25 @@ impl NativeChatView {
         }
     }
 
-    /// The menu's content height (unscaled): the tabs, the tallest tab's rows with their full
-    /// descriptions, and Edit Boosts.
-    /// CDXC:Boosts 2026-11-20 DECISION: User: switching between Show, Do and Work "changes the
-    /// menu's height so the tabs jump"; the menu keeps one height, its tallest tab's, so the tabs
-    /// (at the top of a menu that opens upward from the pill) stay where they are.
+    /// The menu's content height (unscaled): every section's header and rows, up to
+    /// `MENU_MAX_HEIGHT` (the list scrolls past it), and the bottom bar.
+    /// CDXC:Boosts 2026-11-20 DECISION: User (Q4304 "B"): the menu is "too long and not wide
+    /// enough" and its tabs left "empty space at the bottom of the first two tabs". It is one
+    /// 460px list of every Boost under section headers, one line a description (the whole line is
+    /// in the preview card), no taller than its content; "the section chips at the bottom LEFT and
+    /// the edit button at the bottom RIGHT on the same row, and call it 'Edit…'". Supersedes the
+    /// 280px tabbed menu and its fixed tallest-tab height.
     pub(super) fn boost_menu_height(&self) -> Option<f32> {
-        let boosts = self.boosts()?;
-        let list = boosts["list"].as_array().cloned().unwrap_or_default();
-        let rows = boosts["tabs"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .map(|tab| {
-                let tab = text(tab, "id");
-                list.iter()
-                    .filter(|row| row["category"] == tab.as_str())
-                    .map(|row| {
-                        ROW_PAD_Y * 2.0
-                            + LABEL_LINE
-                            + detail_lines(&text(row, "description")) * DETAIL_LINE
-                            + 2.0
-                    })
-                    .sum::<f32>()
+        self.boosts()?;
+        let list: f32 = self
+            .boost_sections()
+            .iter()
+            .map(|(_, _, rows)| {
+                SECTION_HEIGHT
+                    + rows.len() as f32 * (ROW_PAD_Y * 2.0 + LABEL_LINE + DETAIL_LINE + ROW_GAP)
             })
-            .fold(0.0_f32, f32::max);
-        Some(TABS_HEIGHT + 6.0 + rows + FOOTER_HEIGHT)
+            .sum();
+        Some(list.min(MENU_MAX_HEIGHT) + 6.0 + FOOTER_HEIGHT)
     }
 
     /// The preview card's content height, while there is a Boost to preview.
@@ -330,58 +327,143 @@ impl NativeChatView {
         Some(PREVIEW_HEIGHT)
     }
 
-    /// The menu: the tabs, the open tab's Boosts (icon, name, the full description, a tick while
-    /// in the message) and Edit Boosts. A row under the pointer shows its preview beside the menu;
-    /// a click puts it in the message or takes it out. `window` is the menu's own.
+    /// The menu: one list of every Boost under its section's header (icon, name, the description
+    /// on one line, a tick while in the message), then a bar with the section chips on the left (a
+    /// click scrolls to that section; the one at the top of the list is lit) and Edit… on the
+    /// right. A row under the pointer shows its preview, with the whole description, beside the
+    /// menu; a click puts it in the message or takes it out. `window` is the menu's own.
     pub(super) fn boost_menu_body(
         &mut self,
         p: &ChatAppearance,
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        let boosts = self.boosts()?.clone();
+        self.boosts()?;
+        let sections = self.boost_sections();
         let s = p.scale;
         let tone = accent(p.light);
-        let tab = text(&boosts, "tab");
-        let tabs = div()
-            .flex()
-            .flex_shrink_0()
-            .gap(px(2.0 * s))
-            .p(px(2.0 * s))
-            .h(px(TABS_HEIGHT * s))
-            .rounded(px(8.0 * s))
-            .bg(p.foreground.opacity(0.06))
-            .children(
-                boosts["tabs"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .map(|entry| {
-                        let id = text(entry, "id");
-                        let on = id == tab;
-                        div()
-                            .id(gpui::ElementId::Name(format!("boost-tab-{id}").into()))
-                            .role(gpui::Role::Tab)
-                            .aria_label(text(entry, "label"))
-                            .aria_selected(on)
-                            .flex_1()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded(px(6.0 * s))
-                            .text_size(px(12.0 * s))
-                            .text_color(if on { p.foreground } else { p.card_muted })
-                            .chat_cursor_pointer()
-                            .when(on, |tab| tab.bg(p.foreground.opacity(0.1)))
-                            .hover(|style| style.text_color(p.foreground))
-                            .child(text(entry, "label"))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.invoke(json!({"type": "setBoostTab", "tab": id}), cx);
-                            }))
-                    }),
-            );
         let draft = self.draft.clone();
         let preview = self.boost_preview.clone();
+        let scroll = self.boost_scroll.clone();
+        // Each section's header is a child of the list; its index is what a chip scrolls to.
+        let mut starts = Vec::with_capacity(sections.len());
+        let mut next = 0;
+        for (_, _, rows) in &sections {
+            starts.push(next);
+            next += 1 + rows.len();
+        }
+        // The lit chip is the section at the top of the list, or the last one once the list is
+        // scrolled to its end (a short last section never reaches the top).
+        let max = scroll.max_offset().y;
+        let at_end = max > px(0.0) && -scroll.offset().y >= max - px(1.0);
+        let top = scroll.top_item();
+        let current = if at_end {
+            sections.len().saturating_sub(1)
+        } else {
+            starts.iter().rposition(|start| *start <= top).unwrap_or(0)
+        };
+        let mut children: Vec<AnyElement> = Vec::with_capacity(next);
+        for (id, label, rows) in &sections {
+            children.push(
+                div()
+                    .id(gpui::ElementId::Name(format!("boost-section-{id}").into()))
+                    .role(gpui::Role::Heading)
+                    .aria_label(label.clone())
+                    .flex_shrink_0()
+                    .h(px((SECTION_HEIGHT - ROW_GAP) * s))
+                    .flex()
+                    .items_end()
+                    .px(px(10.0 * s))
+                    .pb(px(3.0 * s))
+                    .text_size(px(10.5 * s))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(p.card_muted.opacity(0.8))
+                    .child(label.to_uppercase())
+                    .into_any_element(),
+            );
+            for row in rows {
+                let id = text(row, "id");
+                let in_draft = row["inDraft"] == true;
+                let hovered = preview.as_deref() == Some(id.as_str());
+                let hover_id = id.clone();
+                let click_id = id.clone();
+                let draft = draft.clone();
+                children.push(
+                    div()
+                        .id(gpui::ElementId::Name(format!("boost-row-{id}").into()))
+                        .role(gpui::Role::MenuItem)
+                        .aria_label(format!(
+                            "{}. {}",
+                            text(row, "label"),
+                            text(row, "description")
+                        ))
+                        .flex()
+                        .items_start()
+                        .flex_shrink_0()
+                        .gap(px(8.0 * s))
+                        .px(px(10.0 * s))
+                        .py(px(ROW_PAD_Y * s))
+                        .rounded(px(6.0 * s))
+                        .chat_cursor_pointer()
+                        .when(hovered, |row| row.bg(p.foreground.opacity(0.07)))
+                        .hover(|style| style.bg(p.foreground.opacity(0.07)))
+                        .child(
+                            svg()
+                                .path(text(row, "iconPath"))
+                                .mt(px(2.0 * s))
+                                .size(px(14.0 * s))
+                                .flex_shrink_0()
+                                .text_color(tone),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .flex_1()
+                                .min_w_0()
+                                .child(
+                                    div()
+                                        .truncate()
+                                        .text_size(px(13.0 * s))
+                                        .line_height(px(LABEL_LINE * s))
+                                        .text_color(p.foreground)
+                                        .child(text(row, "label")),
+                                )
+                                .child(
+                                    div()
+                                        .truncate()
+                                        .text_size(px(12.0 * s))
+                                        .line_height(px(DETAIL_LINE * s))
+                                        .text_color(p.card_muted)
+                                        .child(text(row, "description")),
+                                ),
+                        )
+                        .when(in_draft, |row| {
+                            row.child(
+                                svg()
+                                    .path("titlebar/check.svg")
+                                    .mt(px(2.0 * s))
+                                    .size(px(14.0 * s))
+                                    .flex_shrink_0()
+                                    .text_color(p.foreground),
+                            )
+                        })
+                        .on_hover(cx.listener(move |this, hovered: &bool, window, cx| {
+                            if *hovered {
+                                this.preview_boost(&hover_id, window, cx);
+                            }
+                        }))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.invoke(
+                                json!({"type": "toggleBoost", "id": click_id, "text": draft}),
+                                cx,
+                            );
+                            this.close_pill_menu(cx);
+                        }))
+                        .into_any_element(),
+                );
+            }
+        }
         let rows = div()
             .id("boost-menu-rows")
             .flex()
@@ -389,122 +471,98 @@ impl NativeChatView {
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
-            .gap(px(2.0 * s))
-            .children(self.boost_tab_rows().into_iter().map(|row| {
-                let id = text(&row, "id");
-                let in_draft = row["inDraft"] == true;
-                let hovered = preview.as_deref() == Some(id.as_str());
-                let hover_id = id.clone();
-                let click_id = id.clone();
-                let draft = draft.clone();
+            .track_scroll(&scroll)
+            .gap(px(ROW_GAP * s))
+            .children(children);
+        let chips = div().flex().items_center().gap(px(4.0 * s)).children(
+            sections.iter().enumerate().map(|(index, (id, label, _))| {
+                let on = index == current;
+                let start = starts[index];
+                let scroll = scroll.clone();
                 div()
-                    .id(gpui::ElementId::Name(format!("boost-row-{id}").into()))
-                    .role(gpui::Role::MenuItem)
-                    .aria_label(format!(
-                        "{}. {}",
-                        text(&row, "label"),
-                        text(&row, "description")
-                    ))
-                    .flex()
-                    .items_start()
+                    .id(gpui::ElementId::Name(format!("boost-chip-{id}").into()))
+                    .role(gpui::Role::Button)
+                    .aria_label(format!("Go to {label}"))
+                    .aria_selected(on)
                     .flex_shrink_0()
-                    .gap(px(8.0 * s))
-                    .px(px(10.0 * s))
-                    .py(px(ROW_PAD_Y * s))
-                    .rounded(px(6.0 * s))
+                    .px(px(9.0 * s))
+                    .py(px(2.0 * s))
+                    .rounded_full()
+                    .border(px(s))
+                    .text_size(px(12.0 * s))
+                    .whitespace_nowrap()
                     .chat_cursor_pointer()
-                    .when(hovered, |row| row.bg(p.foreground.opacity(0.07)))
-                    .hover(|style| style.bg(p.foreground.opacity(0.07)))
-                    .child(
-                        svg()
-                            .path(text(&row, "iconPath"))
-                            .mt(px(2.0 * s))
-                            .size(px(14.0 * s))
-                            .flex_shrink_0()
-                            .text_color(tone),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_1()
-                            .min_w_0()
-                            .child(
-                                div()
-                                    .text_size(px(13.0 * s))
-                                    .line_height(px(LABEL_LINE * s))
-                                    .text_color(p.foreground)
-                                    .child(text(&row, "label")),
-                            )
-                            .child(
-                                div()
-                                    .w_full()
-                                    .text_size(px(12.0 * s))
-                                    .line_height(px(DETAIL_LINE * s))
-                                    .text_color(p.card_muted)
-                                    .child(text(&row, "description")),
-                            ),
-                    )
-                    .when(in_draft, |row| {
-                        row.child(
-                            svg()
-                                .path("titlebar/check.svg")
-                                .mt(px(2.0 * s))
-                                .size(px(14.0 * s))
-                                .flex_shrink_0()
-                                .text_color(p.foreground),
-                        )
-                    })
-                    .on_hover(cx.listener(move |this, hovered: &bool, window, cx| {
-                        if *hovered {
-                            this.preview_boost(&hover_id, window, cx);
+                    .map(|chip| {
+                        if on {
+                            chip.border_color(gpui::transparent_black())
+                                .bg(p.foreground.opacity(0.1))
+                                .text_color(p.foreground)
+                        } else {
+                            chip.border_color(p.foreground.opacity(0.1))
+                                .text_color(p.card_muted)
                         }
+                    })
+                    .hover(|style| style.text_color(p.foreground))
+                    .child(label.clone())
+                    // The offset is set here rather than on the next layout, so this frame's chips
+                    // already light the section scrolled to.
+                    .on_click(cx.listener(move |_, _, window, _| {
+                        if let Some(item) = scroll.bounds_for_item(start) {
+                            let y = (scroll.bounds().top() - item.top())
+                                .max(-scroll.max_offset().y)
+                                .min(px(0.0));
+                            scroll.set_offset(gpui::point(px(0.0), y));
+                        } else {
+                            scroll.scroll_to_top_of_item(start);
+                        }
+                        window.refresh();
                     }))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.invoke(
-                            json!({"type": "toggleBoost", "id": click_id, "text": draft}),
-                            cx,
-                        );
-                        this.close_pill_menu(cx);
-                    }))
-            }));
-        let footer = div()
+            }),
+        );
+        let edit = div()
             .id("boost-menu-edit")
             .role(gpui::Role::MenuItem)
             .aria_label("Edit Boosts")
             .flex()
             .flex_shrink_0()
             .items_center()
-            .gap(px(8.0 * s))
-            .mt(px(4.0 * s))
-            // CDXC:Boosts 2026-11-20 WHY: User: the "Edit Boosts…" row "isn't vertically centred
-            // in its footer". The menu's own 6px padding sat under the row, so the text was 6px
-            // nearer the line above it than the menu's bottom edge; the row reaches down over that
-            // padding (same height in the layout) so its text sits halfway between the two.
-            .h(px(FOOTER_HEIGHT * s))
-            .mb(px(-6.0 * s))
-            .px(px(10.0 * s))
-            .border_t_1()
-            .border_color(p.foreground.opacity(0.08))
+            .gap(px(6.0 * s))
+            .px(px(8.0 * s))
+            .py(px(3.0 * s))
+            .rounded(px(6.0 * s))
             .text_size(px(12.5 * s))
             .text_color(p.card_muted)
             .chat_cursor_pointer()
-            .hover(|style| style.text_color(p.foreground))
+            .hover(|style| style.text_color(p.foreground).bg(p.foreground.opacity(0.06)))
             .child(
                 svg()
                     .path("titlebar/settings.svg")
                     .size(px(14.0 * s))
                     .text_color(p.card_muted),
             )
-            .child("Edit Boosts\u{2026}")
+            .child("Edit\u{2026}")
             .on_click(cx.listener(|this, _, _, cx| this.open_boost_settings(None, None, cx)));
+        // The bar reaches over the menu's own 6px padding below it, so its row sits halfway
+        // between the line above and the menu's bottom edge.
+        let footer = div()
+            .flex()
+            .flex_shrink_0()
+            .items_center()
+            .justify_between()
+            .gap(px(8.0 * s))
+            .h(px(FOOTER_HEIGHT * s))
+            .mb(px(-6.0 * s))
+            .px(px(4.0 * s))
+            .border_t_1()
+            .border_color(p.foreground.opacity(0.08))
+            .child(chips)
+            .child(edit);
         Some(
             div()
                 .size_full()
                 .flex()
                 .flex_col()
                 .gap(px(6.0 * s))
-                .child(tabs)
                 .child(rows)
                 .child(footer)
                 .into_any_element(),
@@ -589,6 +647,15 @@ impl NativeChatView {
                     &text(&row, "prompt"),
                     p,
                 ))
+                // The whole description, which the menu's row cuts to one line.
+                .child(
+                    div()
+                        .text_size(px(12.0 * s))
+                        .line_height(px(16.0 * s))
+                        .line_clamp(3)
+                        .text_color(p.foreground.opacity(0.88))
+                        .child(text(&row, "description")),
+                )
                 .child(
                     div()
                         .text_size(px(11.5 * s))
