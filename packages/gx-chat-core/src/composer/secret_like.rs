@@ -67,7 +67,57 @@ pub fn looks_like_secret(text: &str) -> bool {
     if text.contains("PRIVATE KEY-----") {
         return true;
     }
-    tokens(text).any(|token| known_prefix(token) || aws_key_id(token) || random_token(token))
+    judged_tokens(text).any(|(token, path)| {
+        known_prefix(token) || aws_key_id(token) || (!path && random_token(token))
+    })
+}
+
+/// The words of `text` (`tokens`), each with whether it is a piece of a path written with spaces in
+/// it. Only a key's prefix or an AWS key id counts in such a piece, not how random it looks.
+///
+/// A path starts at a word that starts with `/` or `~` (a word that does is never judged random
+/// either) and goes on through each word one space after the last that has a `/` and a folder
+/// named as a word is (`Support/ClipBook`), and ends at a file name with its extension
+/// (`Chrome_19-33-36@2x.png`).
+///
+/// CDXC:Secrets 2026-11-20 WHY:
+/// The user, of a draft holding a picture pasted from the ClipBook clipboard app ("it's wrong, it
+/// doesn't hold a key or token, pls fix"): its `[Image #1](/Users/…/Application Support/ClipBook
+/// Rust/attachments/04170605…4d1c/2026-11-19_Google Chrome_19-33-36@2x.png)` reference split at its
+/// spaces, and the piece `Rust/attachments/04170605…/2026-11-19_Google` read as a random token: the
+/// 64-character content hash made the long run and `Rust` and `Google` the upper case. The chat
+/// box then held its Send and kept the draft off other devices. Every such reference Ghostex
+/// writes for an attachment starts with `/` or `~` (or a drive, whose `\` no key holds), so this
+/// covers them and a path the user pastes alike. A key one space after a path and holding a `/`
+/// and a word is the one thing this lets by, and only when it has no known prefix.
+fn judged_tokens(text: &str) -> impl Iterator<Item = (&str, bool)> {
+    let mut in_path = false;
+    let mut previous_end = 0;
+    tokens(text).map(move |token| {
+        // `tokens` yields slices of `text`, so a token's place is its offset in it.
+        let start = token.as_ptr() as usize - text.as_ptr() as usize;
+        let joined = in_path && &text[previous_end..start] == " ";
+        previous_end = start + token.len();
+        if token.starts_with('/') || token.starts_with('~') {
+            in_path = true;
+            return (token, false);
+        }
+        if joined && token.contains('/') && token.split('/').any(word_shaped) {
+            return (token, true);
+        }
+        in_path = false;
+        (token, joined && file_name(token))
+    })
+}
+
+/// A file name ending in an extension of one to five letters and digits (`2x.png`, `notes.md`).
+fn file_name(token: &str) -> bool {
+    token.rsplit_once('.').is_some_and(|(stem, extension)| {
+        !stem.is_empty()
+            && (1..=5).contains(&extension.len())
+            && extension.chars().all(|c| c.is_ascii_alphanumeric())
+            && extension.chars().any(|c| c.is_ascii_alphabetic())
+    })
 }
 
 /// The words of `text`, split at whitespace (U+FEFF and U+0085 included, as the phone's copy
@@ -123,7 +173,8 @@ pub const MASK: &str = "[key removed]";
 /// it is deleted a character at a time (`key_fragment`). A draft is not saved to gxserver while
 /// this holds (draft_sync.rs).
 pub fn has_key_fragment(text: &str) -> bool {
-    text.contains("PRIVATE KEY") || tokens(text).any(key_fragment)
+    text.contains("PRIVATE KEY")
+        || judged_tokens(text).any(|(token, path)| key_fragment(token, path))
 }
 
 /// `text` with everything that could be part of a key replaced by [`MASK`], or `None` when nothing
@@ -134,7 +185,7 @@ pub fn mask_key_fragments(text: &str) -> Option<String> {
     let mut masked = String::with_capacity(text.len());
     let mut copied = 0;
     let mut any = blocks;
-    for token in tokens(&text).filter(|token| key_fragment(token)) {
+    for (token, _) in judged_tokens(&text).filter(|(token, path)| key_fragment(token, *path)) {
         // `tokens` yields slices of `text`, so a token's place is its offset in it.
         let start = token.as_ptr() as usize - text.as_ptr() as usize;
         masked.push_str(&text[copied..start]);
@@ -188,9 +239,10 @@ fn mask_private_key_blocks(text: &str) -> (String, bool) {
 /// A key, or a piece of one left while it is deleted: a known prefix with at least 8 mixed key
 /// characters after it (a body of words is not one, after a prefix ordinary words can follow),
 /// `AKIA`/`ASIA` with at least 8 capitals or digits, or a random run of 16 characters or more.
-/// Ordinary words, links and paths stay out (`not_a_fragment` in the fixture).
-fn key_fragment(token: &str) -> bool {
-    if known_prefix(token) || aws_key_id(token) || random_token(token) {
+/// Ordinary words, links and paths stay out (`not_a_fragment` in the fixture); a piece of a path
+/// with spaces in it (`path`, `judged_tokens`) is not judged on how random it looks.
+fn key_fragment(token: &str, path: bool) -> bool {
+    if known_prefix(token) || aws_key_id(token) || (!path && random_token(token)) {
         return true;
     }
     let prefixed = PREFIXES.iter().any(|known| {
@@ -207,20 +259,16 @@ fn key_fragment(token: &str) -> bool {
                 >= 8
         })
     });
-    prefixed || aws || random_fragment(token)
+    prefixed || aws || (!path && random_fragment(token))
 }
 
 /// What is left of a random token being deleted: 16 characters or more of key characters with
 /// upper case, lower case and a digit, and not made of words. Links and paths are not: like
 /// `random_token`, nothing with `//` or starting with `/` or `~`, and a run of 16 or more between
-/// its `/` and `.` separators.
+/// its `/` and `.` separators (`longest_random_run`).
 fn random_fragment(token: &str) -> bool {
     let token = token.trim_end_matches(['.', '!', '?']);
-    let longest_run = token
-        .split(['/', '.'])
-        .map(str::len)
-        .max()
-        .unwrap_or_default();
+    let longest_run = longest_random_run(token);
     token.len() >= 16
         && !token.contains("//")
         && !token.starts_with('/')
@@ -256,8 +304,8 @@ fn aws_key_id(token: &str) -> bool {
 }
 
 /// A long run of letters, digits and `_-+/.` with upper case, lower case and digits mixed, little
-/// repetition, and not made of words. Hex (commit ids, hashes, UUIDs) has no upper case and paths
-/// have a `/` between words, so neither counts.
+/// repetition, and not made of words. Hex (commit ids, hashes, UUIDs) has one case only, even
+/// inside a path, and paths have a `/` between words, so neither counts.
 fn random_token(token: &str) -> bool {
     let token = token.trim_end_matches(['.', '!', '?']);
     if token.chars().count() < 32
@@ -274,17 +322,29 @@ fn random_token(token: &str) -> bool {
     let lower = token.chars().filter(char::is_ascii_lowercase).count();
     let digits = token.chars().filter(char::is_ascii_digit).count();
     // A path or dotted name: words between separators, not one random run.
-    let longest_run = token
-        .split(['/', '.'])
-        .map(str::len)
-        .max()
-        .unwrap_or_default();
+    let longest_run = longest_random_run(token);
     upper >= 2
         && lower >= 2
         && digits >= 1
         && longest_run >= 24
         && entropy(token) >= 4.0
         && !word_shaped(token)
+}
+
+/// The length of the longest run of `token` between its `/` and `.` separators that has both upper
+/// and lower case, as a random run has. Hex has one case only, so a content hash or commit id in a
+/// path (`attachments/04170605…/Shot.png`) is not the long run, whatever case the folder names
+/// around it are written in (CDXC:Secrets 2026-11-20 at `judged_tokens`).
+fn longest_random_run(token: &str) -> usize {
+    token
+        .split(['/', '.'])
+        .filter(|run| {
+            run.chars().any(|c| c.is_ascii_uppercase())
+                && run.chars().any(|c| c.is_ascii_lowercase())
+        })
+        .map(str::len)
+        .max()
+        .unwrap_or_default()
 }
 
 /// Whether at least half of `token`'s letters and digits sit in words: runs of four or more
