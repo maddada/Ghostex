@@ -693,7 +693,10 @@ fn claude_row_names(row: &PickerRow) -> Vec<String> {
 
 /// Puts a list command's lineup in the picker's order and adds the rows only the picker shows,
 /// described by the published catalog's row of the same name when it has one. Rows the picker does
-/// not show are dropped: the picker is what the user can pick from.
+/// not show are dropped: the picker is what the user can pick from, except Antigravity's (below).
+///
+/// CDXC:AgentProviders 2026-11-20 WHY:
+/// Antigravity 1.5.10 folded its `Orchestrator (Carbon)` and `Orchestrator (Argon)` picker rows into one `Orchestrator` row with a Planner choice, while `agy models` and `/model` keep one id per planner (`gemini-pro-orchestrator-neon`, `Orchestrator (Neon)`). A picker row that names no listed row but heads listed rows `<row> (<choice>)` stands for those rows, so each keeps the id `/model` accepts; the made-up `orchestrator` id agy refuses is never served. `agy models` follows the account and the server, while the picker read is kept per CLI version, so for Antigravity a model the list names and the picker read did not show stays in, after the picker's rows: Gemini 4 Neon was listed before a picker read showed it.
 pub(crate) fn order_by_picker(
     agent: &str,
     mut entry: Value,
@@ -719,6 +722,22 @@ pub(crate) fn order_by_picker(
             let name = words[..count].join(" ");
             find_row(&listed, &name).or_else(|| find_row(&published_rows, &name))
         });
+        if known.is_none() {
+            let heading = format!("{} (", row.label);
+            let choices: Vec<&Value> = listed
+                .iter()
+                .filter(|listed| row_names(listed).any(|name| name.starts_with(&heading)))
+                .collect();
+            if !choices.is_empty() {
+                for choice in choices {
+                    let value = choice.get("value");
+                    if !models.iter().any(|known| known.get("value") == value) {
+                        models.push(choice.clone());
+                    }
+                }
+                continue;
+            }
+        }
         let mut model = known.cloned().unwrap_or_else(|| {
             json!({
                 "value": derived_value(agent, &row.label),
@@ -737,6 +756,14 @@ pub(crate) fn order_by_picker(
             .any(|known| known.get("value") == value.as_ref())
         {
             models.push(model);
+        }
+    }
+    if agent == "antigravity" && !models.is_empty() {
+        for listed in &listed {
+            let value = listed.get("value");
+            if !models.iter().any(|known| known.get("value") == value) {
+                models.push(listed.clone());
+            }
         }
     }
     if !models.is_empty() {
