@@ -2,7 +2,17 @@ use super::{arguments, delivery, identity, lifecycle, main_coordinator};
 use crate::ghostex_cli::{output::print_json, rpc::CliResult, sessions};
 use serde_json::json;
 
+/// How to work with other agents in Ghostex (guide.md), which `ghostex agents guide` prints.
+///
+/// CDXC:AgentSkills 2026-11-20 DECISION:
+/// User (Q4262 "B"): Ghostex's own skills are retired for CLI help. The `ghostex-agents` skill's habits (Copy Details, other computers, stuck sessions, reading another thread, renaming, the final report) live here now, with the title rules of the retired `ghostex-auto-rename-session` and the Codex fork steps of `ghostex-move-codex-session`; `ghostex agents --help` keeps the verbs.
+pub(crate) const AGENTS_GUIDE_MD: &str = include_str!("guide.md");
+
 pub(crate) fn run(args: &[String]) -> CliResult<()> {
+    if args.first().map(String::as_str) == Some("guide") {
+        print!("{AGENTS_GUIDE_MD}");
+        return Ok(());
+    }
     let args = arguments::parse(args)?;
     if args.help {
         print!("{}", include_str!("help.txt"));

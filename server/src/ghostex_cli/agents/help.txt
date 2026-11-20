@@ -1,6 +1,8 @@
 Create, message, switch the account of, reload, and close agent sessions in Ghostex.
 
 USAGE
+  ghostex agents guide                 How to work with other agents: habits, Copy Details,
+                                       stuck sessions, reading a thread, renaming
   ghostex agents whoami [--json]
   ghostex agents types [--json]
   ghostex agents create <agent-id> [--title <name>] [--project-id <id> | --path <folder>]

@@ -32,8 +32,19 @@ const READ_LIMIT: usize = 40;
 const SESSION_TITLE: &str = "Ghostex Help";
 
 /// `ghostex help` prints the CLI help; `ghostex help ask …` asks Ghostex Help.
+/// How Ghostex Help answers and changes settings for the user (help_guide.md), which
+/// `ghostex help guide` prints.
+///
+/// CDXC:AgentSkills 2026-11-20 DECISION:
+/// User (Q4262 "B"): Ghostex's own skills are retired for CLI help. The `ghostex-help` skill's workflow (read the guide, find the key, confirm, set, verify; theme and hotkeys) lives here now, and a Ghostex Help session is told to run it (ask's first message below, and Ask Ghostex in the ⋯ menu); `ghostex guide` keeps the chapters it reads.
+pub(crate) const HELP_GUIDE_MD: &str = include_str!("help_guide.md");
+
 pub fn help_command(args: &[String]) -> CliResult<()> {
     match args.first().map(String::as_str) {
+        Some("guide") => {
+            print!("{HELP_GUIDE_MD}");
+            Ok(())
+        }
         Some("ask") => ask(&args[1..]),
         _ => {
             println!("{}", crate::ghostex_cli::usage::usage());

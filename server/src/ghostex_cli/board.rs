@@ -16,8 +16,18 @@ conversation link; the CLI only ships the parameters and prints the JSON
 result (`{ projectId, sessionId, created }`).
 */
 /// Dispatch a Ghostex Project Board CLI subcommand.
+/// How to work Project Board beads with `bd` (board_guide.md), which `ghostex board guide` prints.
+///
+/// CDXC:AgentSkills 2026-11-20 DECISION:
+/// User (Q4262 "B"): Ghostex's own skills are retired for CLI help; the `ghostex-manage-beads` skill's workflow (link the session first, swimlanes, review beads) lives here now.
+const BOARD_GUIDE_MD: &str = include_str!("board_guide.md");
+
 pub fn board_command(args: &[String]) -> CliResult<()> {
     match args.first().map(String::as_str) {
+        Some("guide") => {
+            print!("{BOARD_GUIDE_MD}");
+            Ok(())
+        }
         Some("start-work") => start_work_command(&args[1..]),
         Some("associate") => associate_command(&args[1..]),
         Some("install-skill") => {

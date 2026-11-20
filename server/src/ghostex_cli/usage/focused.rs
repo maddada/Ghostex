@@ -282,6 +282,10 @@ Inspect:
 pub fn board_usage() -> String {
     let commands = [
         format_help_command(
+            "board guide",
+            "How to work a bead with bd: link this session first, swimlanes, review beads",
+        ),
+        format_help_command(
             "board start-work <bead-id> [--agent id [--allow-hidden]] [--model m] [--effort e] [--project-path path|--project-id id] [--json]",
             "Dispatch a Project Board bead through gxserver",
         ),
@@ -300,6 +304,7 @@ pub fn board_usage() -> String {
         "Ghostex Project Board - dispatch bead work through gxserver
 
 Usage:
+  ghostex board guide
   ghostex board start-work <bead-id> [--agent <agentId> [--allow-hidden]] [--model <model>] [--effort <level>] [--project-path <path>|--project-id <id>] [--json]
   ghostex board associate <bead-id> [--session-id <alias|id|title>] [--project-id <id>] [--json]
   gx board start-work <bead-id>
@@ -491,6 +496,10 @@ Connection details:
   The MCP server reaches Ghostex's embedded CEF pages through the local gxserver, with its token.
   It scans the CEF DevTools ports only for an older Ghostex whose gxserver lacks that route.
   Pass --port, or set GHOSTEX_CEF_REMOTE_DEBUGGING_PORT, to use a DevTools port the app was started with.
+
+Outside Ghostex's browser:
+  For pages in Chrome, Chromium, Edge or an Electron app, or for desktop apps, read the cua-driver skill
+  (Trycua's Cua Driver, which Ghostex installs with Computer Use) and follow it.
 
 Legacy aliases:
   browser-devtools-mcp and browser-mcp still run the MCP server.
@@ -856,6 +865,7 @@ pub fn spaceo_usage() -> String {
 
 Usage:
   gx spaceo --help
+  gx spaceo guide                 How to drive a Mac app on a hidden display
   gx spaceo install-skill [--json]
   gx spaceo status [--json]
   gx spaceo repair
@@ -993,6 +1003,7 @@ list: this chat's numbered messages with their first line, newest first (20 unle
 
 pub fn secret_usage() -> String {
     r#"Usage:
+  ghostex secret guide              How to ask for a secret and use it safely (sudo, 1Password)
   ghostex secret request --label <text> --reason <text> [--placeholder <text>] [--timeout-minutes N] [--session <alias|id|title>]
   ghostex secret providers [list]
   ghostex secret providers add --name <text> --account <1Password account>
