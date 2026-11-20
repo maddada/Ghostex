@@ -318,20 +318,23 @@ pub fn add_hub_secret_folders(settings: &mut serde_json::Map<String, serde_json:
     changed
 }
 
-/// Keeps Classic (today's sidebar, no rail) for someone who already had a settings file when the rail
-/// became the default, and marks their one-time "Meet the rail" intro as pending. Returns whether it
-/// changed anything; a saved layout (either way) is left alone.
+/// Switches someone who already had a settings file to the rail when it became the default, and
+/// marks their one-time "Meet the rail" pop-up as pending. Returns whether it changed anything; a
+/// layout they chose themselves is left alone.
 ///
-/// CDXC:Sidebar 2026-11-20 WHY: stored settings leave a key out until it is saved, so an existing user would get the rail without asking. The desktop runs this once, behind a marker file, at start-up when the settings file already exists (`migrate_sidebar_rail_default_once`); a new install has no file then, so it starts on Rail and sees no intro.
-pub fn keep_classic_sidebar_for_existing_settings(
+/// CDXC:Sidebar 2026-11-20 DECISION: User, for 11.12.0: "On first start of this version, existing users are switched to the Rail automatically (not left on Classic), and the pop-up explains it." The desktop runs this once, behind a marker file, at start-up when the settings file already exists (`migrate_sidebar_rail_default_once`); a new install has no file then, so it starts on Rail without the pop-up. A file a build of the same day set to Classic with its pop-up still pending was never answered, so it is switched too.
+pub fn switch_existing_settings_to_rail(
     settings: &mut serde_json::Map<String, serde_json::Value>,
 ) -> bool {
-    if settings.contains_key("sidebarLayout") {
+    let text = |key: &str| settings.get(key).and_then(serde_json::Value::as_str);
+    let unanswered_classic =
+        text("sidebarLayout") == Some("classic") && text("sidebarRailIntro") == Some("pending");
+    if settings.contains_key("sidebarLayout") && !unanswered_classic {
         return false;
     }
     settings.insert(
         "sidebarLayout".to_string(),
-        serde_json::Value::String("classic".to_string()),
+        serde_json::Value::String("rail".to_string()),
     );
     settings.insert(
         "sidebarRailIntro".to_string(),
@@ -602,31 +605,30 @@ mod dark_look_tests {
 
 #[cfg(test)]
 mod sidebar_layout_tests {
-    use super::keep_classic_sidebar_for_existing_settings;
+    use super::switch_existing_settings_to_rail;
     use serde_json::{json, Map, Value};
 
     fn settings(value: Value) -> Map<String, Value> {
         serde_json::from_value(value).unwrap()
     }
 
-    /// A file that never chose a layout keeps Classic and queues Meet the rail, once.
+    /// A file that never chose a layout goes to Rail and queues Meet the rail, once.
     #[test]
-    fn a_file_without_a_layout_keeps_classic_and_queues_the_intro() {
+    fn a_file_without_a_layout_goes_to_the_rail_and_queues_the_pop_up() {
         let mut object = settings(json!({"sidebarWidth": 320}));
-        assert!(keep_classic_sidebar_for_existing_settings(&mut object));
-        assert_eq!(object.get("sidebarLayout"), Some(&json!("classic")));
+        assert!(switch_existing_settings_to_rail(&mut object));
+        assert_eq!(object.get("sidebarLayout"), Some(&json!("rail")));
         assert_eq!(object.get("sidebarRailIntro"), Some(&json!("pending")));
-        assert!(!keep_classic_sidebar_for_existing_settings(&mut object));
+        assert!(!switch_existing_settings_to_rail(&mut object));
     }
 
-    /// A saved choice, either one, is left alone and gets no intro.
+    /// A layout chosen (the pop-up answered, or Settings) is kept.
     #[test]
-    fn a_saved_layout_is_kept() {
+    fn a_chosen_layout_is_kept() {
         for layout in ["rail", "classic"] {
-            let mut object = settings(json!({"sidebarLayout": layout}));
-            assert!(!keep_classic_sidebar_for_existing_settings(&mut object));
+            let mut object = settings(json!({"sidebarLayout": layout, "sidebarRailIntro": "done"}));
+            assert!(!switch_existing_settings_to_rail(&mut object));
             assert_eq!(object.get("sidebarLayout"), Some(&json!(layout)));
-            assert_eq!(object.get("sidebarRailIntro"), None);
         }
     }
 }
