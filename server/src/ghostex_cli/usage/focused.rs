@@ -923,8 +923,8 @@ Refused, with nothing typed, while the session is working, waits on you (a permi
 question, a Needs you to-do), has queued messages or unsent text in its input box, or runs an
 agent other than Claude Code or Codex.
 
-Who can clear: you, from Ghostex or from your own terminal outside Ghostex, any session; an agent,
-only a coordinator thread it leads (not itself, its coordinator or any other session).
+Who can clear: you (from Ghostex, or from your own terminal outside Ghostex) and any agent on this
+computer, any session but the agent's own. Each clear is in the security log with who did it.
 
 <session> is an alias, id, ref or title, as for rename-command."#
         .to_string()
