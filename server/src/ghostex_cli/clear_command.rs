@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use crate::ghostex_cli::args::{parse_args, Flags};
 use crate::ghostex_cli::output::print_json;
 use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
-use crate::ghostex_cli::{agents::identity, selector, usage};
+use crate::ghostex_cli::{selector, usage};
 
 const ENDPOINT: &str = "/api/clearSessionConversation";
 /// How long to wait for the new conversation, and for a sleeping session to wake and take the clear.
@@ -38,13 +38,16 @@ pub fn clear_command(args: &[String]) -> CliResult<()> {
     let flags = &parsed.flags;
     let selector_text = selector::session_selector_from_args(&parsed.rest, flags)
         .ok_or_else(|| CliError::Other(usage::clear_command_usage()))?;
-    // CDXC:Security 2026-11-20 WHY: with no session variable the CLI uses the token file, which
-    // gxserver takes as you. Under a Ghostex session pane that is an agent that dropped its
-    // variables, so it is refused, the check 11.11.1 added for the raw message verbs.
-    if matches!(identity::raw_caller()?, identity::RawCaller::NoSession)
-        && crate::agent_hooks::caller_ancestry().in_session_pane
-    {
-        return Err(CliError::Other("This runs inside a Ghostex session, but its session can't be identified (its GHOSTEX_* variables are missing), so the clear would run as yours. Run it from the agent's own shell, or from your own terminal outside Ghostex.".into()));
+    // CDXC:Security 2026-11-20 WHY: without its session's `gxs_` token the CLI uses the token
+    // file, which gxserver takes as you. Under a Ghostex session pane that is an agent that dropped
+    // its token (Fable review finding 1: keeping the session variables and unsetting only
+    // `GHOSTEX_SESSION_TOKEN` skipped the 11.11.1 variable check), so it is refused whatever the
+    // variables say. Codex and Empryo panes get their token back from the process tree before this
+    // runs (agent_hooks/ancestor_session.rs).
+    let holds_session_token = std::env::var(crate::security::SESSION_TOKEN_ENV)
+        .is_ok_and(|token| token.trim().starts_with(crate::security::SESSION_TOKEN_PREFIX));
+    if !holds_session_token && crate::agent_hooks::caller_ancestry().in_session_pane {
+        return Err(CliError::Other("This runs inside a Ghostex session but without its session token (GHOSTEX_SESSION_TOKEN), so the clear would run as yours. Run it from the agent's own shell, or from your own terminal outside Ghostex.".into()));
     }
     let session = selector::resolve_cli_session_selector(&selector_text, flags)?;
     let params = json!({ "projectId": session["projectId"], "sessionId": session["sessionId"] });
