@@ -130,6 +130,7 @@ impl ChatOptionMenuPanel {
         for (tile_index, tile) in tiles.iter().enumerate() {
             let label = tile["label"].as_str().unwrap_or_default().to_owned();
             let disabled = tile["disabled"] == true;
+            let selected = self.selected == Some(index) && self.selected_tile == tile_index;
             let icon_path = tile["iconPath"].as_str().map(str::to_owned);
             strip = strip.child(
                 div()
@@ -146,7 +147,7 @@ impl ChatOptionMenuPanel {
                     .gap(px(4.0 * scale))
                     .px(px(4.0 * scale))
                     .rounded(px(6.0 * scale))
-                    .bg(hover.opacity(0.5))
+                    .bg(if selected { hover } else { hover.opacity(0.5) })
                     .when(!disabled, |tile| tile.hover(|tile| tile.bg(hover)))
                     .when(disabled, |tile| tile.opacity(0.42))
                     .when_some(icon_path, |tile, path| {
@@ -265,7 +266,26 @@ impl ChatOptionMenuPanel {
             cx.notify();
             return;
         }
+        // A quick row's tiles: Left and Right move between them, Enter runs the one selected.
+        let tiles = self
+            .selected
+            .and_then(|index| self.rows.get(index))
+            .and_then(|row| row["quick"].as_array())
+            .map(Vec::len);
         match key {
+            "left" | "right" if tiles.is_some() => {
+                let count = tiles.unwrap_or(1).max(1);
+                self.selected_tile = if key == "left" {
+                    (self.selected_tile + count - 1) % count
+                } else {
+                    (self.selected_tile + 1) % count
+                };
+            }
+            "enter" | "space" if tiles.is_some() => {
+                if let Some(index) = self.selected {
+                    self.activate_quick(index, self.selected_tile, cx);
+                }
+            }
             "escape" | "tab" => self.menu.update(cx, |menu, cx| menu.close(None, cx)),
             "left" if self.depth > 0 => self
                 .menu
@@ -294,7 +314,6 @@ impl ChatOptionMenuPanel {
                         row["heading"] != true
                             && row["separator"] != true
                             && row["disabled"] != true
-                            && !row["quick"].is_array()
                     })
                     .map(|(index, _)| index)
                     .collect();
@@ -310,6 +329,9 @@ impl ChatOptionMenuPanel {
                             .unwrap_or(enabled.len() - 1),
                         _ => current.map(|i| (i + 1) % enabled.len()).unwrap_or(0),
                     };
+                    if self.selected != Some(enabled[position]) {
+                        self.selected_tile = 0;
+                    }
                     self.selected = Some(enabled[position]);
                     self.scroll.scroll_to_item(enabled[position]);
                 }
@@ -475,10 +497,24 @@ impl Render for ChatOptionMenuPanel {
                     .map(|icon| format!("agent-icons/{icon}.svg"))
             });
             if let Some(icon_path) = icon_path {
+                // A tag's own colour (Tag As), darkened in light mode as the sidebar menu does.
+                let tag_color = row["iconColor"]
+                    .as_str()
+                    .and_then(|color| u32::from_str_radix(color.trim_start_matches('#'), 16).ok())
+                    .map(|color| {
+                        if !appearance.light {
+                            return color;
+                        }
+                        let channel =
+                            |shift| ((color >> shift & 255u32) as f32 * 0.42).round() as u32;
+                        channel(16) << 16 | channel(8) << 8 | channel(0)
+                    });
                 let ink = if row["danger"] == true {
                     gpui::Hsla::from(crate::app::helpers::chrome_palette::chrome_color(
                         0xff7b72, 0xd32f2f,
                     ))
+                } else if let Some(color) = tag_color {
+                    gpui::Hsla::from(gpui::rgb(color))
                 } else {
                     gpui::Hsla::from(foreground)
                 };

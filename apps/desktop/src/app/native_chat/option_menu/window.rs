@@ -118,6 +118,8 @@ pub(super) struct ChatOptionMenuPanel {
     pub(super) heights: Vec<f32>,
     pub(super) focus: FocusHandle,
     pub(super) selected: Option<usize>,
+    /// The tile the arrow keys are on while the selected row is a quick row.
+    pub(super) selected_tile: usize,
     pub(super) scroll: ScrollHandle,
     pub(super) child: Option<usize>,
     /// The Switch Account panel's Customize state (`SessionAccountsPanel`'s local `customize`).
@@ -899,6 +901,7 @@ impl ChatOptionMenu {
                                 heights,
                                 focus,
                                 selected: None,
+                                selected_tile: 0,
                                 scroll: Default::default(),
                                 child: None,
                                 accounts_customize,

@@ -51,6 +51,13 @@ fn sidebar_row_to_chat(item: &Value) -> Value {
             row[flag] = json!(true);
         }
     }
+    // A tag's own colour, and what a row says after its name (Link to's linked ids).
+    if let Some(color) = item["iconColor"].as_str() {
+        row["iconColor"] = json!(color);
+    }
+    if let Some(suffix) = item["suffix"].as_str().filter(|suffix| !suffix.is_empty()) {
+        row["detail"] = json!(suffix);
+    }
     if let Some(children) = item["children"].as_array() {
         row["children"] = Value::Array(children.iter().map(sidebar_row_to_chat).collect());
         row["openOnHover"] = json!(false);
@@ -377,10 +384,41 @@ impl NativeChatView {
             "stashPrompt" => self.stash_menu_row().map(named).into_iter().collect(),
             "skills" => vec![self.skills_row()],
             "chatOptions" => self.folded_option_rows(),
-            _ => shared
-                .get(place)
-                .map(|items| items.iter().map(sidebar_row_to_chat).collect())
-                .unwrap_or_default(),
+            _ => match shared.get(place) {
+                Some(items) => items.iter().map(sidebar_row_to_chat).collect(),
+                None => self.unlisted_place(place, shared.is_empty()),
+            },
+        }
+    }
+
+    /// A shared place the store had no row for. A coordinator's chat still offers View Playbook
+    /// from the chat core, and a session no list draws (a filter hides another computer's row,
+    /// or the list is not ready) still offers Close, so those never vanish with the sidebar row.
+    fn unlisted_place(&self, place: &str, unlisted: bool) -> Vec<Value> {
+        match place {
+            "coordinator" => self
+                .host_action("viewPlaybook")
+                .map(|action| {
+                    json!({
+                        "label": action["label"],
+                        "iconPath": "titlebar/book.svg",
+                        "command": {"type":"host","action":"viewPlaybook"},
+                    })
+                })
+                .into_iter()
+                .collect(),
+            "close" if unlisted => {
+                let session_id = self.links_session_key().to_sidebar_session_id();
+                vec![named_row(
+                    "close",
+                    json!({
+                        "command": {"type":"sidebarMenu","command":{"type":"command","message":{
+                            "type":"closeSession","sessionId":session_id,"closeSource":"sidebarMenu",
+                        }}},
+                    }),
+                )]
+            }
+            _ => Vec::new(),
         }
     }
 
