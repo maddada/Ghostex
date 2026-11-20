@@ -1028,7 +1028,8 @@ impl GhostexGpuiApp {
                 };
                 match completion_origin {
                     GpuiLocalWorkspaceAttachOrigin::SidebarFocus => {
-                        if this.local_workspace_latest_focus_key.as_ref() != Some(&key) || !selected {
+                        if this.local_workspace_latest_focus_key.as_ref() != Some(&key) || !selected
+                        {
                             return;
                         }
                     }
@@ -1142,7 +1143,11 @@ impl GhostexGpuiApp {
                         }
                         this.cancel_sidebar_focus_border_handoff();
                         if error.code.as_deref() == Some("accountUnavailable") {
-                            this.show_local_workspace_account_refusal_toast(&key, &error.message, cx);
+                            this.show_local_workspace_account_refusal_toast(
+                                &key,
+                                &error.message,
+                                cx,
+                            );
                             return;
                         }
                         this.show_local_workspace_terminal_open_failure(

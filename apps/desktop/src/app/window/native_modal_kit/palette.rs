@@ -526,7 +526,11 @@ mod tests {
         assert!((menu.r * 255.0 - 57.4).abs() < 1.5, "{menu:?}");
         // A notice: 15% white over #0e0e0e, about #323232, above the Settings dialogs' #202020.
         let notice = dark.lifted_notice();
-        assert!((notice.surface.r * 255.0 - 50.2).abs() < 1.5, "{:?}", notice.surface);
+        assert!(
+            (notice.surface.r * 255.0 - 50.2).abs() < 1.5,
+            "{:?}",
+            notice.surface
+        );
         assert!(notice.surface.r > dark.lifted_dialog_fill(true).r);
     }
 }

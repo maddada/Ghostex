@@ -260,11 +260,7 @@ impl SolidPalette {
     /// The theme colour lifted toward white, opaque, with opaque ink steps over it.
     fn lifted(light: bool) -> Self {
         let surface = glass_lifted_opaque_from(workspace_background_color(), light);
-        let ink: Hsla = if light {
-            gpui::black()
-        } else {
-            gpui::white()
-        };
+        let ink: Hsla = if light { gpui::black() } else { gpui::white() };
         let step = |amount: f32| surface.blend(ink.opacity(amount));
         let (strong, title, body, muted, faint, fainter, idle_dot, sleeping_dot, link): (
             Hsla,

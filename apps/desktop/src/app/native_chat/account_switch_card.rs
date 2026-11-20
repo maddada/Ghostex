@@ -61,7 +61,10 @@ impl Palette {
             surface: if p.light {
                 css_mix(white, 0.7, background)
             } else if p.window_glass {
-                Rgba::from(crate::app::helpers::glass_lifted_from(p.background, p.light))
+                Rgba::from(crate::app::helpers::glass_lifted_from(
+                    p.background,
+                    p.light,
+                ))
             } else {
                 css_mix(white, 0.04, background)
             },

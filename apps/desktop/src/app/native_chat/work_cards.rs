@@ -119,7 +119,9 @@ fn page_row_menu(row: &Value) -> Vec<Value> {
     // waits to be seen): gx-chat-core's `dismissLabel`. Both send the agent nothing.
     if row["dismiss"].is_object() {
         let label = row["dismissLabel"].as_str().unwrap_or("Dismiss");
-        rows.push(json!({ "label": label, "iconPath": "titlebar/x.svg", "command": row["dismiss"] }));
+        rows.push(
+            json!({ "label": label, "iconPath": "titlebar/x.svg", "command": row["dismiss"] }),
+        );
     }
     let snooze: Vec<Value> = row["snooze"]
         .as_array()
@@ -128,7 +130,9 @@ fn page_row_menu(row: &Value) -> Vec<Value> {
         .map(|choice| json!({ "label": text(choice, "label"), "command": choice["command"] }))
         .collect();
     if !snooze.is_empty() {
-        rows.push(json!({ "label": "Snooze", "iconPath": "titlebar/clock.svg", "children": snooze }));
+        rows.push(
+            json!({ "label": "Snooze", "iconPath": "titlebar/clock.svg", "children": snooze }),
+        );
     }
     rows
 }

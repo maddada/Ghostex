@@ -258,8 +258,7 @@ impl NativeChatView {
                     // The chat box's button names itself; the icon-only ones say it on hover.
                     .when(!composer, |button| {
                         button.tooltip(move |window, cx| {
-                            gpui_component::tooltip::Tooltip::new(tooltip.clone())
-                                .build(window, cx)
+                            gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
                         })
                     })
                     .child(

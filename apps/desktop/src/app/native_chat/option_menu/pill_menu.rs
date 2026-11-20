@@ -23,7 +23,9 @@ impl ChatOptionMenuPanel {
         let height = pill["height"].as_f64().unwrap_or(0.0) as f32;
         let (appearance, chat) = {
             let menu = self.menu.read(cx);
-            let strip_menu = menu.pill().is_some_and(|pill| pill.starts_with("chat-pill-"));
+            let strip_menu = menu
+                .pill()
+                .is_some_and(|pill| pill.starts_with("chat-pill-"));
             (
                 body_appearance(menu.appearance.clone(), strip_menu),
                 menu.chat.clone(),

@@ -1100,12 +1100,7 @@ impl Render for PromptView {
                 .hover(move |style| style.bg(c.button_hover))
                 .cursor_pointer()
                 .tooltip(move |window, cx| super::tooltip::solid_tooltip(label, window, cx))
-                .child(
-                    gpui::svg()
-                        .path(icon)
-                        .size(px(17.0))
-                        .text_color(c.muted),
-                )
+                .child(gpui::svg().path(icon).size(px(17.0)).text_color(c.muted))
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.with_app(cx, move |app, cx| {
                         app.run_ghostex_capture_action(action, cx)
