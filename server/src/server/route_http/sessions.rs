@@ -193,9 +193,10 @@ pub(super) async fn route_sessions_http(
                         session_id,
                     );
                 }
-                // Logged once the coordinator exists and its first message is queued.
+                // Logged once the coordinator exists and its first message is queued (failed
+                // when it isn't; an error before here logs it failed as it is dropped).
                 if let Some(log) = as_user_log {
-                    log.record_if(role_error.is_none());
+                    log.record(role_error.clone().map_or(Ok(()), Err));
                 }
                 let mut response = json!({ "session": session });
                 if let Some(role_error) = role_error {
