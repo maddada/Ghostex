@@ -467,18 +467,31 @@ impl<'a> SidebarMenus<'a> {
         super::section::section_menu(group, section)
     }
 
-    /// A project header's context menu: the buttons the header no longer draws, then the menu proper.
+    /// A project header's context menu, with the buttons the header no longer draws (layout.rs
+    /// `project_menu_layout`).
     pub fn project_menu(&self, group: &GroupView) -> Vec<MenuItem> {
         let menu_group = self.menu_group(group);
-        let mut menu = header::project_header_menu_rows(
-            &self.action_menu_group(group),
-            &self.inputs.settings,
-            self.host,
-        );
-        if !menu.is_empty() {
-            menu.push(MenuItem::separator());
-        }
-        menu.extend(project::project_menu(&project::ProjectMenuInput {
+        // The worktrees whose sessions this project lists (`sidebar_view/worktree_fold.rs`) have
+        // no header of their own, so their Delete Worktree is here, as on a Unified repository.
+        let folded_worktrees: Vec<(String, String)> = group
+            .core
+            .folded_worktrees
+            .iter()
+            .map(|folded| {
+                let label = match &folded.remote_machine {
+                    Some(remote) => format!("{} · {}", folded.label(), remote.machine_name),
+                    None => folded.label().to_string(),
+                };
+                (label, folded.group_id.clone())
+            })
+            .collect();
+        project::project_menu(&project::ProjectMenuInput {
+            header: header::project_header_rows(
+                &self.action_menu_group(group),
+                &self.inputs.settings,
+                self.host,
+            ),
+            folded_worktrees: &folded_worktrees,
             group: &menu_group,
             sessions: &group.core.sessions,
             collection_id: group.collection_id.as_deref(),
@@ -513,23 +526,7 @@ impl<'a> SidebarMenus<'a> {
                     })
                 },
             ),
-        }));
-        // The worktrees whose sessions this project lists (`sidebar_view/worktree_fold.rs`) have
-        // no header of their own, so their Delete Worktree is here, as on a Unified repository.
-        let worktrees: Vec<(String, String)> = group
-            .core
-            .folded_worktrees
-            .iter()
-            .map(|folded| {
-                let label = match &folded.remote_machine {
-                    Some(remote) => format!("{} · {}", folded.label(), remote.machine_name),
-                    None => folded.label().to_string(),
-                };
-                (label, folded.group_id.clone())
-            })
-            .collect();
-        menu.extend(project::unified_delete_worktree_menu(&worktrees));
-        menu
+        })
     }
 
     /// A project header's buttons: the ⋯ menu, the last-used agent and the agent picker.

@@ -63,9 +63,9 @@ pub use hover::{
 pub use item::{menu_to_json, MenuItem, MenuSecondary, MenuSplit};
 pub use layout::entry as session_menu_entry;
 pub use layout::{
-    assemble_session_menu, session_menu_layout, session_menu_layout_json, tidy_separators,
-    LayoutNode, SessionMenuEntry, SessionMenuSpot, ENTRIES as SESSION_MENU_ENTRIES,
-    MORE as SESSION_MENU_MORE,
+    assemble_session_menu, project_menu_layout, session_menu_layout, session_menu_layout_json,
+    tidy_separators, LayoutNode, ProjectMenuSpot, SessionMenuEntry, SessionMenuSpot,
+    ENTRIES as SESSION_MENU_ENTRIES, MORE as SESSION_MENU_MORE,
 };
 pub use menus::SidebarMenus;
 pub use navigation::{

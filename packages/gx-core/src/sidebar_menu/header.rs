@@ -149,61 +149,100 @@ pub fn project_header_actions(
     actions
 }
 
-/// The project header buttons that live in the project's ⋯ menu: Add Worktree or Create PR, History, New Browser Tab, Create Terminal and the pinned Actions.
+/// The project header buttons that live in the project's menu, each in its place: the project
+/// menu's layout (layout.rs `project_menu_layout`) puts them, and a worktree's menu starts with
+/// them in [`ProjectHeaderRows::in_order`].
+#[derive(Default)]
+pub struct ProjectHeaderRows {
+    /// Add Worktree, or Create PR on a worktree.
+    pub worktree: Option<MenuItem>,
+    /// Create Linear Ticket… or Create GitHub Issue….
+    pub create_ticket: Option<MenuItem>,
+    pub history: Option<MenuItem>,
+    pub new_tab: Option<MenuItem>,
+    pub new_terminal: Option<MenuItem>,
+    pub pinned_actions: Vec<MenuItem>,
+}
+
+impl ProjectHeaderRows {
+    /// The rows in the order a worktree's menu starts with.
+    pub fn in_order(&self) -> Vec<MenuItem> {
+        let mut rows: Vec<MenuItem> = [
+            &self.create_ticket,
+            &self.worktree,
+            &self.history,
+            &self.new_tab,
+            &self.new_terminal,
+        ]
+        .into_iter()
+        .flatten()
+        .cloned()
+        .collect();
+        rows.extend(self.pinned_actions.iter().cloned());
+        rows
+    }
+
+    /// The rows for a place of the project menu's layout (`addWorktree`, `createTicket`,
+    /// `history`, `newTab`, `newTerminal`, `pinnedActions`), `None` for any other place.
+    pub fn place(&self, place: &str) -> Option<Vec<MenuItem>> {
+        let one = |row: &Option<MenuItem>| row.iter().cloned().collect();
+        Some(match place {
+            "addWorktree" => one(&self.worktree),
+            "createTicket" => one(&self.create_ticket),
+            "history" => one(&self.history),
+            "newTab" => one(&self.new_tab),
+            "newTerminal" => one(&self.new_terminal),
+            "pinnedActions" => self.pinned_actions.clone(),
+            _ => return None,
+        })
+    }
+}
+
+/// The project header buttons that live in the project's ⋯ menu: Add Worktree or Create PR, History, New Tab, New Terminal and the pinned Actions. Empty for a bot or a sessions group.
 ///
 /// CDXC:Sidebar 2026-10-08 DECISION:
 /// User (for the phone, applied to the desktop header too): move most per-project buttons into the 3-dots menu, keeping only the agent picker and New agent (New Terminal came back to the header on 2026-10-20, see `project_header_actions`). A header that shows six buttons on hover pushed the project name out of a 200px sidebar. A bot row keeps its own few buttons.
-/// SEE-ALSO: `SidebarMenus::header_actions` puts the ⋯ button in front of the agent split; `project_menu` starts with these rows.
-pub fn project_header_menu_rows(
+/// SEE-ALSO: `SidebarMenus::header_actions` puts the ⋯ button in front of the agent split; `project_menu` places these rows by the layout (CDXC:ContextMenus 2026-11-20 in layout.rs).
+pub fn project_header_rows(
     group: &MenuGroup<'_>,
     settings: &SidebarSettings,
     host: &MenuHost,
-) -> Vec<MenuItem> {
+) -> ProjectHeaderRows {
+    use super::layout::entry_row;
     let group_id = group.group_id;
     let Some(project) = group.project else {
-        return Vec::new();
+        return ProjectHeaderRows::default();
     };
     if project.bot_profile.is_some() {
-        return Vec::new();
+        return ProjectHeaderRows::default();
     }
-    let mut actions = vec![
-        if project.worktree.is_some() {
-            MenuItem::row(
-                "Create PR",
-                "git-pull-request",
-                MenuCommand::command(message::run_sidebar_git_action(group_id, "pr")),
-            )
-        } else {
-            MenuItem::row(
-                "Add Worktree",
-                "git-branch",
-                MenuCommand::project_action(group_id, "worktree", None),
-            )
-        },
+    let worktree = if project.worktree.is_some() {
         MenuItem::row(
-            "History",
-            "history",
-            MenuCommand::project_action(group_id, "history", None),
-        ),
-    ];
-    if !settings.browser_view_tab_hidden {
-        actions.push(
-            MenuItem::row(
-                "New Browser Tab",
-                "world",
-                MenuCommand::command(message::open_browser_pane_in_group(group_id)),
-            )
-            .with_hotkey("openBrowserPane"),
-        );
-    }
-    actions.push(
-        MenuItem::row(
-            "Create Terminal",
-            "terminal-2",
-            MenuCommand::command(message::create_project_terminal(group_id)),
+            "Create PR",
+            "git-pull-request",
+            MenuCommand::command(message::run_sidebar_git_action(group_id, "pr")),
         )
-        .with_hotkey("createSession"),
-    );
+    } else {
+        entry_row(
+            "addWorktree",
+            false,
+            MenuCommand::project_action(group_id, "worktree", None),
+        )
+    };
+    let new_tab = (!settings.browser_view_tab_hidden).then(|| {
+        entry_row(
+            "newTab",
+            false,
+            MenuCommand::command(message::open_browser_pane_in_group(group_id)),
+        )
+    });
+    // The session menu's New Terminal row has no key of its own; here it is the header's.
+    let new_terminal = entry_row(
+        "newTerminal",
+        false,
+        MenuCommand::command(message::create_project_terminal(group_id)),
+    )
+    .with_hotkey("createSession");
     // CDXC:WorkMode 2026-10-09 DECISION:
     // User: "We need a button to create a linear ticket to start work in the ... dropdown in the project header" (also from the Work page). Only a project of this computer with a Linear key has it (with GitHub as the tracker, one where `gh` is signed in); New session itself stays on main with no worktree.
     // CDXC:WorkMode 2026-10-09 DECISION:
@@ -215,18 +254,36 @@ pub fn project_header_menu_rows(
     } else {
         None
     };
-    if let Some((label, icon)) = create_ticket.filter(|_| !group.is_remote && !group.is_stale) {
-        actions.insert(
-            0,
+    let create_ticket = create_ticket
+        .filter(|_| !group.is_remote && !group.is_stale)
+        .map(|(label, icon)| {
             MenuItem::row(
                 label,
                 icon,
                 MenuCommand::project_action(group_id, "createLinearTicket", None),
-            ),
-        );
+            )
+        });
+    ProjectHeaderRows {
+        worktree: Some(worktree),
+        create_ticket,
+        history: Some(entry_row(
+            "history",
+            false,
+            MenuCommand::project_action(group_id, "history", None),
+        )),
+        new_tab,
+        new_terminal: Some(new_terminal),
+        pinned_actions: pinned_actions(group_id, project, settings, host),
     }
-    actions.append(&mut pinned_actions(group_id, project, settings, host));
-    actions
+}
+
+/// [`project_header_rows`] in the order a worktree's menu starts with.
+pub fn project_header_menu_rows(
+    group: &MenuGroup<'_>,
+    settings: &SidebarSettings,
+    host: &MenuHost,
+) -> Vec<MenuItem> {
+    project_header_rows(group, settings, host).in_order()
 }
 
 /// `nativeAgentLauncherItems(groupId)`, the state before any account list has been read. The

@@ -325,6 +325,8 @@ impl NativeChatView {
                         }));
                     }
                 }
+                // Only the project menu's layout has named submenus.
+                LayoutNode::Submenu(..) => {}
             }
         }
         let rows = tidy_separators(rows, is_separator);
