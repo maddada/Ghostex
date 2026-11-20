@@ -34,6 +34,10 @@ use crate::app::helpers::{
 
 /// How long the machine list is reused. Building it stats the settings file and clones its map
 /// under a global lock, and the publish path asks on every publish.
+/// The setting that turns the dot under the computer you're on off (settings catalog
+/// `general/sidebar.rs`).
+const MARK_THIS_COMPUTER_SETTING: &str = "markComputerYouAreOn";
+
 const TABS_MAX_AGE: Duration = Duration::from_millis(1000);
 /// Delay before a client whose thread ended on its own is replaced (the last entry repeats), the
 /// same ladder the local client uses.
@@ -414,6 +418,21 @@ impl GhostexGpuiApp {
         }
 
         let tabs = self.remote_machine_tabs(&ordered);
+        // The computer you're on wears its dot while another computer in the sidebar is connected
+        // (one that is offline or can't be reached doesn't count) and Mark the computer you're on
+        // is on (native_sidebar/computer_mark.rs `with_here_dot`).
+        let mark = tabs
+            .iter()
+            .any(|tab| !tab.is_local() && !tab.this_computer && tab.is_connected())
+            && crate::shared_settings::shared_sidebar_settings_snapshot()
+                .object()
+                .get(MARK_THIS_COMPUTER_SETTING)
+                .and_then(serde_json::Value::as_bool)
+                != Some(false);
+        if crate::app::gx_chat::session_directory::mark_this_computer() != mark {
+            crate::app::gx_chat::session_directory::set_mark_this_computer(mark);
+            cx.notify();
+        }
         let moved = self.gx_store.remote.tabs != tabs;
         let marks = self.gx_store_computer_marks(&tabs);
         if self.gx_store.remote.marks != marks {

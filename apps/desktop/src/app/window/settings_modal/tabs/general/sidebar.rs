@@ -320,6 +320,17 @@ fn sidebar_section(
             ));
         }
     }
+    // CDXC:RemoteMachines 2026-11-20 DECISION in native_sidebar/computer_mark.rs: on by default,
+    // with the other computer rows; both sidebars draw the dot.
+    rows.extend(page.toggle(
+        g,
+        s,
+        "markComputerYouAreOn",
+        "Mark the computer you're on",
+        "Show a small faint dot under the icon of the computer you're on, like the macOS Dock's, wherever computer icons show (the sidebar's computer tiles, session rows and project headers, the chat's where pill, Session details and Settings > Remote), while another computer is connected. Turn off to show none.",
+        false,
+        cx,
+    ));
     // CDXC:Sidebar 2026-11-07 DECISION in gx-core sidebar_view/inputs.rs (an advanced row, Manual by
     // default); both sidebars and the phone follow it.
     rows.extend(page.select(

@@ -37,6 +37,14 @@ const DOT_OPACITY: f32 = 0.55;
 /// the status dots sit at the bottom centre too, so this computer's tile lifts its icon and the dot
 /// clear of them while it shows status dots (machines.rs). This supersedes the corner pip (Q4241)
 /// and the line (Q4248) of the same day.
+///
+/// CDXC:RemoteMachines 2026-11-20 DECISION:
+/// User, two follow-ups on the dot: a setting to hide it, on by default (Mark the computer you're
+/// on, `markComputerYouAreOn`, on Sidebar & Sessions > Sidebar beside the other computer rows), and
+/// the dot only "when 2+ computers are actually CONNECTED": a saved computer that is offline or
+/// can't be reached no longer counts, where before every computer tab in the sidebar did. The
+/// desktop works it out where it rebuilds the machine tabs (gx_store/remote_clients.rs), into
+/// `session_directory::mark_this_computer`, which every place that draws the dot asks.
 pub(crate) fn with_here_dot_at(
     icon: impl IntoElement,
     size: f32,
@@ -129,9 +137,9 @@ impl GhostexGpuiApp {
                 ("titlebar/device-desktop.svg", false)
             }
         };
-        // The computer you're on has its dot (`with_here_dot`); a mark is only drawn while there
-        // is another computer.
+        // The computer you're on has its dot (`with_here_dot`) while another one is connected.
         let here = marked
+            && crate::app::gx_chat::session_directory::mark_this_computer()
             && ghostex_gx_core::SessionKey::parse_sidebar_session_id(&session.session_id)
                 .is_some_and(|key| key.machine.is_local());
         let color = if computer_offline(session) {

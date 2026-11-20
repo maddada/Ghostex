@@ -584,7 +584,7 @@ impl GhostexGpuiApp {
                         12.0 * scale,
                         scale,
                         chip.machine_id == ghostex_gx_core::LOCAL_MACHINE_ID
-                            && crate::app::gx_chat::session_directory::several_computers(),
+                            && crate::app::gx_chat::session_directory::mark_this_computer(),
                         appearance.muted,
                     )),
             )

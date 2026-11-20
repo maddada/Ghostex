@@ -46,14 +46,20 @@ pub(crate) fn set_computer_icons(icons: std::collections::HashMap<String, &'stat
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(icons);
 }
 
-/// Whether more than one computer is in the sidebar, so the computer you're on has its dot
-/// (native_sidebar/computer_mark.rs `with_here_dot`). Never in the web build, which shows one.
-pub(crate) fn several_computers() -> bool {
-    COMPUTER_ICONS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .as_ref()
-        .is_some_and(|icons| !icons.is_empty())
+/// Whether the computer you're on wears its dot (native_sidebar/computer_mark.rs `with_here_dot`):
+/// another computer in the sidebar is connected and Mark the computer you're on is on. Set where
+/// the machine tabs are rebuilt (gx_store/remote_clients.rs); never in the web build, which has
+/// one computer.
+static MARK_THIS_COMPUTER: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[cfg_attr(ghostex_web, allow(dead_code))]
+pub(crate) fn set_mark_this_computer(mark: bool) {
+    MARK_THIS_COMPUTER.store(mark, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub(crate) fn mark_this_computer() -> bool {
+    MARK_THIS_COMPUTER.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// This computer's icon drawing (picked for it, else its system's), once its gxserver answered
