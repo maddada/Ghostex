@@ -41,6 +41,8 @@ const FINISH_STABILITY_MS: i64 = 4_000;
 const CLOSED_GRACE_MS: i64 = 60_000;
 /// After a failed send to a lead, its reports wait this long before the next try.
 const RETRY_AFTER_MS: i64 = 30_000;
+/// A session's activity stamp may lead the lead's `owedSince` by the send's own time.
+const ACTIVITY_SLACK_MS: i64 = 30_000;
 /// How many of a linked session's newest transcript rows are read for the lead's turn.
 const TURN_TAIL_MESSAGES: usize = 60;
 
@@ -98,10 +100,20 @@ struct WatchMemory {
 }
 
 enum LeadReport {
-    Finished { message: String },
-    Waiting { key: String, summary: String },
-    Quiet { since: i64, minutes: i64 },
+    Finished {
+        message: String,
+    },
+    Waiting {
+        key: String,
+        summary: String,
+    },
+    Quiet {
+        since: i64,
+        minutes: i64,
+    },
     Closed,
+    /// It was made a coordinator or a coordinator's thread, which ended the link.
+    Ended,
 }
 
 struct Delivery {
@@ -179,6 +191,11 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
     memory.idle_since.retain(|key, _| keys.contains(key));
     memory.closed_since.retain(|key, _| keys.contains(key));
     memory.transcripts.retain(|key, _| keys.contains(key));
+    // CDXC:LeadLinks 2026-11-20 FIX: Opus review of #678, finding 9: the send ids of reports and
+    // the retry clocks of leads that went away were kept for good.
+    let leads = links.iter().map(LeadLink::lead_key).collect::<HashSet<_>>();
+    memory.send_ids.retain(|(key, _), _| keys.contains(key));
+    memory.retry_at.retain(|lead, _| leads.contains(lead));
     if links.is_empty() {
         return Vec::new();
     }
@@ -195,11 +212,40 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
             .get_session(&lead_key.0, &lead_key.1)
             .ok()
             .flatten();
-        // A lead that is gone for good, or either side turned coordinator: the link ends.
-        if lead.is_none()
-            || became_coordinator_side(&db, &lead_key)
-            || became_coordinator_side(&db, &key)
+        // The linked session was made a coordinator or a coordinator's thread: it reports another
+        // way now, and its lead is told the link ended (Opus review of #678, finding 9).
+        let linked_turned = became_coordinator_side(&db, &key);
+        if linked_turned
+            && lead.as_ref().is_some_and(running_or_sleeping)
+            && !became_coordinator_side(&db, &lead_key)
         {
+            if !memory.in_flight.contains(&key)
+                && !memory.retry_at.get(&lead_key).is_some_and(|at| now < *at)
+            {
+                if let Some(session) = repository.get_session(&key.0, &key.1).ok().flatten() {
+                    let sender = sender_of(
+                        state,
+                        &repository,
+                        &mut projects,
+                        &mut names,
+                        &session,
+                        &key,
+                    );
+                    memory.in_flight.insert(key.clone());
+                    deliveries.push(Delivery {
+                        link,
+                        report: LeadReport::Ended,
+                        sender,
+                        ends_link: true,
+                    });
+                    continue;
+                }
+            } else {
+                continue;
+            }
+        }
+        // A lead that is gone for good, or either side turned coordinator: the link ends.
+        if lead.is_none() || became_coordinator_side(&db, &lead_key) || linked_turned {
             let _ = remove_lead_link(&db, &key.0, &key.1);
             for (project_id, session_id) in [&key, &lead_key] {
                 let _ = schedule_presentation_session_delta(
@@ -324,13 +370,21 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
                         &lead_key.0,
                         &lead_key.1,
                     );
-                    let rows = memory
-                        .transcripts
-                        .entry(key.clone())
-                        .or_default()
-                        .tail(&session, TURN_TAIL_MESSAGES)
-                        .map(|tail| turn_rows(&tail.messages))
-                        .unwrap_or_default();
+                    // Nothing moved since the lead's message: no reply to read yet (Opus review of
+                    // #678, finding 9). A row with no activity stamp is read anyway.
+                    let moved = super::coordinator_remote_runtime::activity_marker_ms(&session)
+                        .is_none_or(|at| at + ACTIVITY_SLACK_MS >= owed_ms);
+                    let rows = if moved {
+                        memory
+                            .transcripts
+                            .entry(key.clone())
+                            .or_default()
+                            .tail(&session, TURN_TAIL_MESSAGES)
+                            .map(|tail| turn_rows(&tail.messages))
+                            .unwrap_or_default()
+                    } else {
+                        Vec::new()
+                    };
                     lead_turn_reply(&rows, &lead_ref, owed_ms)
                         .map(|message| LeadReport::Finished { message })
                 }
@@ -394,6 +448,7 @@ fn report_text(report: &LeadReport, linked_ref: &str) -> String {
             "Ghostex thread report: no new output for {minutes} minutes (quiet since {}). Ghostex did not nudge it. Read where it is with: ghostex read-session-chat {linked_ref} --last 2 --format text",
             crate::network_status::local_clock(*since),
         ),
+        LeadReport::Ended => "Ghostex thread report: it was made a coordinator (or a coordinator's thread), so it no longer reports to you and its link to you ended.".to_string(),
         LeadReport::Closed => format!(
             "Ghostex thread report: its session was closed before it finished the turn you started. A message to it (ghostex agents send {linked_ref} \"...\") resumes the same conversation."
         ),
@@ -450,7 +505,9 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<WatchMemory>>, delivery
                 return;
             }
             let _ = match &report {
-                LeadReport::Finished { .. } | LeadReport::Closed => settle_finished(&db, &key),
+                LeadReport::Finished { .. } | LeadReport::Closed | LeadReport::Ended => {
+                    settle_finished(&db, &key)
+                }
                 LeadReport::Waiting { key: prompt, .. } => settle_waiting(&db, &key, prompt),
                 LeadReport::Quiet { since, .. } => settle_quiet(&db, &key, *since),
             };
