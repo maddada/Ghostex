@@ -325,20 +325,24 @@ fn zmx_error(error: crate::zmx::ZmxEndpointError) -> DomainStateError {
 /// The refusal for a typing job the send guard stopped, or that failed.
 fn send_error(error: crate::session_chat_send::SessionChatSendError) -> DomainStateError {
     use crate::session_chat_send::SessionChatSendFailure as Failure;
-    match error.failure {
-        Failure::PromptWaiting | Failure::ComposerNotReady | Failure::ComposerNotCleared => refused(
-            if error.failure == Failure::ComposerNotReady {
-                INPUT_BOX_NOT_READY
-            } else {
-                "agentBusy"
-            },
-            format!(
-                "The conversation was not cleared: the session stopped taking input before the command was typed ({}). Nothing will be typed later.",
-                error.message.trim_end_matches('.')
-            ),
+    // The guard's own words ("Your message goes out once that is answered") are for chat sends,
+    // which wait; this job never runs again, so they are not passed on.
+    let reason = match error.failure {
+        Failure::PromptWaiting => "a prompt came up in its terminal",
+        Failure::ComposerNotReady => "its input box was not showing",
+        Failure::ComposerNotCleared => "its input box could not be emptied",
+        _ => return refused("dependencyUnavailable", error.message),
+    };
+    refused(
+        if error.failure == Failure::ComposerNotReady {
+            INPUT_BOX_NOT_READY
+        } else {
+            "agentBusy"
+        },
+        format!(
+            "The conversation was not cleared: {reason} just before the command was typed, so nothing was typed. Nothing will be typed later."
         ),
-        _ => refused("dependencyUnavailable", error.message),
-    }
+    )
 }
 
 /// The security log entry for a clear, with its caller (the request's actor: the session, the
