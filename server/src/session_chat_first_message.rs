@@ -610,7 +610,11 @@ pub(crate) async fn edit(
         json!({}),
     );
     broadcast(state, project_id, session_id);
-    Ok(Some(message.text))
+    // Created before the update, it named the retired skill; the chat box gets the current line
+    // (Opus re-review, finding B).
+    Ok(Some(
+        crate::coordinators::with_current_coordinator_line(&message.text).unwrap_or(message.text),
+    ))
 }
 
 /// Held while a model or effort change runs on a session whose first message waits: nothing is
