@@ -65,7 +65,14 @@ pub fn keep_old_dark_look_once() {
     if let Some(parent) = marker.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    let _ = fs::write(&marker, format!("{outcome}\n"));
+    // A marker that is not written lets the next start decide again, and by then a new install
+    // may have a settings file from a finished setup and be given the old look.
+    if let Err(error) = fs::write(&marker, format!("{outcome}\n")) {
+        log::error!(
+            "Ghostex could not record that the old dark look step ran ({}): {error}",
+            marker.display()
+        );
+    }
 }
 
 /// Whether first-run setup would open again: it never completed and gxserver has no project
@@ -88,17 +95,25 @@ fn setup_in_progress(state_dir: &Path, gxserver_database: &Path) -> bool {
     !complete && !gxserver_has_projects(gxserver_database)
 }
 
-/// Whether gxserver's database holds any project. No database reads as none; a database that
-/// cannot be read counts as having one, so a long-time user is never taken for a new one.
+/// Whether gxserver's database holds a project the sidebar shows: not parked in Recent Projects,
+/// not hidden and not a Remote Attach carrier (`should_include_presentation_project` in
+/// server/src/presentation/snapshot.rs, which the app's setup check reads). No database reads as
+/// none; a database that cannot be read counts as having one, so a long-time user is never taken
+/// for a new one.
 fn gxserver_has_projects(database: &Path) -> bool {
     if !database.is_file() {
         return false;
     }
     rusqlite::Connection::open_with_flags(database, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
         .and_then(|connection| {
-            connection.query_row("SELECT EXISTS(SELECT 1 FROM projects)", [], |row| {
-                row.get::<_, bool>(0)
-            })
+            connection.query_row(
+                "SELECT EXISTS(SELECT 1 FROM projects
+                    WHERE COALESCE(isRecentProject, 0) <> 1
+                      AND COALESCE(visibility, 'visible') <> 'hidden'
+                      AND (systemKind IS NULL OR systemKind <> 'remoteAttachCarrier'))",
+                [],
+                |row| row.get::<_, bool>(0),
+            )
         })
         .unwrap_or(true)
 }

@@ -355,18 +355,98 @@ pub const DARK_LOOK_2026_11_20_OLD_DEFAULTS: &[(&str, J)] = &[
 ///
 /// CDXC:Theming 2026-11-20 DECISION:
 /// User (Q4290), on whether long-time users who never touched these settings should get the new dark look on update: keep their current look. Stored settings leave a key out until it is saved, so without this every existing user with a key missing would switch to Black, 88 tints, a 4 point blur, Kanagawa Dragon, the dark theme colours, Ink, pane gap 6 and menu blur 17 on update. The desktop runs this once, behind a marker file, at start-up and only for a settings file that already exists from a finished setup (`keep_old_dark_look_once` in apps/desktop/src/shared_settings/dark_look_default.rs); a new install, or one whose setup never finished, gets the new defaults.
+/// Three keys need more than their old default (Opus review of ce6b86fa1): Same for light and dark is worked out from the dark and light pairs when it was never saved, and the dark tints and Live background this adds would set them apart and turn it off, so its current answer is saved first. A file with no preset whose Custom colour was changed shows that colour (`dark_chrome_raw_controls`), so it gets "custom", not Gray. A work area tint is left out where the retired `windowGlassMainOpacity*` key still decides it (`store_work_area_glass_percent` in window_glass.rs).
 pub fn keep_old_dark_look_for_existing_settings(
     settings: &mut serde_json::Map<String, serde_json::Value>,
 ) -> bool {
     use crate::json::ToJson;
     let mut changed = false;
+    if !settings.contains_key("windowGlassSameForLightAndDark") {
+        let same = window_glass_same_for_light_and_dark(settings);
+        settings.insert(
+            "windowGlassSameForLightAndDark".to_string(),
+            serde_json::Value::Bool(same),
+        );
+        changed = true;
+    }
+    let custom_colour_changed = theme_colours::custom_dark_chrome_controls(settings)
+        != (
+            theme_colours::DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
+            theme_colours::DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB,
+        );
     for (key, old_default) in DARK_LOOK_2026_11_20_OLD_DEFAULTS {
-        if !settings.contains_key(*key) {
-            settings.insert((*key).to_string(), old_default.to_json().to_value());
-            changed = true;
+        if settings.contains_key(*key) {
+            continue;
         }
+        let legacy_tint = match *key {
+            "windowGlassWorkAreaTintDark" => Some("windowGlassMainOpacityDark"),
+            "windowGlassWorkAreaTintLight" => Some("windowGlassMainOpacityLight"),
+            _ => None,
+        };
+        if legacy_tint.is_some_and(|legacy| settings.contains_key(legacy)) {
+            continue;
+        }
+        let value = if *key == "darkThemePreset" && custom_colour_changed {
+            serde_json::Value::String("custom".to_string())
+        } else {
+            old_default.to_json().to_value()
+        };
+        settings.insert((*key).to_string(), value);
+        changed = true;
     }
     changed
+}
+
+/// The dark-mode glass keys and their light-mode twins that Same for light and dark folds into one
+/// (CDXC:Settings 2026-10-29 DECISION, cleanup Q19, in packages/settings-catalog/src/general/theme.rs).
+pub const WINDOW_GLASS_LIGHT_DARK_PAIRS: [(&str, &str); 5] = [
+    ("windowGlassImageDark", "windowGlassImageLight"),
+    ("windowGlassVideoDark", "windowGlassVideoLight"),
+    ("windowGlassLiveStyleDark", "windowGlassLiveStyleLight"),
+    (
+        "windowGlassSidebarOpacityDark",
+        "windowGlassSidebarOpacityLight",
+    ),
+    (
+        "windowGlassWorkAreaTintDark",
+        "windowGlassWorkAreaTintLight",
+    ),
+];
+
+/// Whether light mode uses the dark-mode picture, video, Live background and tints
+/// (`windowGlassSameForLightAndDark`). A settings file that never saw the switch counts as on
+/// unless its two sides were already set apart: a pair is "the same" when both values are equal or
+/// neither was ever saved, so a fresh install starts with one set of rows and a file whose light
+/// mode was tuned on purpose keeps both sets.
+pub fn window_glass_same_for_light_and_dark(
+    object: &serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    if let Some(same) = object
+        .get("windowGlassSameForLightAndDark")
+        .and_then(serde_json::Value::as_bool)
+    {
+        return same;
+    }
+    WINDOW_GLASS_LIGHT_DARK_PAIRS.iter().all(|(dark, light)| {
+        match (object.get(*dark), object.get(*light)) {
+            (None, None) => true,
+            (dark, light) => dark == light,
+        }
+    })
+}
+
+/// The key light mode reads for `light`: its dark twin while Same for light and dark is on.
+pub fn window_glass_light_key<'a>(
+    object: &serde_json::Map<String, serde_json::Value>,
+    light: &'a str,
+) -> &'a str {
+    if !window_glass_same_for_light_and_dark(object) {
+        return light;
+    }
+    WINDOW_GLASS_LIGHT_DARK_PAIRS
+        .iter()
+        .find(|(_, twin)| *twin == light)
+        .map_or(light, |(dark, _)| *dark)
 }
 
 /// Rows a page folds into its collapsed Advanced section (`isAdvancedMainSetting`).
@@ -415,6 +495,85 @@ mod chat_view_default_tests {
         assert_eq!(
             migrated(json!({"sessionChatDetailedView": false, "sessionChatVerboseMode": true})),
             Some(json!(false))
+        );
+    }
+}
+
+#[cfg(test)]
+mod dark_look_tests {
+    use super::{
+        default_value, keep_old_dark_look_for_existing_settings, theme_colours,
+        window_glass_light_key, window_glass_same_for_light_and_dark, ToJson,
+    };
+    use serde_json::{json, Map, Value};
+
+    fn settings(value: Value) -> Map<String, Value> {
+        serde_json::from_value(value).unwrap()
+    }
+
+    /// The tint a key reads as: its saved value, else the catalog default.
+    fn tint(object: &Map<String, Value>, key: &str) -> f64 {
+        object
+            .get(key)
+            .cloned()
+            .or_else(|| default_value(key).map(|value| value.to_json().to_value()))
+            .and_then(|value| value.as_f64())
+            .unwrap()
+    }
+
+    /// The four tints as the app reads them: light mode reads the dark key while Same for light
+    /// and dark is on.
+    fn tints(object: &Map<String, Value>) -> [f64; 4] {
+        [
+            tint(object, "windowGlassSidebarOpacityDark"),
+            tint(object, "windowGlassWorkAreaTintDark"),
+            tint(
+                object,
+                window_glass_light_key(object, "windowGlassSidebarOpacityLight"),
+            ),
+            tint(
+                object,
+                window_glass_light_key(object, "windowGlassWorkAreaTintLight"),
+            ),
+        ]
+    }
+
+    /// A set-up file with none of the 11 keys keeps what the version before the new dark look
+    /// showed: Gray, Same for light and dark on, and 94 everywhere (light mode reads the dark tints).
+    #[test]
+    fn a_file_without_the_look_keys_keeps_the_old_look() {
+        let before = settings(json!({"sidebarWidth": 320, "workAreaFrame": false}));
+        let mut after = before.clone();
+        assert!(keep_old_dark_look_for_existing_settings(&mut after));
+        let gray =
+            theme_colours::dark_chrome_raw_controls(&settings(json!({"darkThemePreset": "gray"})));
+        assert_eq!(theme_colours::dark_chrome_raw_controls(&after), gray);
+        assert!(window_glass_same_for_light_and_dark(&before));
+        assert!(window_glass_same_for_light_and_dark(&after));
+        assert_eq!(tints(&after), [94.0; 4]);
+        // Runs once: a second pass finds every key saved.
+        assert!(!keep_old_dark_look_for_existing_settings(
+            &mut after.clone()
+        ));
+    }
+
+    /// A file with no preset and a changed Custom colour shows that colour, before and after.
+    #[test]
+    fn a_custom_colour_without_a_preset_is_kept() {
+        let before = settings(json!({
+            "customSidebarTitlebarBackgroundTintColor": "#46506a",
+            "customSidebarTitlebarBackgroundDarknessPercent": 90,
+        }));
+        let mut after = before.clone();
+        keep_old_dark_look_for_existing_settings(&mut after);
+        assert_eq!(after.get("darkThemePreset"), Some(&json!("custom")));
+        assert_eq!(
+            theme_colours::dark_chrome_raw_controls(&after),
+            theme_colours::dark_chrome_raw_controls(&before)
+        );
+        assert_eq!(
+            theme_colours::dark_chrome_raw_controls(&after),
+            theme_colours::custom_dark_chrome_controls(&before)
         );
     }
 }
