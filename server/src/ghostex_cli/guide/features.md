@@ -2342,6 +2342,12 @@ own choices (Approve, Approve for this session when OMP offers it, Deny); click
 one to answer. Once you start typing in OMP's terminal, OMP turns the request
 into "Deny and send message", and the chat shows that as a terminal card that
 passes your keys to OMP.
+A message you send to OMP or Pi while it works steers it, the way Enter does in
+its own terminal: the agent reads it at its next step, after the command it is
+running. To have it wait until the agent finishes its turn instead (OMP's and
+Pi's "After yield"), set **Messages sent while it works** to After yield in the
+row of OMP, Pi or any agent that works like them in Settings > Agents; one
+setting covers all of them. Settings key: `piMessagesWhileWorking`.
 Empryo chats show your messages as you typed them (without the repository map
 Empryo adds for its model), its replies and thinking, and the tools it runs with
 their results, and they can be exported like any other chat. Empryo saves a

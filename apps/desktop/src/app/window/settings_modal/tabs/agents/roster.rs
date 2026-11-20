@@ -283,7 +283,8 @@ impl AgentsTab {
         let expanded = self.expanded.contains(&agent_id)
             || (self.search_opens_claude
                 && agent.is_default
-                && agent_id == super::claude_context::CLAUDE_AGENT_ID);
+                && agent_id == super::claude_context::CLAUDE_AGENT_ID)
+            || (self.search_opens_pi && super::pi_messages::is_pi_like(agent));
         let cli_agent = self.cli_agent_id(agent);
         let name = agent.name.clone();
         let grip = reorder_handle(

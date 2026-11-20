@@ -632,6 +632,10 @@ pub const CLAUDE_IDLE_COMPACT_MIN_TOKENS_OPTIONS: &[Opt] = &[
     opt("500K", "500000"),
 ];
 
+/// What a message sent to a busy OMP or Pi does (server/src/session_chat_queue_runtime/pi_channel_send.rs, where the user's decision is).
+pub const PI_MESSAGES_WHILE_WORKING_OPTIONS: &[Opt] =
+    &[opt("Steer", "steer"), opt("After yield", "followUp")];
+
 pub const NEW_SESSION_AGENT_SCOPE_OPTIONS: &[Opt] = &[
     opt("Per project", "project"),
     opt("Per Space", "space"),

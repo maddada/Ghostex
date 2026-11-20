@@ -408,6 +408,10 @@ pub fn exports(module: &str, platform: Platform) -> Vec<(&'static str, Json)> {
                 CLAUDE_IDLE_COMPACT_MIN_TOKENS_OPTIONS.to_json(),
             ),
             (
+                "PI_MESSAGES_WHILE_WORKING_OPTIONS",
+                PI_MESSAGES_WHILE_WORKING_OPTIONS.to_json(),
+            ),
+            (
                 "NEW_SESSION_AGENT_SCOPE_OPTIONS",
                 NEW_SESSION_AGENT_SCOPE_OPTIONS.to_json(),
             ),

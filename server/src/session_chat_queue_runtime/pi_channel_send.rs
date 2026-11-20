@@ -40,6 +40,7 @@ pub(super) async fn send_pi_channel_message(
         "text": text,
         "images": image_paths,
         "interrupt": interrupt,
+        "deliverAs": pi_busy_delivery(state),
     });
     let sent = tokio::task::spawn_blocking(move || {
         crate::pi_chat_channel::request(
@@ -128,4 +129,24 @@ pub(super) async fn send_pi_channel_message(
         );
     }
     Some(Ok(text.len()))
+}
+
+/// Settings > Agents > Messages sent while it works.
+const PI_MESSAGES_WHILE_WORKING_SETTING: &str = "piMessagesWhileWorking";
+
+/// CDXC:AgentProviders 2026-11-20 DECISION:
+/// User (triage Q4302, "steer by default"): a message sent to an OMP or Pi that is working steers it, the way Enter does in their own terminals, instead of waiting until it yields. "Messages sent while it works" (Settings > Agents, in the row of OMP, Pi and every custom agent that works like them, one setting for all of them) keeps After yield for anyone who wants it. Ghostex's extension already passes `deliverAs: "steer"` to Pi's `sendUserMessage` (server/src/agent_hooks/chat_channel_source.rs); anything else is a follow-up, so an extension that predates this still queues the message as before. An idle agent starts the message straight away either way.
+/// SEE-ALSO: apps/desktop/src/app/window/settings_modal/tabs/agents/pi_messages.rs (the row).
+fn pi_busy_delivery(state: &AppState) -> &'static str {
+    let saved =
+        crate::session_lifecycle::read_sidebar_settings(&state.paths).and_then(|settings| {
+            settings
+                .get(PI_MESSAGES_WHILE_WORKING_SETTING)
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        });
+    match saved.as_deref() {
+        Some("followUp") => "followUp",
+        _ => "steer",
+    }
 }

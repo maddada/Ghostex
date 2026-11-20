@@ -10396,6 +10396,28 @@
       "agentWritable": true
     },
     {
+      "key": "piMessagesWhileWorking",
+      "title": "Messages sent while it works",
+      "subtitle": "What a message you send to a working OMP or Pi does. Steer hands it over at the agent's next step, as Enter does in its own terminal. After yield waits until it finishes its turn. In the row of OMP, Pi and every agent that works like them; one setting for all of them.",
+      "tab": "agents",
+      "tabTitle": "Agents",
+      "section": "agentList",
+      "sectionTitle": "Agents",
+      "type": "enum",
+      "default": "steer",
+      "options": [
+        {
+          "label": "Steer",
+          "value": "steer"
+        },
+        {
+          "label": "After yield",
+          "value": "followUp"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
       "key": "preferredAgentInterfaceOverrides",
       "title": "Default view per agent",
       "subtitle": "Agents that support Ghostex's Chat View are marked with a chat bubble and can open in Chat or Terminal regardless of the global Default Agent View. Inherit keeps following that global setting.",
