@@ -60,16 +60,14 @@ fn focused_automation_help_documents_skill_and_definition_contract() {
 #[test]
 fn cli_skill_help_routes_to_specialized_workflows() {
     let text = cli_usage();
-    assert!(text.contains("gx cli install-skill [--json]"));
-    assert!(!text.contains("$ghostex-manage-automations"));
-    assert!(!text.contains("$ghostex-agent-orchestration"));
-    assert!(text.contains("$ghostex-manage-beads"));
-    assert!(text.contains("$ghostex-embedded-browser-use"));
+    assert!(!text.contains("install-skill"));
+    assert!(!text.contains("$ghostex-"));
+    assert!(text.contains("ghostex board guide"));
+    assert!(text.contains("ghostex browser --help"));
 }
 
 #[test]
 fn generate_title_usage_keeps_literal_shell_parameter_expansion() {
-    assert!(generate_title_usage().contains(
-        "ghostex rename-command --session-id \"${GHOSTEX_GLOBAL_SESSION_REF:-${GHOSTEX_SESSION_ID:-${ZMX_SESSION:-}}}\" --title \"<title>\""
-    ));
+    assert!(generate_title_usage()
+        .contains("ghostex rename-session \"$GHOSTEX_GLOBAL_SESSION_REF\" \"<title>\""));
 }

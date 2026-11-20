@@ -70,7 +70,8 @@ pub(crate) fn check_agent(rows: &[Value], agent_id: &str) -> Result<(), DomainSt
     )))
 }
 
-/// The first message of every chat of `bot`, in the agent's own skill spelling, then the task.
+/// The first message of every chat of `bot`: the playbook from `ghostex gbots guide` (the old skill
+/// in the agent's own spelling for an older computer), who it is, then the task.
 pub(super) fn first_message(bot: &Bot, family: &str, task: Option<&str>) -> String {
     let skill = ghostex_gx_chat_core::composer::skill_invocation::skill_invocation(
         GBOTS_SKILL,
@@ -81,8 +82,9 @@ pub(super) fn first_message(bot: &Bot, family: &str, task: Option<&str>) -> Stri
     } else {
         format!("{}, {}", bot.name, bot.title)
     };
+    // CDXC:AgentSkills 2026-11-20 DECISION: User (Q4262 "B"): Ghostex's own skills are retired for CLI help, so the playbook comes from `ghostex gbots guide` (gbots/playbook.md) instead of the `ghostex-gbots` skill. A chat this computer opens on another computer runs that computer's `ghostex`, which is older when it predates the guide; such a computer still installs the skill for a visiting chat (gbots/skill.rs), so the line names it as the way back there.
     let mut text = format!(
-        "Read and adhere to this skill: {skill}\n\nYou are {who}. Before your first reply, and again after any context compaction, run `ghostex gbots brief`."
+        "Read and adhere to this skill: run `ghostex gbots guide` and follow what it prints for the whole session. If this Ghostex says `guide` is not a gbots command, read the {skill} skill instead.\n\nYou are {who}. Before your first reply, and again after any context compaction, run `ghostex gbots guide` and `ghostex gbots brief`."
     );
     match task.map(str::trim).filter(|task| !task.is_empty()) {
         Some(task) => {

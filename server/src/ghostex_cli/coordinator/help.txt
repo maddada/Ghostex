@@ -87,10 +87,9 @@ WHAT A COORDINATOR IS
   that no longer runs) is nudged and reported the same way after 10 minutes
   without a new turn. `coordinator status`
   shows when each working thread started and last showed output. The coordinator
-  never has to poll. Its role is the ghostex-coordinator skill: Ghostex installs it for the
-  coordinator's agent, and its first message always starts with "Read and
-  adhere to this skill: /ghostex-coordinator" ($ghostex-coordinator for agents
-  other than Claude Code and Copilot). After a /clear, a compaction or a fresh
+  never has to poll. Its role is the coordinator playbook: its first message
+  always starts with "Read and adhere to this skill: run `ghostex coordinator
+  guide` and follow what it prints for the whole session." After a /clear, a compaction or a fresh
   start of a Claude or Codex coordinator, Ghostex hands it that line and the
   guide pointer again before its next message (resuming adds nothing, since
   the conversation still has them). `ghostex coordinator guide` prints the
@@ -118,28 +117,27 @@ CREATE
   takes neither --model nor --effort and starts on its configured model, an OpenCode coordinator's --model
   is provider/model (such as openai/gpt-6.1-terra) and its --effort one of that model's variants,
   set before its first message, and the other agents keep their own unless you pass one. --goal is one line the
-  coordinator works toward. --task follows the skill line in its first message.
+  coordinator works toward. --task follows the guide line in its first message.
   The first message waits, typed into the agent's input box but not sent, so the
   user can change the model and effort first: Start on the card in its chat, Enter
   in its terminal, or any message sent to it starts it. --start sends it at once
   instead (use it when nobody is there to press Start).
   options lists the agents a coordinator can run on, with each one's models,
   the model it starts on, the efforts it offers (Low, Medium, High and XHigh, or the agent's
-  levels from Low up to its highest below Max), and the skill line its first message starts with.
+  levels from Low up to its highest below Max), and the line its first message starts with.
 
 PROMOTE
   promote makes a session that already exists (of an agent create accepts) an
   coordinator, keeping its conversation: the sidebar's Advanced > Make
   Coordinator does the same. Without <session-ref> it promotes the session it runs in. It never
-  restarts or interrupts the agent: Ghostex installs the ghostex-coordinator
-  skill and queues a message that starts with the skill line, which reaches the
+  restarts or interrupts the agent: Ghostex queues a message that starts with
+  the guide line, which reaches the
   session once its current turn is over, like the first message of a created
   coordinator. --goal sets the goal. A session that is already a coordinator,
   a thread of one, a draft, or in a box cannot be promoted. Sessions it started
   earlier are not its threads; adopt each with link.
   --computer <name> looks <session-ref> up on another computer this one is
-  connected to (`ghostex computers` lists them); that computer promotes it and
-  installs the skill there. A ref that already names its computer needs no flag.
+  connected to (`ghostex computers` lists them); that computer promotes it. A ref that already names its computer needs no flag.
 
 MAIN COORDINATOR
   Each project has one main coordinator on each computer: the one to contact by
@@ -392,8 +390,8 @@ MEMORY AND INSTRUCTIONS
 
 COORDINATOR PLAYBOOK
   The coordinator playbook is how every coordinator works. It ships inside
-  Ghostex and `guide` prints it; the ghostex-coordinator skill only sends a
-  coordinator to `guide`. Ghostex's playbook is never edited, so its updates keep
+  Ghostex and `guide` prints it; every coordinator's first message sends it
+  there. Ghostex's playbook is never edited, so its updates keep
   arriving. The user changes how coordinators work with playbook overrides:
   one plain text for every coordinator ("Never push without asking", "Ignore
   the board rules"). `guide` prints the playbook, the reply format, and then

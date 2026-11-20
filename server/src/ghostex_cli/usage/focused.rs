@@ -1,30 +1,27 @@
 use super::catalog::{automation_help_commands, format_help_command};
 
 pub fn cli_usage() -> String {
-    "Ghostex CLI Skill - install the help-first agent workflow for Ghostex commands
+    "Ghostex CLI - start every Ghostex task from the CLI help
 
 Usage:
   gx cli --help
-  gx cli install-skill [--json]
 
-Agent skill:
-  Use $ghostex-cli for general Ghostex CLI work across projects, sessions,
-  quick actions, automations, UI controls, servers, and diagnostics.
+How to work with Ghostex:
+  Read ghostex --help first, follow the focused help it points to, inspect
+  state with JSON, target stable ids, perform the requested operation, and
+  verify the resulting state.
 
-What the skill teaches:
-  Read ghostex --help first, follow focused help where available, inspect state
-  with JSON, target stable ids, perform the requested operation, and verify the
-  resulting state.
-
-Specialized workflows:
-  Everyday Ghostex work (sessions, orchestration, automations, quick actions,
-  chat queues, prompt history, server, diagnostics) is covered by ghostex --help
-  and the focused help pages. Use $ghostex-embedded-browser-use,
-  $ghostex-browser-use, $ghostex-computer-use, $ghostex-spaceo,
-  $ghostex-manage-beads, $ghostex-agents, $ghostex-auto-rename-session, or
-  $ghostex-move-codex-session when their domain applies. Use $ghostex-help to
-  explain how a Ghostex feature works or to change an app setting for the user
-  (ghostex guide, ghostex settings).
+Guides (each printed by this Ghostex, so it always matches it):
+  ghostex agent-guide            What an agent in Ghostex can do, and where to read more
+  ghostex agents guide           Work with other agents, read a thread, rename a session
+  ghostex coordinator guide      The coordinator playbook
+  ghostex visual guide <topic>   Ghostex visuals, forms and Live pages
+  ghostex board guide            Project Board beads with bd
+  ghostex secret guide           Ask the user for a password, API key or token
+  ghostex spaceo guide           Drive a Mac app on a hidden display (macOS)
+  ghostex browser --help         Ghostex's own browser panes
+  ghostex help guide             Explain Ghostex and change its settings for the user
+  Pages in Chrome, Edge or an Electron app, and desktop apps: read the cua-driver skill.
 "
     .to_string()
 }
@@ -509,46 +506,38 @@ Legacy aliases:
 }
 
 pub fn generate_title_usage() -> String {
-    "Ghostex Auto Rename Session - install the agent skill for naming Ghostex sessions
+    "Ghostex session titles
 
 Usage:
   gx generate-title --help
-  gx generate-title install-skill [--json]
 
-Agent skill:
-  Use $ghostex-auto-rename-session when a task needs a concise Ghostex session title.
-
-What the skill does:
-  Generate one title shorter than 60 characters.
-  Then submit /rename <title> in the current Ghostex session with rename-command.
-
-Self-session command:
-  ghostex rename-command --session-id \"${GHOSTEX_GLOBAL_SESSION_REF:-${GHOSTEX_SESSION_ID:-${ZMX_SESSION:-}}}\" --title \"<title>\"
+A title is under 60 characters and names the work done. Apply it with:
+  ghostex rename-session \"$GHOSTEX_GLOBAL_SESSION_REF\" \"<title>\"
+A coordinator's thread uses ghostex coordinator rename-self \"<title>\".
+ghostex agents guide (Rename a session) has the rules.
 "
     .to_string()
 }
 
 pub fn guide_usage() -> String {
-    "Ghostex Help - the built-in guide and the agent skill that explains and configures Ghostex
+    "Ghostex Help - the built-in guide that explains and configures Ghostex
 
 Usage:
   gx guide                       Print the overview chapter
   gx guide <chapter>             Print one chapter: overview, features, settings, hotkeys
   gx guide list                  List the chapters
   gx guide --help
-  gx guide install-skill [--json] [--agent <id>...]
 
-Agent skill:
-  Use $ghostex-help when the user asks how a Ghostex feature works, what a
-  setting does, or wants an app setting changed for them.
-
-What the skill teaches:
-  Read ghostex guide (and the settings or hotkeys chapter) before answering,
-  find the exact key with ghostex settings list or get, confirm the change with
-  the user, apply it with ghostex settings set, and verify with settings get.
-  Settings agents may not write are opened for the user with settings open.
+Answering for the user:
+  An agent asked how Ghostex works, or asked to change a setting, follows
+  ghostex help guide: read ghostex guide (and the settings or hotkeys
+  chapter) before answering, find the exact key with ghostex settings list or
+  get, confirm the change with the user, apply it with ghostex settings set,
+  and verify with settings get. Settings agents may not write are opened for
+  the user with settings open.
 
 Related commands:
+  ghostex help guide
   ghostex settings --help
 "
     .to_string()
@@ -627,23 +616,16 @@ Tabs (for --tab):
 }
 
 pub fn move_codex_session_usage() -> String {
-    "Ghostex Move Codex Session - install the agent skill for moving Codex sessions between folders
+    "Moving a Codex session to another folder
 
 Usage:
   gx move-codex-session --help
-  gx move-codex-session install-skill [--json]
 
-Agent skill:
-  Use $ghostex-move-codex-session when a user asks how to move or fork the
-  current Codex CLI conversation into another folder.
-
-What the skill teaches:
-  Run /status in the current Codex session, copy the session id, then create a
-  separate fork in the target folder with codex fork --yolo -C <folder-path> <SESSION_ID>.
-
-Fallback:
-  Use codex fork --all --last --yolo -C <folder-path> only when the user does
-  not want to copy the session id.
+Codex can't move a running session. Run /status in it, copy the session id,
+then fork it into the folder: codex fork --yolo -C <folder-path> <SESSION_ID>
+(leave out --yolo for approvals and the sandbox). Without the id:
+codex fork --all --last --yolo -C <folder-path>. ghostex agents guide has
+the same steps.
 "
     .to_string()
 }
@@ -665,7 +647,7 @@ Guide:
   kind: what to write, the layout, the look, how to check and publish it.
   Read it once per conversation before you make one; it always matches this
   Ghostex. `gx visual guide example` prints a complete Live page to copy the
-  shape of. The ghostex-visuals skill holds the same text.
+  shape of.
 
 Boosts:
   A Boost is a pill the user adds to a chat message (Live page, Chart it,
@@ -685,8 +667,8 @@ Names:
   \"inline HTML\" or \"chat page\" for a Live page. Use the new names
   when you talk to the user (\"I made you a Live page\").
 
-Agent skill:
-  Use $ghostex-visuals when the user asks for it: charts, stats and tables go
+What goes where:
+  Charts, stats and tables go
   in the reply as a ```visual block (Ghostex visuals); questions go in a
   ```questions block, which the chat shows as a Ghostex form; mockups and
   small tools are Live pages published with `ghostex show`. When a
@@ -788,20 +770,15 @@ check:
 }
 
 pub fn manage_beads_usage() -> String {
-    "Ghostex Manage Beads - install the agent skill for the project board workflow
+    "Ghostex Project Board beads
 
 Usage:
   gx manage-beads --help
-  gx manage-beads install-skill [--json]
 
-Agent skill:
-  Use $ghostex-manage-beads when managing Ghostex project board beads with the
-  machine-installed `bd` Beads CLI.
-
-What the skill teaches:
-  The project swimlane workflow (backlog, in_progress, test, review, close),
-  progress comments humans can follow, session-link comments, external refs,
-  and safe examples for review beads.
+Read ghostex board guide before working a bead: link this session to it
+first, the project swimlane workflow (backlog, in_progress, test, review,
+close), progress comments humans can follow, external refs, and safe examples
+for review beads. ghostex board --help has the dispatch verbs.
 
 Boundary:
   Use the machine-installed `bd` CLI directly; do not depend on a bundled
@@ -811,22 +788,16 @@ Boundary:
 }
 
 pub fn agents_orchestration_usage() -> String {
-    "Ghostex Agents - install the agent skill for launching and coordinating other agents
+    "Ghostex Agents - launching and coordinating other agents
 
 Usage:
   gx agents-orchestration --help
-  gx agents-orchestration install-skill [--json]
 
-Agent skill:
-  Use $ghostex-agents when one agent needs other agents to do
-  part of the work: launch them with a specific model and effort, send them
-  tasks, read their replies, wait for them to finish, and verify the result.
-
-What the skill teaches:
-  Read ghostex agents --help and ghostex --help first, resolve your own
-  session and project, hand over self-contained tasks, keep the global
-  reference of every created session, confirm delivery, wait on a last-line
-  sentinel with wait-for-text, verify independently, and cap fix rounds.
+Read ghostex agents --help for the verbs and ghostex agents guide for the
+habits: resolve your own session and project, hand over self-contained
+tasks, keep the global reference of every created session, confirm
+delivery, read replies, verify independently, and cap fix rounds. A bigger
+job across several agents: ghostex coordinator --help.
 
 Boundary:
   Use Ghostex CLI commands instead of raw zmx/tmux control when coordinating
@@ -836,16 +807,13 @@ Boundary:
 }
 
 pub fn computer_use_usage() -> String {
-    "Ghostex Computer Use - install the agent skill for native macOS app control
+    "Ghostex Computer Use - native desktop app control through Cua Driver
 
 Usage:
   gx computer-use --help
-  gx computer-use install-skill [--json]
 
-Agent skill:
-  Use $ghostex-computer-use when a task needs native macOS app automation.
-  The skill is a Ghostex-named wrapper around $cua-driver, so agents get the
-  Cua Driver workflow without requiring the user to remember the lower-level name.
+To drive a desktop app, read the cua-driver skill (Trycua's Cua Driver,
+installed with it) and follow it.
 
 Desktop Control requirements:
   Install Desktop Control from Ghostex setup or Settings > Integrations.
@@ -853,20 +821,19 @@ Desktop Control requirements:
   permissions must be granted before desktop automation can work.
 
 Boundary:
-  Use $ghostex-computer-use for native macOS apps.
-  Use $ghostex-browser-use for supported external browser page content.
-  Use $ghostex-embedded-browser-use and gx browser --help for embedded Ghostex browser panes.
+  Apps on the user's own screen, and pages in Chrome, Edge or an Electron app:
+  the cua-driver skill. Mac apps off-screen: ghostex spaceo guide. Ghostex's
+  own browser panes: gx browser --help.
 "
     .to_string()
 }
 
 pub fn spaceo_usage() -> String {
-    "Ghostex SpaceO - install the agent skill for driving Mac apps on SpaceO's virtual displays
+    "Ghostex SpaceO - drive Mac apps on SpaceO's virtual displays
 
 Usage:
   gx spaceo --help
   gx spaceo guide                 How to drive a Mac app on a hidden display
-  gx spaceo install-skill [--json]
   gx spaceo status [--json]
   gx spaceo repair
 
@@ -878,45 +845,41 @@ Health:
   keyboard only: it asks you to type 'repair' and refuses to run for an agent.
   Agents that find SpaceO stuck tell the user to click Repair in Ghostex.
 
-Agent skill:
-  Use $ghostex-spaceo when a task needs a native Mac app or a Chromium page
-  driven out of the user's way. SpaceO opens the app on a headless virtual
-  display, so the agent clicks, types and takes screenshots there while the
-  user keeps their own screen, pointer and focus.
+Guide:
+  Read ghostex spaceo guide when a task needs a native Mac app or a Chromium
+  page driven out of the user's way. SpaceO opens the app on a headless
+  virtual display, so the agent clicks, types and takes screenshots there
+  while the user keeps their own screen, pointer and focus.
 
 Requirements:
-  macOS only: an Apple Silicon Mac with macOS 14 or later. On Windows and Linux
-  install-skill refuses: SpaceO is only available on macOS. Install SpaceO
+  macOS only: an Apple Silicon Mac with macOS 14 or later. Install SpaceO
   from Settings > Integrations, then grant Accessibility and Screen Recording
   from its rows there. `spaceo doctor` checks the Mac without changing it.
 
 Boundary:
-  Use $ghostex-spaceo for Mac apps that should run off-screen.
-  Use $ghostex-computer-use to drive apps on the user's own screen.
-  Use $ghostex-embedded-browser-use and gx browser --help for embedded Ghostex browser panes.
+  Mac apps that should run off-screen: ghostex spaceo guide.
+  Apps on the user's own screen: the cua-driver skill.
+  Ghostex's own browser panes: gx browser --help.
 "
     .to_string()
 }
 
 pub fn browser_use_usage() -> String {
-    "Ghostex Browser Use - install the Cua Driver browser-page agent skill
+    "Ghostex Browser Use - pages in other browsers through Cua Driver
 
 Usage:
   gx browser-use --help
-  gx browser-use install-skill [--json]
 
-Agent skill:
-  Use $ghostex-browser-use for supported Chrome, Chromium, Edge, and Electron
-  page content through Cua Driver's typed browser tools.
+For Chrome, Chromium, Edge and Electron page content, read the cua-driver
+skill (Trycua's Cua Driver) and use its typed browser tools.
 
 Requirements:
   Cua Driver must be installed. Browser preparation and existing-profile access
-  require the explicit approvals described by the installed Cua Driver skill.
+  require the explicit approvals the cua-driver skill describes.
 
 Boundary:
-  Use $ghostex-browser-use for supported external browser page content.
-  Use $ghostex-embedded-browser-use and gx browser --help for browser panes built into Ghostex.
-  Use $ghostex-computer-use for native apps, browser chrome, and native dialogs.
+  Pages in other browsers, native apps, browser chrome and native dialogs:
+  the cua-driver skill. Ghostex's own browser panes: gx browser --help.
 "
     .to_string()
 }

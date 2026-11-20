@@ -15,13 +15,14 @@ use crate::ghostex_cli::sessions;
 
 const USAGE: &str = "Usage: ghostex help ask \"<question>\" [--new] [--timeout-seconds N] [--json]
 
-Ask a Ghostex Help session (your default prompt agent with the ghostex-help skill, in the Ghostex
-project, like Ask Ghostex in the app's More menu) and print its answer once it finishes.
+Ask a Ghostex Help session (your default prompt agent following `ghostex help guide`, in the
+Ghostex project, like Ask Ghostex in the app's More menu) and print its answer once it finishes.
 Later questions go to the same session while it is idle, so it keeps the conversation; asking
 again while your earlier question is still being answered waits for that answer instead of starting
 another session. --new starts a fresh one. Waits up to 10 minutes unless --timeout-seconds says
 otherwise. A Ghostex Help session can't ask Ghostex Help.
 
+  ghostex help guide       What a Ghostex Help session follows
   ghostex help             Show the full CLI help";
 
 const DEFAULT_TIMEOUT_SECONDS: f64 = 600.0;
@@ -76,10 +77,7 @@ fn ask(args: &[String]) -> CliResult<()> {
     );
     let deadline = Instant::now() + timeout;
     let agent = default_prompt_agent(&flags)?;
-    let message = format!(
-        "{} {question}",
-        crate::session_chat_skill_invocation::skill_invocation(Some(&agent.family), "ghostex-help")
-    );
+    let message = help_message(&question);
     let asker = crate::ghostex_cli::rpc::caller_session_from_env().unwrap_or_default();
     let mut ledger = AskLedger::read();
     let listed = (!flags.truthy("new"))
@@ -218,7 +216,7 @@ fn refuse_inside_help() -> CliResult<()> {
         .ok()
         .is_some_and(|dir| in_help(&dir.to_string_lossy()));
     if caller_in_help || cwd_in_help {
-        return Err(CliError::Other("You are Ghostex Help, so `ghostex help ask` would only start another Ghostex Help chat. Answer from the ghostex-help skill (`ghostex guide`, `ghostex guide features`, `ghostex settings get <key>`); if it doesn't cover the question, say so plainly.".into()));
+        return Err(CliError::Other("You are Ghostex Help, so `ghostex help ask` would only start another Ghostex Help chat. Answer as `ghostex help guide` says (`ghostex guide`, `ghostex guide features`, `ghostex settings get <key>`); if it doesn't cover the question, say so plainly.".into()));
     }
     Ok(())
 }
@@ -593,6 +591,19 @@ pub(crate) fn answer_after_question(chat: &Value, message: &str) -> Option<Strin
         .collect::<Vec<_>>()
         .join("\n\n");
     (!answer.is_empty()).then_some(answer)
+}
+
+/// What a Ghostex Help session is sent for `question`: the order to follow `ghostex help guide`,
+/// then the question. Ask Ghostex in the app's ⋯ menu stages the same opening
+/// (apps/desktop/src/app/gx_store/create/os_integration.rs).
+///
+/// CDXC:AgentSkills 2026-11-20 DECISION:
+/// User (Q4262 "B"): Ghostex's own skills are retired for CLI help, so the session is told to run `ghostex help guide` (help_guide.md, the `ghostex-help` skill's workflow) instead of being handed `/ghostex-help`. Every ask repeats it, as the skill name was, so a reused session that was compacted reads it again; the answer is still found by the question alone (`answer_after_question`).
+pub(crate) fn help_message(question: &str) -> String {
+    format!(
+        "{}\n\n{question}",
+        ghostex_gx_chat_core::composer::skill_invocation::GHOSTEX_HELP_OPENING
+    )
 }
 
 /// A row's text blocks, without its tool calls.

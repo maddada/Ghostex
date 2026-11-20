@@ -183,8 +183,8 @@ about**. You ask only with `item ask`, a form or a page; never write answer link
   line of detail:** a Ghostex form, a ` ```questions ` block in your reply holding every open
   question (one question is fine; `ghostex visual --help` has the format). Its `"title"` names the
   subject, as a row's title does, and every question has a `"detail"`.
-- **Something to look at** (mockups, layouts, a comparison): a Live page (`ghostex show`, the
-  ghostex-visuals skill), each question right under the mockups it asks about; its `<title>` names
+- **Something to look at** (mockups, layouts, a comparison): a Live page (`ghostex show`;
+  `ghostex visual guide pages`), each question right under the mockups it asks about; its `<title>` names
   the subject.
 
 Every question, whichever way you ask it:
