@@ -53,9 +53,18 @@ const DETAIL_CHAR: f32 = 6.2;
 const CALLOUT_WIDTH: f32 = 372.0;
 const CALLOUT_HEIGHT: f32 = 54.0;
 
-/// The Boosts' accent, the ember of the design pages.
+/// The Boosts' accent: gold.
+/// CDXC:Boosts 2026-11-20 DECISION: User: "make Boost gold please, and make the colour of a Boost
+/// added to the chat gold also". On dark the Boosts' accent is the main coordinator's gold (the
+/// crown, native_sidebar/threads.rs); on light it is a deeper gold, since the crown's light amber
+/// (0xd97706) read orange and faint as text on white. The pills in the chat box and in sent messages
+/// take `boost` in reference-visual.json, the same golds, and the phone keeps them equal.
 pub(super) fn accent(light: bool) -> Hsla {
-    rgb(if light { 0xb75d2a } else { 0xe7a47a }).into()
+    if light {
+        rgb(0xa16207).into()
+    } else {
+        rgb(crate::app::native_sidebar::threads::MAIN_COORDINATOR_GOLD_DARK).into()
+    }
 }
 
 thread_local! {

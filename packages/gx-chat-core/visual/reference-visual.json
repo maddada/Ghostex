@@ -13,7 +13,7 @@
     "board": "#4a958e",
     "answer": "#b0708f",
     "message": "#5f8fa8",
-    "boost": "#c98a62"
+    "boost": "#b8860b"
   },
   "transcript": {
     "dark": {
@@ -28,7 +28,7 @@
       "board": "#5ccfc4",
       "answer": "#f472b6",
       "message": "#7dd3fc",
-      "boost": "#e7a47a"
+      "boost": "#fbbf24"
     },
     "light": {
       "file": "#3f6aa8",
@@ -42,7 +42,7 @@
       "board": "#0f766e",
       "answer": "#be185d",
       "message": "#0369a1",
-      "boost": "#b75d2a"
+      "boost": "#a16207"
     }
   },
   "icons": {

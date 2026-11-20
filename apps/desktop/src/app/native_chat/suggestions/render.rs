@@ -224,6 +224,16 @@ impl Render for SuggestionPanel {
                 .border_color(outline)
                 .chat_cursor_pointer()
                 .when(index == selected, |row| row.bg(highlight))
+                // A Boost (the `*` list) leads with the sparkles in the Boosts' gold (boosts.rs).
+                .when(data["kind"] == "boost", |row| {
+                    row.child(
+                        gpui::svg()
+                            .path("titlebar/sparkles.svg")
+                            .size(px(spec.icon_px * s))
+                            .flex_shrink_0()
+                            .text_color(super::super::boosts::accent(p.light)),
+                    )
+                })
                 .when(files, |row| {
                     row.child(
                         gpui::svg()
