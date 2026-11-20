@@ -298,7 +298,7 @@ pub(crate) fn current_sidebar_max_width(window: &Window, mode: TitlebarMode) -> 
     let max_for_window = window.bounds().size.width.as_f32()
         - SIDEBAR_DIVIDER_WIDTH
         - workspace_min_width
-        - work_area_frame_gutter_width();
+        - WORK_AREA_FRAME_GUTTER_WIDTH;
     SIDEBAR_MAX_WIDTH
         .min(max_for_window)
         .max(sidebar_min_width())

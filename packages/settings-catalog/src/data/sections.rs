@@ -49,8 +49,7 @@ use crate::json::J;
 /// User: "i still don't know how a user can see the coordinator playbook". The Coordinator
 /// playbook row (`orchestratorPlaybook`: View playbook and Edit overrides) shows on the Chat page
 /// itself, out of its Advanced section, superseding the Q30-Q32 move above for that one row.
-/// CDXC:Settings 2026-11-18: Frame the work area, the window buttons and Close buttons on the right
-/// left this list for the Window & Layout page (general/theme.rs).
+/// CDXC:Settings 2026-11-18: the window buttons and Close buttons on the right left this list for the Window & Layout page (general/theme.rs).
 /// CDXC:Settings 2026-11-19: the Interface pages draw every row without an Advanced fold, so the
 /// rows that moved onto them (general/theme.rs) and the active pane outline left this list too.
 pub const ADVANCED_MAIN_SETTING_KEYS: &[&str] = &[
@@ -448,7 +447,6 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "windowGlassWorkAreaTintLight",
             "showActivePaneOutline",
             "workspaceActivePaneBorderColor",
-            "workAreaFrame",
             "showWindowButtonsWhenSidebarCollapsed",
             "closeButtonsOnRight",
             "appIconSourceId",
@@ -729,7 +727,6 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
     (
         "windowLayout",
         &[
-            "workAreaFrame",
             "showWindowButtonsWhenSidebarCollapsed",
             "closeButtonsOnRight",
             "showActivePaneOutline",
@@ -951,7 +948,6 @@ pub const MAIN_SETTINGS_SECTION_SETTING_KEYS: &[(&str, &[&str])] = &[
             "windowGlassWorkAreaTintLight",
             "showActivePaneOutline",
             "workspaceActivePaneBorderColor",
-            "workAreaFrame",
             "showWindowButtonsWhenSidebarCollapsed",
             "closeButtonsOnRight",
             "panelAnimationSpeed",

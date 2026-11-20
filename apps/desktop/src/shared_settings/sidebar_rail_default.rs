@@ -10,7 +10,7 @@ use serde_json::Value;
 /// that has not chosen a layout, once.
 ///
 /// CDXC:Sidebar 2026-11-20 WHY:
-/// The same shape as `migrate_work_area_frame_default_once`: a new install has no settings file at its first start, so it is left alone and starts on Rail; the marker file records that this has run, so a new install that saves other settings later is never mistaken for an existing one. A file that cannot be read or saved is left as it is and no marker is written, so the next start tries again. This runs before anything reads the settings file.
+/// The same shape as `keep_old_dark_look_once` (dark_look_default.rs): a new install has no settings file at its first start, so it is left alone and starts on Rail; the marker file records that this has run, so a new install that saves other settings later is never mistaken for an existing one. A file that cannot be read or saved is left as it is and no marker is written, so the next start tries again. This runs before anything reads the settings file.
 /// SEE-ALSO: `switch_existing_settings_to_rail` in packages/settings-catalog/src/lib.rs, app/sidebar_rail/intro.rs (the intro).
 pub fn migrate_sidebar_rail_default_once() {
     let paths = ghostex_storage_paths();

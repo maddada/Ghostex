@@ -330,9 +330,6 @@ fn main() {
     // Before anything reads or writes terminal settings, so the first config Ghostex
     // terminals load is the copied one.
     shared_settings::ghostty_config_migration::migrate_terminal_config_from_ghostty_once();
-    // Frame the work area is on for a new install; an existing settings file keeps it off.
-    // Before the first settings read, so a new install (no file yet) is told from an existing one.
-    shared_settings::work_area_frame_default::migrate_work_area_frame_default_once();
     // The rail is the default; an existing settings file is switched to it and gets the one-time
     // Meet the rail pop-up (shared_settings/sidebar_rail_default.rs).
     shared_settings::sidebar_rail_default::migrate_sidebar_rail_default_once();

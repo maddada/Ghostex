@@ -559,9 +559,9 @@ impl ThemeTab {
         settings_section(&p, "Colours", None, None, rows).map(IntoElement::into_any_element)
     }
 
-    /// The window frame rows of the Advanced fold: Frame the work area, under it the window
-    /// buttons the sidebar's collapse keeps, then the side the close buttons of dialogs and toasts
-    /// sit on. macOS only; None elsewhere or when a search hides all three.
+    /// The window frame rows of the Advanced fold: the window buttons the sidebar's collapse keeps,
+    /// then the side the close buttons of dialogs and toasts sit on. macOS only; None elsewhere or
+    /// when a search hides both.
     ///
     /// CDXC:Settings 2026-11-08 DECISION:
     /// User: "please also move this whole setting under a new advanced area in the interface page in settings". Both rows moved out of Colours into the page's collapsed Advanced fold (`ADVANCED_MAIN_SETTING_KEYS`), as About does with Experimental: a search shows the matching rows in this section in place and the fold stays out. Superseded 2026-11-18 (CDXC:Settings in model.rs, Q4153): the rows are the Window & Layout page's Window frame group, shown without a fold.
@@ -572,20 +572,6 @@ impl ThemeTab {
         let p = t.p;
         let values = &t.values;
         let mut rows: Vec<AnyElement> = Vec::new();
-        if t.visible("workAreaFrame") {
-            rows.push(toggle_field(
-                self,
-                &p,
-                "workAreaFrame",
-                t.spec_plain(
-                    "workAreaFrame",
-                    "Frame the work area",
-                    "Show the work area as a card inside the window, with a thin margin all around, a hairline border and a light shadow. Off keeps the work area edge to edge.",
-                ),
-                values.bool("workAreaFrame"),
-                cx,
-            ));
-        }
         if t.visible("showWindowButtonsWhenSidebarCollapsed") {
             rows.push(toggle_field(
                 self,

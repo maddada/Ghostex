@@ -154,7 +154,7 @@ impl GhostexGpuiApp {
     /// Where the panel sits: down the window's left edge (or just past a docked sidebar), from the
     /// header's bottom to the floor, so the header keeps its window controls and its drag band while
     /// the panel is out; on macOS the floating sidebar runs from the window's top instead, inside
-    /// the work area frame's gutter when the frame is on (`floating_reveal_top`,
+    /// the work area frame's gutter (`floating_reveal_top`,
     /// `floating_reveal_card_inset`).
     pub(crate) fn floating_reveal_frame(&self, width: f32) -> Bounds<Pixels> {
         let content = self.floating_reveal_content();

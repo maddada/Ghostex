@@ -343,21 +343,6 @@ pub fn switch_existing_settings_to_rail(
     true
 }
 
-/// Writes `workAreaFrame` false into the settings of someone who already had a settings file when the
-/// frame became on by default, so their work area keeps the edge-to-edge look it had. Returns whether it
-/// changed anything; a saved choice (either way) is left alone.
-///
-/// CDXC:Workarea 2026-11-08 WHY: stored settings leave a key out until it is saved, so an existing user who never touched Frame the work area has no `workAreaFrame` in the file, and the new default (on) would silently frame their window. The desktop runs this once, behind a marker file, at start-up when the settings file already exists (`migrate_work_area_frame_default_once`); a new install has no file then, so it gets the default.
-pub fn keep_work_area_frame_off_for_existing_settings(
-    settings: &mut serde_json::Map<String, serde_json::Value>,
-) -> bool {
-    if settings.contains_key("workAreaFrame") {
-        return false;
-    }
-    settings.insert("workAreaFrame".to_string(), serde_json::Value::Bool(false));
-    true
-}
-
 /// The look settings whose default changed on 2026-11-20 (the user's own dark look became the
 /// default), each with the default it had before.
 pub const DARK_LOOK_2026_11_20_OLD_DEFAULTS: &[(&str, J)] = &[
@@ -567,7 +552,7 @@ mod dark_look_tests {
     /// showed: Gray, Same for light and dark on, and 94 everywhere (light mode reads the dark tints).
     #[test]
     fn a_file_without_the_look_keys_keeps_the_old_look() {
-        let before = settings(json!({"sidebarWidth": 320, "workAreaFrame": false}));
+        let before = settings(json!({"sidebarWidth": 320}));
         let mut after = before.clone();
         assert!(keep_old_dark_look_for_existing_settings(&mut after));
         let gray =

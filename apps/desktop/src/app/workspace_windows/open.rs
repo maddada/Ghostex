@@ -81,10 +81,9 @@ pub(crate) fn workspace_window_options(
         35px Search row while the sidebar is docked and the 36px work area header while it is
         collapsed, and both centre their own contents near y = 18. At the old y = 8 the lights
         sat three and a half pixels above everything beside them in both states; 11.5 puts a
-        12px light on that same centreline. With the work area frame on, both rows start one
+        12px light on that same centreline. Inside the work area frame both rows start one
         gutter lower and the card one gutter in, and the lights move down and in with them
-        (`workspace_traffic_light_position`); a window already open follows a change of the
-        setting at once (`sync_work_area_frame_traffic_lights`).
+        (`workspace_traffic_light_position`).
         */
         titlebar: Some(gpui::TitlebarOptions {
             title: Some(TITLEBAR_PROJECT_LABEL_FALLBACK.into()),

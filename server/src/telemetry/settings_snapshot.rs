@@ -197,7 +197,6 @@ pub const FIELDS: &[Field] = &[
         "agentManagerZoomPercent",
         Kind::Bucket(&ZOOM),
     ),
-    field("work_area_frame", "workAreaFrame", Kind::Toggle),
     field("animations", "panelAnimationSpeed", Kind::Choice),
     // Sidebar.
     field("sidebar_view", "sidebarView", Kind::Choice),

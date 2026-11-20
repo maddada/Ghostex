@@ -277,11 +277,6 @@ impl Render for GhostexGpuiApp {
         let rail = self
             .sidebar_rail_shown()
             .then(|| self.render_sidebar_rail(window, cx));
-        // The work area frame (helpers/work_area_frame.rs, decision there). Off, every branch below
-        // takes today's path and the element tree is unchanged.
-        let work_area_frame = work_area_frame_active();
-        #[cfg(target_os = "macos")]
-        crate::app::element::sync_work_area_frame_traffic_lights(window);
         // Read before the header and the floating sidebar lay out from `window_controls_shown`.
         self.main_window_fullscreen = window.is_fullscreen();
         #[cfg(target_os = "macos")]
@@ -1423,15 +1418,15 @@ impl Render for GhostexGpuiApp {
                     .relative()
                     .overflow_hidden()
                     .map(|row| {
-                        if work_area_frame && !window_glass_active() {
-                            row.bg(work_area_frame_gutter_fill())
-                        } else {
+                        if window_glass_active() {
                             row.bg(window_body_row_background())
+                        } else {
+                            row.bg(work_area_frame_gutter_fill())
                         }
                     })
-                    // With the frame on, the gutter runs above the sidebar too, so the sidebar's
+                    // The work area frame's gutter runs above the sidebar too, so the sidebar's
                     // top row stays level with the card's header (helpers/work_area_frame.rs).
-                    .when(work_area_frame, |row| row.pt(px(WORK_AREA_FRAME_MARGIN)))
+                    .pt(px(WORK_AREA_FRAME_MARGIN))
                     /*
                     CDXC:FocusRouting 2026-09-28 WHY:
                     GPUI focuses a `track_focus` element on every mouse-down no child claims, so tracking the context menus' fallback handle on the whole body row took keyboard focus from a terminal on any click beside or around it (its margins, the agent bar). Keys then went through the root fallback, which forwards only committed text: Backspace did nothing and Pinyin never composed (reported on 10.5.0). The handle only has to be drawn inside the root that owns the app's `on_action` listeners, so it sits on a zero-size child that can never be hovered or clicked.
@@ -1500,7 +1495,7 @@ impl Render for GhostexGpuiApp {
                         this.child(self.render_sidebar_resize_divider(cx))
                     })
                     // Under glass the frame's gutter is a ring the card sits in, painted before it.
-                    .when(work_area_frame && window_glass_active(), |this| {
+                    .when(window_glass_active(), |this| {
                         this.child(crate::app::element::work_area_frame_glass_gutter())
                     })
                     .map(|row| {
@@ -1532,9 +1527,6 @@ impl Render for GhostexGpuiApp {
                             })
                             .child(self.render_workspace_with_command_pane(window, cx))
                             .child(self.render_workarea_header(window, cx));
-                        if !work_area_frame {
-                            return row.child(column);
-                        }
                         // The gutter between the card and the window: the body row holds the top one,
                         // this wrapper the others, the divider's 1pt counting toward it beside the
                         // sidebar.

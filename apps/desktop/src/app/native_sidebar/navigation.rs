@@ -66,9 +66,9 @@ impl GhostexGpuiApp {
     /// What lies between the sidebar's own right edge and the edge the user sees there: docked
     /// beside the work area card, the divider's 1pt and the frame's gutter (6pt in all, not
     /// zoomed: the window's, not the sidebar's); nothing for the floating sidebar, a card of its
-    /// own, or with the frame off, where the divider is the edge.
+    /// own, or in the web build, which draws no frame and where the divider is the edge.
     pub(crate) fn native_sidebar_right_gutter(&self) -> f32 {
-        if work_area_frame_active() && !self.sidebar_collapsed {
+        if cfg!(not(ghostex_web)) && !self.sidebar_collapsed {
             WORK_AREA_FRAME_MARGIN
         } else {
             0.0
@@ -173,8 +173,8 @@ fn lights_row_top_padding(scale: f32, gutter: f32) -> f32 {
 }
 
 /// Where the red light's visible edge starts from the floating sidebar's left edge: its button sits
-/// at the window's own light position (`workspace_traffic_light_position`, 11pt without the frame;
-/// with it the panel moves in by the same gutter as the lights) and AppKit draws the light's rim
+/// at the window's own light position (`workspace_traffic_light_position`; the panel moves in by
+/// the frame's gutter, the same as the lights) and AppKit draws the light's rim
 /// half a point inside it (measured at 2x). The lights do not scale with the sidebar's zoom.
 const FLOATING_ROW_EDGE_INSET: f32 = 11.5;
 
@@ -671,8 +671,8 @@ mod tests {
 
     #[test]
     fn the_floating_row_centres_on_the_lights_it_carries() {
-        // The lights are 14pt tall at (11, 11.5), or one 6pt gutter lower and further in with the
-        // work area frame on.
+        // The lights are 14pt tall at AppKit's (11, 11.5) in the panel, which sits one gutter in
+        // like them, or one 6pt gutter lower for a row that does not move with them.
         for (gutter, lights_top) in [(0.0, 11.5), (6.0, 17.5)] {
             for scale in [0.9, 1.0, 1.1] {
                 let centre =
@@ -683,7 +683,7 @@ mod tests {
                 );
             }
         }
-        // At full size and without the frame the row keeps the floating row's 5pt padding.
+        // At full size and with no gutter the row keeps the floating row's 5pt padding.
         assert_eq!(lights_row_top_padding(1.0, 0.0), 5.0);
     }
 
