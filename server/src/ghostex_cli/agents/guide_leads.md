@@ -42,12 +42,12 @@ ghostex agents unlink --all                                 # end every link to 
 A session can only link others to itself (`--lead self`); only the user (from
 their own terminal or the app) can link a session to another lead. Send the
 linked session its work with `ghostex agents send <ref> "..."` (`--queue` and
-`--with-next` too): the turn that message starts is reported. Don't wait in a loop for reports: each arrives as a
-message when the turn ends.
+`--with-next` too): the turn that message starts is reported. Don't wait in a
+loop for reports: each arrives as a message when the turn ends.
 
 ## Undoing
 
-The user can end links from the sidebar: Unlink from <lead> on a linked
+The user can end links from the sidebar: Unlink from Lead on a linked
 session, Stop leading on the lead. An unlinked session keeps running as an
 ordinary session and simply stops reporting; nothing is closed.
 
