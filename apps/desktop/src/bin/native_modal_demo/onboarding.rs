@@ -576,6 +576,8 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                         let mut state = host.borrow_mut();
                         state.cli_status["cuaDriverInstalled"] = json!(true);
                         state.cli_status["computerUseSkillInstalled"] = json!(true);
+                        // The same cua-driver skill is browser use too (2026-11-20).
+                        state.cli_status["browserSkillInstalled"] = json!(true);
                         state.cli_status["cuaDriverAccessibilityPermissionGranted"] = json!(false);
                         state.cli_status["cuaDriverScreenRecordingPermissionGranted"] =
                             json!(false);
@@ -592,18 +594,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                     let mut state = host.borrow_mut();
                     state.cli_status["cuaDriverAccessibilityPermissionGranted"] = json!(true);
                     state.cli_status["cuaDriverScreenRecordingPermissionGranted"] = json!(true);
-                    state.cli_status.clone()
-                };
-                cx.defer(move |cx| {
-                    with_view(&host, cx, move |view, cx| {
-                        view.receive_cli_status(payload, cx)
-                    })
-                });
-            }
-            OnboardingCommand::InstallBrowserSkill => {
-                let payload = {
-                    let mut state = host.borrow_mut();
-                    state.cli_status["browserSkillInstalled"] = json!(true);
                     state.cli_status.clone()
                 };
                 cx.defer(move |cx| {

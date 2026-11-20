@@ -187,12 +187,14 @@ impl GpuiOnboardingWindow {
             != Some(true);
         self.send(OnboardingCommand::InstallComputerUse { install_driver }, cx);
         // The embedded Browser's skill comes with it (CDXC:Onboarding 2026-11-13 above `ROW_TOPS`).
+        // CDXC:AgentSkills 2026-11-20: since the Ghostex Browser Use skill retired (Q4262) browser use
+        // is the same `cua-driver` skill the Computer Use install adds, so the switch only waits
+        // for it (as long as Computer Use does) instead of starting a second install.
         if !self.browser_skill_installed() && self.browser_skill_pending.is_none() {
             self.browser_skill_pending = Some(super::BrowserSkillPending {
                 target: true,
-                deadline: Instant::now() + Duration::from_secs(120),
+                deadline: Instant::now() + Duration::from_secs(150),
             });
-            self.send(OnboardingCommand::InstallBrowserSkill, cx);
         }
         self.after_computer_use_changed(before, cx);
         self.show_toast(

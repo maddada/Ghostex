@@ -321,16 +321,20 @@ impl GhostexGpuiApp {
                 );
             }
             OnboardingCommand::InstallComputerUse { install_driver } => {
-                // Cua Driver first when it is missing, then the Computer Use skill.
+                // CDXC:AgentSkills 2026-11-20: Computer Use is Cua Driver plus its `cua-driver` skill
+                // (the Ghostex wrapper retired, Q4262). A missing driver is installed first, and its
+                // install adds the skill once it finishes (cli_install.rs
+                // `gpui_finish_desktop_control_setup`); with the driver there, only the skill runs.
                 if install_driver {
                     self.defer_in_main_window(cx, |app, window, cx| {
                         app.handle_gpui_cua_driver_install_or_update(window, cx);
                     });
+                } else {
+                    self.run_gpui_ghostex_cli_settings_action_quietly(
+                        GpuiGhostexCliSettingsAction::InstallComputerUseSkill,
+                        cx,
+                    );
                 }
-                self.run_gpui_ghostex_cli_settings_action_quietly(
-                    GpuiGhostexCliSettingsAction::InstallComputerUseSkill,
-                    cx,
-                );
             }
             OnboardingCommand::OpenAccessibilityPreferences => {
                 self.open_gpui_macos_system_settings_url(
@@ -343,12 +347,6 @@ impl GhostexGpuiApp {
                 self.open_gpui_macos_system_settings_url(
                     GPUI_MACOS_SCREEN_RECORDING_PREFERENCES_URL,
                     "openScreenRecordingPreferences",
-                    cx,
-                );
-            }
-            OnboardingCommand::InstallBrowserSkill => {
-                self.run_gpui_ghostex_cli_settings_action_quietly(
-                    GpuiGhostexCliSettingsAction::InstallBrowserUseSkill,
                     cx,
                 );
             }

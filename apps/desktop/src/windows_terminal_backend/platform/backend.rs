@@ -88,17 +88,6 @@ printf '%s\n' \
   "$gx_path" \
   "$gx_usable" \
   "$gx_blocked" \
-  "$(test -f "$skills_root/ghostex-browser-use/SKILL.md" && printf 1 || printf 0)" \
-  "$(test -f "$skills_root/ghostex-embedded-browser-use/SKILL.md" && printf 1 || printf 0)" \
-  "$(test -f "$skills_root/ghostex-computer-use/SKILL.md" && printf 1 || printf 0)" \
-  "$(test -f "$skills_root/ghostex-cli/SKILL.md" && printf 1 || printf 0)" \
-  "$(test -f "$skills_root/ghostex-agents/SKILL.md" && printf 1 || printf 0)" \
-  "$(test -f "$skills_root/ghostex-manage-beads/SKILL.md" && printf 1 || printf 0)" \
-  "$(test -f "$skills_root/ghostex-auto-rename-session/SKILL.md" && printf 1 || printf 0)" \
-  "$(test -f "$skills_root/ghostex-move-codex-session/SKILL.md" && printf 1 || printf 0)" \
-  "$(test -f "$skills_root/ghostex-help/SKILL.md" && printf 1 || printf 0)" \
-  "$(test -f "$skills_root/ghostex-visuals/SKILL.md" && printf 1 || printf 0)" \
-  "$(test -f "$skills_root/ghostex-secrets/SKILL.md" && printf 1 || printf 0)" \
   "$(test -f "$skills_root/ghostex/SKILL.md" && printf 1 || printf 0)"
 "#,
         posix_single_quote(&package_dir),
@@ -115,20 +104,8 @@ printf '%s\n' \
     let gx_path = validated_optional_wsl_path(lines.next())?;
     let gx_usable = parse_status_flag(lines.next())?;
     let gx_blocked_by_existing_command = parse_status_flag(lines.next())?;
-    let skill_names = [
-        "ghostex-browser-use",
-        "ghostex-embedded-browser-use",
-        "ghostex-computer-use",
-        "ghostex-cli",
-        "ghostex-agents",
-        "ghostex-manage-beads",
-        "ghostex-auto-rename-session",
-        "ghostex-move-codex-session",
-        "ghostex-help",
-        "ghostex-visuals",
-        "ghostex-secrets",
-        "ghostex",
-    ];
+    // CDXC:AgentSkills 2026-11-20: only the `ghostex` skill is still bundled (Q4262); the retired ones are not probed.
+    let skill_names = ["ghostex"];
     let mut skill_paths = Vec::with_capacity(skill_names.len());
     for skill_name in skill_names {
         let installed = parse_status_flag(lines.next())?;
@@ -139,17 +116,6 @@ printf '%s\n' \
     }
     let mut skill_paths = skill_paths.into_iter();
     Ok(WindowsWslGhostexCliStatus {
-        browser_skill_path: skill_paths.next().flatten(),
-        embedded_browser_skill_path: skill_paths.next().flatten(),
-        computer_use_skill_path: skill_paths.next().flatten(),
-        cli_skill_path: skill_paths.next().flatten(),
-        agents_orchestration_skill_path: skill_paths.next().flatten(),
-        manage_beads_skill_path: skill_paths.next().flatten(),
-        generate_title_skill_path: skill_paths.next().flatten(),
-        move_codex_session_skill_path: skill_paths.next().flatten(),
-        help_skill_path: skill_paths.next().flatten(),
-        visuals_skill_path: skill_paths.next().flatten(),
-        secrets_skill_path: skill_paths.next().flatten(),
         agent_guide_skill_path: skill_paths.next().flatten(),
         ghostex_path,
         gx_blocked_by_existing_command,

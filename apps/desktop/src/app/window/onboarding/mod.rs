@@ -119,8 +119,6 @@ pub(crate) enum OnboardingCommand {
     },
     OpenAccessibilityPreferences,
     OpenScreenRecordingPreferences,
-    /// `installBrowserUseSkill`: turning on Fast Computer & Browser use adds it too.
-    InstallBrowserSkill,
     OpenExternalUrl(String),
     /// `completeFirstLaunchSetup`, then open `FinishTarget` (and Add Project when the app has no
     /// project yet), and queue what the devices page asked for.

@@ -41,22 +41,11 @@ pub(crate) enum WindowsWslSetupPhase {
 #[cfg(target_os = "windows")]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct WindowsWslGhostexCliStatus {
-    pub(crate) cli_skill_path: Option<String>,
-    pub(crate) browser_skill_path: Option<String>,
-    pub(crate) computer_use_skill_path: Option<String>,
-    pub(crate) embedded_browser_skill_path: Option<String>,
-    pub(crate) agents_orchestration_skill_path: Option<String>,
-    pub(crate) manage_beads_skill_path: Option<String>,
-    pub(crate) generate_title_skill_path: Option<String>,
     pub(crate) ghostex_path: Option<String>,
     pub(crate) gx_blocked_by_existing_command: bool,
     pub(crate) gx_path: Option<String>,
     pub(crate) gx_usable: bool,
-    pub(crate) move_codex_session_skill_path: Option<String>,
-    pub(crate) help_skill_path: Option<String>,
     pub(crate) agent_guide_skill_path: Option<String>,
-    pub(crate) visuals_skill_path: Option<String>,
-    pub(crate) secrets_skill_path: Option<String>,
 }
 
 #[allow(dead_code)] // used by the windows path
