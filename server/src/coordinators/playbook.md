@@ -294,8 +294,10 @@ Ghostex works out each status:
 - **Waiting:** on something outside that hasn't happened (a store review, a vendor, CI, another item,
   the rebuild that puts it in the user's app): `item wait` with what it waits on. Never Blocked,
   never the user.
-- **Blocked:** the user must act now to unblock it (an ask with `--holds`, or a thread still not
-  moving after the nudge).
+- **Blocked:** the user must act now to unblock it: an ask with `--holds`, nothing else
+  (`item edit --status blocked` is refused without one). A thread still not moving after the nudge
+  is never Blocked: it stays In progress for the user, and `item list` and `status` name it
+  ("quiet") for you. Heal it as the reports tell you; the user is not your healer.
 - **Not being worked on:** nobody is on it. `item list` and `status` name it until you finish it,
   ask, say what it waits on or work on it again.
 

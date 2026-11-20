@@ -16,10 +16,10 @@
 //! items replace the board and its open items move over once (migration 0074). A thread, a
 //! question or a release step is never an item of its own: threads attach to an item, asks and
 //! steps live inside it. Ghostex works out the status the user sees from the coordinator's word
-//! and what it can see itself: an open ask that holds the work up or a thread that is not moving
-//! is Blocked, a thread waiting on the user is Needs you, a working thread is Moving, and a wait
-//! on another item or an ask clears itself when that finishes or is answered. Who has the ball
-//! (the owner) follows from the status.
+//! and what it can see itself: an open ask that holds the work up is Blocked (a thread that is not
+//! moving is not: the coordinator heals it, 2026-11-20), a thread waiting on the user is Needs you,
+//! a working thread is Moving, and a wait on another item or an ask clears itself when that
+//! finishes or is answered. Who has the ball (the owner) follows from the status.
 //! SEE-ALSO: server/src/coordinators/board.rs (the old board, now drawn from these items for older
 //! clients), server/src/storage/migrations/0074_coordinator_work_items.sql.
 
@@ -840,12 +840,15 @@ pub fn derive(item: &WorkItem, context: &WorkContext<'_>) -> (&'static str, Valu
     if item.for_thread && !threads.is_empty() && threads.iter().all(|row| row["state"] == "done") {
         return ("finished", nobody());
     }
-    if let Some(row) = threads.iter().find(|row| row["stuck"] == true) {
-        let mut owner = you();
-        owner["why"] = json!(format!("{} isn't moving", text(row, "title")));
-        return ("blocked", owner);
-    }
-    if item.asks.iter().any(|ask| ask.is_open() && ask.holds) || item.status == "blocked" {
+    // CDXC:Coordinators 2026-11-20 DECISION:
+    // User, of W756 shown red Blocked while its thread was only in a long silent build ("why are
+    // you showing ME this as blocked? I don't care about this, there's no action here"), then on
+    // the Q4301 page, picking A: "let the coordinator fix the stuck threads, not me". Blocked is
+    // only an open ask that holds the work up (`item ask --holds`). A thread quiet after Ghostex's
+    // nudge stays In progress: healing it is the coordinator's job, which hears about it every 8
+    // minutes and sees it as `quiet` in `item list` and `status` (`quiet_hint`). A stored
+    // "blocked" with no holding ask (older items, the board's words) is In progress too.
+    if item.asks.iter().any(|ask| ask.is_open() && ask.holds) {
         return ("blocked", you());
     }
     if threads.iter().any(|row| row["state"] == "waiting") {
@@ -875,7 +878,7 @@ pub fn derive(item: &WorkItem, context: &WorkContext<'_>) -> (&'static str, Valu
             None => return context.coordinator_on(item),
         }
     }
-    if item.status == "moving" {
+    if matches!(item.status.as_str(), "moving" | "blocked") {
         // A thread that still owes work (a job running, a turn cut off) keeps the ball.
         if let Some(row) = threads
             .iter()
@@ -1101,6 +1104,9 @@ pub fn item_value(item: &WorkItem, context: &WorkContext<'_>, history: usize) ->
     if let Some(reason) = recheck_reason(item, status, context, Utc::now()) {
         out["recheck"] = json!(reason);
     }
+    if let Some(hint) = quiet_hint(&item.threads, status, context) {
+        out["quiet"] = json!(hint);
+    }
     // A Later kind says only what kind of Later it is.
     if status == "later" && !item.reason.is_empty() {
         out["reason"] = json!(item.reason);
@@ -1172,6 +1178,22 @@ fn until_ahead(until: &str, now: DateTime<Utc>) -> bool {
     }
     NaiveDate::parse_from_str(until, "%Y-%m-%d")
         .is_ok_and(|day| day >= now.with_timezone(&Local).date_naive())
+}
+
+/// What the coordinator is told, and the user is not, about an In progress item whose thread is
+/// quiet after Ghostex's nudge (`stuck` on its row): "G9dxg Title (quiet)". The user sees In
+/// progress; `item list` and `status` print this for the coordinator to heal it.
+fn quiet_hint(threads: &[WorkThread], status: &str, context: &WorkContext<'_>) -> Option<String> {
+    if status != "moving" {
+        return None;
+    }
+    let quiet: Vec<String> = threads
+        .iter()
+        .filter_map(|thread| context.thread(thread))
+        .filter(|row| row["stuck"] == true)
+        .map(|row| format!("{} {}", text(row, "sessionId"), text(row, "title")))
+        .collect();
+    (!quiet.is_empty()).then(|| quiet.join("; "))
 }
 
 /// Why the coordinator should look at the item again, or `None`: Waiting for
@@ -2061,6 +2083,14 @@ fn apply_edit(
                 "Unknown status {word}. Use needs-you, blocked, moving, waiting, later (or next, held, parked, backlog) or finished."
             ))
         })?;
+        // Blocked is only an open ask that holds the work up: no ask, no Blocked.
+        if status == "blocked" && !item.asks.iter().any(|ask| ask.is_open() && ask.holds) {
+            return Err(bad(format!(
+                "{} is not Blocked: Blocked means the user must act before it can go on. Ask them with `item ask {} \"<question>\" --holds`; work that is only quiet or waiting stays In progress (a thread that stopped is yours to heal) or Waiting (`item wait`).",
+                item.reference(),
+                item.reference()
+            )));
+        }
         if status == "finished" {
             item.finished_at = Some(at.to_string());
         } else {
