@@ -17,13 +17,12 @@
 //! SEE-ALSO: apps/desktop/src/app/sidebar_dispatch/folder_pickers_and_os_integration.rs (`dispatch_gpui_os_integration_command_message`),
 //! apps/desktop/src/app/titlebar/help_menu.rs.
 
-use ghostex_gx_chat_core::composer::skill_invocation::skill_invocation;
 use ghostex_gx_core::{
     AgentRecordOptions, ProjectKey, SidebarAgent, agent_record_params,
-    check_startup_prompt_receipt, created_session, default_agent_id_for_icon,
-    first_prompt_title_runtime_settings, normalize_project_path, os_integration_command_params,
-    project_name_from_path, queue_startup_prompt_params, resolve_sidebar_agent,
-    start_provider_params, terminal_create_params,
+    check_startup_prompt_receipt, created_session, first_prompt_title_runtime_settings,
+    normalize_project_path, os_integration_command_params, project_name_from_path,
+    queue_startup_prompt_params, resolve_sidebar_agent, start_provider_params,
+    terminal_create_params,
 };
 use serde_json::{Value, json};
 
@@ -301,7 +300,7 @@ impl GhostexGpuiApp {
             );
             return;
         };
-        let draft = ghostex_help_draft(&agent, &question);
+        let draft = ghostex_help_draft(&question);
         let interface = self.gx_store_preferred_interface(&agent.agent_id);
         let Some(project_path) = project_path else {
             self.gx_store_create_toast(
@@ -583,7 +582,7 @@ Ground rules:
 - Ask me which places I want boxes to run before you create anything that costs money. Docker on this computer is free; Hetzner, Vercel, Daytona, E2B, DigitalOcean and my own server bill while a box exists.
 - Never show an API token, key or sign-in code in this chat or in a command you print. Save provider tokens straight into ~/.agentbox/secrets.env as KEY=value lines (keep the file mode 600) and check them with `agentbox <provider> login --status`, which shows them masked.
 - agentbox logins and wizards need a real terminal. Run them with `ghostex terminal --title \"<title>\" -- <command>`, read the screen with `ghostex read-text \"<title>\"`, and answer prompts with `ghostex send-text` and `ghostex send-enter` (see `ghostex --help`).
-- Use $ghostex-browser-use to work in my browser, or $ghostex-computer-use when a page needs the desktop. If neither skill is installed, open the page and tell me exactly what to click. When a page asks for my password or a two-factor code, stop and let me type it.
+- To work in my browser, or on the desktop when a page needs it, read the cua-driver skill and follow it. If it is not installed, open the page and tell me exactly what to click. When a page asks for my password or a two-factor code, stop and let me type it.
 
 Steps:
 1. See what is already done: `ghostex agentbox status --json` and `agentbox --version`. Skip every step that is already done.
@@ -603,17 +602,17 @@ Steps:
 8. Ask whether I want box web apps at https://<box>.localhost addresses. If yes, run `agentbox install portless`.
 9. Finish with `ghostex agentbox status` and a short summary: which places are ready, what still needs me, and a reminder that cloud boxes keep billing until I stop or destroy them in Ghostex Settings > Cloud Boxes.";
 
-/// The Help chat's draft: the ghostex-help skill mention in the agent's own spelling, then the
-/// question. The open-ended row has no question, so the draft keeps a trailing space for the user
-/// to type straight after the mention.
-fn ghostex_help_draft(agent: &SidebarAgent, question: &str) -> String {
-    let family = default_agent_id_for_icon(agent.icon.as_deref())
-        .or_else(|| default_agent_id_for_icon(Some(agent.agent_id.as_str())))
-        .unwrap_or(agent.agent_id.as_str());
-    let mention = skill_invocation("ghostex-help", Some(family));
+/// The Help chat's draft: the order to follow `ghostex help guide`, then the question, the same
+/// text `ghostex help ask` sends (gx-chat-core `GHOSTEX_HELP_OPENING`). The open-ended row has no
+/// question, so the draft ends where the user types it.
+///
+/// CDXC:AgentSkills 2026-11-20 DECISION:
+/// User (Q4262 "B"): Ghostex's own skills are retired for CLI help, so the draft no longer starts with the `ghostex-help` skill in the agent's spelling; any agent follows the guide the same way.
+fn ghostex_help_draft(question: &str) -> String {
+    let opening = ghostex_gx_chat_core::composer::skill_invocation::GHOSTEX_HELP_OPENING;
     match question.trim() {
-        "" => format!("{mention} "),
-        question => format!("{mention} {question}"),
+        "" => format!("{opening}\n\n"),
+        question => format!("{opening}\n\n{question}"),
     }
 }
 

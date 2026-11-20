@@ -65,13 +65,17 @@ pub const COORDINATOR_SKILL_OLD_NAMES: &[&str] = &["ghostex-orchestrator"];
 ///
 /// CDXC:Coordinators 2026-11-11 WHY:
 /// A coordinator started before the rename has "Read and adhere to this skill: /ghostex-orchestrator" (or `$ghostex-orchestrator`) as its first message, and that skill is removed at the first start after the update (agent_skills_renamed.rs). Its playbook never depended on the folder: `ghostex coordinator guide` prints it from the app, and the playbook sends it there before its first reply and after every compaction. The line changes the guide's text, so every existing coordinator also gets the "playbook changed" note with its next message (playbook.rs `playbook_update_note`) and reads this line once it runs the guide. No new note text: phone apps already out recognise only the notes they know (packages/gx-chat-core/src/session/appended_notes.rs).
+///
+/// CDXC:AgentSkills 2026-11-20 WHY:
+/// User (Q4262 "B"): the coordinator skill is retired for CLI help, so a coordinator started before that has "Read and adhere to this skill: /ghostex-coordinator" (or an older name) as its first message while the skill is gone. The line now names every name the skill had and says this guide is the playbook; the changed text also gives every coordinator the "playbook changed" note, as at the 2026-11-11 rename.
 pub fn coordinator_skill_renamed_line() -> String {
     let old = COORDINATOR_SKILL_OLD_NAMES
         .iter()
+        .chain(std::iter::once(&COORDINATOR_SKILL_NAME))
         .map(|name| format!("`{name}`"))
         .collect::<Vec<_>>()
         .join(" or ");
-    format!("Your playbook is the `{COORDINATOR_SKILL_NAME}` skill. If your first message named {old}, that is this skill's old name: follow this guide, and don't look for a skill by the old name.")
+    format!("Your playbook is this guide, `ghostex coordinator guide`. If your first message named a {old} skill, that skill is retired: follow this guide, and don't look for the skill.")
 }
 
 /// The session runtime setting that marks an orchestrator as taking its role from the skill
@@ -206,17 +210,20 @@ pub fn coordinator_guide_for(playbook: &str, overrides: &str, paths: &GxserverPa
 /// CDXC:Coordinators 2026-11-11 WHY:
 /// A coordinator created just before the update keeps its first message in the queue until its agent takes it, and that message named `ghostex-orchestrator`, which the first start after the update removes (agent_skills_renamed.rs). A new coordinator gets no "playbook changed" note before its first guide read (playbook.rs `mark_new_coordinator`), so nothing else would tell it the name. gxserver rewrites such lines at startup, before any queue is sent.
 pub fn rename_queued_coordinator_skill_lines(db: &rusqlite::Connection) -> rusqlite::Result<usize> {
-    use ghostex_gx_chat_core::composer::skill_invocation::{skill_invocation, SKILL_LINE_PREFIX};
+    use ghostex_gx_chat_core::composer::skill_invocation::{
+        skill_invocation, COORDINATOR_GUIDE_LINE, SKILL_LINE_PREFIX,
+    };
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let mut changed = 0;
-    for old in COORDINATOR_SKILL_OLD_NAMES {
+    // CDXC:AgentSkills 2026-11-20 WHY: the coordinator skill is retired for CLI help (Q4262 "B"), so a first message still queued that names it under any name becomes the guide line every new coordinator gets.
+    let names = COORDINATOR_SKILL_OLD_NAMES
+        .iter()
+        .chain(std::iter::once(&COORDINATOR_SKILL_NAME));
+    for old in names {
         // One agent of each spelling: `/name`, `$name`, `/skill:name`, `@name`.
         for agent in ["claude", "codex", "pi", "opencode"] {
             let from = format!("{SKILL_LINE_PREFIX}{}", skill_invocation(old, Some(agent)));
-            let to = format!(
-                "{SKILL_LINE_PREFIX}{}",
-                skill_invocation(COORDINATOR_SKILL_NAME, Some(agent))
-            );
+            let to = COORDINATOR_GUIDE_LINE;
             let mut statement = db.prepare(
                 "SELECT DISTINCT projectId, sessionId FROM session_chat_queued_prompts
                  WHERE substr(text, 1, length(?1)) = ?1
@@ -298,9 +305,11 @@ pub fn coordinator_role_again(
     ))
 }
 
-/// The line every new orchestrator's first message starts with (`/ghostex-coordinator` for Claude
-/// Code and Copilot, `$ghostex-coordinator` for every other agent); the dialogs show the same
-/// line from the same function.
+/// The line every new orchestrator's first message starts with: "run `ghostex coordinator guide`"
+/// (gx-chat-core `COORDINATOR_GUIDE_LINE`); the dialogs show the same line from the same function.
+///
+/// CDXC:AgentSkills 2026-11-20 DECISION:
+/// User (Q4262 "B", then "make sure we don't break stuff"): Ghostex's own skills are retired for CLI help. This supersedes the skill half of the 2026-10-17 decision above: the locked first line stays (same opening, still unremovable), but it sends the coordinator to `ghostex coordinator guide` instead of naming the `ghostex-coordinator` skill, which only pointed there.
 pub fn coordinator_skill_line(family: &str) -> String {
     ghostex_gx_chat_core::composer::skill_invocation::coordinator_skill_line(Some(family))
 }

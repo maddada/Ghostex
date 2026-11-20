@@ -331,7 +331,7 @@
       "id": "use-ghostex-computer-use-skill",
       "icon": "device-desktop",
       "title": "Let agents use your apps",
-      "body": "Install Fast Computer & Browser Use in Settings > Integrations, then ask for /ghostex-computer-use."
+      "body": "Install Fast Computer & Browser Use in Settings > Integrations, then ask for /cua-driver."
     },
     {
       "id": "use-ghostex-embedded-browser-use-skill",

@@ -250,7 +250,7 @@ pub(crate) fn brief_section(paths: &GxserverPaths, bot_id: &str) -> String {
         )),
     }
     if computer.computer_use {
-        out.push_str("## Using the computer's screen and apps\n\nThe user lets you use the screen and apps of the computer you work on when the work needs it: use `$ghostex-spaceo` (your own virtual display, so you never take over the user's screen; one SpaceO session per chat, destroyed when you're done) or `$ghostex-computer-use` (cua-driver, in the background). Prefer a command, file or API when there is one, and never sign in, buy, send or delete anything there unless the user asked for exactly that.\n\n");
+        out.push_str("## Using the computer's screen and apps\n\nThe user lets you use the screen and apps of the computer you work on when the work needs it: use SpaceO (`ghostex spaceo guide`: your own virtual display, so you never take over the user's screen; one SpaceO session per chat, destroyed when you're done) or Cua Driver (read the `cua-driver` skill; it works in the background). Prefer a command, file or API when there is one, and never sign in, buy, send or delete anything there unless the user asked for exactly that.\n\n");
     }
     out
 }

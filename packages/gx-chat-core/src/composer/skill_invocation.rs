@@ -70,29 +70,27 @@ pub const COORDINATOR_SKILL_NAME: &str = "ghostex-coordinator";
 /// What a role's first message starts with, before the skill in the agent's spelling.
 pub const SKILL_LINE_PREFIX: &str = "Read and adhere to this skill: ";
 
-/// The line every new orchestrator's first message starts with, in the agent's own skill
-/// spelling ([`skill_invocation`]): "Read and adhere to this skill: /ghostex-coordinator" for
-/// Claude Code, `$ghostex-coordinator` for Codex. gxserver sends it, and the New Orchestrator
-/// dialog shows it as the locked first line.
+/// The line every new orchestrator's first message starts with: [`COORDINATOR_GUIDE_LINE`] for
+/// every agent (until 2026-11-20, "Read and adhere to this skill: /ghostex-coordinator" in the
+/// agent's own skill spelling for the agents that load skills). gxserver sends it, and the New
+/// Orchestrator dialog shows it as the locked first line.
 /// SEE-ALSO: server/src/coordinators/role.rs (`orchestrator_first_message`, the CDXC:Coordinators 2026-10-17 decision).
 ///
 /// CDXC:Coordinators 2026-11-13 WHY:
 /// Any agent may run a coordinator since the user's Q2980 decision, but only the agents in `COORDINATOR_AGENT_FAMILIES` (gx-protocol) load skills from a folder Ghostex installs into. Every other agent (and one Ghostex cannot name) gets [`COORDINATOR_GUIDE_LINE`], which works for any agent that can run a shell command; it keeps the same opening so a queued first message is still found by it (role.rs `coordinator_role_reminder`).
-pub fn coordinator_skill_line(agent: Option<&str>) -> String {
-    let known = agent.map(str::trim).is_some_and(|agent| {
-        ghostex_gx_protocol::coordinator::COORDINATOR_AGENT_FAMILIES.contains(&agent)
-    });
-    if !known {
-        return COORDINATOR_GUIDE_LINE.to_string();
-    }
-    format!(
-        "{SKILL_LINE_PREFIX}{}",
-        skill_invocation(COORDINATOR_SKILL_NAME, agent)
-    )
+///
+/// CDXC:AgentSkills 2026-11-20 DECISION:
+/// User (Q4262 "B"): Ghostex's own skills are retired for CLI help, so every coordinator, whatever its agent, now starts with [`COORDINATOR_GUIDE_LINE`]: the playbook straight from `ghostex coordinator guide`, which the `ghostex-coordinator` skill only pointed to. The line keeps [`SKILL_LINE_PREFIX`], so everything that finds a coordinator's first message by its opening (role.rs `coordinator_role_again`, the queued-line rewrite at startup, titles) still finds it. `agent` is kept for callers that pass it.
+pub fn coordinator_skill_line(_agent: Option<&str>) -> String {
+    COORDINATOR_GUIDE_LINE.to_string()
 }
 
-/// The first line of a coordinator whose agent loads no skills Ghostex installs: the playbook
-/// straight from the CLI.
+/// The opening of every message to a Ghostex Help session (`ghostex help ask` and Ask Ghostex in
+/// the ⋯ menu): the workflow from `ghostex help guide`, which replaced the `ghostex-help` skill
+/// (CDXC:AgentSkills 2026-11-20, server/src/ghostex_cli/help_ask.rs `help_message`).
+pub const GHOSTEX_HELP_OPENING: &str = "You are Ghostex Help. If you haven't yet in this conversation, run `ghostex help guide` and follow it, then answer:";
+
+/// The first line of every coordinator: the playbook straight from the CLI.
 pub const COORDINATOR_GUIDE_LINE: &str = "Read and adhere to this skill: run `ghostex coordinator guide` and follow what it prints for the whole session.";
 
 /// The name in a `$name` or `/name` pill label, when it is one gxserver's scanner also accepts,

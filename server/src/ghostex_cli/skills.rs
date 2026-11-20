@@ -668,12 +668,11 @@ mod tests {
         let error = computer_use_command(&["frobnicate".to_string()]).expect_err("unknown");
         let message = error.to_string();
         assert!(message.starts_with("Unknown computer-use command: frobnicate\n\n"));
-        assert!(message.contains("Ghostex Computer Use - install the agent skill"));
+        assert!(message.contains("Ghostex Computer Use - native desktop app control"));
 
         let error = browser_use_command(&["frobnicate".to_string()]).expect_err("unknown");
         let message = error.to_string();
         assert!(message.starts_with("Unknown browser-use command: frobnicate\n\n"));
-        assert!(message
-            .contains("Ghostex Browser Use - install the Cua Driver browser-page agent skill"));
+        assert!(message.contains("Ghostex Browser Use - pages in other browsers"));
     }
 }

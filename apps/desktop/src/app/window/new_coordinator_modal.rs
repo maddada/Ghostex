@@ -52,13 +52,10 @@ const GOAL_PLACEHOLDER: &str = "One line it works toward, e.g. Ship the new chec
 const CANCEL: &str = "Cancel";
 const NEXT: &str = "Next";
 
-/// The locked first line the form shows before the agent is picked: the skill by its name, which
-/// each agent's first message writes in its own spelling (gx-chat-core `coordinator_skill_line`).
+/// The locked first line the form shows: the line every coordinator's first message starts with
+/// (gx-chat-core `coordinator_skill_line`), which sends it to `ghostex coordinator guide`.
 fn coordinator_first_line() -> String {
-    use ghostex_gx_chat_core::composer::skill_invocation::{
-        COORDINATOR_SKILL_NAME, SKILL_LINE_PREFIX,
-    };
-    format!("{SKILL_LINE_PREFIX}{COORDINATOR_SKILL_NAME}")
+    ghostex_gx_chat_core::composer::skill_invocation::coordinator_skill_line(None)
 }
 
 /// An agent set up on the copy's computer, with the warning the agent picker shows for it.
