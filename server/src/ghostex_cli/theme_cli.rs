@@ -43,7 +43,8 @@ Theme colours:
 
 Limits:
   Only the settings and colours `read` lists can change. You can't see the
-  result: make small changes and ask the user how it looks.
+  result: make small changes and ask the user how it looks. A theme keeps
+  the user's fonts: change a font only when the user asks for one.
 
 Examples:
   gx theme set darkThemePreset=blue themeSidebarContrast=-6
