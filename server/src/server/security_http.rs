@@ -843,10 +843,26 @@ fn handle(
                 label,
                 ..
             } = parse(params)?;
-            security
+            let (opened, renamed) = security
                 .open_owner_session(&key_id, &challenge, &signature, label.as_deref(), now)
-                .map(|opened| json!(opened))
-                .map_err(|error| ("forbidden", error.to_string()))
+                .map_err(|error| ("forbidden", error.to_string()))?;
+            // A key's name follows its computer's; each change is in the security log (Fable
+            // 5.2's review, finding 3; CDXC:Security 2026-11-20 at `current_key_label`).
+            if let Some(renamed) = renamed {
+                crate::audit::record(
+                    crate::audit::Action::new(
+                        "ownerKey.rename",
+                        format!("The owner key {} is now named {}", renamed.old, renamed.new),
+                    )
+                    .target(key_id.clone()),
+                    crate::audit::Actor::from(&Principal::Owner {
+                        device_id: opened.device_id.clone(),
+                    }),
+                    crate::audit::Outcome::Done,
+                    None,
+                );
+            }
+            Ok(json!(opened))
         }
         security::PROVE_OWNER_HANDOVER_ENDPOINT => {
             // CDXC:Security 2026-11-17 DECISION at `terminal_may_approve` in security/policy.rs:

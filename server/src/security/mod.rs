@@ -34,7 +34,7 @@ pub use approver_keys::{
 pub use capability::{route_access, Capability, Principal, RouteAccess, SessionRole};
 pub use events::SecurityEvent;
 pub use ghostex_gx_protocol::approval::{ApprovalRequest, SensitiveAction};
-pub use owner::{OwnerChallenges, OwnerError, OWNER_CHALLENGE_TTL_MS};
+pub use owner::{KeyRenamed, OwnerChallenges, OwnerError, OWNER_CHALLENGE_TTL_MS};
 pub use policy::{
     opens_door, DOOR_SESSION_ENDPOINTS, DOOR_SESSION_TTL_MS, EASY_CONNECT_ENABLE,
     FIRST_KEY_HANDOFF_FILE, OWNER_KEY_RESUME, TOKEN_FILE_CODE_WINDOW_MS,
