@@ -37,6 +37,9 @@ pub(super) const BOOST_MENU: &str = "boostMenu";
 pub(super) const BOOST_PREVIEW: &str = "boostPreview";
 pub(super) const BOOST_MENU_WIDTH: f32 = 280.0;
 pub(super) const BOOST_PREVIEW_WIDTH: f32 = 236.0;
+/// The Boosts "Try a Boost" offers on a new chat, in order (the phone's `TRY_A_BOOST` in
+/// cards/Boosts.tsx is the same list).
+const TRY_A_BOOST: [&str; 4] = ["live-page", "chart", "compare", "computer-use"];
 /// The preview card's content height.
 const PREVIEW_HEIGHT: f32 = 172.0;
 /// The menu's tab bar, its footer row, a row's padding and the width a description wraps in
@@ -601,37 +604,111 @@ impl NativeChatView {
         )
     }
 
-    /// "Try a Boost" under a new chat's headline: a chip per Show Boost; a click puts it in the
-    /// message.
+    /// "Try a Boost" just above a new chat's chat box: a chip per featured Boost, on one row; a
+    /// click puts it in the message. Only while the new chat's welcome shows its headline.
+    /// CDXC:Boosts 2026-11-20 DECISION: User: the chips wrapping onto a second row under the
+    /// headline "looks very ugly", then: "don't show the Try a Boost chips under the new-chat
+    /// headline at all; on a new chat they belong just above the chat box", and "'Ask me in a form'
+    /// is a bad one to highlight: feature 'Computer & Browser use' instead". The row never wraps:
+    /// the chips that fit show, and the rest fold into a "+N" chip whose menu lists them.
     pub(super) fn render_try_a_boost(
         &self,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> Option<AnyElement> {
-        let list: Vec<Value> = self.boosts()?["list"]
-            .as_array()?
+        let welcome = &self.snapshot["newSessionWelcome"];
+        if !welcome.is_object() || welcome["showTitle"] == false {
+            return None;
+        }
+        let rows = self.boosts()?["list"].as_array()?;
+        let all: Vec<Value> = TRY_A_BOOST
             .iter()
-            .filter(|row| row["category"] == "show")
-            .cloned()
+            .filter_map(|id| rows.iter().find(|row| row["id"] == *id).cloned())
             .collect();
+        if all.is_empty() {
+            return None;
+        }
+        // The box's width on the last frame (the pane's, less its margins, before the first).
+        let box_width = self.composer_bounds.get().size.width.as_f32();
+        let room = if box_width > 0.0 {
+            box_width
+        } else {
+            (self.bounds.get().size.width.as_f32() - 48.0 * p.scale).max(0.0)
+        } - 16.0 * p.scale;
         let s = p.scale;
         let tone = accent(p.light);
+        // Widths as the row lays them out, from the text's length (13px, about 0.5em a glyph as
+        // measured in the web build): padding, border, icon and gap around each label, 6px between.
+        let glyphs = |label: &str| label.chars().count() as f32 * 13.0 * 0.5 * s;
+        let chip_width = |label: &str| glyphs(label) + (18.0 + 2.0 + 14.0 + 5.0) * s;
+        let gap = 6.0 * s;
+        let lead = glyphs("Try a Boost") + 18.0 * s;
+        let more_width = |hidden: usize| glyphs(&format!("+{hidden}")) + 20.0 * s;
+        let mut used = lead;
+        let mut shown = 0;
+        for (index, row) in all.iter().enumerate() {
+            let width = gap + chip_width(&text(row, "label"));
+            let left = all.len() - index - 1;
+            let reserve = if left > 0 { gap + more_width(left) } else { 0.0 };
+            if used + width + reserve > room {
+                break;
+            }
+            used += width;
+            shown += 1;
+        }
+        let hidden: Vec<Value> = all[shown..].to_vec();
+        let list: Vec<Value> = all[..shown].to_vec();
+        let more = (!hidden.is_empty()).then(|| {
+            let count = hidden.len();
+            div()
+                .id("try-a-boost-more")
+                .role(gpui::Role::Button)
+                .aria_label(format!("{count} more Boosts"))
+                .flex_shrink_0()
+                .px(px(9.0 * s))
+                .py(px(3.0 * s))
+                .rounded_full()
+                .border(px(s))
+                .border_color(p.foreground.opacity(0.1))
+                .text_color(p.muted)
+                .chat_cursor_pointer()
+                .hover(|style| style.bg(p.foreground.opacity(0.06)))
+                .child(format!("+{count}"))
+                .on_click(cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                    let rows: Vec<Value> = hidden
+                        .iter()
+                        .map(|row| {
+                            json!({
+                                "label": text(row, "label"),
+                                "iconPath": text(row, "iconPath"),
+                                "command": {"type": "toggleBoost", "id": text(row, "id"), "text": this.draft},
+                            })
+                        })
+                        .collect();
+                    this.show_chat_menu_at(rows, event.position(), 240.0, window, cx);
+                }))
+        });
         Some(
             div()
                 .id("try-a-boost")
                 .role(gpui::Role::Group)
                 .aria_label("Try a Boost")
                 .w_full()
-                .max_w(px(560.0 * s))
+                .max_w(px(room.max(0.0) + 16.0 * s))
+                .overflow_hidden()
                 .flex()
-                .flex_wrap()
-                .justify_center()
+                .flex_nowrap()
+                .justify_start()
+                .px(px(8.0 * s))
+                .pb(px(6.0 * s))
                 .items_center()
                 .gap(px(6.0 * s))
                 .text_size(px(13.0 * s))
                 .child(
                     div()
                         .flex()
+                        .flex_shrink_0()
+                        .whitespace_nowrap()
                         .items_center()
                         .gap(px(5.0 * s))
                         .text_color(p.muted)
@@ -656,6 +733,8 @@ impl NativeChatView {
                         .gap(px(5.0 * s))
                         .px(px(9.0 * s))
                         .py(px(3.0 * s))
+                        .flex_shrink_0()
+                        .whitespace_nowrap()
                         .rounded_full()
                         .border(px(s))
                         .border_color(if in_draft {
@@ -683,6 +762,7 @@ impl NativeChatView {
                             this.invoke(json!({"type": "toggleBoost", "id": id, "text": draft}), cx)
                         }))
                 }))
+                .children(more)
                 .into_any_element(),
         )
     }
