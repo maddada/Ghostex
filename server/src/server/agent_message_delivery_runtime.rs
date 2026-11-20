@@ -77,9 +77,23 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<SessionKey> {
     let mut republish = expire_unwatched_sends(&db);
     // What `--with-next` held for a session that was closed is dropped, and each sender told
     // (session_chat_send/with_next.rs).
-    for sender in crate::session_chat_send::settle_held_for_closed_sessions(&db) {
+    let (senders, remote) = crate::session_chat_send::settle_held_for_closed_sessions(&db);
+    for sender in senders {
         if !republish.contains(&sender) {
             republish.push(sender);
+        }
+    }
+    // A sender on another computer gets its "Not delivered" held there, for its own next message.
+    for notice in remote {
+        if let Some(computer) = crate::connected_computers::find(&notice.server_id) {
+            let _ = super::coordinator_remote_runtime::remote_rpc(
+                &computer,
+                "/api/sendSessionChatMessage",
+                json!({
+                    "projectId": notice.sender.0, "sessionId": notice.sender.1,
+                    "text": notice.notice, "withNext": true,
+                }),
+            );
         }
     }
     let sends = waiting_sends(&db);

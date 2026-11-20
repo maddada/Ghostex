@@ -117,15 +117,118 @@ fn read_all_held(db: &rusqlite::Connection) -> Vec<((String, String), Vec<Value>
         .collect()
 }
 
-/// The session that sent `note`, `None` for the user's own send and Ghostex's notes.
+fn from_field(note: &Value, key: &str) -> Option<String> {
+    note.pointer(&format!("/from/{key}"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+/// The session on this computer that sent `note`, `None` for the user's own send, Ghostex's
+/// notes and a sender on another computer.
 fn note_sender(note: &Value) -> Option<(String, String)> {
-    let field = |key: &str| {
-        note.pointer(&format!("/from/{key}"))
-            .and_then(Value::as_str)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string)
-    };
-    Some((field("projectId")?, field("sessionId")?))
+    if from_field(note, "serverId").is_some() {
+        return None;
+    }
+    Some((
+        from_field(note, "projectId")?,
+        from_field(note, "sessionId")?,
+    ))
+}
+
+/// Who holds, lists or withdraws a message: always the caller, never the request's own words.
+///
+/// CDXC:SessionChat 2026-11-20 WHY:
+/// The security review of #677 found `/api/heldWithNext` and the hold took the sender from the
+/// body, so a session or another computer that left it out counted as the user and could withdraw
+/// anyone's notes, and one that named another session could hold in its name. A session's own
+/// token means that session; the app, a phone and the shared token file (the CLI in the user's own
+/// terminal) mean the user; another computer is never the user: it names which of its sessions
+/// sent the message, and only that computer's notes are its to withdraw.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum HeldSender {
+    User,
+    Session(String, String),
+    /// Another computer (`server_id`, its name), and the session there that sent it when it says.
+    Peer {
+        server_id: String,
+        name: String,
+        session: Option<(String, String)>,
+    },
+}
+
+impl HeldSender {
+    pub(crate) fn of(
+        caller: &crate::security::Principal,
+        body: &Value,
+    ) -> Result<Self, DomainStateError> {
+        use crate::security::Principal;
+        match caller {
+            Principal::Owner { .. } | Principal::Device { .. } | Principal::LocalAgent => {
+                Ok(Self::User)
+            }
+            Principal::Session {
+                project_id,
+                session_id,
+                ..
+            } => Ok(Self::Session(project_id.clone(), session_id.clone())),
+            Principal::Peer { server_id, name } => Ok(Self::Peer {
+                server_id: server_id.clone(),
+                name: name.clone(),
+                session: param(body, "senderProjectId")
+                    .zip(param(body, "senderSessionId"))
+                    .map(|(project, session)| (project.to_string(), session.to_string())),
+            }),
+            _ => Err(DomainStateError {
+                code: "forbidden",
+                message: "Only the user, a session or a connected computer can hold or withdraw a message for a session's next one.".to_string(),
+            }),
+        }
+    }
+
+    /// What a held note records as its `from`, `None` for the user.
+    fn record(&self) -> Option<Value> {
+        match self {
+            Self::User => None,
+            Self::Session(project, session) => {
+                Some(json!({ "projectId": project, "sessionId": session }))
+            }
+            Self::Peer {
+                server_id,
+                name,
+                session,
+            } => Some(match session {
+                Some((project, session)) => json!({
+                    "serverId": server_id, "computer": name,
+                    "projectId": project, "sessionId": session,
+                }),
+                None => json!({ "serverId": server_id, "computer": name }),
+            }),
+        }
+    }
+
+    /// Whether `note` is this sender's to withdraw (the user's: every one) or list as its own.
+    fn owns(&self, note: &Value) -> bool {
+        let field = |key: &str| from_field(note, key);
+        match self {
+            Self::User => true,
+            Self::Session(project, session) => {
+                note_sender(note).as_ref() == Some(&(project.clone(), session.clone()))
+            }
+            Self::Peer {
+                server_id, session, ..
+            } => {
+                field("serverId").as_deref() == Some(server_id.as_str())
+                    && match session {
+                        Some((project, session)) => {
+                            field("projectId").as_deref() == Some(project.as_str())
+                                && field("sessionId").as_deref() == Some(session.as_str())
+                        }
+                        None => field("sessionId").is_none(),
+                    }
+            }
+        }
+    }
 }
 
 /// A restored session is a new row: what was held for the closed one moves to it
@@ -147,7 +250,7 @@ struct HeldMessage<'a> {
     text: &'a str,
     body: Option<&'a str>,
     request_id: Option<&'a str>,
-    from: Option<(&'a str, &'a str)>,
+    from: Option<Value>,
     system: bool,
 }
 
@@ -200,8 +303,8 @@ fn hold(
         if let Some(body) = message.body {
             note["body"] = json!(body);
         }
-        if let Some((project, session)) = message.from {
-            note["from"] = json!({ "projectId": project, "sessionId": session });
+        if let Some(from) = message.from {
+            note["from"] = from;
         }
         if message.system {
             note["system"] = json!(true);
@@ -271,7 +374,8 @@ pub(crate) fn is_held_with_next(
 pub(crate) fn held_note_message(note: &Value) -> String {
     let text = note["text"].as_str().unwrap_or_default();
     if note["system"] == json!(true) {
-        ghostex_gx_chat_core::session::appended_notes::with_system_notes("", &[text])
+        let text = ghostex_gx_chat_core::session::appended_notes::neutralised_held_note(text);
+        ghostex_gx_chat_core::session::appended_notes::with_system_notes("", &[&text])
             .trim()
             .to_string()
     } else {
@@ -283,11 +387,30 @@ pub(crate) fn held_note_message(note: &Value) -> String {
 /// (Claude Code), `None` for none. Each note sits between the tags the chat finds it by, to draw
 /// "2 held notes went in with this message" (gx-chat-core `appended_notes::held_notes_note`).
 pub(crate) fn held_notes_block(notes: &[Value]) -> Option<String> {
-    let texts: Vec<&str> = notes
-        .iter()
-        .filter_map(|note| note["text"].as_str())
-        .collect();
+    let texts: Vec<String> = notes.iter().filter_map(labelled).collect();
+    let texts: Vec<&str> = texts.iter().map(String::as_str).collect();
     ghostex_gx_chat_core::session::appended_notes::held_notes_note(&texts)
+}
+
+/// A held note's text with who sent it, where its own sender block does not say: a session's
+/// message carries that block, the user's own (from their terminal) and Ghostex's notice do not.
+fn labelled(note: &Value) -> Option<String> {
+    let text = note["text"].as_str()?.trim();
+    if text.is_empty() {
+        return None;
+    }
+    let computer = from_field(note, "computer").unwrap_or_else(|| "another computer".to_string());
+    Some(if note["system"] == json!(true) {
+        format!("From Ghostex: {text}")
+    } else if from_field(note, "sessionId").is_some() {
+        text.to_string()
+    } else if from_field(note, "serverId").is_some() {
+        format!("From Ghostex on {computer}: {text}")
+    } else {
+        format!(
+            "Held by the user from their own terminal (not part of their message above):\n\n{text}"
+        )
+    })
 }
 
 /// A held message dropped because its recipient was closed: who to tell, and what.
@@ -296,11 +419,22 @@ pub(crate) struct DroppedHeldNote {
     pub send_request_id: Option<String>,
 }
 
+/// A "Not delivered" notice for a sender on another computer (`server_id`), held there for its
+/// session by the delivery watch (server/agent_message_delivery_runtime.rs).
+pub(crate) struct RemoteNotice {
+    pub server_id: String,
+    pub sender: (String, String),
+    pub notice: String,
+}
+
 /// Drops what is held for sessions that were closed (stopped) or removed, and holds a "not
 /// delivered" note for each sending session that is still open, so it learns with its own next
 /// message. Returns the dropped messages that came from a session, for their chat cards.
-pub(crate) fn drop_held_for_closed_sessions(db: &rusqlite::Connection) -> Vec<DroppedHeldNote> {
+pub(crate) fn drop_held_for_closed_sessions(
+    db: &rusqlite::Connection,
+) -> (Vec<DroppedHeldNote>, Vec<RemoteNotice>) {
     let mut dropped = Vec::new();
+    let mut remote = Vec::new();
     let repository = DomainRepository::new(db, "");
     for ((project_id, session_id), held) in {
         let _lock = lock();
@@ -333,9 +467,13 @@ pub(crate) fn drop_held_for_closed_sessions(db: &rusqlite::Connection) -> Vec<Dr
             .map(|title| format!("\u{201c}{title}\u{201d} ({session_id})"))
             .unwrap_or_else(|| session_id.clone());
         for note in held {
-            let Some(sender) = note_sender(&note) else {
+            let remote_sender = from_field(&note, "serverId")
+                .zip(from_field(&note, "projectId"))
+                .zip(from_field(&note, "sessionId"))
+                .map(|((server, project), session)| (server, (project, session)));
+            if note_sender(&note).is_none() && remote_sender.is_none() {
                 continue;
-            };
+            }
             let words = note["body"]
                 .as_str()
                 .or_else(|| note["text"].as_str())
@@ -347,13 +485,25 @@ pub(crate) fn drop_held_for_closed_sessions(db: &rusqlite::Connection) -> Vec<Dr
                 start
             };
             let request_id = note["sendRequestId"].as_str().map(str::to_string);
-            let notice = format!(
-                "Not delivered: the message you sent with --with-next to {title}{} was dropped, because that session was closed before its next message. It began: \u{201c}{start}\u{201d}",
-                request_id
-                    .as_deref()
-                    .map(|id| format!(" (request id {id})"))
-                    .unwrap_or_default()
+            let notice = ghostex_gx_chat_core::session::appended_notes::neutralised_held_note(
+                &format!(
+                    "Not delivered: the message you sent with --with-next to {title}{} was dropped, because that session was closed before its next message. It began: \u{201c}{start}\u{201d}",
+                    request_id
+                        .as_deref()
+                        .map(|id| format!(" (request id {id})"))
+                        .unwrap_or_default()
+                ),
             );
+            let Some(sender) = note_sender(&note) else {
+                if let Some((server_id, sender)) = remote_sender {
+                    remote.push(RemoteNotice {
+                        server_id,
+                        sender,
+                        notice,
+                    });
+                }
+                continue;
+            };
             let _ = hold(
                 db,
                 &sender.0,
@@ -372,7 +522,7 @@ pub(crate) fn drop_held_for_closed_sessions(db: &rusqlite::Connection) -> Vec<Dr
             });
         }
     }
-    dropped
+    (dropped, remote)
 }
 
 /// Marks the sender's card for a held message that will not go: `failure` says why.
@@ -398,10 +548,14 @@ fn settle_card(
 }
 
 /// [`drop_held_for_closed_sessions`], with each dropped message's card marked not delivered.
-/// Returns the senders whose chat must be republished.
-pub(crate) fn settle_held_for_closed_sessions(db: &rusqlite::Connection) -> Vec<(String, String)> {
+/// Returns the senders whose chat must be republished, and the notices for senders on other
+/// computers.
+pub(crate) fn settle_held_for_closed_sessions(
+    db: &rusqlite::Connection,
+) -> (Vec<(String, String)>, Vec<RemoteNotice>) {
     let mut republish = Vec::new();
-    for dropped in drop_held_for_closed_sessions(db) {
+    let (dropped, remote) = drop_held_for_closed_sessions(db);
+    for dropped in dropped {
         let Some(id) = dropped.send_request_id.as_deref() else {
             continue;
         };
@@ -417,7 +571,7 @@ pub(crate) fn settle_held_for_closed_sessions(db: &rusqlite::Connection) -> Vec<
             republish.push(dropped.sender);
         }
     }
-    republish
+    (republish, remote)
 }
 
 fn param<'a>(body: &'a Value, field: &str) -> Option<&'a str> {
@@ -433,6 +587,7 @@ fn param<'a>(body: &'a Value, field: &str) -> Option<&'a str> {
 /// says when it went in, or that it did not.
 pub(crate) fn hold_with_next_response(
     state: &AppState,
+    caller: &crate::security::Principal,
     endpoint_path: &str,
     request_id: &str,
     body: &Value,
@@ -441,11 +596,14 @@ pub(crate) fn hold_with_next_response(
         return None;
     }
     let read = |field: &str| param(body, field);
-    let from = read("senderProjectId").zip(read("senderSessionId"));
     let held = match (read("projectId"), read("sessionId"), read("text")) {
-        (Some(project_id), Some(session_id), Some(text)) => open_gxserver_database(&state.paths)
-            .map_err(|error| DomainStateError::corrupt_state(error.to_string()))
-            .and_then(|db| {
+        (Some(project_id), Some(session_id), Some(text)) => HeldSender::of(caller, body)
+            .and_then(|sender| {
+                open_gxserver_database(&state.paths)
+                    .map_err(|error| DomainStateError::corrupt_state(error.to_string()))
+                    .map(|db| (db, sender))
+            })
+            .and_then(|(db, sender)| {
                 let send_request_id =
                     read(crate::session_chat_send_requests::SEND_REQUEST_ID_PARAM);
                 let (count, duplicate) = hold(
@@ -456,13 +614,17 @@ pub(crate) fn hold_with_next_response(
                         text,
                         body: read("body"),
                         request_id: send_request_id,
-                        from,
+                        from: sender.record(),
                         system: false,
                     },
                 )?;
-                if let (Some((sender_project, sender_session)), Some(id), false) =
-                    (from, send_request_id, duplicate)
+                // A session here is followed by the delivery watch; its card lives on this
+                // computer (a sender on another computer is told on its own: `RemoteNotice`).
+                if let (HeldSender::Session(sender_project, sender_session), Some(id), false) =
+                    (&sender, send_request_id, duplicate)
                 {
+                    let (sender_project, sender_session) =
+                        (sender_project.as_str(), sender_session.as_str());
                     let mut watch = Map::new();
                     for (key, value) in [
                         ("senderProjectId", sender_project),
@@ -516,18 +678,13 @@ fn listed(recipient: &(String, String), note: &Value) -> Value {
     })
 }
 
-/// Whether the caller may see or withdraw `note`: a session only what it sent, the user (no
-/// sender) everything.
-fn callers(note: &Value, caller: Option<&(String, String)>) -> bool {
-    caller.is_none_or(|caller| note_sender(note).as_ref() == Some(caller))
-}
-
-fn held_with_next(db: &rusqlite::Connection, body: &Value) -> Result<Value, DomainStateError> {
+fn held_with_next(
+    db: &rusqlite::Connection,
+    body: &Value,
+    caller: &HeldSender,
+) -> Result<Value, DomainStateError> {
     let recipient = param(body, "projectId")
         .zip(param(body, "sessionId"))
-        .map(|(project, session)| (project.to_string(), session.to_string()));
-    let caller = param(body, "senderProjectId")
-        .zip(param(body, "senderSessionId"))
         .map(|(project, session)| (project.to_string(), session.to_string()));
     match param(body, "action").unwrap_or("list") {
         "list" => {
@@ -538,12 +695,13 @@ fn held_with_next(db: &rusqlite::Connection, body: &Value) -> Result<Value, Doma
                         .iter()
                         .map(|note| listed(recipient, note))
                         .collect(),
-                    // No recipient: what the calling session holds anywhere on this computer.
+                    // No recipient: what the caller holds anywhere on this computer (the user:
+                    // everything held here).
                     None => read_all_held(db)
                         .iter()
                         .flat_map(|(recipient, held)| {
                             held.iter()
-                                .filter(|note| caller.is_some() && callers(note, caller.as_ref()))
+                                .filter(|note| caller.owns(note))
                                 .map(|note| listed(recipient, note))
                                 .collect::<Vec<_>>()
                         })
@@ -574,7 +732,7 @@ fn held_with_next(db: &rusqlite::Connection, body: &Value) -> Result<Value, Doma
                 let held = read_held(db, &recipient.0, &recipient.1);
                 let (withdrawn, kept): (Vec<Value>, Vec<Value>) =
                     held.into_iter().partition(|note| {
-                        callers(note, caller.as_ref())
+                        caller.owns(note)
                             && (all
                                 || note["sendRequestId"]
                                     .as_str()
@@ -619,13 +777,16 @@ fn held_with_next(db: &rusqlite::Connection, body: &Value) -> Result<Value, Doma
 /// withdraws the sender's own (the user's: any).
 pub(crate) fn handle_held_with_next_http(
     state: &AppState,
+    caller: &crate::security::Principal,
     endpoint_path: String,
     request_id: String,
     body: &Value,
 ) -> RoutedResponse {
-    let result = open_gxserver_database(&state.paths)
-        .map_err(|error| DomainStateError::corrupt_state(error.to_string()))
-        .and_then(|db| held_with_next(&db, body));
+    let result = HeldSender::of(caller, body).and_then(|sender| {
+        open_gxserver_database(&state.paths)
+            .map_err(|error| DomainStateError::corrupt_state(error.to_string()))
+            .and_then(|db| held_with_next(&db, body, &sender))
+    });
     match result {
         Ok(answer) => routed_json(
             Some(endpoint_path),
