@@ -404,8 +404,10 @@ fn dirty_build_inputs() -> Res<Vec<String>> {
 
 fn is_build_input(path: &str) -> bool {
     const NOT_BUILT: [&str; 5] = ["ai/", "docs/", ".github/", "apps/mobile/", "apps/gpui-web/"];
-    // Markdown under skills/ is bundled and compiled in (include_str!); everywhere else it is notes.
-    let notes = path.ends_with(".md") && !path.starts_with("skills/");
+    // Markdown under skills/ is bundled, and under server/src/ compiled in (include_str!: the
+    // guides `ghostex … guide` prints, CDXC:AgentSkills 2026-11-20); everywhere else it is notes.
+    let notes =
+        path.ends_with(".md") && !path.starts_with("skills/") && !path.starts_with("server/src/");
     !notes && !NOT_BUILT.iter().any(|prefix| path.starts_with(prefix))
 }
 
