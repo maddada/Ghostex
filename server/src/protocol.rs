@@ -684,6 +684,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/stopSessionBackgroundTask"
         // CDXC:SessionChat 2026-11-17 WHY: remote-allowed like readSessionDetails: the checkout, the box record and the terminal backend the where pill reads live on the machine that runs the session (session_where.rs).
         | "/api/readSessionWhere"
+        // CDXC:AgentProviders 2026-11-20 WHY: remote-allowed like readSessionWhere: the model picker's Fetch latest models reads the agent CLI of the machine that runs the session and serves its lineup (agent_model_catalog.rs). It carries only an agent id.
+        | "/api/refreshAgentModelLineup"
         // CDXC:SessionChat 2026-11-14 WHY: remote-allowed like reloadSessionAgent: the Mode menu's "Restart in Bypass when idle" restarts the agent on the machine that runs it; it carries only ids, the mode and on or off (session_chat_mode_restart.rs).
         | "/api/restartSessionInMode"
         | "/api/readSessionChatSkills"

@@ -55,14 +55,15 @@ fn ranked(mut efforts: Vec<String>) -> Vec<String> {
 }
 
 /// Asks the agent's CLI for its lineup, as a catalog agent entry; `None` while the CLI is missing,
-/// logged out, or prints no model. `cache_dir` keeps the picker reads (one per CLI version).
-pub(crate) fn read_lineup(agent: &str, cache_dir: &std::path::Path) -> Option<Value> {
+/// logged out, or prints no model. `cache_dir` keeps the picker reads (one per CLI version);
+/// `fresh` reads the picker again even so (the model picker's Fetch latest models).
+pub(crate) fn read_lineup(agent: &str, cache_dir: &std::path::Path, fresh: bool) -> Option<Value> {
     if agent == "opencode" {
         return opencode_lineup();
     }
     let home = crate::resume_lookup::home_dir();
     if agent == "claude" {
-        let picker = crate::agent_model_pickers::picker_rows(agent, &home, cache_dir)?;
+        let picker = crate::agent_model_pickers::picker_rows(agent, &home, cache_dir, fresh)?;
         let published = crate::agent_model_catalog::published_agent(agent)?;
         return crate::agent_model_pickers::claude_lineup(&picker, &published);
     }
@@ -85,7 +86,7 @@ pub(crate) fn read_lineup(agent: &str, cache_dir: &std::path::Path) -> Option<Va
     // Cursor's and Antigravity's lists differ from their pickers in order and rows (Q2983, Q2986).
     let entry = match agent {
         "cursor" | "antigravity" => {
-            match crate::agent_model_pickers::picker_rows(agent, &home, cache_dir) {
+            match crate::agent_model_pickers::picker_rows(agent, &home, cache_dir, fresh) {
                 Some(picker) => crate::agent_model_pickers::order_by_picker(
                     agent,
                     entry,

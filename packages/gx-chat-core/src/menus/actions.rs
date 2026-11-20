@@ -23,6 +23,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         | ActionKind::ModelMenuFavorite
         | ActionKind::ModelMenuPick
         | ActionKind::ModelMenuTrait
+        | ActionKind::ModelMenuRefresh
         | ActionKind::SelectForkBranch => crate::menus::picker::handle(state, action, context),
 
         ActionKind::ContextEdit

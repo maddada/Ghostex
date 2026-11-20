@@ -78,6 +78,8 @@ pub struct ModelMenuView {
     pub query: String,
     /// Whether the open tab lists its Legacy models below the current ones.
     pub legacy_open: bool,
+    /// The agent whose list Fetch latest models is reading again (`picker/refresh.rs`).
+    pub refreshing: Option<ModelPickerProvider>,
 }
 
 /// One model choice as family e1's session option catalog lists it.

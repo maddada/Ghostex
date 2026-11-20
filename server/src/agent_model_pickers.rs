@@ -100,9 +100,16 @@ fn program_name(agent: &str) -> Option<&'static str> {
 }
 
 /// The agent's picker rows for the installed CLI version: the cached read when the version is the
-/// one it was read on, else a fresh read (cached on success). `None` while the CLI is missing,
-/// signed out, or its picker could not be read.
-pub(crate) fn picker_rows(agent: &str, home: &Path, cache_dir: &Path) -> Option<Vec<PickerRow>> {
+/// one it was read on, else a fresh read (cached on success). `fresh` reads the picker again even
+/// when the cached read is of this version (the model picker's Fetch latest models), keeping the
+/// cached read when the new one fails. `None` while the CLI is missing, signed out, or its picker
+/// could not be read.
+pub(crate) fn picker_rows(
+    agent: &str,
+    home: &Path,
+    cache_dir: &Path,
+    fresh: bool,
+) -> Option<Vec<PickerRow>> {
     let program = crate::agent_hooks::probing::resolve_probe_command(program_name(agent)?, home)?;
     let version = cli_version(agent, &program, home)?;
     let cache_path = cache_dir.join("agent-model-pickers.json");
@@ -110,24 +117,27 @@ pub(crate) fn picker_rows(agent: &str, home: &Path, cache_dir: &Path) -> Option<
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
         .unwrap_or_default();
-    if let Some(saved) = cache
+    let cached: Option<Vec<PickerRow>> = cache
         .get(agent)
         .filter(|saved| saved.get("version").and_then(Value::as_str) == Some(version.as_str()))
-    {
-        let rows: Vec<PickerRow> = saved
-            .get("rows")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(PickerRow::from_json)
-            .collect();
-        if !rows.is_empty() {
-            return Some(rows);
-        }
+        .map(|saved| {
+            saved
+                .get("rows")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(PickerRow::from_json)
+                .collect::<Vec<_>>()
+        })
+        .filter(|rows| !rows.is_empty());
+    if !fresh && cached.is_some() {
+        return cached;
     }
     let scratch = cache_dir.join("model-picker-scratch");
     std::fs::create_dir_all(&scratch).ok()?;
-    let rows = read_picker(agent, &program, &scratch).filter(|rows| !rows.is_empty())?;
+    let Some(rows) = read_picker(agent, &program, &scratch).filter(|rows| !rows.is_empty()) else {
+        return cached;
+    };
     cache.insert(
         agent.to_string(),
         json!({

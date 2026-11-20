@@ -17,6 +17,7 @@ pub mod js;
 pub mod model_menu;
 pub mod model_picker;
 pub mod projection;
+pub mod refresh;
 pub mod selection;
 pub mod settle;
 pub mod traits;

@@ -69,6 +69,8 @@ pub struct PickersState {
     pub model_hold: Option<crate::menus::picker::hold_card::ModelHoldMemo>,
     /// An OpenCode model picked in a draft running another agent, waiting for the switch to land.
     pub draft_handoff_model: Option<DraftHandoffModel>,
+    /// The model picker's Fetch latest models request in flight (`menus/picker/refresh.rs`).
+    pub model_menu_refresh: Option<u64>,
 }
 
 /// A model the draft's next agent starts on, queued once the chat reads the session as that

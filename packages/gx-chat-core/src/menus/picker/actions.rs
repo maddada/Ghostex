@@ -24,6 +24,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         ActionKind::ModelMenuFavorite => model_menu_favorite(state, action),
         ActionKind::ModelMenuPick => model_menu_pick_action(state, action, context),
         ActionKind::ModelMenuTrait => model_menu_trait(state, action),
+        ActionKind::ModelMenuRefresh => crate::menus::picker::refresh::refresh(state, action),
         ActionKind::SelectForkBranch => vec![Effect::HostAction {
             action: "selectForkBranch".to_string(),
             params: Box::new(Value::Object(action.params.clone())),

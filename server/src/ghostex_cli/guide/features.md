@@ -3232,7 +3232,12 @@ with matching starred models still first. Older versions of a model (GPT 6 Sol
 once GPT 6.1 Sol is out, for example) sit under Legacy models at the bottom of
 the tab; click it (or reach it with the arrow keys and press Enter or Right) to show them. A starred legacy model also stands at the top of the list and stays in this list with its star lit. Codex,
 Cursor, Grok Build, Antigravity and OpenCode's lists come from the agent installed on that computer, so
-new models show up without a Ghostex update. The OpenCode tab is there in every
+new models show up without a Ghostex update. Ghostex reads them again every ten
+minutes; to see a model the agent just added (after the agent updated itself,
+for example) right away, click the refresh button at the right end of the
+search field (Fetch latest models). The list updates in place and keeps your
+search text; on the tab of an agent whose list Ghostex keeps itself, the button
+is dimmed. The OpenCode tab is there in every
 thread and lists the models of the providers you set up in OpenCode; an OpenCode
 thread lists the ones its own folder can use. Click a row's star to keep that
 model on the Favorites tab; hover the info icon that appears on a row to read

@@ -162,6 +162,15 @@ pub(super) async fn route_chat_http(
             )
             .await
         }
+        "/api/refreshAgentModelLineup" => {
+            crate::agent_model_catalog::handle_refresh_agent_model_lineup_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
         "/api/readSessionWhere" => {
             crate::session_where::handle_read_session_where_http(
                 &state,

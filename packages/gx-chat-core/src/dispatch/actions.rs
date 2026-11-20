@@ -175,6 +175,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::ModelMenuFavorite
         | ActionKind::ModelMenuPick
         | ActionKind::ModelMenuTrait
+        | ActionKind::ModelMenuRefresh
         | ActionKind::Accounts
         | ActionKind::SwitchDraftAgent
         | ActionKind::SwitchDraftRunLocation
