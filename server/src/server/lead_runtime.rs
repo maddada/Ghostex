@@ -112,6 +112,29 @@ fn lead_turn_rows(cache: &mut TurnCache, session: &Value, owed_ms: i64) -> Vec<T
     cache.rows.clone()
 }
 
+/// The openings of user rows nobody typed: Ghostex's notes, a slash command's echo and output, a
+/// background job's notice. Anything else is a message, even one that starts with a tag
+/// (`<task>…`).
+///
+/// CDXC:LeadLinks 2026-11-20 FIX: Opus re-review of #678: every user row starting with `<` was
+/// skipped, so a lead message that opened with a tag was never matched and its turn never
+/// reported.
+const WRAPPER_OPENINGS: &[&str] = &[
+    "<ghostex-system>",
+    "<command-name>",
+    "<command-message>",
+    "<command-args>",
+    "<local-command",
+    "<task-notification>",
+    "<system-reminder>",
+];
+
+fn is_wrapper(text: &str) -> bool {
+    WRAPPER_OPENINGS
+        .iter()
+        .any(|opening| text.starts_with(opening))
+}
+
 /// A transcript's rows as `lead_turn_reply` reads them: what someone typed (a tool result, a
 /// background job's notice or a Ghostex note is nobody's message) and the agent's words.
 fn turn_rows(messages: &[crate::session_chat::SessionChatMessage]) -> Vec<TurnRow> {
@@ -131,13 +154,11 @@ fn turn_rows(messages: &[crate::session_chat::SessionChatMessage]) -> Vec<TurnRo
                 .collect::<Vec<_>>()
                 .join("\n\n");
             match message.role {
-                SessionChatRole::User if !text.is_empty() && !text.starts_with('<') => {
-                    Some(TurnRow {
-                        user: true,
-                        text,
-                        at: message.timestamp,
-                    })
-                }
+                SessionChatRole::User if !text.is_empty() && !is_wrapper(&text) => Some(TurnRow {
+                    user: true,
+                    text,
+                    at: message.timestamp,
+                }),
                 SessionChatRole::Assistant if !text.is_empty() => Some(TurnRow {
                     user: false,
                     text,
