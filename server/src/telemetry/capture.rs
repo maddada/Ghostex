@@ -191,14 +191,19 @@ pub fn sidebar_layout_changed(layout: &'static str, source: &'static str) {
     );
 }
 
-/// The one-time Meet the rail intro was answered: the layouts tried in it and the one kept.
-pub fn rail_intro_answered(tried: &'static str, chose: &'static str) {
+/// The one-time Meet the rail pop-up opened on `layout`.
+pub fn rail_intro_shown(layout: &'static str) {
+    capture(
+        taxonomy::EVENT_RAIL_INTRO_SHOWN,
+        &[("layout", PropertyValue::Enum(layout))],
+    );
+}
+
+/// The Meet the rail pop-up closed keeping `chose`.
+pub fn rail_intro_answered(chose: &'static str) {
     capture(
         taxonomy::EVENT_RAIL_INTRO_ANSWERED,
-        &[
-            ("tried", PropertyValue::Enum(tried)),
-            ("chose", PropertyValue::Enum(chose)),
-        ],
+        &[("chose", PropertyValue::Enum(chose))],
     );
 }
 

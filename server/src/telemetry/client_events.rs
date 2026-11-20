@@ -22,7 +22,7 @@ use super::{
     extensions::{self, ExtensionRef},
     taxonomy::{
         self, EVENT_APP_LAUNCHED, EVENT_CLIENT_CONNECTED, EVENT_RAIL_INTRO_ANSWERED,
-        EVENT_SIDEBAR_LAYOUT_CHANGED, EVENT_SURFACE_OPENED,
+        EVENT_RAIL_INTRO_SHOWN, EVENT_SIDEBAR_LAYOUT_CHANGED, EVENT_SURFACE_OPENED,
     },
 };
 
@@ -56,11 +56,14 @@ pub fn record_client_event(body: &Value) {
                 capture::sidebar_layout_changed(layout, source);
             }
         }
+        EVENT_RAIL_INTRO_SHOWN => {
+            if let Some(layout) = enum_property(properties, "layout", taxonomy::SIDEBAR_LAYOUTS) {
+                capture::rail_intro_shown(layout);
+            }
+        }
         EVENT_RAIL_INTRO_ANSWERED => {
-            let tried = enum_property(properties, "tried", taxonomy::RAIL_INTRO_TRIED);
-            let chose = enum_property(properties, "chose", taxonomy::SIDEBAR_LAYOUTS);
-            if let (Some(tried), Some(chose)) = (tried, chose) {
-                capture::rail_intro_answered(tried, chose);
+            if let Some(chose) = enum_property(properties, "chose", taxonomy::SIDEBAR_LAYOUTS) {
+                capture::rail_intro_answered(chose);
             }
         }
         _ => {}

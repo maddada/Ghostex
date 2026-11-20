@@ -220,12 +220,16 @@ pub(crate) fn record_gpui_sidebar_layout_changed_telemetry(
     );
 }
 
-/// The one-time Meet the rail intro was answered: `tried` is "none", "rail", "classic" or
-/// "both", `chose` the layout kept.
-pub(crate) fn record_gpui_rail_intro_answered_telemetry(tried: &'static str, chose: &'static str) {
+/// Meet the rail opened, on `layout` ("rail" or "classic").
+pub(crate) fn record_gpui_rail_intro_shown_telemetry(layout: &'static str) {
+    record_gpui_client_event_on_thread("rail_intro.shown", serde_json::json!({ "layout": layout }));
+}
+
+/// Meet the rail closed (Done, Escape or its corner) keeping `layout`.
+pub(crate) fn record_gpui_rail_intro_answered_telemetry(layout: &'static str) {
     record_gpui_client_event_on_thread(
         "rail_intro.answered",
-        serde_json::json!({ "tried": tried, "chose": chose }),
+        serde_json::json!({ "chose": layout }),
     );
 }
 
