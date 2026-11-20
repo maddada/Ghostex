@@ -329,6 +329,12 @@ impl AgentsTab {
                 let rows = self.claude_context_rows(p, window, cx);
                 children.extend(rows.into_iter().map(panel_child));
             }
+            // What a message sent to a busy OMP or Pi does (pi_messages.rs).
+            if super::pi_messages::is_pi_like(agent) {
+                children.push(group_title(p, "Messages"));
+                let row = self.pi_messages_row(p, &agent_id, window, cx);
+                children.push(panel_child(row));
+            }
         } else {
             children.push(off_note(p, &agent.name));
         }

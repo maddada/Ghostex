@@ -683,6 +683,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("claudeIdleCompactAbove", J::Str("200000")),
     ("claudeOneHourPromptCache", J::Bool(false)),
     ("compactWorkersBeforeReturn", J::Bool(true)),
+    // CDXC:AgentProviders 2026-11-20 SEE-ALSO: a message sent to a busy OMP or Pi steers it, as Enter does in its own terminal (server/src/session_chat_queue_runtime/pi_channel_send.rs, where the user's decision is).
+    ("piMessagesWhileWorking", J::Str("steer")),
     // CDXC:VoiceMode 2026-10-20 WHY:
     // xAI is the default provider: Grok Voice is billed per minute at a known price, and Grok dictation already needs the xAI key. Each provider keeps its own voice; the API keys are not settings (gxserver seals them, see server/src/voice_agent/keys.rs).
     ("voiceAgentProvider", J::Str("xai")),

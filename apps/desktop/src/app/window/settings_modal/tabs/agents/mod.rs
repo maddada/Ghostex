@@ -20,6 +20,7 @@ mod inline_input;
 pub(crate) mod logos;
 mod model;
 mod panel;
+mod pi_messages;
 mod remote_hooks;
 mod remote_machine;
 mod roster;
@@ -98,6 +99,9 @@ pub(crate) struct AgentsTab {
     /// A search found a row of Claude Code's Context group, so its panel shows open
     /// (claude_context.rs `search_opens_claude`).
     search_opens_claude: bool,
+    /// A search found Messages sent while it works, so OMP's and Pi's panels show open
+    /// (pi_messages.rs `search_opens_pi`).
+    search_opens_pi: bool,
     /// `draftAgentIds`: the order after a drop, until the synced roster catches up.
     draft_agent_ids: Option<Vec<String>>,
     synced_agent_ids: Vec<String>,
@@ -187,6 +191,7 @@ impl AgentsTab {
             hook_status_loading: false,
             expanded: Vec::new(),
             search_opens_claude: false,
+            search_opens_pi: false,
             draft_agent_ids: None,
             synced_agent_ids: Vec::new(),
             editor: None,
@@ -465,6 +470,7 @@ impl Render for AgentsTab {
             )
         };
         self.search_opens_claude = claude_context::search_opens_claude(&search);
+        self.search_opens_pi = pi_messages::search_opens_pi(&search);
         let mut blocks: Vec<PageBlock> = Vec::new();
         if search.tab.is_searching && !search.tab.has_visible() {
             let store = self.store.clone();
