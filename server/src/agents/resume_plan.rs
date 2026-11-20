@@ -377,6 +377,8 @@ pub(crate) fn to_agent_resume_input(
         let command = super::with_claude_bypass_consent(agent_id.as_deref(), &command);
         // Claude's idle compaction and cache length from Settings (claude_idle_compaction.rs).
         let command = super::with_claude_compaction_settings(agent_id.as_deref(), &command);
+        // A named effort level starts with Claude's Ultracode switch off (claude_launch_ultracode.rs).
+        let command = super::with_claude_launch_ultracode(agent_id.as_deref(), &command);
         // Ghostex's skills, slash-only for a Claude Ghostex didn't start, back on for the model
         // here (agent_skills_session.rs).
         let command =

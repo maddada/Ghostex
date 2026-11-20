@@ -5,7 +5,9 @@ use super::*;
 /// CDXC:SessionChat 2026-09-26 WHY:
 /// Verified live on Claude Code 2.1.283 (Windows): bare `/effort` opens a slider whose footer reads "←/→ to adjust · Enter to confirm · s for this session only · Esc to cancel", and `s` answered "Set effort level to xhigh (this session only)" with `~/.claude/settings.json` byte-identical afterwards. The `/model` list can only set effort on the row it applies, and 2.1.283 lists no row for a session started on `opus[1m]`, so every effort change from chat on such a session failed and snapped back.
 pub(super) const CLAUDE_EFFORT_COMMAND: &str = "/effort";
-const CLAUDE_EFFORT_SLIDER_FOOTER: &str = "s for this session only";
+/// The slider's footer starts with this; the `/model` list says "←/→ to adjust" on its effort row.
+const CLAUDE_EFFORT_SLIDER_ADJUST: &str = "←/→ to adjust";
+const CLAUDE_EFFORT_SLIDER_SESSION_ONLY: &str = "session only";
 const CLAUDE_EFFORT_SLIDER_MARKER: char = '\u{25b2}';
 const CLAUDE_EFFORT_APPLIED_PREFIX: &str = "⎿ Set effort level to ";
 const CLAUDE_EFFORT_SESSION_ONLY: &str = "(this session only)";
@@ -30,7 +32,7 @@ pub(super) struct ClaudeEffortSlider {
 }
 
 /// `Ultracode  on` → `Some(true)`; the description line "Ultracode: dynamic workflows…" is not it.
-fn ultracode_switch(line: &str) -> Option<bool> {
+pub(crate) fn ultracode_switch(line: &str) -> Option<bool> {
     line.match_indices(CLAUDE_ULTRACODE_SWITCH)
         .find_map(|(index, _)| {
             let rest = &line[index + CLAUDE_ULTRACODE_SWITCH.len()..];
@@ -45,6 +47,12 @@ fn ultracode_switch(line: &str) -> Option<bool> {
         })
 }
 
+/// CDXC:SessionChat 2026-11-20 WHY:
+/// GitHub #694. Claude Code 2.1.329 reworded the slider's footer from "←/→ to adjust · Enter to confirm · s for this session only · Esc to cancel" to "←/→ to adjust · s to use this session only · Enter to save · Esc to cancel", and to "←/→ to adjust · Enter to use this session only · Esc to cancel" once Tab has flipped the Ultracode switch (`s` still applies it for this session only; verified live). Matching the old words left the slider unreadable: every chat effort pick that goes through it, and the Ultracode check after a session-only model pick, timed out ("did not confirm the model picker's open Claude effort slider step in time") and pressed Escape, so a new session's effort and Ultracode never changed. Every build's footer has the adjust hint and a session-only key on one line; the `/model` list puts "←/→ to adjust" on its effort row instead.
+pub(crate) fn is_claude_effort_slider_footer(line: &str) -> bool {
+    line.contains(CLAUDE_EFFORT_SLIDER_ADJUST) && line.contains(CLAUDE_EFFORT_SLIDER_SESSION_ONLY)
+}
+
 /// Only the footer at the tail proves the slider is open now; history keeps an old one visible.
 pub(super) fn claude_effort_slider_open(screen: &str) -> bool {
     screen_lines(screen)
@@ -52,7 +60,7 @@ pub(super) fn claude_effort_slider_open(screen: &str) -> bool {
         .rev()
         .filter(|line| !line.trim().is_empty())
         .take(CLAUDE_PICKER_TAIL_LINES)
-        .any(|line| line.contains(CLAUDE_EFFORT_SLIDER_FOOTER) && line.contains("Enter to confirm"))
+        .any(|line| is_claude_effort_slider_footer(line))
 }
 
 /// Reads the slider off its columns: the marker row sits right above the level labels, and the
@@ -64,7 +72,7 @@ pub(super) fn claude_effort_slider(screen: &str) -> Option<ClaudeEffortSlider> {
     let lines = screen_lines_spaced(screen);
     let footer = lines
         .iter()
-        .rposition(|line| line.contains(CLAUDE_EFFORT_SLIDER_FOOTER))?;
+        .rposition(|line| is_claude_effort_slider_footer(line))?;
     // CDXC:SessionChat 2026-09-29 WHY:
     // Claude Code 2.1.284 ends the label row with "Tab to toggle" for its Ultracode switch, so only
     // the leading run of level names is the rail. Requiring every word to be a level left the
@@ -74,24 +82,38 @@ pub(super) fn claude_effort_slider(screen: &str) -> Option<ClaudeEffortSlider> {
         .rev()
         .take(6)
         .find(|&index| rail_words(&lines[index]).len() >= 2)?;
-    let marker = lines[labels_index.checked_sub(1)?]
-        .chars()
-        .position(|ch| ch == CLAUDE_EFFORT_SLIDER_MARKER)?;
-    let (levels, centres): (Vec<String>, Vec<usize>) =
-        rail_words(&lines[labels_index]).into_iter().unzip();
+    let (levels, current) =
+        claude_effort_rail(&lines[labels_index.checked_sub(1)?], &lines[labels_index])?;
     let ultracode = lines[labels_index.saturating_sub(1)..footer]
         .iter()
         .find_map(|line| ultracode_switch(line));
-    let current = centres
-        .iter()
-        .enumerate()
-        .min_by_key(|(_, centre)| centre.abs_diff(marker))?
-        .0;
     Some(ClaudeEffortSlider {
         levels,
         current,
         ultracode,
     })
+}
+
+/// The level names of a label row and the index of the one the marker row's `▲` stands over
+/// (the label whose centre is nearest it). The two rows must keep their columns: a marker row
+/// above a label row as the terminal paints them, indent included.
+pub(crate) fn claude_effort_rail(
+    marker_row: &str,
+    labels_row: &str,
+) -> Option<(Vec<String>, usize)> {
+    let marker = marker_row
+        .chars()
+        .position(|ch| ch == CLAUDE_EFFORT_SLIDER_MARKER)?;
+    let (levels, centres): (Vec<String>, Vec<usize>) = rail_words(labels_row).into_iter().unzip();
+    if levels.len() < 2 {
+        return None;
+    }
+    let current = centres
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, centre)| centre.abs_diff(marker))?
+        .0;
+    Some((levels, current))
 }
 
 /// The leading level names of a label row, each with the column of its centre.

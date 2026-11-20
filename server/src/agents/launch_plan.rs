@@ -529,9 +529,17 @@ pub(crate) fn create_agent_session_params_for_project(
                             command.to_string(),
                             // Ghostex's skills, slash-only for a Claude Ghostex didn't start,
                             // back on for the model here (agent_skills_session.rs).
+                            // and a named effort level's Ultracode switch off
+                            // (claude_launch_ultracode.rs).
                             crate::agent_skills_session::with_ghostex_skills_on(
                                 family.as_deref(),
-                                &super::with_claude_compaction_settings(family.as_deref(), command),
+                                &super::with_claude_launch_ultracode(
+                                    family.as_deref(),
+                                    &super::with_claude_compaction_settings(
+                                        family.as_deref(),
+                                        command,
+                                    ),
+                                ),
                             ),
                         )
                     })

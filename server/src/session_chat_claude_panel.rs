@@ -808,6 +808,35 @@ fn panel_blocks(rows: &[Row]) -> Option<Vec<Value>> {
             structured = true;
             continue;
         }
+        /*
+        CDXC:SessionChat 2026-11-20 WHY:
+        GitHub #694: "The slider sits past `max`". Claude's `/effort` rail ("─────▲────") went into the code font and its level row ("low  medium  high  xhigh  max") into the text font, so the marker stood over the wrong word (xhigh read as past max). The two rows become one tab strip with the level under the marker selected, read the way the slider driver reads it (session_chat_claude_effort_slider.rs); a click on another level moves the marker that many steps (`selectTab`), and the "Faster … Smarter" ends above it go with it.
+        */
+        if line.contains('▲') && is_drawing(line) {
+            if let Some((levels, current)) = body.get(index).and_then(|labels| {
+                crate::session_chat_codex_picker::claude_effort_rail(&row.plain, &labels.plain)
+            }) {
+                flush_pre(&mut pre, &mut blocks);
+                let faster_smarter = blocks.last().is_some_and(|block| {
+                    block["type"] == "table"
+                        && block["rows"]
+                            .as_array()
+                            .is_some_and(|rows| rows.len() == 1 && rows[0]["key"] == "Faster")
+                });
+                if faster_smarter {
+                    blocks.pop();
+                }
+                let tabs: Vec<Value> = levels
+                    .iter()
+                    .enumerate()
+                    .map(|(at, level)| json!({ "label": level, "selected": at == current }))
+                    .collect();
+                blocks.push(json!({ "type": "tabs", "title": "Effort", "tabs": tabs }));
+                index += 1;
+                structured = true;
+                continue;
+            }
+        }
         if is_drawing(line) {
             pre.push(row.plain.clone());
             continue;

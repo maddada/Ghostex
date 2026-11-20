@@ -492,10 +492,25 @@ pub fn detect_claude_dialog(text: &str) -> Option<TerminalDialog> {
     if lower.contains("tab") {
         actions.push("tab");
     }
+    /*
+    CDXC:SessionChat 2026-11-20 WHY:
+    GitHub #694: "Ultracode can't be turned off". Claude Code's `/effort` slider (2.1.284 on) draws an Ultracode switch beside its rail with "Tab to toggle" on the level row, not in the footer, so the card never had a key for it and Ultracode stayed on in every new session. The switch's state picks the button's words; both send Tab.
+    */
+    if remainder.iter().any(|line| line.contains("Tab to toggle")) {
+        if let Some(on) = remainder
+            .iter()
+            .find_map(|line| crate::session_chat_codex_picker::claude_ultracode_switch(line))
+        {
+            actions.push(if on { "ultracodeOff" } else { "ultracodeOn" });
+        }
+    }
     if lower.contains("space") {
         actions.push("toggle");
     }
-    if lower.contains("session only") {
+    // `s` applies the pick for this session only ("s to use this session only", older "s for this
+    // session only"); a footer whose Enter does that ("Enter to use this session only", the
+    // slider once its Ultracode switch moved) has only Confirm for it.
+    if lower.contains("s to use this session only") || lower.contains("s for this session only") {
         actions.push("sessionOnly");
     }
     if lower.contains("ctrl+a") {
@@ -685,7 +700,7 @@ pub(crate) fn claude_dialog_steps(
                 "down" => "\x1b[1;1B",
                 "left" => "\x1b[1;1D",
                 "right" => "\x1b[1;1C",
-                "tab" => "\t",
+                "tab" | "ultracodeOn" | "ultracodeOff" => "\t",
                 "toggle" => " ",
                 "confirm" => "\r",
                 "sessionOnly" => "s",
