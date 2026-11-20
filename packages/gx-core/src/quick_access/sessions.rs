@@ -661,7 +661,13 @@ fn session_icon(session: &dyn SessionFields, catalog: &TagCatalog) -> QuickAcces
     if agentless && terminal_kind {
         return QuickAccessIcon::asset("terminal-2", None);
     }
-    QuickAccessIcon::None
+    // CDXC:QuickAccess 2026-11-20 DECISION: User: "where some rows have icons, all do". A browser
+    // page without a favicon and an agent whose logo is not in the table drew an empty slot among
+    // rows that have one; they take the world and robot glyphs the app uses for those.
+    if session.field("sessionKind") == Some("browser") {
+        return QuickAccessIcon::asset("world", None);
+    }
+    QuickAccessIcon::asset("robot", None)
 }
 
 /// `buildSessionGroups`.
