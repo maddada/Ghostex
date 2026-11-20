@@ -327,7 +327,14 @@ pub(crate) fn plan(
                 warnings.push(message);
             }
         }
-        Err(()) => warnings.push("Ghostex couldn't finish checking which programs have files open in the folder (lsof took too long). Close editors using it before the move.".to_string()),
+        // A move it couldn't vouch for is refused, as with cloud files it can't check.
+        Err(()) => {
+            let message = "Ghostex couldn't finish checking which programs have files open in the folder (lsof took too long). Close editors using it, then try again; --force-open-files moves it anyway.".to_string();
+            if !dry_run && !force_open_files {
+                return Err(refuse(message));
+            }
+            warnings.push(message);
+        }
     }
     // Ghostex's own Files editor: unsaved changes would be saved into the old path.
     let editor = ghostex_editor_files(&project_ids);

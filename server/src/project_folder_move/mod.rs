@@ -301,7 +301,7 @@ pub(crate) fn resume(
     let _one_move = registry::lock_moves()?;
     let journal = journal::read_journal(&paths.root_dir, project_id)
         .ok_or_else(|| DomainStateError::not_found("This project has no unfinished move."))?;
-    match next_step(journal) {
+    match next_step(journal.clone()) {
         Next::Finish(journal) => {
             // Its own entry (left by the startup recovery or a failed record) is replaced; one
             // that overlaps another unfinished move is refused and the block kept.
@@ -316,11 +316,41 @@ pub(crate) fn resume(
         Next::Forget => {
             journal::remove_journal(&paths.root_dir, project_id);
             registry::end_moving(project_id);
-            Ok((json!({ "projectId": project_id, "forgotten": true, "notes": ["The folder never moved, so there was nothing to finish."] }), Vec::new()))
+            Ok((
+                json!({ "projectId": project_id, "forgotten": true, "notes": ["The folder never moved, so there was nothing to finish."] }),
+                Vec::new(),
+            ))
         }
         Next::Stuck(why) => Err(conflict(format!(
-            "The move can't be finished on its own: {why}. Put the folder back at one of the two paths, then run --resume again, or --abandon."
+            "The move can't be finished on its own: {why}. {}",
+            stuck_by_hand(&journal)
         ))),
+    }
+}
+
+/// The shell's move command, for the steps a user takes by hand.
+fn move_command() -> &'static str {
+    if cfg!(windows) {
+        "move"
+    } else {
+        "mv"
+    }
+}
+
+/// What to do by hand when the disk can't say whether the move happened: both folders exist, or
+/// neither.
+fn stuck_by_hand(journal: &Journal) -> String {
+    let (old, new) = (&journal.old_path, &journal.new_path);
+    let mv = move_command();
+    let id = &journal.project_id;
+    if std::path::Path::new(old).exists() {
+        format!(
+            "Look in both {old} and {new} and keep the one holding the project. If that is {new}, rename the other aside ({mv} \"{old}\" \"{old}.leftover\") and run ghostex move-project-folder --project-id {id} --resume to finish the move. If it is {old}, rename {new} aside ({mv} \"{new}\" \"{new}.leftover\") and run --resume, which then forgets the move and leaves the project at {old}."
+        )
+    } else {
+        format!(
+            "Find the project's folder and move it back by hand ({mv} \"<where it is>\" \"{old}\"), then run ghostex move-project-folder --project-id {id} --resume, which forgets the move; or move it to {new} and run --resume to finish the move."
+        )
     }
 }
 
@@ -332,9 +362,14 @@ pub(crate) fn abandon(paths: &GxserverPaths, project_id: &str) -> Result<Value, 
     let journal = journal::read_journal(&paths.root_dir, project_id)
         .ok_or_else(|| DomainStateError::not_found("This project has no unfinished move."))?;
     if let Next::Finish(_) = next_step(journal.clone()) {
+        let (old, new) = (&journal.old_path, &journal.new_path);
+        let undo = if matches!(journal.phase, Phase::Planned | Phase::Moved) {
+            format!("To undo it instead, move the folder back by hand ({} \"{new}\" \"{old}\"), then run --abandon.", move_command())
+        } else {
+            format!("Ghostex already names the new folder, so to undo it, finish it with --resume, then move it back with ghostex move-project-folder --project-id {project_id} \"{old}\".")
+        };
         return Err(conflict(format!(
-            "This move can still be finished: the folder is at {}. Run ghostex move-project-folder --project-id {project_id} --resume instead.",
-            journal.new_path
+            "This move can still be finished: the folder is at {new}. Run ghostex move-project-folder --project-id {project_id} --resume instead. {undo}"
         )));
     }
     journal::remove_journal(&paths.root_dir, project_id);
@@ -422,12 +457,45 @@ mod tests {
         .unwrap();
         let refused = abandon(&paths, project_id).unwrap_err();
         assert!(refused.message.contains("--resume"), "{}", refused.message);
+        let undo = format!(
+            "move the folder back by hand ({} \"{}\" \"{}\"), then run --abandon",
+            move_command(),
+            dir.path().join("New").display(),
+            dir.path().join("Old").display()
+        );
+        assert!(refused.message.contains(&undo), "{}", refused.message);
         assert!(journal::read_journal(&paths.root_dir, project_id).is_some());
         // Both folders there: it can't be finished, so it may be forgotten.
         std::fs::create_dir(dir.path().join("Old")).unwrap();
         let abandoned = abandon(&paths, project_id).unwrap();
         assert_eq!(abandoned["abandoned"], true);
         assert!(journal::read_journal(&paths.root_dir, project_id).is_none());
+    }
+
+    #[test]
+    fn resume_says_what_to_do_by_hand_when_the_disk_cant_tell() {
+        let _serial = registry::test_serial();
+        let home = tempfile::tempdir().unwrap();
+        let paths = crate::paths::get_gxserver_paths(Some(home.path().to_path_buf()));
+        let db = Connection::open_in_memory().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let project_id = "stuck-test-project";
+        journal::create_journal(
+            &paths.root_dir,
+            &journal(dir.path(), project_id, Phase::Moved),
+        )
+        .unwrap();
+        // Neither folder: find it and move it back.
+        let neither = resume(&paths, &db, project_id).unwrap_err().message;
+        assert!(neither.contains("<where it is>"), "{neither}");
+        assert!(neither.contains(&dir.path().join("Old").display().to_string()));
+        // Both folders: keep one, rename the other aside.
+        std::fs::create_dir(dir.path().join("Old")).unwrap();
+        std::fs::create_dir(dir.path().join("New")).unwrap();
+        let both = resume(&paths, &db, project_id).unwrap_err().message;
+        assert!(both.contains(".leftover"), "{both}");
+        assert!(journal::read_journal(&paths.root_dir, project_id).is_some());
+        journal::remove_journal(&paths.root_dir, project_id);
     }
 
     #[test]
