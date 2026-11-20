@@ -601,7 +601,8 @@ foreground back. That took 6.8 s on the trial; keep it short. In a test copy
 whose sessions are all named `smoke-*`, type `smoke` so the list visibly
 narrows to rows rather than to "No sessions match".
 
-**5.3 Live page.** NOT RUN on the trial. It needs an agent in the test copy to
+**5.3 Live page.** Mac-only (see "Mac-only steps and the stop rule" below);
+NOT RUN on the trial. It needs an agent in the test copy to
 show the page's card. Claude and Codex have no logins there, and OpenCode's
 background service doesn't start in the isolated home ("serviceUnreachable",
 "OpenCode's background service did not start").
@@ -611,21 +612,30 @@ row (UIA `select`), background `click` in the box (about x 700, y 1062),
 `type_text`, then `read-session-chat-queue <ref> --json` `.draft.content` holds
 the text. `press_key return` empties the box and the message shows in the
 transcript. Typing passed; sending failed for the reason in 5.3 (OpenCode).
-With a working agent, pass is as on the Mac.
+The send half is Mac-only (see below); on Windows, pass is the typing half:
+the draft holds the text and Return empties the box.
 
 **Clean up.** `win-gx … kill all`, `win-gx … server stop-all`, then stop the
 processes whose path is under `<run>\gx` (the app's Close leaves it running)
 and delete `<run>\gx`. Close the real step 2 threads with
 `ghostex agents close`. Delete the saved clipboard folder.
 
-**Open on Windows (2026-11-20).** 5.3 and the send half of 5.4 need an agent
-that answers inside the test copy, which has no Claude or Codex logins (and
-OpenCode's background service doesn't start in its isolated home). Until the
-user picks how they run there (copy the logins into the test copy for the run,
-use the installed app while the user is away, or leave them to the Mac run),
-report them `NOT RUN` with that reason. Whether a Windows failure or `NOT RUN`
-stops the release isn't decided yet either: report the Windows lines under the
-Mac's and say which they are.
+**Mac-only steps and the stop rule on Windows** (Main Coordinator's decision,
+2026-11-20; the user can override it).
+- **5.3 and the send half of 5.4 stay Mac-only.** The test copy has no agent
+  that answers (no Claude or Codex logins, and OpenCode's background service
+  doesn't start in its isolated home), and the Mac run covers both. Windows
+  runs 5.4's typing half only. Report them as `5.3 MAC ONLY` and `5.4 PASS
+  (typing; send is Mac-only)`. These are not `NOT RUN`s, so they don't count
+  as a Stop.
+- **Windows results use the Mac's stop rule.** A crash, or typing that doesn't
+  land (4.1's typed or pasted line, 4.2's letters, 5.1, 5.2, 5.4's typing), stops
+  the release. Every other Windows failure is a warning. A `NOT RUN` on a
+  Windows Stop step counts as a Stop, as on the Mac. The palette half of 5.2
+  needs the foreground (see 5.2 above): if the user is never idle long enough
+  to run it, that is a `NOT RUN`, so wait for a quiet moment instead of
+  skipping it.
+- Put the Windows lines in the report under the Mac's, each marked `Windows`.
 
 ### Linux pass (Arch Chungus)
 
