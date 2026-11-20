@@ -9639,7 +9639,6 @@
       "type": "json",
       "default": [
         "search",
-        "notifications",
         "mainHub",
         "agentsHub",
         "allAutomations",

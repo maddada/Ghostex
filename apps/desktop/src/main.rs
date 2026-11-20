@@ -336,6 +336,9 @@ fn main() {
     // The rail is the default; an existing settings file is switched to it and gets the one-time
     // Meet the rail pop-up (shared_settings/sidebar_rail_default.rs).
     shared_settings::sidebar_rail_default::migrate_sidebar_rail_default_once();
+    // With the rail on, the bell is in the sidebar's top bar; the bell 11.12.0 saved with the
+    // rail's pins comes off them once (shared_settings/sidebar_rail_bell.rs).
+    shared_settings::sidebar_rail_bell::migrate_sidebar_rail_bell_once();
     // The 2026-11-20 dark look is the default for a new install; an existing, set-up settings file
     // keeps the old look (shared_settings/dark_look_default.rs). Before the first settings read too.
     shared_settings::dark_look_default::keep_old_dark_look_once();

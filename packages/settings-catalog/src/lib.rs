@@ -343,6 +343,22 @@ pub fn switch_existing_settings_to_rail(
     true
 }
 
+/// Takes Notifications off the rail's saved pins (`sidebarRailPins`). Returns whether it changed
+/// anything; a file without saved pins, or whose pins lack it, is left alone.
+///
+/// CDXC:Sidebar 2026-11-20 DECISION:
+/// Coordinator, after the user put the bell in the sidebar's top bar with the rail on (Q4318 B): "avoid the double bell for everyone on 11.12.0. Add a one-time step (with its own marker, like the rail switch) that removes Notifications from saved rail pins, since 11.12.0 wrote it from the old defaults; after that, pinning it again from ⋯ sticks." 11.12.0 saved the whole list, defaults included, the first time anyone pinned, unpinned or dragged an icon, so a saved bell pin cannot be told from a chosen one. The desktop runs this once, behind its own marker file, at start-up (`migrate_sidebar_rail_bell_once`); a pin made after that is kept.
+pub fn unpin_bell_from_saved_rail_pins(
+    settings: &mut serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    let Some(serde_json::Value::Array(pins)) = settings.get_mut("sidebarRailPins") else {
+        return false;
+    };
+    let before = pins.len();
+    pins.retain(|pin| pin.as_str() != Some("notifications"));
+    pins.len() != before
+}
+
 /// Writes `workAreaFrame` false into the settings of someone who already had a settings file when the
 /// frame became on by default, so their work area keeps the edge-to-edge look it had. Returns whether it
 /// changed anything; a saved choice (either way) is left alone.

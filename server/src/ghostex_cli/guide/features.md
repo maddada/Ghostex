@@ -737,7 +737,8 @@ sidebar. It stays when you hide the sidebar. By default it holds Search,
 Main Hub, Agents Hub, All Automations, Hermes, Claude and Grok Bot (each only
 while its feature is on), then ⋯. Its ⋯ menu lists everything else too:
 Notifications (pin it to have the bell, with its unread count, on the rail as
-well), Commands, Voice Call, Files, Changes, Browser,
+well; 11.12.0 pinned it by default, so the next version takes it off the rail
+once, and a pin you make after that stays), Commands, Voice Call, Files, Changes, Browser,
 Project Board, Dev servers, Resources, Extensions, Connect a Phone and Settings.
 Point at a row and click its pin to put it on the rail; click the filled pin to
 take it off. Drag icons on the rail into your own order, or right-click one to

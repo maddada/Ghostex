@@ -608,12 +608,11 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("sidebarSpaceSwitchBehavior", J::Str("restore")),
     ("sidebarView", J::Str("project")),
     ("sidebarLayout", J::Str("rail")),
-    // CDXC:Sidebar 2026-11-20 SEE-ALSO: gx-core sidebar_rail.rs (`RAIL_ITEMS`, the keys); the rail's pinned icons, top to bottom. No Settings row: the rail's ⋯ menu and dragging are how it is set.
+    // CDXC:Sidebar 2026-11-20 SEE-ALSO: gx-core sidebar_rail.rs (`RAIL_ITEMS`, the keys; `RAIL_DEFAULT_PINS`, which this matches: no Notifications, whose bell is in the sidebar's top bar with the rail on); the rail's pinned icons, top to bottom. No Settings row: the rail's ⋯ menu and dragging are how it is set.
     (
         "sidebarRailPins",
         J::Arr(&[
             J::Str("search"),
-            J::Str("notifications"),
             J::Str("mainHub"),
             J::Str("agentsHub"),
             J::Str("allAutomations"),

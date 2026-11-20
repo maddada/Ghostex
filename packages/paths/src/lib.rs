@@ -157,6 +157,12 @@ impl GhostexPaths {
         self.state_dir.join("sidebar-rail-default-migrated-v2")
     }
 
+    /// Written once Notifications has been taken off the rail's saved pins, which 11.12.0 wrote
+    /// from its old defaults (`migrate_sidebar_rail_bell_once` in the desktop app).
+    pub fn sidebar_rail_bell_marker_file(&self) -> PathBuf {
+        self.state_dir.join("sidebar-rail-bell-unpinned")
+    }
+
     pub fn hub_secret_folders_marker_file(&self) -> PathBuf {
         self.state_dir.join("hub-secret-folders-added")
     }
