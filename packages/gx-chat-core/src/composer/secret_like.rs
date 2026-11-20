@@ -67,7 +67,7 @@ pub fn looks_like_secret(text: &str) -> bool {
     if text.contains("PRIVATE KEY-----") {
         return true;
     }
-    tokens(text).any(|token| known_prefix(token) || aws_key_id(token) || random_token(token))
+    tokens(text).any(|token| known_key(token) || random_token(token))
 }
 
 /// The words of `text` (`tokens`), each with whether it is a piece of a path written with spaces in
@@ -150,6 +150,23 @@ fn tokens(text: &str) -> impl Iterator<Item = &str> {
             )
     })
     .filter(|token| !token.is_empty())
+}
+
+/// A known prefix's key or an AWS key id at the start of `token` or of one of its pieces of a link
+/// or path (`url_pieces`).
+fn known_key(token: &str) -> bool {
+    url_pieces(token).any(|piece| known_prefix(piece) || aws_key_id(piece))
+}
+
+/// `token` split at `/`, `?`, `&` and `@`, where a key sits in a link or path
+/// (`https://host/hook/<key>`, `?<key>&x=1`, `https://<key>@host`) without starting the word.
+///
+/// CDXC:Secrets 2026-11-20 WHY:
+/// A security review of the ClipBook fix found a prefixed key inside a link or a path missed every
+/// time, as a prefix was only looked for at the start of a word. Only the prefix and AWS checks
+/// split here; a word with `//` or a leading `/` is still never judged random as a whole.
+fn url_pieces(token: &str) -> impl Iterator<Item = &str> {
+    token.split(['/', '?', '&', '@'])
 }
 
 fn known_prefix(token: &str) -> bool {
@@ -245,21 +262,25 @@ fn mask_private_key_blocks(text: &str) -> (String, bool) {
 /// Ordinary words, links and paths stay out (`not_a_fragment` in the fixture); a piece of a path
 /// with spaces in it (`path`, `judged_tokens`) is not judged as a random fragment.
 fn key_fragment(token: &str, path: bool) -> bool {
-    if known_prefix(token) || aws_key_id(token) || random_token(token) {
+    if known_key(token) || random_token(token) {
         return true;
     }
-    let prefixed = PREFIXES.iter().any(|known| {
-        token.strip_prefix(known.prefix).is_some_and(|rest| {
-            let run = body_run(rest, known.separators);
-            run.len() >= 8 && mixed(run) && !(known.words && word_shaped(run))
+    let prefixed = url_pieces(token).any(|piece| {
+        PREFIXES.iter().any(|known| {
+            piece.strip_prefix(known.prefix).is_some_and(|rest| {
+                let run = body_run(rest, known.separators);
+                run.len() >= 8 && mixed(run) && !(known.words && word_shaped(run))
+            })
         })
     });
-    let aws = ["AKIA", "ASIA"].iter().any(|prefix| {
-        token.strip_prefix(prefix).is_some_and(|rest| {
-            rest.chars()
-                .take_while(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
-                .count()
-                >= 8
+    let aws = url_pieces(token).any(|piece| {
+        ["AKIA", "ASIA"].iter().any(|prefix| {
+            piece.strip_prefix(prefix).is_some_and(|rest| {
+                rest.chars()
+                    .take_while(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+                    .count()
+                    >= 8
+            })
         })
     });
     prefixed || aws || (!path && random_fragment(token))
@@ -338,9 +359,14 @@ fn random_token(token: &str) -> bool {
 /// and lower case, as a random run has. Hex has one case only, so a content hash or commit id in a
 /// path (`attachments/04170605…/Shot.png`) is not the long run, whatever case the folder names
 /// around it are written in (CDXC:Secrets 2026-11-20 at `judged_tokens`).
+///
+/// A `/` splits the run only when one of the word's pieces between `/` is word-shaped, as a path's
+/// folder is: standard base64 has `/` among its characters, and a 40-character key cut at it fell
+/// under 24 and was missed about one time in six (security review, 2026-11-20).
 fn longest_random_run(token: &str) -> usize {
+    let path = token.split('/').any(word_shaped);
     token
-        .split(['/', '.'])
+        .split(|c: char| c == '.' || (path && c == '/'))
         .filter(|run| {
             run.chars().any(|c| c.is_ascii_uppercase())
                 && run.chars().any(|c| c.is_ascii_lowercase())
