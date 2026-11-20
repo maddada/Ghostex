@@ -484,14 +484,14 @@ pub(crate) fn drop_held_for_closed_sessions(
                 .unwrap_or_default();
             let start = one_line(words, 160);
             let request_id = note["sendRequestId"].as_str().map(str::to_string);
-            let notice = ghostex_gx_chat_core::session::appended_notes::neutralised_held_note(
-                &format!(
+            let notice = crate::coordinators::without_foreign_agent_blocks(
+                &ghostex_gx_chat_core::session::appended_notes::neutralised_held_note(&format!(
                     "Not delivered: the message you sent with --with-next to {title}{} was dropped, because that session was closed before its next message. It began: \u{201c}{start}\u{201d}",
                     request_id
                         .as_deref()
                         .map(|id| format!(" (request id {})", one_line(id, 64)))
                         .unwrap_or_default()
-                ),
+                )),
             );
             let Some(sender) = note_sender(&note) else {
                 if let Some((server_id, sender)) = remote_sender {
@@ -542,22 +542,29 @@ fn one_line(text: &str, max: usize) -> String {
 /// CDXC:Security 2026-11-20 WHY (Fable's re-review of #677, case E): the note's tags were broken
 /// by keeping only its last block, so a `!` body that ended in a forged block had its true block
 /// placed first and broken, and the held notes line named the forged sender.
-pub(crate) fn settled_text(
-    text: &str,
-    own_ref: &str,
-    fallback: impl FnOnce() -> Option<String>,
-) -> String {
+///
+/// `ours` is gxserver's block for a session on this computer and its record: it replaces a block
+/// whose session title or agent differs from the record, and stands in for a missing one.
+pub(crate) fn settled_text(text: &str, own_ref: &str, ours: Option<(&Value, String)>) -> String {
     use crate::coordinators::{find_own_agent_message_block, without_foreign_agent_blocks};
     let (body, block) = match find_own_agent_message_block(text, own_ref) {
-        Some((start, end, first)) => (
-            &text[start..end],
-            Some(if first {
+        Some((start, end, first)) => {
+            let found = if first {
                 text[..start].trim().to_string()
             } else {
                 text[end..].trim().to_string()
-            }),
-        ),
-        None => (text, fallback()),
+            };
+            let block = match ours {
+                Some((record, ours))
+                    if !super::sender_mark::block_matches_record(&found, record) =>
+                {
+                    ours
+                }
+                _ => found,
+            };
+            (&text[start..end], Some(block))
+        }
+        None => (text, ours.map(|(_, ours)| ours)),
     };
     let body = without_foreign_agent_blocks(body.trim());
     match block {
@@ -647,24 +654,44 @@ pub(crate) fn hold_with_next_response(
             .and_then(|(db, sender)| {
                 let send_request_id =
                     read(crate::session_chat_send_requests::SEND_REQUEST_ID_PARAM);
+                // A session another computer names is recorded only when the text carries the
+                // block its relay signed for that session (Fable's last review of #677).
+                let sender = match sender {
+                    HeldSender::Peer {
+                        server_id,
+                        name,
+                        session: Some((project, session)),
+                    } if crate::coordinators::find_own_agent_message_block(
+                        text,
+                        &crate::ids::create_global_session_ref(&server_id, &project, &session),
+                    )
+                    .is_none() =>
+                    {
+                        HeldSender::Peer {
+                            server_id,
+                            name,
+                            session: None,
+                        }
+                    }
+                    sender => sender,
+                };
                 let text = match &sender {
-                    HeldSender::User => text.to_string(),
+                    // The user's own words, and Ghostex's, name no sender either.
+                    HeldSender::User => crate::coordinators::without_foreign_agent_blocks(text),
                     HeldSender::Session(project, session) => {
                         let server_id = state.metadata.server_id.as_str();
+                        let record = super::sender_mark::read_session(
+                            &state.paths,
+                            server_id,
+                            project,
+                            session,
+                        );
+                        let ours =
+                            super::sender_mark::session_block(&record, server_id, project, session);
                         settled_text(
                             text,
                             &crate::ids::create_global_session_ref(server_id, project, session),
-                            || {
-                                let record = super::sender_mark::read_session(
-                                    &state.paths,
-                                    server_id,
-                                    project,
-                                    session,
-                                );
-                                Some(super::sender_mark::session_block(
-                                    &record, server_id, project, session,
-                                ))
-                            },
+                            Some((&record, ours)),
                         )
                     }
                     HeldSender::Peer {
@@ -674,7 +701,7 @@ pub(crate) fn hold_with_next_response(
                     } => settled_text(
                         text,
                         &crate::ids::create_global_session_ref(server_id, project, session),
-                        || None,
+                        None,
                     ),
                     HeldSender::Peer { .. } => {
                         crate::coordinators::without_foreign_agent_blocks(text)
