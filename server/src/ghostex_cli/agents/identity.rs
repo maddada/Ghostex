@@ -76,11 +76,18 @@ pub(crate) fn sender(as_user: bool) -> CliResult<Sender> {
         // Only where `--as-user` would be accepted (the checks below).
         let holds_session_token = std::env::var(crate::security::SESSION_TOKEN_ENV)
             .is_ok_and(|value| !value.trim().is_empty());
-        if matches!(lookup, CallerLookup::NoSession)
-            && !holds_session_token
-            && !crate::agent_hooks::caller_ancestry().in_session_pane
-        {
-            return Err(CliError::Other(NO_SESSION_SEND.into()));
+        if matches!(lookup, CallerLookup::NoSession) && !holds_session_token {
+            let ancestry = crate::agent_hooks::caller_ancestry();
+            if !ancestry.in_session_pane {
+                return Err(CliError::Other(
+                    if ancestry.grok_bot {
+                        NO_SESSION_SEND_GROK_BOT
+                    } else {
+                        NO_SESSION_SEND
+                    }
+                    .into(),
+                ));
+            }
         }
         return agent_from(lookup).map(Sender::Agent);
     }
@@ -109,10 +116,12 @@ pub(crate) fn sender(as_user: bool) -> CliResult<Sender> {
     })
 }
 
-/// `agents send` without `--as-user` from outside every Ghostex session (your own terminal, Grok
-/// Bot): what to run instead.
-/// CDXC:GrokBot 2026-11-20 WHY: Grok Bot ran `agents send <ref> "<text>"` without `--as-user` and got only "Run inside a Ghostex agent session", which it can't do, so it could not pass the user's answers on or start a coordinator. Outside every session pane the refusal names the command that works; it still refuses, since sending as the user stays explicit (the 2026-11-19 decision on [`Sender`]). Under a session pane (an agent that lost its variables) the old error stands.
-const NO_SESSION_SEND: &str = "Cannot identify the caller: no Ghostex session runs this command, so it can't send as an agent. To send as yourself from your own terminal or Grok Bot, add --as-user: ghostex agents send --as-user <ref> \"<text>\" (or ghostex agents send --as-user --main-coordinator --project-id <id> --if-none create \"<text>\"). The message arrives as yours, labelled \"Sent via Grok Bot\" (from a terminal, \"Sent from the terminal\").";
+/// `agents send` without `--as-user` from outside every Ghostex session.
+/// CDXC:GrokBot 2026-11-20 WHY: Grok Bot ran `agents send <ref> "<text>"` without `--as-user` and got only "Run inside a Ghostex agent session", which it can't do, so it could not pass the user's answers on or start a coordinator. Sending as the user stays explicit (the 2026-11-19 decision on [`Sender`]). Fable's review of 4e4dbf7c6: an agent whose command lost its session (Codex's `inherit = "core"`, Empryo, a backgrounded or launchd job) lands here too and reads any hint as meant for itself, so this text tells an agent to rerun from its own shell and never names the flag's use; only with Grok Bot above the command does the refusal give the full `--as-user` command ([`NO_SESSION_SEND_GROK_BOT`]). Under a session pane the old error stands.
+const NO_SESSION_SEND: &str = "Cannot identify the caller: no Ghostex session runs this command. An agent never adds --as-user: rerun this command from your session's own shell, where Ghostex knows which session you are. (Sending as yourself from your own terminal: see SENDER BLOCK in ghostex agents --help.)";
+
+/// The refusal when the Grok Bot desktop app runs the command: the commands its brief names.
+const NO_SESSION_SEND_GROK_BOT: &str = "Cannot identify the caller: Grok Bot runs this outside any Ghostex session. Grok Bot sends as the user with --as-user right after send: ghostex agents send --as-user <ref> \"<text>\" (or ghostex agents send --as-user --main-coordinator --project-id <id> --if-none create \"<text>\"). The message arrives as the user's, labelled \"Sent via Grok Bot\".";
 
 /// The session variables [`lookup_caller`] reads, in its order.
 const SESSION_VARIABLES: [&str; 4] = [

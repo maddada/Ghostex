@@ -302,17 +302,16 @@ pub(crate) fn sign_agent_message(
 }
 
 /// Applies the rules above to a message route's body before it is handled. `via` is honoured only
-/// from the token file and never passed on.
+/// from the token file and never passed on. Answers the security log entry of a send as the user,
+/// for the route to write once the send went through ([`AsUserLog::record_if`]).
 pub(crate) fn prepare(
     paths: &GxserverPaths,
     server_id: &str,
     route: &str,
     caller: &Principal,
     body: &mut Value,
-) {
-    let Some(params) = body.get_mut("params").and_then(Value::as_object_mut) else {
-        return;
-    };
+) -> Option<AsUserLog> {
+    let params = body.get_mut("params").and_then(Value::as_object_mut)?;
     let via = params
         .remove("via")
         .and_then(|value| value.as_str().map(str::to_string));
@@ -332,25 +331,26 @@ pub(crate) fn prepare(
             if *project_id != target_project || *session_id != target_session {
                 sign_agent_message(paths, server_id, project_id, session_id, params);
             }
+            None
         }
         Principal::Owner { .. } | Principal::Device { .. } | Principal::LocalAgent => {
-            let Some(text) = params
+            let text = params
                 .get("text")
                 .and_then(Value::as_str)
-                .map(str::to_string)
-            else {
-                return;
-            };
+                .map(str::to_string)?;
             if text.trim().is_empty() {
-                return;
+                return None;
             }
-            let text =
-                label_as_user_send(server_id, caller, via.as_deref(), params).unwrap_or(text);
+            let (text, log) = match label_as_user_send(server_id, caller, via.as_deref(), params) {
+                Some((labelled, log)) => (labelled, Some(log)),
+                None => (text, None),
+            };
             // Recorded once the send is accepted (`note_accepted_user_send`); an edit by the user
             // records its new text, which the scheduler's later send settles by.
             if route != "/api/sendSessionMessage" && !text.trim().is_empty() {
                 params.insert(USER_SEND_MARK.to_string(), Value::Bool(true));
             }
+            log
         }
         // Another of the user's computers relays a message one of the user's own callers sent
         // there with `userSend` (connected_computers/relay.rs `mark_relayed_send`); its agents'
@@ -375,9 +375,10 @@ pub(crate) fn prepare(
             {
                 params.insert(USER_SEND_MARK.to_string(), Value::Bool(true));
             }
+            None
         }
         // Anything else was marked by the computer it came from before it came (see above).
-        _ => {}
+        _ => None,
     }
 }
 
@@ -419,14 +420,15 @@ pub(crate) fn withdraw_user_send(paths: &GxserverPaths, noted: Option<(String, S
 /// `ghostex agents send --as-user`'s label and security log entry: only it passes `via`, from the
 /// token file, and never with a `draftVersion`; the app's, the web build's and a phone's sends stay
 /// exactly as they were. Labels `params`' text ("Sent from the terminal", "Sent via Grok Bot") and
-/// answers it, or `None` when nothing applies. `server_id` is the computer whose chat it goes to:
-/// this one, or the one a relay passes it on to (connected_computers/relay.rs), which drops `via`.
+/// answers it with its log entry, or `None` when nothing applies. `server_id` is the computer whose
+/// chat it goes to: this one, or the one a relay passes it on to (connected_computers/relay.rs),
+/// which drops `via`.
 pub(crate) fn label_as_user_send(
     server_id: &str,
     caller: &Principal,
     via: Option<&str>,
     params: &mut Map<String, Value>,
-) -> Option<String> {
+) -> Option<(String, AsUserLog)> {
     let label = as_user_label(caller, via)?;
     if params.contains_key("draftVersion") {
         return None;
@@ -440,16 +442,16 @@ pub(crate) fn label_as_user_send(
         param(params, "projectId"),
         param(params, "sessionId"),
     );
-    record_send_as_user(
-        format!(
+    let log = AsUserLog {
+        description: format!(
             "Sent a message into {target}'s chat as you ({})",
             label.to_lowercase()
         ),
         target,
-    );
+    };
     let labelled = with_as_user_label(text, label);
     params.insert("text".to_string(), json!(labelled));
-    Some(labelled)
+    Some((labelled, log))
 }
 
 /// The label for an `--as-user` send's `via`, only from the token file.
@@ -462,13 +464,43 @@ fn as_user_label(caller: &Principal, via: Option<&str>) -> Option<&'static str> 
     matches!(caller, Principal::LocalAgent).then_some(label)
 }
 
-fn record_send_as_user(description: String, target: String) {
-    crate::audit::record(
-        crate::audit::Action::new("chat.sendAsUser", description).target(target),
-        crate::audit::Actor::current(),
-        crate::audit::Outcome::Done,
-        None,
-    );
+/// The security log entry (`chat.sendAsUser`) of a send as the user, written only once it went
+/// through.
+///
+/// CDXC:Security 2026-11-20 WHY (Fable's review of 4e4dbf7c6): the entry was written while the
+/// request was read, so a create for a project that doesn't exist, and sends whose delivery failed,
+/// were logged "done". A queued prompt counts once the queue took it.
+#[must_use]
+pub(crate) struct AsUserLog {
+    description: String,
+    target: String,
+}
+
+impl AsUserLog {
+    pub(crate) fn record_if(self, went_through: bool) {
+        if went_through {
+            crate::audit::record(
+                crate::audit::Action::new("chat.sendAsUser", self.description).target(self.target),
+                crate::audit::Actor::current(),
+                crate::audit::Outcome::Done,
+                None,
+            );
+        }
+    }
+}
+
+/// Writes `log` when the routed send `response` went through: a success status and no send failure
+/// (session_chat_send_diagnostics.rs `SendFailureReason`).
+pub(crate) fn record_as_user_log(log: Option<AsUserLog>, response: &crate::server::RoutedResponse) {
+    if let Some(log) = log {
+        let went_through = response.response.status().is_success()
+            && response
+                .response
+                .extensions()
+                .get::<crate::session_chat_send_diagnostics::SendFailureReason>()
+                .is_none();
+        log.record_if(went_through);
+    }
 }
 
 /// `text` with the label as its last line. A `/` or `!` command from the user's own terminal still
@@ -481,45 +513,75 @@ fn with_as_user_label(text: String, label: &str) -> String {
     }
 }
 
-/// `ghostex agents send --as-user --main-coordinator --if-none create`: the new coordinator's first
-/// request (`coordinator.firstRequest` of `/api/createAgentSession`) is the user's message, so it
-/// gets the same label and security log entry as any `--as-user` send. `coordinator.via` is
-/// honoured only from the token file and is always removed.
+/// Who a new coordinator's first request (`coordinator.firstRequest` of `/api/createAgentSession`)
+/// is from, the rules [`prepare`] applies to a chat message. `coordinator.via` is always removed.
+/// - `ghostex agents send --as-user --main-coordinator --if-none create` passes it from the token
+///   file: the request is the user's message, labelled like any `--as-user` send, with the log
+///   entry this answers for the route to write once the create went through.
+/// - An agent session's own token: the request gets gxserver's block for that session unless it
+///   carries its own exact one, so an agent's words never start a coordinator as the user's.
+///
+/// `server_id_here` names the calling session; `target_server_id` the computer the coordinator is
+/// made on (another one when the relay calls this before forwarding).
+///
+/// CDXC:Security 2026-11-20 WHY (Fable's review of 4e4dbf7c6): a session token's first request
+/// went in unsigned, so ending it with "Sent via Grok Bot" made it identical to the user's. An
+/// agent's `ghostex coordinator create --task` now carries its block, as its messages do.
 pub(crate) fn label_coordinator_first_request(
-    server_id: &str,
+    paths: &GxserverPaths,
+    server_id_here: &str,
+    target_server_id: &str,
     caller: &Principal,
     params: &mut Map<String, Value>,
-) {
+) -> Option<AsUserLog> {
     let project_id = param(params, "projectId").to_string();
-    let Some(coordinator) = params.get_mut("coordinator").and_then(Value::as_object_mut) else {
-        return;
-    };
+    let coordinator = params
+        .get_mut("coordinator")
+        .and_then(Value::as_object_mut)?;
     let via = coordinator
         .remove("via")
         .and_then(|value| value.as_str().map(str::to_string));
-    let Some(label) = as_user_label(caller, via.as_deref()) else {
-        return;
-    };
     let text = coordinator
         .get("firstRequest")
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
     if text.trim().is_empty() {
-        return;
+        return None;
     }
-    let target = format!("{server_id}:{project_id}");
-    record_send_as_user(
-        format!(
-            "Started a coordinator in project {target} with your message as its first request ({})",
-            label.to_lowercase()
-        ),
-        target,
-    );
+    if let Principal::Session {
+        project_id: own_project,
+        session_id: own_session,
+        ..
+    } = caller
+    {
+        let mut message = Map::new();
+        message.insert("text".to_string(), json!(text));
+        sign_agent_message(
+            paths,
+            server_id_here,
+            own_project,
+            own_session,
+            &mut message,
+        );
+        if let Some(signed) = message.remove("text") {
+            coordinator.insert("firstRequest".to_string(), signed);
+        }
+        return None;
+    }
+    let label = as_user_label(caller, via.as_deref())?;
     coordinator.insert(
         "firstRequest".to_string(),
         json!(with_as_user_label(text, label)),
     );
+    let target = format!("{target_server_id}:{project_id}");
+    Some(AsUserLog {
+        description: format!(
+            "Started a coordinator in project {target} with your message as its first request ({})",
+            label.to_lowercase()
+        ),
+        target,
+    })
 }
 
 /// The flag a relay sets on a message one of the user's own callers sent through it to another

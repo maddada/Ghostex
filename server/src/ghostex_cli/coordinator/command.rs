@@ -629,7 +629,8 @@ fn next_tag(parsed: &ParsedArgs) -> CliResult<()> {
 /// CDXC:GrokBot 2026-11-20 WHY: status only reads, so outside a session it needs no flag when
 /// there is one choice: the only main coordinator (on `--computer`, when given). With several, it
 /// names each one's exact command instead of guessing.
-fn status_target(parsed: &ParsedArgs) -> CliResult<(Value, Flags)> {
+/// Answers whether it picked the only main coordinator because none was named.
+fn status_target(parsed: &ParsedArgs) -> CliResult<(Value, Flags, bool)> {
     let named = ["coordinator", "orchestrator", "session"]
         .iter()
         .any(|key| flag_text(&parsed.flags, key).is_some());
@@ -641,11 +642,14 @@ fn status_target(parsed: &ParsedArgs) -> CliResult<(Value, Flags)> {
         base.insert_text("computer", &computer);
     }
     let project_id = match target_coordinator(parsed) {
-        Ok(found) => return Ok(found),
+        Ok((session, flags)) => return Ok((session, flags, false)),
         Err(error) if named || !outside_session(&error) => return Err(error),
         Err(_) => match flag_text(&parsed.flags, "projectId") {
             Some(project_id) => project_id,
-            None => return only_main_coordinator(&base),
+            None => {
+                let (session, flags) = only_main_coordinator(&base)?;
+                return Ok((session, flags, true));
+            }
         },
     };
     let listed = call_gxserver_rpc(
@@ -680,7 +684,8 @@ fn status_target(parsed: &ParsedArgs) -> CliResult<(Value, Flags)> {
             )
         }));
     };
-    resolve_session(agents::text(main, "globalRef"), &base)
+    let (session, flags) = resolve_session(agents::text(main, "globalRef"), &base)?;
+    Ok((session, flags, false))
 }
 
 /// `coordinator status` outside a session with no coordinator named: the only main coordinator, or
@@ -715,12 +720,43 @@ fn only_main_coordinator(base: &Flags) -> CliResult<(Value, Flags)> {
     }
 }
 
+/// CDXC:GrokBot 2026-11-20 WHY (Fable's review of 4e4dbf7c6): a command that lost its session got
+/// the only main coordinator's status without a word, so the answer says on its first line (and in
+/// `picked` with `--json`) that it picked that one. The "You have not read your playbook yet" notice
+/// is the coordinator's own instruction; another reader (Grok Bot, a thread, your terminal) could
+/// follow it, so it goes only to that coordinator.
 fn status(parsed: &ParsedArgs) -> CliResult<()> {
-    let (session, flags) = status_target(parsed)?;
-    let view = read_view(&session, &flags)?;
+    let (session, flags, picked) = status_target(parsed)?;
+    let mut view = read_view(&session, &flags)?;
+    let picked = picked.then(|| {
+        format!(
+            "No coordinator named, so this is the only main coordinator: {} ({}).",
+            agents::text(&session, "title"),
+            agents::text(&session, "globalRef")
+        )
+    });
+    if !agents::text(&view, "playbookNotice").is_empty() {
+        let reader = crate::ghostex_cli::agents::identity::agent_caller()
+            .ok()
+            .flatten();
+        let own = reader.is_some_and(|reader| {
+            agents::text(&reader, "globalRef") == agents::text(&view["coordinator"], "globalRef")
+        });
+        if !own {
+            if let Some(view) = view.as_object_mut() {
+                view.remove("playbookNotice");
+            }
+        }
+    }
     if parsed.flags.truthy("json") {
+        if let Some(picked) = &picked {
+            view["picked"] = json!(picked);
+        }
         print_json(&view);
         return Ok(());
+    }
+    if let Some(picked) = &picked {
+        println!("{picked}");
     }
     print_status(&view, parsed.flags.truthy("all"));
     Ok(())

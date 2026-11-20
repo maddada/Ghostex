@@ -1,6 +1,7 @@
 //! `/api/computers/<serverId>/relay/api/...`: an agent's request for another computer, forwarded
 //! over the connection this computer already has to it.
 
+use crate::session_chat_send::sender_mark::AsUserLog;
 use std::time::Duration;
 
 use axum::{
@@ -141,6 +142,8 @@ pub(crate) async fn relay(
     // computer passes it on as it came (session_chat_send/sender_mark.rs). One of the user's own
     // callers' messages leaves marked as the user's (`userSend`), so the other computer records it
     // as theirs (quotes of earlier messages, chat_message_numbers.rs); nobody else's carries it.
+    // The security log entry of a send as the user, written once the other computer took it.
+    let mut as_user_log = None;
     let bytes = if forwarded == crate::session_chat_send::HELD_WITH_NEXT_ENDPOINT {
         // Who lists or withdraws a held note there is the session calling here, or no session.
         match stamped_sender(caller, &bytes) {
@@ -155,8 +158,26 @@ pub(crate) async fn relay(
             }
         }
     } else if crate::session_chat_send::sender_mark::MESSAGE_ROUTES.contains(&forwarded) {
-        match marked_message_body(paths, server_id_here, server_id, caller, &bytes) {
-            Ok(marked) => marked.into(),
+        match marked_message_body_logged(paths, server_id_here, server_id, caller, &bytes) {
+            Ok((marked, log)) => {
+                as_user_log = log;
+                marked.into()
+            }
+            Err(message) => {
+                return refusal(
+                    StatusCode::BAD_REQUEST,
+                    "badRequest",
+                    message.to_string(),
+                    request_id,
+                )
+            }
+        }
+    } else if forwarded == "/api/createAgentSession" {
+        match marked_create_body(paths, server_id_here, server_id, caller, &bytes) {
+            Ok((marked, log)) => {
+                as_user_log = log;
+                marked.into()
+            }
             Err(message) => {
                 return refusal(
                     StatusCode::BAD_REQUEST,
@@ -214,6 +235,9 @@ pub(crate) async fn relay(
             request_id,
         ),
         Ok(Ok(Ok((status, content_type, body)))) => {
+            if let Some(log) = as_user_log {
+                log.record_if((200..300).contains(&status) && relayed_send_went_through(&body));
+            }
             if let Some((key, sent_at)) = reopen_target.filter(|_| (200..300).contains(&status)) {
                 let (paths, caller) = (paths.clone(), caller.clone());
                 let _ = tokio::task::spawn_blocking(move || {
@@ -346,6 +370,7 @@ fn header_text(headers: &HeaderMap, name: &str) -> Option<String> {
 /// serde_json takes only space, tab, LF and CR around a document while the receiver trims every
 /// Unicode space first, so an agent's body wrapped in a form feed or NBSP reached the other
 /// computer neither signed nor stripped of `userSend`.
+#[cfg(test)]
 pub(crate) fn marked_message_body(
     paths: &crate::paths::GxserverPaths,
     server_id_here: &str,
@@ -353,11 +378,41 @@ pub(crate) fn marked_message_body(
     caller: &Principal,
     bytes: &[u8],
 ) -> Result<Vec<u8>, &'static str> {
-    const NOT_A_MESSAGE: &str = "A message must be a JSON object with an object `params`.";
+    marked_message_body_logged(paths, server_id_here, target_server_id, caller, bytes)
+        .map(|(body, _)| body)
+}
+
+const NOT_A_MESSAGE: &str = "A message must be a JSON object with an object `params`.";
+
+/// A forwarded body read as the receiving gxserver reads it (see `marked_message_body`).
+fn forwarded_body(bytes: &[u8]) -> Result<serde_json::Value, &'static str> {
     let text = std::str::from_utf8(bytes)
         .map_err(|_| NOT_A_MESSAGE)?
         .trim();
-    let mut body: serde_json::Value = serde_json::from_str(text).map_err(|_| NOT_A_MESSAGE)?;
+    let body: serde_json::Value = serde_json::from_str(text).map_err(|_| NOT_A_MESSAGE)?;
+    if !body.get("params").is_some_and(serde_json::Value::is_object) {
+        return Err(NOT_A_MESSAGE);
+    }
+    Ok(body)
+}
+
+/// Whether the other computer's answer to a relayed send says it went through: not `ok: false`.
+fn relayed_send_went_through(body: &[u8]) -> bool {
+    serde_json::from_slice::<serde_json::Value>(body).map_or(true, |answer| {
+        answer.get("ok") != Some(&serde_json::Value::Bool(false))
+    })
+}
+
+/// `marked_message_body`, with the security log entry of a send as the user, for the relay to
+/// write once the other computer took it.
+fn marked_message_body_logged(
+    paths: &crate::paths::GxserverPaths,
+    server_id_here: &str,
+    target_server_id: &str,
+    caller: &Principal,
+    bytes: &[u8],
+) -> Result<(Vec<u8>, Option<AsUserLog>), &'static str> {
+    let mut body = forwarded_body(bytes)?;
     let params = body
         .get_mut("params")
         .and_then(|params| params.as_object_mut())
@@ -369,12 +424,13 @@ pub(crate) fn marked_message_body(
     let via = params
         .remove("via")
         .and_then(|value| value.as_str().map(str::to_string));
-    crate::session_chat_send::sender_mark::label_as_user_send(
+    let log = crate::session_chat_send::sender_mark::label_as_user_send(
         target_server_id,
         caller,
         via.as_deref(),
         params,
-    );
+    )
+    .map(|(_, log)| log);
     if let Principal::Session {
         project_id,
         session_id,
@@ -389,7 +445,37 @@ pub(crate) fn marked_message_body(
             params,
         );
     }
-    serde_json::to_vec(&body).map_err(|_| NOT_A_MESSAGE)
+    Ok((serde_json::to_vec(&body).map_err(|_| NOT_A_MESSAGE)?, log))
+}
+
+/// A coordinator create for another computer: its first request is labelled as the user's, or
+/// signed as the calling agent's, here before it leaves
+/// (sender_mark.rs `label_coordinator_first_request`), since the other computer strips `via` from
+/// a peer and holds no record of this computer's sessions.
+///
+/// CDXC:Security 2026-11-20 WHY (Fable's review of 4e4dbf7c6): `agents send --as-user
+/// --main-coordinator --computer <name> --if-none create` lost its label and log entry, and an
+/// agent's create went there unsigned.
+fn marked_create_body(
+    paths: &crate::paths::GxserverPaths,
+    server_id_here: &str,
+    target_server_id: &str,
+    caller: &Principal,
+    bytes: &[u8],
+) -> Result<(Vec<u8>, Option<AsUserLog>), &'static str> {
+    let mut body = forwarded_body(bytes)?;
+    let params = body
+        .get_mut("params")
+        .and_then(|params| params.as_object_mut())
+        .ok_or(NOT_A_MESSAGE)?;
+    let log = crate::session_chat_send::sender_mark::label_coordinator_first_request(
+        paths,
+        server_id_here,
+        target_server_id,
+        caller,
+        params,
+    );
+    Ok((serde_json::to_vec(&body).map_err(|_| NOT_A_MESSAGE)?, log))
 }
 
 /// Names the calling session as the sender (`senderProjectId`, `senderSessionId`) and drops any
