@@ -51,6 +51,7 @@ pub(crate) fn new_saved_account(found: &DiscoveredAccount) -> SavedAccount {
         login_expired_at: None,
         login_confirmed_at: None,
         synced: None,
+        sign_in_ignored: false,
     }
 }
 pub(crate) fn dispatch(
@@ -223,6 +224,24 @@ pub(crate) fn dispatch(
             state.accounts.invalidate();
             snapshot = state.accounts.refresh(&state.paths.home_dir, true);
         }
+        // "Don't use on <computer>" and its Undo, from a usage popup or the phone's Usage pane
+        // (`SavedAccount::sign_in_ignored`).
+        "setSignInIgnored" => {
+            let id = required(params, "id")?;
+            let ignored = params
+                .get("ignored")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| {
+                    DomainStateError::bad_request("Choose whether to hide this sign-in warning.")
+                })?;
+            let account = registry
+                .accounts
+                .iter_mut()
+                .find(|a| a.id == id)
+                .ok_or_else(|| DomainStateError::not_found("Account not found."))?;
+            account.sign_in_ignored = ignored;
+            store::write(&db, &registry)?;
+        }
         // CDXC:AgentProviders 2026-09-08 DECISION: Settings can exchange two account slots through cswap or xswap. Defaults and session bindings follow account identity, and cached launch plans must be regenerated for the new slot.
         "swapSlots" => {
             let first = registry
@@ -343,6 +362,8 @@ pub(crate) fn dispatch(
                 saved.selector = found.selector.clone();
                 // An account that came from another computer is signed in here now.
                 saved.synced = None;
+                // Signed in here again: its warning speaks again when it next signs out.
+                saved.sign_in_ignored = false;
                 // Signing in again is the user saying the login works now.
                 if saved.disabled.take().is_some() {
                     saved.eligible = true;
@@ -1173,7 +1194,7 @@ fn state_value(
     for found in &snapshot.accounts {
         let id = account_id(found);
         let saved = registry.accounts.iter().find(|a| a.id == id);
-        rows.push(json!({"id":id,"provider":found.provider,"selector":found.selector,"name":saved.map(|a|a.name.as_str()).unwrap_or(&found.name),"email":found.email,"indicator":saved.map(|a|a.indicator.as_str()).unwrap_or(""),"color":saved.map(|a|a.color.as_str()).unwrap_or("neutral"),"eligible":saved.is_some_and(|a|a.eligible),"registered":saved.is_some(),"showInTitlebar":saved.is_some_and(|a|a.show_in_titlebar&&!a.user_disabled),"userDisabled":saved.is_some_and(|a|a.user_disabled),"sharedHistory":saved.is_some_and(|a|a.shared_history)||found.shared_history,"disabledReason":saved.and_then(|a|a.disabled.as_ref()).map(|d|d.reason.as_str()),"status":found.status,"usage":found.usage,"resetCredits":found.reset_credits,"resetCreditDetails":found.reset_credit_details,"resetCreditsError":found.reset_credits_error,"usageUpdatedAt":found.usage_updated_at,"usageError":found.usage_error,"usageStale":found.usage_stale,"sessionCount":session_counts.get(&id).copied().unwrap_or(0)}));
+        rows.push(json!({"id":id,"provider":found.provider,"selector":found.selector,"name":saved.map(|a|a.name.as_str()).unwrap_or(&found.name),"email":found.email,"indicator":saved.map(|a|a.indicator.as_str()).unwrap_or(""),"color":saved.map(|a|a.color.as_str()).unwrap_or("neutral"),"eligible":saved.is_some_and(|a|a.eligible),"registered":saved.is_some(),"showInTitlebar":saved.is_some_and(|a|a.show_in_titlebar&&!a.user_disabled),"userDisabled":saved.is_some_and(|a|a.user_disabled),"signInIgnored":saved.is_some_and(|a|a.sign_in_ignored),"sharedHistory":saved.is_some_and(|a|a.shared_history)||found.shared_history,"disabledReason":saved.and_then(|a|a.disabled.as_ref()).map(|d|d.reason.as_str()),"status":found.status,"usage":found.usage,"resetCredits":found.reset_credits,"resetCreditDetails":found.reset_credit_details,"resetCreditsError":found.reset_credits_error,"usageUpdatedAt":found.usage_updated_at,"usageError":found.usage_error,"usageStale":found.usage_stale,"sessionCount":session_counts.get(&id).copied().unwrap_or(0)}));
         // A Codex login's ChatGPT account (workspace), which a hub account's twin check compares.
         if found.provider == Provider::Codex {
             if let Some(row) = rows.last_mut() {
@@ -1185,7 +1206,7 @@ fn state_value(
     let loading = titlebar && snapshot.fetched_at.is_none();
     for saved in &registry.accounts {
         if !rows.iter().any(|r| r["id"].as_str() == Some(&saved.id)) {
-            let mut row = json!({"id":saved.id,"provider":saved.provider,"selector":saved.selector,"name":saved.name,"email":"","indicator":saved.indicator,"color":saved.color,"eligible":saved.eligible,"registered":true,"showInTitlebar":saved.show_in_titlebar&&!saved.user_disabled,"userDisabled":saved.user_disabled,"sharedHistory":saved.shared_history,"status":if saved.user_disabled {"disabled"} else if loading {"loading"} else {"unavailable"},"usage":[],"usageError":if loading || saved.user_disabled {None} else {Some(SAVED_LOGIN_MISSING)},"sessionCount":session_counts.get(&saved.id).copied().unwrap_or(0)});
+            let mut row = json!({"id":saved.id,"provider":saved.provider,"selector":saved.selector,"name":saved.name,"email":"","indicator":saved.indicator,"color":saved.color,"eligible":saved.eligible,"registered":true,"showInTitlebar":saved.show_in_titlebar&&!saved.user_disabled,"userDisabled":saved.user_disabled,"signInIgnored":saved.sign_in_ignored,"sharedHistory":saved.shared_history,"status":if saved.user_disabled {"disabled"} else if loading {"loading"} else {"unavailable"},"usage":[],"usageError":if loading || saved.user_disabled {None} else {Some(SAVED_LOGIN_MISSING)},"sessionCount":session_counts.get(&saved.id).copied().unwrap_or(0)});
             // CDXC:SettingsSync 2026-11-07 WHY: an account synced from another computer has no
             // login here; it asks to be signed in on this computer, with the email it came with.
             if let Some(synced) = saved.synced.as_ref().filter(|_| saved.selector.is_empty()) {

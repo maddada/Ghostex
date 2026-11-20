@@ -590,7 +590,55 @@ impl AccountUsagePanel {
     fn render_sign_in_banner(&self, banner: SignInBanner) -> AnyElement {
         let color = amber();
         let p = self.palette;
+        let warning = !banner.signed_out.is_empty();
+        // "Don't use <place>" and Undo: the flag on the account's own computer.
+        let ignore = |row: &SignedOutRow, ignored: bool| {
+            let app = self.main_app.clone();
+            let account = row.account.clone().unwrap_or_default();
+            let machine = row.machine.clone().unwrap_or_else(|| "local".into());
+            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut App| {
+                cx.stop_propagation();
+                let (app, account, machine) = (app.clone(), account.clone(), machine.clone());
+                cx.defer(move |cx| {
+                    let _ = app.update(cx, |app, cx| {
+                        app.set_account_sign_in_ignored(account, machine, ignored, cx);
+                    });
+                });
+            }
+        };
+        let ignored_rows = banner
+            .ignored
+            .iter()
+            .map(|row| {
+                h_flex()
+                    .w_full()
+                    .gap(px(6.0))
+                    .items_center()
+                    .text_color(chrome_ink().opacity(0.70))
+                    .child(div().min_w_0().child(row.message.clone()))
+                    .child("·")
+                    .child(
+                        div()
+                            .id(SharedString::from(format!(
+                                "account-usage-sign-in-undo-{}",
+                                row.key
+                            )))
+                            .flex_shrink_0()
+                            .cursor_pointer()
+                            .text_color(chrome_ink().opacity(0.90))
+                            .hover(|this| this.underline())
+                            .on_click(ignore(row, false))
+                            .child("Undo"),
+                    )
+            })
+            .collect::<Vec<_>>();
         let rows = banner.signed_out.into_iter().map(|row| {
+            let dismiss = ignore(&row, true);
+            let dismiss_words: SharedString = format!(
+                "Don't use {}: hides this until it signs in there",
+                row.place
+            )
+            .into();
             let run = {
                 let (id, app) = (self.id, self.main_app.clone());
                 let (account, machine) = (row.account, row.machine);
@@ -635,6 +683,30 @@ impl AccountUsagePanel {
                     })
                     .child("Sign in again"),
                 )
+                .child(
+                    div()
+                        .id(SharedString::from(format!(
+                            "account-usage-sign-in-ignore-{}",
+                            row.key
+                        )))
+                        .flex_shrink_0()
+                        .size(px(CONTROL_HEIGHT))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(px(RESOURCE_CONTROL_RADIUS))
+                        .cursor_pointer()
+                        .hover(|this| this.bg(chrome_ink().opacity(0.12)))
+                        .tooltip(move |window, cx| {
+                            Tooltip::new(dismiss_words.clone()).build(window, cx)
+                        })
+                        .on_click(dismiss)
+                        .child(titlebar_svg_icon(
+                            "titlebar/x.svg",
+                            12.0,
+                            chrome_ink().opacity(0.70).into(),
+                        )),
+                )
         });
         v_flex()
             .w_full()
@@ -644,11 +716,18 @@ impl AccountUsagePanel {
             .gap(px(5.0))
             .rounded(px(RESOURCE_CONTROL_RADIUS))
             .border_1()
-            .border_color(color.opacity(0.30))
-            .bg(color.opacity(0.10))
+            .map(|this| {
+                if warning {
+                    this.border_color(color.opacity(0.30))
+                        .bg(color.opacity(0.10))
+                } else {
+                    this.border_color(chrome_ink().opacity(0.12))
+                }
+            })
             .text_size(px(12.0))
             .line_height(px(NOTICE_LINE))
             .children(rows)
+            .children(ignored_rows)
             .when_some(banner.fine, |this, fine| {
                 this.child(div().text_color(chrome_ink().opacity(0.70)).child(fine))
             })
@@ -938,17 +1017,21 @@ fn account_notice(account: &Value, now: i64) -> Option<AccountNotice> {
 #[derive(Debug, PartialEq)]
 pub(super) struct SignInBanner {
     signed_out: Vec<SignedOutRow>,
+    /// The computers the user said the account isn't used on (`ignored`), each with its Undo.
+    ignored: Vec<SignedOutRow>,
     /// Where the account is fine, and any computer that can't be reached.
     fine: Option<String>,
-    /// The card's own copy is one of the signed-out ones, so the notice under the card would
-    /// only say it again.
+    /// The card's own copy is one of the signed-out (or not used) ones, so the notice under the
+    /// card would only say it again.
     covers_shown: bool,
 }
 
 #[derive(Debug, PartialEq)]
 struct SignedOutRow {
-    /// "Signed out here", "Signed out on Mac Studio".
+    /// "Signed out here", "Signed out on Mac Studio", "Not used on m7-arch".
     message: String,
+    /// "here", "on Mac Studio": its Don't use button's words.
+    place: String,
     /// The account to sign in again, and the remote computer it is on (`None` here).
     account: Option<String>,
     machine: Option<String>,
@@ -965,31 +1048,23 @@ struct SignedOutRow {
 /// computer through the page's machine picker for another computer (the chat's Reconnect does the
 /// same), then where it is still signed in and any computer that can't be reached. The computers
 /// come from `signInComputers` (`usage_popup_account`).
+///
+/// CDXC:AgentProviders 2026-11-20 DECISION:
+/// User: "I want this account to actually not be signed in on arch, but I still see the warning.
+/// Can we have a button to dismiss the warning?". Each signed-out line has an x, "Don't use on
+/// m7-arch", which tells that computer (`SavedAccount::sign_in_ignored`): its line becomes "Not
+/// used on m7-arch · Undo" and the card stops turning amber for it, until the account signs in
+/// there again or the user presses Undo. With nothing else to say the banner is a plain line.
 fn sign_in_banner(account: &Value) -> Option<SignInBanner> {
     let computers = array(account, "signInComputers");
     let state = |computer: &Value| text(computer, "state").to_string();
     if !computers
         .iter()
-        .any(|computer| state(computer) == "signedOut")
+        .any(|computer| matches!(state(computer).as_str(), "signedOut" | "ignored"))
     {
         return None;
     }
     let here = |computer: &Value| computer["here"] == true;
-    let id = text(account, "id");
-    let signed_out = computers
-        .iter()
-        .filter(|computer| state(computer) == "signedOut")
-        .map(|computer| SignedOutRow {
-            message: if here(computer) {
-                "Signed out here".to_string()
-            } else {
-                format!("Signed out on {}", text(computer, "name"))
-            },
-            account: (!id.is_empty()).then(|| id.to_string()),
-            machine: (!here(computer)).then(|| text(computer, "machine").to_string()),
-            key: text(computer, "machine").to_string(),
-        })
-        .collect();
     let place = |computer: &&Value| {
         if here(computer) {
             "here".to_string()
@@ -997,6 +1072,30 @@ fn sign_in_banner(account: &Value) -> Option<SignInBanner> {
             format!("on {}", text(computer, "name"))
         }
     };
+    let id = text(account, "id");
+    let row = |computer: &Value, message: String| SignedOutRow {
+        message,
+        place: place(&computer),
+        account: (!id.is_empty()).then(|| id.to_string()),
+        machine: (!here(computer)).then(|| text(computer, "machine").to_string()),
+        key: text(computer, "machine").to_string(),
+    };
+    let signed_out = computers
+        .iter()
+        .filter(|computer| state(computer) == "signedOut")
+        .map(|computer| {
+            let words = match here(computer) {
+                true => "Signed out here".to_string(),
+                false => format!("Signed out on {}", text(computer, "name")),
+            };
+            row(computer, words)
+        })
+        .collect();
+    let ignored = computers
+        .iter()
+        .filter(|computer| state(computer) == "ignored")
+        .map(|computer| row(computer, format!("Not used {}", place(&computer))))
+        .collect();
     let list = |state_name: &str| -> Vec<String> {
         computers
             .iter()
@@ -1024,12 +1123,15 @@ fn sign_in_banner(account: &Value) -> Option<SignInBanner> {
             .collect();
         fine.push(format!("Can't reach {} right now.", spoken_list(&names)));
     }
+    let fine = (!fine.is_empty()).then(|| fine.join(" "));
     Some(SignInBanner {
+        // Where it is fine matters only next to a computer it is signed out on.
+        fine: fine.filter(|_| !Vec::is_empty(&signed_out)),
         signed_out,
-        fine: (!fine.is_empty()).then(|| fine.join(" ")),
-        covers_shown: computers
-            .iter()
-            .any(|computer| computer["shown"] == true && state(computer) == "signedOut"),
+        ignored,
+        covers_shown: computers.iter().any(|computer| {
+            computer["shown"] == true && matches!(state(computer).as_str(), "signedOut" | "ignored")
+        }),
     })
 }
 
@@ -1048,12 +1150,19 @@ fn sign_in_banner_height(account: &Value) -> f32 {
         return 0.0;
     };
     let rows = banner.signed_out.len() as f32;
+    let lines = banner.ignored.len() as f32;
     let fine = if banner.fine.is_some() {
         NOTICE_LINE + 5.0
     } else {
         0.0
     };
-    NOTICE_GAP + 14.0 + 2.0 + rows * CONTROL_HEIGHT + (rows - 1.0) * 5.0 + fine
+    NOTICE_GAP
+        + 14.0
+        + 2.0
+        + rows * CONTROL_HEIGHT
+        + lines * NOTICE_LINE
+        + (rows + lines - 1.0) * 5.0
+        + fine
 }
 
 /// "a", "a and b", "a, b and c".
@@ -1284,6 +1393,7 @@ mod tests {
             banner.signed_out,
             vec![SignedOutRow {
                 message: "Signed out on Mac Studio".into(),
+                place: "on Mac Studio".into(),
                 account: Some("claude-sp".into()),
                 machine: Some("remote-1".into()),
                 key: "remote-1".into(),

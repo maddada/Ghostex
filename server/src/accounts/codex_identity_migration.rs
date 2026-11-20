@@ -265,6 +265,7 @@ mod tests {
             login_expired_at: None,
             login_confirmed_at: None,
             synced: None,
+            sign_in_ignored: false,
         }
     }
 
@@ -285,6 +286,7 @@ mod tests {
             login_expired_at: None,
             login_confirmed_at: None,
             synced: None,
+            sign_in_ignored: false,
         }
     }
 

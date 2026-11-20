@@ -121,6 +121,19 @@ pub(crate) struct SavedAccount {
     /// 2026-11-07 in gx-core settings_sync/lists.rs). Cleared by that sign-in (`register`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub synced: Option<SyncedAccount>,
+    /// The user said this account isn't used on this computer while it is signed out here: its
+    /// signed-out warning (the sidebar's amber card, the usage popup's line, the phone's) stays
+    /// quiet. Kept on this computer only (settings sync never sends it, gx-core
+    /// settings_sync/lists.rs `account_sync_value`), so every client reading this computer agrees.
+    /// Cleared when the account signs in here again (`register`) or the user undoes it.
+    ///
+    /// CDXC:AgentProviders 2026-11-20 DECISION:
+    /// User, of "Signed out on m7-arch" in an account's usage popup: "I want this account to
+    /// actually not be signed in on arch, but I still see the warning. Can we have a button to
+    /// dismiss the warning?". Unlike turning the account off (`user_disabled`), the account stays
+    /// listed, and its sign-in is still offered.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sign_in_ignored: bool,
 }
 impl SavedAccount {
     /// Automatic switching and the automatic new-session rules may pick this account.
