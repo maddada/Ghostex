@@ -27,7 +27,7 @@ static WINDOW_GLASS_WALLPAPER: AtomicBool = AtomicBool::new(false);
 static WINDOW_GLASS_PICTURE_FOLLOWS_SCREEN: AtomicBool = AtomicBool::new(false);
 
 /// CDXC:Theming 2026-09-30 DECISION:
-/// User: "i'm not able to set the transparency blur level in ghostex on macos please add sliders for this (hope they can work on other oses too)". Settings has a Blur slider (`windowGlassBlurRadius`, 0 to 100 points, default 60: the main window's glass as it always was) and a Menu blur slider (`windowGlassMenuBlurRadius`, default 20: `FROSTED_MENU_BLUR_RADIUS`). Blur reaches every GPUI backend through `set_background_blur_style`: on macOS it sets the live blur, the wallpaper and picture blur and the video blur; on Windows and Linux the system draws the Desktop and windows blur and has no radius to set, so there it sets the wallpaper, picture and video blur. Menu blur is macOS only for the same reason. 0 shows what is behind the glass sharp. On Windows with Desktop and windows the slider gives way to the Windows blur choice (`WINDOW_GLASS_WINDOWS_BLUR`), and Menu blur is hidden off macOS (`availability.rs` in the settings catalog).
+/// User: "i'm not able to set the transparency blur level in ghostex on macos please add sliders for this (hope they can work on other oses too)". Settings has a Blur slider (`windowGlassBlurRadius`, 0 to 100 points, default 4 since 2026-11-20, 60 before) and a Menu blur slider (`windowGlassMenuBlurRadius`, default 20: `FROSTED_MENU_BLUR_RADIUS`). Blur reaches every GPUI backend through `set_background_blur_style`: on macOS it sets the live blur, the wallpaper and picture blur and the video blur; on Windows and Linux the system draws the Desktop and windows blur and has no radius to set, so there it sets the wallpaper, picture and video blur. Menu blur is macOS only for the same reason. 0 shows what is behind the glass sharp. On Windows with Desktop and windows the slider gives way to the Windows blur choice (`WINDOW_GLASS_WINDOWS_BLUR`), and Menu blur is hidden off macOS (`availability.rs` in the settings catalog).
 static WINDOW_GLASS_BLUR_RADIUS: AtomicU8 = AtomicU8::new(WINDOW_GLASS_BLUR_RADIUS_DEFAULT);
 
 /// CDXC:Theming 2026-10-16 DECISION:
@@ -49,8 +49,9 @@ fn window_glass_behind_window_blur() -> gpui::BehindWindowBlur {
     }
 }
 
-/// The main window glass's blur radius in points until Settings says otherwise.
-const WINDOW_GLASS_BLUR_RADIUS_DEFAULT: u8 = 60;
+/// The main window glass's blur radius in points until Settings says otherwise
+/// (`windowGlassBlurRadius` in packages/settings-catalog/src/data/defaults.rs).
+const WINDOW_GLASS_BLUR_RADIUS_DEFAULT: u8 = 4;
 
 /// `windowGlassMenuBlurRadius`: the blur radius of frosted menus and tooltips.
 static WINDOW_GLASS_MENU_BLUR_RADIUS: AtomicU8 = AtomicU8::new(FROSTED_MENU_BLUR_RADIUS as u8);
@@ -152,7 +153,7 @@ fn window_glass_uses_backdrop(
 
 /// The picture the main window's glass shows in the current appearance, when Glass shows is
 /// Custom image and one is chosen for that appearance.
-fn window_glass_custom_image() -> Option<std::path::PathBuf> {
+pub(crate) fn window_glass_custom_image() -> Option<std::path::PathBuf> {
     let images = WINDOW_GLASS_IMAGES.lock().ok()?;
     if !images.custom {
         return None;
@@ -190,16 +191,16 @@ struct AppliedWindowGlass {
 /// with `window_glass_active_in` so they stay opaque there.
 static MAIN_WINDOW_ID: AtomicU64 = AtomicU64::new(u64::MAX);
 
-/// Default coverage of the sidebar's and the work area's tints over the blurred desktop: point 10
-/// of the Transparency strength slider (CDXC:Theming 2026-10-04 DECISION on the tint defaults in
+/// Default coverage of the sidebar's and the work area's tints over the blurred desktop: point 20
+/// of the Transparency strength slider (CDXC:Theming 2026-11-20 DECISION on the tint defaults in
 /// packages/settings-catalog/src/data/defaults.rs; `transparencyStrengthPatch` in
 /// packages/core-ui/settings-modal/theme-simple-controls.tsx (deleted 2026-10-01)), the same tint for the sidebar
 /// and the work area. SEE-ALSO: the CDXC:Theming 2026-09-25 DECISION on
 /// `DEFAULT_WINDOW_GLASS_SIDEBAR_OPACITY_DARK_PERCENT` in packages/shared/ghostex-settings/types.ts (deleted 2026-10-01).
-const SIDEBAR_GLASS_ALPHA_DARK: f32 = 0.94;
-const SIDEBAR_GLASS_ALPHA_LIGHT: f32 = 0.97;
-const WORK_AREA_GLASS_ALPHA_DARK: f32 = 0.94;
-const WORK_AREA_GLASS_ALPHA_LIGHT: f32 = 0.97;
+const SIDEBAR_GLASS_ALPHA_DARK: f32 = 0.88;
+const SIDEBAR_GLASS_ALPHA_LIGHT: f32 = 0.93;
+const WORK_AREA_GLASS_ALPHA_DARK: f32 = 0.88;
+const WORK_AREA_GLASS_ALPHA_LIGHT: f32 = 0.93;
 
 /// CDXC:Theming 2026-09-23 DECISION:
 /// User: "implement sliders for the glass for sidebar vs main area (2 different sliders for dark mode, and 2 for light mode)", then "can we make the sidebar darker than main area somehow? currently this isn't possible / i feel would be nicer if they are separate and each can be modified freely? not doubling up the transparency for workarea when i do for sidebar??". Under glass the sidebar and the work area each paint their own tint straight over the blurred desktop, and nothing tints the window underneath both, so either area can be the darker one. Settings holds four percentages (`windowGlassSidebarOpacityDark`, `windowGlassWorkAreaTintDark`, `windowGlassSidebarOpacityLight`, `windowGlassWorkAreaTintLight`) whose defaults are the constants above. This supersedes the same day's shell tint under the whole window with the work area's value as an extra layer over it; a saved extra layer (`windowGlassMainOpacity*`) is carried over as the coverage the two layers added up to.
@@ -828,7 +829,7 @@ pub(crate) fn window_glass_redraw_key() -> u64 {
 }
 
 /// CDXC:Theming 2026-09-25 DECISION:
-/// User: a single frosted menu was "not looking glassy at all", then "for the context menus and menus, we need them to be more transparent by default. Right now, the settings you have, they don't look transparent still." Every frosted menu and tooltip window uses one recipe: a 20px blur that keeps the backdrop's colour saturation (`FROSTED_MENU_BLUR_RADIUS`, `FROSTED_MENU_KEEP_SATURATION`, applied by `apply_frosted_menu_blur`; the main window's glass keeps its 60px, desaturated blur), and a fill of the theme's menu colour lifted a little toward white in dark mode covering 32% in dark mode and 60% in light mode (`frosted_menu_alpha`), so shapes and colours behind a menu read through it. Supersedes the same day's 50% fill over the main window's blur. The dark-mode coverage is 45% since 2026-10-29 (CDXC:AppModal on `frosted_dialog_fill`). Superseded on 2026-10-29 on macOS by the dropdowns' fill: no lift toward white and 60% dark / 75% light, see the Theming 2026-10-29 decision below.
+/// User: a single frosted menu was "not looking glassy at all", then "for the context menus and menus, we need them to be more transparent by default. Right now, the settings you have, they don't look transparent still." Every frosted menu and tooltip window uses one recipe: a 20px blur that keeps the backdrop's colour saturation (`FROSTED_MENU_BLUR_RADIUS`, `FROSTED_MENU_KEEP_SATURATION`, applied by `apply_frosted_menu_blur`; the main window's glass keeps its own desaturated blur, `windowGlassBlurRadius`), and a fill of the theme's menu colour lifted a little toward white in dark mode covering 32% in dark mode and 60% in light mode (`frosted_menu_alpha`), so shapes and colours behind a menu read through it. Supersedes the same day's 50% fill over the main window's blur. The dark-mode coverage is 45% since 2026-10-29 (CDXC:AppModal on `frosted_dialog_fill`). Superseded on 2026-10-29 on macOS by the dropdowns' fill: no lift toward white and 60% dark / 75% light, see the Theming 2026-10-29 decision below.
 ///
 /// CDXC:Theming 2026-10-10 DECISION:
 /// User, on Windows, of the sidebar's ☰ menu next to the Notifications panel: "this menu is gray right now and this one is bluish please make them all consistent with the bluish one so all menus are same". On Windows every frosted menu, dropdown, context menu and tooltip takes the Notifications panel's surface: the theme colour, not lifted toward white, covering `frosted_modal_alpha` of the blur (`frosted_lift`, `frosted_menu_alpha`). Supersedes the thinner menu fill above on Windows; macOS keeps it (until the 2026-10-29 decision below).

@@ -87,6 +87,7 @@ impl PageGlass {
 impl GpuiVisualPageModalWindow {
     /// Hands the new page its glass and keeps it in step while the window is open.
     pub(super) fn follow_page_glass(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        PAGE_WINDOWS_OPENED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.sync_page_glass(true, window, cx);
         self._glass_watch = Some(cx.spawn_in(window, async move |this, cx| {
             loop {
@@ -181,11 +182,14 @@ fn page_glass(window: &Window, cx: &mut App) -> Option<Glass> {
         crate::app::helpers::workspace_background_color()
             .opacity(crate::app::helpers::work_area_glass_alpha()),
     );
+    let desktop = desktop_picture_path(bounds.center());
+    let source = picture_source(desktop.as_deref());
     let Some(snapshot) = snapshot else {
         if crate::app::helpers::window_glass_live::window_glass_live_mode() {
             return None;
         }
-        return stand_in_glass(window, cx, tint).or_else(|| remembered_glass(bounds.size, tint));
+        return stand_in_glass(window, cx, tint, desktop.as_deref(), &source)
+            .or_else(|| remembered_glass(bounds.size, tint, &source));
     };
     // Held against the screen (and always under the live blur, which is the screen behind the
     // window), the page window shows the part of the screen it sits over, like the main window
@@ -199,7 +203,7 @@ fn page_glass(window: &Window, cx: &mut App) -> Option<Glass> {
         snapshot.window.origin + offset
     });
     let jpeg = softened(&snapshot.jpeg, f32::from(snapshot.screen.width));
-    remember_picture(&jpeg);
+    remember_picture(&jpeg, &source);
     Some(Glass {
         jpeg,
         rect: picture_rect(bounds.size, snapshot.screen, on_screen),
@@ -207,10 +211,26 @@ fn page_glass(window: &Window, cx: &mut App) -> Option<Glass> {
     })
 }
 
+/// What the page window's picture is a picture of: the custom picture the glass shows, else the
+/// desktop picture macOS names for the page window's display (`desktop`), else nothing. The kept
+/// picture is used only for the same one (`remembered_glass`).
+fn picture_source(desktop: Option<&std::path::Path>) -> String {
+    let (kind, path) = match crate::app::helpers::window_glass_custom_image() {
+        Some(custom) => ("custom", custom),
+        None => match desktop {
+            Some(desktop) => ("desktop", desktop.to_path_buf()),
+            None => return String::new(),
+        },
+    };
+    format!("{kind}|{}", path.display())
+}
+
 /// CDXC:SessionChat 2026-11-16 DECISION:
-/// User: "why dont i see the bg show here in the ghostex page pls? we implemented this before but i dont see it now anymore". The page window's picture comes from the main window's snapshot of the desktop picture, and that snapshot is `None` whenever macOS names a desktop picture file that cannot be opened. That is what happened on 2026-11-16: a wallpaper changer left the desktop on `$TMPDIR/StaticWallpaper/<n>_static.jpg`, which was gone by the afternoon (the system log showed Ghostex's once-a-second check failing on it, "can't open ... fileExists == false"). The main window's live blur kept working, since the system blurs what is on screen, but the page window fell back to the painted dusk. So the last picture the page window was handed is kept (in memory, and in the cache folder for the next launch) and used while the desktop picture can't be read, placed covering the window; the real picture takes over again as soon as one can be read. A video or a live style is not this: there the glass shows no picture on purpose, so the page keeps the painted dusk or dawn.
-fn remembered_glass(window_size: Size<Pixels>, tint: Rgba) -> Option<Glass> {
-    let (jpeg, screen) = remembered_picture()?;
+/// User: "why dont i see the bg show here in the ghostex page pls? we implemented this before but i dont see it now anymore". The page window's picture comes from the main window's snapshot of the desktop picture, and that snapshot is `None` whenever macOS names a desktop picture file that cannot be opened. That is what happened on 2026-11-16: a wallpaper changer left the desktop on `$TMPDIR/StaticWallpaper/<n>_static.jpg`, which was gone by the afternoon (the system log showed Ghostex's once-a-second check failing on it, "can't open ... fileExists == false"). So the last picture the page window was handed is kept (in memory, and in the cache folder for the next launch) and used while the desktop picture can't be read, placed covering the window; the real picture takes over again as soon as one can be read. A video or a live style is not this: there the glass shows no picture on purpose, so the page keeps the painted dusk or dawn.
+/// CDXC:SessionChat 2026-11-20 WHY:
+/// User: "why is this inline html using my old wallpaper? make it use my current one, at least on restart; I hate stale wallpaper, it's not matching". The kept picture was used for whatever desktop picture could not be read, including a different one set since, so a new wallpaper that Ghostex may not open showed the previous one, across restarts too. It is now kept with what it is a picture of (`picture_source`: the desktop picture's path, or the custom picture's) and used only while that is still what the glass shows.
+fn remembered_glass(window_size: Size<Pixels>, tint: Rgba, source: &str) -> Option<Glass> {
+    let (jpeg, screen) = remembered_picture(source)?;
     Some(Glass {
         jpeg,
         rect: picture_rect(window_size, screen, None),
@@ -220,12 +240,22 @@ fn remembered_glass(window_size: Size<Pixels>, tint: Rgba) -> Option<Glass> {
 
 /// CDXC:SessionChat 2026-11-17 WHY:
 /// User: "why is this not showing the blurred bg like it used to??? it's inline html in the macos app". The desktop is a Wallspace video wallpaper. Wallspace plays the video itself and names a still of it, `$TMPDIR/StaticWallpaper/<key>_static.jpg`, as the macOS desktop picture, and that file was gone again (the system log showed the main window's once-a-second read failing on it, "fileExists == false"). The fallback of 2026-11-16 above only helps once a picture has been seen, and none had been since the app started, so the page window painted the flat dusk top (`PAGE_TOP_DARK`). While the desktop picture can't be read, the page now uses Wallspace's own poster of the wallpaper it is playing (`wallspace_poster`), which is the same scene, placed as the main window's picture would be. The kept picture still comes after it, for any other desktop picture that disappears.
-fn stand_in_glass(window: &Window, cx: &App, tint: Rgba) -> Option<Glass> {
-    let poster = wallspace_poster()?;
+/// CDXC:SessionChat 2026-11-20 WHY:
+/// User: "why is this inline html using my old wallpaper? make it use my current one". The user had moved from Wallspace to iWallpaper, whose desktop picture lies in its own sandbox, which macOS will not let Ghostex open (the system log: "could not open ... com.macosgame.iwallpaper/Data/Documents/DesktopImage/<uuid>.png", "Operation not permitted"). The poster was picked from Wallspace's preferences, which still named Wallspace's last wallpaper, so the page showed that old scene. The poster is now taken only when the desktop picture is a Wallspace still, and by that still's own key; any other desktop picture Ghostex can't open is read off the screen instead (`captured_desktop`), when Ghostex already may read the screen.
+fn stand_in_glass(
+    window: &Window,
+    cx: &App,
+    tint: Rgba,
+    desktop: Option<&std::path::Path>,
+    source: &str,
+) -> Option<Glass> {
     let bounds = window.bounds();
     let display = window.display(cx)?.bounds();
-    let jpeg = stand_in_picture(&poster, display.size)?;
-    remember_picture(&jpeg);
+    let jpeg = desktop
+        .and_then(wallspace_poster)
+        .and_then(|poster| stand_in_picture(&poster, display.size))
+        .or_else(|| captured_desktop(display, source))?;
+    remember_picture(&jpeg, source);
     let on_screen = (crate::app::helpers::window_glass_shows_live_blur()
         || crate::app::helpers::window_glass_picture_follows_screen())
     .then(|| bounds.origin - display.origin);
@@ -236,27 +266,107 @@ fn stand_in_glass(window: &Window, cx: &App, tint: Rgba) -> Option<Glass> {
     })
 }
 
-/// The poster Wallspace keeps for the wallpaper it is playing, when there is one.
+/// The path of the desktop picture macOS names for the display that holds `point` (GPUI's global
+/// space), whether or not Ghostex may open it.
 #[cfg(target_os = "macos")]
-fn wallspace_poster() -> Option<std::path::PathBuf> {
-    let home = std::path::PathBuf::from(std::env::var_os("HOME")?);
-    let prefs = home.join("Library/Preferences/wallspace.app.plist");
-    // The preferences are read again only when the file changes.
-    static LAST: std::sync::Mutex<Option<(std::time::SystemTime, Option<String>)>> =
+fn desktop_picture_path(point: Point<Pixels>) -> Option<std::path::PathBuf> {
+    use std::os::unix::ffi::OsStrExt as _;
+    unsafe extern "C" {
+        fn GhostexGpuiDesktopPicturePath(
+            x: f64,
+            y: f64,
+            out: *mut std::ffi::c_char,
+            capacity: usize,
+        ) -> usize;
+    }
+    let mut out = vec![0u8; 4096];
+    let length = unsafe {
+        GhostexGpuiDesktopPicturePath(
+            f32::from(point.x) as f64,
+            f32::from(point.y) as f64,
+            out.as_mut_ptr().cast(),
+            out.len(),
+        )
+    };
+    (length > 0).then(|| std::ffi::OsStr::from_bytes(&out[..length.min(out.len())]).into())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn desktop_picture_path(_point: Point<Pixels>) -> Option<std::path::PathBuf> {
+    None
+}
+
+/// Counts the page windows opened, so each one reads the screen afresh (`captured_desktop`).
+static PAGE_WINDOWS_OPENED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How long a picture read off the screen is used before it is read again while a page window
+/// stays open: a wallpaper app may change its picture without a new name.
+const CAPTURE_KEPT_FOR: Duration = Duration::from_secs(30);
+
+/// The desktop of the display at `display` as it is on screen, cut to the display's shape and
+/// softened like the main window's picture (`softened`); `None` when Ghostex may not read the
+/// screen (it never asks) or on another system. Read again for each page window, when the desktop
+/// picture (`source`) or the display changes, and every `CAPTURE_KEPT_FOR`.
+fn captured_desktop(display: Bounds<Pixels>, source: &str) -> Option<Vec<u8>> {
+    type Key = (String, [u32; 4], u64);
+    static LAST: std::sync::Mutex<Option<(Key, std::time::Instant, Vec<u8>)>> =
         std::sync::Mutex::new(None);
-    let modified = std::fs::metadata(&prefs).and_then(|m| m.modified()).ok()?;
-    let mut last = LAST.lock().ok()?;
-    let key = match last.as_ref() {
-        Some((seen, key)) if *seen == modified => key.clone(),
-        _ => {
-            let key = plist::Value::from_file(&prefs)
-                .ok()
-                .and_then(|prefs| wallspace_key(prefs.as_dictionary()?));
-            *last = Some((modified, key.clone()));
-            key
-        }
-    }?;
-    drop(last);
+    let key: Key = (
+        source.to_string(),
+        [
+            f32::from(display.origin.x).to_bits(),
+            f32::from(display.origin.y).to_bits(),
+            f32::from(display.size.width).to_bits(),
+            f32::from(display.size.height).to_bits(),
+        ],
+        PAGE_WINDOWS_OPENED.load(std::sync::atomic::Ordering::Relaxed),
+    );
+    if let Ok(last) = LAST.lock()
+        && let Some((last_key, taken, soft)) = last.as_ref()
+        && *last_key == key
+        && taken.elapsed() < CAPTURE_KEPT_FOR
+    {
+        return Some(soft.clone());
+    }
+    let center = display.center();
+    let capture = screen_capture_jpeg(f32::from(center.x) as f64, f32::from(center.y) as f64)?;
+    let jpeg = screen_shaped_jpeg(&capture, display.size)?;
+    let soft = softened(&jpeg, f32::from(display.size.width));
+    if let Ok(mut last) = LAST.lock() {
+        *last = Some((key, std::time::Instant::now(), soft.clone()));
+    }
+    Some(soft)
+}
+
+/// What the desktop of the display holding (`x`, `y`) shows, as a JPEG (the native shim's
+/// `GhostexGpuiDesktopCaptureJpeg`).
+#[cfg(target_os = "macos")]
+fn screen_capture_jpeg(x: f64, y: f64) -> Option<Vec<u8>> {
+    unsafe extern "C" {
+        fn GhostexGpuiDesktopCaptureJpeg(x: f64, y: f64, length: *mut usize) -> *mut u8;
+        fn GhostexGpuiFreeBytes(bytes: *mut u8);
+    }
+    let mut length = 0usize;
+    let bytes = unsafe { GhostexGpuiDesktopCaptureJpeg(x, y, &mut length) };
+    if bytes.is_null() {
+        return None;
+    }
+    let jpeg = unsafe { std::slice::from_raw_parts(bytes, length) }.to_vec();
+    unsafe { GhostexGpuiFreeBytes(bytes) };
+    Some(jpeg)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn screen_capture_jpeg(_x: f64, _y: f64) -> Option<Vec<u8>> {
+    None
+}
+
+/// Wallspace's poster of the wallpaper whose still is the desktop picture `desktop`
+/// (`<key>_static.jpg` in its `StaticWallpaper` folder), when there is one.
+#[cfg(target_os = "macos")]
+fn wallspace_poster(desktop: &std::path::Path) -> Option<std::path::PathBuf> {
+    let key = wallspace_key(desktop)?;
+    let home = std::path::PathBuf::from(std::env::var_os("HOME")?);
     let poster = home
         .join("Library/Caches/Wallspace/images/posters")
         .join(format!("{key}.webp"));
@@ -264,29 +374,23 @@ fn wallspace_poster() -> Option<std::path::PathBuf> {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn wallspace_poster() -> Option<std::path::PathBuf> {
+fn wallspace_poster(_desktop: &std::path::Path) -> Option<std::path::PathBuf> {
     None
 }
 
-/// The playing wallpaper's key in Wallspace's preferences: `savedWallpaperKey`, else the name of
-/// `savedWallpaperMasterUrl`'s video. Only digits, letters, `-` and `_`, since it names a file.
-#[cfg(target_os = "macos")]
-fn wallspace_key(prefs: &plist::Dictionary) -> Option<String> {
-    let key = match prefs.get("savedWallpaperKey") {
-        Some(plist::Value::Integer(key)) => Some(key.to_string()),
-        Some(plist::Value::String(key)) => Some(key.clone()),
-        _ => None,
+/// The wallpaper's key in the name of Wallspace's still `desktop`, `StaticWallpaper/<key>_static.*`.
+/// Only digits, letters, `-` and `_`, since it names a file.
+fn wallspace_key(desktop: &std::path::Path) -> Option<String> {
+    let folder = desktop.parent()?.file_name()?.to_str()?;
+    if folder != "StaticWallpaper" {
+        return None;
     }
-    .or_else(|| {
-        let url = prefs.get("savedWallpaperMasterUrl")?.as_string()?;
-        let name = url.rsplit('/').next()?;
-        Some(name.split('.').next()?.to_string())
-    })?;
+    let key = desktop.file_stem()?.to_str()?.strip_suffix("_static")?;
     (!key.is_empty()
         && key
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_'))
-    .then_some(key)
+    .then(|| key.to_string())
 }
 
 /// The picture at `path`, cut to the shape of a screen `screen` points in size (the middle of it,
@@ -360,10 +464,12 @@ fn screen_shaped_jpeg(bytes: &[u8], screen: Size<Pixels>) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// The last picture the page window was handed, and its size (only its shape matters, to cover
-/// the window); read from the cache folder once per launch.
+/// The last picture the page window was handed, what it is a picture of (`picture_source`) and
+/// its size (only its shape matters, to cover the window); read from the cache folder once per
+/// launch.
 struct Remembered {
     jpeg: Vec<u8>,
+    source: String,
     screen: Size<Pixels>,
 }
 
@@ -375,12 +481,19 @@ fn remembered_path() -> std::path::PathBuf {
         .join("page-window-glass.jpg")
 }
 
-/// Keeps `jpeg` for the times the desktop picture can't be read; written only when it changed.
-fn remember_picture(jpeg: &[u8]) {
+/// Where the kept picture's `source` is written, beside it. A picture kept without one (before
+/// 2026-11-20) belongs to no source, so it is never shown.
+fn remembered_source_path() -> std::path::PathBuf {
+    remembered_path().with_extension("source")
+}
+
+/// Keeps `jpeg`, a picture of `source`, for the times that can't be read; written only when it
+/// changed.
+fn remember_picture(jpeg: &[u8], source: &str) {
     let Ok(mut remembered) = REMEMBERED.lock() else {
         return;
     };
-    if matches!(&*remembered, Some(Some(known)) if known.jpeg == jpeg) {
+    if matches!(&*remembered, Some(Some(known)) if known.jpeg == jpeg && known.source == source) {
         return;
     }
     let Some(screen) = picture_size(jpeg) else {
@@ -388,6 +501,7 @@ fn remember_picture(jpeg: &[u8]) {
     };
     *remembered = Some(Some(Remembered {
         jpeg: jpeg.to_vec(),
+        source: source.to_string(),
         screen,
     }));
     drop(remembered);
@@ -395,22 +509,37 @@ fn remember_picture(jpeg: &[u8]) {
     if let Some(folder) = path.parent() {
         let _ = std::fs::create_dir_all(folder);
     }
-    let partial = path.with_extension("jpg.partial");
-    if std::fs::write(&partial, jpeg).is_ok() {
-        let _ = std::fs::rename(&partial, &path);
+    for (path, bytes) in [
+        (path.clone(), jpeg),
+        (remembered_source_path(), source.as_bytes()),
+    ] {
+        let partial = path.with_extension("partial");
+        if std::fs::write(&partial, bytes).is_ok() {
+            let _ = std::fs::rename(&partial, &path);
+        }
     }
 }
 
-/// The kept picture, from memory or else from the cache folder.
-fn remembered_picture() -> Option<(Vec<u8>, Size<Pixels>)> {
+/// The kept picture, from memory or else from the cache folder, while it is a picture of
+/// `source`.
+fn remembered_picture(source: &str) -> Option<(Vec<u8>, Size<Pixels>)> {
+    if source.is_empty() {
+        return None;
+    }
     let mut remembered = REMEMBERED.lock().ok()?;
     let known = remembered.get_or_insert_with(|| {
+        let source = std::fs::read_to_string(remembered_source_path()).ok()?;
         let jpeg = std::fs::read(remembered_path()).ok()?;
         let screen = picture_size(&jpeg)?;
-        Some(Remembered { jpeg, screen })
+        Some(Remembered {
+            jpeg,
+            source,
+            screen,
+        })
     });
     known
         .as_ref()
+        .filter(|known| known.source == source)
         .map(|known| (known.jpeg.clone(), known.screen))
 }
 
@@ -705,29 +834,25 @@ mod tests {
         assert!(screen_shaped_jpeg(b"not a picture", size(px(800.0), px(600.0))).is_none());
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
-    fn wallspace_names_its_wallpaper_by_key_or_by_its_video() {
-        let mut prefs = plist::Dictionary::new();
-        prefs.insert(
-            "savedWallpaperMasterUrl".into(),
-            plist::Value::String(
-                "file:///Users/me/Library/Caches/Wallspace/Wallpapers/107826141533452.mp4".into(),
-            ),
+    fn wallspace_names_its_wallpaper_by_the_key_in_its_still() {
+        use std::path::Path;
+        let still = Path::new("/var/folders/x/T/StaticWallpaper/816347559438864_static.jpg");
+        assert_eq!(wallspace_key(still).as_deref(), Some("816347559438864"));
+        // Another app's desktop picture is not Wallspace's, whatever Wallspace last played.
+        let other = Path::new(
+            "/Users/me/Library/Containers/com.macosgame.iwallpaper/Data/Documents/DesktopImage/D270FA36.png",
         );
-        assert_eq!(wallspace_key(&prefs).as_deref(), Some("107826141533452"));
-        prefs.insert(
-            "savedWallpaperKey".into(),
-            plist::Value::Integer(816347559438864_i64.into()),
+        assert_eq!(wallspace_key(other), None);
+        assert_eq!(
+            wallspace_key(Path::new("/Pictures/816347559438864_static.jpg")),
+            None
         );
-        assert_eq!(wallspace_key(&prefs).as_deref(), Some("816347559438864"));
         // A key that would leave the posters folder is refused.
-        prefs.insert(
-            "savedWallpaperKey".into(),
-            plist::Value::String("../../x".into()),
+        assert_eq!(
+            wallspace_key(Path::new("/T/StaticWallpaper/.._static.jpg")),
+            None
         );
-        assert_eq!(wallspace_key(&prefs), None);
-        assert_eq!(wallspace_key(&plist::Dictionary::new()), None);
     }
 
     #[test]

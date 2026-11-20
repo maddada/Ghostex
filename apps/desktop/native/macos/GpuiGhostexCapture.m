@@ -365,3 +365,109 @@ void GhostexGpuiDetachChildWindow(void *native_view) {
     [parent removeChildWindow:window];
   }
 }
+
+/// The display that holds the point (`x`, `y`) in GPUI's global space (CoreGraphics' global
+/// display space), or the main display when none does.
+static CGDirectDisplayID GhostexGpuiDisplayAtPoint(double x, double y) {
+  CGDirectDisplayID display = kCGNullDirectDisplay;
+  uint32_t count = 0;
+  if (CGGetDisplaysWithPoint(CGPointMake(x, y), 1, &display, &count) != kCGErrorSuccess ||
+      count == 0) {
+    return CGMainDisplayID();
+  }
+  return display;
+}
+
+/// Writes into `out` the path of the desktop picture macOS names for the display that holds the
+/// point (`x`, `y`) (`desktopImageURLForScreen:`), and returns its length; 0 when there is none
+/// or it does not fit. The name says which wallpaper is on that display even when the file itself
+/// can't be read (another app's sandbox, a file since deleted).
+size_t GhostexGpuiDesktopPicturePath(double x, double y, char *out, size_t capacity) {
+  @autoreleasepool {
+    if (!out || capacity == 0) {
+      return 0;
+    }
+    CGDirectDisplayID display = GhostexGpuiDisplayAtPoint(x, y);
+    for (NSScreen *screen in NSScreen.screens) {
+      NSNumber *number = screen.deviceDescription[@"NSScreenNumber"];
+      if (!number || number.unsignedIntValue != display) {
+        continue;
+      }
+      NSURL *url = [NSWorkspace.sharedWorkspace desktopImageURLForScreen:screen];
+      const char *path = url.path.fileSystemRepresentation;
+      size_t length = path ? strlen(path) : 0;
+      if (length == 0 || length >= capacity) {
+        return 0;
+      }
+      memcpy(out, path, length + 1);
+      return length;
+    }
+    return 0;
+  }
+}
+
+/// CDXC:SessionChat 2026-11-20 WHY:
+/// User: "why is this inline html using my old wallpaper? make it use my current one". A wallpaper
+/// app such as iWallpaper names a picture inside its own sandbox as the desktop picture, which
+/// macOS will not let another app open ("Operation not permitted"), and draws its wallpaper in a
+/// window of its own at the desktop's level. What the desktop shows is then only on screen, so the
+/// page window reads it there: every window at or below the desktop's level on the display that
+/// holds (`x`, `y`) (the desktop picture and any wallpaper app's window over it, never the desktop
+/// icons or an app's window), at the display's size in points. Only when Ghostex already may read
+/// the screen: this never asks for Screen Recording.
+///
+/// Returns the picture as a JPEG in a buffer the caller frees with `GhostexGpuiFreeBytes`, and its
+/// length in `length`; NULL when there is none.
+uint8_t *GhostexGpuiDesktopCaptureJpeg(double x, double y, size_t *length) {
+  @autoreleasepool {
+    if (length) {
+      *length = 0;
+    }
+    if (@available(macOS 10.15, *)) {
+      if (!CGPreflightScreenCaptureAccess()) {
+        return NULL;
+      }
+    }
+    CGDirectDisplayID display = GhostexGpuiDisplayAtPoint(x, y);
+    CGRect bounds = CGDisplayBounds(display);
+    CGWindowLevel desktop = CGWindowLevelForKey(kCGDesktopWindowLevelKey);
+    NSArray *windows = CFBridgingRelease(
+        CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID));
+    CFMutableArrayRef ids = CFArrayCreateMutable(NULL, 0, NULL);
+    for (NSDictionary *info in windows) {
+      NSNumber *layer = info[(__bridge NSString *)kCGWindowLayer];
+      NSNumber *number = info[(__bridge NSString *)kCGWindowNumber];
+      if (layer && number && layer.intValue <= desktop) {
+        CFArrayAppendValue(ids, (const void *)(uintptr_t)number.unsignedIntValue);
+      }
+    }
+    CGImageRef image = NULL;
+    if (CFArrayGetCount(ids) > 0) {
+      image = CGWindowListCreateImageFromArray(bounds, ids, kCGWindowImageNominalResolution);
+    }
+    CFRelease(ids);
+    if (!image) {
+      return NULL;
+    }
+    NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithCGImage:image];
+    CFRelease(image);
+    NSData *jpeg = [rep representationUsingType:NSBitmapImageFileTypeJPEG
+                                     properties:@{NSImageCompressionFactor : @0.85}];
+    if (jpeg.length == 0) {
+      return NULL;
+    }
+    uint8_t *bytes = malloc(jpeg.length);
+    if (!bytes) {
+      return NULL;
+    }
+    memcpy(bytes, jpeg.bytes, jpeg.length);
+    if (length) {
+      *length = jpeg.length;
+    }
+    return bytes;
+  }
+}
+
+void GhostexGpuiFreeBytes(uint8_t *bytes) {
+  free(bytes);
+}
