@@ -194,7 +194,6 @@ pub(crate) fn uninstall_skill(home: &Path, skill: &str) -> Result<(), DomainStat
     // `is_own_ghostex_skill`).
     if skill == crate::agent_skills::GHOSTEX_SKILL_NAME
         && crate::agent_skills::is_users_ghostex_entry(&path, &path, &[])
-        && !fs::symlink_metadata(&path).is_ok_and(|meta| meta.file_type().is_symlink())
     {
         return Err(DomainStateError::bad_request(
             "This ghostex skill isn't the one Ghostex installed, so it was kept.",
