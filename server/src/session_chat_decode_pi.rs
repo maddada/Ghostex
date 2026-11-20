@@ -36,13 +36,9 @@ fn pi_tool_result_pictures(
         .filter_map(Value::as_object)
         .filter(|record| record.get("type").and_then(Value::as_str) == Some("image"))
         .filter_map(|record| {
-            let data = record
-                .get("data")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            if data.trim().is_empty() {
+            let Some(data) = inline_picture_data(record) else {
                 return image_ref_block(record);
-            }
+            };
             if reads_a_file {
                 return None;
             }
