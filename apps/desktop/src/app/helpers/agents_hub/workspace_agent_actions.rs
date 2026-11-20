@@ -263,9 +263,13 @@ pub(crate) fn gpui_uninstall_bundled_agent_skill(skill_name: &str) -> Result<boo
     // user's own skill of that name) is kept: only one whose every file is this build's or one
     // gxserver recorded writing (server/src/agent_skills.rs `is_own_ghostex_skill`) goes.
     if skill_name == "ghostex"
-        && metadata.is_dir()
-        && !metadata.file_type().is_symlink()
-        && !gpui_ghostex_skill_is_own(&skill_path)
+        && if metadata.file_type().is_symlink() {
+            // A link is the user's (their checkout, say) unless it leads into the app's own
+            // files (Opus re-review, finding C).
+            !gpui_link_into_app_bundle(&skill_path)
+        } else {
+            metadata.is_dir() && !gpui_ghostex_skill_is_own(&skill_path)
+        }
     {
         return Ok(false);
     }
@@ -283,6 +287,22 @@ pub(crate) fn gpui_uninstall_bundled_agent_skill(skill_name: &str) -> Result<boo
         "Bundled Ghostex skill uninstall failed. Current integration status was refreshed."
             .to_string()
     })
+}
+
+/// Whether the link at `link` leads into the app's own files: its bundle, or the gxserver package
+/// beside this program.
+fn gpui_link_into_app_bundle(link: &std::path::Path) -> bool {
+    let Ok(target) = fs::canonicalize(link) else {
+        return false;
+    };
+    if target.to_string_lossy().contains(".app/Contents/") {
+        return true;
+    }
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| fs::canonicalize(exe).ok())
+        .and_then(|exe| exe.parent()?.parent().map(std::path::Path::to_path_buf))
+        .is_some_and(|package| target.starts_with(package))
 }
 
 /// Whether the `ghostex` skill folder at `dir` is Ghostex's own unedited copy: every file is this
