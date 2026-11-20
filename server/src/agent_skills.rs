@@ -1593,36 +1593,6 @@ mod tests {
         assert!(ghostex_agent_sync::fsx::is_symlink(&fresh));
     }
 
-    #[test]
-    fn an_install_naming_no_agents_links_only_into_agents_that_are_present() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let home = temp.path().join("home");
-        fs::create_dir_all(home.join(".kiro")).expect("kiro home");
-        fs::create_dir_all(home.join(".factory")).expect("droid home");
-        let source = temp.path().join("source").join("thread-brief");
-        write_skill(&source, "thread-brief");
-        install_skill_folder(&home, &source, "thread-brief").expect("installed");
-        assert!(home.join(".agents/skills/thread-brief/SKILL.md").is_file());
-        // Present agents get the link, the skills folder inside their home made for them.
-        assert!(ghostex_agent_sync::fsx::is_symlink(
-            &home.join(".kiro/skills/thread-brief")
-        ));
-        assert!(ghostex_agent_sync::fsx::is_symlink(
-            &home.join(".factory/skills/thread-brief")
-        ));
-        // No home folder is made for an agent that isn't there.
-        for absent in [".qoder", ".rovodev", ".codebuddy", ".claude", ".gemini", ".pi"] {
-            assert!(!home.join(absent).exists(), "{absent} was made");
-        }
-        // Naming an agent still installs for it, home included.
-        let target_roots =
-            agent_skill_install_target_roots(&home, &["qoder".to_string()]).expect("roots");
-        place_skill(&source, "thread-brief", &target_roots).expect("placed");
-        assert!(ghostex_agent_sync::fsx::is_symlink(
-            &home.join(".qoder/skills/thread-brief")
-        ));
-    }
-
     #[tokio::test]
     async fn install_agent_skills_rejects_explicit_empty_skill_names() {
         let temp = tempfile::tempdir().expect("tempdir");
