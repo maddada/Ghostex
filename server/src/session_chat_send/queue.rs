@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::atomic::AtomicUsize;
 
 // ---------------------------------------------------------------------------
 // Per-session send queue (upstream chat spec §7.6)
@@ -15,6 +16,10 @@ cancelled, or the queue was gone). Only the former is evidence about the
 terminal, so only the former may raise a notice.
 */
 pub(super) const SESSION_CHAT_SEND_CANCELLED: &str = "The session chat send was cancelled.";
+/// The refusal of `execute_session_chat_send_if_idle` when another write to the session's terminal
+/// is waiting or running.
+pub(super) const SESSION_CHAT_SEND_WRITES_PENDING: &str =
+    "Another write to the session's terminal (typed keys or a message) is still waiting or running.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SessionChatSendFailure {
@@ -79,6 +84,13 @@ impl SessionChatSendError {
     /// True when the send was cancelled before its Enter was written: the
     /// interrupt endpoint bumped the queue generation under it, so nothing
     /// reached the agent and the caller still owns the text.
+    /// True when `execute_session_chat_send_if_idle` found another write waiting or running and
+    /// queued nothing.
+    pub fn writes_pending(&self) -> bool {
+        self.failure == SessionChatSendFailure::NotAttempted
+            && self.message == SESSION_CHAT_SEND_WRITES_PENDING
+    }
+
     pub fn cancelled(&self) -> bool {
         self.failure == SessionChatSendFailure::NotAttempted
             && self.message == SESSION_CHAT_SEND_CANCELLED
@@ -100,11 +112,25 @@ pub(super) struct SessionChatSendJob {
     pub(super) zmx_name: String,
     pub(super) generation: u64,
     pub(super) steps: Vec<SessionChatSendStep>,
+    /// Counts this job in its queue's `pending` until the worker is done with it (run, failed or
+    /// skipped as cancelled): dropping it counts the job out.
+    pub(super) pending: PendingWrite,
+}
+
+/// One job counted in its session's `pending` writes; counted out when dropped.
+pub(super) struct PendingWrite(Arc<AtomicUsize>);
+
+impl Drop for PendingWrite {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 struct SessionChatSendQueue {
     tx: mpsc::UnboundedSender<SessionChatSendJob>,
     generation: Arc<AtomicU64>,
+    /// Jobs queued or running for this session (`PendingWrite`).
+    pending: Arc<AtomicUsize>,
 }
 
 static SESSION_CHAT_SEND_QUEUES: OnceLock<Mutex<HashMap<String, SessionChatSendQueue>>> =
@@ -233,6 +259,78 @@ pub(super) fn queue_session_chat_send(
     captured_draft: Option<oneshot::Sender<CapturedTerminalDraft>>,
     on_step: Option<SessionChatStepObserver>,
 ) -> Result<(), String> {
+    queue_job(
+        project_id,
+        session_id,
+        zmx_name,
+        source,
+        steps,
+        completion,
+        captured_draft,
+        on_step,
+        false,
+    )
+}
+
+/*
+CDXC:Security 2026-11-20 WHY:
+`ghostex clear-command` (server/session_clear_http.rs) must not type its `/clear` and Enter behind
+another write that is waiting or running in the session's queue: a `send-text` or `send-key` an
+agent queued just before could start a turn, or leave text, that the clear then lands in (the last
+race the Fable review of 6d5889f7f left open). This runs the job only when no other job is
+queued or running for the session, checked and enqueued under the queue's lock, and otherwise
+queues nothing and answers `writes_pending`.
+*/
+pub async fn execute_session_chat_send_if_idle(
+    project_id: &str,
+    session_id: &str,
+    zmx_name: &str,
+    source: &str,
+    steps: Vec<SessionChatSendStep>,
+) -> Result<(), SessionChatSendError> {
+    let (completion_tx, completion_rx) = oneshot::channel();
+    queue_job(
+        project_id,
+        session_id,
+        zmx_name,
+        source,
+        steps,
+        Some(completion_tx),
+        None,
+        None,
+        true,
+    )
+    .map_err(SessionChatSendError::not_attempted)?;
+    completion_rx.await.map_err(|_| {
+        SessionChatSendError::not_attempted(
+            "The session chat send worker stopped before completing the message.".to_string(),
+        )
+    })?
+}
+
+/// Whether a write is queued or running in the session's terminal queue.
+pub fn session_chat_send_writes_pending(project_id: &str, session_id: &str) -> bool {
+    SESSION_CHAT_SEND_QUEUES
+        .get()
+        .and_then(|queues| queues.lock().ok())
+        .and_then(|map| {
+            map.get(&queue_key(project_id, session_id))
+                .map(|queue| queue.pending.load(Ordering::SeqCst) > 0)
+        })
+        .unwrap_or(false)
+}
+
+fn queue_job(
+    project_id: &str,
+    session_id: &str,
+    zmx_name: &str,
+    source: &str,
+    steps: Vec<SessionChatSendStep>,
+    completion: Option<oneshot::Sender<Result<(), SessionChatSendError>>>,
+    captured_draft: Option<oneshot::Sender<CapturedTerminalDraft>>,
+    on_step: Option<SessionChatStepObserver>,
+    only_if_idle: bool,
+) -> Result<(), String> {
     if steps.is_empty() {
         return Ok(());
     }
@@ -246,8 +344,18 @@ pub(super) fn queue_session_chat_send(
             let (tx, rx) = mpsc::unbounded_channel();
             let generation = Arc::new(AtomicU64::new(0));
             tokio::spawn(run_session_chat_send_worker(rx, generation.clone()));
-            SessionChatSendQueue { tx, generation }
+            SessionChatSendQueue {
+                tx,
+                generation,
+                pending: Arc::new(AtomicUsize::new(0)),
+            }
         });
+    // Checked and counted under the map lock, so no other write can be queued in between.
+    if only_if_idle && queue.pending.load(Ordering::SeqCst) > 0 {
+        return Err(SESSION_CHAT_SEND_WRITES_PENDING.to_string());
+    }
+    queue.pending.fetch_add(1, Ordering::SeqCst);
+    let pending = PendingWrite(queue.pending.clone());
     let job = SessionChatSendJob {
         on_step,
         completion,
@@ -258,6 +366,7 @@ pub(super) fn queue_session_chat_send(
         zmx_name: zmx_name.to_string(),
         generation: queue.generation.load(Ordering::SeqCst),
         steps,
+        pending,
     };
     queue
         .tx

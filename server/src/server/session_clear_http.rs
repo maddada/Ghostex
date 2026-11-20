@@ -51,6 +51,8 @@ pub(crate) const CLEAR_SESSION_ENDPOINT: &str = "/api/clearSessionConversation";
 /// goes idle (Fable review of 6d5889f7f, finding 6).
 pub(crate) const INPUT_BOX_NOT_READY: &str = "inputBoxNotReady";
 
+const WRITES_PENDING: &str = "Another write to its terminal (typed keys or a message) is still waiting or running. Try again once it is done.";
+
 fn refused(code: &'static str, message: impl Into<String>) -> DomainStateError {
     DomainStateError {
         code,
@@ -112,6 +114,12 @@ fn busy_refusal(
     }
     if !running {
         return None;
+    }
+    // A `send-text`, `send-key` or message still waiting or running in its terminal's queue would
+    // go in first; the clear's own job checks this again as it is queued (queue.rs
+    // `execute_session_chat_send_if_idle`).
+    if crate::session_chat_send::session_chat_send_writes_pending(project_id, session_id) {
+        return Some(WRITES_PENDING.into());
     }
     let activity = crate::presentation::presentation_activity(session, &now);
     if activity == "working" && !crate::presentation::working_only_in_background(session, &now) {
@@ -325,6 +333,12 @@ fn zmx_error(error: crate::zmx::ZmxEndpointError) -> DomainStateError {
 /// The refusal for a typing job the send guard stopped, or that failed.
 fn send_error(error: crate::session_chat_send::SessionChatSendError) -> DomainStateError {
     use crate::session_chat_send::SessionChatSendFailure as Failure;
+    if error.writes_pending() {
+        return refused(
+            "agentBusy",
+            format!("The conversation was not cleared. {WRITES_PENDING}"),
+        );
+    }
     // The guard's own words ("Your message goes out once that is answered") are for chat sends,
     // which wait; this job never runs again, so they are not passed on.
     let reason = match error.failure {
