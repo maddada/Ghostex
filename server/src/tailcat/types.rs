@@ -157,6 +157,10 @@ pub enum TailcatStateUpdate {
         #[serde(default, rename = "customHost", alias = "custom_host")]
         custom_host: String,
     },
+    /// A Cloud Box's boot only (`ghostex box boot`): turns Easy Connect on for exactly the devices
+    /// the box's boot ticket names, in one write. Refused on a computer that isn't a box
+    /// (`apply_tailcat_state_update`, CDXC:CloudBoxes 2026-11-21).
+    EnableForBoxDevices {},
 }
 
 impl TailcatStateUpdate {
@@ -166,6 +170,7 @@ impl TailcatStateUpdate {
             Self::SetPorts { .. } => "setPorts",
             Self::SetAllowedClientKeys { .. } => "setAllowedClientKeys",
             Self::SetRelay { .. } => "setRelay",
+            Self::EnableForBoxDevices {} => "enableForBoxDevices",
         }
     }
 }

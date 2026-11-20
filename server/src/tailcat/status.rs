@@ -114,6 +114,12 @@ pub fn apply_tailcat_state_update(
                 }
                 state.relay = TailcatRelaySetting { mode, custom_host };
             }
+            TailcatStateUpdate::EnableForBoxDevices {} => {
+                let keys = crate::cloud_boxes::box_mode::boot::ticket_device_keys()
+                    .map_err(anyhow::Error::msg)?;
+                state.allowed_client_keys = normalize_tailcat_client_keys(keys);
+                state.enabled = true;
+            }
         }
         Ok(())
     })
@@ -212,6 +218,7 @@ pub fn reconcile_tailcat_runtime(
 CDXC:RemotePairing 2026-11-13 DECISION:
 Easy Connect is strictly opt-in (11.6.0 put an SSH-only iPhone on a computer's Easy Connect allow-list with no click): nothing turns it on or moves a phone onto it without the person's own ask, only the route they chose is used, and as a hard rule: while Easy Connect is off on a computer, no key can be added to its allow-list by any path (pairing, a phone's request, the API, the CLI); it is refused. Every tailcat state write goes through `change_tailcat_state`, so the refusal lives there; taking keys off always works.
 SEE-ALSO: remote_access/pair_device.rs (`finish_pairing`, `/api/pairOverSsh` refuse before anything is written), apps/mobile/app/src/machines/sshPairing.ts.
+SEE-ALSO: `TailcatStateUpdate::EnableForBoxDevices` (CDXC:CloudBoxes 2026-11-21 in cloud_boxes/box_mode/boot.rs): a Cloud Box's boot turns Easy Connect on and sets its devices in the same write, so the rule holds without an exception; that update works only on a box and only for its ticket's devices.
 */
 /// The refusal for a key added while Easy Connect is off.
 pub const EASY_CONNECT_OFF_REFUSAL: &str =

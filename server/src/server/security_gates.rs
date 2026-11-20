@@ -363,6 +363,15 @@ fn easy_connect_action(state: &AppState, params: &Map<String, Value>) -> Option<
                     .params(exact()),
             )
         }
+        // Turns Easy Connect on and lets the box ticket's devices in. The box's own boot runs it
+        // with the token file (you); an agent asks every time, as for any device let in.
+        TailcatStateUpdate::EnableForBoxDevices {} => Some(
+            ActionRequest::new(
+                SensitiveAction::EasyConnectAllowList,
+                "Turn on Easy Connect for this Cloud Box's devices",
+            )
+            .params(exact()),
+        ),
         TailcatStateUpdate::SetPorts { ports } => {
             let open: HashSet<u16> = current
                 .as_ref()
