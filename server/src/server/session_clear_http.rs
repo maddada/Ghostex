@@ -187,13 +187,23 @@ fn screen_refusal(
     None
 }
 
-pub(crate) fn handle_clear_session_request(
+/// What the route does once its checks pass: answer that the session is waking, or type the
+/// command and answer with `result`.
+enum Prepared {
+    Waking(Value),
+    Type {
+        job: crate::zmx::ZmxQueuedSessionMessage,
+        result: Value,
+    },
+}
+
+fn prepare_clear(
     state: &AppState,
     caller: &Principal,
     db: &rusqlite::Connection,
     repository: &DomainRepository<'_>,
     params: &Map<String, Value>,
-) -> Result<Value, DomainStateError> {
+) -> Result<Prepared, DomainStateError> {
     let project_id = text(params, "projectId")
         .ok_or_else(|| DomainStateError::bad_request("clear-command needs a projectId."))?;
     let session_id = text(params, "sessionId")
@@ -259,57 +269,120 @@ pub(crate) fn handle_clear_session_request(
                 eprintln!("[gxserver] clear-command: could not wake {pid}:{sid}: {reason}");
             }
         });
-        return Ok(json!({
+        return Ok(Prepared::Waking(json!({
             "ok": true,
             "projectId": project_id,
             "sessionId": session_id,
             "agent": agent,
             "command": command,
             "delivery": "waking",
-        }));
+        })));
     }
     let previous = session
         .pointer("/runtimeSettings/agentSessionId")
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
-    let delivery = {
-        let mut send = Map::new();
-        send.insert("projectId".to_string(), json!(project_id));
-        send.insert("sessionId".to_string(), json!(session_id));
-        send.insert(
-            "diagnosticInputSource".to_string(),
-            json!("session-clear-command"),
-        );
-        send.insert("submit".to_string(), Value::Bool(true));
-        send.insert("text".to_string(), json!(command));
-        crate::zmx::dispatch_zmx_session_interaction_endpoint(
-            repository,
-            "/api/sendSessionMessage",
-            &send,
-        )
-        .map_err(|error| match error {
-            crate::zmx::ZmxEndpointError::Domain(error) => error,
-            crate::zmx::ZmxEndpointError::DependencyUnavailable(message) => {
-                refused("dependencyUnavailable", message)
+    let mut send = Map::new();
+    send.insert("projectId".to_string(), json!(project_id));
+    send.insert("sessionId".to_string(), json!(session_id));
+    send.insert(
+        "diagnosticInputSource".to_string(),
+        json!("session-clear-command"),
+    );
+    send.insert("submit".to_string(), Value::Bool(true));
+    send.insert("text".to_string(), json!(command));
+    let job = crate::zmx::read_zmx_queued_session_message(repository, &send).map_err(zmx_error)?;
+    Ok(Prepared::Type {
+        job,
+        result: json!({
+            "ok": true,
+            "projectId": project_id,
+            "sessionId": session_id,
+            "agent": agent,
+            "command": command,
+            "delivery": "sent",
+            "previousAgentSessionId": (!previous.is_empty()).then_some(previous),
+        }),
+    })
+}
+
+fn zmx_error(error: crate::zmx::ZmxEndpointError) -> DomainStateError {
+    match error {
+        crate::zmx::ZmxEndpointError::Domain(error) => error,
+        crate::zmx::ZmxEndpointError::DependencyUnavailable(message) => {
+            refused("dependencyUnavailable", message)
+        }
+    }
+}
+
+/// The refusal for a typing job the send guard stopped, or that failed.
+fn send_error(error: crate::session_chat_send::SessionChatSendError) -> DomainStateError {
+    use crate::session_chat_send::SessionChatSendFailure as Failure;
+    match error.failure {
+        Failure::PromptWaiting | Failure::ComposerNotReady | Failure::ComposerNotCleared => refused(
+            "agentBusy",
+            format!(
+                "The conversation was not cleared: the session stopped taking input before the command was typed ({}). Nothing will be typed later.",
+                error.message.trim_end_matches('.')
+            ),
+        ),
+        _ => refused("dependencyUnavailable", error.message),
+    }
+}
+
+/// `/api/clearSessionConversation`. The checks run off the async workers; the command is then
+/// typed by an awaited job that is never run again (Fable review of 6d5889f7f, finding 3: the
+/// queued job with its retry step answered "sent" before typing, and a job a prompt refused typed
+/// `/clear` and Enter up to 30 minutes later, after the caller had been told it failed).
+pub(crate) async fn handle_clear_session_http(
+    state: &AppState,
+    caller: &Principal,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> super::RoutedResponse {
+    let prepared = super::http_dispatch::blocking_section(|| {
+        let params = crate::domain::read_domain_rpc_params(body)?;
+        let db = crate::storage::open_gxserver_database(&state.paths).map_err(|error| {
+            DomainStateError {
+                code: "internalError",
+                message: format!("SQLite gxserver state error: {error}"),
             }
         })?;
-        "sent"
+        let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        prepare_clear(state, caller, &db, &repository, &params)
+    });
+    let outcome = match prepared {
+        Ok(Prepared::Waking(result)) => Ok(result),
+        Ok(Prepared::Type { job, result }) => match job.execute_once().await {
+            Ok(_) => {
+                let (project_id, session_id, command) = (
+                    result["projectId"].as_str().unwrap_or_default(),
+                    result["sessionId"].as_str().unwrap_or_default(),
+                    result["command"].as_str().unwrap_or_default(),
+                );
+                crate::session_chat_app_command::record_session_chat_app_command(
+                    project_id, session_id, command,
+                );
+                eprintln!(
+                    "[gxserver] clear-command: {project_id}:{session_id} {command} by {}",
+                    caller.kind()
+                );
+                Ok(result)
+            }
+            Err(error) => Err(send_error(error)),
+        },
+        Err(error) => Err(error),
     };
-    crate::session_chat_app_command::record_session_chat_app_command(
-        project_id, session_id, command,
-    );
-    eprintln!(
-        "[gxserver] clear-command: {project_id}:{session_id} {command} by {} ({delivery})",
-        caller.kind()
-    );
-    Ok(json!({
-        "ok": true,
-        "projectId": project_id,
-        "sessionId": session_id,
-        "agent": agent,
-        "command": command,
-        "delivery": delivery,
-        "previousAgentSessionId": (!previous.is_empty()).then_some(previous),
-    }))
+    match outcome {
+        Ok(result) => super::routed_json(
+            Some(endpoint_path),
+            axum::http::StatusCode::OK,
+            crate::protocol::rpc_success(request_id, result),
+        ),
+        Err(error) => {
+            super::http_endpoints::domain_error_response(endpoint_path, request_id, error)
+        }
+    }
 }

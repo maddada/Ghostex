@@ -578,18 +578,14 @@ pub(super) async fn route_sessions_http(
         }
         // `ghostex clear-command`: who may clear is decided from `caller` (session_clear_http.rs).
         super::super::session_clear_http::CLEAR_SESSION_ENDPOINT => {
-            let caller = caller.clone();
-            handle_domain_http(
+            super::super::session_clear_http::handle_clear_session_http(
                 &state,
+                &caller,
                 endpoint.path,
                 request_id,
                 &body_json,
-                |repository, db, params, _| {
-                    super::super::session_clear_http::handle_clear_session_request(
-                        &state, &caller, db, repository, params,
-                    )
-                },
             )
+            .await
         }
         // `ghostex needs-you`: a session's to-dos for the user (session_needs_you/).
         crate::session_needs_you::SESSION_NEEDS_YOU_ENDPOINT => {

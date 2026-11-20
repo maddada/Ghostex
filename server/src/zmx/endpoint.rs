@@ -1013,6 +1013,35 @@ impl ZmxQueuedSessionMessage {
         Ok(self.into_result())
     }
 
+    /// Awaited delivery that is never run again: no `RetryAfterPrompt` step, so a job a prompt or
+    /// a missing input box refused answers with that refusal and is never typed later (only a
+    /// leftover in the input box is cleared once the prompt closes). For `ghostex clear-command`,
+    /// whose caller must know whether the command was typed (server/session_clear_http.rs).
+    pub async fn execute_once(
+        self,
+    ) -> Result<Value, crate::session_chat_send::SessionChatSendError> {
+        let steps = self
+            .steps()
+            .into_iter()
+            .filter(|step| {
+                !matches!(
+                    step,
+                    crate::session_chat_send::SessionChatSendStep::RetryAfterPrompt { .. }
+                )
+            })
+            .collect();
+        crate::session_chat_send::execute_session_chat_send(
+            &self.project_id,
+            &self.session_id,
+            &self.zmx_name,
+            &self.source,
+            steps,
+        )
+        .await?;
+        self.capture_prompt_sent();
+        Ok(self.into_result())
+    }
+
     /// Fire-and-forget enqueue, used by the synchronous in-process dispatch.
     pub fn enqueue(self) -> Value {
         crate::session_chat_send::enqueue_session_chat_send(
