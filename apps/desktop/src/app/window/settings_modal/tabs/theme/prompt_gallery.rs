@@ -26,12 +26,11 @@ use gpui::{
 };
 use gpui_component::{h_flex, v_flex};
 use serde_json::{Map, Value, json};
-use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
 const DESCRIBE_TITLE: &str = "Describe a look";
-const DESCRIBE_COPY: &str = "An agent sets the colours, fonts and glass from your words, like \u{201c}a calm, dark look with frosted glass\u{201d}.";
+const DESCRIBE_COPY: &str = "An agent sets the colours and glass from your words, like \u{201c}a calm, dark look with frosted glass\u{201d}. Your fonts stay as they are.";
 /// The draft Ask an agent stages in the Help chat.
 const STARTER_PROMPT: &str = "Give Ghostex a calm, dark look with soft colours and frosted glass.";
 /// The pictures' shape (960 x 660), and how a look's tile draws one: the window inside it spans
@@ -45,8 +44,6 @@ const LOOKS_CAPTION: &str = "Agent-made";
 const THEME_ENDPOINT: &str = "/api/theme";
 /// `/api/theme` waits up to 15s for the app to save, then 3s for the file to show it.
 const THEME_TIMEOUT: Duration = Duration::from_secs(20);
-/// The font settings a gallery theme leaves alone on a computer without its font.
-const FONT_KEYS: [&str; 2] = ["sessionChatFontFamily", "terminalFontFamily"];
 
 /// One row of `THEME_GALLERY`.
 #[derive(Clone, Debug)]
@@ -116,23 +113,6 @@ fn picture_bytes(id: &str) -> Option<&'static [u8]> {
 pub(super) struct PromptGallery {
     busy: Option<String>,
     applied: Option<(String, String)>,
-}
-
-/// `changes` without the fonts this computer does not have.
-fn changes_for_this_computer(
-    changes: &Map<String, Value>,
-    installed: &HashSet<String>,
-) -> Map<String, Value> {
-    changes
-        .iter()
-        .filter(|(key, value)| {
-            !FONT_KEYS.contains(&key.as_str())
-                || value
-                    .as_str()
-                    .is_some_and(|family| installed.contains(family))
-        })
-        .map(|(key, value)| (key.clone(), value.clone()))
-        .collect()
 }
 
 /// One short line of a failed theme call for its notice: the first sentence of the answer's first
@@ -306,8 +286,8 @@ impl ThemeTab {
         let Some(theme) = gallery_themes().into_iter().find(|theme| theme.id == id) else {
             return;
         };
-        let installed: HashSet<String> = cx.text_system().all_font_names().into_iter().collect();
-        let mut changes = changes_for_this_computer(&theme.changes, &installed);
+        // No look names a font (CDXC:Theming 2026-11-21 in theme_gallery.rs): the user's fonts stay.
+        let mut changes = theme.changes;
         let values = self.store.read(cx).values();
         if !preview_scheme_dark(&values.string("sidebarTheme"), self.scheme_dark) {
             changes.insert("sidebarTheme".into(), json!("dark-2"));

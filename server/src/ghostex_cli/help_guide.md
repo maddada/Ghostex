@@ -66,6 +66,9 @@ they ask for one.
      them; quote a value with spaces (`terminalFontFamily="JetBrains Mono"`).
    - You can't see the result. Make one small change at a time, tell the user
      what you changed, and ask how it looks before the next.
+   - A theme or look never changes fonts: leave `sessionChatFontFamily`,
+     `terminalFontFamily` and the other Text & Fonts settings alone unless the
+     user asks for a font by name or asks to change their fonts.
    - The change applies at once and your chat shows a Theme changed card with
      Undo. When the command says something is hard to read (a glass tint so low
      that text sits on the desktop, an outline that barely shows), the change
