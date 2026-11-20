@@ -40,7 +40,8 @@ pub(crate) const DEFAULT_TERMINAL_CURSOR_STYLE: &str = "bar";
 pub(crate) const DEFAULT_TERMINAL_FONT_FAMILY: &str = "JetBrains Mono";
 pub(crate) const DEFAULT_TERMINAL_FONT_WEIGHT: f64 = 300.0;
 pub(crate) const NORMAL_TERMINAL_FONT_WEIGHT: f64 = 400.0;
-pub(crate) const DEFAULT_TERMINAL_GHOSTTY_THEME: &str = "GitHub Dark";
+/// `terminalGhosttyTheme` in packages/settings-catalog/src/data/defaults.rs.
+pub(crate) const DEFAULT_TERMINAL_GHOSTTY_THEME: &str = "Ghostex Kanagawa Dragon";
 /// Empty: no custom terminal background colour (`workspaceBackgroundColor` in
 /// packages/settings-catalog/src/data/defaults.rs).
 pub(crate) const DEFAULT_TERMINAL_BACKGROUND_COLOR: &str = "";

@@ -1068,7 +1068,7 @@ impl ThemeTab {
                 t.spec(
                     "terminalGhosttyTheme",
                     "Terminal palette in dark mode",
-                    "Uses the dark theme set in Ghostex's terminal config, or GitHub Dark when none is set.",
+                    "Uses the dark theme set in Ghostex's terminal config, or Ghostex Kanagawa Dragon when none is set.",
                 ),
                 Some(reset_key::<Self>("terminalGhosttyTheme")),
                 &options,

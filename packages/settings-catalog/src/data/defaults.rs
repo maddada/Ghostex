@@ -786,11 +786,22 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
         J::Num(96.0),
     ),
     ("customSidebarTitlebarBackgroundColor", J::Str("#0b0b0b")),
-    ("darkThemePreset", J::Str("gray")),
+    // CDXC:Theming 2026-11-20 DECISION:
+    // User: "make my current theme values the default for Ghostex in dark mode, with transparency and all that." Out of the box dark mode is their look: the Black colour square, glass tinted 88 in the sidebar and the work area (Strength 20), a 4 point blur, the Ghostex Kanagawa Dragon terminal palette, faint borders (`#3e3e3e6b`) and dark message bubbles (`#0000006b`), and Ink as the Live background. Light mode keeps its own defaults (its light tints move to 93 only so the one Strength slider reads 20; light mode is solid out of the box, so they change nothing there). Their App font is not shipped with Ghostex, so the App font stays App default; Terminal background stays Black / white (the CDXC:Theming 2026-09-28 decision in terminal_gpui_engine.rs), which in dark mode with Black looks the same. Supersedes Gray (2026-07-22), Strength 10 (2026-10-23) and the GitHub Dark dark palette (2026-10-14) as defaults.
+    ("darkThemePreset", J::Str("black")),
     ("lightThemePreset", J::Str("gray")),
     ("themeSidebarContrast", J::Num(0.0)),
     ("themeWorkAreaContrast", J::Num(0.0)),
-    ("themeRoles", J::Obj(&[])),
+    (
+        "themeRoles",
+        J::Obj(&[(
+            "dark",
+            J::Obj(&[
+                ("userMessage", J::Str("#0000006b")),
+                ("border", J::Str("#3e3e3e6b")),
+            ]),
+        )]),
+    ),
     (
         "customSidebarTitlebarLightBackgroundTintColor",
         J::Str("#808080"),
@@ -804,8 +815,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
         J::Str("#f4f4f5"),
     ),
     // CDXC:Terminal 2026-05-22-12:29:
-    // New Ghostex terminals should default to the requested GitHub Dark terminal
-    // profile: JetBrains Mono 13pt, bar cursor with blink, wght=300, 20% cell
+    // New Ghostex terminals should default to the requested terminal profile
+    // (its dark palette is Ghostex Kanagawa Dragon since 2026-11-20, see `darkThemePreset`): JetBrains Mono 13pt, bar cursor with blink, wght=300, 20% cell
     // height expansion, 15 MB scrollback, no copy-on-select, and one-to-one
     // precision/discrete mouse scrolling.
     ("terminalCursorStyle", J::Str("bar")),
@@ -821,7 +832,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("terminalBoldUsesHeavierFont", J::Bool(true)),
     ("terminalColorScheme", J::Str("app")),
     ("terminalGhosttyLightTheme", J::Str("GitHub Light Default")),
-    ("terminalGhosttyTheme", J::Str("GitHub Dark")),
+    ("terminalGhosttyTheme", J::Str("Ghostex Kanagawa Dragon")),
     ("terminalBackgroundOpacity", J::Num(100.0)),
     ("terminalBackgroundImage", J::Str("")),
     ("terminalBackgroundImageOpacity", J::Num(1.0)),
@@ -1014,20 +1025,20 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("windowGlassVideoDark", J::Str("")),
     ("windowGlassVideoLight", J::Str("")),
     ("windowGlassVideoOnlyOnPower", J::Bool(true)),
-    ("windowGlassLiveStyleDark", J::Str("aurora")),
+    ("windowGlassLiveStyleDark", J::Str("ink")),
     ("windowGlassLiveStyleLight", J::Str("drift")),
     ("windowGlassLiveSpeed", J::Num(1.0)),
     ("windowGlassLiveBrightness", J::Num(60.0)),
-    ("windowGlassBlurRadius", J::Num(60.0)),
+    ("windowGlassBlurRadius", J::Num(4.0)),
     ("windowGlassWindowsBlur", J::Str("acrylic")),
     ("windowGlassMenuBlurRadius", J::Num(20.0)),
-    // CDXC:Theming 2026-10-23 DECISION:
-    // User: "please make the app's transparency level 10 by default (the slider in settings)" (2026-10-04), then "pls make the sidebar and main area default to having the same strength for the transparency by default". The four tints are the ones Settings' Strength slider writes at 10 (`transparencyStrengthPatch`), so the slider opens on 10, and the sidebar and the work area share one tint per appearance; they replace 94/91 (dark) and 97/93 (light), which kept the work area more see-through.
+    // CDXC:Theming 2026-11-20 DECISION:
+    // User: "pls make the sidebar and main area default to having the same strength for the transparency by default" (2026-10-23), then "make my current theme values the default for Ghostex in dark mode, with transparency and all that" (2026-11-20, see `darkThemePreset`). The four tints are the ones Settings' Strength slider writes at 20 (`transparencyStrengthPatch`), so the slider opens on 20, and the sidebar and the work area share one tint per appearance. Supersedes Strength 10 (94 dark, 97 light).
     // SEE-ALSO: apps/desktop/src/app/helpers/window_glass.rs, apps/desktop/src/app/window/onboarding/model.rs, apps/desktop/src/app/window/settings_modal/tabs/theme/colours.rs.
-    ("windowGlassSidebarOpacityDark", J::Num(94.0)),
-    ("windowGlassWorkAreaTintDark", J::Num(94.0)),
-    ("windowGlassSidebarOpacityLight", J::Num(97.0)),
-    ("windowGlassWorkAreaTintLight", J::Num(97.0)),
+    ("windowGlassSidebarOpacityDark", J::Num(88.0)),
+    ("windowGlassWorkAreaTintDark", J::Num(88.0)),
+    ("windowGlassSidebarOpacityLight", J::Num(93.0)),
+    ("windowGlassWorkAreaTintLight", J::Num(93.0)),
     ("terminalBackgroundMode", J::Str("pure")),
     ("workspaceBackgroundColor", J::Str("")),
     ("clickToWakeSleepingSessions", J::Bool(true)),

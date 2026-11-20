@@ -3769,7 +3769,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "gray",
+      "default": "black",
       "options": [
         {
           "label": "Graphite",
@@ -4164,7 +4164,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "aurora",
+      "default": "ink",
       "options": [
         {
           "label": "Aurora",
@@ -4296,7 +4296,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "number",
-      "default": 60,
+      "default": 4,
       "agentWritable": true,
       "availability": "Not shown on Windows while Behind the glass is Desktop and windows."
     },
@@ -4355,7 +4355,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "number",
-      "default": 94,
+      "default": 88,
       "agentWritable": true
     },
     {
@@ -4369,7 +4369,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "number",
-      "default": 94,
+      "default": 88,
       "agentWritable": true
     },
     {
@@ -4383,7 +4383,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "number",
-      "default": 97,
+      "default": 93,
       "agentWritable": true
     },
     {
@@ -4397,7 +4397,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "number",
-      "default": 97,
+      "default": 93,
       "agentWritable": true
     },
     {
@@ -4443,7 +4443,12 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "json",
-      "default": {},
+      "default": {
+        "dark": {
+          "userMessage": "#0000006b",
+          "border": "#3e3e3e6b"
+        }
+      },
       "agentWritable": false
     },
     {
@@ -4481,7 +4486,7 @@
     {
       "key": "terminalGhosttyTheme",
       "title": "Terminal palette in dark mode",
-      "subtitle": "Uses the dark theme set in Ghostex's terminal config, or GitHub Dark when none is set.",
+      "subtitle": "Uses the dark theme set in Ghostex's terminal config, or Ghostex Kanagawa Dragon when none is set.",
       "tab": "theme",
       "tabTitle": "Themes",
       "group": "appearance",
@@ -4489,7 +4494,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "GitHub Dark",
+      "default": "Ghostex Kanagawa Dragon",
       "options": [
         {
           "label": "Use terminal config file",

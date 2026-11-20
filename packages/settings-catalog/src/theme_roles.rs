@@ -10,6 +10,7 @@
 //! User (Q3113 B and Q3195, agent theming page): after the look settings, agents restyle Ghostex through about sixteen named theme roles, "border, hairline, muted text, accent, surfaces, menu", that override what the palettes derive, per appearance, in one synced setting, so "the white borders feel too bright, tone them down" works. Borders, dividers and grey text are washes of the ink by default, so on window glass they stay see-through and on a solid fill they read the same: a role set as an opacity keeps that, and one set as a colour paints that colour on both.
 //! SEE-ALSO: apps/desktop/src/app/helpers/theme_roles.rs (the desktop applies them), server/src/theme/ (`ghostex theme`), server/src/ghostex_cli/help_guide.md.
 
+use crate::json::ToJson;
 use serde_json::{Map, Value};
 
 /// The setting that holds every role.
@@ -215,17 +216,31 @@ pub fn appearance_key(light: bool) -> &'static str {
     }
 }
 
-/// The raw value of `role` in one appearance, as saved.
+/// The raw value of `role` in one appearance, as saved, or as the catalog's default `themeRoles`
+/// sets it when the settings hold no `themeRoles` at all.
 pub fn saved_role<'a>(
     settings: &'a Map<String, Value>,
     light: bool,
     role: &str,
 ) -> Option<&'a str> {
-    settings
-        .get(THEME_ROLES_SETTING)?
-        .get(appearance_key(light))?
-        .get(role)?
-        .as_str()
+    match settings.get(THEME_ROLES_SETTING) {
+        Some(saved) => saved.get(appearance_key(light))?.get(role)?.as_str(),
+        None => crate::default_value(THEME_ROLES_SETTING)?
+            .get(appearance_key(light))?
+            .get(role)?
+            .as_str(),
+    }
+}
+
+/// Every role as saved, or the catalog's default `themeRoles` when the settings hold none, for a
+/// change to start from.
+pub fn saved_roles(settings: &Map<String, Value>) -> Map<String, Value> {
+    match settings.get(THEME_ROLES_SETTING) {
+        Some(saved) => saved.as_object().cloned().unwrap_or_default(),
+        None => crate::default_value(THEME_ROLES_SETTING)
+            .and_then(|roles| roles.to_json().to_value().as_object().cloned())
+            .unwrap_or_default(),
+    }
 }
 
 /// The role overrides of one appearance, by role id; roles not set (or unreadable) are absent.

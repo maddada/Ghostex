@@ -8,6 +8,7 @@
 //! CDXC:Theming 2026-11-14 DECISION:
 //! User (Q3195, agent theming stage B): "share the work-area colour logic so the server's estimate goes away": the readability checks of `ghostex theme` read the same colours the window derives, not an estimate.
 
+use crate::json::J;
 use serde_json::{Map, Value};
 
 /// A `#rrggbb` setting's colour.
@@ -467,7 +468,13 @@ pub fn dark_chrome_raw_controls(object: &Map<String, Value>) -> (f64, u32) {
     {
         return custom;
     }
-    let (_, darkness, tint) = DARK_THEME_PRESET_CONTROLS[0];
+    // No preset saved and the custom colour untouched: the default preset (`darkThemePreset`).
+    let default_preset = crate::default_value("darkThemePreset").and_then(J::as_str);
+    let (_, darkness, tint) = DARK_THEME_PRESET_CONTROLS
+        .iter()
+        .find(|(key, _, _)| Some(*key) == default_preset)
+        .copied()
+        .unwrap_or(DARK_THEME_PRESET_CONTROLS[0]);
     (darkness + theme_contrast_offset(object), tint)
 }
 
