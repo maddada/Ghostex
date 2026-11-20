@@ -23,9 +23,8 @@ use super::appearance::SidebarAppearance;
 use crate::GhostexGpuiApp;
 use crate::app::helpers::*;
 
-/// The row's side padding and its height, before the zoom: the top rows' shared edge and button
-/// height (navigation.rs).
-const ROW_PADDING: f32 = super::navigation::SIDEBAR_TOP_EDGE_INSET;
+/// The row's height before the zoom: the top rows' shared button height (navigation.rs). Its side
+/// padding is the sidebar's side insets (`native_sidebar_side_insets`).
 const ROW_HEIGHT: f32 = super::navigation::SIDEBAR_TOP_ROW_BUTTON_HEIGHT;
 /// The button's corner radius, the arrow half's width and the inset of the label half.
 const BUTTON_RADIUS: f32 = super::navigation::SIDEBAR_TOP_ROW_BUTTON_RADIUS;
@@ -43,9 +42,14 @@ const START_GROUP: &str = "native-sidebar-new-session-start";
 /// The arrow half's icon: the sidebar's plain chevron, pointing to the list it opens.
 const CHOOSE_ICON: &str = "titlebar/chevron-right.svg";
 
-/// The width the label half gets in a sidebar `sidebar_width` wide, at `scale`.
-fn label_half_width(sidebar_width: f32, scale: f32) -> f32 {
-    sidebar_width / scale - ROW_PADDING * 2.0 - ARROW_WIDTH
+/// The width the label half gets in a sidebar `sidebar_width` wide with these side insets, at
+/// `scale`.
+fn label_half_width(
+    sidebar_width: f32,
+    insets: super::navigation::SidebarSideInsets,
+    scale: f32,
+) -> f32 {
+    (sidebar_width - insets.left - insets.right) / scale - ARROW_WIDTH
 }
 
 /// The shortcut the button shows: the configured New Agent Session key. The browser build has no
@@ -85,8 +89,9 @@ impl GhostexGpuiApp {
             0.0 => self.sidebar_width,
             width => width,
         };
+        let insets = self.native_sidebar_side_insets(scale);
         let shortcut = start_shortcut()
-            .filter(|_| label_half_width(sidebar_width, scale) >= LABEL_WITH_KEY_MIN_WIDTH);
+            .filter(|_| label_half_width(sidebar_width, insets, scale) >= LABEL_WITH_KEY_MIN_WIDTH);
         let start_tooltip = match start_shortcut() {
             Some(key) => format!("Start your last agent in the open project ({key})"),
             None => "Start your last agent in the open project".to_string(),
@@ -215,7 +220,8 @@ impl GhostexGpuiApp {
         h_flex()
             .w_full()
             .flex_shrink_0()
-            .px(px(ROW_PADDING * scale))
+            .pl(px(insets.left))
+            .pr(px(insets.right))
             .child(
                 h_flex()
                     .flex_1()

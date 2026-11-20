@@ -53,7 +53,7 @@ impl SpaceDragPreview {
     ) -> Option<Value> {
         let pitch = self.pitch;
         let left = if target_kind == "space-row" {
-            bounds.left() + px((super::navigation::SIDEBAR_TOP_EDGE_INSET + self.leading) * scale)
+            bounds.left() + px((super::navigation::SIDEBAR_SIDE_INSET + self.leading) * scale)
         } else {
             let index = self
                 .visible_ids

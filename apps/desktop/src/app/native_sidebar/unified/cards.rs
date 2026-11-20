@@ -477,10 +477,7 @@ impl GhostexGpuiApp {
         .flatten()
         .collect::<Vec<_>>()
         .join("\n");
-        let span = crate::app::native_sidebar::tooltips::SidebarTooltipSpan::sidebar(
-            self.sidebar_width,
-            scale,
-        );
+        let span = self.native_sidebar_tooltip_span(scale);
         let tooltips = hud["settings"]["showSidebarSessionTooltips"].as_bool() != Some(false)
             && self.native_sidebar.pointer_inside
             && self.native_sidebar.menu.is_none();

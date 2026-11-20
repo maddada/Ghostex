@@ -244,9 +244,11 @@ impl Render for ChiefRowPreview {
         };
         // Main Hub's header: the project header with the flower and "Main Hub" (project_header.rs).
         let home_header = |fold: ChiefFold| {
-            chief_block(1.0).pb(px(0.0)).child(chief_header_row(
-                HOME_LABEL, 1.0, colors, fold, false, false, None, None,
-            ))
+            chief_block(1.0, 10.0, 10.0)
+                .pb(px(0.0))
+                .child(chief_header_row(
+                    HOME_LABEL, 1.0, colors, fold, false, false, None, None,
+                ))
         };
         // A section heading (sections.rs): 12px, light, faint.
         let heading = |label: &str| {
@@ -423,7 +425,7 @@ impl Render for ChiefRowPreview {
                     .child(session("Main Coordinator"))
             })
             .when(shown && !home, |column| {
-                column.child(chief_block(1.0).child(main).when(
+                column.child(chief_block(1.0, 10.0, 10.0).child(main).when(
                     fold == ChiefFold::Unfolded,
                     |block| {
                         block

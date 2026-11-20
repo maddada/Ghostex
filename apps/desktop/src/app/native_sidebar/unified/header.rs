@@ -15,9 +15,9 @@ use crate::GhostexGpuiApp;
 use crate::app::native_sidebar::appearance::SidebarAppearance;
 use crate::app::native_sidebar::focus_order::SidebarStopPlace;
 
-/// The header's side padding, its one button (the filter) and the gap before it, before the zoom:
-/// the top rows' shared edge and button size (native_sidebar/navigation.rs).
-const HEADER_PADDING: f32 = crate::app::native_sidebar::navigation::SIDEBAR_TOP_EDGE_INSET;
+/// The header's one button (the filter) and the gap before it, before the zoom: the top rows'
+/// shared button size (native_sidebar/navigation.rs). Its side padding is the sidebar's side insets
+/// (`native_sidebar_side_insets`).
 const HEADER_BUTTON: f32 = crate::app::native_sidebar::navigation::SIDEBAR_TOP_ROW_BUTTON_HEIGHT;
 const HEADER_GAP: f32 = 4.0;
 const HEADER_BUTTONS: f32 = 1.0;
@@ -262,8 +262,11 @@ impl GhostexGpuiApp {
             0.0 => self.sidebar_width,
             width => width,
         };
+        let insets = self.native_sidebar_side_insets(scale);
         let room = (sidebar_width
-            - (HEADER_PADDING * 2.0 + (HEADER_BUTTON + HEADER_GAP) * HEADER_BUTTONS) * scale)
+            - insets.left
+            - insets.right
+            - (HEADER_BUTTON + HEADER_GAP) * HEADER_BUTTONS * scale)
             .max(0.0);
         let bar = self.render_native_unified_filter_bar(
             unified,
@@ -278,7 +281,8 @@ impl GhostexGpuiApp {
             .w_full()
             .flex_shrink_0()
             .h(px(HEADER_BUTTON * scale))
-            .px(px(HEADER_PADDING * scale))
+            .pl(px(insets.left))
+            .pr(px(insets.right))
             .gap(px(HEADER_GAP * scale))
             .child(bar)
             .child(

@@ -133,10 +133,7 @@ impl GhostexGpuiApp {
         } else {
             "Hide threads"
         };
-        let span = crate::app::native_sidebar::tooltips::SidebarTooltipSpan::sidebar(
-            self.sidebar_width,
-            scale,
-        );
+        let span = self.native_sidebar_tooltip_span(scale);
         Some(
             h_flex()
                 .id(gpui::SharedString::from(format!(

@@ -149,10 +149,7 @@ impl GhostexGpuiApp {
                         .join("\n");
                     format!("{}\n\nOn these computers:\n{computers}", group.label)
                 });
-                let span = crate::app::native_sidebar::tooltips::SidebarTooltipSpan::sidebar(
-                    self.sidebar_width,
-                    scale,
-                );
+                let span = self.native_sidebar_tooltip_span(scale);
                 title.when_some(
                     tooltip.filter(|_| {
                         self.native_sidebar.pointer_inside

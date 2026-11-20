@@ -222,7 +222,7 @@ impl GhostexGpuiApp {
         let (selected_background, selected_outline) =
             super::selectors::space_tile_selected_colors(appearance);
         let tooltip = self.native_machine_tooltip(machine);
-        let tooltip_span = super::tooltips::SidebarTooltipSpan::sidebar(self.sidebar_width, scale);
+        let tooltip_span = self.native_sidebar_tooltip_span(scale);
         // An update waiting there: the tab's arrow, small on the tile's top-right corner, clear of
         // the dots at its bottom centre. Only another computer's tile shows one, so it never meets
         // the dot under this computer's icon (computer_mark.rs `with_here_dot`).
@@ -427,7 +427,7 @@ impl GhostexGpuiApp {
             "Computers: {}",
             self.native_machine_tooltip(picked)
         ));
-        let tooltip_span = super::tooltips::SidebarTooltipSpan::sidebar(self.sidebar_width, scale);
+        let tooltip_span = self.native_sidebar_tooltip_span(scale);
         let dot_group = "native-machines-button-dots";
         div()
             .id("native-sidebar-machines")
