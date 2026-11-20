@@ -430,6 +430,9 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         let mode = page.web().map(WebPlace::mode);
+        if page != TakeoverPage::AgentsHub {
+            self.agents_hub_takeover = None;
+        }
         if let Some(place) = page.web()
             && (!place.enabled() || !self.titlebar_mode_available(place.mode()))
         {
@@ -494,6 +497,9 @@ impl GhostexGpuiApp {
     }
 
     fn finish_turning_claude_off(&mut self, cx: &mut gpui::Context<Self>) {
+        // The rail's Agents Hub is made again on its next open, which asks for a fresh catalog
+        // and takes the palette of the moment (agents_hub_modal_lifecycle.rs).
+        self.agents_hub_takeover = None;
         self.focus_default_surface_for_active_mode(cx);
         self.reconcile_agents_pane_surfaces(cx);
         self.update_active_mode_cef_child_visibility(cx);

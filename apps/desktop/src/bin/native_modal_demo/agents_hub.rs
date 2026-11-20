@@ -399,6 +399,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         initial_skill: state.strip_prefix("skill:").map(str::to_string),
         initial_skill_path: None,
         word_wrap: state == "wrap",
+        embedded: false,
     };
     let (window, view) = super::open_large_modal_window(
         AGENTS_HUB_MODAL_WIDTH,
