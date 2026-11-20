@@ -210,7 +210,7 @@ pub(super) async fn route_chat_http(
             // Who the text is from is the caller's to say, never the text's
             // (session_chat_send/sender_mark.rs).
             let mut body_json = body_json;
-            crate::session_chat_send::sender_mark::prepare(
+            let as_user_log = crate::session_chat_send::sender_mark::prepare(
                 &state.paths,
                 state.metadata.server_id.as_str(),
                 &endpoint.path,
@@ -225,6 +225,7 @@ pub(super) async fn route_chat_http(
                 &body_json,
             )
             .await;
+            crate::session_chat_send::sender_mark::record_as_user_log(as_user_log, &response);
             crate::session_chat_send_diagnostics::record_response(
                 &state,
                 &request_id,
@@ -380,7 +381,7 @@ pub(super) async fn route_chat_http(
         | "/api/acknowledgeSessionChatDraftHandoff" => {
             // A queued prompt is a send too: a repeated `sendRequestId` must not queue it twice.
             let mut body_json = body_json;
-            if matches!(
+            let as_user_log = if matches!(
                 endpoint.path.as_str(),
                 "/api/queueSessionChatPrompt" | "/api/updateSessionChatQueuedPrompt"
             ) {
@@ -390,8 +391,10 @@ pub(super) async fn route_chat_http(
                     &endpoint.path,
                     &caller,
                     &mut body_json,
-                );
-            }
+                )
+            } else {
+                None
+            };
             let mut response = if endpoint.path == "/api/queueSessionChatPrompt" {
                 let queue_state = state.clone();
                 let queue_caller = caller.clone();
@@ -456,6 +459,7 @@ pub(super) async fn route_chat_http(
                 }
                 response
             };
+            crate::session_chat_send::sender_mark::record_as_user_log(as_user_log, &response);
             crate::session_chat_send_diagnostics::record_response(
                 &state,
                 &request_id,

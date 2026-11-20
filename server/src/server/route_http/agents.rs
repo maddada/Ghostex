@@ -161,16 +161,22 @@ pub(super) async fn route_agents_http(
         | "/api/focusSession" => {
             // A message typed into another session says who sent it (session_chat_send/sender_mark.rs).
             let mut body_json = body_json;
-            if endpoint.path == "/api/sendSessionMessage" {
+            let as_user_log = if endpoint.path == "/api/sendSessionMessage" {
                 crate::session_chat_send::sender_mark::prepare(
                     &state.paths,
                     state.metadata.server_id.as_str(),
                     &endpoint.path,
                     &caller,
                     &mut body_json,
-                );
-            }
-            handle_zmx_session_interaction_http(&state, endpoint.path, request_id, &body_json).await
+                )
+            } else {
+                None
+            };
+            let response =
+                handle_zmx_session_interaction_http(&state, endpoint.path, request_id, &body_json)
+                    .await;
+            crate::session_chat_send::sender_mark::record_as_user_log(as_user_log, &response);
+            response
         }
         "/api/dispatchRendererCommand" => {
             handle_renderer_command_http(&state, endpoint.path, request_id, &body_json).await

@@ -161,7 +161,36 @@ pub(crate) fn caller_ancestry() -> CallerAncestry {
         }
         current = parent;
     }
+    if responsible_app_is_zmx(&table) {
+        ancestry.in_session_pane = true;
+    }
     ancestry
+}
+
+/// CDXC:GrokBot 2026-11-20 WHY (Fable's review of 4e4dbf7c6): a command an agent detaches from its
+/// pane (double fork, `setsid`, a clean environment) has launchd as its parent, so the walk above
+/// finds no `zmx`, yet macOS still holds the session's `zmx` responsible for it (checked in a real
+/// pane before and after detaching). Not covered: a job started through launchd (`launchctl`,
+/// `open`, cron), which macOS holds responsible for itself, and Linux and Windows, which have no
+/// such record; there only the variables and the parent walk count.
+#[cfg(target_os = "macos")]
+fn responsible_app_is_zmx(table: &super::nested_agent::ProcessTable) -> bool {
+    extern "C" {
+        fn responsibility_get_pid_responsible_for_pid(pid: libc::pid_t) -> libc::pid_t;
+    }
+    // SAFETY: a libSystem call that takes a pid and only returns a pid (or -1).
+    let responsible =
+        unsafe { responsibility_get_pid_responsible_for_pid(std::process::id() as libc::pid_t) };
+    u32::try_from(responsible)
+        .ok()
+        .filter(|pid| *pid > 1)
+        .and_then(|pid| table.executable_stem(pid))
+        .is_some_and(|stem| stem.trim_start_matches('-').eq_ignore_ascii_case("zmx"))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn responsible_app_is_zmx(_table: &super::nested_agent::ProcessTable) -> bool {
+    false
 }
 
 /// Points this process at the Ghostex session `zmx_name` names, with the local gxserver address.
