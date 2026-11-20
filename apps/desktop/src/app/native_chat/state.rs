@@ -1232,6 +1232,7 @@ impl NativeChatView {
             let before = std::mem::replace(&mut self.snapshot, Arc::new(snapshot));
             self.note_held_send(&before);
             self.remeasure_on_look_change(&before);
+            self.remeasure_changed_quiet_rows(&before);
             self.adopt_board_focus(&before, cx);
             self.prune_kept_replies(&before, cx);
             self.sync_dock_ask_modal(cx);
