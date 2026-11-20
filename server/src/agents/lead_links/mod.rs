@@ -145,6 +145,46 @@ pub(crate) fn link_checked(
     Ok(before)
 }
 
+/// One transcript row as `lead_turn_reply` reads it: a message someone typed (`user`) or the
+/// agent's words, with its time (ms) when the transcript has one.
+#[derive(Clone, Debug)]
+pub(crate) struct TurnRow {
+    pub user: bool,
+    pub text: String,
+    pub at: Option<i64>,
+}
+
+/// A lead's message reaches its transcript a moment after the send that marked the link owed.
+const LEAD_MESSAGE_SLACK_MS: i64 = 30_000;
+
+/// The reply to the lead's newest message: the agent's last words after that message and before
+/// the next message the user typed there. `None` until there is one. `rows` are oldest first;
+/// `lead_ref` is the lead's Global Ref, which the sender block of each of its messages names.
+///
+/// CDXC:LeadLinks 2026-11-20 FIX:
+/// Opus review of #678, finding 3: the report took the newest reply newer than `owedSince`, read
+/// again on every try, so a retried report (the lead busy) or a lead message that reached a
+/// session busy with the user's turn could send the lead the user's own turn, and then count the
+/// lead's turn as reported. The reply is now found from the lead's own message (its sender block),
+/// so a retry gives the same reply and a turn the user starts afterwards is never sent.
+pub(crate) fn lead_turn_reply(rows: &[TurnRow], lead_ref: &str, owed_ms: i64) -> Option<String> {
+    let from_lead = |row: &TurnRow| {
+        row.user && crate::coordinators::find_own_agent_message_block(&row.text, lead_ref).is_some()
+    };
+    let start = rows.iter().rposition(|row| {
+        from_lead(row)
+            && row
+                .at
+                .is_none_or(|at| at + LEAD_MESSAGE_SLACK_MS >= owed_ms)
+    })?;
+    rows[start + 1..]
+        .iter()
+        .take_while(|row| !row.user || from_lead(row))
+        .filter(|row| !row.user && !row.text.trim().is_empty())
+        .last()
+        .map(|row| row.text.clone())
+}
+
 /// How new a session may be for a link to say its first task is the lead's (`owed`).
 const FRESH_SESSION_MS: i64 = 60_000;
 

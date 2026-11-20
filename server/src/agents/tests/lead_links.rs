@@ -83,3 +83,65 @@ fn owed_is_honoured_only_for_a_session_just_created_with_no_reply() {
     assert!(!honours_owed(&fresh, now, true));
     assert!(!honours_owed(&serde_json::json!({}), now, false));
 }
+
+#[test]
+fn the_report_is_the_reply_to_the_leads_own_message_never_a_later_user_turn() {
+    use crate::agents::lead_links::{lead_turn_reply, TurnRow};
+    use crate::coordinators::{agent_message, MessageSender};
+    let lead_ref = "S1:P1:GA";
+    let from = |reply_to: &str, body: &str| {
+        agent_message(
+            &MessageSender {
+                agent_name: "Codex".into(),
+                title: "Lead".into(),
+                session_id: "GA".into(),
+                agent_id: "codex".into(),
+                agent_session_id: "x".into(),
+                global_ref: reply_to.into(),
+            },
+            body,
+        )
+    };
+    let row = |user: bool, text: &str, at: i64| TurnRow {
+        user,
+        text: text.to_string(),
+        at: Some(at),
+    };
+    let owed = 10_000;
+    let lead_message = from(lead_ref, "Check the signing setup.");
+    let mut rows = vec![
+        row(true, "an older message of the user's", 1_000),
+        row(false, "older reply", 2_000),
+        row(true, &lead_message, 10_500),
+    ];
+    // The lead's turn has not answered yet.
+    assert_eq!(lead_turn_reply(&rows, lead_ref, owed), None);
+    rows.push(row(false, "Working on it.", 11_000));
+    rows.push(row(false, "Signing is set up.", 12_000));
+    assert_eq!(
+        lead_turn_reply(&rows, lead_ref, owed).as_deref(),
+        Some("Signing is set up.")
+    );
+    // The user then has their own turn there (the report to the lead is being retried): the lead
+    // still gets the reply to its own message, never the user's turn.
+    rows.push(row(true, "Also rename the branch.", 13_000));
+    rows.push(row(false, "Renamed it.", 14_000));
+    assert_eq!(
+        lead_turn_reply(&rows, lead_ref, owed).as_deref(),
+        Some("Signing is set up.")
+    );
+    // Another session's message, or the user's own, is not the lead's.
+    let other = vec![
+        row(true, &from("S1:P1:GB", "Do something."), 10_500),
+        row(false, "Done.", 11_000),
+    ];
+    assert_eq!(lead_turn_reply(&other, lead_ref, owed), None);
+    let user_only = vec![
+        row(true, "Do something.", 10_500),
+        row(false, "Done.", 11_000),
+    ];
+    assert_eq!(lead_turn_reply(&user_only, lead_ref, owed), None);
+    // A lead message from before the turn it owes (an earlier, reported one) does not count.
+    let stale = vec![row(true, &lead_message, 1_000), row(false, "Old.", 1_500)];
+    assert_eq!(lead_turn_reply(&stale, lead_ref, 100_000), None);
+}
