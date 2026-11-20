@@ -1517,7 +1517,7 @@ mod tests {
             question("Q1", "Which layout?", &["Tabs", "One long page"])
         );
         let expression = r#"(function(){
-          var picks=document.querySelectorAll(".gx-pick"),radios=Array.prototype.slice.call(document.querySelectorAll(".gx-choices .gx-choice")).concat(Array.prototype.slice.call(document.querySelectorAll(".gx-picked .gx-other"))),log=[];
+          var picks=document.querySelectorAll(".gx-pick"),radios=Array.prototype.slice.call(document.querySelectorAll(".gx-choices .gx-choice")).concat(Array.prototype.slice.call(document.querySelectorAll(".gx-pickbar .gx-other"))),log=[];
           function state(){return Array.prototype.map.call(picks,function(p){return p.getAttribute("aria-pressed")+":"+p.textContent;}).concat(Array.prototype.map.call(radios,function(r){return r.getAttribute("aria-checked");}));}
           log.push(state());picks[1].click();log.push(state());picks[1].click();log.push(state());
           radios[0].click();log.push(state());picks[1].click();log.push(state());radios[1].click();log.push(state());
