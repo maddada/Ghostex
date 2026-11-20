@@ -474,51 +474,54 @@ impl NativeChatView {
             .track_scroll(&scroll)
             .gap(px(ROW_GAP * s))
             .children(children);
-        let chips = div().flex().items_center().gap(px(4.0 * s)).children(
-            sections.iter().enumerate().map(|(index, (id, label, _))| {
-                let on = index == current;
-                let start = starts[index];
-                let scroll = scroll.clone();
-                div()
-                    .id(gpui::ElementId::Name(format!("boost-chip-{id}").into()))
-                    .role(gpui::Role::Button)
-                    .aria_label(format!("Go to {label}"))
-                    .aria_selected(on)
-                    .flex_shrink_0()
-                    .px(px(9.0 * s))
-                    .py(px(2.0 * s))
-                    .rounded_full()
-                    .border(px(s))
-                    .text_size(px(12.0 * s))
-                    .whitespace_nowrap()
-                    .chat_cursor_pointer()
-                    .map(|chip| {
-                        if on {
-                            chip.border_color(gpui::transparent_black())
-                                .bg(p.foreground.opacity(0.1))
-                                .text_color(p.foreground)
-                        } else {
-                            chip.border_color(p.foreground.opacity(0.1))
-                                .text_color(p.card_muted)
-                        }
-                    })
-                    .hover(|style| style.text_color(p.foreground))
-                    .child(label.clone())
-                    // The offset is set here rather than on the next layout, so this frame's chips
-                    // already light the section scrolled to.
-                    .on_click(cx.listener(move |_, _, window, _| {
-                        if let Some(item) = scroll.bounds_for_item(start) {
-                            let y = (scroll.bounds().top() - item.top())
-                                .max(-scroll.max_offset().y)
-                                .min(px(0.0));
-                            scroll.set_offset(gpui::point(px(0.0), y));
-                        } else {
-                            scroll.scroll_to_top_of_item(start);
-                        }
-                        window.refresh();
-                    }))
-            }),
-        );
+        let chips =
+            div()
+                .flex()
+                .items_center()
+                .gap(px(4.0 * s))
+                .children(sections.iter().enumerate().map(|(index, (id, label, _))| {
+                    let on = index == current;
+                    let start = starts[index];
+                    let scroll = scroll.clone();
+                    div()
+                        .id(gpui::ElementId::Name(format!("boost-chip-{id}").into()))
+                        .role(gpui::Role::Button)
+                        .aria_label(format!("Go to {label}"))
+                        .aria_selected(on)
+                        .flex_shrink_0()
+                        .px(px(9.0 * s))
+                        .py(px(2.0 * s))
+                        .rounded_full()
+                        .border(px(s))
+                        .text_size(px(12.0 * s))
+                        .whitespace_nowrap()
+                        .chat_cursor_pointer()
+                        .map(|chip| {
+                            if on {
+                                chip.border_color(gpui::transparent_black())
+                                    .bg(p.foreground.opacity(0.1))
+                                    .text_color(p.foreground)
+                            } else {
+                                chip.border_color(p.foreground.opacity(0.1))
+                                    .text_color(p.card_muted)
+                            }
+                        })
+                        .hover(|style| style.text_color(p.foreground))
+                        .child(label.clone())
+                        // The offset is set here rather than on the next layout, so this frame's chips
+                        // already light the section scrolled to.
+                        .on_click(cx.listener(move |_, _, window, _| {
+                            if let Some(item) = scroll.bounds_for_item(start) {
+                                let y = (scroll.bounds().top() - item.top())
+                                    .max(-scroll.max_offset().y)
+                                    .min(px(0.0));
+                                scroll.set_offset(gpui::point(px(0.0), y));
+                            } else {
+                                scroll.scroll_to_top_of_item(start);
+                            }
+                            window.refresh();
+                        }))
+                }));
         let edit = div()
             .id("boost-menu-edit")
             .role(gpui::Role::MenuItem)
@@ -533,7 +536,11 @@ impl NativeChatView {
             .text_size(px(12.5 * s))
             .text_color(p.card_muted)
             .chat_cursor_pointer()
-            .hover(|style| style.text_color(p.foreground).bg(p.foreground.opacity(0.06)))
+            .hover(|style| {
+                style
+                    .text_color(p.foreground)
+                    .bg(p.foreground.opacity(0.06))
+            })
             .child(
                 svg()
                     .path("titlebar/settings.svg")
@@ -716,7 +723,11 @@ impl NativeChatView {
         for (index, row) in all.iter().enumerate() {
             let width = gap + chip_width(&text(row, "label"));
             let left = all.len() - index - 1;
-            let reserve = if left > 0 { gap + more_width(left) } else { 0.0 };
+            let reserve = if left > 0 {
+                gap + more_width(left)
+            } else {
+                0.0
+            };
             if used + width + reserve > room {
                 break;
             }
@@ -872,11 +883,7 @@ impl NativeChatView {
             let boost = chat.composer_selection_for_boost(cx);
             // Paste is offered without peeking at the clipboard, as GPUI Kit's own edit menu does.
             let menu = menu
-                .menu_with_disabled(
-                    "Cut",
-                    !has_selection,
-                    Box::new(gpui_component::input::Cut),
-                )
+                .menu_with_disabled("Cut", !has_selection, Box::new(gpui_component::input::Cut))
                 .menu_with_disabled(
                     "Copy",
                     !has_selection,
@@ -1105,42 +1112,44 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
             .flex()
             .flex_col()
             .child(bar(Some("signups.html")))
-            .child(div()
-            .flex_1()
-            .min_h_0()
-            .flex()
-            .flex_col()
-            .gap(px(6.0 * s))
-            .p(px(7.0 * s))
             .child(
                 div()
+                    .flex_1()
+                    .min_h_0()
                     .flex()
-                    .gap(px(5.0 * s))
+                    .flex_col()
+                    .gap(px(6.0 * s))
+                    .p(px(7.0 * s))
                     .child(
-                        tile()
-                            .child(small("Signups", p.card_muted))
-                            .child(small("1,284", p.foreground)),
+                        div()
+                            .flex()
+                            .gap(px(5.0 * s))
+                            .child(
+                                tile()
+                                    .child(small("Signups", p.card_muted))
+                                    .child(small("1,284", p.foreground)),
+                            )
+                            .child(
+                                tile()
+                                    .child(small("Week", p.card_muted))
+                                    .child(small("+18%", p.foreground)),
+                            ),
                     )
                     .child(
-                        tile()
-                            .child(small("Week", p.card_muted))
-                            .child(small("+18%", p.foreground)),
+                        div().flex_1().flex().items_end().gap(px(4.0 * s)).children(
+                            [0.34_f32, 0.52, 0.44, 0.7, 0.62, 0.88, 0.76]
+                                .into_iter()
+                                .enumerate()
+                                .map(|(n, height)| {
+                                    div()
+                                        .flex_1()
+                                        .h(relative(height))
+                                        .rounded_t(px(2.0 * s))
+                                        .bg(if n == 5 { tone } else { strong })
+                                }),
+                        ),
                     ),
             )
-            .child(
-                div().flex_1().flex().items_end().gap(px(4.0 * s)).children(
-                    [0.34_f32, 0.52, 0.44, 0.7, 0.62, 0.88, 0.76]
-                        .into_iter()
-                        .enumerate()
-                        .map(|(n, height)| {
-                            div()
-                                .flex_1()
-                                .h(relative(height))
-                                .rounded_t(px(2.0 * s))
-                                .bg(if n == 5 { tone } else { strong })
-                        }),
-                ),
-            ))
             .into_any_element(),
         "compare" | "triage" | "second" => div()
             .size_full()
@@ -1325,6 +1334,115 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                             .child(small("Onboarding plan", p.foreground))
                             .child(small("Done: 3 pages and a report", p.card_muted)),
                     ),
+            )
+            .into_any_element(),
+        // Ship it: the commit, its branch and the pull request it opens.
+        "ship" => div()
+            .size_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .gap(px(5.0 * s))
+            .p(px(7.0 * s))
+            .children(
+                [
+                    ("Commit", false),
+                    ("boost/onboarding", false),
+                    ("PR #418", true),
+                ]
+                .into_iter()
+                .enumerate()
+                .flat_map(|(n, (label, last))| {
+                    let chip = div()
+                        .flex_none()
+                        .px(px(6.0 * s))
+                        .py(px(3.0 * s))
+                        .rounded(px(5.0 * s))
+                        .bg(soft)
+                        .border(px(s))
+                        .border_color(if last { tone } else { strong })
+                        .child(small(label, p.foreground))
+                        .into_any_element();
+                    let link = (n > 0).then(|| {
+                        div()
+                            .w(px(8.0 * s))
+                            .h(px(1.0))
+                            .flex_none()
+                            .bg(strong)
+                            .into_any_element()
+                    });
+                    link.into_iter().chain(std::iter::once(chip))
+                }),
+            )
+            .into_any_element(),
+        // Inbox it! and Schedule it: the card each leaves, as the dock and All Automations show it.
+        "inbox" | "schedule" => div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .justify_center()
+            .gap(px(5.0 * s))
+            .p(px(8.0 * s))
+            .children(
+                match kind {
+                    "inbox" => vec![(
+                        "Why does CI fail on main?",
+                        "A race in the token refresh. Fix: #418",
+                        "Done",
+                    )],
+                    _ => vec![
+                        ("Check the deploy", "Today 15:30", "Once"),
+                        ("Weekly usage report", "Mondays 09:00", "Repeats"),
+                    ],
+                }
+                .into_iter()
+                .map(|(title, line_two, chip)| {
+                    div()
+                        .w_full()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.0 * s))
+                        .px(px(7.0 * s))
+                        .py(px(5.0 * s))
+                        .rounded(px(6.0 * s))
+                        .bg(soft)
+                        .border(px(s))
+                        .border_color(strong)
+                        .child(
+                            svg()
+                                .path(if kind == "inbox" {
+                                    "titlebar/circle-dot.svg"
+                                } else {
+                                    "titlebar/clock.svg"
+                                })
+                                .flex_none()
+                                .size(px(12.0 * s))
+                                .text_color(if kind == "inbox" {
+                                    gpui::rgb(crate::app::native_sidebar::status::QUESTION_COLOR)
+                                        .into()
+                                } else {
+                                    tone
+                                }),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .flex()
+                                .flex_col()
+                                .child(small(title, p.foreground))
+                                .child(small(line_two, p.card_muted)),
+                        )
+                        .child(
+                            div()
+                                .flex_none()
+                                .px(px(4.0 * s))
+                                .rounded(px(3.0 * s))
+                                .border(px(s))
+                                .border_color(strong)
+                                .child(small(chip, p.card_muted)),
+                        )
+                }),
             )
             .into_any_element(),
         _ => div()
