@@ -84,6 +84,9 @@ pub fn sidebar_titlebar_tint_direction(base: [f32; 3]) -> [f32; 3] {
 /// CDXC:Theming 2026-09-08 SEE-ALSO:
 /// packages/shared/ghostex-settings/titlebar-color.ts (deleted 2026-10-01) owns the matching neutral #808080 tint at 96 contrast default.
 pub const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_RGB: u32 = 0x0b0b0b;
+/// Graphite's tint (the Gray square), which was also the Custom colour's tint until a settings
+/// file chose one, up to 2026-11-21. The Custom colour's own default is now the catalog's
+/// (`default_custom_dark_tint_rgb`).
 pub const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB: u32 = 0x808080;
 pub const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT: f64 = 96.0;
 /// The one depth limit, shared with the Settings preview (`crate::dark_chrome`).
@@ -329,10 +332,33 @@ pub const LIGHT_THEME_PRESET_CONTROLS: [(&str, f64, u32); 16] = [
     ("purple", 95.0, 0x6c4f8f),
 ];
 
+/// The Custom dark colour's tint while a settings file has none: the catalog's default
+/// (`customSidebarTitlebarBackgroundTintColor`).
+///
+/// CDXC:Theming 2026-11-21 WHY:
+/// The default dark look became a Custom colour (`#46506a`, see `darkThemePreset` in
+/// data/defaults.rs), so a file with no tint saved must draw the catalog's tint, not Graphite's
+/// `#808080`, or a new install would paint grey under the Custom square.
+pub fn default_custom_dark_tint_rgb() -> u32 {
+    crate::default_value("customSidebarTitlebarBackgroundTintColor")
+        .and_then(J::as_str)
+        .and_then(|hex| hex_rgb(Some(&Value::String(hex.to_string()))))
+        .unwrap_or(DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB)
+}
+
 /// The saved custom dark controls: the darkness slider (seeded from a valid legacy saved
 /// background color when the slider key is missing) plus the tint choice. The stored
 /// `customSidebarTitlebarBackgroundColor` hex itself is never the applied color.
 pub fn custom_dark_chrome_controls(object: &Map<String, Value>) -> (f64, u32) {
+    custom_dark_chrome_controls_with_tint(object, default_custom_dark_tint_rgb())
+}
+
+/// `custom_dark_chrome_controls` with `default_tint` for a file that saved no tint (the
+/// keep-old-look steps in lib.rs read a file as the version before them did).
+pub fn custom_dark_chrome_controls_with_tint(
+    object: &Map<String, Value>,
+    default_tint: u32,
+) -> (f64, u32) {
     let legacy_background = hex_rgb(object.get("customSidebarTitlebarBackgroundColor"));
     let darkness_fallback = legacy_background
         .map(sidebar_titlebar_background_darkness_for_color)
@@ -343,8 +369,8 @@ pub fn custom_dark_chrome_controls(object: &Map<String, Value>) -> (f64, u32) {
             .and_then(Value::as_f64)
             .unwrap_or(darkness_fallback),
     );
-    let tint = hex_rgb(object.get("customSidebarTitlebarBackgroundTintColor"))
-        .unwrap_or(DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB);
+    let tint =
+        hex_rgb(object.get("customSidebarTitlebarBackgroundTintColor")).unwrap_or(default_tint);
     (darkness, tint)
 }
 
@@ -460,16 +486,18 @@ pub fn dark_chrome_raw_controls(object: &Map<String, Value>) -> (f64, u32) {
     }) {
         return (*darkness + theme_contrast_offset(object), *tint);
     }
-    if custom
-        != (
-            DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
-            DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB,
-        )
+    // No preset saved: the default preset (`darkThemePreset`), unless the custom colour was tuned,
+    // which then stays in force. The default is itself Custom since 2026-11-21.
+    let default_preset = crate::default_value("darkThemePreset").and_then(J::as_str);
+    if default_preset == Some("custom")
+        || custom
+            != (
+                DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
+                default_custom_dark_tint_rgb(),
+            )
     {
         return custom;
     }
-    // No preset saved and the custom colour untouched: the default preset (`darkThemePreset`).
-    let default_preset = crate::default_value("darkThemePreset").and_then(J::as_str);
     let (_, darkness, tint) = DARK_THEME_PRESET_CONTROLS
         .iter()
         .find(|(key, _, _)| Some(*key) == default_preset)

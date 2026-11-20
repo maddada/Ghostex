@@ -44,7 +44,7 @@ pub(crate) fn gpui_onboarding_settings() -> OnboardingSettings {
         && custom_dark_chrome_controls(object)
             != (
                 DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
-                DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB,
+                ghostex_settings_catalog::theme_colours::default_custom_dark_tint_rgb(),
             )
     {
         settings.dark_theme_preset = "custom".to_string();

@@ -3803,7 +3803,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "black",
+      "default": "custom",
       "options": [
         {
           "label": "Graphite",
@@ -3887,7 +3887,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "string",
-      "default": "#808080",
+      "default": "#46506a",
       "agentWritable": true
     },
     {
@@ -4058,7 +4058,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "enum",
-      "default": "desktopAndWindows",
+      "default": "live",
       "options": [
         {
           "label": "Desktop and windows",
@@ -4302,7 +4302,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "number",
-      "default": 1,
+      "default": 0.3,
       "agentWritable": true
     },
     {
@@ -4316,7 +4316,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "number",
-      "default": 60,
+      "default": 25,
       "agentWritable": true
     },
     {
@@ -4479,8 +4479,22 @@
       "type": "json",
       "default": {
         "dark": {
-          "userMessage": "#0000006b",
-          "border": "#3e3e3e6b"
+          "accent": "#d8664f",
+          "focusRing": "#d8664f",
+          "border": "8%",
+          "divider": "6%",
+          "text": "#ece4d6",
+          "mutedText": "#9b968d",
+          "userMessage": "#24272e",
+          "chatBox": "#15171bcc",
+          "surface": "#181a1fcc",
+          "control": "#1e2026cc",
+          "menu": "#141519f2",
+          "selection": "9%",
+          "hover": "5%",
+          "success": "#9cbf8c",
+          "warning": "#d9b46a",
+          "danger": "#e06c75"
         }
       },
       "agentWritable": false
@@ -9088,7 +9102,7 @@
       "section": "windowLayout",
       "sectionTitle": "Window & Layout",
       "type": "string",
-      "default": "#3b82f6",
+      "default": "#d8664f",
       "agentWritable": true
     },
     {

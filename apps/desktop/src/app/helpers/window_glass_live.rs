@@ -66,9 +66,27 @@ pub(crate) fn refresh_window_glass_live(object: &serde_json::Map<String, serde_j
         .unwrap_or_default()
         .to_string()
     };
+    // A key the file does not hold reads as the catalog's default (Live, 0.3 and 25 since
+    // 2026-11-21), not a copy of an older one.
+    let catalog_default = |key: &str| {
+        ghostex_settings_catalog::availability::default_value_on(
+            ghostex_settings_catalog::Platform::current(),
+            key,
+        )
+    };
+    let number = |key: &str| {
+        object
+            .get(key)
+            .and_then(serde_json::Value::as_f64)
+            .or_else(|| catalog_default(key).and_then(ghostex_settings_catalog::J::as_f64))
+            .filter(|value| value.is_finite())
+    };
     let source = object
         .get("windowGlassSource")
-        .and_then(serde_json::Value::as_str);
+        .and_then(serde_json::Value::as_str)
+        .or_else(|| {
+            catalog_default("windowGlassSource").and_then(ghostex_settings_catalog::J::as_str)
+        });
     live.live = matches!(source, Some("live" | "video"));
     let legacy_video = source == Some("video");
     live.style_dark = live_slot_style(
@@ -87,18 +105,10 @@ pub(crate) fn refresh_window_glass_live(object: &serde_json::Map<String, serde_j
         )),
         legacy_video,
     );
-    live.speed = object
-        .get("windowGlassLiveSpeed")
-        .and_then(serde_json::Value::as_f64)
-        .filter(|speed| speed.is_finite())
-        .map_or(1.0, |speed| speed.clamp(0.25, 2.0) as f32);
-    live.brightness = object
-        .get("windowGlassLiveBrightness")
-        .and_then(serde_json::Value::as_f64)
-        .filter(|brightness| brightness.is_finite())
-        .map_or(0.60, |brightness| {
-            (brightness.clamp(10.0, 100.0) / 100.0) as f32
-        });
+    live.speed = number("windowGlassLiveSpeed").map_or(1.0, |speed| speed.clamp(0.25, 2.0) as f32);
+    live.brightness = number("windowGlassLiveBrightness").map_or(0.60, |brightness| {
+        (brightness.clamp(10.0, 100.0) / 100.0) as f32
+    });
     live.only_on_power = object
         .get("windowGlassVideoOnlyOnPower")
         .and_then(serde_json::Value::as_bool)
