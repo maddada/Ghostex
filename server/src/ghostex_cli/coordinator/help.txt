@@ -158,7 +158,10 @@ STATUS
   status prints the goal, the standing instructions, the memory notes, and every
   thread grouped by state: Waiting on you, Finished, Working, Sleeping, Closed,
   Done (done threads are counted; --all lists them). Inside a coordinator
-  session it describes that coordinator; elsewhere pass --coordinator <ref>.
+  session it describes that coordinator; elsewhere pass --coordinator <ref>,
+  or --project-id <id> for that project's main coordinator. Outside every
+  session with neither, it describes the only main coordinator, or lists the
+  command for each when several projects have one.
   Run from a thread, it describes the thread's coordinator.
 
 THREADS

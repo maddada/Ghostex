@@ -76,6 +76,13 @@ pub(super) async fn route_sessions_http(
                 // `--path <folder>` is added as a project first (gbots/project.rs).
                 let mut placed = params.clone();
                 crate::gbots::add_create_project_path(&state, db, repository, &mut placed)?;
+                // A coordinator `agents send --as-user` starts takes the user's message as its
+                // first request, labelled like any send as the user (session_chat_send/sender_mark.rs).
+                crate::session_chat_send::sender_mark::label_coordinator_first_request(
+                    state.metadata.server_id.as_str(),
+                    &caller,
+                    &mut placed,
+                );
                 let params = &placed;
                 // A Claude cloud create goes to the repo's main checkout project (claude_cloud/create.rs).
                 let cloud_params = crate::claude_cloud::cloud_create_params(repository, params)?;

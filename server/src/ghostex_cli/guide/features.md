@@ -5363,6 +5363,13 @@ the message arrives in the agent's chat as yours, labelled "Sent via Grok Bot"
 log records it. `--as-user` is refused inside any Ghostex session, so an agent
 can't use it to speak as you; a message from another agent always carries its
 "Message from another agent" block, which gxserver adds itself when it's missing.
+Without `--as-user`, a send from outside every session is refused and the
+error names the `--as-user` command to run instead. A coordinator the bot
+starts with `--main-coordinator --if-none create` gets your message as its
+first request, labelled the same way. To see a coordinator's
+threads, the bot runs `ghostex coordinator status --project-id <id>`; with no
+flag it shows the only main coordinator, or lists the command for each project
+that has one.
 
 What the bot may do: anything the `ghostex` command can, including answering
 an agent's question or permission prompt and unblocking a stuck agent, but
