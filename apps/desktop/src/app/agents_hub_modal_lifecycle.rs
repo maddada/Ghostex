@@ -48,6 +48,7 @@ impl GhostexGpuiApp {
                 .filter(|path| !path.is_empty())
                 .map(str::to_string),
             word_wrap: crate::app::native_docs::storage::read_word_wrap(),
+            embedded: false,
         };
         let host: AgentsHubModalHost = self.native_app_modal_host(cx, |app, command, cx| {
             app.handle_gpui_agents_hub_modal_command(command, AgentsHubTarget::Window, cx);
@@ -77,6 +78,7 @@ impl GhostexGpuiApp {
             initial_skill: None,
             initial_skill_path: None,
             word_wrap: crate::app::native_docs::storage::read_word_wrap(),
+            embedded: true,
         };
         let host: AgentsHubModalHost = self.native_app_modal_host(cx, |app, command, cx| {
             app.handle_gpui_agents_hub_modal_command(command, AgentsHubTarget::Takeover, cx);

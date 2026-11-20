@@ -76,6 +76,9 @@ pub(crate) struct AgentsHubModalConfig {
     pub(crate) initial_skill_path: Option<String>,
     /// The remembered wrap choice the Files view shares (`ghostex.manage.wordWrap`).
     pub(crate) word_wrap: bool,
+    /// Drawn inside the main window by the rail's Agents Hub takeover rather than in a window of
+    /// its own: its shortcuts act only while it has focus, and nothing closes it on a click away.
+    pub(crate) embedded: bool,
 }
 
 /// The Agent Sync filter over the agent list.
@@ -277,12 +280,18 @@ impl GpuiAgentsHubModalWindow {
         */
         let window_id: WindowId = window.window_handle().window_id();
         let view = cx.weak_entity();
+        let embedded = config.embedded;
         let keys = cx.intercept_keystrokes(move |event, window, cx| {
             if window.window_handle().window_id() != window_id {
                 return;
             }
             let handled = view
                 .update(cx, |this, cx| {
+                    // In the main window (the rail's takeover) the Hub shares the window with
+                    // everything else, so its shortcuts are its own only while it has focus.
+                    if embedded && !this.focus_handle.contains_focused(window, cx) {
+                        return false;
+                    }
                     this.handle_shortcut(&event.keystroke, window, cx)
                 })
                 .unwrap_or(false);
@@ -318,8 +327,13 @@ impl GpuiAgentsHubModalWindow {
             sync_search,
             _subscriptions: vec![search_change, sync_search_change, keys],
         };
-        this._subscriptions
-            .extend(super::super::popup_dismissal::close_app_modal_on_click_away(window, cx));
+        // A window of its own closes on a click away; in the main window there is nothing to
+        // click away to, so the takeover's own ways out (its rail icon, the sidebar, a session)
+        // close it instead.
+        if !embedded {
+            this._subscriptions
+                .extend(super::super::popup_dismissal::close_app_modal_on_click_away(window, cx));
+        }
         this.update_search_placeholder(window, cx);
         /*
         CDXC:AgentLauncher 2026-05-14-08:29:
