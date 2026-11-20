@@ -814,7 +814,7 @@ impl NativeChatView {
             .when(!is_card, |this| {
                 this.border_1()
                     .border_color(p.input_border)
-                    .bg(p.card_panel)
+                    .bg(p.over_content_fill(p.card_panel))
                     .text_size(px(12.0 * s))
                     .line_height(px(16.0 * s))
             })
@@ -985,7 +985,9 @@ impl NativeChatView {
             .rounded(px(14.0 * s))
             .border_1()
             .border_color(p.input_border)
-            .bg(p.card_panel)
+            // It floats over the chat box, so under glass it is opaque (CDXC:Theming 2026-11-20 on
+            // `ChatAppearance::over_content_fill`).
+            .bg(p.over_content_fill(p.card_panel))
             .child(
                 div()
                     .flex()
