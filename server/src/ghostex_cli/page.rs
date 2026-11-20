@@ -71,7 +71,7 @@ fn retire_command(args: &[String]) -> CliResult<()> {
     }
     for id in list("noSession") {
         println!(
-            "{}: no session published it, so it waits on nobody.",
+            "{}: no chat shows it and no session published it, so it waits on nobody.",
             id.as_str().unwrap_or_default()
         );
     }

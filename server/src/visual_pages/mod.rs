@@ -48,7 +48,7 @@ pub(crate) use publish::{
 };
 pub(crate) use questions::{page_answered, page_questions};
 pub(crate) use retire::{
-    handle_retire_visual_pages_http, page_id_of, read_retired_page_ids,
+    handle_retire_visual_pages_http, page_id_of, read_retired_page_ids, take_back_retired_pages,
     RETIRE_VISUAL_PAGES_ENDPOINT,
 };
 pub(crate) use scroll::{handle as page_scroll, is_scroll_route};

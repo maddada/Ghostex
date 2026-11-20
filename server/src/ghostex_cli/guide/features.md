@@ -2510,9 +2510,11 @@ says Seen. Pages an agent showed before this came in don't wait. When two or
 more pages wait only to be seen, Mark all seen at the bottom of that list clears
 them all at once (their cards say Seen, and nothing is sent to the agent). When
 an agent shows a newer version of the same file, the older cards say Replaced
-and stop counting: the newest card is the page. An agent can also retire a page
-it replaced or no longer needs, with its questions, using `ghostex page retire`
-(`ghostex page --help`). A page with
+and stop counting in every chat that shows them: the newest card is the page.
+An agent can also retire a page it replaced or no longer needs, with its
+questions, using `ghostex page retire` (`ghostex page --help`): it stops waiting
+in every chat that shows it, so it no longer keeps that chat's Needs you or
+holds up clearing its conversation. A page with
 questions shows "N of M answered" in a small pill at its bottom right (green
 once every question has an answer). In the
 floating window, clicking outside it, its Hide button beside the close button,

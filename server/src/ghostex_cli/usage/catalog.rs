@@ -311,7 +311,7 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "page retire <page>... [--json]",
-            "Retire Live pages you published and then replaced or no longer need: each page (its id or its address, the \"url\" in the block ghostex show printed) and its open questions stop waiting on the reader, so they leave the dock, the ? pill and the sidebar's dot on every computer and phone; the page still opens. A newer ghostex show of the same file already replaces its older cards by itself",
+            "Retire Live pages you published and then replaced or no longer need: each page (its id or its address, the \"url\" in the block ghostex show printed) and its open questions stop waiting on the reader in every chat that shows it (also one that printed its block after yours), so they leave the dock, the ? pill, the board's Needs you and the sidebar's dot on every computer and phone; the page still opens. A newer ghostex show of the same file already retires its older pages by itself, in every chat that shows them",
         ),
         format_help_command(
             "visual check <file.json|-|page.html> [--width N] [--text-scale P] [--light] [--out file.png]",

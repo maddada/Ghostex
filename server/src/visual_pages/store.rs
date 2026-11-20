@@ -383,6 +383,35 @@ pub(super) fn note_retired(gxserver_state_dir: &Path, id: &str) {
     let _ = write_record(gxserver_state_dir, id, &record);
 }
 
+/// The pages `ghostex show` published earlier from the file at `source` that are not retired yet,
+/// leaving out `newest` (the page just published from it) and pages made by opening the file
+/// (`file_page.rs`), which no chat shows.
+pub(super) fn earlier_pages_from(
+    gxserver_state_dir: &Path,
+    source: &str,
+    newest: &str,
+) -> Vec<String> {
+    let Ok(entries) = fs::read_dir(visual_pages_dir(gxserver_state_dir)) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            name.strip_suffix(".json")
+                .filter(|id| is_page_id(id) && *id != newest)
+                .map(str::to_string)
+        })
+        .filter(|id| {
+            read_record(gxserver_state_dir, id).is_some_and(|record| {
+                record.get("sourcePath").and_then(serde_json::Value::as_str) == Some(source)
+                    && record.get("retiredAt").is_none()
+                    && !super::file_page::opened_from_file(&record)
+            })
+        })
+        .collect()
+}
+
 /// Marks a page made by opening its file, which no session published (`file_page.rs`).
 pub(super) fn mark_opened_from_file(gxserver_state_dir: &Path, id: &str) {
     let _guard = RECORD_WRITE_LOCK
