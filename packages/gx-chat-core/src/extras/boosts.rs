@@ -793,7 +793,7 @@ pub fn document(state: &ChatState) -> Value {
         "list": list,
         "hint": (boosts.hint_seen == Some(false)).then(|| json!({
             "title": "New: Boosts",
-            "text": "Get the answer as a page, a chart or a map.",
+            "text": "Pages, charts, maps and more.",
         })),
     })
 }
