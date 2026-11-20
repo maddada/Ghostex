@@ -1465,13 +1465,15 @@ where they are while you open, change and close views.
 - Every computer goes by its icon and its own name, the one you're on too:
   Ghostex never calls it "This computer" (the where pill's card, Session
   details, Run on, menus, usage cards and Settings all name it).
-- While more than one computer is in the sidebar, the computer you're on has
-  a small faint dot under its icon, like the macOS Dock's, wherever that icon
-  shows: its computer tile (and
-  the folded computers button), its session rows and Unified cards, a
-  project's header, the chat's where pill and its card, Session details and
-  its row in Settings > Remote. With one computer nothing is marked, and the
-  phone marks nothing.
+- While another computer in the sidebar is connected, the computer you're on
+  has a small faint dot under its icon, like the macOS Dock's, wherever that
+  icon shows: its computer tile (and the folded computers button), its session
+  rows and Unified cards, a project's header, the chat's where pill and its
+  card, Session details and its row in Settings > Remote. A computer that is
+  offline or can't be reached doesn't count, and with one computer nothing is
+  marked; the phone marks nothing. Turn the dot off with Mark the computer
+  you're on in Settings > Sidebar & Sessions (`markComputerYouAreOn`, on by
+  default).
 - Every computer has an icon. While more than one computer is in the
   sidebar, every session row ends with its computer's icon, this computer's
   sessions included (a Unified card shows it after the branch), and a
@@ -2364,15 +2366,25 @@ is an HTML page the agent publishes, for things a chart can't show, such as a
 UI mockup, a comparison or a small interactive tool. Ask for them by name
 ("give me a Live page for this", "ask me in a gx form", "show it as gx
 visuals"); agents still understand the older words Ghostex page, gx page,
-inline HTML, inline questions and inline graphs. **Boosts** ask for them in one click: the Boost pill at the right
-of the strip on top of the chat box lists Live page, Chart it, Side by side, Map it and
-Triage requests (issues, pull requests or tickets explained one by one on a Live page,
-with a decision for each), and a new chat offers them as "Try a Boost". A pick adds a
-Boost pill to your message; pick it again, or delete the pill, to take it out. A Boost
-lasts that one message. Point at the pill in the chat box to read the instruction the
-agent gets, and double-click it to change that instruction: Save keeps your version for
-that Boost in every chat on this computer, and Reset to default goes back to Ghostex's.
-`ghostex visual boosts` lists them, and `ghostex visual boosts reset <id>` resets one.
+inline HTML, inline questions and inline graphs. **Boosts** ask for these, and more, in one click. The Boost pill at the right
+of the strip on top of the chat box opens a short menu in tabs: Show (Live page, Chart it,
+Side by side, Map it, Ask me in a form), Do (Computer use and Browser use, where the agent
+drives an app or a browser itself; Show screenshots; Second opinion, where another agent
+checks the answer), Work (Triage requests, which explains issues, pull requests or tickets
+one by one on a Live page with a decision for each; Plan with workers; Try it in a
+worktree; Save to Docs; Steps for me, which lists what only you can do under Needs you;
+Tell me when done) and Custom, your own. Pointing at a Boost in the menu shows a small
+preview of what comes back. You can also type `*` at the start of a word in the chat box
+to pick one (`*ch` finds Chart it; a space right after the `*` closes the list, so lists
+and sums type as before), and a new chat offers "Try a Boost". A pick adds a Boost pill
+to your message; pick it again, or delete the pill, to take it out. A Boost lasts that
+one message. Point at the pill in the chat box to read the instruction the agent gets;
+double-click it to change that instruction. Settings > Boosts turns Boosts on or off,
+edits or resets the instruction of every Boost, and adds, edits, reorders and deletes
+your own Boosts; select words in a message or the chat box and choose Save as Boost to
+start one from them. All of it is kept on this computer for every chat and device that
+uses it. `ghostex visual boosts` lists them, and `ghostex visual boosts reset <id>`
+resets one (`on` or `off` shows or hides Boosts).
 For a Live page the chat shows a card with a small preview
 picture of the page, the same on desktop, web, and mobile. Pages share one
 look: a soft dusk backdrop in dark mode (a soft dawn in light) with frosted
