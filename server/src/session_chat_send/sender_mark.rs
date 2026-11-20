@@ -285,11 +285,14 @@ pub(crate) fn sign_agent_message(
     let text = crate::coordinators::without_foreign_agent_blocks(&text);
     let session = read_session(paths, server_id, project_id, session_id);
     // A plain (non-agent) terminal pane holds a session token too: the person at it sends as the
-    // user, as the raw verbs always did there (CDXC:Coordinators 2026-10-24 in outbound.rs).
-    if session
-        .get("agentId")
-        .and_then(Value::as_str)
-        .is_none_or(|agent| agent.trim().is_empty())
+    // user, as the raw verbs always did there (CDXC:Coordinators 2026-10-24 in outbound.rs). Only a
+    // record that says so counts: when the record can't be read (`Null`), the message is signed,
+    // never passed on as the user's (Fable's review of 544c1b5d0).
+    if session.is_object()
+        && session
+            .get("agentId")
+            .and_then(Value::as_str)
+            .is_none_or(|agent| agent.trim().is_empty())
     {
         return;
     }
@@ -303,7 +306,7 @@ pub(crate) fn sign_agent_message(
 
 /// Applies the rules above to a message route's body before it is handled. `via` is honoured only
 /// from the token file and never passed on. Answers the security log entry of a send as the user,
-/// for the route to write once the send went through ([`AsUserLog::record_if`]).
+/// for the route to write once the send's outcome is known ([`AsUserLog::record`]).
 pub(crate) fn prepare(
     paths: &GxserverPaths,
     server_id: &str,
@@ -442,13 +445,13 @@ pub(crate) fn label_as_user_send(
         param(params, "projectId"),
         param(params, "sessionId"),
     );
-    let log = AsUserLog {
-        description: format!(
+    let log = AsUserLog::new(
+        format!(
             "Sent a message into {target}'s chat as you ({})",
             label.to_lowercase()
         ),
         target,
-    };
+    );
     let labelled = with_as_user_label(text, label);
     params.insert("text".to_string(), json!(labelled));
     Some((labelled, log))
@@ -464,43 +467,69 @@ fn as_user_label(caller: &Principal, via: Option<&str>) -> Option<&'static str> 
     matches!(caller, Principal::LocalAgent).then_some(label)
 }
 
-/// The security log entry (`chat.sendAsUser`) of a send as the user, written only once it went
-/// through.
+/// The security log entry (`chat.sendAsUser`) of a send as the user, written once its outcome is
+/// known: done when it went through, failed (with the reason when there is one) when it didn't or
+/// may not have.
 ///
-/// CDXC:Security 2026-11-20 WHY (Fable's review of 4e4dbf7c6): the entry was written while the
-/// request was read, so a create for a project that doesn't exist, and sends whose delivery failed,
-/// were logged "done". A queued prompt counts once the queue took it.
+/// CDXC:Security 2026-11-20 WHY (Fable's reviews of 4e4dbf7c6 and 544c1b5d0): the entry was written
+/// while the request was read, so a create for a project that doesn't exist, and sends whose
+/// delivery failed, were logged "done"; then a failed or uncertain send left no entry at all. A
+/// queued prompt counts once the queue took it. An entry still pending when the request gives up
+/// early (an error on the way, a computer that didn't answer) is written as failed when dropped.
 #[must_use]
 pub(crate) struct AsUserLog {
-    description: String,
-    target: String,
+    entry: Option<(String, String)>,
 }
 
 impl AsUserLog {
-    pub(crate) fn record_if(self, went_through: bool) {
-        if went_through {
+    fn new(description: String, target: String) -> Self {
+        Self {
+            entry: Some((description, target)),
+        }
+    }
+
+    /// Writes the entry: `Ok` when the send went through, `Err(reason)` when it failed or may not
+    /// have.
+    pub(crate) fn record(mut self, outcome: Result<(), String>) {
+        self.write(outcome);
+    }
+
+    fn write(&mut self, outcome: Result<(), String>) {
+        if let Some((description, target)) = self.entry.take() {
             crate::audit::record(
-                crate::audit::Action::new("chat.sendAsUser", self.description).target(self.target),
+                crate::audit::Action::new("chat.sendAsUser", description).target(target),
                 crate::audit::Actor::current(),
-                crate::audit::Outcome::Done,
+                match outcome {
+                    Ok(()) => crate::audit::Outcome::Done,
+                    Err(reason) => crate::audit::Outcome::Failed(reason),
+                },
                 None,
             );
         }
     }
 }
 
-/// Writes `log` when the routed send `response` went through: a success status and no send failure
-/// (session_chat_send_diagnostics.rs `SendFailureReason`).
-pub(crate) fn record_as_user_log(log: Option<AsUserLog>, response: &crate::server::RoutedResponse) {
-    if let Some(log) = log {
-        let went_through = response.response.status().is_success()
-            && response
-                .response
-                .extensions()
-                .get::<crate::session_chat_send_diagnostics::SendFailureReason>()
-                .is_none();
-        log.record_if(went_through);
+impl Drop for AsUserLog {
+    fn drop(&mut self) {
+        self.write(Err("It stopped before it went through.".to_string()));
     }
+}
+
+/// Writes `log` for the routed send `response`: done for a success status with no send failure
+/// (session_chat_send_diagnostics.rs `SendFailureReason`), failed otherwise.
+pub(crate) fn record_as_user_log(log: Option<AsUserLog>, response: &crate::server::RoutedResponse) {
+    let Some(log) = log else {
+        return;
+    };
+    let failure = response
+        .response
+        .extensions()
+        .get::<crate::session_chat_send_diagnostics::SendFailureReason>();
+    log.record(match failure {
+        Some(reason) => Err(reason.message.clone()),
+        None if response.response.status().is_success() => Ok(()),
+        None => Err(format!("Ghostex answered {}.", response.response.status())),
+    });
 }
 
 /// `text` with the label as its last line. A `/` or `!` command from the user's own terminal still
@@ -575,13 +604,13 @@ pub(crate) fn label_coordinator_first_request(
         json!(with_as_user_label(text, label)),
     );
     let target = format!("{target_server_id}:{project_id}");
-    Some(AsUserLog {
-        description: format!(
+    Some(AsUserLog::new(
+        format!(
             "Started a coordinator in project {target} with your message as its first request ({})",
             label.to_lowercase()
         ),
         target,
-    })
+    ))
 }
 
 /// The flag a relay sets on a message one of the user's own callers sent through it to another

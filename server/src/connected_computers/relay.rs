@@ -236,7 +236,7 @@ pub(crate) async fn relay(
         ),
         Ok(Ok(Ok((status, content_type, body)))) => {
             if let Some(log) = as_user_log {
-                log.record_if((200..300).contains(&status) && relayed_send_went_through(&body));
+                log.record(relayed_send_outcome(&name, status, &body));
             }
             if let Some((key, sent_at)) = reopen_target.filter(|_| (200..300).contains(&status)) {
                 let (paths, caller) = (paths.clone(), caller.clone());
@@ -396,11 +396,22 @@ fn forwarded_body(bytes: &[u8]) -> Result<serde_json::Value, &'static str> {
     Ok(body)
 }
 
-/// Whether the other computer's answer to a relayed send says it went through: not `ok: false`.
-fn relayed_send_went_through(body: &[u8]) -> bool {
-    serde_json::from_slice::<serde_json::Value>(body).map_or(true, |answer| {
-        answer.get("ok") != Some(&serde_json::Value::Bool(false))
-    })
+/// Whether the other computer's answer to a relayed send says it went through: a success status
+/// and not `ok: false`; otherwise why not (its message, or the status).
+fn relayed_send_outcome(computer: &str, status: u16, body: &[u8]) -> Result<(), String> {
+    let answer = serde_json::from_slice::<serde_json::Value>(body).ok();
+    let refused = answer
+        .as_ref()
+        .is_some_and(|answer| answer.get("ok") == Some(&serde_json::Value::Bool(false)));
+    if (200..300).contains(&status) && !refused {
+        return Ok(());
+    }
+    Err(answer
+        .as_ref()
+        .and_then(|answer| answer.get("message").or_else(|| answer.get("error")))
+        .and_then(serde_json::Value::as_str)
+        .map(|message| format!("{computer}: {message}"))
+        .unwrap_or_else(|| format!("{computer} answered {status}.")))
 }
 
 /// `marked_message_body`, with the security log entry of a send as the user, for the relay to
