@@ -314,6 +314,8 @@ pub(crate) struct NativeChatView {
     pub(crate) note_subscription: Option<Subscription>,
     /// The Boost whose preview shows beside the Boost menu (boosts.rs).
     pub(super) boost_preview: Option<String>,
+    /// Where the Boost menu's list is scrolled; its section chips scroll it (boosts.rs).
+    pub(super) boost_scroll: gpui::ScrollHandle,
     /// The callout's Show me asked for the Boost menu, which opens on the next frame (boosts.rs).
     pub(super) boost_menu_requested: bool,
     /// Where the strip's Boost pill was painted, which its menu lines up with (boosts.rs).
@@ -713,6 +715,7 @@ impl NativeChatView {
             note_input: None,
             note_subscription: None,
             boost_preview: None,
+            boost_scroll: gpui::ScrollHandle::new(),
             boost_menu_requested: false,
             boost_pill_bounds: Default::default(),
             form_inputs: Default::default(),
