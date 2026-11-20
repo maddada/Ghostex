@@ -1,6 +1,7 @@
 //! What the onboarding reads and writes: the detected agents, the settings it shows, the choices
 //! that live only for the length of the flow, and the helpers the panels share
 //! (packages/core-ui/onboarding/onboarding-state.ts (deleted 2026-10-01), contract.ts, apps/desktop/views/onboarding-host-adapter.ts (deleted 2026-10-01)).
+use ghostex_settings_catalog::J;
 use serde_json::{Map, Value};
 
 /// README section listing every supported agent CLI; the Install guide popup and the finished screen open it.
@@ -340,20 +341,25 @@ impl OnboardingSettings {
             Some(value @ ("plain-light" | "system")) => value.to_string(),
             Some(_) => "dark-2".to_string(),
         };
+        // A key the file does not hold reads as the settings catalog's default.
+        let catalog_default = |key: &str| ghostex_settings_catalog::default_value(key);
+        let catalog_number =
+            |key: &str| catalog_default(key).and_then(J::as_f64).unwrap_or_default();
         let preset = |key: &str, presets: &[(&str, &str); 16]| {
             text(key)
                 .filter(|value| *value == "custom" || presets.iter().any(|(id, _)| id == value))
-                .unwrap_or("gray")
+                .or_else(|| catalog_default(key).and_then(J::as_str))
+                .unwrap_or_default()
                 .to_string()
         };
-        let sidebar = |key: &str, fallback: f64| {
+        let sidebar = |key: &str| {
             read_number(object, key)
                 .map(|value| value.clamp(0.0, 100.0).round())
-                .unwrap_or(fallback)
+                .unwrap_or_else(|| catalog_number(key))
         };
-        let glass_sidebar_dark = sidebar("windowGlassSidebarOpacityDark", 94.0);
-        let glass_sidebar_light = sidebar("windowGlassSidebarOpacityLight", 97.0);
-        let work_area = |key: &str, legacy: &str, sidebar_percent: f64, fallback: f64| {
+        let glass_sidebar_dark = sidebar("windowGlassSidebarOpacityDark");
+        let glass_sidebar_light = sidebar("windowGlassSidebarOpacityLight");
+        let work_area = |key: &str, legacy: &str, sidebar_percent: f64| {
             read_number(object, key)
                 .or_else(|| {
                     read_number(object, legacy).map(|extra| {
@@ -363,7 +369,7 @@ impl OnboardingSettings {
                     })
                 })
                 .map(|value| value.clamp(0.0, 100.0).round())
-                .unwrap_or(fallback)
+                .unwrap_or_else(|| catalog_number(key))
         };
         Self {
             view_hidden: VIEW_KEYS.map(|key| read_bool(object, key.hidden_key(), false)),
@@ -415,14 +421,12 @@ impl OnboardingSettings {
                 "windowGlassWorkAreaTintDark",
                 "windowGlassMainOpacityDark",
                 glass_sidebar_dark,
-                94.0,
             ),
             glass_sidebar_light,
             glass_work_area_light: work_area(
                 "windowGlassWorkAreaTintLight",
                 "windowGlassMainOpacityLight",
                 glass_sidebar_light,
-                97.0,
             ),
         }
     }
@@ -1091,11 +1095,11 @@ mod tests {
     }
 
     #[test]
-    fn unsaved_tints_read_as_strength_ten_and_stay_equal() {
+    fn unsaved_tints_read_as_strength_twenty_and_stay_equal() {
         let settings = OnboardingSettings::from_object(&Map::new());
         assert_eq!(settings.glass_sidebar_dark, settings.glass_work_area_dark);
         assert_eq!(settings.glass_sidebar_light, settings.glass_work_area_light);
-        assert_eq!(transparency_strength(&settings), (Some(10.0), 10.0));
+        assert_eq!(transparency_strength(&settings), (Some(20.0), 20.0));
         let [dark_sidebar, dark_work, light_sidebar, light_work] =
             tints(&transparency_strength_patch(35.0, &settings));
         assert_eq!(dark_sidebar, dark_work);

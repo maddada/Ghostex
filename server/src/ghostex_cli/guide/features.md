@@ -3716,7 +3716,7 @@ Terminal theme can override the app with Light, Dark, or System. The palette
 selectors show the theme set in Ghostex's terminal config, including separate light
 and dark selections when configured. A single theme is used for both appearances
 unless you select a separate light palette. Without a configured theme, the defaults
-are GitHub Light and GitHub Dark. All open terminals refresh automatically when their
+are GitHub Light in light mode and Ghostex Kanagawa Dragon in dark mode. All open terminals refresh automatically when their
 app, system, or terminal theme changes, including idle terminals and terminals in
 inactive projects. The appearance override and light palette apply to Ghostex only.
 
@@ -8194,11 +8194,12 @@ still match it. Solarized Dark's work area is a shade redder than the theme's
 own projects (licences in the app's third-party notices).
 Colours: Appearance, three preview cards (System, Light, or Dark; System is the
 default and follows the operating system appearance); Dark mode colour and Light
-mode colour, each a row of sixteen small colour squares (Graphite, the default,
-Black in dark mode or White in light mode, Slate, Midnight, a deep navy, Blue,
+mode colour, each a row of sixteen small colour squares (Graphite, the light mode
+default, Black in dark mode (its default) or White in light mode, Slate, Midnight, a deep navy, Blue,
 Indigo, Teal, Green, Forest, Olive, Amber, Orange, Red, Rose, Pink and Purple;
-picking a dark colour gives light mode the same colour until you pick one there
-yourself, and the light row says when it still follows) and a + square for a
+picking a dark colour gives light mode the same colour while light mode still has
+the matching colour and you have not picked one there yourself, and the light row
+says when it still follows) and a + square for a
 custom colour, which opens a colour picker (with HEX, R, G and B boxes) right at
 the square; and Colourfulness, a fine-grained slider from Subtle to Full (Soft is the default;
 the name of the nearest of Subtle, Soft, Balanced, Rich, Vivid and Full shows beside it)

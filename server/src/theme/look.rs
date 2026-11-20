@@ -211,13 +211,8 @@ pub(crate) fn patch_for<'a>(
             patch.insert(key.to_string(), value.clone());
             continue;
         };
-        let roles = roles.get_or_insert_with(|| {
-            settings
-                .get(THEME_ROLES_SETTING)
-                .and_then(Value::as_object)
-                .cloned()
-                .unwrap_or_default()
-        });
+        let roles = roles
+            .get_or_insert_with(|| ghostex_settings_catalog::theme_roles::saved_roles(settings));
         let appearance = roles
             .entry(appearance_key(light))
             .or_insert_with(|| Value::Object(Map::new()));

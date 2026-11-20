@@ -672,7 +672,7 @@ pub(super) fn area_colourfulness_patch(key: &str, position: usize) -> Map<String
 }
 
 /// `TRANSPARENCY_STRENGTH_*` and the anchor the strength-to-tint curve is drawn from: strength 20 is
-/// 88/93, and the shipped default is strength 10 (94 dark and 97 light for both areas in the settings catalog).
+/// 88/93, which is also the shipped default (88 dark and 93 light for both areas in the settings catalog).
 pub(super) const STRENGTH_MIN: f64 = 0.0;
 pub(super) const STRENGTH_MAX: f64 = 100.0;
 pub(super) const STRENGTH_STEP: f64 = 5.0;
@@ -1016,14 +1016,14 @@ mod tests {
     }
 
     #[test]
-    fn catalog_defaults_are_strength_ten() {
+    fn catalog_defaults_are_strength_twenty() {
         let values = SettingsValues::from_map(Map::new());
-        let patch = strength_patch(10.0, strength_gaps(&values));
+        let patch = strength_patch(20.0, strength_gaps(&values));
         for key in TINT_KEYS {
             let default = ghostex_settings_catalog::default_value(key)
                 .and_then(ghostex_settings_catalog::J::as_f64);
             assert_eq!(patch[key].as_f64(), default, "{key}");
         }
-        assert_eq!(strength_from_settings(&values), (Some(10.0), 10.0));
+        assert_eq!(strength_from_settings(&values), (Some(20.0), 20.0));
     }
 }

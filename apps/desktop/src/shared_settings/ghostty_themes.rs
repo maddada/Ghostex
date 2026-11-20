@@ -3,7 +3,7 @@ use std::{collections::HashSet, fs, path::Path};
 use serde_json::{Map, Value};
 
 /// CDXC:Theming 2026-10-14 DECISION:
-/// User: separate Ghostex's Ghostty config from the Ghostty app's, importing "fonts and a few things like that from Ghostty itself, but not the theme". Supersedes the 2026-09-14 decision to show the Ghostty app's theme: the palette selectors now follow the theme set in Ghostex's own terminal config, and GitHub defaults apply when it sets none.
+/// User: separate Ghostex's Ghostty config from the Ghostty app's, importing "fonts and a few things like that from Ghostty itself, but not the theme". Supersedes the 2026-09-14 decision to show the Ghostty app's theme: the palette selectors now follow the theme set in Ghostex's own terminal config, and the catalog defaults apply when it sets none (Ghostex Kanagawa Dragon in dark mode since 2026-11-20, GitHub Light Default in light mode).
 /// The config's theme owns the dark palette setting; an explicit app light palette overrides its light selection.
 pub(super) fn hydrate_ghostty_theme_selections(object: &mut Map<String, Value>) {
     let path = super::ghostex_terminal_config_path();
