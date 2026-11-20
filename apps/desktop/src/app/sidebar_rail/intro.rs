@@ -75,6 +75,35 @@ impl GhostexGpuiApp {
                     cx.notify();
                 }
             });
+        self.open_sidebar_rail_intro_window(config, host, cx);
+    }
+
+    /// `ghostex debug show-modal rail-intro`: Meet the rail as it opens for real, for checks and
+    /// screenshots. It leaves `sidebarRailIntro` and the layout alone and records nothing: Switch
+    /// only flips the pop-up (as in its native-modal-demo preview), Done closes it.
+    #[cfg_attr(ghostex_web, allow(dead_code))]
+    pub(crate) fn open_sidebar_rail_intro_preview(&mut self, cx: &mut Context<Self>) {
+        let config = RailIntroModalConfig {
+            palette: self.gpui_native_dialog_palette(),
+            rail: super::sidebar_rail_on(),
+        };
+        let host: RailIntroHost =
+            self.native_app_modal_host(cx, |app, command, cx| match command {
+                RailIntroCommand::Switch { .. } => {}
+                RailIntroCommand::Done { .. } => {
+                    app.release_native_app_modal_window(GpuiAppModalKind::RailIntro, cx);
+                    cx.notify();
+                }
+            });
+        self.open_sidebar_rail_intro_window(config, host, cx);
+    }
+
+    fn open_sidebar_rail_intro_window(
+        &mut self,
+        config: RailIntroModalConfig,
+        host: RailIntroHost,
+        cx: &mut Context<Self>,
+    ) {
         let app = cx.weak_entity();
         cx.defer(move |cx| {
             let _ = app.update(cx, |app, cx| {

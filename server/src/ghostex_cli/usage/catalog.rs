@@ -830,6 +830,10 @@ pub fn usage() -> String {
     let evidence_commands = [
         format_help_command("screenshot [output.png]", "Capture the Ghostex window"),
         format_help_command(
+            "debug show-modal <name> | --list",
+            "Open a one-time pop-up (rail-intro) on this computer's Ghostex window for checks and screenshots; its once-only marker and your settings stay as they are",
+        ),
+        format_help_command(
             "logs [--file name] [--lines n] [--grep text] [--json]",
             "Print the newest log lines, oldest first; --grep searches the whole log (warnings and errors are always logged, info lines only while their Diagnostic logs area is on)",
         ),

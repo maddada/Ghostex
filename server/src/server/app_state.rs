@@ -188,6 +188,9 @@ pub(super) const RENDERER_COMMAND_ACTIONS: &[&str] = &[
     "runCommand",
     // The `ghostex` session group verbs: the app owns the groups document (gx-core `workspace_groups/verb_edits.rs`).
     "sessionGroups",
+    // `ghostex debug show-modal`: a one-time pop-up as a preview (gx-core `DEBUG_SHOW_MODALS`);
+    // only this computer may ask (route_http/agents.rs `debug_modal_caller_allowed`).
+    "showDebugModal",
     "switchProject",
     "toggleCloseAfterDone",
     "toggleSidebarCollapsed",

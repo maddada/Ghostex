@@ -28,6 +28,8 @@ pub enum RendererCommandError {
     SessionGroupFull,
     /// A group verb before the app has read its stored session groups.
     SessionGroupsLoading,
+    /// `ghostex debug show-modal` naming a pop-up it cannot open.
+    UnknownDebugModal,
 }
 
 impl RendererCommandError {
@@ -55,6 +57,9 @@ impl RendererCommandError {
             Self::SessionGroupFull => "That session group is full.",
             Self::SessionGroupsLoading => {
                 "Ghostex is still loading its session groups; try again in a moment."
+            }
+            Self::UnknownDebugModal => {
+                "This app can't show that pop-up; ghostex debug show-modal --list names the ones it can."
             }
         }
     }
