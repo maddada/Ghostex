@@ -767,7 +767,7 @@ pub fn suggestion_popup(
 }
 
 /// The `*` list's first tab (named in its heading, "Boosts · Show") and the tab label each later
-/// tab's first row carries (Do, Work, Custom), the list being in the menu's order.
+/// tab's first row carries (Actions, Work, Custom), the list being in the menu's order.
 /// CDXC:Boosts 2026-11-20 DECISION: User: "in the * picker show the Boosts grouped with small
 /// section labels between the types (Show, Do, Work, Custom)", the same labels as the menu's tabs.
 fn boost_sections(choices: &[(String, String, String)]) -> (Option<String>, Vec<Option<String>>) {

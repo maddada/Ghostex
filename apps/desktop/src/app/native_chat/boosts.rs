@@ -1,5 +1,5 @@
 //! Boosts in the chat (gx-chat-core `extras/boosts.rs` has the user's decisions and the rules): the
-//! Boost pill at the right of the pill strip; its menu, a 280px list in Show, Do, Work and Custom
+//! Boost pill at the right of the pill strip; its menu, a 280px list in Show, Actions, Work and Custom
 //! tabs with every description in full and a preview card beside it; the one-time callout bubble
 //! above the pill; the Boost pills' hover and double click; "Try a Boost" on a new chat; and Save as
 //! Boost. Editing is Settings > Boosts (window/settings_modal/tabs/boosts.rs), which the menu's
