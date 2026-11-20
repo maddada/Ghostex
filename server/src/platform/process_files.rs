@@ -115,7 +115,7 @@ pub(crate) fn print_open_paths(arguments: &[String]) -> anyhow::Result<()> {
     let answer: HashMap<String, Vec<PathBuf>> = arguments
         .iter()
         .filter_map(|pid| pid.parse::<i64>().ok())
-        .map(|pid| (pid.to_string(), open_paths(pid)))
+        .filter_map(|pid| Some((pid.to_string(), open_paths(pid)?)))
         .collect();
     println!("{}", serde_json::to_string(&answer)?);
     Ok(())
@@ -127,16 +127,17 @@ pub(crate) fn print_open_paths(arguments: &[String]) -> anyhow::Result<()> {
 ///
 /// CDXC:SessionIdentity 2026-10-25 WHY:
 /// The handle values come from `NtQueryInformationProcess(ProcessHandleInformation)`, not `PssCaptureSnapshot`. On Windows 11 22621 `PssCaptureSnapshot(PSS_CAPTURE_HANDLES)` raised an access violation inside Windows for every process it was pointed at (Codex, Explorer, wmx, PowerShell), while other capture flags and this query worked; that call was the gxserver crash on every Codex session start in GitHub #289 and #292. Do not bring the process-snapshot API back for this lookup.
-fn open_paths(process_id: i64) -> Vec<PathBuf> {
-    let Some(pid) = u32::try_from(process_id).ok().filter(|pid| *pid != 0) else {
-        return Vec::new();
-    };
+fn open_paths(process_id: i64) -> Option<Vec<PathBuf>> {
+    let pid = u32::try_from(process_id).ok().filter(|pid| *pid != 0)?;
     unsafe {
         let process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_DUP_HANDLE, 0, pid);
         if process.is_null() {
-            return Vec::new();
+            return None;
         }
-        let handles = handle_values(process).unwrap_or_default();
+        let Some(handles) = handle_values(process) else {
+            CloseHandle(process);
+            return None;
+        };
         let mut paths = Vec::new();
         for handle in handles {
             let mut duplicate = ptr::null_mut();
@@ -161,7 +162,7 @@ fn open_paths(process_id: i64) -> Vec<PathBuf> {
             CloseHandle(duplicate);
         }
         CloseHandle(process);
-        paths
+        Some(paths)
     }
 }
 

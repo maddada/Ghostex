@@ -782,19 +782,20 @@ pub(super) fn zmx_session_process_identities_from_probe(
             transcript recency. This gives title reconciliation the canonical
             session_index identity after desktop restore as well as first run.
             */
-            let paths = identity
+            if let Some(paths) = identity
                 .process_id
                 .and_then(|pid| open_files_by_pid.remove(&pid))
-                .unwrap_or_default();
-            if let Some((agent_session_id, agent_session_path)) =
-                codex_process_session_identity_from_paths(paths.iter().cloned())
             {
-                // CDXC:SessionIdentity 2026-09-11 WHY: Codex keeps its original resume argv after rewind. The live rollout must replace both fields together, or polling restores the old ID beside the new branch's path.
-                identity.agent_session_id = Some(agent_session_id);
-                identity.agent_session_path = Some(agent_session_path);
-            }
-            if paths.len() <= 4096 {
-                identity.open_file_paths = Some(paths.into());
+                if let Some((agent_session_id, agent_session_path)) =
+                    codex_process_session_identity_from_paths(paths.iter().cloned())
+                {
+                    // CDXC:SessionIdentity 2026-09-11 WHY: Codex keeps its original resume argv after rewind. The live rollout must replace both fields together, or polling restores the old ID beside the new branch's path.
+                    identity.agent_session_id = Some(agent_session_id);
+                    identity.agent_session_path = Some(agent_session_path);
+                }
+                if paths.len() <= 4096 {
+                    identity.open_file_paths = Some(paths.into());
+                }
             }
         }
         if identity.agent_id.as_deref() != Some("omp")
