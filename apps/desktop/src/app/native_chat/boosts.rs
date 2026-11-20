@@ -1099,8 +1099,15 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                     ),
             )
             .into_any_element(),
+        // A Live page with the charts on it, as Chart it asks for.
         "chart" => div()
             .size_full()
+            .flex()
+            .flex_col()
+            .child(bar(Some("signups.html")))
+            .child(div()
+            .flex_1()
+            .min_h_0()
             .flex()
             .flex_col()
             .gap(px(6.0 * s))
@@ -1133,7 +1140,7 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                                 .bg(if n == 5 { tone } else { strong })
                         }),
                 ),
-            )
+            ))
             .into_any_element(),
         "compare" | "triage" | "second" => div()
             .size_full()

@@ -2433,7 +2433,7 @@ UI mockup, a comparison or a small interactive tool. Ask for them by name
 ("give me a Live page for this", "ask me in a gx form", "show it as gx
 visuals"); agents still understand the older words Ghostex page, gx page,
 inline HTML, inline questions and inline graphs. **Boosts** ask for these, and more, in one click. The Boost pill at the right
-of the strip on top of the chat box opens one list of them in sections: Show (Live page, Chart it,
+of the strip on top of the chat box opens one list of them in sections: Show (Live page; Chart it, a Live page of charts and tables;
 Side by side, Map it, Ask me in a form), Actions (Computer & Browser use, where the agent
 drives your apps and Chrome or another browser itself with Cua Driver; Embedded Browser
 use, where it drives pages in Ghostex's own browser; Show screenshots; Second opinion, where another agent
