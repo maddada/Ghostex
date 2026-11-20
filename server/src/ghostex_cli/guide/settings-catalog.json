@@ -10535,6 +10535,18 @@
       "agentWritable": true
     },
     {
+      "key": "leanCodexWorkers",
+      "title": "Lean Codex workers",
+      "subtitle": "Codex threads a coordinator starts run without Codex's own computer use, browser use, image generation, apps and plugins, so each request is about 12% smaller and they start faster. Sessions you start yourself keep all of them. Applies to threads started or resumed after you change it.",
+      "tab": "agents",
+      "tabTitle": "Agents",
+      "section": "config",
+      "sectionTitle": "Defaults",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
       "key": "agentAcceptAllEnabled",
       "title": "Agent approvals: accept all",
       "subtitle": "Start supported agents with approvals turned off (full access) by default. Off keeps each agent CLI default approval mode. Projects can override it.",

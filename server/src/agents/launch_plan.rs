@@ -162,6 +162,19 @@ pub(crate) fn create_agent_session_params_for_project(
     } else {
         None
     };
+    // `coordinator start-thread` marks its thread, for Lean Codex workers (codex_lean.rs); only
+    // that param sets the marker, so a copy of a thread is the user's own session.
+    let coordinator_thread = params
+        .get(super::codex_lean::COORDINATOR_THREAD_KEY)
+        .and_then(Value::as_bool)
+        == Some(true);
+    runtime_settings.remove(super::codex_lean::COORDINATOR_THREAD_KEY);
+    if coordinator_thread {
+        runtime_settings.insert(
+            super::codex_lean::COORDINATOR_THREAD_KEY.to_string(),
+            json!(true),
+        );
+    }
     let configured_command = if agentbox_provider.is_none() {
         apply_thread_marked_handovers(
             &agent_id,
@@ -541,15 +554,20 @@ pub(crate) fn create_agent_session_params_for_project(
                         (
                             command.to_string(),
                             // A GBot that may not use the screen is started without its
-                            // tools (gbot_computer_use.rs).
-                            super::with_gbot_computer_use(
+                            // tools (gbot_computer_use.rs), and a coordinator's Codex thread
+                            // lean while Lean Codex workers is on (codex_lean.rs).
+                            super::with_lean_codex_worker(
                                 family.as_deref(),
                                 Some(&runtime_settings),
-                                &with_home_secret_folders_denied(
+                                &super::with_gbot_computer_use(
                                     family.as_deref(),
-                                    launch_cwd.as_deref(),
-                                    is_gbot_chat(Some(&runtime_settings)),
-                                    command,
+                                    Some(&runtime_settings),
+                                    &with_home_secret_folders_denied(
+                                        family.as_deref(),
+                                        launch_cwd.as_deref(),
+                                        is_gbot_chat(Some(&runtime_settings)),
+                                        command,
+                                    ),
                                 ),
                             ),
                         )

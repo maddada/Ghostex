@@ -4056,9 +4056,9 @@ with nothing to install. For "make Claude Code control Codex":
 
 Related settings: Settings > Agents (agent switches, Add custom agent, Default
 view per agent; Defaults: Default Prompt Agent, Title Generation Agent, Agent
-approvals; Session resume hooks), `agentAcceptAllEnabled`,
-`agentHooksAutoInstall`, `showQuickModelPickerInTerminal` (Option+P model
-picker).
+approvals, Lean Codex workers; Session resume hooks), `agentAcceptAllEnabled`,
+`agentHooksAutoInstall`, `leanCodexWorkers`, `showQuickModelPickerInTerminal`
+(Option+P model picker).
 
 ## Coordinators
 
@@ -4553,6 +4553,13 @@ version of the Projects features in Cursor and Claude Code.
   threads with fewer MCP servers. They are set each time the session's terminal starts: a
   restarted thread keeps them, an unlinked one loses them at its next start. A thread on
   another computer (`start-thread --computer`) does not get them yet.
+- **Lean Codex workers** (Settings > Agents, off by default): Codex threads a
+  coordinator starts run without Codex's own computer use, browser use, image generation,
+  apps, plugins and skill search, so each request is about 12% smaller and they start
+  faster. Sessions you start yourself, and a thread you unlink, keep all of them. It applies
+  to threads started or resumed after you change it, and Ghostex passes only the features
+  your installed Codex knows. Ghostex's own background Codex calls (session titles, Catch me
+  up, commit messages) always run this way. Setting: `leanCodexWorkers`.
 
 Coordinators run on Claude, Codex, ZCode, Empryo, Cursor, Grok, Copilot, Antigravity, Pi,
 OMP, OpenCode or DeepSeek Harness; threads can be any configured

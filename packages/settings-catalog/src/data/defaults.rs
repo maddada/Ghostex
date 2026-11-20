@@ -720,6 +720,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("coordinatorBoardCollapsedColumns", J::Str("done")),
     // CDXC:AgentGuide 2026-11-02 DECISION: User (Q1066): the short Ghostex note goes to every agent session Ghostex starts, "on by default (with a setting to turn it off)".
     ("agentGhostexNote", J::Bool(true)),
+    // CDXC:AgentProviders 2026-11-20 SEE-ALSO: Lean Codex workers, off by default (server/src/agents/codex_lean.rs).
+    ("leanCodexWorkers", J::Bool(false)),
     ("readAgentLiveStatus", J::Bool(true)),
     // CDXC:AgentGuide 2026-11-02 DECISION: User (#263): "if user asks for browser we ask which the user prefers (internal ghostex browser, or external browser)", and (Q1069) the answer is kept in this setting, which the note and `ghostex agent-guide` then state so agents stop asking. Ask until the user picks.
     ("agentPreviewBrowser", J::Str("ask")),

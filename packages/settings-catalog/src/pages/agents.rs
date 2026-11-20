@@ -29,6 +29,8 @@ pub(crate) fn config() -> Section {
             // CDXC:Settings 2026-11-11 DECISION in apps/desktop settings_modal/model.rs (`RailTier`, Q2511): these two moved here from Chat; they set what an agent is told and given when it starts, not how the chat looks. Claude task list still shows only while the Session details panel is on (its `settingKeys`).
             row("agentGhostexNote", "Tell agents about Ghostex", "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Live pages, Ghostex forms and visuals in the chat, run other agents and coordinators, explain or change its own settings, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it."),
             row("sessionDetailsClaudeTaskTools", "Claude task list", "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it. Shown while the Session details panel extension is on."),
+            // CDXC:AgentProviders 2026-11-20 SEE-ALSO: server/src/agents/codex_lean.rs, where the user's decision is.
+            row("leanCodexWorkers", "Lean Codex workers", "Codex threads a coordinator starts run without Codex's own computer use, browser use, image generation, apps and plugins, so each request is about 12% smaller and they start faster. Sessions you start yourself keep all of them. Applies to threads started or resumed after you change it."),
         ],
     )
 }
