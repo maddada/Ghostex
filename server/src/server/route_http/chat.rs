@@ -234,8 +234,10 @@ pub(super) async fn route_chat_http(
             .await;
             response
         }
+        // Who lists or withdraws is the caller, never the request's words (with_next.rs `HeldSender`).
         "/api/heldWithNext" => crate::session_chat_send::handle_held_with_next_http(
             &state,
+            &caller,
             endpoint.path,
             request_id,
             &body_json,
