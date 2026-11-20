@@ -190,7 +190,14 @@ pub(crate) fn gpui_ghostex_cli_status_message_with_cua_update_check(
     let cua_driver_installed = cua_driver_path.is_some() || cua_app_installed;
     let cua_driver_skill_path = gpui_cua_driver_skill_path();
     // CDXC:AgentSkills 2026-11-20 DECISION: the Ghostex Computer Use and Browser Use skills are retired for Trycua's own `cua-driver` skill (Q4262), so "installed" for computer and browser use (onboarding's steps, Desktop Control) means that skill is linked for an agent.
-    let cua_driver_skill_installed = cua_driver_skill_path.is_some();
+    // The same test the driver install's finish step uses (cli_install.rs): a link in any agent's
+    // skills folder, or on Windows the fetched pack, which WSL agents read through
+    // `cua-driver skills path` without a Windows-side link (Opus re-review, finding A).
+    let cua_driver_skill_installed = if cfg!(windows) {
+        gpui_cua_driver_skill_pack_installed()
+    } else {
+        gpui_cua_driver_skill_linked()
+    };
     let desktop_control_installed = cua_driver_installed && cua_driver_skill_installed;
     // SpaceO's probes (version, latest release, daemon ping) run beside Trycua's instead of after them.
     let (spaceo_status, (cua_driver_update_status, cua_permission_status)) =
