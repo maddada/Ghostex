@@ -26,6 +26,13 @@ pub(super) const MENU_HEADER_HEIGHT: f32 = 28.0;
 pub(super) const MENU_SECTION_GAP: f32 = 4.0;
 pub(super) const MENU_FOOTER_HEIGHT: f32 = 26.0;
 
+/// Every pill in the strip above the chat box is this tall, unscaled (its 19px line, 2px above and
+/// below, a 1px edge). A pill with a text child gets that from its line; one with only an icon and
+/// a dot (Autopilot, the tips' bulb, an icon-tier page or place pill) would be 5px shorter, so each
+/// also sets this height. User (2026-11-20): "the pills on top of the chat box aren't all the same
+/// height".
+pub(super) const PILL_HEIGHT: f32 = 25.0;
+
 /// The amber of the ? pill's corner dot and a running pill's (`corner_dot`).
 pub(super) const ATTENTION_COLOR: u32 = 0xf5a524;
 
@@ -575,6 +582,7 @@ impl NativeChatView {
             .items_center()
             .flex_shrink_0()
             .gap(px(5.0 * s))
+            .h(px(PILL_HEIGHT * s))
             .px(px(if label.is_empty() { 7.0 } else { 8.0 } * s))
             .py(px(2.0 * s))
             .rounded_full()

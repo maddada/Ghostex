@@ -52,6 +52,7 @@ impl NativeChatView {
             .items_center()
             .flex_shrink_0()
             .gap(px(5.0 * s))
+            .h(px(super::chat_pills::PILL_HEIGHT * s))
             .px(px(8.0 * s))
             .py(px(2.0 * s))
             .rounded_full()

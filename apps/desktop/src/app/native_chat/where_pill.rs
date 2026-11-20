@@ -431,6 +431,7 @@ impl NativeChatView {
                 .flex()
                 .items_center()
                 .flex_shrink_0()
+                .h(px(super::chat_pills::PILL_HEIGHT * s))
                 .rounded_full()
                 .border(px(BORDER * s))
                 .border_color(p.foreground.opacity(0.1))
