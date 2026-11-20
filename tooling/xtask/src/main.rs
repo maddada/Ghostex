@@ -76,6 +76,8 @@ Checks and generators
                           write the phone Settings search's copy of the desktop's words per setting
   generate-mobile-tabler-icons
                           regenerate the phone's Tabler icon set
+  generate-mobile-session-menu
+                          write the phone's bundled copy of the one session menu (gx-core layout.rs)
   build-agentation        build the Annotate tool (the Agentation fork in .dependencies/agentation)
                           into apps/desktop/vendor/agentation/agentation.generated.js (needs pnpm)
   build-mobile-chat-wasm  build the phone's chat core as WebAssembly into
@@ -140,6 +142,9 @@ fn main() {
         }
         "generate-mobile-settings-search-words" => {
             tasks::mobile_script(&name, "generate-settings-search-words.mjs", &args)
+        }
+        "generate-mobile-session-menu" => {
+            tasks::mobile_script(&name, "generate-session-menu-layout.mjs", &args)
         }
         "generate-mobile-tabler-icons" => {
             tasks::mobile_script(&name, "generate-tabler-icons.mjs", &args)

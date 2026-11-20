@@ -463,8 +463,9 @@ const PRODUCT_LIST = [
      *
      * The Rust chat core is the second exception: the Android job builds it as WebAssembly into
      * the page the app bundles (tooling/release-mobile/chat-core-page.sh, from packages/gx-chat-wasm
-     * and the gx-chat-json, gx-chat-core, gx-protocol and gx-visual crates it compiles in) and
-     * never commits it. The same job exports the release's over-the-air update
+     * and the gx-chat-json, gx-chat-core, gx-protocol, gx-visual, gx-core, gx-cloud and
+     * settings-catalog crates it compiles in; gx-core holds the phone's session menus since
+     * 2026-11-20, sidebar_menu/layout.rs) and never commits it. The same job exports the release's over-the-air update
      * (tooling/release-mobile/ota-export.sh), and the release publishes that update only when this
      * product builds, so without these pathspecs a release that changed only the chat core would
      * reuse the previous APK and phones would never get the change. The core is not native code
@@ -493,6 +494,12 @@ const PRODUCT_LIST = [
       { pathspec: 'packages/gx-chat-core/**' },
       { pathspec: 'packages/gx-protocol/**' },
       { pathspec: 'packages/gx-visual/**' },
+      { pathspec: 'packages/gx-core/**' },
+      { pathspec: ':(exclude)packages/gx-core/target' },
+      { pathspec: 'packages/gx-cloud/**' },
+      { pathspec: ':(exclude)packages/gx-cloud/target' },
+      { pathspec: 'packages/settings-catalog/**' },
+      { pathspec: ':(exclude)packages/settings-catalog/target' },
       { pathspec: 'packages/gx-chat-wasm/**' },
       { pathspec: ':(exclude)packages/gx-chat-wasm/target' },
       { pathspec: 'tooling/release-mobile/chat-core-page.sh' },

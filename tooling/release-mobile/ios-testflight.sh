@@ -45,6 +45,10 @@ node apps/mobile/app/scripts/generate-chat-agents.mjs
 # (server/src/ghostex_cli/guide/settings-catalog.json, packages/settings-catalog). Regenerate
 # them from the release checkout too, so the phone's search never finds settings by older words.
 node apps/mobile/app/scripts/generate-settings-search-words.mjs
+# The phone's bundled copy of the one session menu (packages/gx-core/src/sidebar_menu/layout.rs),
+# which its menus use when the chat core cannot answer. Regenerate it from the release checkout
+# too, so a stale copy can never ship.
+node apps/mobile/app/scripts/generate-session-menu-layout.mjs
 
 cd "$MOBILE_ROOT"
 bunx expo prebuild --platform ios --no-install
