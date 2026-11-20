@@ -95,7 +95,14 @@ fn codex_response_item(
             if let SessionChatBlock::ToolResult { call_id, .. } = &mut result {
                 *call_id = extract_string(payload.get("call_id"));
             }
-            Some(transcript_message(SessionChatRole::Tool, vec![result]))
+            let output = payload.get("output");
+            let content = output
+                .and_then(Value::as_object)
+                .and_then(|record| record.get("content"))
+                .or(output);
+            let mut blocks = vec![result];
+            blocks.extend(tool_result_pictures(content));
+            Some(transcript_message(SessionChatRole::Tool, blocks))
         }
         // Hosted-tool lanes: the call carries no name field of its own.
         Some("web_search_call") => Some(transcript_message(

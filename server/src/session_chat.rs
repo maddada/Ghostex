@@ -740,6 +740,49 @@ carrying only `alt`, which the chat clients render as an attachment chip. The
 bytes are deliberately NOT forwarded: transcripts hold multi-megabyte data URLs
 and every frame crosses the websocket.
 */
+/// The base64 bytes of a picture a tool result holds inline, in each agent's spelling: Pi's
+/// `{"type":"image","data"}`, Claude's `{"type":"image","source":{"type":"base64","data"}}` and
+/// Codex's `{"type":"input_image","image_url":"data:image/…;base64,…"}`.
+pub(crate) fn inline_picture_data(record: &Map<String, Value>) -> Option<&str> {
+    match record.get("type").and_then(Value::as_str) {
+        Some("image") => record
+            .get("data")
+            .or_else(|| as_record(record.get("source")).and_then(|source| source.get("data")))
+            .and_then(Value::as_str),
+        Some("input_image") => record
+            .get("image_url")
+            .and_then(Value::as_str)
+            .and_then(|url| url.strip_prefix("data:image/"))
+            .and_then(|rest| rest.split_once(";base64,"))
+            .map(|(_, data)| data),
+        _ => None,
+    }
+    .filter(|data| !data.trim().is_empty())
+}
+
+/// The pictures a tool's result returned as bytes, each kept as a file on this machine and shown
+/// by its path (`tool_picture_path`); a picture that cannot be kept is left out.
+///
+/// CDXC:SessionChat 2026-11-20 WHY:
+/// An MCP screenshot (Claude's `mcp__cua-driver__get_window_state`, `mcp__chrome-devtools__take_screenshot`) or Codex's browser `js` screenshot came back inside the tool result, whose text alone reached the chat, so the picture the agent looked at never showed on any client. The same fix as Pi's (issue #680, `session_chat_decode_pi.rs`).
+/// SEE-ALSO: packages/gx-chat-core/src/transcript/presentation.rs `image_blocks` leaves out a result's copy of the file its call read, which the call's row already shows.
+pub(crate) fn tool_result_pictures(content: Option<&Value>) -> Vec<SessionChatBlock> {
+    let Some(Value::Array(items)) = content else {
+        return Vec::new();
+    };
+    items
+        .iter()
+        .filter_map(Value::as_object)
+        .filter_map(inline_picture_data)
+        .filter_map(crate::session_chat_files::tool_picture_path)
+        .map(|path| SessionChatBlock::ImageRef {
+            path: Some(path.to_string_lossy().into_owned()),
+            url: None,
+            alt: None,
+        })
+        .collect()
+}
+
 pub(crate) fn image_ref_block(record: &Map<String, Value>) -> Option<SessionChatBlock> {
     let source = as_record(record.get("source"));
     let url = extract_string(source.and_then(|inner| inner.get("url")))

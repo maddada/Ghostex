@@ -69,19 +69,51 @@ pub fn message_tool_rows(message: &ChatMessage) -> (Vec<FileChange<'_>>, Vec<Too
     (changes, pairs)
 }
 
-fn image_blocks(blocks: &[&ChatBlock]) -> Vec<ImageRef> {
-    blocks
-        .iter()
-        .copied()
-        .filter_map(|block| match block {
-            ChatBlock::ImageRef { path, url, alt } => Some(ImageRef {
-                path: path.clone(),
-                url: url.clone(),
-                alt: alt.clone(),
-            }),
-            _ => None,
-        })
-        .collect()
+/// A message's pictures: its own, and the ones its tool results returned (gxserver puts those
+/// right after their result), except a result's copy of the picture file its call read. The call
+/// is looked for in the message, then in the chat's other rows (`messages`): a Codex output can be
+/// a row of its own.
+///
+/// CDXC:SessionChat 2026-11-20 WHY:
+/// gxserver now sends the pictures a tool returned (an MCP or browser screenshot, issue #680), and
+/// a call that read a picture file (Codex's `view_image`, Claude's Read) returns that file too,
+/// which its row already shows (`read_images.rs`): the copy would show the same picture twice.
+fn image_blocks(blocks: &[ChatBlock], messages: &[ChatRow]) -> Vec<ImageRef> {
+    let reads_a_picture = |id: &str| {
+        std::iter::once(blocks)
+            .chain(messages.iter().map(|message| message.blocks.as_slice()))
+            .flatten()
+            .find_map(|block| match block {
+                ChatBlock::ToolCall {
+                    name,
+                    input,
+                    call_id: Some(call),
+                } if call == id => Some((name, input)),
+                _ => None,
+            })
+            .is_some_and(|(name, input)| {
+                !crate::transcript::read_images::image_paths_in_call(name, input, None).is_empty()
+            })
+    };
+    let mut answering: Option<&str> = None;
+    let mut images = Vec::new();
+    for block in blocks {
+        match block {
+            ChatBlock::ToolResult { call_id, .. } => answering = call_id.as_deref(),
+            ChatBlock::ImageRef { path, url, alt } => {
+                if answering.is_some_and(reads_a_picture) {
+                    continue;
+                }
+                images.push(ImageRef {
+                    path: path.clone(),
+                    url: url.clone(),
+                    alt: alt.clone(),
+                });
+            }
+            _ => answering = None,
+        }
+    }
+    images
 }
 
 /// CDXC:SessionChat 2026-09-02:
@@ -140,7 +172,7 @@ pub fn project_message(
         .collect();
     let durations = &durations;
     let (prose, tools) = split_blocks(&message.blocks);
-    let images = image_blocks(&prose);
+    let images = image_blocks(&message.blocks, messages);
     let body = js_trim(&prose_markdown(&message.blocks)).to_string();
     let is_user = message.role == ChatRole::User;
     // Answers a page or question form sent: the card stands for each envelope, and the bubble

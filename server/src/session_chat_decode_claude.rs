@@ -154,6 +154,43 @@ pub(crate) fn claude_content_block(record: &Map<String, Value>) -> Option<Sessio
     }
 }
 
+/// Puts the pictures each tool result returned (`tool_result_pictures`) right after its result.
+/// Claude's `Read` of a picture file (`toolUseResult.type` "image") is left out: its call's row
+/// already shows that file (`read_images.rs` in gx-chat-core).
+fn attach_claude_tool_pictures(
+    record: &Map<String, Value>,
+    content: Option<&Value>,
+    blocks: &mut Vec<SessionChatBlock>,
+) {
+    let read_a_picture_file = record
+        .get("toolUseResult")
+        .and_then(|result| result.get("type"))
+        .and_then(Value::as_str)
+        == Some("image");
+    let Some(Value::Array(items)) = content else {
+        return;
+    };
+    if read_a_picture_file {
+        return;
+    }
+    for item in items.iter().filter_map(Value::as_object) {
+        if item.get("type").and_then(Value::as_str) != Some("tool_result") {
+            continue;
+        }
+        let pictures = tool_result_pictures(item.get("content"));
+        if pictures.is_empty() {
+            continue;
+        }
+        let id = extract_string(item.get("tool_use_id"));
+        let at = blocks.iter().position(
+            |block| matches!(block, SessionChatBlock::ToolResult { call_id, .. } if *call_id == id),
+        );
+        if let Some(at) = at {
+            blocks.splice(at + 1..at + 1, pictures);
+        }
+    }
+}
+
 /// Hands an edit result the patch Claude recorded beside it (`toolUseResult`), so the chat's file
 /// change card can show the file's own line numbers and surrounding lines. The record holds one
 /// `toolUseResult`, so it is attached only when the row answers a single call.
@@ -755,6 +792,7 @@ pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<Se
     let content = message.and_then(|inner| inner.get("content"));
     let mut decoded_blocks = claude_content_blocks(content);
     attach_claude_tool_patch(&record, &mut decoded_blocks);
+    attach_claude_tool_pictures(&record, content, &mut decoded_blocks);
     if role == "user" {
         decoded_blocks = decoded_blocks
             .into_iter()
