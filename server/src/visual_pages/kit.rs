@@ -348,7 +348,7 @@ tr.gx-row[aria-checked=true]>td{background:color-mix(in srgb,var(--gx-pick) 7%,t
 .gx-options>.gx-row:not(tr)[aria-checked=true]{border-color:color-mix(in srgb,var(--gx-pick) 70%,transparent);box-shadow:0 0 0 4px color-mix(in srgb,var(--gx-pick) 10%,transparent),var(--gx-glass-shadow)}
 /* The question card under picks shows what was picked, not the list again. */
 gx-question.gx-q-tied>.gx-choices{display:none}
-.gx-picked{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;min-height:32px;box-sizing:border-box;padding:4px 4px 4px 10px;border-radius:10px;background:var(--gx-option);border:1px solid var(--gx-option-border)}
+.gx-pickbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;min-height:32px;box-sizing:border-box;padding:4px 4px 4px 10px;border-radius:10px;background:var(--gx-option);border:1px solid var(--gx-option-border)}
 .gx-picked-label{flex:none;font-size:12.5px;color:var(--gx-muted);white-space:nowrap}
 .gx-picked-chips{display:flex;flex:1 1 140px;flex-wrap:wrap;gap:4px;min-width:0}
 .gx-picked-chip{display:inline-flex;flex:none;align-items:center;max-width:100%;height:22px;box-sizing:border-box;padding:0 2px 0 8px;border-radius:999px;border:1px solid color-mix(in srgb,var(--gx-pick) 40%,transparent);background:color-mix(in srgb,var(--gx-pick) 9%,transparent);color:var(--gx-fg);font:500 11.5px/20px var(--font-sans);white-space:nowrap}
@@ -357,9 +357,9 @@ gx-question.gx-q-tied>.gx-choices{display:none}
 .gx-picked-chip>.gx-picked-go:only-child{padding-right:6px}
 .gx-picked-none{font-size:12.5px;color:var(--gx-muted)}
 .gx-picked-none>button{border:0;background:none;padding:0;color:var(--gx-fg);font:inherit;text-decoration:underline dotted;text-underline-offset:3px;cursor:pointer}
-.gx-picked>.gx-other{width:auto;flex:none;margin-left:auto;padding:2px 9px;gap:6px;border-radius:7px;font-size:12px;line-height:20px}
-.gx-picked>.gx-other .gx-mark{width:12px;height:12px;margin-top:4px}
-.gx-picked>.gx-other .gx-letter{display:none}
+.gx-pickbar>.gx-other{width:auto;flex:none;margin-left:auto;padding:2px 9px;gap:6px;border-radius:7px;font-size:12px;line-height:20px}
+.gx-pickbar>.gx-other .gx-mark{width:12px;height:12px;margin-top:4px}
+.gx-pickbar>.gx-other .gx-letter{display:none}
 /* The bar at the bottom while a list's rows are on screen: what is picked there, the page's count, Send. It takes the answered pill's place. */
 .gx-rowbar{position:fixed;left:50%;bottom:max(var(--gx-gutter,16px),env(safe-area-inset-bottom,0px));z-index:21;transform:translateX(-50%);box-sizing:border-box;width:min(var(--gx-text-width,720px),calc(100% - 2*var(--gx-gutter,16px)));display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:7px 7px 7px 14px;border-radius:14px;border:1px solid var(--gx-card-border);background:var(--gx-footer);box-shadow:var(--gx-glass-shadow);-webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15);color:var(--gx-muted);font:13px/18px var(--font-sans);opacity:0;visibility:hidden;transition:opacity .15s,visibility .15s}
 .gx-rowbar.gx-on{opacity:1;visibility:visible}
@@ -912,7 +912,8 @@ function tidyCards(questions,ties){
     var real=q.choices.filter(function(c){return !c.button.classList.contains("gx-other");}),mine=ties.filter(function(t){return t.q===q;});
     if(!real.length||!real.every(function(c){return mine.some(function(t){return t.c===c;});}))return;
     var qe=q.el,list=qe.querySelector(".gx-choices"),other=q.choices.filter(function(c){return c.button.classList.contains("gx-other");})[0];
-    var bar=el("div","gx-picked"),chips=el("span","gx-picked-chips"),rowsOf=mine.some(function(t){return t.node.classList.contains("gx-row");});
+    // Not "gx-picked": attachPick puts that class on a picked mockup card, and this bar's flex layout squashed the card.
+    var bar=el("div","gx-pickbar"),chips=el("span","gx-picked-chips"),rowsOf=mine.some(function(t){return t.node.classList.contains("gx-row");});
     bar.append(el("span","gx-picked-label",rowsOf?"Picked above":"Picked"),chips);if(other)bar.append(other.button);
     list.before(bar);qe.classList.add("gx-q-tied");
     function nodeOf(c){var t=mine.filter(function(t){return t.c===c;})[0];return t&&t.node;}
