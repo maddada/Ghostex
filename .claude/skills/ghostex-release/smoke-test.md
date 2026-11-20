@@ -582,10 +582,14 @@ Steps 2, 4.1 and 5 against a throwaway gxserver and the GPUI web build in headle
    has no Settings window and no Browser pane (5.1 and 4.2 NOT RUN there), and Ctrl+P goes to
    a focused terminal.
 
-**Stop rule for the Linux pass: not decided yet (2026-11-20).** The web build
-can't run 4.2, 5.1 or 5.2, so those are `NOT RUN (web build)` there. Report the
-Linux lines under the Mac's, each marked `Linux`, until the coordinator writes
-the rule here.
+**Stop rule for the Linux pass** (Main Coordinator's decision, 2026-11-20; the
+user can override it): the Mac's rule. A crash, or typing that doesn't land
+(4.1's typed or pasted line, 5.4's typing), stops the release, and every other
+Linux failure is a warning. The steps the web build doesn't have (4.2 Browser,
+5.1 Settings, 5.2 Search palette) are reported as `NOT RUN (web build)` and
+don't count as a Stop; any other `NOT RUN` on a Linux Stop step counts as a
+Stop, as on the Mac. Report the Linux lines under the Mac's, each marked
+`Linux`.
 
 ### Windows pass: steps 2, 4 and 5 (runs beside the Mac smoke)
 
