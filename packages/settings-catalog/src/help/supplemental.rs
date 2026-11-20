@@ -476,7 +476,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         section: "official",
         section_title: "Built-in",
         title: "Turn off Session notes",
-        subtitle: "Turn off Session notes: Note in a session's menu and hover buttons, the note dot on its card, Session note in the chat's More actions, the Session Note hotkey and the ghostex session-note command, here and in the phone app. Off by default; notes you wrote are kept and come back when you turn it on.",
+        subtitle: "Turn off Session notes: Note in a session's menus and hover buttons, the note dot on its card, the Session: Note hotkey and the ghostex session-note command, here and in the phone app. Off by default; notes you wrote are kept and come back when you turn it on.",
         options: &[],
         user_only: false,
     },

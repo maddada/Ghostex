@@ -90,6 +90,46 @@ impl GhostexGpuiApp {
         })
     }
 
+    /// The rows each place of the one session menu holds for a session (gx-core
+    /// sidebar_menu/layout.rs), as menu JSON, for the chat box ⋯ to fill its shared places with
+    /// the sidebar's own rows. `None` when no list draws the session.
+    pub(crate) fn gx_store_session_menu_places(
+        &mut self,
+        key: &ghostex_gx_core::SessionKey,
+    ) -> Option<Vec<(String, Vec<Value>)>> {
+        if !self.gx_store_sidebar_list_ready() {
+            return None;
+        }
+        let session_id = key.to_sidebar_session_id();
+        let host = self.gx_store_menu_host();
+        let now_ms = super::host::now_ms();
+        let store = &self.gx_store;
+        let list = &store.sidebar_list;
+        let drawn = SidebarMenus::new(&store.core, list.view(), &list.last_inputs, &host, now_ms)
+            .row_menu_places(&session_id);
+        // A session the list hides (a filter, a collapsed project's hidden rows) still has its
+        // chat; this computer's rows are read unfiltered, as the View panel's refs are.
+        let places = drawn.or_else(|| {
+            let view = unfiltered_local_view(&store.core, &list.last_inputs, now_ms);
+            SidebarMenus::new(&store.core, &view, &list.last_inputs, &host, now_ms)
+                .row_menu_places(&session_id)
+        })?;
+        Some(
+            places
+                .into_iter()
+                .map(|(place, items)| {
+                    (
+                        place.to_string(),
+                        items
+                            .iter()
+                            .map(ghostex_gx_core::MenuItem::to_json)
+                            .collect(),
+                    )
+                })
+                .collect(),
+        )
+    }
+
     fn gx_store_panel_menu(
         &mut self,
         build: impl FnOnce(&SidebarMenus<'_>, &ghostex_gx_core::SidebarView) -> Option<Value>,

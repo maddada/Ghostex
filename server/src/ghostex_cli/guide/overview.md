@@ -24,7 +24,7 @@ hotkeys Every shortcut and its default binding
   Actions and Open In extensions are on, and Actions is off by default), the chat's
   **Work** button and context ring, a **⋯** button, and the command terminal and view
   panel toggles. The ⋯ menu holds the header's other controls, grouped under This chat
-  (Share, Open in a popup), Project, Agents (Claude, Grok Bot, Voice call) and Panels,
+  (Share, Popout), Project, Agents (Claude, Grok Bot, Voice Call) and Panels,
   each row saying what it is doing now (On, Live, In a call). Point at a row and click
   its pin to put that control back in the header. Right-click a control in the header
   to unpin it into ⋯ (for Start, Open, Commit and the Voice headset, Unpin from header

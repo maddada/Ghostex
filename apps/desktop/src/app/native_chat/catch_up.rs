@@ -73,7 +73,7 @@ impl NativeChatView {
         let button = div()
             .id("catch-me-up")
             .role(gpui::Role::Button)
-            .aria_label("Catch me up")
+            .aria_label("Catch Me Up")
             .aria_expanded(open)
             .flex_shrink_0()
             .flex()
@@ -107,7 +107,7 @@ impl NativeChatView {
             .child(if loading {
                 "Catching up…"
             } else {
-                "Catch me up"
+                "Catch Me Up"
             })
             .tooltip(|window, cx| {
                 gpui_component::tooltip::Tooltip::new(
@@ -178,7 +178,7 @@ impl NativeChatView {
                     .min_w_0()
                     .text_color(p.foreground)
                     .font_weight(FontWeight::MEDIUM)
-                    .child("Catch me up"),
+                    .child("Catch Me Up"),
             )
             .when(loading, |this| {
                 this.child(

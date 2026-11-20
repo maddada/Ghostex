@@ -443,7 +443,7 @@ pub fn settle(state: &mut ChatState, request_id: u64, outcome: &RpcOutcome) -> O
         // An older gxserver has no `readSessionFilesLinks` and refuses it without a sentence.
         RpcOutcome::Err { message, .. } if !message.chars().any(char::is_alphabetic) => {
             files_links.error = Some(
-                "Ghostex on this computer is too old for Files and links. Update it and try again."
+                "Ghostex on this computer is too old for Files and Links. Update it and try again."
                     .to_string(),
             );
         }

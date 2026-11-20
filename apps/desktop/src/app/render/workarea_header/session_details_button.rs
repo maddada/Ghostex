@@ -41,7 +41,7 @@ impl GhostexGpuiApp {
             div()
                 .id("ghostex-gpui-workarea-header-session-details")
                 .role(gpui::Role::Button)
-                .aria_label("Session details")
+                .aria_label("Session Details")
                 .flex()
                 .flex_shrink_0()
                 .items_center()

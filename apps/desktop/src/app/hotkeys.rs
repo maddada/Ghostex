@@ -331,6 +331,7 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("wakeFocusedSession", ""),
     ("closeFocusedSession", "cmd+shift+backspace"),
     ("popOutPane", "ctrl+shift+o"),
+    ("generateSessionTitle", ""),
     // CDXC:Navigation 2026-09-19: mirrors packages/settings-catalog/src/hotkey_definitions.rs,
     // where the brackets moved from group focus to Back/Forward.
     ("focusPreviousGroup", ""),

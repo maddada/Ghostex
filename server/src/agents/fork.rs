@@ -248,7 +248,7 @@ fn at_message_plan(plan: &mut Value) -> Result<String, DomainStateError> {
         plan.get("runtimeCommand").and_then(Value::as_str),
     ) else {
         return Err(DomainStateError::bad_request(
-            "Fork from here works with Claude Code only. Use Fork Session to copy the whole conversation.",
+            "Fork from here works with Claude Code only. Use Fork in the session's menu to copy the whole conversation.",
         ));
     };
     let fork_id = uuid::Uuid::new_v4().to_string();

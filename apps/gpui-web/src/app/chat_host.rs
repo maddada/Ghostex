@@ -31,6 +31,14 @@ impl GhostexGpuiApp {
                 self.open_app_modal_from_bridge(message.clone(), cx);
                 return;
             }
+            // A shared row of the chat box ⋯ (Copy, Tag As, Close, …): the sidebar menu's own row
+            // for this session, run as the sidebar runs it (gx-core sidebar_menu/layout.rs).
+            Some("sidebarMenuCommand") => {
+                if let Some(command) = message.get("command") {
+                    self.dispatch_native_sidebar_ui(command.clone(), cx);
+                }
+                return;
+            }
             _ => {}
         }
         if self.web_chat_session_control(session, message, cx) {

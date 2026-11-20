@@ -185,6 +185,12 @@ pub(super) fn measure_rows(
             if row["separator"] == true {
                 return Ok(m.separator);
             }
+            if let Some(tiles) = row["quick"].as_array() {
+                let inner = width - m.chrome();
+                return Ok(quick_row_height(tiles, inner, |label| {
+                    text_width(label) * QUICK_TILE_TEXT / 12.0
+                }));
+            }
             let heading = row["heading"] == true;
             let accessory = if row["toggle"] == true {
                 SWITCH_WIDTH + m.row_gap
@@ -245,4 +251,26 @@ pub(super) fn measure_rows(
             })
         })
         .collect()
+}
+
+/// A session menu's quick row (gx-core sidebar_menu/layout.rs): tiles side by side, an icon over a
+/// label of up to two lines.
+pub(super) const QUICK_TILE_GAP: f32 = 4.0;
+pub(super) const QUICK_TILE_TEXT: f32 = 11.0;
+const QUICK_TILE_HEIGHT: f32 = 54.0;
+const QUICK_TILE_LINE: f32 = 14.0;
+const QUICK_TILE_ROW_BOTTOM: f32 = 4.0;
+
+/// One line of labels, or two when any label is wider than its tile ("Files and Links").
+pub(super) fn quick_row_height(
+    tiles: &[Value],
+    inner_width: f32,
+    label_width: impl Fn(&str) -> f32,
+) -> f32 {
+    let count = tiles.len().max(1) as f32;
+    let tile = (inner_width - QUICK_TILE_GAP * (count - 1.0)) / count - 8.0;
+    let two_lines = tiles
+        .iter()
+        .any(|tile_row| label_width(tile_row["label"].as_str().unwrap_or_default()) > tile);
+    QUICK_TILE_HEIGHT + QUICK_TILE_ROW_BOTTOM + if two_lines { QUICK_TILE_LINE } else { 0.0 }
 }

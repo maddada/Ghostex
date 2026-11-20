@@ -953,6 +953,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
             ("wakeFocusedSession", J::Str("")),
             ("closeFocusedSession", J::Str("cmd+shift+backspace")),
             ("popOutPane", J::Str("ctrl+shift+o")),
+            ("generateSessionTitle", J::Str("")),
             ("focusPreviousGroup", J::Str("")),
             ("focusNextGroup", J::Str("")),
             ("navigateHistoryBack", J::Str("cmd+[")),

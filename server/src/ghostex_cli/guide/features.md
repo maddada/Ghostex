@@ -942,17 +942,17 @@ project's sessions only; its browser tabs are slept and closed from the tab
 strip above the view, where they live.
 Sleep Inactive and Close Inactive leave sessions with unanswered question cards
 awake, for every agent, as well as sessions that are working, waiting for
-approval or running a background shell. A session's Advanced > Sleep Below
+approval or running a background shell. A session's More > Sleep Below
 also skips unanswered question cards, approvals and background shells.
 Click a project header (or the chevron beside it) or a group header to expand
 or collapse it; rename a group from its right-click menu.
 Sessions groups gather some of a project's sessions under a header of their
 own, with a folder icon. To make one, right-click a session and choose
-Advanced > Move to New Group (or New Sessions Group on the Move to Group
+More > Move to New Group (or New Sessions Group on the Move to Group
 page): the new group's name opens for renaming with the default name
 selected, so type a name and press Enter, or press Escape to keep it. Once
 the project has a sessions group, the
-session menu's Advanced > Move to Group page lists the project's groups: pick
+session menu's More > Move to Group page lists the project's groups: pick
 one to move the session there, or Remove from Group to put it back in the
 project's own list. A group's right-click menu has Ungroup, which removes the
 group and keeps its sessions open in the project's own list, and Close, which
@@ -1279,7 +1279,7 @@ where they are while you open, change and close views.
 - Presets: Settings > Sidebar & Sessions > Sidebar > Preset switches groups of card
   details at once; the individual rows below it are marked Advanced.
 - Timed Delayed Send: open **Delayed Send** from an agent's right-click menu
-  under **Advanced**. Session Automations opens with **When all agents finish**
+  under **More**. Session Automations opens with **When all agents finish**
   selected. Choose **After a delay** for hours and minutes, or
   **Specific time** for a future date and time, then **Save changes**.
   Specific time is available in Session Automations on desktop, web, and mobile.
@@ -1312,14 +1312,28 @@ where they are while you open, change and close views.
   it. Hover an icon on a card to see its name; buttons flip
   to the reverse action on an active row (Unpin, Wake, Unsnooze, Unpark,
   Cancel Close After Done). The enabled buttons also stay in the
-  session's right-click menu, which always runs Rename, Pin, Snooze, Park,
-  Sleep, then Tag As after a line, like ChatGPT's menu; Note is under the
-  menu's Advanced submenu unless its hover button is on (Note and its hover
-  button show only while Session notes is on in Settings > Extensions). Close is the
+  session's right-click menu (Note and its hover button show only while
+  Session notes is on in Settings > Extensions). Close is the
   exception: while it is on the card it is never in the menu, and turning it
   off puts Close back as the menu's last row. Hover buttons also in context
   menu (on by default) controls the rest; turn it off and every enabled
-  button leaves the menu (and its Advanced submenu).
+  button leaves the menu (and its More submenu).
+- Session menus: a session's right-click menu in the sidebar, the chat box's
+  ⋯ (More actions) and the phone's long-press, chat ⋯ and terminal ⋯ menus are
+  one list with one name per action. It starts with a row of icon tiles
+  (Rename, then the place's own: Pin and Popout in the sidebar, Files and
+  Links and Side Chat in the chat box), then the place's own rows (Snooze and
+  Park in the sidebar; the chat box's folded controls, View and Stop Reading in
+  a chat), then Coordinator, Mark Thread Done, Copy and Tag As. **More** holds
+  Sleep, Fork, Full Reload, Switch Account, Delayed Send and Note, then Close
+  After Done, Handoff / Export, Link to, Branches, Make Coordinator and
+  Postpone By, then the place's rarer rows (Move to Group, Sleep Below and
+  Close Below in the sidebar; Stash Prompt, Skills, Context window and Options
+  in the chat box). Close is last. A row shows only where it applies, such as
+  Coordinator on a coordinator and Mark Thread Done on a thread. View 1st
+  Message and Focus are gone from the menus, and Generate Title is a command
+  palette command, Session: Generate Title, which names the focused session
+  from its recent prompts.
   Both rows live under Sidebar & Sessions > Session Cards, in the page's Advanced fold. Settings:
   `sessionCardHoverButtons` (a list of `{ id, enabled }` with ids `rename`,
   `pin`, `note`, `snooze`, `closeAfterDone`, `tag`, `park`, `sleep`,
@@ -1573,7 +1587,7 @@ question, a Needs you to-do), has queued messages or unsent text in its input bo
 You and any agent on this computer can clear any session (an agent not its own),
 and each clear is in the security log (Settings > Security) with who did it. A
 message one agent sends another is still never run as a command.
-Fork (a session's right-click menu, or More actions > Agent in its chat) opens the new
+Fork (More in a session's right-click menu or its chat box's ⋯ menu) opens the new
 session beside the original and switches to it. It starts as
 `Fork: <original name>` and saves that name through the agent's own rename
 command so it survives reopening the conversation.
@@ -1706,7 +1720,7 @@ when you open it.
   one reopens that agent's session, or focuses it when it is already open in
   the sidebar. A prompt can
   be forked into Claude, Codex, Pi, OpenCode, Cursor or Grok.
-- Delayed Actions opens Session Automations. Send Enter defaults to **When all
+- Delayed Send opens Session Automations. Send Enter defaults to **When all
   agents finish**. It can also run after a delay, when this agent finishes, or
   **When a specific agent finishes**. Choose the specific agent from the Agent sessions
   on the same computer; sleeping sessions are excluded. Ghostex waits until the
@@ -2017,7 +2031,7 @@ Settings > Extensions > Experimental. On the computer, hover an
 agent's final reply and press Read aloud (the speaker, last before the time); on
 the reply being read it becomes Stop reading. Turn on Auto-read in the chat's
 More actions (⋯) menu, under View, to hear each finished reply of the chat you are looking
-at; while something is read, the same menu has Stop reading. Only the agent's
+at; while something is read, the same menu has Stop Reading. Only the agent's
 final reply of each turn is read, never your messages, tool calls or thinking.
 Code blocks and tables are skipped with a short note, links are read by their
 name and a file path by its file name, and a turn that ends with a question says
@@ -2031,13 +2045,13 @@ uses the device's own voices: it speaks in the Mac app and in Ghostex in a
 browser; the Windows app does not speak yet and the Linux app has no voice, so
 use the phone or a browser there. On the phone, Read aloud works in the chats of
 a computer that has it switched on: hold a reply and choose Read aloud (Stop
-reading on the reply being read), and Auto-read and Stop reading are in the
+reading on the reply being read), and Auto-read and Stop Reading are in the
 chat's ⋯ menu. The phone has its own voice and speed under Read aloud in its
 Settings > Chat, shown while one of your computers has it on. Auto-read keeps
 reading with the phone locked or Ghostex in the background: a "Voice mode on"
 notification shows it, with Pause (Resume) and Stop. On an iPhone there is no
 such notification: a reply being read keeps playing with the phone locked, and
-Stop reading is in the chat's ⋯ menu. If the phone cannot reach
+Stop Reading is in the chat's ⋯ menu. If the phone cannot reach
 the computer for 5 minutes, Auto-read turns itself off and says so; if Ghostex
 on that computer is too old to stay connected in the background, the phone asks
 you to update it there (`readAloudHidden`, `readAloudVoice`,
@@ -2126,7 +2140,7 @@ In Claude Code, Codex, and OpenCode chats, start a message with `!` to run a she
 in that agent's session, for example `! pwd`. The command and its output appear
 in the chat.
 A side chat is a separate conversation beside the main one: ask something on the
-side without interrupting or derailing the agent's work. Side chat in the chat
+side without interrupting or derailing the agent's work. Side Chat in the chat
 box's More actions puts a Side Chat pill in the chat box (typing `/btw` on its own
 and pressing Enter does the same); sending a message with the pill, or typing
 `/btw <question>`, forks the session into a side chat that starts with that
@@ -2848,7 +2862,7 @@ VS Code/Files preferences as transcript links. Double-click a composer pill to e
 its reference text. Every file the chat shows has Copy Path and the location row:
 right-click a file reference, a file edit row, a tool row that names a file, a
 picture or an attachment for Open in VS Code, Open in Files (every file except
-folders and media), Copy Path, or the location row, and each file in Files and links has
+folders and media), Copy Path, or the location row, and each file in Files and Links has
 copy and location buttons. The location row is left out for a remote session's
 files (they are on the other computer) and in Ghostex web; on the phone, hold the
 file for Copy Path.
@@ -2964,8 +2978,8 @@ waits for its answer instead of starting another chat, and a Ghostex Help chat
 never asks Ghostex Help itself. Setting: `agentGhostexNote`; CLI: `ghostex
 agent-guide`, `ghostex help ask "<question>" [--new]`.
 
-Catch me up: turn on Catch me up button (Settings > Chat, off by default) and
-the chat box shows a Catch me up button at its top right while it is empty, on
+Catch Me Up: turn on Catch Me Up button (Settings > Chat, off by default) and
+the chat box shows a Catch Me Up button at its top right while it is empty, on
 the computer and on the phone; it fades out as you start typing and back in
 when the box is empty again. Clicking it has your Title Generation Agent
 (Settings > Agents, a small, cheap model such as Claude Haiku or Codex's mini
@@ -3036,7 +3050,7 @@ Cache card shows the cache length, when the chat will be compacted if it stays i
 note saying it happened while idle. Settings: `claudeIdleCompaction`, `claudeIdleCompactAbove`,
 `claudeOneHourPromptCache`.
 
-Files and links: More actions > Files and links (or its shortcut, Option+Ctrl+L
+Files and Links: More actions > Files and Links (or its shortcut, Option+Ctrl+L
 on macOS and Ctrl+Alt+Shift+L on Windows and Linux, changeable in Settings >
 Hotkeys) opens a menu that floats above the chat box, without pushing the
 conversation up, listing everything the session mentioned, on the computer and
@@ -3078,7 +3092,7 @@ Pick Summary under More actions > View, where its row shows the
 Toggle Summary Mode shortcut (Option+Ctrl+S on macOS, Ctrl+Alt+Shift+S on Windows
 and Linux), which switches it from anywhere in that chat and can be changed in
 Settings > Hotkeys.
-Stash prompt is in More actions > More: it stashes what is in
+Stash Prompt is in More actions > More: it stashes what is in
 the chat box, or, with an empty chat box, opens your stashed prompts; the row
 shows how many are stashed. While this chat has stashed prompts, a Stashed pill
 with their number sits in the pill strip along the chat box's top edge, after
@@ -3091,13 +3105,13 @@ the chat you are in, or restores it. The Prompt Editor shortcut (Ctrl+G on macOS
 Ctrl+Shift+G on Windows and Linux) does the same while you are in a chat: it
 maximizes the chat box with your text in it, and pressing it again restores it.
 As space gets tighter, toolbar buttons move into More actions one at a time:
-Session note, Attach, Maximize, then Terminal View. The microphone never moves:
+Note, Attach, Maximize, then Terminal View. The microphone never moves:
 it always stays right next to Send.
 If the context ring still does not fit beside the model, it moves into More
-actions > More as Session details (or Context window in a chat without the
+actions > More as Session Details (or Context window in a chat without the
 panel); the model pill shortens instead of moving.
 Controls return as space opens up; More actions, Dictate and Send or Stop stay visible.
-On the phone, More actions > More > Stash prompt with an empty chat box opens
+On the phone, More actions > More > Stash Prompt with an empty chat box opens
 Saved prompts for this project: tap one to put it in the chat box, or delete it
 with its trash button. Tags and editing stay on the computer.
 Click the model pill or the context meter to open it; hovering does not open either control.
@@ -3462,7 +3476,7 @@ that turn and sends "." afterwards so it carries on); `ghostex create-agent <cla
 agent and starts it again on the same conversation, losing what its current turn
 was doing. A coordinator uses them when a thread can't start or gets stuck,
 and tells you what it did.
-In the chat's More actions menu (under Agent), and in the ⋯ menu of the bar under a Claude or
+In the chat's More actions menu (under More), and in the ⋯ menu of the bar under a Claude or
 Codex terminal view, click Switch Account to open its submenu of saved accounts
 with their usage; hovering over it does not open it. Open submenus stay open when you move the
 pointer across other menu items, so you can move into them without rushing.
@@ -3499,7 +3513,7 @@ the session stopped. With Switch accounts, Try first picks which account Ghostex
 tries first. Every Claude and Codex session follows those settings as they are now,
 including sessions that are already open, forks, and restored sessions, so a
 change there applies everywhere at once. To make one session behave differently,
-open More actions > Agent > Switch Account and click Customize under Keep going at a
+open More actions > More > Switch Account and click Customize under Keep going at a
 limit; Use session defaults returns it to the Settings values.
 After you use a reset, the sessions waiting on that login's limit continue by
 themselves: Ghostex stops the turn each one is stuck in and sends it one Continue,
@@ -4145,7 +4159,7 @@ version of the Projects features in Cursor and Claude Code.
   After its conversation is compacted, it is told to read its playbook again
   (`ghostex coordinator guide`).
 - **Turn a session into a coordinator**: right-click an agent session in the
-  sidebar, open **Advanced** and choose **Make
+  sidebar, open **More** and choose **Make
   Coordinator** (optionally with a goal); on the phone it is in the session's
   menu too. The session keeps its conversation and is never restarted or
   interrupted: it gets the coordinator crown right away, and a message telling
@@ -4415,7 +4429,8 @@ version of the Projects features in Cursor and Claude Code.
   card to open it in place: one that needs you offers **Reply**, **Show in
   chat**, **Dismiss** and **Snooze** beside **Mention**, as a row above the chat
   box does. Right-click a card, or click its ⋯ (long-press on the phone), for
-  **Mention in chat**, **Tags**, **Mark done** and **Drop** (**Restore** brings
+  **Mention in chat**, **Tag As**, **Mark Thread Done** (**Mark Done** on a
+  link's card) and **Drop** (**Restore** brings
   it back for 7 days). Drag a card onto another group to move it. The panel
   opens beside the chat (a floating card when the chat is narrow) or as columns
   over the chat (Settings > Chat > **Coordinator board opens as**); in columns,
@@ -4492,8 +4507,8 @@ version of the Projects features in Cursor and Claude Code.
   overrides…), from the **Playbook overrides** row of the New Coordinator
   dialog (Edit), or by right-clicking a coordinator and choosing **Playbook
   overrides…**. To read the playbook a coordinator follows, right-click it in
-  the sidebar (long-press on the phone) and choose **View playbook**, or choose
-  **View playbook** in its chat's More actions menu (…), under Agent; it is also in
+  the sidebar (long-press on the phone) and choose **Coordinator > View Playbook**, or
+  choose the same in its chat's More actions menu (…); it is also in
   **Settings > Chat > Coordinator playbook**, in the New Coordinator dialog and
   in the overrides editor. It shows Ghostex's playbook with the reply format
   you chose, read-only, then your overrides in their own box marked as yours,
@@ -4571,7 +4586,7 @@ keeps its playbook in `~/.empryo/agents/ghostex-coordinator.md` and switches the
 session to it with `/agent ghostex-coordinator` before anything else, so leave that
 file in place. From a terminal or another agent: `ghostex coordinator create --title <name>
 [--path <folder> | --project-id <id>] [--model <m>] [--effort <e>] [--goal <text>] [--task <first request>] [--start]` (its first message waits for Start in its chat unless `--start` sends it at once), `ghostex coordinator
-promote <session> [--goal <text>] [--computer <name>]` (make an existing session a coordinator; in versions after 10.49.0 this works on a connected computer's session too, and so does the sidebar's Advanced > Make Coordinator on its rows: that computer keeps the coordinator), `ghostex coordinator status`,
+promote <session> [--goal <text>] [--computer <name>]` (make an existing session a coordinator; in versions after 10.49.0 this works on a connected computer's session too, and so does the sidebar's More > Make Coordinator on its rows: that computer keeps the coordinator), `ghostex coordinator status`,
 `ghostex coordinator options` (the agents, models and efforts a coordinator can use),
 `ghostex coordinator start-thread --title <title> --task <brief> [--worktree]
 [--agent <id>] [--model <m>] [--effort <e>] [--account <number|email>] [--read-only]` (`--read-only`, from 11.6.0, starts a thread in its agent's read-only mode, with accept-all taken off its command: Codex in its read-only sandbox with approval on request, which refuses writes; Claude in Plan mode, which blocks its file edits but, as Claude Code designs Plan mode, can still run shell commands while it plans (ones Claude's auto-mode check or your own allow rules approve), so a command can still change files; it stays read-only whenever it is resumed, restarted, woken or started in a worktree, an agent without a read-only mode is refused before any session exists, and a thread on another computer whose Ghostex is too old to honour it is ended before its brief instead of running with full rights; `--path <folder>`, here and on `coordinator create` and `ghostex agents create`, adds that folder as a project, creating it if needed, and starts there; `--account`, in versions after 10.45.0, starts a Claude or Codex thread on that saved account instead of the Account for new sessions rule; one that needs signing in is refused), `ghostex coordinator resolve
@@ -5083,7 +5098,7 @@ you turn them back on.
   could have, and `ghostex gbots computer <bot> --use this` brings it back.
 - **Calling it**: right-click a GBot and choose Call (on the phone, long-press
   it) to talk to it out loud through the Voice agent; on one of its chats, the
-  Voice menu (the arrow beside the work area header's headset, or Voice call in the
+  Voice menu (the arrow beside the work area header's headset, or Voice Call in the
   header's ⋯ menu) offers Call <GBot> (on the phone,
   the chat's ⋯ menu). It answers as itself in its own voice and passes what you
   say to its chat, so the call's messages are in that chat (your standing chat
@@ -5311,7 +5326,7 @@ the work area header starts a spoken conversation with Ghostex's voice
 agent, and pressing it again hangs up. The headset is in the header's ⋯ menu (Voice
 call, under Agents) until you pin it there with the pin that shows when you point at
 the row; pinned, it sits left of the Start, Open and Commit buttons, and right-clicking
-it opens its menu with Unpin from header last. Voice call in ⋯ opens the same choices
+it opens its menu with Unpin from header last. Voice Call in ⋯ opens the same choices
 as the headset's arrow. A call that is open keeps the headset in the header until it
 ends. Option+Ctrl+V (Ctrl+Alt+Shift+V on Windows
 and Linux) starts and ends a call from anywhere in the window. Ask what your sessions are doing or
@@ -5398,8 +5413,8 @@ call holding the talk button, Space or the hotkey unmutes you for as long as
 you hold. It hangs up by itself after 5 minutes with nobody talking.
 
 A call can also be about just one session. Click the small arrow on the
-headset button (or Voice call in the header's ⋯ menu) and pick "This session: <title>" (the session you are looking
-at), or press the "Voice Call About This Session" hotkey (no key is set; give it
+headset button (or Voice Call in the header's ⋯ menu) and pick "This session: <title>" (the session you are looking
+at), or press the "Session: Voice Call" hotkey (no key is set; give it
 one in Settings > Hotkeys). The agent starts by saying where that session
 stands, tells you when it finishes its turn with the gist of its reply in a
 sentence or two, and mentions no other sessions; asked about another one, it
@@ -5423,8 +5438,8 @@ started on, so picking a session of another computer while a call is open asks
 whether to keep the call or hang up and call, on the computer and the phone
 alike. A computer whose
 Ghostex is too old for it says "Update Ghostex on <computer> to have a voice
-call about one session." On the phone, "Voice call about this chat" in a chat's
-⋯ menu and "Voice Call" when you long-press a session start the same call, and
+call about one session." On the phone, "Voice Call" in a chat's ⋯ menu and when you
+long-press a session starts the same call, and
 the voice screen shows "Only about <title> (<project>)" with an All sessions
 button.
 
@@ -5509,12 +5524,12 @@ Turn it off with its switch on Settings > Extensions (the Voice
 agent card) and the headset and its arrow leave the top
 of the window, the voice agent hotkeys stop working and leave Settings >
 Hotkeys, a call that is running ends, and the phone app hides its headset,
-Voice call about this chat and Voice Call for that computer, and Settings >
+its sessions' Voice Call rows and Voice Call for that computer, and Settings >
 Voice Agent leaves the sidebar. Dictate keeps working: Settings > Dictation
 still shows the key its engine needs and Past recordings. Turn it back on and everything returns, with your voice
 settings as you left them.
 
-Settings: `voiceAgentHidden` (off by default, which keeps the voice agent on), `voiceAgentProvider`, `voiceAgentXaiVoice`, `voiceAgentOpenaiVoice`, `voiceAgentSpeed`, `voiceAgentCallMode`, `voiceAgentWaitForReply`; the Memory row (`voiceAgentMemory`) forgets the remembered conversation. Hotkeys: Toggle Voice Agent, Voice Call About This Session, Hold to Talk (`holdToTalk`).
+Settings: `voiceAgentHidden` (off by default, which keeps the voice agent on), `voiceAgentProvider`, `voiceAgentXaiVoice`, `voiceAgentOpenaiVoice`, `voiceAgentSpeed`, `voiceAgentCallMode`, `voiceAgentWaitForReply`; the Memory row (`voiceAgentMemory`) forgets the remembered conversation. Hotkeys: Toggle Voice Agent, Session: Voice Call, Hold to Talk (`holdToTalk`).
 
 ## Remote machines, web, and mobile
 
@@ -6001,7 +6016,7 @@ agents, a connection from either side is enough.
   layouts remembered for each arrangement. A session can show Chat in its pane,
   but only one pane shows Chat at a time; a chat in a pane has a compact chat
   box: the field, then one row with the model, **More actions**, Dictate and
-  Send. Session note, Attach and Terminal View are under More actions; the
+  Send. Note, Attach and Terminal View are under More actions; the
   permission mode, Copy Report, the pill strip and the status line show only in
   the full chat view. While a chat pane is active and the keyboard is up, the
   terminal's keyboard button stands at its usual place and hides the keyboard.
@@ -7596,9 +7611,9 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   switch in Settings > Extensions > Built-in to attach a note to an agent
   conversation, such as what to do next when you come back to it. Then
   right-click a session and choose **Note** (or use its hover button, or
-  Option+Cmd+N on macOS for the focused session), or pick **Session note** in the chat's
-  More actions (under Agent) or the terminal's More actions; a session with a note shows a small dot on
-  its card, the note in its tooltip and a "1" beside Session note. The note
+  Option+Cmd+N on macOS for the focused session), or pick **Note** in the chat's
+  More actions (under More) or the terminal's More actions; a session with a note shows a small dot on
+  its card, the note in its tooltip and a "1" beside Note. The note
   belongs to the conversation, so it is still there after you close the
   session and resume it, and the phone app shows and edits the same notes.
   Turning it off hides all of that, here and on the phone, and keeps every
@@ -7909,8 +7924,8 @@ Related settings: none; window positions and layouts are saved automatically.
 
 ### Popups (a session in a window of its own)
 
-**Open in a Popup** (a session's right-click menu, the button at the right of
-the work area header, a split pane's bar menu, the Open in a Popup hotkey, or
+**Popout** (the tile at the top of a session's right-click menu, the button at the right of
+the work area header, a split pane's bar menu, the Session: Popout hotkey, or
 Option-click, Alt-click on Windows and Linux, on a session in the sidebar)
 moves a chat or terminal session into a small window of its own; its pane shows
 a card with **Show Window** and **Bring Back**. Popping out another session
@@ -7936,7 +7951,7 @@ open again with their tabs at the next launch. Browser tabs stay in the main
 window. A popup shows sessions of the project the main window is on; a session
 of another project shows a card until the main window switches to its project.
 
-Hotkey: Open in a Popup (`popOutPane`) pops the focused pane's session out, or
+Hotkey: Session: Popout (`popOutPane`) pops the focused pane's session out, or
 brings it back when it is already in a popup.
 
 ## Updates (Settings > Updates)

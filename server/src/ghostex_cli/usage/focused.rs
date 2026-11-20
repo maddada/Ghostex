@@ -579,7 +579,7 @@ Writing:
 
 Hotkeys:
   Ids are the camelCase action ids from `ghostex guide hotkeys` (a title such
-  as \"Fork Session\" works too). Keys are written like cmd+shift+o: modifiers
+  as \"Session: Fork\" works too). Keys are written like cmd+shift+o: modifiers
   cmd, ctrl, alt (option) and shift, then one key (a letter, digit, symbol,
   f1-f24, up, down, left, right, tab, enter, escape, space, backspace, delete,
   home, end, pageup, pagedown). Separate a two-step sequence with a space. On

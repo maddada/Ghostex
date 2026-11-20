@@ -103,6 +103,8 @@ pub(crate) const QUICK_BUTTON_MIN_WIDTH: f32 = 58.0;
 /// A row of icon buttons (`quick`, the session menu's Rename, Pin and Copy ID): an icon over a
 /// small label, with the row's own padding under it.
 pub(crate) const SIDEBAR_MENU_QUICK_ROW_HEIGHT: f32 = 54.0;
+/// What a quick row grows by when a tile's label takes a second line.
+const QUICK_ROW_SECOND_LINE: f32 = 14.0;
 
 /// How long a row's armed Remove button waits for its second click.
 pub(crate) const SIDEBAR_MENU_ARM_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(4);
@@ -285,8 +287,8 @@ impl SidebarMenuPanel {
     pub(crate) fn item_height(&self, item: &Value) -> f32 {
         if item["separator"] == true {
             SIDEBAR_MENU_SEPARATOR_HEIGHT
-        } else if item.get("quick").is_some() {
-            SIDEBAR_MENU_QUICK_ROW_HEIGHT
+        } else if let Some(buttons) = item["quick"].as_array() {
+            self.quick_row_height(buttons)
         } else if item["heading"] == true {
             SIDEBAR_MENU_HEADING_HEIGHT
         } else if (self.search.is_some() || item["twoLineRow"] == true)
@@ -452,6 +454,24 @@ impl SidebarMenuPanel {
         self.items
             .first()
             .is_some_and(|item| item["menuStyle"] == "agentLauncher")
+    }
+
+    /// A quick row's height: one line of labels, or two when a label is wider than its tile
+    /// ("Files and Links"); the tiles share the panel's width.
+    pub(crate) fn quick_row_height(&self, buttons: &[Value]) -> f32 {
+        // 11px label, slightly wide so a one-line estimate never clips a wrapped label.
+        const TILE_PX_PER_CHAR: f32 = 6.4;
+        let count = buttons.len().max(1) as f32;
+        let tile = (self.fitted_width(false) - 14.0 - 4.0 * (count - 1.0)) / count - 8.0;
+        let wraps = buttons.iter().any(|button| {
+            button["label"].as_str().unwrap_or_default().chars().count() as f32 * TILE_PX_PER_CHAR
+                > tile
+        });
+        if wraps {
+            SIDEBAR_MENU_QUICK_ROW_HEIGHT + QUICK_ROW_SECOND_LINE
+        } else {
+            SIDEBAR_MENU_QUICK_ROW_HEIGHT
+        }
     }
 
     /// CDXC:ContextMenus 2026-09-21 WHY:

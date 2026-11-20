@@ -21,7 +21,7 @@ use serde_json::json;
 
 impl NativeChatView {
     /// The gxserver session this chat shows, as the sidebar store keys it.
-    fn links_session_key(&self) -> SessionKey {
+    pub(super) fn links_session_key(&self) -> SessionKey {
         if self.config.machine_id == crate::app::gx_chat::LOCAL_MACHINE_ID {
             SessionKey::local(
                 self.config.project_id.clone(),

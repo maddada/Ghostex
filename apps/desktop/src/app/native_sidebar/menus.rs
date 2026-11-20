@@ -2,9 +2,8 @@ use super::{
     actions::NativeSidebarAction,
     hover_actions::{SESSION_HOVER_BUTTON, SESSION_HOVER_ICON},
     menu_state::{
-        QUICK_BUTTON_MIN_WIDTH, SIDEBAR_MENU_ARM_TIMEOUT, SIDEBAR_MENU_QUICK_ROW_HEIGHT,
-        SIDEBAR_MENU_SEARCH_HEIGHT, SIDEBAR_MENU_SEPARATOR_HEIGHT, SidebarMenuPanel,
-        SidebarMenuPlacement, SidebarMenuState,
+        QUICK_BUTTON_MIN_WIDTH, SIDEBAR_MENU_ARM_TIMEOUT, SIDEBAR_MENU_SEARCH_HEIGHT,
+        SIDEBAR_MENU_SEPARATOR_HEIGHT, SidebarMenuPanel, SidebarMenuPlacement, SidebarMenuState,
     },
 };
 use crate::app::window::native_modal_kit::modal_typed_filter_field;
@@ -1141,19 +1140,20 @@ impl GhostexGpuiApp {
                     offset += SIDEBAR_MENU_SEPARATOR_HEIGHT;
                     continue;
                 }
-                // CDXC:ContextMenus 2026-11-15 SEE-ALSO: the user's decision on the session menu's
-                // quick row in packages/gx-core/src/sidebar_menu/session.rs `full_menu`: its
-                // buttons side by side, an icon over a small label, each running its own command.
+                // CDXC:ContextMenus 2026-11-20 SEE-ALSO: the one session menu's quick row
+                // (packages/gx-core/src/sidebar_menu/layout.rs): its tiles side by side, an icon
+                // over a small label of up to two lines, each running its own command. The chat
+                // box ⋯ draws the same tiles (native_chat/option_menu/render.rs).
                 if let Some(buttons) = item["quick"].as_array() {
+                    let strip_height = panel.quick_row_height(buttons);
                     let mut strip = h_flex()
                         .w_full()
-                        .h(px(SIDEBAR_MENU_QUICK_ROW_HEIGHT * scale))
+                        .h(px(strip_height * scale))
                         .flex_shrink_0()
                         .gap(px(4.0 * scale))
                         .pb(px(6.0 * scale));
                     for (button_index, button) in buttons.iter().enumerate() {
                         let label = button["label"].as_str().unwrap_or_default().to_owned();
-                        // A short tile label ("Popout") may carry its full name for assistive tech.
                         let aria_label = button["ariaLabel"]
                             .as_str()
                             .map_or_else(|| label.clone(), str::to_owned);
@@ -1185,12 +1185,15 @@ impl GhostexGpuiApp {
                                         .flex_shrink_0(),
                                 )
                                 .child(
+                                    // Up to two lines: a long name ("Files and Links") wraps
+                                    // rather than being cut off (`quick_row_height`).
                                     div()
                                         .max_w_full()
-                                        .overflow_hidden()
-                                        .whitespace_nowrap()
-                                        .text_ellipsis()
+                                        .px(px(4.0 * scale))
+                                        .text_center()
+                                        .line_clamp(2)
                                         .text_size(px(11.0 * scale))
+                                        .line_height(px(14.0 * scale))
                                         .child(label),
                                 )
                                 .on_click(cx.listener(move |app, _, window, cx| {
@@ -1206,7 +1209,7 @@ impl GhostexGpuiApp {
                         );
                     }
                     content = content.child(strip);
-                    offset += SIDEBAR_MENU_QUICK_ROW_HEIGHT;
+                    offset += strip_height;
                     continue;
                 }
                 let label = item["label"].as_str().unwrap_or_default().to_owned();

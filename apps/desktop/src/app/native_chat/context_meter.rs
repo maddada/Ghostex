@@ -237,7 +237,7 @@ impl NativeChatView {
             .hover(|style| style.bg(appearance.border))
             .tooltip({
                 let label = if self.session_details_available() {
-                    "Session details"
+                    "Session Details"
                 } else {
                     "Statusline Config"
                 };

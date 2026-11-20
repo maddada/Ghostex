@@ -434,8 +434,8 @@
     },
     {
       "key": "chatCatchMeUp",
-      "title": "Catch me up button",
-      "subtitle": "Show a Catch me up button at the top right of the chat box while it is empty. It has your Title Generation Agent (a small, cheap model) read the session's last 30 agent messages and shows where the session stands: what needs you, what is done, in progress or untested.",
+      "title": "Catch Me Up button",
+      "subtitle": "Show a Catch Me Up button at the top right of the chat box while it is empty. It has your Title Generation Agent (a small, cheap model) read the session's last 30 agent messages and shows where the session stands: what needs you, what is done, in progress or untested.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "chat",
@@ -9728,6 +9728,7 @@
         "wakeFocusedSession": "",
         "closeFocusedSession": "cmd+shift+backspace",
         "popOutPane": "ctrl+shift+o",
+        "generateSessionTitle": "",
         "focusPreviousGroup": "",
         "focusNextGroup": "",
         "navigateHistoryBack": "cmd+[",
@@ -12209,7 +12210,7 @@
     {
       "key": "sessionNotesHidden",
       "title": "Turn off Session notes",
-      "subtitle": "Turn off Session notes: Note in a session's menu and hover buttons, the note dot on its card, Session note in the chat's More actions, the Session Note hotkey and the ghostex session-note command, here and in the phone app. Off by default; notes you wrote are kept and come back when you turn it on.",
+      "subtitle": "Turn off Session notes: Note in a session's menus and hover buttons, the note dot on its card, the Session: Note hotkey and the ghostex session-note command, here and in the phone app. Off by default; notes you wrote are kept and come back when you turn it on.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -14391,7 +14392,7 @@
     },
     {
       "id": "voiceCallAboutSession",
-      "title": "Voice Call About This Session",
+      "title": "Session: Voice Call",
       "description": "Start a voice call about the session you are looking at, or move the open call to it.",
       "defaultKey": "",
       "terminalDefaultKey": ""
@@ -14580,7 +14581,7 @@
     },
     {
       "id": "renameActiveSession",
-      "title": "Rename Active Session",
+      "title": "Session: Rename",
       "description": "Rename the focused session.",
       "defaultKey": "cmd+r",
       "windowsLinuxDefaultKey": "cmd+shift+r",
@@ -14753,8 +14754,8 @@
     },
     {
       "id": "delayedSend",
-      "title": "Delayed Actions",
-      "description": "Open delayed actions for the focused terminal session.",
+      "title": "Session: Delayed Send",
+      "description": "Open Delayed Send for the focused terminal session.",
       "defaultKey": "ctrl+shift+s",
       "windowsLinuxDefaultKey": "cmd+alt+s",
       "terminalDefaultKey": "ctrl+shift+s",
@@ -14792,7 +14793,7 @@
     },
     {
       "id": "sessionNote",
-      "title": "Session Note",
+      "title": "Session: Note",
       "description": "Open the note attached to the focused agent conversation.",
       "defaultKey": "cmd+alt+n",
       "terminalDefaultKey": "cmd+alt+n"
@@ -14889,7 +14890,7 @@
     },
     {
       "id": "forkSession",
-      "title": "Fork Session",
+      "title": "Session: Fork",
       "description": "Fork the focused session.",
       "defaultKey": "cmd+ctrl+shift+f",
       "windowsLinuxDefaultKey": "cmd+alt+shift+f",
@@ -14902,8 +14903,8 @@
     },
     {
       "id": "reloadSession",
-      "title": "Reload Session",
-      "description": "Reload the focused session.",
+      "title": "Session: Full Reload",
+      "description": "Fully reload the focused session.",
       "defaultKey": "",
       "retiredDefaultKeys": [
         "ctrl+shift+r",
@@ -14913,7 +14914,7 @@
     },
     {
       "id": "sleepFocusedSession",
-      "title": "Sleep Focused Session",
+      "title": "Session: Sleep",
       "description": "Sleep the focused terminal session.",
       "defaultKey": "cmd+shift+a",
       "retiredDefaultKeys": [
@@ -14924,26 +14925,33 @@
     },
     {
       "id": "wakeFocusedSession",
-      "title": "Wake Focused Session",
+      "title": "Session: Wake",
       "description": "Wake the focused sleeping terminal session.",
       "defaultKey": "",
       "terminalDefaultKey": ""
     },
     {
       "id": "closeFocusedSession",
-      "title": "Close Focused Session",
+      "title": "Session: Close",
       "description": "Close the focused pane or session.",
       "defaultKey": "cmd+shift+backspace",
       "terminalDefaultKey": "cmd+shift+backspace"
     },
     {
       "id": "popOutPane",
-      "title": "Open in a Popup",
+      "title": "Session: Popout",
       "description": "Open the focused pane's session in a popup, or bring it back.",
       "defaultKey": "ctrl+shift+o",
       "windowsLinuxDefaultKey": "cmd+alt+o",
       "terminalDefaultKey": "ctrl+shift+o",
       "windowsLinuxTerminalDefaultKey": "cmd+alt+o"
+    },
+    {
+      "id": "generateSessionTitle",
+      "title": "Session: Generate Title",
+      "description": "Name the focused session from its recent prompts.",
+      "defaultKey": "",
+      "terminalDefaultKey": ""
     },
     {
       "id": "focusPreviousGroup",
@@ -15560,7 +15568,7 @@
     },
     {
       "id": "sleepFocusedSessionSecondKey",
-      "title": "Sleep Focused Session (Second Key)",
+      "title": "Session: Sleep (Second Key)",
       "description": "A second key that sleeps the focused terminal session.",
       "defaultKey": "alt+shift+s",
       "terminalDefaultKey": "alt+shift+s"

@@ -362,23 +362,17 @@ fn text(value: &Value, key: &str) -> String {
 }
 
 /// CDXC:ContextMenus 2026-11-18 DECISION:
-/// User: "move Popup to be the 3rd button after rename and pin". Open in a Popup (added by `session_popup::with_open_in_new_window_row`) moves into the menu's quick row right after Rename and Pin, and leaves the list; a menu with no quick row keeps it where it was added.
-/// User (2026-11-18): the quick tile cut the name off ("Open in..."), so "please make the Open in Popup shorter name so it fits ... I think 'Popout' sounds good?". Only that tile reads "Popout" (icon kept); its `ariaLabel` keeps the full name for assistive tech. Quick buttons have no tooltip: no tooltip shows while a context menu is open (CDXC:Tooltips 2026-10-17). A row left in the list keeps "Open in a Popup".
-const QUICK_POPUP_LABEL: &str = "Popout";
-
+/// User: "move Popup to be the 3rd button after rename and pin". Popout (added by `session_popup::with_open_in_new_window_row`) moves into the menu's quick row right after Rename and Pin, and leaves the list; a menu with no quick row keeps it where it was added. Since 2026-11-20 (the one session menu, gx-core sidebar_menu/layout.rs) the action is named Popout everywhere, so the tile and a row read the same.
 fn popup_row_into_quick_row(mut items: Vec<Value>) -> Vec<Value> {
-    let Some(popup_at) = items
-        .iter()
-        .position(|item| item["label"] == "Open in a Popup")
-    else {
+    let Some(popup_at) = items.iter().position(|item| {
+        item["command"]["action"] == crate::app::session_popup::OPEN_IN_NEW_WINDOW_ACTION
+    }) else {
         return items;
     };
     let Some(quick_at) = items.iter().position(|item| item["quick"].is_array()) else {
         return items;
     };
-    let mut popup = items.remove(popup_at);
-    popup["ariaLabel"] = Value::from("Open in a Popup");
-    popup["label"] = Value::from(QUICK_POPUP_LABEL);
+    let popup = items.remove(popup_at);
     // Removing an earlier row shifts the quick row down by one; the quick row leads the menu, so
     // this only matters for odd shapes.
     let quick_at = if popup_at < quick_at {

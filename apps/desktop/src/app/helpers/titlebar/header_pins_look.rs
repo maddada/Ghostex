@@ -101,15 +101,15 @@ impl HeaderSlot {
     pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Work => "Work",
-            Self::SessionDetails => "Session details",
+            Self::SessionDetails => "Session Details",
             Self::Share => "Share",
-            Self::Popout => "Open in a popup",
+            Self::Popout => "Popout",
             Self::Start => "Start",
             Self::Open => "Open",
             Self::Commit => "Commit",
             Self::Claude => "Claude",
             Self::GrokBot => "Grok Bot",
-            Self::Voice => "Voice call",
+            Self::Voice => "Voice Call",
             Self::BottomPanel => "Bottom panel",
             Self::SidePanel => "Side panel",
         }
