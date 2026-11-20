@@ -622,6 +622,23 @@ pub fn read_if_due(state: &mut ChatState, next_request_id: impl FnOnce() -> u64)
     Some(read(state, next_request_id(), json!({ "op": "list" })))
 }
 
+/// The `*` picker opened: read the Boosts again, so it offers the user's Boosts made or renamed in
+/// Settings > Boosts (or Save as Boost in another chat) since this chat started. The list shows the
+/// Boosts this chat has now and fills in when the answer lands.
+///
+/// CDXC:Boosts 2026-11-21 WHY: gxserver sends no word when the Boosts change, and the chat read
+/// them once at its start; only the Boost menu read them again, so a custom Boost made while a
+/// chat was open never reached its `*` picker (user: "please also allow me to mention my custom
+/// boosts using * right now that doesn't work").
+pub fn read_for_picker(state: &mut ChatState) -> Option<Effect> {
+    let boosts = &state.extras.boosts;
+    if !boosts.started || boosts.unsupported || boosts.request.is_some() {
+        return None;
+    }
+    let request_id = state.core.allocate_request_id();
+    Some(read(state, request_id, json!({ "op": "list" })))
+}
+
 /// Takes gxserver's `{boosts: [{id, prompt, edited}], custom: [...], on, hintSeen}`.
 fn apply_answer(state: &mut ChatState, result: &Value) {
     let boosts = &mut state.extras.boosts;

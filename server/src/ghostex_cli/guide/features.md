@@ -2491,7 +2491,7 @@ runs once later or on repeat and reports back, changed or stopped in All Automat
 when done) and Custom, your own. The chips at the bottom of the menu jump to a
 section, and Edit… beside them opens Settings > Boosts. Pointing at a Boost shows a small
 preview of what comes back, with its whole description. You can also type `*` at the start of a word in the chat box
-to pick one (`*ch` finds Chart it; a space right after the `*` closes the list, so lists
+to pick one, your own Boosts included (`*ch` finds Chart it; a space right after the `*` closes the list, so lists
 and sums type as before), and a new chat offers "Try a Boost". A pick adds a Boost pill
 to your message; pick it again, or delete the pill, to take it out. A Boost lasts that
 one message. Point at the pill in the chat box to read the instruction the agent gets;
