@@ -254,3 +254,177 @@ fn opt_out_queues_nothing_and_opt_in_queues_the_event() {
     telemetry.enqueue(EVENT_SURFACE_OPENED, &properties);
     assert!(telemetry.queued_for_test().is_empty());
 }
+
+// CDXC:Telemetry 2026-11-20: the privacy review of 591004b37 (Boosts, extensions, the daily
+// settings snapshot, account plans). Each case is something a user typed, or a value outside the
+// closed tables, that must never reach PostHog.
+
+use super::settings_snapshot::{self as snapshot, AccountsReport, BoostsReport, SnapshotFacts};
+use super::taxonomy::{EVENT_BOOSTS_USED, EVENT_SETTINGS_SNAPSHOT};
+
+#[test]
+fn snapshot_rejects_typed_values_unknown_labels_keys_and_plans() {
+    // A value typed into a select setting, not one of its choices.
+    let typed = [("sidebar_view", PropertyValue::Enum("alice's sidebar"))];
+    assert!(taxonomy::validate(EVENT_SETTINGS_SNAPSHOT, &typed).is_err());
+    // A number where a range label belongs.
+    let raw = [("glass_blur", PropertyValue::Enum("37"))];
+    assert!(taxonomy::validate(EVENT_SETTINGS_SNAPSHOT, &raw).is_err());
+    let raw_count = [("claude_accounts", PropertyValue::Number(137.0))];
+    assert!(taxonomy::validate(EVENT_SETTINGS_SNAPSHOT, &raw_count).is_err());
+    // A key the snapshot does not list.
+    let unknown = [("home_folder", PropertyValue::Bool(true))];
+    assert!(taxonomy::validate(EVENT_SETTINGS_SNAPSHOT, &unknown).is_err());
+    // A plan outside the table.
+    let plan = [("claude_top_plan", PropertyValue::Enum("ultra"))];
+    assert!(taxonomy::validate(EVENT_SETTINGS_SNAPSHOT, &plan).is_err());
+    assert_eq!(
+        snapshot::claude_plan(&json!({"organizationType": "acme_internal"})),
+        Some("other")
+    );
+    assert_eq!(
+        snapshot::codex_plan(&json!("acme-enterprise-x")),
+        Some("other")
+    );
+    // The person record takes only its own few keys.
+    let person = [(
+        taxonomy::PERSON_SET_KEY,
+        PropertyValue::PersonSet(vec![("dark_theme_preset", PropertyValue::Enum("black"))]),
+    )];
+    assert!(taxonomy::validate(EVENT_SETTINGS_SNAPSHOT, &person).is_err());
+    // A choice Settings lists passes.
+    let listed = [("sidebar_view", PropertyValue::Enum("unified"))];
+    assert!(taxonomy::validate(EVENT_SETTINGS_SNAPSHOT, &listed).is_ok());
+}
+
+#[test]
+fn boosts_used_names_only_ghostex_boosts() {
+    for id in ["custom-1", "my-secret-boost"] {
+        let properties = [("boosts", PropertyValue::EnumList(vec![id]))];
+        assert!(
+            taxonomy::validate(EVENT_BOOSTS_USED, &properties).is_err(),
+            "{id} must not be sendable"
+        );
+    }
+    let ghostex = [
+        (
+            "boosts",
+            PropertyValue::EnumList(vec!["live-page", "chart"]),
+        ),
+        (
+            "custom_boost_count",
+            PropertyValue::Enum(taxonomy::count_bucket(1)),
+        ),
+    ];
+    assert!(taxonomy::validate(EVENT_BOOSTS_USED, &ghostex).is_ok());
+    let raw_count = [("custom_boost_count", PropertyValue::Number(1.0))];
+    assert!(taxonomy::validate(EVENT_BOOSTS_USED, &raw_count).is_err());
+}
+
+#[test]
+fn snapshot_of_personal_settings_carries_none_of_them() {
+    remember_official();
+    let settings = json!({
+        "windowGlassImageDark": "/Users/alice/Pictures/alice-at-home.png",
+        "windowGlassVideoLight": "/Users/alice/Movies/holiday.mp4",
+        "themeRoles": { "accent": "#a1b2c3" },
+        "terminalGhosttyTheme": "Alice Private Palette",
+        "sidebarView": "typed by alice",
+        "windowGlass": "frosted",
+        "sidebarDefaultWidthPx": 287,
+    });
+    let facts = SnapshotFacts {
+        linux: None,
+        remote_machine_count: 1,
+        workspace_count: Some(137),
+        boosts: BoostsReport {
+            on: true,
+            custom: 2,
+            edited: 0,
+        },
+        accounts: Some(AccountsReport {
+            counts: [("claude", 137)].into_iter().collect(),
+            claude_plans: vec!["max_20x"],
+            codex_plans: vec![],
+        }),
+        store_extensions: vec![
+            (OFFICIAL_ID.to_string(), "1.4.2".to_string()),
+            // A version the check refuses: this entry goes, the snapshot stays.
+            (OFFICIAL_ID.to_string(), "1.4.2+build5".to_string()),
+            (CUSTOM_ID.to_string(), "0.1.0".to_string()),
+        ],
+        custom_extensions_installed: 1,
+    };
+    let properties = snapshot::snapshot_properties(Some(&settings), &facts);
+    let encoded =
+        taxonomy::validate(EVENT_SETTINGS_SNAPSHOT, &properties).expect("the snapshot validates");
+    let text = Value::Object(encoded.clone()).to_string();
+    for personal in [
+        "alice",
+        "/Users",
+        "#a1b2c3",
+        "Private Palette",
+        "holiday",
+        "my-secret-tool",
+        "137",
+        "build5",
+    ] {
+        assert!(!text.contains(personal), "{personal} leaked: {text}");
+    }
+    assert_eq!(encoded["glass_picture_dark_set"], json!(true));
+    assert_eq!(encoded["glass_video_light_set"], json!(true));
+    assert!(encoded.get("sidebar_view").is_none());
+    assert!(encoded.get("terminal_palette_dark").is_none());
+    assert_eq!(encoded["sidebar_width"], json!("260-299"));
+    assert_eq!(encoded["workspace_count"], json!("11+"));
+    assert_eq!(encoded["claude_accounts"], json!("11+"));
+    assert_eq!(encoded["custom_boost_count"], json!("2"));
+    assert_eq!(
+        encoded["store_extensions_installed"],
+        json!([format!("{OFFICIAL_ID}@1.4.2")])
+    );
+}
+
+#[test]
+fn linux_version_only_for_known_distros_and_only_numbers() {
+    assert_eq!(
+        snapshot::linux_distro_version("other", "AcmeCorp-Internal-2"),
+        None
+    );
+    assert_eq!(
+        snapshot::linux_distro_version("ubuntu", "AcmeCorp-Internal-2"),
+        None
+    );
+    assert_eq!(snapshot::linux_distro_version("other", "24.04"), None);
+    assert_eq!(
+        snapshot::linux_distro_version("ubuntu", "24.04"),
+        Some("24.04".to_string())
+    );
+    assert_eq!(
+        snapshot::linux_distro_version("fedora", "41"),
+        Some("41".to_string())
+    );
+    assert_eq!(snapshot::linux_distro("acmecorp"), "other");
+    assert_eq!(snapshot::linux_desktop("Acme-Session"), Some("other"));
+    assert_eq!(snapshot::linux_desktop("ubuntu:GNOME"), Some("gnome"));
+}
+
+#[test]
+fn built_in_changes_skip_ids_a_new_release_added() {
+    let known = extensions::known_built_in_extensions();
+    assert!(known.contains(&"github"));
+    let previous_known: Vec<String> = known
+        .iter()
+        .filter(|id| **id != "github")
+        .map(|id| id.to_string())
+        .collect();
+    let previous_on: Vec<String> = vec![];
+    // github is new since the last snapshot and on by default: not a user's switch.
+    let changes =
+        extensions::built_in_extension_changes(&previous_known, &previous_on, &known, &["github"]);
+    assert!(changes.is_empty());
+    let previous_known: Vec<String> = known.iter().map(|id| id.to_string()).collect();
+    let changes =
+        extensions::built_in_extension_changes(&previous_known, &previous_on, &known, &["github"]);
+    assert_eq!(changes, vec![("github", true)]);
+}

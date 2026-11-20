@@ -186,6 +186,24 @@ pub const IDENTITY_SOURCES: &[&str] = &["claude", "codex", "install"];
 /// the gaps hard to check. Membership is order-independent either way.
 pub const PROJECT_BUCKETS: &[&str] = &["0", "1-2", "3-5", "6-10", "10+"];
 
+/// CDXC:Telemetry 2026-11-20 (privacy review of 591004b37): the small counts the Boosts event and
+/// the settings snapshot carry (accounts per provider, workspaces, the user's own Boosts, edited
+/// Boost prompts, extensions not from the Store) go as these ranges, so an outlier such as 137
+/// accounts cannot single an install out. Ordinal order, like `PROJECT_BUCKETS`.
+pub const COUNT_BUCKETS: &[&str] = &["0", "1", "2", "3", "4-5", "6-10", "11+"];
+
+pub fn count_bucket(count: usize) -> &'static str {
+    match count {
+        0 => "0",
+        1 => "1",
+        2 => "2",
+        3 => "3",
+        4..=5 => "4-5",
+        6..=10 => "6-10",
+        _ => "11+",
+    }
+}
+
 /// `std::env::consts::OS` values we recognise. A platform outside this table is
 /// simply omitted rather than sent, which is why the table does not need to be
 /// exhaustive over every Rust target.
@@ -641,9 +659,7 @@ fn event_property_spec(event: &str, key: &str) -> Option<PropertySpec> {
         (EVENT_BOOSTS_USED, "agent_executable") => Some(PropertySpec::Token),
         (EVENT_BOOSTS_USED, "source") => Some(PropertySpec::Enum(PROMPT_SOURCES)),
         (EVENT_BOOSTS_USED, "boosts") => Some(PropertySpec::BoostList),
-        (EVENT_BOOSTS_USED, "boost_count") | (EVENT_BOOSTS_USED, "custom_boost_count") => {
-            Some(PropertySpec::Number)
-        }
+        (EVENT_BOOSTS_USED, "custom_boost_count") => Some(PropertySpec::Enum(COUNT_BUCKETS)),
         (EVENT_SETTINGS_SNAPSHOT, PERSON_SET_KEY) => Some(PropertySpec::PersonSet),
         (EVENT_SETTINGS_SNAPSHOT, key) => super::settings_snapshot::property_spec(key),
         _ => None,

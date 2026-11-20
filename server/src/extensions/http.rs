@@ -43,6 +43,15 @@ pub(crate) async fn handle_extensions_http(
     let toggled_to = (endpoint_path == "/api/updateExtensionState")
         .then(|| params.get("patch")?.get("enabled")?.as_bool())
         .flatten();
+    // Whether it was on before, so a patch that repeats the current value is not counted
+    // (CDXC:Telemetry 2026-11-20 below).
+    let enabled_before = toggled_to.and_then(|_| {
+        let id = params.get("id")?.as_str()?;
+        super::store::read_store(&state.paths.extensions_store_file)
+            .ok()?
+            .get(id)
+            .map(|entry| entry.enabled)
+    });
     let registry = state.extension_registry.clone();
     let operation_path = endpoint_path.clone();
     let outcome = tokio::task::spawn_blocking(move || {
@@ -84,7 +93,10 @@ pub(crate) async fn handle_extensions_http(
                     crate::telemetry::extension_uninstalled(answered("/id"))
                 }
                 "/api/updateExtensionState" => {
-                    if let (Some(enabled), Some(id)) = (toggled_to, answered("/extension/id")) {
+                    let changed = toggled_to.is_some() && enabled_before != toggled_to;
+                    if let (true, Some(enabled), Some(id)) =
+                        (changed, toggled_to, answered("/extension/id"))
+                    {
                         crate::telemetry::extension_toggled(
                             crate::telemetry::extensions::resolve_store_extension(id),
                             "installed",
