@@ -94,6 +94,7 @@ pub(crate) fn project_membership_menu(
     for collection in &collections.collections {
         children.push(MenuItem {
             label: Some(collection.title.clone()),
+            icon: Some("folder".to_string()),
             checked: current_collection_id == Some(collection.collection_id.as_str()),
             command: Some(MenuCommand::project_membership(
                 group_id,

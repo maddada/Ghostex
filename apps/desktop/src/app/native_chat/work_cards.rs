@@ -105,21 +105,21 @@ fn page_row_menu(row: &Value) -> Vec<Value> {
     let mut rows = Vec::new();
     // A snoozed row's Unsnooze (gx-chat-core `dock_with`'s `snoozed`): back under Needs you now.
     if row["unsnooze"].is_object() {
-        rows.push(json!({ "label": "Unsnooze", "command": row["unsnooze"] }));
+        rows.push(json!({ "label": "Unsnooze", "iconPath": "titlebar/alarm.svg", "command": row["unsnooze"] }));
     }
     if row["showInChat"].is_object() {
-        rows.push(json!({ "label": "Show in chat", "command": row["showInChat"] }));
+        rows.push(json!({ "label": "Show in chat", "iconPath": "titlebar/message.svg", "command": row["showInChat"] }));
     }
     // Mark answered, beside Dismiss: one answered in the chat box closes by hand
     // (gx-chat-core `questions::later::mark_answered`).
     if row["markAnswered"].is_object() {
-        rows.push(json!({ "label": "Mark answered", "command": row["markAnswered"] }));
+        rows.push(json!({ "label": "Mark answered", "iconPath": "titlebar/circle-check.svg", "command": row["markAnswered"] }));
     }
     // Dismiss, or Mark as read on a row that asks no question (a Needs you to-do, a page that only
     // waits to be seen): gx-chat-core's `dismissLabel`. Both send the agent nothing.
     if row["dismiss"].is_object() {
         let label = row["dismissLabel"].as_str().unwrap_or("Dismiss");
-        rows.push(json!({ "label": label, "command": row["dismiss"] }));
+        rows.push(json!({ "label": label, "iconPath": "titlebar/x.svg", "command": row["dismiss"] }));
     }
     let snooze: Vec<Value> = row["snooze"]
         .as_array()
@@ -128,7 +128,7 @@ fn page_row_menu(row: &Value) -> Vec<Value> {
         .map(|choice| json!({ "label": text(choice, "label"), "command": choice["command"] }))
         .collect();
     if !snooze.is_empty() {
-        rows.push(json!({ "label": "Snooze", "children": snooze }));
+        rows.push(json!({ "label": "Snooze", "iconPath": "titlebar/clock.svg", "children": snooze }));
     }
     rows
 }
@@ -1778,6 +1778,7 @@ impl NativeChatView {
                 0,
                 json!({
                     "label": "Copy command",
+                    "iconPath": "titlebar/copy.svg",
                     "command": { "type": "copyText", "text": command.trim() },
                 }),
             );
@@ -1786,6 +1787,7 @@ impl NativeChatView {
         if !markdown.is_empty() {
             rows.push(json!({
                 "label": "Copy as Markdown",
+                "iconPath": "titlebar/markdown.svg",
                 "command": { "type": "copyText", "text": markdown },
             }));
         }
@@ -1803,6 +1805,7 @@ impl NativeChatView {
             };
             rows.push(json!({
                 "label": "Mention in chat box",
+                "iconPath": "titlebar/quote.svg",
                 "command": {
                     "type": "insertBoardReference",
                     "reference": mention,

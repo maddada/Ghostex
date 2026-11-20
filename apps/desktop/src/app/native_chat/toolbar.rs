@@ -130,8 +130,8 @@ impl NativeChatView {
                 self.menu_side = Some(super::option_menu::MenuSide::Right);
                 let trigger = button_trigger(self.composer_button_bounds.attach.get(), position);
                 self.show_chat_menu(vec![
-                    json!({"label":"Images or files…","command":{"type":"host","action":"pickAttachments","requestId":"native-chat-attachments","selection":"files"}}),
-                    json!({"label":"Folders…","command":{"type":"host","action":"pickAttachments","requestId":"native-chat-attachments","selection":"folders"}}),
+                    json!({"label":"Images or files…","iconPath":"titlebar/photo.svg","command":{"type":"host","action":"pickAttachments","requestId":"native-chat-attachments","selection":"files"}}),
+                    json!({"label":"Folders…","iconPath":"titlebar/folder.svg","command":{"type":"host","action":"pickAttachments","requestId":"native-chat-attachments","selection":"folders"}}),
                 ], trigger, 200.0, window, cx)
             }
             "attachPath" => self.host(

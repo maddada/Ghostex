@@ -460,6 +460,7 @@ impl GhostexGpuiApp {
             };
             items.push(json!({
                 "label": "Show on All Spaces",
+                "icon": "stack",
                 "checked": on(SHOW_ON_ALL_SPACES_SETTING, false),
                 "command": { "type": "chief", "op": "toggleSetting", "key": SHOW_ON_ALL_SPACES_SETTING },
             }));
@@ -468,6 +469,7 @@ impl GhostexGpuiApp {
             if chief_on() {
                 items.push(json!({
                     "label": "Ask Before New Chat",
+                    "icon": "help-circle",
                     "checked": on(CONFIRM_NEW_CHAT_SETTING, true),
                     "command": { "type": "chief", "op": "toggleSetting", "key": CONFIRM_NEW_CHAT_SETTING },
                 }));
