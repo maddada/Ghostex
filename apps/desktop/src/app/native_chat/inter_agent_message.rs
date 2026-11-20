@@ -179,6 +179,10 @@ impl NativeChatView {
             p,
             cx,
         );
+        // "2 held notes went in with this message" under the card, as under a bubble: a message
+        // sent with `ghostex agents send --with-next` goes in with the next one, which is often
+        // another agent's (`held_notes_line`, transcript.rs).
+        let held = self.held_notes_line(id, message, false, p, cx);
         // A thread's "waiting for an answer" report carries its relayed approval card under it
         // (relayed_approval.rs). Once the card ended the report goes with it: answered here, the
         // card's one line stands in for both; ended anywhere else, neither shows (gx-chat-core
@@ -196,8 +200,20 @@ impl NativeChatView {
                 .gap(gpui::px(6.0 * p.scale))
                 .child(card)
                 .child(self.relayed_approval_card(&relayed, "report", p, cx))
+                .children(held)
                 .into_any_element(),
-            None => card,
+            None => match held {
+                Some(held) => gpui::div()
+                    .flex()
+                    .flex_col()
+                    .w_full()
+                    .min_w_0()
+                    .gap(gpui::px(4.0 * p.scale))
+                    .child(card)
+                    .child(held)
+                    .into_any_element(),
+                None => card,
+            },
         }
     }
 
