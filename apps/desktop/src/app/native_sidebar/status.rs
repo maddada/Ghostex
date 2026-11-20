@@ -221,7 +221,16 @@ pub(crate) fn tile_status_dot(
     ))
 }
 
-/// The colours of a folded coordinator's overlapping stack, back to front: the red approval dot is the front one.
+/// The colours of a folded coordinator's overlapping stack, back to front, least urgent first: grey
+/// shell, amber working, blue finished, pink question, and the red blocker (approval, failed or
+/// stuck) in front.
+///
+/// CDXC:SessionStatus 2026-11-20 DECISION:
+/// User, of a folded coordinator row whose amber working dot covered its pink one: "make question
+/// and blocker higher priority here than the working indicator". Every overlapping stack puts the
+/// most urgent dot in front, in the order the Space and computer tiles pick their one dot
+/// (`TileCounts::color`): red > pink > blue > amber > grey. Supersedes the 2026-10-23 order with
+/// the pink dot at the back.
 fn stack_colors(
     working: bool,
     attention: bool,
@@ -230,10 +239,10 @@ fn stack_colors(
     approval: bool,
 ) -> Vec<Hsla> {
     [
-        (question, rgb(QUESTION_COLOR).into()),
         (!working && background_work, background_work_color().into()),
         (working, rgb(WORKING_COLOR).into()),
-        (attention, rgb(0x95d7f6).into()),
+        (attention, rgb(ATTENTION_COLOR).into()),
+        (question, rgb(QUESTION_COLOR).into()),
         (approval, rgb(APPROVAL_COLOR).into()),
     ]
     .into_iter()
@@ -314,16 +323,18 @@ pub(crate) fn sized_overlapped_dots(
 }
 
 /// CDXC:SessionStatus 2026-10-23 DECISION:
-/// User: "also 1 more thing if there's question + working or question + done then show those 2 dots overlapping like we show it at the bottom of the space button". A row with a pending question draws the pink dot, and when the session is also working (orange) or done (blue attention) a second dot overlaps it, as the Space buttons drew their dots then: the pink one behind and to the left, the other in front, a 1px ring in `ring` (the row's fill) between them. The pair is centred in the same `STATUS_SLOT_WIDTH` slot as every other indicator.
+/// User: "also 1 more thing if there's question + working or question + done then show those 2 dots overlapping like we show it at the bottom of the space button". A row with a pending question draws the pink dot, and when the session is also working (orange) or done (blue attention) a second dot overlaps it, a 1px ring in `ring` (the row's fill) between them. The pair is centred in the same `STATUS_SLOT_WIDTH` slot as every other indicator. Since 2026-11-20 the pink dot is the front one, the other behind and to the left (`stack_colors`: the most urgent dot in front).
 pub(crate) fn question_indicator(activity: &str, scale: f32, ring: Hsla) -> AnyElement {
-    let front: Option<Hsla> = match activity {
+    let behind: Option<Hsla> = match activity {
         "working" => Some(rgb(WORKING_COLOR).into()),
-        "attention" => Some(rgb(0x95d7f6).into()),
+        "attention" => Some(rgb(ATTENTION_COLOR).into()),
         _ => None,
     };
-    let dots = match front {
-        Some(front) => overlapped_dots(vec![rgb(QUESTION_COLOR).into(), front], scale, ring, None)
-            .into_any_element(),
+    let dots = match behind {
+        Some(behind) => {
+            overlapped_dots(vec![behind, rgb(QUESTION_COLOR).into()], scale, ring, None)
+                .into_any_element()
+        }
         None => div()
             .size(px(STATUS_DOT_SIZE * scale))
             .rounded_full()
