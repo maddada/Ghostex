@@ -118,6 +118,18 @@ pub fn rail_pins_moved(pins: &[&'static str], key: &str, index: usize) -> Vec<&'
     next
 }
 
+/// `pins` with the pinned `key` dropped on the pin at `target` (an index into `pins`; `pins.len()`
+/// drops it after the last one): it takes that pin's place, before it, whichever way it moved.
+pub fn rail_pins_dropped(pins: &[&'static str], key: &str, target: usize) -> Vec<&'static str> {
+    let Some(from) = pins.iter().position(|pin| *pin == key) else {
+        return rail_pins_moved(pins, key, target);
+    };
+    // `rail_pins_moved` counts in the list without the dragged pin, where everything after it
+    // sits one place higher.
+    let to = if from < target { target - 1 } else { target };
+    rail_pins_moved(pins, key, to)
+}
+
 /// `pins` as the settings value.
 pub fn rail_pins_value(pins: &[&'static str]) -> Value {
     Value::Array(
@@ -125,4 +137,62 @@ pub fn rail_pins_value(pins: &[&'static str]) -> Value {
             .map(|key| Value::String((*key).to_string()))
             .collect(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const PINS: &[&str] = &["search", "notifications", "mainHub"];
+
+    #[test]
+    fn a_pin_dropped_on_a_later_pin_takes_its_place() {
+        assert_eq!(
+            rail_pins_dropped(PINS, "search", 2),
+            ["notifications", "search", "mainHub"]
+        );
+        assert_eq!(
+            rail_pins_dropped(PINS, "search", 1),
+            ["search", "notifications", "mainHub"]
+        );
+    }
+
+    #[test]
+    fn a_pin_dropped_on_an_earlier_pin_takes_its_place() {
+        assert_eq!(
+            rail_pins_dropped(PINS, "mainHub", 0),
+            ["mainHub", "search", "notifications"]
+        );
+    }
+
+    #[test]
+    fn a_pin_dropped_after_the_last_one_ends_the_rail() {
+        assert_eq!(
+            rail_pins_dropped(PINS, "search", PINS.len()),
+            ["notifications", "mainHub", "search"]
+        );
+    }
+
+    #[test]
+    fn pins_keep_known_keys_once() {
+        let mut settings = Map::new();
+        settings.insert(
+            RAIL_PINS_SETTINGS_KEY.to_string(),
+            serde_json::json!(["claude", "nope", "claude", "grok"]),
+        );
+        assert_eq!(rail_pins(&settings), ["claude", "grok"]);
+        assert_eq!(rail_pins(&Map::new()), RAIL_DEFAULT_PINS);
+    }
+
+    #[test]
+    fn pinning_adds_at_the_end_and_unpinning_removes() {
+        assert_eq!(
+            rail_pins_with(PINS, "grok", true),
+            ["search", "notifications", "mainHub", "grok"]
+        );
+        assert_eq!(
+            rail_pins_with(PINS, "search", false),
+            ["notifications", "mainHub"]
+        );
+    }
 }

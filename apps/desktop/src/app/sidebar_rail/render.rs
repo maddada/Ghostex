@@ -118,7 +118,7 @@ impl GhostexGpuiApp {
                 cx,
             )
         });
-        let more = self.render_sidebar_rail_more_button(&appearance, cx);
+        let more = self.render_sidebar_rail_more_button(pins.len(), &appearance, cx);
         let workspace = self.render_sidebar_rail_workspace(&appearance, cx);
         let usage = (!self.account_usage_meters().is_empty())
             .then(|| self.render_sidebar_rail_usage_toggle(&appearance, cx));
@@ -363,13 +363,16 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
+    /// ⋯, which also takes a dragged pin dropped on it: after the last pin.
     fn render_sidebar_rail_more_button(
         &self,
+        pin_count: usize,
         appearance: &SidebarAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let bounds = self.sidebar_rail.more_bounds.clone();
         let hover = appearance.hover;
+        let drop_line = appearance.foreground;
         div()
             .id("ghostex-gpui-sidebar-rail-more")
             .role(gpui::Role::Button)
@@ -401,6 +404,14 @@ impl GhostexGpuiApp {
                         window,
                         cx,
                     );
+                }),
+            )
+            .drag_over::<DraggedRailItem>(move |style, _, _, _| {
+                style.border_t_2().border_color(drop_line)
+            })
+            .on_drop(
+                cx.listener(move |app, dragged: &DraggedRailItem, _window, cx| {
+                    app.move_sidebar_rail_pin(dragged.key, pin_count, cx);
                 }),
             )
             .managed_tooltip_with_placement(ManagedTooltipPlacement::Right, |window, cx| {

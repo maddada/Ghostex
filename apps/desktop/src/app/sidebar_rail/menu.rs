@@ -194,7 +194,7 @@ impl GhostexGpuiApp {
         true
     }
 
-    /// Moves the dragged pin `key` to `index` (an unpinned item dropped there is pinned there).
+    /// The dragged pin `key` dropped on the pin at `index` (`pins.len()`: after the last one).
     pub(crate) fn move_sidebar_rail_pin(
         &mut self,
         key: &'static str,
@@ -202,7 +202,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let pins = sidebar_rail_pins_now();
-        let moved = rail_pins_moved(&pins, key, index);
+        let moved = ghostex_gx_core::sidebar_rail::rail_pins_dropped(&pins, key, index);
         if moved != pins {
             self.save_sidebar_rail_pins(&moved, cx);
         }
