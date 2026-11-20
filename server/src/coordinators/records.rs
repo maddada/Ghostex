@@ -101,6 +101,23 @@ impl ThreadRecord {
     }
 }
 
+/// The session's runtime setting that says which coordinator started it (`start-thread`, `agents
+/// create`): `{ coordinatorProjectId, coordinatorSessionId }`. A session the user made and a
+/// coordinator adopted with `coordinator link` has none.
+pub const STARTED_BY_COORDINATOR_KEY: &str = "startedByCoordinator";
+
+/// Whether `session` was started by the coordinator `coordinator` (`STARTED_BY_COORDINATOR_KEY`).
+pub fn started_by_coordinator(session: &Value, coordinator: &SessionKey) -> bool {
+    session
+        .pointer(&format!("/runtimeSettings/{STARTED_BY_COORDINATOR_KEY}"))
+        .is_some_and(|started| {
+            started.get("coordinatorProjectId").and_then(Value::as_str)
+                == Some(coordinator.0.as_str())
+                && started.get("coordinatorSessionId").and_then(Value::as_str)
+                    == Some(coordinator.1.as_str())
+        })
+}
+
 pub(crate) fn now_iso() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
 }

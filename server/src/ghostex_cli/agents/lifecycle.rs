@@ -138,6 +138,8 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
                 "projectId": session["projectId"], "sessionId": session["sessionId"],
                 "task": body.as_deref().unwrap_or_default(), "onlyIfCoordinator": true,
                 "pendingMessage": body.as_deref().unwrap_or_default(),
+                // This session was just made for the coordinator (work_cleanup_threads.rs).
+                crate::coordinators::STARTED_BY_COORDINATOR_KEY: true,
             }),
             &flags,
         );

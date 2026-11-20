@@ -828,6 +828,13 @@ pub struct PresentationSessionWork {
         skip_serializing_if = "std::ops::Not::not"
     )]
     pub cleaned_up: bool,
+    /// Why the pass that cleans up by itself kept this merged thread's worktree: `uncommitted`,
+    /// `ignored`, `hidden` or `unmerged`; the banner says it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_kept: Option<String>,
+    /// The files or commits it was kept for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_kept_detail: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

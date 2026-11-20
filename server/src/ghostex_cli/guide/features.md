@@ -2379,7 +2379,7 @@ UI mockup, a comparison or a small interactive tool. Ask for them by name
 visuals"); agents still understand the older words Ghostex page, gx page,
 inline HTML, inline questions and inline graphs. **Boosts** ask for these, and more, in one click. The Boost pill at the right
 of the strip on top of the chat box opens a short menu in tabs: Show (Live page, Chart it,
-Side by side, Map it, Ask me in a form), Do (Computer & Browser use, where the agent
+Side by side, Map it, Ask me in a form), Actions (Computer & Browser use, where the agent
 drives your apps and Chrome or another browser itself with Cua Driver; Embedded Browser
 use, where it drives pages in Ghostex's own browser; Show screenshots; Second opinion, where another agent
 checks the answer), Work (Triage requests, which explains issues, pull requests or tickets
@@ -7064,16 +7064,22 @@ A coordinator's threads share one banner under their coordinator instead: "N mer
 worktrees" with Clean up all and Keep, which answer them all at once (`ghostex issues
 cleanup-threads <coordinator> clean-up|keep`). With **Clean up merged threads by
 themselves** on (Settings > Session Cards, off by default), Ghostex removes a merged
-thread's worktree and puts the thread to sleep on its own, but only for a thread a
-coordinator started whose worktree has no uncommitted or unpushed changes and that
-neither works nor waits on you; a coordinator and your own sessions are never
-touched (Clean up and Clean up all wait, too, for a thread that hasn't read its
-coordinator's last message). The banner then says "Cleaned up N worktrees" with Undo, which puts
-the worktrees back on their branches (`ghostex issues cleanup-threads <coordinator>
+thread's worktree and puts the thread to sleep on its own, but only for a thread its
+coordinator started (never one it adopted, and never a coordinator or your own session),
+quiet for at least 20 minutes, not open on screen, with no message from its coordinator
+still on its way, on its branch's own merged PR, and with nothing a removal would lose:
+no uncommitted changes, no files git ignores outside build folders (such as `.env`), no
+changes git status hides, and no commits outside the merged PR. It keeps the branch.
+Clean up and Clean up all keep such worktrees too and say why, and the banner says
+"N kept: <why>". A cleaned-up thread stays where it was: waking it or messaging it is
+refused, never moved onto your own checkout; Undo, where the banner offers
+it, puts the worktree back on its branch and the thread can run again. The banner
+says "Cleaned up N worktrees" with Undo (`ghostex issues cleanup-threads <coordinator>
 undo`, or `dismiss` to hide the line); anything it could not clean up stays in the
 banner. Finished threads (PR merged, nothing running or waiting) fold behind the
 coordinator's "N finished threads" row however recently they ran. Turn **Offer Clean
-up when a PR merges** off in Settings > Session Cards to never get it (on by default). With **Title sessions by their branch** on (same page, off
+up when a PR merges** off in Settings > Session Cards to never get it, which also
+stops the cleanup on its own (on by default). With **Title sessions by their branch** on (same page, off
 by default), a session on a branch other than main is titled by that branch,
 without your name and the ticket ID, until you rename it. Linear status needs a
 Linear API key: set one per workspace in Settings > Workspaces, or for one

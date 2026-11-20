@@ -141,3 +141,84 @@ pub(crate) fn work_cleaned_up(session: &Value) -> bool {
         .and_then(Value::as_str)
         .is_some_and(|answer| answer == "cleanUp" || answer == AUTO_CLEAN_UP_ANSWER)
 }
+
+/// A coordinator's thread cleaned up for its merged PR, by the user or by itself: its record says
+/// `thread`. Its session stays where it was (it never moves into the project's folder, where it
+/// would run on the user's own checkout) until Undo puts the worktree back.
+pub(crate) fn cleaned_thread_holds_place(session: &Value) -> bool {
+    work_cleanup_record(session).is_some_and(|record| {
+        record.get("thread").and_then(Value::as_bool) == Some(true)
+            && matches!(
+                record.get("answer").and_then(Value::as_str),
+                Some("cleanUp" | AUTO_CLEAN_UP_ANSWER)
+            )
+    })
+}
+
+/// CDXC:WorkMode 2026-11-20 WHY: once a coordinator's thread is cleaned up its worktree is gone, and
+/// waking it (a follow-up from its coordinator, a click) used to move it into the project's folder,
+/// where it resumed on the user's main checkout believing it was still on its branch (Opus review
+/// of the merged-thread cleanup). It is refused instead, with what to do; Undo puts the worktree
+/// back first. `Some(message)` while the thread's worktree folder is gone.
+pub(crate) fn cleaned_thread_wake_refusal(session: &Value) -> Option<String> {
+    if !cleaned_thread_holds_place(session) {
+        return None;
+    }
+    let marker = read_worktree_session_marker(session)?;
+    if Path::new(&marker.path).exists() {
+        return None;
+    }
+    Some(
+        "This thread's worktree was cleaned up after its PR merged, so it can't run. Use Undo in its coordinator's banner, or start a new thread."
+            .to_string(),
+    )
+}
+
+/// Why the pass that cleans up by itself kept a merged thread's worktree, as its banner says it:
+/// `{ pullRequest, reason, detail, at }` under `runtimeSettings.workCleanupKept`.
+pub(crate) const WORK_CLEANUP_KEPT_KEY: &str = "workCleanupKept";
+
+/// The kept reason for this PR: `(code, detail)`.
+pub(crate) fn work_cleanup_kept(
+    session: &Value,
+    pull_request_key: &str,
+) -> Option<(String, String)> {
+    let record = session
+        .pointer(&format!("/runtimeSettings/{WORK_CLEANUP_KEPT_KEY}"))
+        .and_then(Value::as_object)?;
+    if record.get("pullRequest").and_then(Value::as_str) != Some(pull_request_key) {
+        return None;
+    }
+    let text = |key: &str| {
+        record
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
+    Some((text("reason"), text("detail")))
+}
+
+/// Writes (or with `None`, clears) the kept reason.
+pub(crate) fn write_work_cleanup_kept(
+    db: &Connection,
+    project_id: &str,
+    session_id: &str,
+    kept: Option<&Value>,
+) -> Result<(), DomainStateError> {
+    let result = match kept {
+        Some(record) => db.execute(
+            &format!("UPDATE sessions SET runtimeSettingsJson = json_set(COALESCE(runtimeSettingsJson, '{{}}'), '$.{WORK_CLEANUP_KEPT_KEY}', json(?1)) WHERE projectId = ?2 AND sessionId = ?3"),
+            params![record.to_string(), project_id, session_id],
+        ),
+        None => db.execute(
+            &format!("UPDATE sessions SET runtimeSettingsJson = json_remove(runtimeSettingsJson, '$.{WORK_CLEANUP_KEPT_KEY}') WHERE projectId = ?1 AND sessionId = ?2"),
+            params![project_id, session_id],
+        ),
+    };
+    result.map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("SQLite work cleanup error: {error}"),
+    })?;
+    Ok(())
+}

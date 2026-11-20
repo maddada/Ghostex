@@ -399,6 +399,106 @@ pub fn runtime_settings_with_moved_worktree_path(
 }
 
 // ---------------------------------------------------------------------------
+// what removing a worktree would lose
+// ---------------------------------------------------------------------------
+
+/// Folders a build or an install makes again, which removing a worktree may delete.
+const REBUILDABLE_FOLDERS: &[&str] = &[
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    ".next",
+    ".venv",
+    "__pycache__",
+    ".turbo",
+];
+
+/// What `git worktree remove` would delete without `--force` though `git status --porcelain`
+/// shows nothing.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum WorktreeHiddenWork {
+    /// Files git ignores outside the rebuildable folders (`.env`, a local database), first few.
+    Ignored(Vec<String>),
+    /// Tracked files marked skip-worktree or assume-unchanged, whose edits git status hides.
+    Hidden(Vec<String>),
+}
+
+impl WorktreeHiddenWork {
+    /// A short code clients map to their own words (`autoKept`).
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Ignored(_) => "ignored",
+            Self::Hidden(_) => "hidden",
+        }
+    }
+
+    /// One line for a warning or a log, naming the first files.
+    pub fn describe(&self) -> String {
+        let (what, paths) = match self {
+            Self::Ignored(paths) => ("files git ignores", paths),
+            Self::Hidden(paths) => ("changes git status hides", paths),
+        };
+        format!("{what} ({})", paths.join(", "))
+    }
+}
+
+/// CDXC:WorkMode 2026-11-20 WHY: `git worktree remove` without `--force` refuses only what
+/// `git status` shows, so a clean status still deleted an ignored `.env` or local database and
+/// edits hidden by skip-worktree (reproduced in the Opus review of the merged-thread cleanup). Clean
+/// up, Clean up all and the pass that cleans up by itself keep such a worktree and say why; a build
+/// folder that can be made again does not count. `None` from git means the check could not run, which
+/// callers treat as "keep it".
+pub fn worktree_hidden_work(worktree_path: &str) -> Option<Option<WorktreeHiddenWork>> {
+    let status = crate::session_git_status::run_git_probe_command(
+        worktree_path,
+        &[
+            "status",
+            "--porcelain",
+            "--ignored=matching",
+            "--untracked-files=all",
+        ],
+    )?;
+    let ignored: Vec<String> = status
+        .lines()
+        .filter_map(|line| line.strip_prefix("!! "))
+        .map(|path| path.trim().trim_matches('"').to_string())
+        .filter(|path| {
+            !path
+                .trim_end_matches('/')
+                .split('/')
+                .any(|part| REBUILDABLE_FOLDERS.contains(&part))
+        })
+        .collect();
+    if !ignored.is_empty() {
+        return Some(Some(WorktreeHiddenWork::Ignored(first_paths(ignored))));
+    }
+    let listed =
+        crate::session_git_status::run_git_probe_command(worktree_path, &["ls-files", "-v"])?;
+    let hidden: Vec<String> = listed
+        .lines()
+        .filter_map(|line| {
+            let flag = line.chars().next()?;
+            (flag == 'S' || flag.is_ascii_lowercase())
+                .then(|| line.get(2..).unwrap_or_default().trim().to_string())
+        })
+        .collect();
+    if !hidden.is_empty() {
+        return Some(Some(WorktreeHiddenWork::Hidden(first_paths(hidden))));
+    }
+    Some(None)
+}
+
+fn first_paths(mut paths: Vec<String>) -> Vec<String> {
+    let more = paths.len().saturating_sub(3);
+    paths.truncate(3);
+    if more > 0 {
+        paths.push(format!("{more} more"));
+    }
+    paths
+}
+
+// ---------------------------------------------------------------------------
 // removed worktree
 // ---------------------------------------------------------------------------
 
@@ -422,6 +522,11 @@ pub fn plan_removed_worktree_move(
         .map(str::trim)
         .filter(|cwd| !cwd.is_empty())?;
     if Path::new(cwd).exists() {
+        return None;
+    }
+    // A coordinator's thread cleaned up for its merged PR stays where it was: in the project's
+    // folder it would run on the user's own checkout (crate::work_mode::cleaned_thread_wake_refusal).
+    if crate::work_mode::cleaned_thread_holds_place(session) {
         return None;
     }
     let marker = read_worktree_session_marker(session)?;
