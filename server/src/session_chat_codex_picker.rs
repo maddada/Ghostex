@@ -1223,9 +1223,8 @@ impl PickerDriver<'_> {
                 )
             })?;
         // A footer that names no effort (`<model> default`, or a /statusline with the model name
-        // only) cannot confirm the effort afterwards either: the pick is then confirmed by a change
-        // line that was not on the screen before it.
-        let footer_names_effort = selection.effort.is_some();
+        // only) relies on a fresh change line to confirm the effort; whenever the confirmation
+        // screen's footer does name an effort, require it to match `plan.effort`.
         let changed_before =
             changed_line_count(&screen, &plan.model, &plan.effort, plan.session_only);
         if selection
@@ -1352,11 +1351,10 @@ impl PickerDriver<'_> {
             let fresh_change =
                 changed_line_count(screen, &plan.model, &plan.effort, plan.session_only)
                     > changed_before;
-            let effort_ok = !footer_names_effort
-                || selection
-                    .effort
-                    .as_ref()
-                    .is_some_and(|effort| effort.value == plan.effort);
+            let effort_ok = selection
+                .effort
+                .as_ref()
+                .is_none_or(|effort| effort.value == plan.effort);
             (fresh_change
                 && effort_ok
                 && !any_picker_open(screen)
