@@ -332,6 +332,7 @@ pub fn project_message(
             None => Value::Null,
         },
     );
+    projected.insert("heldNotes".to_string(), held_notes_line(message));
     let with_text = !rest.is_empty();
     let mut cards = page_answers.iter().map(|answers| {
         // An in-chat form's answers show its choices' labels (`project_page_answers`).
@@ -1906,4 +1907,39 @@ pub fn row_detail_scope(
         }));
     }
     tools.get(index).map(open_tool_detail)
+}
+
+/// "2 held notes went in with this message" under a user's message, with each note (who sent it
+/// and its words) for the line to open onto; `null` on a row that carried none
+/// (`session::appended_notes::held_notes`, CDXC:SessionChat 2026-11-20 there).
+fn held_notes_line(message: &ChatMessage) -> Value {
+    let Some(notes) = message
+        .held_notes
+        .as_ref()
+        .filter(|notes| !notes.is_empty())
+    else {
+        return Value::Null;
+    };
+    let notes: Vec<Value> = notes
+        .iter()
+        .map(
+            |note| match crate::transcript::agent_message::parse_inter_agent_message(note) {
+                Some(inter) => {
+                    let from = [inter.session_title.as_str(), inter.agent_name.as_str()]
+                        .into_iter()
+                        .find(|name| !name.trim().is_empty());
+                    serde_json::json!({ "from": from, "body": inter.body })
+                }
+                None => serde_json::json!({ "from": Value::Null, "body": note }),
+            },
+        )
+        .collect();
+    serde_json::json!({
+        "label": format!(
+            "{} held {} went in with this message",
+            notes.len(),
+            if notes.len() == 1 { "note" } else { "notes" }
+        ),
+        "notes": notes,
+    })
 }

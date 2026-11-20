@@ -137,6 +137,7 @@ pub fn streaming_message(text: &str) -> ChatMessage {
         custom_message: None,
         message_number: None,
         message_ref: None,
+        held_notes: None,
     }
 }
 

@@ -584,6 +584,7 @@ pub fn pending_sends_as_messages(pending: &[PendingSend]) -> Vec<ChatRow> {
                 custom_message: None,
                 message_number: None,
                 message_ref: None,
+                held_notes: None,
             };
             let command = entry
                 .text

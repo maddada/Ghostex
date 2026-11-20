@@ -749,6 +749,7 @@ impl NativeChatView {
                             .gap(px(4.0 * s))
                             .children(indicator.map(|(icon, _)| icon))
                             .children(self.attaching_line(&id, true, p))
+                            .children(self.held_notes_line(&id, message, true, p, cx))
                             .children(failed_delivery)
                             .children(actions),
                     )
@@ -800,6 +801,8 @@ impl NativeChatView {
                         .child(bubble)
                         // "Image is being uploaded" while it waits for its picture.
                         .children(self.attaching_line(&id, true, p))
+                        // "2 held notes went in with this message", which opens onto them.
+                        .children(self.held_notes_line(&id, message, true, p, cx))
                         .children(failed_delivery)
                         .children(actions),
                 )
@@ -1161,6 +1164,98 @@ impl NativeChatView {
             .child(prose)
             .child(self.show_more_toggle(format!("prompt-toggle:{id}"), key, expanded, p, cx))
             .into_any_element()
+    }
+
+    /// "2 held notes went in with this message" under a prompt that carried messages other
+    /// sessions sent with `ghostex agents send --with-next` (the core's `heldNotes`, CDXC:SessionChat
+    /// 2026-11-20 in gx-chat-core `session/appended_notes.rs`). It opens onto each note: who sent
+    /// it and its words. `right`: the bubble sits at the right, so the line does too.
+    pub(super) fn held_notes_line(
+        &self,
+        id: &str,
+        message: &Value,
+        right: bool,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> Option<AnyElement> {
+        let held = &message["heldNotes"];
+        let label = held["label"].as_str()?.to_string();
+        let notes = held["notes"].as_array()?;
+        let s = p.scale;
+        let key = format!("held-notes:{id}");
+        let expanded = self.expanded.contains(&key);
+        let toggle_key = key.clone();
+        let head = div()
+            .id(format!("held-notes-toggle:{id}"))
+            .flex()
+            .items_center()
+            .gap(px(4.0 * s))
+            .text_size(px(13.0 * s))
+            .text_color(p.muted)
+            .chat_cursor_pointer()
+            .hover(|style| style.text_color(p.foreground))
+            .child(
+                super::disclosure_motion::turned_chevron(self.fold_turn(&key, expanded, cx), false)
+                    .size(px(14.0 * s))
+                    .text_color(p.muted),
+            )
+            .child(label)
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.anchor_disclosure_toggle(&toggle_key, !expanded);
+                if expanded {
+                    this.expanded.remove(&toggle_key);
+                } else {
+                    this.expanded.insert(toggle_key.clone());
+                }
+                cx.notify();
+            }));
+        let column = div()
+            .max_w(relative(0.8))
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .gap(px(6.0 * s))
+            .when(right, |column| column.items_end())
+            .child(head);
+        if !expanded {
+            return Some(column.into_any_element());
+        }
+        let bodies = notes.iter().enumerate().map(|(index, note)| {
+            let from = note["from"].as_str().filter(|from| !from.trim().is_empty());
+            div()
+                .w_full()
+                .flex()
+                .flex_col()
+                .gap(px(2.0 * s))
+                .children(from.map(|from| {
+                    div()
+                        .text_size(px(12.0 * s))
+                        .text_color(p.muted)
+                        .child(format!("From {from}"))
+                }))
+                .child(self.prompt_markdown(
+                    format!("held-note:{id}:{index}"),
+                    text(note, "body"),
+                    &Value::Null,
+                    p,
+                    cx,
+                ))
+        });
+        Some(
+            column
+                .child(
+                    div()
+                        .w_full()
+                        .flex()
+                        .flex_col()
+                        .gap(px(10.0 * s))
+                        .border_l(px(2.0 * s))
+                        .border_color(p.muted.opacity(0.42))
+                        .pl(px(10.0 * s))
+                        .children(bodies),
+                )
+                .into_any_element(),
+        )
     }
 }
 

@@ -431,6 +431,67 @@ pub fn with_system_notes(text: &str, notes: &[&str]) -> String {
     )
 }
 
+/// Each message `ghostex agents send --with-next` held for a Claude Code session, inside the
+/// `<ghostex-system>` block of the message that carried it (gxserver `with_next.rs`).
+///
+/// CDXC:SessionChat 2026-11-20 DECISION:
+/// GitHub #677: Claude Code ran each held note typed after a message as a turn of its own, so the
+/// notes now ride in that message's block, which no chat draws. The user then asked for "the short
+/// line under the message: '2 held notes went in with this message' (expandable to show them)":
+/// gxserver writes each note between these tags, [`held_notes`] reads them back from the recorded
+/// row, [`shown_message`] keeps them on the row it shows (`ChatMessage::held_notes`), and every
+/// chat draws the line from the row's projected `heldNotes` (desktop transcript.rs, the phone's
+/// MessageRow.tsx).
+const HELD_NOTE_OPEN: &str = "<held-note>";
+const HELD_NOTE_CLOSE: &str = "</held-note>";
+
+/// The note that carries `held` (each a message another session sent with `--with-next`) to the
+/// agent inside the releasing message's `<ghostex-system>` block, `None` for none.
+pub fn held_notes_note(held: &[&str]) -> Option<String> {
+    let held: Vec<&str> = held
+        .iter()
+        .map(|note| note.trim())
+        .filter(|note| !note.is_empty())
+        .collect();
+    if held.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "Held until this message (`ghostex agents send --with-next`); read {} with it, in this turn:\n\n{}",
+        if held.len() == 1 { "it" } else { "them" },
+        held.iter()
+            .map(|note| format!("{HELD_NOTE_OPEN}\n{note}\n{HELD_NOTE_CLOSE}"))
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    ))
+}
+
+/// The held messages ([`held_notes_note`]) inside `text`'s `<ghostex-system>` blocks, in order.
+pub fn held_notes(text: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut rest = text;
+    while let Some(open) = rest.find(SYSTEM_OPEN) {
+        let block = &rest[open + SYSTEM_OPEN.len()..];
+        let Some(close) = block.find(SYSTEM_CLOSE) else {
+            break;
+        };
+        let mut inside = &block[..close];
+        while let Some(start) = inside.find(HELD_NOTE_OPEN) {
+            let after = &inside[start + HELD_NOTE_OPEN.len()..];
+            let Some(end) = after.find(HELD_NOTE_CLOSE) else {
+                break;
+            };
+            let note = after[..end].trim();
+            if !note.is_empty() {
+                found.push(note.to_string());
+            }
+            inside = &after[end + HELD_NOTE_CLOSE.len()..];
+        }
+        rest = &block[close + SYSTEM_CLOSE.len()..];
+    }
+    found
+}
+
 /// `text` without its `<ghostex-system>` blocks, or `None` when it has none.
 fn without_system_blocks(text: &str) -> Option<String> {
     if !text.contains(SYSTEM_OPEN) {
@@ -517,11 +578,13 @@ pub fn shown_message(message: &ChatMessage) -> Option<ChatMessage> {
         return None;
     }
     let mut changed = false;
+    let mut held = Vec::new();
     let blocks = message
         .blocks
         .iter()
         .map(|block| match block {
             ChatBlock::Text { text } => {
+                held.extend(held_notes(text));
                 let stripped = without_notes(text);
                 let plain = if stripped.len() != text.trim_end().len() {
                     stripped
@@ -542,8 +605,12 @@ pub fn shown_message(message: &ChatMessage) -> Option<ChatMessage> {
             other => other.clone(),
         })
         .collect();
+    changed |= !held.is_empty();
     changed.then(|| ChatMessage {
         blocks,
+        held_notes: (!held.is_empty())
+            .then_some(held)
+            .or(message.held_notes.clone()),
         ..message.clone()
     })
 }
