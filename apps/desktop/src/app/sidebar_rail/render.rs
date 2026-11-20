@@ -158,6 +158,20 @@ impl GhostexGpuiApp {
             .items_center()
             .pb(px(8.0))
             .bg(sidebar_chrome_fill(appearance.glass, 180.0))
+            // Which half has the pointer, for the hidden sidebar's reveal
+            // (`sidebar_rail_reveal_hover`); a press starts its wait again.
+            .on_mouse_move(cx.listener(|app, event: &gpui::MouseMoveEvent, window, cx| {
+                let top_half = event.position.y < window.viewport_size().height / 2.0;
+                app.sidebar_rail_reveal_hover(Some(top_half), cx);
+            }))
+            .on_hover(cx.listener(|app, hovered: &bool, _, cx| {
+                if !*hovered {
+                    app.sidebar_rail_reveal_hover(None, cx);
+                }
+            }))
+            .capture_any_mouse_down(cx.listener(|app, _, _, cx| {
+                app.sidebar_rail_reveal_hover(None, cx);
+            }))
             // CDXC:Sidebar 2026-11-21 DECISION:
             // User: "No right border on the rail: remove the rail's right-side border line, and
             // widen the main area's frame 7px to the left into that space (Rail layout; Classic

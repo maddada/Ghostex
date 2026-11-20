@@ -74,6 +74,9 @@ impl GhostexGpuiApp {
         let mut inside = hovered
             || self.floating_reveal_chat_child_active(cx)
             || self.floating_reveal.edge_hovered
+            // The rail, left of the panel, keeps it out as the window's left edge does on macOS
+            // (`sidebar_rail_reveal_hover`).
+            || self.sidebar_rail.reveal_half.is_some()
             // Beside a docked sidebar the pointer that opened the panel is still over the sidebar.
             || (self.floating_reveal.sidebar_hovered && !self.sidebar_collapsed)
             // A menu or a rename field opened from the floating sidebar owns the pointer for as

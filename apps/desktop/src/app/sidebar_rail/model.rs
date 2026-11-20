@@ -144,6 +144,16 @@ pub(crate) struct SidebarRailState {
     /// The ⋯ button.
     pub(crate) more_bounds: RailBounds,
     items: RefCell<HashMap<&'static str, RailBounds>>,
+    /// Which half of the rail has the pointer (`Some(true)`: the top), for the hidden sidebar's
+    /// reveal (`sidebar_rail_reveal_hover` in host.rs). None off the rail.
+    #[cfg(not(ghostex_web))]
+    pub(crate) reveal_half: Option<bool>,
+    /// Counts the pointer's moves between halves, so a dwell that ended elsewhere does nothing.
+    #[cfg(not(ghostex_web))]
+    pub(crate) reveal_generation: u64,
+    /// The rail armed the reveal, so leaving it disarms what it armed.
+    #[cfg(not(ghostex_web))]
+    pub(crate) reveal_armed: bool,
 }
 
 impl SidebarRailState {

@@ -9,6 +9,15 @@ use crate::GhostexGpuiApp;
 use crate::app::sidebar_rail::RailItemState;
 
 impl GhostexGpuiApp {
+    /// The page never floats the sidebar, so resting on the rail opens nothing (the desktop's
+    /// `sidebar_rail_reveal_hover`).
+    pub(crate) fn sidebar_rail_reveal_hover(
+        &mut self,
+        _top_half: Option<bool>,
+        _cx: &mut gpui::Context<Self>,
+    ) {
+    }
+
     pub(crate) fn sidebar_rail_item_state(&self, key: &str, _cx: &gpui::App) -> RailItemState {
         let snapshot = self.native_sidebar.snapshot.as_ref();
         let mut state = RailItemState::default();
