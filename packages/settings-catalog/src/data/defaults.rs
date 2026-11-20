@@ -1033,7 +1033,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("windowGlassLiveBrightness", J::Num(60.0)),
     ("windowGlassBlurRadius", J::Num(4.0)),
     ("windowGlassWindowsBlur", J::Str("acrylic")),
-    ("windowGlassMenuBlurRadius", J::Num(20.0)),
+    // CDXC:Theming 2026-11-20 DECISION: User (Q4288): "yes, make pane gap 6 and menu blur 17 defaults too", from their own look (see `darkThemePreset`). Menu blur applies in light mode too. Supersedes 20.
+    ("windowGlassMenuBlurRadius", J::Num(17.0)),
     // CDXC:Theming 2026-11-20 DECISION:
     // User: "pls make the sidebar and main area default to having the same strength for the transparency by default" (2026-10-23), then "make my current theme values the default for Ghostex in dark mode, with transparency and all that" (2026-11-20, see `darkThemePreset`). The four tints are the ones Settings' Strength slider writes at 20 (`transparencyStrengthPatch`), so the slider opens on 20, and the sidebar and the work area share one tint per appearance. Supersedes Strength 10 (94 dark, 97 light).
     // SEE-ALSO: apps/desktop/src/app/helpers/window_glass.rs, apps/desktop/src/app/window/onboarding/model.rs, apps/desktop/src/app/window/settings_modal/tabs/theme/colours.rs.
@@ -1074,9 +1075,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("workspaceOpenTargetHiddenIds", J::Arr(&[])),
     // CDXC:Workarea 2026-05-30-07:24:
     // The macOS app no longer exposes Pane Gap as a user setting. Keep the
-    // persisted field for settings compatibility, but normalize it to zero so
-    // native panes always render without configurable spacing.
-    ("workspacePaneGap", J::Num(0.0)),
+    // persisted field for settings compatibility; native panes render without
+    // configurable spacing.
+    // CDXC:Theming 2026-11-20 DECISION: User (Q4288): "yes, make pane gap 6 and menu blur 17 defaults too". The default is 6, as the user's own settings and the gallery themes have it; the desktop app does not read this key today, so it changes no spacing.
+    ("workspacePaneGap", J::Num(6.0)),
     ("remoteMachines", J::Arr(&[])),
     ("remoteTailscaleEnabled", J::Bool(true)),
     ("commandsPanelDefaultHeightPx", J::Num(125.0)),
