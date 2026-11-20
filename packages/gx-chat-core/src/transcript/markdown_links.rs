@@ -32,14 +32,22 @@ pub fn markdown_link(href: &str, label: &str) -> Option<Value> {
     }
     // A Boost the message carried (`extras/boosts.rs`): its name in a pill, what it asked of the
     // agent in its hover.
-    if let Some(boost) = crate::extras::boosts::boost_of_href(href) {
+    if crate::extras::boosts::boost_id_of_href(href).is_some() {
+        let boost = crate::extras::boosts::boost_of_href(href);
         let mut entry = Map::new();
         entry.insert("href".to_string(), href.into());
         entry.insert("sourceLabel".to_string(), label.into());
-        entry.insert("label".to_string(), boost.label.into());
+        entry.insert(
+            "label".to_string(),
+            boost.map_or(label, |boost| boost.label).into(),
+        );
         entry.insert(
             "title".to_string(),
-            format!("Boost: {}", boost.description).into(),
+            match boost {
+                Some(boost) => format!("Boost: {}", boost.description),
+                None => "Your Boost".to_string(),
+            }
+            .into(),
         );
         entry.insert("kind".to_string(), "boost".into());
         return Some(Value::Object(entry));

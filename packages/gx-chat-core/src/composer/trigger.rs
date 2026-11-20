@@ -24,6 +24,8 @@ pub enum TriggerKind {
     Session,
     /// `#M`: one of the user's earlier messages in this chat (`message_numbers.rs`).
     Message,
+    /// `*`: a Boost for this message (`extras/boosts.rs`).
+    Boost,
 }
 
 /// The mention under the caret.
@@ -84,6 +86,8 @@ pub fn detect_composer_trigger(text: &str, caret: Option<usize>) -> Option<Compo
         TriggerKind::Session
     } else if is_message_token(&token) {
         TriggerKind::Message
+    } else if is_boost_token(&token) {
+        TriggerKind::Boost
     } else {
         return session_words_trigger(&indexed, cursor);
     };
@@ -152,6 +156,17 @@ fn is_message_token(token: &str) -> bool {
         .strip_prefix("#M")
         .or_else(|| token.strip_prefix("#m"))
         .is_some_and(|digits| digits.chars().all(|c| c.is_ascii_digit()))
+}
+
+/// A `*` token that is a Boost being picked: `*`, `*ch`, but not `**` (bold) or `*` followed by
+/// anything but a letter. A space ends the token, so `* item` (a list) and `2 * 3` never keep it open.
+///
+/// CDXC:Boosts 2026-11-20 DECISION:
+/// User (Q4260 "A"): `*` at the start of any word opens the Boost picker, like `/`, `@` and `$`; a
+/// space right after it closes it.
+fn is_boost_token(token: &str) -> bool {
+    let mut chars = token.chars();
+    chars.next() == Some('*') && chars.all(|character| character.is_alphanumeric() || character == '-')
 }
 
 /// A `+` token that is a mention being typed: `+`, `+fix`, but not `+1`, `++` or `+-`.

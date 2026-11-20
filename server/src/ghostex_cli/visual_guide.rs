@@ -122,20 +122,21 @@ pub(crate) fn guide_command(args: &[String]) -> CliResult<()> {
     }
 }
 
-const BOOSTS_HELP: &str =
-    "Usage: ghostex visual boosts [list|show <id>|set <id> <prompt|->|reset <id>] [--json]
+const BOOSTS_HELP: &str = "Usage: ghostex visual boosts [list|show <id>|set <id> <prompt|->|reset <id>|on|off] [--json]
 
 Boosts are the pills a person adds to a chat message from the Boost pill in
-the chat box (Live page, Chart it, Side by side, Map it, Triage requests).
-Ghostex adds each Boost's prompt under that message, in a <ghostex-system>
-block, for that one message. An edited prompt is kept per Boost for every
-chat on this computer, until it is reset.
+the chat box, or by typing * (Live page, Chart it, Computer use, Plan with
+workers and the rest, plus their own). Ghostex adds each Boost's prompt under
+that message, in a <ghostex-system> block, for that one message. Prompts,
+the user's own Boosts and the on/off switch are kept for every chat on this
+computer; Settings > Boosts edits them all.
 
   ghostex visual boosts              Every Boost, and whether its prompt was edited
   ghostex visual boosts show <id>    One Boost's prompt
   ghostex visual boosts set <id> <prompt>
                                      Edit a Boost's prompt (- reads it from stdin)
-  ghostex visual boosts reset <id>   Go back to the prompt Ghostex ships";
+  ghostex visual boosts reset <id>   Go back to the prompt Ghostex ships
+  ghostex visual boosts on | off     Show or hide Boosts in every chat";
 
 fn call(params: Value) -> CliResult<Value> {
     call_gxserver_rpc(crate::boosts::BOOSTS_ENDPOINT, &params, &Flags::default())
@@ -166,7 +167,11 @@ pub(crate) fn boosts_command(args: &[String]) -> CliResult<()> {
         "show" => {
             let id = id()?;
             let answer = call(json!({ "op": "list" }))?;
-            let Some(row) = rows(&answer).into_iter().find(|row| row["id"] == id) else {
+            let Some(row) = rows(&answer)
+                .into_iter()
+                .chain(answer["custom"].as_array().cloned().unwrap_or_default())
+                .find(|row| row["id"] == id)
+            else {
                 return Err(CliError::Other(format!("No Boost is called \"{id}\".")));
             };
             if json_out {
@@ -194,6 +199,7 @@ pub(crate) fn boosts_command(args: &[String]) -> CliResult<()> {
             call(json!({ "op": "set", "id": id, "prompt": prompt }))?
         }
         "reset" => call(json!({ "op": "reset", "id": id()? }))?,
+        "on" | "off" => call(json!({ "op": "setOn", "on": words[0] == "on" }))?,
         other => {
             return Err(CliError::Other(format!(
                 "Unknown boosts command: {other}\n\n{BOOSTS_HELP}"
@@ -207,9 +213,12 @@ pub(crate) fn boosts_command(args: &[String]) -> CliResult<()> {
         );
         return Ok(());
     }
+    if answer["on"] == false {
+        println!("Boosts are off (ghostex visual boosts on shows them again).");
+    }
     for row in rows(&answer) {
         println!(
-            "{:<10} {:<16} {}",
+            "{:<15} {:<20} {}",
             row["id"].as_str().unwrap_or_default(),
             row["label"].as_str().unwrap_or_default(),
             if row["edited"] == true {
@@ -217,6 +226,13 @@ pub(crate) fn boosts_command(args: &[String]) -> CliResult<()> {
             } else {
                 "Ghostex's prompt"
             }
+        );
+    }
+    for row in answer["custom"].as_array().into_iter().flatten() {
+        println!(
+            "{:<15} {:<20} your Boost",
+            row["id"].as_str().unwrap_or_default(),
+            row["label"].as_str().unwrap_or_default(),
         );
     }
     Ok(())

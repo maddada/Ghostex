@@ -463,6 +463,14 @@ pub fn selection_changed(state: &mut ChatState, text: &str, caret: usize) {
     {
         composer.suggestions.dismissed.message = false;
     }
+    if next
+        .as_ref()
+        .map(|trigger| trigger.kind != crate::composer::trigger::TriggerKind::Boost)
+        .unwrap_or(true)
+        || next_start != previous_start
+    {
+        composer.suggestions.dismissed.boost = false;
+    }
     if crate::composer::slash_commands::slash_query(text).is_none() {
         composer.suggestions.dismissed.slash = false;
     }
@@ -515,6 +523,7 @@ fn suggestion_command(state: &mut ChatState, action: &UserAction) -> Vec<Effect>
             SuggestionKind::File => state.composer.suggestions.dismissed.file = true,
             SuggestionKind::Session => state.composer.suggestions.dismissed.session = true,
             SuggestionKind::Message => state.composer.suggestions.dismissed.message = true,
+            SuggestionKind::Boost => state.composer.suggestions.dismissed.boost = true,
         }
         return Vec::new();
     }
@@ -718,6 +727,9 @@ pub(crate) fn apply_recall(state: &mut ChatState, up: bool) -> Vec<Effect> {
                     }),
                     message: trigger.as_ref().is_some_and(|trigger| {
                         trigger.kind == crate::composer::trigger::TriggerKind::Message
+                    }),
+                    boost: trigger.as_ref().is_some_and(|trigger| {
+                        trigger.kind == crate::composer::trigger::TriggerKind::Boost
                     }),
                 };
             vec![Effect::SetComposerText {
