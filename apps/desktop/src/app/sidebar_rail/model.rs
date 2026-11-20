@@ -75,7 +75,6 @@ pub(crate) fn sidebar_rail_pins() -> Vec<&'static str> {
 pub(crate) fn rail_item_icon(key: &str) -> &'static str {
     match key {
         "search" => "titlebar/search.svg",
-        "notifications" => "titlebar/bell.svg",
         "mainHub" => "titlebar/ghostex-flower.svg",
         "agentsHub" => "titlebar/users-group.svg",
         "allAutomations" => "titlebar/clock.svg",
@@ -84,13 +83,6 @@ pub(crate) fn rail_item_icon(key: &str) -> &'static str {
         "claude" => "agent-icons/claude.svg",
         "grok" => "agent-icons/grok-build.svg",
         "voiceCall" => "titlebar/headset.svg",
-        "files" => "titlebar/folder.svg",
-        "changes" => "titlebar/file-diff.svg",
-        "browser" => "titlebar/browser.svg",
-        "projectBoard" => "titlebar/layout-board-split.svg",
-        "devServers" => "titlebar/world.svg",
-        "resources" => "titlebar/device-desktop.svg",
-        "extensions" => "titlebar/puzzle.svg",
         "connectPhone" => "titlebar/devices.svg",
         "settings" => "titlebar/settings.svg",
         _ => "titlebar/dots.svg",
@@ -108,11 +100,10 @@ pub(crate) fn rail_item_icon_size(key: &str) -> f32 {
     }
 }
 
-/// A count or a dot on an icon. The web build's items carry none.
+/// A dot on an icon (Main Hub's). The web build's items carry none.
 #[cfg_attr(ghostex_web, allow(dead_code))]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum RailBadge {
-    Count(usize, Hsla),
     Dot(Hsla),
 }
 

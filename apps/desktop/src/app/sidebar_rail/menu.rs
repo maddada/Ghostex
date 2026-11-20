@@ -2,7 +2,7 @@
 //! The menu is the sidebar's context menu (native_sidebar/menus.rs), so it looks and behaves like
 //! every other menu and works in the web build too.
 
-use gpui::{Bounds, Pixels, Point, Window, point, px};
+use gpui::{Bounds, Pixels, Point, Window};
 use serde_json::{Value, json};
 
 use ghostex_gx_core::sidebar_rail::{
@@ -130,10 +130,14 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let menu = self.sidebar_rail_more_menu(cx);
-        let at = bounds.map_or(pointer, |bounds| {
-            point(bounds.right() + px(4.0 * scale), bounds.top())
-        });
-        Self::show_native_sidebar_menu(&menu, at, scale, window, cx);
+        // CDXC:Sidebar 2026-11-21 DECISION:
+        // User: "Open the ⋯ menu right next to the rail (a small gap like other popovers), not
+        // about 40px away." It opened as a right-click's menu does, centred across the sidebar,
+        // so it hangs beside ⋯ now, the sidebar menus' 3pt from it, its first row level with it.
+        match bounds {
+            Some(button) => self.show_native_sidebar_menu_beside(&menu, button, scale, window, cx),
+            None => Self::show_native_sidebar_menu(&menu, pointer, scale, window, cx),
+        }
     }
 
     /// A rail menu row's command. Returns whether it was one.

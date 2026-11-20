@@ -158,6 +158,12 @@ impl GhostexPaths {
         self.state_dir.join("sidebar-rail-bell-unpinned")
     }
 
+    /// Written once the side panel views and Notifications have been taken off the rail's saved
+    /// pins, when they left the rail (`migrate_sidebar_rail_views_once` in the desktop app).
+    pub fn sidebar_rail_views_marker_file(&self) -> PathBuf {
+        self.state_dir.join("sidebar-rail-views-unpinned")
+    }
+
     pub fn hub_secret_folders_marker_file(&self) -> PathBuf {
         self.state_dir.join("hub-secret-folders-added")
     }

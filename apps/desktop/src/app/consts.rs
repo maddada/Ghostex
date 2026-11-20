@@ -184,8 +184,16 @@ pub(crate) const WINDOW_CONTROLS_LEADING_RESERVE: f32 = 88.0;
 /// Superseded in part by CDXC:Titlebar 2026-11-07 DECISION in helpers/work_area_frame.rs: on macOS this is the docked x outside full screen; with the
 /// sidebar hidden and in full screen the button takes the edge strip's x, as off macOS
 /// (`sidebar_toggle_leading_x`).
+///
+/// CDXC:Titlebar 2026-11-21 DECISION:
+/// User: "macOS only, in every state (docked, collapsed header, floating, Rail and Classic): move
+/// the toggle sidebar button 10px left, closer to the traffic lights. Windows/Linux unchanged." The
+/// button sits 10pt nearer the green light than the 88pt reserve put it; every row that clears the
+/// lights for it (the docked top row, the header while the window keeps its lights, the floating
+/// sidebar's row that carries them) reads this one value. Supersedes, for the toggle, the
+/// 2026-10-11 9pt move away from the green light. The kanban window keeps the full reserve.
 #[cfg(target_os = "macos")]
-pub(crate) const SIDEBAR_TOGGLE_LEADING_X: f32 = WINDOW_CONTROLS_LEADING_RESERVE;
+pub(crate) const SIDEBAR_TOGGLE_LEADING_X: f32 = WINDOW_CONTROLS_LEADING_RESERVE - 10.0;
 
 #[cfg(not(target_os = "macos"))]
 pub(crate) const SIDEBAR_TOGGLE_LEADING_X: f32 =

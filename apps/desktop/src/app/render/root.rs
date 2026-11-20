@@ -277,6 +277,8 @@ impl Render for GhostexGpuiApp {
         let rail = self
             .sidebar_rail_shown()
             .then(|| self.render_sidebar_rail(window, cx));
+        let card_left_gutter = self
+            .work_area_frame_left_gutter(sidebar_frame.animating || sidebar_chrome_visible);
         // Read before the header and the floating sidebar lay out from `window_controls_shown`.
         self.main_window_fullscreen = window.is_fullscreen();
         #[cfg(target_os = "macos")]
@@ -1496,7 +1498,9 @@ impl Render for GhostexGpuiApp {
                     })
                     // Under glass the frame's gutter is a ring the card sits in, painted before it.
                     .when(window_glass_active(), |this| {
-                        this.child(crate::app::element::work_area_frame_glass_gutter())
+                        this.child(crate::app::element::work_area_frame_glass_gutter(
+                            card_left_gutter == 0.0,
+                        ))
                     })
                     .map(|row| {
                         /*
@@ -1529,14 +1533,9 @@ impl Render for GhostexGpuiApp {
                             .child(self.render_workarea_header(window, cx));
                         // The gutter between the card and the window: the body row holds the top one,
                         // this wrapper the others, the divider's 1pt counting toward it beside the
-                        // sidebar.
+                        // sidebar, and none beside the rail (`work_area_frame_left_gutter`).
                         let margin = px(WORK_AREA_FRAME_MARGIN);
-                        let sidebar_in_row = sidebar_frame.animating || sidebar_chrome_visible;
-                        let left = if sidebar_in_row {
-                            margin - px(SIDEBAR_DIVIDER_WIDTH)
-                        } else {
-                            margin
-                        };
+                        let left = px(card_left_gutter);
                         let card = column
                             .border(px(WORK_AREA_FRAME_BORDER))
                             .border_color(work_area_frame_border_color())

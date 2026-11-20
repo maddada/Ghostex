@@ -169,10 +169,12 @@ fn add_rounded_rect(path: &mut PathBuilder, bounds: Bounds<Pixels>, radius: Pixe
 
 /// CDXC:Workarea 2026-11-05 WHY:
 /// Under window glass the sidebar and the work area each tint the blurred desktop themselves and nothing tints the window beneath them (CDXC:Theming 2026-09-23 on `SIDEBAR_GLASS_PERCENT_DARK`), so the gutter cannot be a fill under the card: the card's own tint would stack on it. The gutter is the sidebar's tint painted as a ring around the card, from the sidebar's edge to the window's, with the card's rounded shape left out. Must come before the card in the body row.
-pub(crate) fn work_area_frame_glass_gutter() -> impl IntoElement {
+/// `card_beside_rail`: the card starts at the rail's right edge (`work_area_frame_left_gutter`), so
+/// no gutter lies left of it and the rail tints its own column.
+pub(crate) fn work_area_frame_glass_gutter(card_beside_rail: bool) -> impl IntoElement {
     canvas(
         |_, _, _| {},
-        |bounds, _, window, _cx| {
+        move |bounds, _, window, _cx| {
             if !window_glass_active() {
                 return;
             }
@@ -182,7 +184,11 @@ pub(crate) fn work_area_frame_glass_gutter() -> impl IntoElement {
             // The gutter: the strip above the sidebar and the card, then everything right of the
             // sidebar down to the window's bottom edge.
             let margin = px(WORK_AREA_FRAME_MARGIN);
-            let side = card.left() - margin;
+            let side = if card_beside_rail {
+                card.left()
+            } else {
+                card.left() - margin
+            };
             let strip = bounds.top() + margin;
             let mut ring = PathBuilder::fill()
                 .with_style(gpui::PathStyle::Fill(gpui::FillOptions::even_odd()));

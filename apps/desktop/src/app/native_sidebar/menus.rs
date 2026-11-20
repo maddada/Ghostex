@@ -167,6 +167,37 @@ impl GhostexGpuiApp {
         );
     }
 
+    /// The sidebar's menu hung beside `button`, `SIDEBAR_MENU_OWNER_GAP` to its right with its first
+    /// row level with it (left of it without room on the right), where submenus may go
+    /// (`native_sidebar_submenu_room`); where it fits on neither side it opens as a right-click's
+    /// does. The rail's ⋯ menu (app/sidebar_rail/menu.rs).
+    pub(crate) fn show_native_sidebar_menu_beside(
+        &self,
+        items: &Value,
+        button: Bounds<Pixels>,
+        scale: f32,
+        window: &mut Window,
+        cx: &mut gpui::App,
+    ) {
+        let placement = SidebarMenuPlacement::Beside {
+            parent: button,
+            row: button,
+            room: self.native_sidebar_submenu_room(window),
+            gap: px(SIDEBAR_MENU_OWNER_GAP * scale),
+        };
+        Self::open_native_sidebar_menu(
+            items,
+            Point::new(button.left(), button.bottom()),
+            placement,
+            None,
+            None,
+            scale,
+            None,
+            window,
+            cx,
+        );
+    }
+
     /// The sidebar's menu (same rows, frosted host and dismissal) hung from a button outside the
     /// sidebar: `region` is the area it must stay inside (the Beads view's side panel menus).
     pub(crate) fn show_native_menu_in_region(
@@ -1609,6 +1640,15 @@ impl GhostexGpuiApp {
                         // A button that takes two clicks stands down as the pointer leaves, and
                         // shows while the pointer is on its row.
                         .when(row_menu && !confirm, |row| row.group(MENU_ROW_GROUP))
+                        // CDXC:Sidebar 2026-11-21 WHY:
+                        // User: hovering a rail ⋯ row should show an outline pin at its right; the
+                        // click target worked but the icon stayed invisible, because its row was no
+                        // hover group (only rows with a row menu or a two-click button were), so
+                        // the button's group hover never fired. A hover-only button's row is one.
+                        .when(
+                            item["secondary"]["hoverOnly"] == true && !row_menu && !confirm,
+                            |row| row.group(MENU_ROW_GROUP),
+                        )
                         .when(confirm, |row| {
                             row.group(MENU_ROW_GROUP).on_hover(cx.listener(
                                 move |app, hovered: &bool, _, cx| {

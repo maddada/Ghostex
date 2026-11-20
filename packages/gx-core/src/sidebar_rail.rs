@@ -29,12 +29,14 @@ const fn item(key: &'static str, label: &'static str, group: &'static str) -> Ra
 }
 
 /// The ⋯ menu's groups, in order.
-pub const RAIL_MENU_GROUPS: [&str; 4] = ["Go to", "Agents", "Views", "This computer"];
+pub const RAIL_MENU_GROUPS: [&str; 3] = ["Go to", "Agents", "This computer"];
 
 /// Every item, in ⋯ menu order.
+///
+/// CDXC:Sidebar 2026-11-21 DECISION:
+/// User: views on the rail "don't make sense", "even when I have a view open in the side panel, don't show it in the left-side rail"; the rail is for agents and hubs (Hermes, the Claude and Grok bots, Voice Call, All Automations, Main Hub, Agents Hub, Search). So the side panel views (Files, Changes, Browser, Project Board, Dev servers, Resources, Extensions) are no rail items: never an icon, not even while open, never a pin, and no Views group in ⋯ (coordinator's call; they stay in the side panel and their usual buttons). Notifications left too: the bell is in the sidebar's top bar. Saved pins of theirs are not read, and the desktop drops them from the settings file once (`drop_retired_rail_pins` in packages/settings-catalog). Supersedes the Views group and the Notifications row of the 2026-11-20 rail.
 pub const RAIL_ITEMS: &[RailItem] = &[
     item("search", "Search", "Go to"),
-    item("notifications", "Notifications", "Go to"),
     item("mainHub", "Main Hub", "Go to"),
     item("agentsHub", "Agents Hub", "Go to"),
     item("allAutomations", "All Automations", "Go to"),
@@ -43,13 +45,6 @@ pub const RAIL_ITEMS: &[RailItem] = &[
     item("claude", "Claude", "Agents"),
     item("grok", "Grok Bot", "Agents"),
     item("voiceCall", "Voice Call", "Agents"),
-    item("files", "Files", "Views"),
-    item("changes", "Changes", "Views"),
-    item("browser", "Browser", "Views"),
-    item("projectBoard", "Project Board", "Views"),
-    item("devServers", "Dev servers", "Views"),
-    item("resources", "Resources", "Views"),
-    item("extensions", "Extensions", "Views"),
     item("connectPhone", "Connect a Phone", "This computer"),
     item("settings", "Settings", "This computer"),
 ];

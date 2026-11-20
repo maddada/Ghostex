@@ -315,21 +315,17 @@ impl GhostexGpuiApp {
         // bar. Same when the sidebar is hidden (the header's copy)." So with the rail on too, Toggle
         // sidebar holds the corner and the bell sits before the menu, as in Classic. This supersedes
         // the same day's Q4318 B (the bell in the corner, Toggle sidebar at the rail's foot).
-        let toggle_here = owns_window_corner;
         let corner_toggle_x = owns_window_corner.then(|| {
             (crate::app::helpers::sidebar_toggle_leading_x(self.window_controls_reserved())
                 - self.sidebar_rail_width())
             .max(5.0 * scale)
         });
         // The floating sidebar's top row while the panel carries the traffic lights at its start
-        // (`floating_sidebar_lights_row`). Its buttons stay right-aligned as they are; the row keeps
-        // the lights clear by the docked row's reserve, so a narrow or zoomed sidebar narrows its
-        // buttons instead of sliding them under the green light, and it holds the lights' centre
-        // line (`lights_row_top_padding`).
+        // (`floating_sidebar_lights_row`). It holds the lights' centre line
+        // (`lights_row_top_padding`).
         let lights_row = (!owns_window_corner)
             .then(|| self.floating_sidebar_lights_row())
             .flatten();
-        let lights_reserve = lights_row.map(|(reserve, _)| reserve);
         // On macOS the hidden sidebar's top row is the floating panel's, which runs from the
         // window's top with or without the lights (full screen has none): it centres its buttons on
         // the lights' line with as much room under them as above, and keeps the lights' inset on
@@ -337,6 +333,21 @@ impl GhostexGpuiApp {
         // keeps its own lights (`floating_sidebar_full_height`), keeps the plain row.
         let floating_row =
             !owns_window_corner && self.sidebar_collapsed && self.floating_sidebar_full_height();
+        // CDXC:Sidebar 2026-11-21 DECISION:
+        // User: "When the sidebar is collapsed and floats out on hover, show the sidebar expand
+        // (toggle) button at the top of the floating sidebar, right of the macOS traffic lights, so
+        // one click docks it." The full-height panel covers the header's own toggle, so its top row
+        // draws Toggle sidebar at the window x the docked row gives it (right after the lights the
+        // panel carries, at the edge strip's x in full screen), less the panel's own left inset
+        // (`floating_reveal_left_inset`, the rail's width included). A panel under the header leaves
+        // the header's toggle in view and keeps none. Supersedes the 2026-11-06 row that only kept
+        // the lights clear.
+        let floating_toggle_x = floating_row.then(|| {
+            (crate::app::helpers::sidebar_toggle_leading_x(lights_row.is_some())
+                - self.floating_reveal_left_inset())
+            .max(5.0 * scale)
+        });
+        let toggle_here = owns_window_corner || floating_toggle_x.is_some();
         let (row_height, top_padding, bottom_padding) =
             if owns_window_corner || lights_row.is_some() || floating_row {
                 let top_padding = match lights_row {
@@ -363,7 +374,9 @@ impl GhostexGpuiApp {
                 0.0 => self.sidebar_width,
                 width => width,
             };
-            let leading = corner_toggle_x.or(lights_reserve).unwrap_or(5.0 * scale);
+            let leading = corner_toggle_x
+                .or(floating_toggle_x)
+                .unwrap_or(5.0 * scale);
             let toggle = if toggle_here {
                 (TITLEBAR_SIDEBAR_COLLAPSE_ICON_SIZE + 2.0 * TITLEBAR_BUTTON_HORIZONTAL_PADDING)
                     * scale
@@ -418,7 +431,7 @@ impl GhostexGpuiApp {
             .when_some(corner_toggle_x, |row, toggle_x| {
                 window_drag_region(row.pl(px(toggle_x)))
             })
-            .when_some(lights_reserve, |row, reserve| row.pl(px(reserve)))
+            .when_some(floating_toggle_x, |row, toggle_x| row.pl(px(toggle_x)))
             .overflow_hidden()
             /*
             CDXC:Sidebar 2026-09-20 DECISION:
@@ -439,8 +452,10 @@ impl GhostexGpuiApp {
             .when(toggle_here, |row| {
                 // The header's copy of this row (Claude's) sits under the traffic lights the
                 // floating sidebar shows, so its toggles draw nothing there meanwhile
-                // (`window_lights_over_header`).
-                let under_lights = self.sidebar_collapsed && self.window_lights_over_header();
+                // (`window_lights_over_header`). The floating sidebar's own row is beside them.
+                let under_lights = owns_window_corner
+                    && self.sidebar_collapsed
+                    && self.window_lights_over_header();
                 // The row's unscaled leading padding puts the button on the header's x, whatever
                 // the zoom; from there it scales like the rest of the row (GitHub #375). The spacer
                 // keeps it left of the row's other buttons, which align right.

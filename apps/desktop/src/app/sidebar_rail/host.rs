@@ -8,29 +8,6 @@ use super::model::{RailBadge, RailItemState};
 use crate::GhostexGpuiApp;
 use crate::app::claude_web::{TakeoverPage, WebPlace};
 use crate::app::native_sidebar::actions::NativeSidebarAction;
-use crate::app::window::GpuiTitlebarPopupKind;
-use crate::*;
-
-/// The side panel view item `key` opens.
-fn rail_view_mode(key: &str) -> Option<TitlebarMode> {
-    match key {
-        "files" => Some(TitlebarMode::Manage),
-        "changes" => Some(TitlebarMode::Changes),
-        "browser" => Some(TitlebarMode::Browser),
-        "projectBoard" => Some(TitlebarMode::Kanban),
-        _ => None,
-    }
-}
-
-/// The sidebar menu's panel item `key` opens (titlebar/menu_panels.rs).
-fn rail_menu_panel(key: &str) -> Option<&'static str> {
-    match key {
-        "devServers" => Some(ghostex_gx_core::MENU_PANEL_DEV_SERVERS),
-        "resources" => Some(ghostex_gx_core::MENU_PANEL_RESOURCES),
-        "extensions" => Some(ghostex_gx_core::MENU_PANEL_EXTENSIONS),
-        _ => None,
-    }
-}
 
 fn rail_web_place(key: &str) -> Option<WebPlace> {
     match key {
@@ -51,37 +28,8 @@ impl GhostexGpuiApp {
             state.showing = self.web_place_on() == Some(place);
             return state;
         }
-        if let Some(mode) = rail_view_mode(key) {
-            state.available = self.titlebar_mode_available(mode);
-            state.showing = self.view_panel_open() && self.active_mode == mode && !self.claude_on();
-            return state;
-        }
-        if let Some(panel) = rail_menu_panel(key) {
-            state.available = self.sidebar_menu_panel_offered(panel);
-            return state;
-        }
         match key {
             "search" | "commands" | "connectPhone" | "settings" => state.available = true,
-            "notifications" => {
-                state.available = self.titlebar_notification_bell_visible();
-                state.showing = self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::Notifications);
-                let feed = &self.notification_feed_state;
-                if feed.unread_count > 0 {
-                    let light = chrome_uses_light_appearance();
-                    let unread = || feed.items.iter().filter(|item| !item.read);
-                    let color = if unread().any(|item| item.awaiting_approval) {
-                        gpui::rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into()
-                    } else if unread().any(|item| item.kind.urgent()) {
-                        gpui::rgb(crate::notification_feed::notification_urgent_color(light)).into()
-                    } else {
-                        gpui::rgb(crate::notification_feed::notification_attention_color(
-                            light,
-                        ))
-                        .into()
-                    };
-                    state.badge = Some(RailBadge::Count(feed.unread_count, color));
-                }
-            }
             "mainHub" => {
                 let chief = snapshot
                     .and_then(|snapshot| snapshot.chiefs.iter().find(|chief| chief.is_local));
@@ -130,18 +78,6 @@ impl GhostexGpuiApp {
             self.toggle_web_place(place, window, cx);
             return;
         }
-        if let Some(mode) = rail_view_mode(key) {
-            if self.view_panel_open() && self.active_mode == mode && !self.claude_on() {
-                self.close_view_panel(cx);
-            } else {
-                self.set_active_mode(mode, window, cx);
-            }
-            return;
-        }
-        if let Some(panel) = rail_menu_panel(key) {
-            self.open_sidebar_menu_panel(panel, window, cx);
-            return;
-        }
         let sidebar_action = |action: &str| json!({"type": "sidebarAction", "action": action});
         match key {
             "search" => self.dispatch_native_sidebar_ui(sidebar_action("sessions"), cx),
@@ -149,9 +85,6 @@ impl GhostexGpuiApp {
                 .dispatch_native_sidebar_ui(sidebar_action(ghostex_gx_core::COMMANDS_ACTION), cx),
             "connectPhone" => self.dispatch_native_sidebar_ui(sidebar_action("remoteSetup"), cx),
             "settings" => self.dispatch_native_sidebar_ui(sidebar_action("settings"), cx),
-            // The feed hangs beside the rail's bell when that was clicked, else beside the bell in
-            // the sidebar's top bar or the header, or ⋯ while neither is on screen (render.rs).
-            "notifications" => self.toggle_gpui_titlebar_notifications_popup(window, cx),
             "mainHub" => self.handle_native_sidebar_action(
                 &NativeSidebarAction {
                     command: json!({ "type": "chief", "op": "open" }),

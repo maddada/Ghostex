@@ -67,6 +67,21 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// The work area frame's gutter left of the card: none beside the rail while the sidebar is
+    /// hidden (the card starts at the rail's right edge), the frame's gutter otherwise, less the
+    /// divider's 1pt that counts toward it while the sidebar is in the row.
+    #[cfg(not(ghostex_web))]
+    pub(crate) fn work_area_frame_left_gutter(&self, sidebar_in_row: bool) -> f32 {
+        use crate::app::consts::SIDEBAR_DIVIDER_WIDTH;
+        if sidebar_in_row {
+            WORK_AREA_FRAME_MARGIN - SIDEBAR_DIVIDER_WIDTH
+        } else if self.sidebar_rail_shown() {
+            0.0
+        } else {
+            WORK_AREA_FRAME_MARGIN
+        }
+    }
+
     /// The rail column, left of the sidebar, from the window's top to its bottom.
     pub(crate) fn render_sidebar_rail(
         &mut self,
@@ -107,11 +122,11 @@ impl GhostexGpuiApp {
                 cx,
             ));
         }
-        // An unpinned item opened from ⋯ shows here while its view or page is on screen. Not the
-        // feed: its bell is in the sidebar's top bar or the header (CDXC:Sidebar 2026-11-20 in
-        // native_sidebar/navigation.rs), so it does not need a second one here.
+        // An unpinned item opened from ⋯ shows here while its page is on screen. The side panel
+        // views and the feed are no rail items (CDXC:Sidebar 2026-11-21 on gx-core's `RAIL_ITEMS`),
+        // so an open view never shows here.
         let temporary = RAIL_ITEMS.iter().find(|item| {
-            item.key != "notifications" && !pins.contains(&item.key) && {
+            !pins.contains(&item.key) && {
                 let state = self.sidebar_rail_item_state(item.key, cx);
                 state.available && state.showing
             }
@@ -143,10 +158,13 @@ impl GhostexGpuiApp {
             .items_center()
             .pb(px(8.0))
             .bg(sidebar_chrome_fill(appearance.glass, 180.0))
-            // A hairline on its right edge, so the rail reads as a column of its own beside the
-            // sidebar and beside the work area when the sidebar is hidden.
-            .border_r_1()
-            .border_color(appearance.foreground.opacity(0.06))
+            // CDXC:Sidebar 2026-11-21 DECISION:
+            // User: "No right border on the rail: remove the rail's right-side border line, and
+            // widen the main area's frame 7px to the left into that space (Rail layout; Classic
+            // unchanged)." The rail has no hairline of its own: it shares the sidebar's fill, and
+            // with the sidebar hidden the work area card starts at its right edge, taking the
+            // frame's gutter and the old hairline (`work_area_frame_left_gutter`). Supersedes the
+            // hairline that set the rail apart as a column of its own.
             .child(crate::app::render::window_drag_region::window_drag_region(
                 div()
                     .id("ghostex-gpui-sidebar-rail-top")
@@ -314,12 +332,6 @@ impl GhostexGpuiApp {
         let temporary_border = appearance.muted.opacity(0.55);
         let drop_line = appearance.foreground;
         let bounds = self.sidebar_rail.item_bounds(key);
-        // Opened from a bell pinned here, the feed hangs beside it. Only on its click: the bell in
-        // the sidebar's top bar or the header, painted after the rail, sets the anchor otherwise.
-        let bell_anchor = (key == "notifications")
-            .then(|| self.sidebar_rail_bell_anchor())
-            .flatten();
-        let click_bounds = bounds.clone();
         let button = div()
             .id(gpui::SharedString::from(format!(
                 "ghostex-gpui-sidebar-rail-{key}"
@@ -357,9 +369,6 @@ impl GhostexGpuiApp {
             .when_some(state.badge, |button, badge| button.child(rail_badge(badge)))
             .on_click(cx.listener(move |app, _, window, cx| {
                 cx.stop_propagation();
-                if let (Some(anchor), Some(rect)) = (&bell_anchor, click_bounds.get()) {
-                    anchor.set(Some(rail_popup_anchor(rect)));
-                }
                 app.run_sidebar_rail_item(key, window, cx);
             }))
             // Move and unpin save the pins, which the web build cannot (menu.rs), so it offers
@@ -424,13 +433,9 @@ impl GhostexGpuiApp {
         let bounds = self.sidebar_rail.more_bounds.clone();
         let hover = appearance.hover;
         let drop_line = appearance.foreground;
-        // Without the bell on the rail, the feed (from ⋯ or its hotkey) hangs beside ⋯ unless the
-        // bell in the sidebar's top bar or the header is on screen: they paint after the rail, so
-        // theirs is the anchor then.
-        let bell_on_rail = sidebar_rail_pins().contains(&"notifications");
-        let bell_anchor = (!bell_on_rail)
-            .then(|| self.sidebar_rail_bell_anchor())
-            .flatten();
+        // The feed (from its hotkey) hangs beside ⋯ unless the bell in the sidebar's top bar or
+        // the header is on screen: they paint after the rail, so theirs is the anchor then.
+        let bell_anchor = self.sidebar_rail_bell_anchor();
         div()
             .id("ghostex-gpui-sidebar-rail-more")
             .role(gpui::Role::Button)
@@ -576,27 +581,6 @@ fn rail_dashed_line(color: Hsla) -> AnyElement {
 
 fn rail_badge(badge: RailBadge) -> AnyElement {
     match badge {
-        RailBadge::Count(count, color) => div()
-            .absolute()
-            .top(px(2.0))
-            .right(px(1.0))
-            .min_w(px(14.0))
-            .h(px(14.0))
-            .px(px(3.0))
-            .rounded_full()
-            .bg(color)
-            .flex()
-            .items_center()
-            .justify_center()
-            .text_size(px(9.5))
-            .font_weight(gpui::FontWeight::BOLD)
-            .text_color(gpui::white())
-            .child(if count > 99 {
-                "99+".to_string()
-            } else {
-                count.to_string()
-            })
-            .into_any_element(),
         RailBadge::Dot(color) => div()
             .absolute()
             .right(px(4.0))

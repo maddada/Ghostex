@@ -181,7 +181,11 @@ impl GhostexGpuiApp {
     pub(crate) fn floating_reveal_left_inset(&self) -> f32 {
         // The rail stays at the window's left edge, so a panel floats beside it (app/sidebar_rail/).
         let rail = self.sidebar_rail_width();
-        if self.sidebar_collapsed {
+        if self.sidebar_collapsed && rail > 0.0 {
+            // Beside the rail the work area card starts at the rail's edge with no gutter
+            // (`work_area_frame_left_gutter`), and so does the panel, level with the card.
+            rail
+        } else if self.sidebar_collapsed {
             rail + self
                 .floating_reveal_card_inset(self.floating_reveal_content())
                 .max(FLOATING_REVEAL_LEFT_GAP)

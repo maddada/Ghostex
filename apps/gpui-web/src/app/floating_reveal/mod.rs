@@ -26,6 +26,11 @@ impl crate::GhostexGpuiApp {
         false
     }
 
+    /// The page never floats the sidebar, so nothing sits in from the window's left for one.
+    pub(crate) fn floating_reveal_left_inset(&self) -> f32 {
+        0.0
+    }
+
     /// The page never floats the sidebar, so its top row never shows the lights.
     pub(crate) fn floating_sidebar_lights_row(&self) -> Option<(f32, f32)> {
         None

@@ -359,6 +359,36 @@ pub fn unpin_bell_from_saved_rail_pins(
     pins.len() != before
 }
 
+/// The keys `sidebarRailPins` held for items that are no longer on the rail: the side panel views
+/// and Notifications (gx-core's `RAIL_ITEMS` no longer lists them).
+pub const RETIRED_RAIL_PIN_KEYS: &[&str] = &[
+    "notifications",
+    "files",
+    "changes",
+    "browser",
+    "projectBoard",
+    "devServers",
+    "resources",
+    "extensions",
+];
+
+/// Takes the retired items (`RETIRED_RAIL_PIN_KEYS`) off the rail's saved pins. Returns whether it
+/// changed anything; a file without saved pins, or whose pins lack them, is left alone.
+///
+/// CDXC:Sidebar 2026-11-21 DECISION:
+/// User: views on the rail "don't make sense", "even when I have a view open in the side panel, don't show it in the left-side rail"; the rail is for agents and hubs. The views and Notifications left the rail and its ⋯ menu, so the rail no longer reads them from the pins; the desktop runs this once, behind its own marker file, at start-up (`migrate_sidebar_rail_views_once`), so the settings file stops carrying them too (coordinator: "A one-time cleanup removes view ids from saved rail pins").
+pub fn drop_retired_rail_pins(settings: &mut serde_json::Map<String, serde_json::Value>) -> bool {
+    let Some(serde_json::Value::Array(pins)) = settings.get_mut("sidebarRailPins") else {
+        return false;
+    };
+    let before = pins.len();
+    pins.retain(|pin| {
+        pin.as_str()
+            .is_none_or(|key| !RETIRED_RAIL_PIN_KEYS.contains(&key))
+    });
+    pins.len() != before
+}
+
 /// The look settings whose default changed on 2026-11-20 (the user's own dark look became the
 /// default), each with the default it had before.
 pub const DARK_LOOK_2026_11_20_OLD_DEFAULTS: &[(&str, J)] = &[

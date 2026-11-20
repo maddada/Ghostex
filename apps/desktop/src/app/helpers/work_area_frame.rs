@@ -167,7 +167,7 @@ mod tests {
             reserve + WORK_AREA_FRAME_MARGIN
         );
         #[cfg(target_os = "macos")]
-        assert_eq!(reserve, 88.0);
+        assert_eq!(reserve, 78.0);
         #[cfg(not(target_os = "macos"))]
         assert_eq!(reserve, 10.0);
     }
