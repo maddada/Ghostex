@@ -22,6 +22,7 @@ mod folder_install;
 mod on_tab;
 pub(crate) mod page_tabs;
 mod remembered_form;
+mod remote_machine;
 mod scope_editor;
 mod sections;
 mod view_editor;
@@ -122,6 +123,11 @@ pub(crate) struct ExtensionsTab {
     /// The cards the On tab showed during this visit, so one switched off there stays listed
     /// until the tab is left (on_tab.rs).
     pub(crate) on_tab_kept: HashSet<String>,
+    /// The remote machine the machine picker shows (`None`: this computer), its name, and its
+    /// switches (remote_machine.rs).
+    shown_machine: Option<String>,
+    shown_machine_name: Option<String>,
+    remote: remote_machine::RemoteExtensions,
 }
 
 impl SettingsPage for ExtensionsTab {
@@ -143,6 +149,7 @@ impl ExtensionsTab {
         // The page view outlives a switch to another page, which is when it closes and reopens.
         cx.observe(&store, |page, _, cx| {
             page.sync_active(cx);
+            page.follow_machine(cx);
             cx.notify();
         })
         .detach();
@@ -185,7 +192,11 @@ impl ExtensionsTab {
             preview_applied: false,
             collab_card: Default::default(),
             on_tab_kept: HashSet::new(),
+            shown_machine: None,
+            shown_machine_name: None,
+            remote: Default::default(),
         };
+        page.follow_machine(cx);
         page.request_plugin_status_if_missing(cx);
         page.read_installed_clis(cx);
         page.restore_open_form(cx);
@@ -308,6 +319,12 @@ impl ExtensionsTab {
         self.browser.selected_store = None;
         self.browser.consent = None;
         self.load_browser(cx);
+        super::machine_picker::request_machine_states(&self.store, cx);
+        // Back on the page with a machine picked: read its switches afresh (the first read is
+        // `follow_machine`'s).
+        if self.shown_machine.is_some() && self.remote.status.is_some() {
+            self.load_remote_extensions(cx);
+        }
     }
 
     /// CDXC:Extensions 2026-09-26 DECISION:
@@ -564,9 +581,42 @@ impl Render for ExtensionsTab {
                 store.request().gxserver_rpc_available,
             )
         };
-        let detail_open = has_transport && self.browser.detail_open();
+        let detail_open =
+            has_transport && self.browser.detail_open() && self.shown_machine.is_none();
         self.sync_detail_scroll(detail_open, cx);
         let mut blocks: Vec<PageBlock> = Vec::new();
+        // The machine picker (once a remote machine is saved); with one picked the page is that
+        // computer's own switches alone (remote_machine.rs, CDXC:Extensions 2026-11-21).
+        let picker = if detail_open {
+            None
+        } else {
+            super::machine_picker::render_machine_picker_described(
+                self,
+                &p,
+                &self.store.clone(),
+                |shown| {
+                    match shown {
+                    Some(name) => format!(
+                        "Showing what Ghostex on {name} runs itself: Main Hub, GBots and CLIProxyAPI. Turning one on here turns it on there."
+                    ),
+                    None => "Pick a connected remote machine to turn on Main Hub, GBots or CLIProxyAPI there.".to_string(),
+                }
+                },
+                window,
+                cx,
+            )
+        };
+        if self.shown_machine.is_some() {
+            if let Some(picker) = picker {
+                blocks.push(PageBlock::section("machinePicker", picker));
+            }
+            let section = self.render_remote_section(&p, cx);
+            blocks.push(PageBlock::section("remoteOfficial", section));
+            return settings_page(&self.store, SettingsTabId::Extensions, &p, blocks, cx);
+        }
+        if let Some(picker) = picker {
+            blocks.push(PageBlock::section("machinePicker", picker));
+        }
         if detail_open {
             let detail = self.render_detail(&p, window, cx);
             blocks.push(PageBlock::plain(div().w_full().pt(px(20.0)).child(detail)));

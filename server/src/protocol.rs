@@ -1001,6 +1001,10 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         // `ghostex grokbot` here connects, tests or sends through it (grokbot/). The label alone
         // keeps no phone out: grokbot/api.rs `require_this_computer` checks the caller.
         crate::grokbot::GROKBOT_ENDPOINT => full_local(path),
+        // Settings > Extensions with this computer picked on another computer's app: the label keeps
+        // nobody out (every request reaches the router as a local one), so machine_extensions.rs
+        // checks the caller (CDXC:Extensions 2026-11-21 there).
+        crate::machine_extensions::MACHINE_EXTENSIONS_ENDPOINT => full_local(path),
         "/api/createSecretRequest"
         | "/api/waitSecretRequest"
         | "/api/cancelSecretRequest"

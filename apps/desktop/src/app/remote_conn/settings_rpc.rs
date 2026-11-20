@@ -1,4 +1,4 @@
-//! Settings > Agents (its CLIs and session resume hooks), Settings > Integrations, Settings > Accounts and Settings > Dictation with a remote machine
+//! Settings > Agents (its CLIs and session resume hooks), Settings > Integrations, Settings > Accounts, Settings > Dictation and Settings > Extensions with a remote machine
 //! picked: their gxserver calls go to that machine's gxserver through its tunnel instead of this
 //! computer's.
 //!
@@ -26,6 +26,10 @@ fn allowed_keys(path: &str) -> Option<&'static [&'static str]> {
             "includeDesktopControl",
         ],
         "/api/machineIntegrations" => &["action", "skillName"],
+        // Settings › Extensions with a remote machine picked: that computer's own switches (Main
+        // Hub, GBots, CLIProxyAPI); its gxserver lets only the owner's apps flip them
+        // (server/src/machine_extensions.rs).
+        "/api/machineExtensions" => &["action", "id", "on"],
         // The Session resume hooks card with that machine picked (tabs/agents/remote_hooks.rs).
         "/api/readAgentHookStatus" | "/api/installAgentHooks" | "/api/uninstallAgentHooks" => {
             &["agentIds"]
@@ -127,6 +131,7 @@ pub(crate) fn settings_remote_params(path: &str, params: &Value) -> Option<Value
             Value::String(text) => text.chars().count() <= 200,
             Value::Bool(_) => {
                 matches!(key.as_str(), "fresh" | "includeDesktopControl")
+                    || (path == "/api/machineExtensions" && key == "on")
                     || (accounts && ACCOUNT_SWITCHES.contains(&key.as_str()))
             }
             // Dictate's settings patch; gxserver checks every field and the overall size above
@@ -322,6 +327,29 @@ mod tests {
         assert_eq!(
             settings_remote_params("/api/setVoiceAgentKey", &json!({ "apiKey": "x" })),
             None
+        );
+    }
+
+    #[test]
+    fn extension_switches_cross_with_their_id_and_state_only() {
+        assert_eq!(
+            settings_remote_params(
+                "/api/machineExtensions",
+                &json!({ "action": "set", "id": "chief", "on": true, "patch": { "x": 1 } }),
+            ),
+            Some(json!({ "action": "set", "id": "chief", "on": true }))
+        );
+        // `on` is the only switch that crosses as a boolean.
+        assert_eq!(
+            settings_remote_params(
+                "/api/machineExtensions",
+                &json!({ "action": "set", "id": "chief", "fresh": true }),
+            ),
+            Some(json!({ "action": "set", "id": "chief" }))
+        );
+        assert_eq!(
+            settings_remote_params("/api/machineIntegrations", &json!({ "on": true })),
+            Some(json!({}))
         );
     }
 

@@ -16,6 +16,10 @@
 //! computer goes to the one `GHOSTEX_NATIVE_MODAL_DEMO_LOCAL_ENV` names, and Kubuntu VM's to the one
 //! `GHOSTEX_NATIVE_MODAL_DEMO_REMOTE_ENV` names (each a `cargo xtask test-server` env.sh), through
 //! `ghostex session-chat-rpc agentAccounts`.
+//! `machines-extensions` (Extensions, Kubuntu VM picked) and `machines-extensions-open` (Extensions
+//! on this computer with the picker open) send Kubuntu VM's `/api/machineExtensions` to the real test
+//! gxserver `GHOSTEX_NATIVE_MODAL_DEMO_REMOTE_ENV` names, with its token file, as the app's tunnel
+//! to a connected computer does.
 use serde_json::{Map, Value, json};
 
 pub(super) fn owns(state: &str) -> bool {
@@ -47,6 +51,10 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
             json!({ "initialTab": "dictation", "initialMachineId": "remote-1" })
         }
         "machines-accounts" => json!({ "initialTab": "accounts", "initialMachineId": "remote-1" }),
+        "machines-extensions" => {
+            json!({ "initialTab": "extensions", "initialMachineId": "remote-1" })
+        }
+        "machines-extensions-open" => json!({ "initialTab": "extensions" }),
         "machines-accounts-unreachable" => {
             json!({ "initialTab": "accounts", "initialMachineId": "remote-2" })
         }
@@ -158,6 +166,38 @@ fn linux_rpc(state: &str, path: &str, params: &Value) -> Result<Value, String> {
 }
 
 /// Whether `state` answers Accounts from the test gxservers (see the header).
+pub(super) fn forwards_extensions(state: &str, path: &str) -> bool {
+    state.starts_with("machines-extensions") && path == "/api/machineExtensions"
+}
+
+/// Kubuntu VM's `/api/machineExtensions` on the test gxserver `GHOSTEX_NATIVE_MODAL_DEMO_REMOTE_ENV`
+/// names, posted with its token file (what the app's tunnel to a connected computer carries).
+/// Blocks, so call it off the main thread.
+pub(super) fn forward_extensions(params: &Value) -> Result<Value, String> {
+    let env_var = "GHOSTEX_NATIVE_MODAL_DEMO_REMOTE_ENV";
+    let env_file =
+        std::env::var(env_var).map_err(|_| format!("Set {env_var} to a test server's env.sh."))?;
+    let body = json!({ "protocolVersion": 1, "params": params }).to_string();
+    let output = std::process::Command::new("/bin/sh")
+        .arg("-c")
+        .arg(r#". "$1" && exec curl -s -X POST -H "Authorization: Bearer $(cat "$GHOSTEX_GXSERVER_AUTH_TOKEN_FILE")" -H 'content-type: application/json' --data-binary "$2" "$GHOSTEX_GXSERVER_BASE_URL/api/machineExtensions""#)
+        .arg("sh")
+        .arg(&env_file)
+        .arg(&body)
+        .output()
+        .map_err(|error| error.to_string())?;
+    let answer: Value = serde_json::from_slice(&output.stdout)
+        .map_err(|_| String::from_utf8_lossy(&output.stderr).trim().to_string())?;
+    if answer["ok"] == true {
+        Ok(answer["result"].clone())
+    } else {
+        Err(answer["message"]
+            .as_str()
+            .unwrap_or("The test gxserver refused the request.")
+            .to_string())
+    }
+}
+
 pub(super) fn forwards_accounts(state: &str, path: &str) -> bool {
     state.starts_with("machines-accounts") && path == "/api/agentAccounts"
 }

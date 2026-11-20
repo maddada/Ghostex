@@ -45,6 +45,21 @@ pub(super) async fn route_control_http(
         "/api/draftFeedback" | "/api/sendFeedback" => {
             handle_feedback_http(endpoint.path, request_id, &body_json).await
         }
+        crate::machine_extensions::MACHINE_EXTENSIONS_ENDPOINT => {
+            match crate::domain::read_domain_rpc_params(&body_json) {
+                Err(error) => domain_error_response(endpoint.path, request_id, error),
+                Ok(params) => {
+                    match crate::machine_extensions::dispatch(&state, &caller, &params).await {
+                        Ok(result) => routed_json(
+                            Some(endpoint.path),
+                            StatusCode::OK,
+                            rpc_success(request_id, result),
+                        ),
+                        Err(error) => domain_error_response(endpoint.path, request_id, error),
+                    }
+                }
+            }
+        }
         crate::chief::CHIEF_ENDPOINT => {
             crate::chief::handle_chief_http(&state, &caller, endpoint.path, request_id, &body_json)
                 .await
