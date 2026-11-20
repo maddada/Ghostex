@@ -599,3 +599,34 @@ mod dark_look_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod sidebar_layout_tests {
+    use super::keep_classic_sidebar_for_existing_settings;
+    use serde_json::{json, Map, Value};
+
+    fn settings(value: Value) -> Map<String, Value> {
+        serde_json::from_value(value).unwrap()
+    }
+
+    /// A file that never chose a layout keeps Classic and queues Meet the rail, once.
+    #[test]
+    fn a_file_without_a_layout_keeps_classic_and_queues_the_intro() {
+        let mut object = settings(json!({"sidebarWidth": 320}));
+        assert!(keep_classic_sidebar_for_existing_settings(&mut object));
+        assert_eq!(object.get("sidebarLayout"), Some(&json!("classic")));
+        assert_eq!(object.get("sidebarRailIntro"), Some(&json!("pending")));
+        assert!(!keep_classic_sidebar_for_existing_settings(&mut object));
+    }
+
+    /// A saved choice, either one, is left alone and gets no intro.
+    #[test]
+    fn a_saved_layout_is_kept() {
+        for layout in ["rail", "classic"] {
+            let mut object = settings(json!({"sidebarLayout": layout}));
+            assert!(!keep_classic_sidebar_for_existing_settings(&mut object));
+            assert_eq!(object.get("sidebarLayout"), Some(&json!(layout)));
+            assert_eq!(object.get("sidebarRailIntro"), None);
+        }
+    }
+}
