@@ -225,6 +225,8 @@ impl GhostexGpuiApp {
             }
         };
         let click_menu = open_menu.clone();
+        let a11y_menu = open_menu.clone();
+        let rail = cx.entity().downgrade();
         Some(
             div()
                 .id("ghostex-gpui-sidebar-rail-workspace")
@@ -258,6 +260,16 @@ impl GhostexGpuiApp {
                         cx.stop_propagation();
                         open_menu(app, event.position, window, cx);
                     }),
+                )
+                // The right-click menu for VoiceOver and automation (AXShowMenu), hung where a
+                // right click hangs it (CDXC:Workspaces 2026-11-20 in native_sidebar/workspace_tile.rs).
+                .on_a11y_action(
+                    gpui::AccessibleAction::ShowContextMenu,
+                    move |_, window, cx| {
+                        let _ = rail.update(cx, |app, cx| {
+                            a11y_menu(app, gpui::point(px(0.0), px(0.0)), window, cx)
+                        });
+                    },
                 )
                 .managed_tooltip_with_placement(
                     ManagedTooltipPlacement::Right,
