@@ -523,6 +523,18 @@ pub fn picker_choices(state: &BoostsState) -> Vec<(String, String, String)> {
         .collect()
 }
 
+/// The name of the menu tab a Boost sits in (`Show`, `Do`, `Work`), `Custom` for the user's own:
+/// the `*` list's section labels.
+pub fn tab_label_of(id: &str) -> &'static str {
+    let category = BOOSTS
+        .iter()
+        .find(|boost| boost.id == id)
+        .map_or("custom", |boost| boost.category);
+    TABS.iter()
+        .find(|(tab, _)| *tab == category)
+        .map_or("Custom", |(_, label)| *label)
+}
+
 /// The Boosts whose name has a word starting with `query` (any case), in the menu's order; every
 /// one for an empty query.
 pub fn filter_choices<'a>(

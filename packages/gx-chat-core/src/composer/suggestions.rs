@@ -638,9 +638,8 @@ pub fn suggestion_popup(
         SuggestionKind::Slash => sections(&slash, sources),
         SuggestionKind::Skill => sections(&skill_rows, sources),
         SuggestionKind::Session => session_sections(&matches.session_matches),
-        SuggestionKind::File | SuggestionKind::Message | SuggestionKind::Boost => {
-            (None, Vec::new())
-        }
+        SuggestionKind::Boost => boost_sections(&matches.boost_matches),
+        SuggestionKind::File | SuggestionKind::Message => (None, Vec::new()),
     };
     let row_label = |row: &SlashRow| match row {
         SlashRow::Skill(skill) => (format!("/{}", skill.name), skill_detail(skill)),
@@ -726,7 +725,9 @@ pub fn suggestion_popup(
                 section_heading.unwrap_or_else(|| SESSION_SUGGESTION_HEADING.to_string())
             }
             SuggestionKind::Message => MESSAGE_SUGGESTION_HEADING.to_string(),
-            SuggestionKind::Boost => BOOST_SUGGESTION_HEADING.to_string(),
+            SuggestionKind::Boost => section_heading
+                .map(|tab| format!("{BOOST_SUGGESTION_HEADING} \u{b7} {tab}"))
+                .unwrap_or_else(|| BOOST_SUGGESTION_HEADING.to_string()),
         },
         status: match kind {
             SuggestionKind::Skill => {
@@ -763,6 +764,31 @@ pub fn suggestion_popup(
             | SuggestionKind::Boost => false,
         },
     })
+}
+
+/// The `*` list's first tab (named in its heading, "Boosts · Show") and the tab label each later
+/// tab's first row carries (Do, Work, Custom), the list being in the menu's order.
+/// CDXC:Boosts 2026-11-20 DECISION: User: "in the * picker show the Boosts grouped with small
+/// section labels between the types (Show, Do, Work, Custom)", the same labels as the menu's tabs.
+fn boost_sections(choices: &[(String, String, String)]) -> (Option<String>, Vec<Option<String>>) {
+    let mut first = None;
+    let mut previous: Option<&str> = None;
+    let mut out = Vec::with_capacity(choices.len());
+    for (id, _, _) in choices {
+        let tab = crate::extras::boosts::tab_label_of(id);
+        if previous == Some(tab) {
+            out.push(None);
+            continue;
+        }
+        if first.is_none() {
+            first = Some(tab.to_string());
+            out.push(None);
+        } else {
+            out.push(Some(tab.to_string()));
+        }
+        previous = Some(tab);
+    }
+    (first, out)
 }
 
 /// The `+` list's heading (its first row's section) and the heading each later section's first row
