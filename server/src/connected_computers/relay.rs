@@ -141,7 +141,20 @@ pub(crate) async fn relay(
     // computer passes it on as it came (session_chat_send/sender_mark.rs). One of the user's own
     // callers' messages leaves marked as the user's (`userSend`), so the other computer records it
     // as theirs (quotes of earlier messages, chat_message_numbers.rs); nobody else's carries it.
-    let bytes = if crate::session_chat_send::sender_mark::MESSAGE_ROUTES.contains(&forwarded) {
+    let bytes = if forwarded == crate::session_chat_send::HELD_WITH_NEXT_ENDPOINT {
+        // Who lists or withdraws a held note there is the session calling here, or no session.
+        match stamped_sender(caller, &bytes) {
+            Ok(stamped) => stamped.into(),
+            Err(message) => {
+                return refusal(
+                    StatusCode::BAD_REQUEST,
+                    "badRequest",
+                    message.to_string(),
+                    request_id,
+                )
+            }
+        }
+    } else if crate::session_chat_send::sender_mark::MESSAGE_ROUTES.contains(&forwarded) {
         match marked_message_body(paths, server_id_here, server_id, caller, &bytes) {
             Ok(marked) => marked.into(),
             Err(message) => {
@@ -350,6 +363,7 @@ pub(crate) fn marked_message_body(
         .and_then(|params| params.as_object_mut())
         .ok_or(NOT_A_MESSAGE)?;
     crate::session_chat_send::sender_mark::mark_relayed_send(caller, params);
+    stamp_sender(caller, params);
     // `--as-user --computer`: the other computer drops `via`, so the label and the security log
     // entry are written here, as for a chat on this computer (Fable's review of 809e881f4).
     let via = params
@@ -376,6 +390,38 @@ pub(crate) fn marked_message_body(
         );
     }
     serde_json::to_vec(&body).map_err(|_| NOT_A_MESSAGE)
+}
+
+/// Names the calling session as the sender (`senderProjectId`, `senderSessionId`) and drops any
+/// the request carried: the other computer takes a held note's sender from these
+/// (session_chat_send/with_next.rs `HeldSender`), so only the relay may say them.
+///
+/// CDXC:Security 2026-11-20 WHY (Fable's re-review of #677): an agent here could claim another
+/// session here and withdraw its held notes there, or have its "Not delivered" go to that session.
+fn stamp_sender(caller: &Principal, params: &mut serde_json::Map<String, serde_json::Value>) {
+    params.remove("senderProjectId");
+    params.remove("senderSessionId");
+    if let Principal::Session {
+        project_id,
+        session_id,
+        ..
+    } = caller
+    {
+        params.insert("senderProjectId".to_string(), json!(project_id));
+        params.insert("senderSessionId".to_string(), json!(session_id));
+    }
+}
+
+/// [`stamp_sender`] on a request that is not a message (`/api/heldWithNext`).
+fn stamped_sender(caller: &Principal, bytes: &[u8]) -> Result<Vec<u8>, &'static str> {
+    const NOT_A_REQUEST: &str = "A request must be a JSON object with an object `params`.";
+    let mut body: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| NOT_A_REQUEST)?;
+    let params = body
+        .get_mut("params")
+        .and_then(|params| params.as_object_mut())
+        .ok_or(NOT_A_REQUEST)?;
+    stamp_sender(caller, params);
+    serde_json::to_vec(&body).map_err(|_| NOT_A_REQUEST)
 }
 
 pub(crate) fn refusal(
