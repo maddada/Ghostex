@@ -60,9 +60,11 @@ to and the threads have nobody to report to.
   platforms) on dangerous work: security or approvals, a release or anything published to users, a
   data migration or deletion, a phone app build.
 - When the brief has the thread drive an app or a browser (cua-driver, the embedded browser,
-  Playwright or headless Chrome, a test server's web build), ask it to save screenshots of the key
-  moments under `~/.local/share/ghostex/i/` and link them in its report. Never ask for them when
-  the thread does no GUI work.
+  Playwright or headless Chrome, a test server's web build), ask it to save a screenshot of every
+  state of the UI as it changes (before, each step, after) under `~/.local/share/ghostex/i/` and
+  link them in its report. Never tiny: at least 1650x962 points, so size the window or viewport
+  first (`--window-size=1650,962` or larger, cua-driver `set_window_frame`). Never ask for them
+  when the thread does no GUI work.
 - One task per message. A thread reports only by ending its turn, so when you send several, say
   "finish all, then report" or "report after the first and wait for me".
 - Ghostex adds the goal, standing instructions and reporting rules, and the thread reads the
