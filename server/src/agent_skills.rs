@@ -1178,8 +1178,25 @@ pub const RETIRED_GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
 /// `#` lines naming the file each group belongs to.
 const RETIRED_FOR_CLI_HELP_SHIPPED_SHA256: &str = include_str!("agent_skills_retired_sha256.txt");
 
-/// Folders a retired skill shipped besides SKILL.md and agents/ (see the 2026-11-20 decision).
-const RETIRED_SKILL_SHIPPED_FOLDERS: &[&str] = &["references", "examples"];
+/// Files a retired skill shipped besides SKILL.md and agents/ (see the 2026-11-20 decision): the
+/// skill, its folder and every name that folder ever held. Any other file there is the user's.
+///
+/// CDXC:AgentSkills 2026-11-20 WHY: Opus review, finding 6: accepting any file in those folders
+/// would delete a note the user added inside one; the repository history has only these names.
+const RETIRED_SKILL_SHIPPED_FOLDERS: &[(&str, &str, &[&str])] = &[
+    (
+        "ghostex-help",
+        "references",
+        &[
+            "features.md",
+            "hotkeys.md",
+            "overview.md",
+            "settings.md",
+            "settings-catalog.json",
+        ],
+    ),
+    ("ghostex-visuals", "examples", &["plan-review.html"]),
+];
 
 /// sha256 of every SKILL.md / agents/openai.yaml revision the retired skills
 /// ever shipped with (collected from the repository history at removal time).
@@ -1270,11 +1287,8 @@ fn retired_skill_dir_is_unmodified_shipped_copy(skill_dir: &Path) -> bool {
             }
         } else if name == ".DS_Store" {
             continue;
-        } else if RETIRED_SKILL_SHIPPED_FOLDERS
-            .iter()
-            .any(|folder| name == *folder)
-            && entry.file_type().is_ok_and(|kind| kind.is_dir())
-            && saw_only_files(&entry.path())
+        } else if entry.file_type().is_ok_and(|kind| kind.is_dir())
+            && holds_only_shipped_files(skill_dir, &name, &entry.path())
         {
             continue;
         } else {
@@ -1284,12 +1298,25 @@ fn retired_skill_dir_is_unmodified_shipped_copy(skill_dir: &Path) -> bool {
     saw_skill_md
 }
 
-/// True when `dir` holds only plain files (no folders, no links).
-fn saw_only_files(dir: &Path) -> bool {
+/// True when `dir`, the folder `folder` of the retired skill at `skill_dir`, holds only plain files
+/// that skill shipped there ([`RETIRED_SKILL_SHIPPED_FOLDERS`]).
+fn holds_only_shipped_files(skill_dir: &Path, folder: &std::ffi::OsStr, dir: &Path) -> bool {
+    let skill = skill_dir
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let Some((_, _, shipped)) = RETIRED_SKILL_SHIPPED_FOLDERS
+        .iter()
+        .find(|(name, shipped_folder, _)| *name == skill && folder == *shipped_folder)
+    else {
+        return false;
+    };
     fs::read_dir(dir).is_ok_and(|entries| {
-        entries
-            .flatten()
-            .all(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
+        entries.flatten().all(|entry| {
+            entry.file_name() == ".DS_Store"
+                || (entry.file_type().is_ok_and(|kind| kind.is_file())
+                    && shipped.iter().any(|name| entry.file_name() == *name))
+        })
     })
 }
 
