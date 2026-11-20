@@ -333,6 +333,9 @@ fn main() {
     // Frame the work area is on for a new install; an existing settings file keeps it off.
     // Before the first settings read, so a new install (no file yet) is told from an existing one.
     shared_settings::work_area_frame_default::migrate_work_area_frame_default_once();
+    // The rail is the default for a new install; an existing settings file keeps Classic and gets
+    // the one-time Meet the rail intro (shared_settings/sidebar_rail_default.rs).
+    shared_settings::sidebar_rail_default::migrate_sidebar_rail_default_once();
     // The 2026-11-20 dark look is the default for a new install; an existing, set-up settings file
     // keeps the old look (shared_settings/dark_look_default.rs). Before the first settings read too.
     shared_settings::dark_look_default::keep_old_dark_look_once();

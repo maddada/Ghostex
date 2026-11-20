@@ -149,6 +149,12 @@ impl GhostexPaths {
         self.state_dir.join("dark-look-default-migrated")
     }
 
+    /// Written once the rail's on-by-default change has run over an existing settings file
+    /// (`migrate_sidebar_rail_default_once` in the desktop app).
+    pub fn sidebar_rail_default_marker_file(&self) -> PathBuf {
+        self.state_dir.join("sidebar-rail-default-migrated")
+    }
+
     pub fn hub_secret_folders_marker_file(&self) -> PathBuf {
         self.state_dir.join("hub-secret-folders-added")
     }

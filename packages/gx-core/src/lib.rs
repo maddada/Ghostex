@@ -59,6 +59,7 @@ mod sidebar_actions;
 mod sidebar_command_run;
 mod sidebar_drag;
 mod sidebar_menu;
+pub mod sidebar_rail;
 mod sidebar_ui;
 mod sidebar_view;
 pub mod test_files;

@@ -43,6 +43,7 @@ pub(crate) mod ghostty_config_values;
 pub(crate) mod hub_secret_folders;
 pub(crate) mod normalize;
 pub(crate) mod service;
+pub(crate) mod sidebar_rail_default;
 pub(crate) mod snapshot;
 pub(crate) mod terminal_layout;
 pub(crate) mod types;
