@@ -293,20 +293,31 @@ impl NativeChatView {
         }
     }
 
-    /// The menu's content height (unscaled): the tabs, the open tab's rows with their full
+    /// The menu's content height (unscaled): the tabs, the tallest tab's rows with their full
     /// descriptions, and Edit Boosts.
+    /// CDXC:Boosts 2026-11-20 DECISION: User: switching between Show, Do and Work "changes the
+    /// menu's height so the tabs jump"; the menu keeps one height, its tallest tab's, so the tabs
+    /// (at the top of a menu that opens upward from the pill) stay where they are.
     pub(super) fn boost_menu_height(&self) -> Option<f32> {
-        self.boosts()?;
-        let rows: f32 = self
-            .boost_tab_rows()
-            .iter()
-            .map(|row| {
-                ROW_PAD_Y * 2.0
-                    + LABEL_LINE
-                    + detail_lines(&text(row, "description")) * DETAIL_LINE
-                    + 2.0
+        let boosts = self.boosts()?;
+        let list = boosts["list"].as_array().cloned().unwrap_or_default();
+        let rows = boosts["tabs"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|tab| {
+                let tab = text(tab, "id");
+                list.iter()
+                    .filter(|row| row["category"] == tab.as_str())
+                    .map(|row| {
+                        ROW_PAD_Y * 2.0
+                            + LABEL_LINE
+                            + detail_lines(&text(row, "description")) * DETAIL_LINE
+                            + 2.0
+                    })
+                    .sum::<f32>()
             })
-            .sum();
+            .fold(0.0_f32, f32::max);
         Some(TABS_HEIGHT + 6.0 + rows + FOOTER_HEIGHT)
     }
 
