@@ -28,6 +28,63 @@ pub struct SessionWork {
     pub auto_cleaned: Option<bool>,
     /// The worktree was cleaned up for the merged PR.
     pub cleaned_up: bool,
+    /// Why the pass that cleans up by itself kept its worktree.
+    pub auto_kept: Option<CleanupKept>,
+}
+
+/// Why a merged thread's worktree was kept (server/src/server/work_cleanup_threads.rs).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CleanupKept {
+    Uncommitted,
+    /// Files git ignores, such as `.env`.
+    Ignored,
+    /// Edits hidden by skip-worktree or assume-unchanged.
+    Hidden,
+    /// Commits that are not in its merged PR.
+    Unmerged,
+    Other,
+}
+
+impl CleanupKept {
+    pub fn from_code(code: &str) -> Self {
+        match code {
+            "uncommitted" => Self::Uncommitted,
+            "ignored" => Self::Ignored,
+            "hidden" => Self::Hidden,
+            "unmerged" => Self::Unmerged,
+            _ => Self::Other,
+        }
+    }
+
+    /// Its bit in a set of reasons (`KeptTally::reasons`).
+    pub fn bit(self) -> u8 {
+        1 << (self as u8)
+    }
+
+    /// Every reason in a set, in order.
+    pub fn all_in(reasons: u8) -> Vec<Self> {
+        [
+            Self::Uncommitted,
+            Self::Ignored,
+            Self::Hidden,
+            Self::Unmerged,
+            Self::Other,
+        ]
+        .into_iter()
+        .filter(|reason| reasons & reason.bit() != 0)
+        .collect()
+    }
+
+    /// What the banner says after "N kept:".
+    pub fn words(self) -> &'static str {
+        match self {
+            Self::Uncommitted => "uncommitted changes",
+            Self::Ignored => "ignored files",
+            Self::Hidden => "hidden changes",
+            Self::Unmerged => "unmerged commits",
+            Self::Other => "other reasons",
+        }
+    }
 }
 
 impl SessionWork {
@@ -156,6 +213,7 @@ impl SessionWork {
             offer_cleanup_all: work.offer_cleanup_all,
             auto_cleaned: work.auto_cleaned.as_ref().map(|line| line.undo),
             cleaned_up: work.cleaned_up,
+            auto_kept: work.auto_kept.as_deref().map(CleanupKept::from_code),
         }
     }
 

@@ -42,6 +42,21 @@ pub(crate) fn is_recent_thread(row: &SessionRow, now_ms: u64) -> bool {
                 .is_some_and(|at| at + RECENT_THREAD_MS > now_ms as i64))
 }
 
+/// The banner's kept threads: how many, and every reason they were kept for
+/// (`CleanupKept::bit`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct KeptTally {
+    pub count: u16,
+    pub reasons: u8,
+}
+
+impl KeptTally {
+    pub(crate) fn add(&mut self, reason: super::work::CleanupKept) {
+        self.reasons |= reason.bit();
+        self.count = self.count.saturating_add(1);
+    }
+}
+
 /// A thread whose merged-PR offer its coordinator's banner answers (`RowNesting::cleanup_offers`):
 /// its computer answers it for all the coordinator's threads at once, and it runs on the
 /// coordinator's computer, which is the one that answers.
@@ -380,6 +395,7 @@ pub(crate) fn nest_threads(
 
     // The coordinator banner's counts over its direct threads, folded or not (a lead has none).
     let mut banner: HashMap<usize, (u16, u16, u16)> = HashMap::new();
+    let mut kept: HashMap<usize, KeptTally> = HashMap::new();
     let mut in_banner = vec![false; sessions.len()];
     for (parent, list) in &children {
         if lead_parent[*parent] {
@@ -391,6 +407,9 @@ pub(crate) fn nest_threads(
             if offer_in_banner(row, &sessions[*parent].row) {
                 in_banner[*child] = true;
                 counts.0 = counts.0.saturating_add(1);
+                if let Some(reason) = row.work.as_ref().and_then(|work| work.auto_kept) {
+                    kept.entry(*parent).or_default().add(reason);
+                }
             }
             if let Some(undo) = row.work.as_ref().and_then(|work| work.auto_cleaned) {
                 counts.1 = counts.1.saturating_add(1);
@@ -444,6 +463,8 @@ pub(crate) fn nest_threads(
             cleanup_offers: banner.get(&index).map_or(0, |counts| counts.0),
             auto_cleaned: banner.get(&index).map_or(0, |counts| counts.1),
             auto_cleaned_undo: banner.get(&index).map_or(0, |counts| counts.2),
+            auto_kept: kept.get(&index).map_or(0, |kept| kept.count),
+            auto_kept_reasons: kept.get(&index).map_or(0, |kept| kept.reasons),
             cleanup_in_banner: in_banner[index],
             older_hidden: older_hidden_of[index],
             contains_active_session: holds_active == Some(index),

@@ -10,7 +10,8 @@ use std::collections::{BTreeSet, HashMap};
 use crate::keys::SessionKey;
 use crate::sidebar_view::{
     is_finished_thread, is_recent_thread, offer_in_banner, recent_thread_deadline_ms,
-    session_is_snoozed, CoordinatorBadge, FoldedStatus, RowNesting, SessionRow, ThreadTally,
+    session_is_snoozed, CoordinatorBadge, FoldedStatus, KeptTally, RowNesting, SessionRow,
+    ThreadTally,
 };
 
 use super::build::{came_back_ms, machine_key, UnifiedFilter, UnifiedRow, UnifiedSettings};
@@ -83,6 +84,7 @@ pub struct UnifiedCrew {
     pub cleanup_offers: u16,
     pub auto_cleaned: u16,
     pub auto_cleaned_undo: u16,
+    pub kept: KeptTally,
 }
 
 impl UnifiedCrew {
@@ -106,6 +108,8 @@ impl UnifiedCrew {
             cleanup_offers: self.cleanup_offers,
             auto_cleaned: self.auto_cleaned,
             auto_cleaned_undo: self.auto_cleaned_undo,
+            auto_kept: self.kept.count,
+            auto_kept_reasons: self.kept.reasons,
             contains_active_session: self.contains_active,
             holds_active_below: self.active_below,
             folded_status: self.folded_status,
@@ -340,6 +344,7 @@ fn lay_out(
     let bump = |count: &mut u16| *count = count.saturating_add(1);
     let (mut finished, mut cleanup_offers, mut auto_cleaned, mut auto_cleaned_undo) =
         (0_u16, 0_u16, 0_u16, 0_u16);
+    let mut kept = KeptTally::default();
     for child in &mut row.threads {
         let session = &child.session.row;
         if !child.shown && is_finished_thread(session) {
@@ -348,6 +353,9 @@ fn lay_out(
         child.cleanup_in_banner = offer_in_banner(session, &row.session.row);
         if child.cleanup_in_banner {
             bump(&mut cleanup_offers);
+            if let Some(reason) = session.work.as_ref().and_then(|work| work.auto_kept) {
+                kept.add(reason);
+            }
         }
         if let Some(undo) = session.work.as_ref().and_then(|work| work.auto_cleaned) {
             bump(&mut auto_cleaned);
@@ -405,6 +413,7 @@ fn lay_out(
         cleanup_offers,
         auto_cleaned,
         auto_cleaned_undo,
+        kept,
     });
     for child in &mut row.threads {
         let matched = child.subtree_matched;

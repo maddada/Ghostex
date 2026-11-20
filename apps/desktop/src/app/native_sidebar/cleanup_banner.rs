@@ -34,21 +34,38 @@ pub(crate) struct CleanupBanner {
     /// Threads cleaned up by themselves that it reports, and how many Undo can put back.
     pub(crate) auto_cleaned: u16,
     pub(crate) auto_cleaned_undo: u16,
+    /// Of the offers, the ones the pass that cleans up by itself kept, and every reason why
+    /// (gx-core `CleanupKept::bit`).
+    pub(crate) kept: u16,
+    pub(crate) kept_reasons: u8,
 }
 
 impl CleanupBanner {
-    pub(crate) fn new(offers: u16, auto_cleaned: u16, auto_cleaned_undo: u16) -> Option<Self> {
+    pub(crate) fn new(
+        offers: u16,
+        auto_cleaned: u16,
+        auto_cleaned_undo: u16,
+        kept: u16,
+        kept_reasons: u8,
+    ) -> Option<Self> {
         (offers > 0 || auto_cleaned > 0).then_some(Self {
             offers,
             auto_cleaned,
             auto_cleaned_undo,
+            kept,
+            kept_reasons,
         })
     }
 
     /// Its height, unscaled.
     pub(super) fn height(&self) -> f32 {
-        let lines =
-            if self.offers > 0 { 2.0 } else { 0.0 } + if self.auto_cleaned > 0 { 1.0 } else { 0.0 };
+        let lines = if self.offers > 0 { 2.0 } else { 0.0 }
+            + if self.offers > 0 && self.kept > 0 {
+                1.0
+            } else {
+                0.0
+            }
+            + if self.auto_cleaned > 0 { 1.0 } else { 0.0 };
         lines * BANNER_LINE_HEIGHT + 2.0 * BANNER_PADDING_Y
     }
 }
@@ -157,6 +174,23 @@ impl GhostexGpuiApp {
                     .child(label(worktrees(count)))
                     .into_any_element(),
             );
+            // What the pass that cleans up by itself kept, and why (CDXC:WorkMode 2026-11-20 in
+            // server/src/worktree_sessions.rs).
+            if banner.kept > 0 {
+                lines.push(
+                    line()
+                        .child(label(format!(
+                            "{} kept: {}",
+                            banner.kept,
+                            ghostex_gx_core::CleanupKept::all_in(banner.kept_reasons)
+                                .into_iter()
+                                .map(ghostex_gx_core::CleanupKept::words)
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )))
+                        .into_any_element(),
+                );
+            }
             lines.push(
                 line()
                     .child(chip(

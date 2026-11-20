@@ -60,7 +60,7 @@ mod threads;
 pub(crate) use threads::MAX_DEPTH as MAX_THREAD_DEPTH;
 pub(crate) use threads::{
     is_finished_thread, is_recent_thread, lay_out_tree, offer_in_banner, recent_thread_deadline_ms,
-    TreeChildren, TreeSpot, TreeStep,
+    KeptTally, TreeChildren, TreeSpot, TreeStep,
 };
 pub(crate) mod view;
 mod work;
@@ -143,7 +143,9 @@ pub use view::{
     RowWorktree, SectionView, SessionMenuFacts, SessionRow, SessionTiming, SessionView,
     ShowAllProjectsRow, SidebarView, SpaceView, ThreadTally, WorktreeView, RENAME_SHAKE_FRESH_MS,
 };
-pub use work::{SessionWork, WorkGithubIssue, WorkLinearIssue, WorkLinearProject, WorkPullRequest};
+pub use work::{
+    CleanupKept, SessionWork, WorkGithubIssue, WorkLinearIssue, WorkLinearProject, WorkPullRequest,
+};
 pub use workspaces::{
     project_workspace_id, remote_window_workspace, window_machine_tabs, window_spaces,
     window_workspace, WindowWorkspace,

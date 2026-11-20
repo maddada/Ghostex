@@ -601,6 +601,8 @@ impl UnifiedSidebarHost {
                                 crew.cleanup_offers,
                                 crew.auto_cleaned,
                                 crew.auto_cleaned_undo,
+                                crew.kept.count,
+                                crew.kept.reasons,
                             ),
                         }))
                     }

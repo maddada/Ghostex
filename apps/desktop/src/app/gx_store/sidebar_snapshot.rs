@@ -1093,6 +1093,8 @@ pub(crate) fn insert_coordinator_nesting(
                 "cleanupOffers": nesting.cleanup_offers,
                 "autoCleaned": nesting.auto_cleaned,
                 "autoCleanedUndo": nesting.auto_cleaned_undo,
+                "autoKept": nesting.auto_kept,
+                "autoKeptReasons": nesting.auto_kept_reasons,
                 "passingLinesBelow": nesting.passing_lines_below(),
                 "containsActive": nesting.contains_active_session,
                 "activeBelow": nesting.holds_active_below,

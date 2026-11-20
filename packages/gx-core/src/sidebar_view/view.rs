@@ -546,6 +546,10 @@ pub struct RowNesting {
     /// and how many of them Undo can put back.
     pub auto_cleaned: u16,
     pub auto_cleaned_undo: u16,
+    /// On a coordinator row: its threads in the banner that the pass kept, and every reason why
+    /// (`CleanupKept::bit`).
+    pub auto_kept: u16,
+    pub auto_kept_reasons: u8,
     /// On a thread row: its merged-PR offer is answered in its coordinator's banner, so the row
     /// draws none of its own.
     pub cleanup_in_banner: bool,
