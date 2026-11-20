@@ -1336,13 +1336,14 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                     ),
             )
             .into_any_element(),
-        // Ship it: the commit, its branch and the pull request it opens.
+        // Ship it: the commit, its branch and the pull request it opens, top to bottom.
         "ship" => div()
             .size_full()
             .flex()
+            .flex_col()
             .items_center()
             .justify_center()
-            .gap(px(5.0 * s))
+            .gap(px(3.0 * s))
             .p(px(7.0 * s))
             .children(
                 [
@@ -1365,8 +1366,8 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                         .into_any_element();
                     let link = (n > 0).then(|| {
                         div()
-                            .w(px(8.0 * s))
-                            .h(px(1.0))
+                            .w(px(1.0))
+                            .h(px(6.0 * s))
                             .flex_none()
                             .bg(strong)
                             .into_any_element()
@@ -1387,7 +1388,7 @@ fn preview_art(kind: &str, prompt: &str, p: &ChatAppearance) -> AnyElement {
                 match kind {
                     "inbox" => vec![(
                         "Why does CI fail on main?",
-                        "A race in the token refresh. Fix: #418",
+                        "A race in the token refresh",
                         "Done",
                     )],
                     _ => vec![
