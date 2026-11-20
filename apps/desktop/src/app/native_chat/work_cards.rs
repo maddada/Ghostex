@@ -1251,7 +1251,7 @@ impl NativeChatView {
         // Reply always shows: it is the one answer that takes anything, so a row keeps it one
         // click away.
         let reply_width = reply_answer.as_ref().map_or(0.0, |_| icon_width + 6.0);
-        // Jump to context after Reply, on every row that came from a chat (gx-chat-core
+        // Jump to context before Reply, on a row whose asking message is in another chat (gx-chat-core
         // `work_cards::context_of`).
         let context_button = if look.buttons.is_some() || settled {
             None
@@ -1288,10 +1288,16 @@ impl NativeChatView {
             None if fold => vec![self.answers_dropdown(&key, &answers, busy, p, cx)],
             None => self.work_answer_buttons(&key, &answers, busy, p, cx),
         };
+        // Reply is always the rightmost button, whatever stands before it (answers, Details, Jump
+        // to context), so it never shifts between rows.
+        //
+        // CDXC:Coordinators 2026-11-20 DECISION:
+        // User, of a thread to-do whose Jump to context sat right of Reply: "switch it so Reply is
+        // always on the most right instead of shifting around".
+        buttons.extend(context_button);
         if let Some(answer) = &reply_answer {
             buttons.push(self.dock_reply_icon(&format!("{key}:reply"), answer, busy, p, cx));
         }
-        buttons.extend(context_button);
         // A page or form's answered/total ("0/1"), quiet, at the row's right end just before
         // its buttons and age.
         //

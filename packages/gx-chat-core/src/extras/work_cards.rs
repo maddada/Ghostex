@@ -719,7 +719,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 "needs": true,
             });
             row["showInChat"] = show_in_chat(&turns, asked_in, &key);
-            row["context"] = context_of(ask, &row["showInChat"]);
+            row["context"] = context_of(ask);
             if is_snoozed {
                 let back = snooze_end(ask, &key, state);
                 row["snooze"] = Value::Null;
@@ -993,7 +993,7 @@ pub fn panel_actions_with(
             "markAnswered": card["markAnswered"],
             "snooze": card["snooze"],
             // Jump to context on its Work panel card (`context_of`).
-            "context": context_of(ask, &show),
+            "context": context_of(ask),
             "showInChat": show,
         });
     }
@@ -1035,7 +1035,6 @@ pub fn question_actions(state: &ChatState, context: &ChatContext, id: &str) -> V
                 "markAnswered": row["markAnswered"],
                 "snooze": row["snooze"],
                 "showInChat": row["showInChat"],
-                "context": row["context"],
             })
         })
 }
@@ -1072,17 +1071,25 @@ fn show_in_chat(turns: &[Turn], at: i64, target: &str) -> Value {
     }
 }
 
-/// A Needs you row's Jump to context: what opens the chat that asked it, scrolled to the message
-/// that did. A thread's to-do (`ghostex needs-you add` in a coordinator's thread, gxserver's
-/// `fromThread`) opens that thread's chat, at its newest messages where it asked; anything else
-/// shows the reply that asked it in this chat (`showInChat`). `null` when neither is known.
+/// A Needs you row's Jump to context: what opens the chat that asked it, when that is not the chat
+/// on screen. Today only a thread's to-do (`ghostex needs-you add` in a coordinator's thread,
+/// gxserver's `fromThread`) is: it opens that thread's chat, at its newest messages where it
+/// asked. `null` for every other row, which keeps Show in chat in its menu (`showInChat`).
 ///
 /// CDXC:Coordinators 2026-11-20 DECISION:
 /// User, picking the clear-questions page's bundle A (Q4255) with a note: "At least when we have
 /// such questions on regular threads we should have a button to jump to context." Every Needs you
 /// row that came from a chat (answer links, forms, pages, item asks, a thread's questions) has a
 /// Jump to context icon button beside Details and Reply, in the dock, the Work panel and the phone.
-pub(crate) fn context_of(ask: &Value, show_in_chat: &Value) -> Value {
+///
+/// CDXC:Coordinators 2026-11-20 DECISION:
+/// User, of Live page rows with Details, Reply and the jump button: "I don't want jump to context
+/// shown here, should be only shown when needed", then picked A on the jump-context page (Q4263):
+/// the button shows only when the asking message is in another chat than the one on screen. A
+/// page or form opens its own content, and an ask's, a one-click question's or the chat's own
+/// to-do's message is in the chat the dock belongs to, so those keep Show in chat in their menus.
+/// Supersedes the part above that put it on every row.
+pub(crate) fn context_of(ask: &Value) -> Value {
     let thread = &ask["fromThread"];
     if !text(thread, "sessionId").is_empty() {
         return json!({
@@ -1092,7 +1099,7 @@ pub(crate) fn context_of(ask: &Value, show_in_chat: &Value) -> Value {
             "sessionId": text(thread, "sessionId"),
         });
     }
-    show_in_chat.clone()
+    Value::Null
 }
 
 /// A blocked or just-finished line of work's dock row (`done_key`: the finished row's, with the x
@@ -1259,8 +1266,6 @@ fn question_rows_of(
                 "markAnswered": if asker.seen_only { Value::Null } else { json!({ "type": "markQuestionAnswered", "id": asker.id }) },
                 "snooze": snooze,
                 "showInChat": { "type": "showInChat", "messageId": asker.message_id, "target": asker.id },
-                // Jump to context: the reply that asked it (`context_of`).
-                "context": { "type": "showInChat", "messageId": asker.message_id, "target": asker.id },
                 "mention": "",
                 "needs": true,
             });

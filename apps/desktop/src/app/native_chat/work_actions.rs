@@ -355,9 +355,9 @@ impl NativeChatView {
         ))
     }
 
-    /// Jump to context as an icon button beside Details and Reply: opens the chat that asked the row's
-    /// question, scrolled to the message that did (gx-chat-core `work_cards::context_of`). `None`
-    /// for a row that came from no chat.
+    /// Jump to context as an icon button just before Reply: opens the chat that asked the row's
+    /// question when that is another chat (gx-chat-core `work_cards::context_of`, today a thread's
+    /// to-do). `None` for every other row, which has Show in chat in its menu.
     pub(super) fn dock_context_icon(
         &self,
         key: &str,
