@@ -11,6 +11,9 @@
 //!
 //! CDXC:Workspaces 2026-11-20 DECISION:
 //! User: "I figured out just clicking on the P or W button in the bottom left is enough, but I don't like the P or W icon in the bottom left", then picked "A. The name, quietly" (Q4254): the letter on a coloured square becomes an 8px dot in the workspace's colour and the workspace's name in the sidebar's own text, in the same place with the same one click; with a single workspace nothing is drawn (`gx_store_workspace_tile`). Supersedes the letter block of the 2026-10-10 decision.
+//!
+//! CDXC:Workspaces 2026-11-20 DECISION:
+//! User: "make the bg behind this pill and its arrow on the right match the look of the accounts below it". The name and the arrow are one tile with exactly the account usage cards' surface: their resting, hover and pressed fills (`usage_card_fills`), their radius and their height (`SIDEBAR_USAGE_CARD_RADIUS`, `SIDEBAR_USAGE_METER_HEIGHT`, native_sidebar/usage.rs), and no border, as the cards have none. Each half lights alone on hover, so the switch and the menu stay two targets. Supersedes the separate quiet fill on the name and the unfilled arrow of the decision above.
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -24,7 +27,7 @@ use super::appearance::SidebarAppearance;
 use crate::GhostexGpuiApp;
 use crate::app::helpers::*;
 
-/// The chevron part's width, its right border included.
+/// The chevron part's width.
 const CHEVRON_PART_WIDTH: f32 = 18.0;
 /// The name part's widest, so a long workspace name ends in an ellipsis instead of pushing the
 /// line.
@@ -68,8 +71,10 @@ impl GhostexGpuiApp {
             .map(rgb)
             .map(gpui::Hsla::from)
             .unwrap_or(appearance.muted);
-        // The name part's quiet fill at rest; the hover fill on top of it while pointed at.
-        let rest = appearance.foreground.opacity(0.06);
+        // The account usage cards' own surface. Each half carries the fills, so a hovered half is
+        // exactly a hovered card rather than a hover wash stacked on the resting fill.
+        let fills = super::usage::usage_card_fills(appearance.light);
+        let radius = px(super::usage::SIDEBAR_USAGE_CARD_RADIUS * scale);
         let tooltips = self.native_sidebar.pointer_inside
             && self.native_sidebar.menu.is_none()
             && !cx.has_active_drag();
@@ -124,10 +129,11 @@ impl GhostexGpuiApp {
             .gap(px(7.0 * scale))
             .pl(px(8.0 * scale))
             .pr(px(6.0 * scale))
-            .rounded_l(px(6.0 * scale))
-            .bg(rest)
+            .rounded_l(radius)
+            .bg(fills.rest)
             .cursor_pointer()
-            .hover(|part| part.bg(appearance.hover))
+            .hover(|part| part.bg(fills.hover))
+            .active(|part| part.bg(fills.open))
             .child(
                 div()
                     .size(px(8.0 * scale))
@@ -187,9 +193,11 @@ impl GhostexGpuiApp {
             .flex()
             .items_center()
             .justify_center()
-            .rounded_r(px(6.0 * scale))
+            .rounded_r(radius)
+            .bg(fills.rest)
             .cursor_pointer()
-            .hover(|part| part.bg(appearance.hover))
+            .hover(|part| part.bg(fills.hover))
+            .active(|part| part.bg(fills.open))
             .child(titlebar_svg_icon(
                 "titlebar/chevron-down.svg",
                 10.0 * scale,
@@ -229,8 +237,8 @@ impl GhostexGpuiApp {
                 .on_prepaint(super::menus::record_menu_owner(&owner))
                 .flex()
                 .min_w_0()
-                .h(px(28.0 * scale))
-                .rounded(px(6.0 * scale))
+                .h(px(super::usage::SIDEBAR_USAGE_METER_HEIGHT * scale))
+                .rounded(radius)
                 .child(letter)
                 .child(chevron)
                 .into_any_element(),
