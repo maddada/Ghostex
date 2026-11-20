@@ -302,7 +302,7 @@ say them in the report. `$ref` is a step's `globalRef` (`$S show`).
 | 5.1 to 5.4 | Stop |
 | 6.1, 6.2 | Stop if stray text is left in the input box; otherwise Warn |
 | 7.1 Phone launch | Stop on a crash |
-| 7.2 Phone connect | NOT RUN (owner approval) unless the user pairs it |
+| 7.2 Phone connect and chat | Warn; NOT RUN only if the pairing itself fails |
 | 7.3 Phone chat (demo) | Warn |
 
 ### 1. The last crash (crash checks; see "Keeping the list")
@@ -545,14 +545,107 @@ never touches `~/Android/Sdk` or another agent's adb.
    dump: `text=`/`content-desc=` and `bounds=`), type with `phone-smoke.sh text '...'`.
 4. **7.1 Launch.** The first screen (Ghostex, Scan the code, Use Tailscale, Use SSH details, Try
    demo experience) shows and `adb logcat -b crash` has no `io.ghostex` line. **Stop** on a crash.
-5. **7.2 Connect, up to the approval.** Machines > Add a computer > Scan. Every real route
-   needs the owner: a Connect a Phone code only the computer's window makes, then Approve on
-   the computer; Use SSH details needs the user's password and reaches the real gxserver.
-   Agents stop at the Scan the code screen (screenshot) and never approve, mint codes or type
-   passwords. Mark the connected chat NOT RUN (owner approval) unless the user pairs it.
+5. **7.2 Connect to a throwaway test server and chat** (**Warn**; NOT RUN only if the
+   pairing itself fails). See "7.2 in full" below the list.
 6. **7.3 Chat (demo).** Try demo experience > Atlas API > the session; type a message, Send;
    **Pass:** the bubble shows, a reply follows, the box empties. **Warn** otherwise.
 7. Clean up: `phone-smoke.sh uninstall`, `phone-smoke.sh down`. Keep the SDK and AVD.
+
+**7.2 in full: pair the emulator with a throwaway test server, then chat.**
+
+**The one exception to "agents never approve".** User, 2026-11-20 (Q4320, asked
+whether to pair the smoke emulator each release): "i can't click approve for
+this so i allow u for the smoke to click on approve using /cua-driver please".
+It is narrow:
+- Only during a release smoke, and only to pair **the smoke's Android emulator
+  on m7-arch** with **a throwaway test server started for that run**
+  (`cargo xtask test-server … --isolated-home`). Never the user's real
+  gxserver or their own Ghostex window, never a real phone or computer.
+- For that pairing only, the smoke agent may make the Connect a Phone code in
+  that test server's own window and press its **Approve** with cua-driver,
+  after the checks in step 5 below, and it removes the pairing and the test
+  server afterwards.
+- Everything else stays forbidden: no Approve (or any other answer) on the
+  user's real app or on any card that isn't this pairing, no other pairing, no
+  `computer-code` approvals, and no passwords (an admin or SSH password prompt
+  ends the step).
+
+**Which window shows the Approve.** The desktop app, not the web build. The
+web build never opens the Connect a device window (`apps/gpui-web/src/app/
+window/mod.rs`, "the page never opens that window") and drops approval actions
+(`web_host/toasts.rs`: approving "needs the computer's own key store and
+presence prompt, which a page has not"), so the 8. Linux pass's webdrive can't
+do this. The installed Linux app runs as an isolated instance attached to the
+test server (`GHOSTEX_HOME` and `GHOSTEX_GXSERVER_DEV_PORT`, the "isolated
+desktop instances" listener in `helpers/os_cli/process_and_constants.rs`), and
+that instance's Connect a device window makes the code and shows "Is this your
+phone?".
+
+Written 2026-11-20 from the code; not run yet. Fix what the first run finds.
+1. **Before:** write down `grep -c 'ghostex-paired:' ~/.ssh/authorized_keys`
+   and the modification times of the real HOME's tailcat key folder (`ls -ld
+   ~/.local/share/tailcat ~/.config/tailcat 2>/dev/null`) into `$W`, to prove
+   afterwards that the pairing wrote nothing into the real HOME.
+2. **Test server with its own HOME**, in the m7-arch checkout at the release
+   point: `cargo xtask test-server start --name smoke-phone --projects
+   <scratch folder> --isolated-home`, then in every shell `source
+   ~/.local/share/agent-work/Ghostex/test-servers/smoke-phone/env.sh` and
+   check `command -v ghostex` names that server's `gxserver/bin/`. Never pair
+   with a test server started without `--isolated-home`: the approval would
+   write the phone's SSH key line into the user's real
+   `~/.ssh/authorized_keys` and tailcat's key into the real HOME (issue
+   #674). Turn Easy Connect on there: `ghostex tailcat enable` (the
+   isolated HOME is given the real helper's path). Make the session to chat
+   with: an agent if one starts there (the isolated HOME has no Claude or
+   Codex login, so most likely not), else a terminal:
+   `ghostex create-session smoke-phone-7.2 --start --project-id <id>`.
+3. **The isolated app.** In a shell with that `env.sh` sourced, start the
+   installed app's binary (under `/opt/ghostex`; `ls /opt/ghostex`) on a
+   display the user doesn't look at: a headless nested compositor with its
+   own `WAYLAND_DISPLAY` that cua-driver can drive (check on the first run;
+   if none works, ask the coordinator before opening it on the user's
+   screen). Check it is its own instance on the test server, not a hand-off
+   to the user's running app: a new pid that stays up, and a sidebar with only
+   the scratch project. If it hands off (the user's own window comes up),
+   touch nothing in that window; the step is NOT RUN.
+4. **The code.** In the isolated window, open Connect a Phone (sidebar More
+   Options > Connect a Phone; press each control by its `query` token). It
+   turns Easy Connect on; if it asks for an admin password (SSH access off),
+   close it: NOT RUN. Press `Copy the code`, read it from that display's
+   clipboard (`wl-paste` with the nested `WAYLAND_DISPLAY`) into
+   `$W/pair-code.txt`. On the emulator: Add a computer > Paste a code instead,
+   type it with `phone-smoke.sh text '<code>'` (check with `phone-smoke.sh ui`
+   that the whole code landed), continue. The phone shows Check your
+   computer with three words (`phone-smoke.sh shot 7.2-words`, words from
+   `ui`). The code works once for five minutes.
+5. **The checks, then Approve.** The isolated window turns into "Is this your
+   phone?". Before pressing anything, check all of these from a `query` read
+   of that window (`get_window_state` with its own pid and window_id, full
+   size), and screenshot it:
+   - The window belongs to the isolated app's pid from step 3, not the user's
+     app.
+   - The device it names is the emulator (the name the phone app reports;
+     compare `adb shell getprop ro.product.model`).
+   - The computer it names is the test server's instance (same machine name
+     as m7-arch, so the pid and the scratch-only sidebar are what tell it
+     apart), and its three words equal the phone's.
+   Then press that card's `Approve` token. If any check fails, press `Not my
+   phone` instead: the step is NOT RUN, and say why.
+6. **7.2 Pass.** The phone opens the test server's sessions ("Connected to"
+   on top). Open the step 2 session, send `Reply with exactly: smoke-ok-7.2`
+   to an agent, or type `echo smoke-ok-7.2` and Enter in the terminal. Pass:
+   it shows on the phone with the reply or the echoed line
+   (`phone-smoke.sh shot 7.2-chat`), and `ghostex read-session-chat` /
+   `read-text` on the test server confirms it. **Warn** otherwise (paired but
+   the chat doesn't work); NOT RUN only when the pairing itself failed.
+7. **Clean up.** On the phone, remove the computer (or uninstall the app, as
+   step 7 does anyway). In the isolated window remove the paired emulator
+   (Settings > Remote, its row's Remove), quit the isolated app (and its
+   nested compositor), `cargo xtask test-server remove smoke-phone` (closes
+   its sessions and deletes its home with the isolated `authorized_keys`),
+   and delete `$W/pair-code.txt`. Then repeat step 1's two reads: the real
+   `authorized_keys` count and the tailcat folders must be unchanged. If
+   they changed, say so first in the report.
 
 ### 8. Linux GUI pass (GPUI web build, headless, Arch)
 
