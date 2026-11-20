@@ -161,6 +161,17 @@ pub fn load_or_create_scoped_owner_key(scope: &str) -> Result<DeviceKey, KeyErro
     load_or_create_account(&format!("{}-{scope}", KeyRole::Owner.account()))
 }
 
+/// The owner key kept for one connected computer (as [`load_or_create_scoped_owner_key`] names
+/// it), without making one: `None` when there is none.
+pub fn load_scoped_owner_key(scope: &str) -> Result<Option<DeviceKey>, KeyError> {
+    if scope.is_empty() || !scope.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err(KeyError::KeyStore("invalid key name".to_string()));
+    }
+    platform::read_secret(&format!("{}-{scope}", KeyRole::Owner.account()))?
+        .map(|pkcs8| DeviceKey::from_pkcs8(&pkcs8))
+        .transpose()
+}
+
 /// The approver key, made and saved the first time, after the presence prompt shows `reason`
 /// (the approval card's summary). Returns what proved the user was there.
 pub fn unlock_approver_key(reason: &str) -> Result<(DeviceKey, Presence), KeyError> {

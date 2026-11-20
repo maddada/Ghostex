@@ -5895,7 +5895,14 @@ agents, a connection from either side is enough.
   computer> (Ghostex app) show the pairing code of <this computer> (Ghostex
   server …)" there; that card and the app that asks show the same four key
   words and name the same computer and server id, so approve it only when they
-  match. Too many such asks from that computer's terminal in an hour are
+  match. When another computer asks for your approval and the app here can't
+  give it yet (say you removed that computer from Settings > Remote and added
+  it again), its notice names where to approve it and offers "Let <this
+  computer> manage <that computer>": that asks that computer once, as above.
+  If this app still holds the key of the entry you removed, "Let this Mac
+  manage <that computer> again?" shows here too, and approving it lets this
+  app approve there again. A phone paired with a computer shows a card when a
+  new request waits there; Open takes it to that computer's Approvals. Too many such asks from that computer's terminal in an hour are
   refused for the rest of the hour (the asking app says so), and the security
   log notes it. If the app here no
   longer counts as you (its key is gone: a new Keychain, a reinstall) and no

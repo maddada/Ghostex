@@ -174,6 +174,9 @@ impl GhostexGpuiApp {
             // Raised only by the app's approval cards (app/owner_security/ui.rs); approving needs
             // the computer's own key store and presence prompt, which a page has not.
             GpuiAppToastAction::SecurityApproval { .. } => {}
+            // Raised only by the app's approval notices (app/owner_security/ui.rs); asking to
+            // manage a computer needs this computer's own owner keys, which a page has not.
+            GpuiAppToastAction::AskToManage { .. } => {}
         }
     }
 
