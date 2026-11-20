@@ -19,14 +19,15 @@
 use super::*;
 
 use crate::agents::lead_links::{
-    list_lead_links, read_lead_link, remove_lead_link, set_link_observed_working, settle_finished,
-    settle_quiet, settle_waiting, LeadLink,
+    lead_turn_reply, list_lead_links, read_lead_link, remove_lead_link, set_link_observed_working,
+    settle_finished, settle_quiet, settle_waiting, LeadLink, TurnRow,
 };
 use crate::coordinators::{
     agent_message, classify_thread_session, report_body, SessionKey, ThreadProgress, ThreadReport,
     ThreadState,
 };
 use crate::presentation::effective_lifecycle_state;
+use crate::session_chat_queue_runtime::SessionChatTranscriptGate;
 
 use super::coordinator_runtime::{
     agent_names, send_to_coordinator, session_sender, waiting_report_prompt,
@@ -40,6 +41,45 @@ const FINISH_STABILITY_MS: i64 = 4_000;
 const CLOSED_GRACE_MS: i64 = 60_000;
 /// After a failed send to a lead, its reports wait this long before the next try.
 const RETRY_AFTER_MS: i64 = 30_000;
+/// How many of a linked session's newest transcript rows are read for the lead's turn.
+const TURN_TAIL_MESSAGES: usize = 60;
+
+/// A transcript's rows as `lead_turn_reply` reads them: what someone typed (a tool result, a
+/// background job's notice or a Ghostex note is nobody's message) and the agent's words.
+fn turn_rows(messages: &[crate::session_chat::SessionChatMessage]) -> Vec<TurnRow> {
+    use crate::session_chat::{SessionChatBlock, SessionChatRole};
+    messages
+        .iter()
+        .filter(|message| !message.queued)
+        .filter_map(|message| {
+            let text = message
+                .blocks
+                .iter()
+                .filter_map(|block| match block {
+                    SessionChatBlock::Text { text } => Some(text.trim()),
+                    _ => None,
+                })
+                .filter(|text| !text.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            match message.role {
+                SessionChatRole::User if !text.is_empty() && !text.starts_with('<') => {
+                    Some(TurnRow {
+                        user: true,
+                        text,
+                        at: message.timestamp,
+                    })
+                }
+                SessionChatRole::Assistant if !text.is_empty() => Some(TurnRow {
+                    user: false,
+                    text,
+                    at: message.timestamp,
+                }),
+                _ => None,
+            }
+        })
+        .collect()
+}
 
 #[derive(Default)]
 struct WatchMemory {
@@ -53,6 +93,8 @@ struct WatchMemory {
     retry_at: HashMap<SessionKey, i64>,
     /// The send id of each report still on its way, so a retried report is the same send.
     send_ids: HashMap<(SessionKey, String), String>,
+    /// Each owed link's transcript tail, read again only when the file changed.
+    transcripts: HashMap<SessionKey, SessionChatTranscriptGate>,
 }
 
 enum LeadReport {
@@ -133,6 +175,7 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
     let keys = links.iter().map(LeadLink::key).collect::<HashSet<_>>();
     memory.idle_since.retain(|key, _| keys.contains(key));
     memory.closed_since.retain(|key, _| keys.contains(key));
+    memory.transcripts.retain(|key, _| keys.contains(key));
     if links.is_empty() {
         return Vec::new();
     }
@@ -254,11 +297,23 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
                 if now - since < FINISH_STABILITY_MS {
                     None
                 } else {
-                    // Its newest reply, once it is newer than the lead's message: a turn too short
-                    // for a tick to see it working still counts.
-                    crate::notification_feed::body::last_assistant_message(&session)
-                        .filter(|(_, at)| at.is_some_and(|at| at > owed_ms))
-                        .map(|(message, _)| LeadReport::Finished { message })
+                    // The reply to the lead's own message (`lead_turn_reply`): a turn too short for
+                    // a tick to see it working still counts, and a turn the user started after it
+                    // is never the one sent.
+                    let lead_ref = crate::ids::create_global_session_ref(
+                        state.metadata.server_id.as_str(),
+                        &lead_key.0,
+                        &lead_key.1,
+                    );
+                    let rows = memory
+                        .transcripts
+                        .entry(key.clone())
+                        .or_default()
+                        .tail(&session, TURN_TAIL_MESSAGES)
+                        .map(|tail| turn_rows(&tail.messages))
+                        .unwrap_or_default();
+                    lead_turn_reply(&rows, &lead_ref, owed_ms)
+                        .map(|message| LeadReport::Finished { message })
                 }
             }
             _ => None,
