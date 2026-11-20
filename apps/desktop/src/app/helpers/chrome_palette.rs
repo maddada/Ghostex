@@ -86,15 +86,17 @@ pub(crate) fn glass_lifted_from(base: gpui::Hsla, light: bool) -> gpui::Hsla {
     } else {
         GLASS_LIFT_DARK
     };
-    base.opacity(1.0)
+    // `alpha`, not `opacity`: `Hsla::opacity` multiplies the alpha, so `opacity(1.0)` left a
+    // see-through base (and the "opaque" lift below at 96%).
+    base.alpha(1.0)
         .blend(gpui::white().opacity(lift))
-        .opacity(GLASS_LIFTED_ALPHA)
+        .alpha(GLASS_LIFTED_ALPHA)
 }
 
 /// [`glass_lifted_from`] kept opaque, for a surface whose content must not show anything through
 /// it (a × over a picture, Capture's windows over other apps).
 pub(crate) fn glass_lifted_opaque_from(base: gpui::Hsla, light: bool) -> gpui::Hsla {
-    glass_lifted_from(base, light).opacity(1.0)
+    glass_lifted_from(base, light).alpha(1.0)
 }
 
 /// The ink wash a box with nothing under it takes on glass (the fenced code blocks' 6% light wash

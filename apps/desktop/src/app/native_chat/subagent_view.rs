@@ -93,8 +93,10 @@ impl NativeChatView {
         }
         let s = p.scale;
         let glass = crate::app::helpers::window_glass_active_in(window);
+        // Under glass nothing is painted behind the card, so it is opaque over the transcript
+        // (CDXC:Theming 2026-11-20 on `ChatAppearance::over_content_fill`).
         let card_fill = if glass {
-            p.composer_background
+            crate::app::helpers::glass_lifted_opaque_from(p.background, p.light)
         } else {
             p.background
         };

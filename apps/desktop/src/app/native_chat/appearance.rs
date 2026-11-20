@@ -143,6 +143,28 @@ impl ChatAppearance {
         self.menu
     }
 
+    /// The fill of a card the chat draws over its own content inside the window (the Dictate card
+    /// and pill over the chat box, the subagent viewer over the transcript). Under window glass it
+    /// is the chat's colour lifted toward white and kept opaque (`glass_lifted_opaque_from`); glass
+    /// off, `solid`.
+    ///
+    /// CDXC:Theming 2026-11-20 DECISION:
+    /// User, of the "Hex isn't installed" card on Arch (Hyprland) with the chat box's placeholder and
+    /// buttons showing through it: "the bg shown here isn't frosted at all". Shown the options
+    /// (Q4293), they picked A, an opaque lifted fill. No platform blurs one part of a window over
+    /// another (macOS's material, Windows' acrylic and a Linux compositor's blur all blur behind
+    /// the whole window), so these cards took the transcript cards' 6% wash (`card_panel`,
+    /// `composer_background`) with the box's text sharp under it, on every platform. They take the
+    /// lift Q4247 gave the chat's other floating surfaces, opaque rather than 96% because text sits
+    /// right under them.
+    pub(crate) fn over_content_fill(&self, solid: Hsla) -> Hsla {
+        if self.window_glass {
+            crate::app::helpers::glass_lifted_opaque_from(self.background, self.light)
+        } else {
+            solid
+        }
+    }
+
     /// The `--destructive` tone the React transcript painted failed tool results and failed writes in.
     /// The Danger theme role when it is set (helpers/theme_roles.rs).
     pub(crate) fn error(&self) -> Hsla {
