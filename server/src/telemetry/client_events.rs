@@ -65,7 +65,23 @@ fn record_app_launched(properties: Option<&Value>) {
         super::debug_log("recordClientEvent app.launched has no usable app_version".to_string());
         return;
     };
-    capture::app_launched(app_version);
+    /*
+    CDXC:Telemetry 2026-11-20:
+    On Linux the desktop also says which desktop environment or compositor and
+    which session type it runs in (its own `XDG_CURRENT_DESKTOP` and
+    `XDG_SESSION_TYPE`, which a gxserver started by systemd may not have).
+    Mapped onto the closed tables here, so a custom session name is `other`.
+    */
+    let text = |key: &str| {
+        properties
+            .and_then(|properties| properties.get(key))
+            .and_then(Value::as_str)
+    };
+    capture::app_launched(
+        app_version,
+        text("linux_desktop").and_then(super::settings_snapshot::linux_desktop),
+        text("linux_session").and_then(super::settings_snapshot::linux_session),
+    );
 }
 
 fn record_surface_opened(properties: Option<&Value>) {

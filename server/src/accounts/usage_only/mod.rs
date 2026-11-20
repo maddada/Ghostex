@@ -59,6 +59,28 @@ fn account_id(provider: UsageProvider, identity: &str) -> String {
     )
 }
 
+/// How many usage-only accounts there are per provider (`cursor`, `gemini`, `copilot`), for the
+/// anonymous daily snapshot (telemetry/settings_snapshot.rs). `None` when the file can't be read.
+pub(crate) fn provider_counts(paths: &GxserverPaths) -> Option<Vec<(&'static str, usize)>> {
+    let accounts = store::read(paths).ok()?;
+    Some(
+        [
+            UsageProvider::Cursor,
+            UsageProvider::Gemini,
+            UsageProvider::Copilot,
+        ]
+        .into_iter()
+        .map(|provider| {
+            let count = accounts
+                .iter()
+                .filter(|account| account.provider == provider)
+                .count();
+            (provider.id(), count)
+        })
+        .collect(),
+    )
+}
+
 /// Whether an account id is one of these accounts' (they are named after their provider).
 pub(crate) fn owns_id(id: &str) -> bool {
     ["cursor-", "gemini-", "copilot-"]

@@ -40,6 +40,9 @@ pub(crate) async fn handle_extensions_http(
     read: extension ids are not ours to report.
     */
     let install_source = extension_install_source(&endpoint_path, &params);
+    let toggled_to = (endpoint_path == "/api/updateExtensionState")
+        .then(|| params.get("patch")?.get("enabled")?.as_bool())
+        .flatten();
     let registry = state.extension_registry.clone();
     let operation_path = endpoint_path.clone();
     let outcome = tokio::task::spawn_blocking(move || {
@@ -60,13 +63,35 @@ pub(crate) async fn handle_extensions_http(
         Ok(result) => {
             // Only a SUCCEEDED lifecycle change is counted; a rejected install
             // is not an install.
+            /*
+            CDXC:Telemetry 2026-11-20:
+            Which extension, read from the registry's answer: an official Store
+            id (with its version) or `custom` (telemetry/capture.rs). An on/off
+            change is counted only when the patch switched `enabled`.
+            */
+            let answered = |pointer: &str| result.pointer(pointer).and_then(Value::as_str);
             match endpoint_path.as_str() {
                 "/api/installExtension" => {
                     if let Some(source) = install_source {
-                        crate::telemetry::extension_installed(source);
+                        crate::telemetry::extension_installed(
+                            source,
+                            answered("/extension/id"),
+                            answered("/extension/manifest/version"),
+                        );
                     }
                 }
-                "/api/uninstallExtension" => crate::telemetry::extension_uninstalled(),
+                "/api/uninstallExtension" => {
+                    crate::telemetry::extension_uninstalled(answered("/id"))
+                }
+                "/api/updateExtensionState" => {
+                    if let (Some(enabled), Some(id)) = (toggled_to, answered("/extension/id")) {
+                        crate::telemetry::extension_toggled(
+                            crate::telemetry::extensions::resolve_store_extension(id),
+                            "installed",
+                            enabled,
+                        );
+                    }
+                }
                 _ => {}
             }
             // A sidebar extension added, removed, turned on or off changes what clients draw.

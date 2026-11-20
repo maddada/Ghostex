@@ -129,6 +129,40 @@ pub(crate) fn with_boosts(paths: &GxserverPaths, text: &str) -> String {
     core::with_boosts(text, |id| prompt_of(&saved, id))
 }
 
+/// Boosts on this computer for the anonymous daily snapshot: whether they are on, how many of the
+/// user's own Boosts there are and how many of Ghostex's prompts the user edited. Counts only:
+/// never a label or a prompt (CDXC:Telemetry 2026-11-20 in telemetry/settings_snapshot.rs).
+pub(crate) fn telemetry_summary(
+    paths: &GxserverPaths,
+) -> crate::telemetry::settings_snapshot::BoostsReport {
+    let saved = read(paths);
+    crate::telemetry::settings_snapshot::BoostsReport {
+        on: !saved.off,
+        custom: saved.custom.len(),
+        edited: BOOSTS
+            .iter()
+            .filter(|boost| edited(&saved, boost).is_some())
+            .count(),
+    }
+}
+
+/// The Boosts a message carries, for the anonymous `boosts.used` event: Ghostex's own by id, and
+/// how many others (the user's own, or one since deleted), which are never named.
+pub(crate) fn used_in(text: &str) -> (Vec<&'static str>, usize) {
+    if !text.contains("](boost:") {
+        return (Vec::new(), 0);
+    }
+    let mut built_in = Vec::new();
+    let mut other = 0;
+    for (id, _) in core::boosts_in(text) {
+        match core::boost(&id) {
+            Some(boost) => built_in.push(boost.id),
+            None => other += 1,
+        }
+    }
+    (built_in, other)
+}
+
 fn listing(saved: &Saved) -> Value {
     json!({
         "on": !saved.off,

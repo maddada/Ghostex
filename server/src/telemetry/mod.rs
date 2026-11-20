@@ -25,6 +25,7 @@ Layout:
 - `client_events` — `/api/recordClientEvent` body handling.
 - `client_platform` — web client OS family from the User-Agent.
 - `extensions` — the built-in / official Store extension whitelist.
+- `settings_snapshot` — the daily install snapshot (settings, Linux, accounts, Boosts).
 */
 
 pub mod base;
@@ -39,6 +40,7 @@ pub mod identity;
 pub mod profile;
 pub mod queue;
 pub mod role;
+pub mod settings_snapshot;
 pub mod state;
 pub mod task;
 pub mod taxonomy;
@@ -46,8 +48,8 @@ pub mod taxonomy;
 mod tests;
 
 pub use capture::{
-    client_connected, extension_installed, extension_uninstalled, prompt_sent,
-    prompt_source_for_diagnostic_input_source, session_started, ClientPlatform,
+    boosts_used, client_connected, extension_installed, extension_toggled, extension_uninstalled,
+    prompt_sent, prompt_source_for_diagnostic_input_source, session_started, ClientPlatform,
 };
 pub use client_events::record_client_event;
 pub use gate::is_enabled;

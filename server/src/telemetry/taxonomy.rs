@@ -216,6 +216,119 @@ pub const ARCHES: &[&str] = &[
     "x86_64",
 ];
 
+/*
+CDXC:Telemetry 2026-11-20:
+User: "add PostHog tracking for Boosts used in a message and for extensions ...
+also for settings like transparency, which Linux distro is used, and other
+useful settings; how many accounts people have and which subscription; what
+kind of sidebar people use and their sidebar settings". The tables below are
+the closed sets those answers may take. Anything outside them is `other` (a
+distro, a desktop) or left out (a plan), never the raw text: `/etc/os-release`
+and `XDG_CURRENT_DESKTOP` are machine-provided, but a hand-built distro or a
+custom session name is still free text.
+*/
+
+/// `ID=` from `/etc/os-release`, for the distributions Ghostex users are likely to run.
+pub const LINUX_DISTROS: &[&str] = &[
+    "almalinux",
+    "alpine",
+    "arch",
+    "bazzite",
+    "cachyos",
+    "centos",
+    "debian",
+    "elementary",
+    "endeavouros",
+    "fedora",
+    "garuda",
+    "gentoo",
+    "kali",
+    "linuxmint",
+    "manjaro",
+    "neon",
+    "nixos",
+    "nobara",
+    "opensuse-leap",
+    "opensuse-tumbleweed",
+    "other",
+    "pop",
+    "raspbian",
+    "rhel",
+    "rocky",
+    "solus",
+    "tuxedo",
+    "ubuntu",
+    "void",
+    "zorin",
+];
+
+/// The desktop environment or compositor, from `XDG_CURRENT_DESKTOP` (or
+/// `XDG_SESSION_DESKTOP`), lowercased with any `X-` prefix removed.
+pub const LINUX_DESKTOPS: &[&str] = &[
+    "budgie", "cinnamon", "cosmic", "deepin", "gnome", "hyprland", "i3", "kde", "labwc", "lxde",
+    "lxqt", "mate", "niri", "other", "pantheon", "river", "sway", "unity", "wayfire", "xfce",
+];
+
+/// `XDG_SESSION_TYPE`.
+pub const LINUX_SESSION_TYPES: &[&str] = &["other", "tty", "wayland", "x11"];
+
+/*
+The plan an account's provider reports, as Claude Swap and Codex Swap list it
+(`cswap list --json` `plan.organizationType` + `plan.tier`, `xswap list --json`
+`plan`). Never the account's email, name, organization or id.
+*/
+pub const CLAUDE_PLANS: &[&str] = &[
+    "enterprise",
+    "free",
+    "max",
+    "max_20x",
+    "max_5x",
+    "other",
+    "pro",
+    "team",
+];
+pub const CODEX_PLANS: &[&str] = &[
+    "business",
+    "edu",
+    "enterprise",
+    "free",
+    "go",
+    "other",
+    "plus",
+    "pro",
+    "prolite",
+    "team",
+];
+
+/// The same plans from best to least, so `claude_top_plan` and `codex_top_plan`
+/// name the best plan among an install's accounts.
+pub const CLAUDE_PLAN_RANK: &[&str] = &[
+    "enterprise",
+    "max_20x",
+    "max",
+    "max_5x",
+    "team",
+    "pro",
+    "free",
+    "other",
+];
+pub const CODEX_PLAN_RANK: &[&str] = &[
+    "enterprise",
+    "business",
+    "pro",
+    "team",
+    "edu",
+    "prolite",
+    "plus",
+    "go",
+    "free",
+    "other",
+];
+
+/// Where a built-in extension's on/off change was noticed: the daily snapshot
+/// compares the built-in extensions that are on with the last one it sent.
+pub const EXTENSION_TOGGLE_KINDS: &[&str] = &["built_in", "installed"];
+
 /// Event names. Only these reach PostHog.
 pub const EVENT_HEARTBEAT: &str = "heartbeat";
 pub const EVENT_APP_LAUNCHED: &str = "app.launched";
@@ -225,6 +338,10 @@ pub const EVENT_PROMPT_SENT: &str = "prompt.sent";
 pub const EVENT_SURFACE_OPENED: &str = "surface.opened";
 pub const EVENT_EXTENSION_INSTALLED: &str = "extension.installed";
 pub const EVENT_EXTENSION_UNINSTALLED: &str = "extension.uninstalled";
+pub const EVENT_EXTENSION_ENABLED: &str = "extension.enabled";
+pub const EVENT_EXTENSION_DISABLED: &str = "extension.disabled";
+pub const EVENT_BOOSTS_USED: &str = "boosts.used";
+pub const EVENT_SETTINGS_SNAPSHOT: &str = "settings.snapshot";
 
 /// PostHog's person-properties key. Overwrite semantics (`$set`), not
 /// `$set_once`: the person record should always show the install's CURRENT
@@ -265,6 +382,9 @@ pub enum PropertyValue {
     Extension(super::extensions::ExtensionRef),
     /// A sorted list of such extensions.
     ExtensionList(Vec<super::extensions::ExtensionRef>),
+    /// Official Store extensions with the version installed, sent as `id@version`. Each id is
+    /// re-checked against the Store whitelist and each version clamped like `Version`.
+    ExtensionVersionList(Vec<(super::extensions::ExtensionRef, String)>),
     /*
     PostHog's `$set` person-properties object, carried by the heartbeat only.
     Nesting `PropertyValue` inside itself is what keeps the privacy guarantee
@@ -279,8 +399,17 @@ pub enum PropertyValue {
 
 /// What a given property key is allowed to carry.
 #[derive(Clone, Copy, Debug)]
-enum PropertySpec {
+pub(super) enum PropertySpec {
     Number,
+    Bool,
+    /// One of the choices Settings itself lists for this settings key
+    /// (`telemetry::settings_snapshot::setting_choices`).
+    SettingChoice(&'static str),
+    /// Ghostex's own Boost ids (gx-chat-core `extras::boosts::BOOSTS`); a user's own Boost is
+    /// only ever counted, never named.
+    BoostList,
+    /// Official Store extension ids with their installed version.
+    StoreExtensionVersionList,
     Enum(&'static [&'static str]),
     EnumList(&'static [&'static str]),
     Version,
@@ -306,6 +435,10 @@ pub fn is_known_event(event: &str) -> bool {
             | EVENT_SURFACE_OPENED
             | EVENT_EXTENSION_INSTALLED
             | EVENT_EXTENSION_UNINSTALLED
+            | EVENT_EXTENSION_ENABLED
+            | EVENT_EXTENSION_DISABLED
+            | EVENT_BOOSTS_USED
+            | EVENT_SETTINGS_SNAPSHOT
     )
 }
 
@@ -487,6 +620,32 @@ fn event_property_spec(event: &str, key: &str) -> Option<PropertySpec> {
         (EVENT_SURFACE_OPENED, "extension") => Some(PropertySpec::Extension),
         (EVENT_SURFACE_OPENED, "client") => Some(PropertySpec::Enum(SURFACE_CLIENTS)),
         (EVENT_EXTENSION_INSTALLED, "source") => Some(PropertySpec::Enum(EXTENSION_SOURCES)),
+        (EVENT_APP_LAUNCHED, "linux_desktop") => Some(PropertySpec::Enum(LINUX_DESKTOPS)),
+        (EVENT_APP_LAUNCHED, "linux_session") => Some(PropertySpec::Enum(LINUX_SESSION_TYPES)),
+        /*
+        CDXC:Telemetry 2026-11-20:
+        Which extension, now that installs, uninstalls and on/off changes are
+        counted per extension: a built-in id, an official Store id or `custom`
+        (re-checked by `ExtensionRef::sendable`), and the version only for an
+        official Store extension.
+        */
+        (EVENT_EXTENSION_INSTALLED, "extension")
+        | (EVENT_EXTENSION_UNINSTALLED, "extension")
+        | (EVENT_EXTENSION_ENABLED, "extension")
+        | (EVENT_EXTENSION_DISABLED, "extension") => Some(PropertySpec::Extension),
+        (EVENT_EXTENSION_INSTALLED, "extension_version") => Some(PropertySpec::Version),
+        (EVENT_EXTENSION_ENABLED, "kind") | (EVENT_EXTENSION_DISABLED, "kind") => {
+            Some(PropertySpec::Enum(EXTENSION_TOGGLE_KINDS))
+        }
+        (EVENT_BOOSTS_USED, "agent") => Some(PropertySpec::Enum(KNOWN_AGENT_IDS)),
+        (EVENT_BOOSTS_USED, "agent_executable") => Some(PropertySpec::Token),
+        (EVENT_BOOSTS_USED, "source") => Some(PropertySpec::Enum(PROMPT_SOURCES)),
+        (EVENT_BOOSTS_USED, "boosts") => Some(PropertySpec::BoostList),
+        (EVENT_BOOSTS_USED, "boost_count") | (EVENT_BOOSTS_USED, "custom_boost_count") => {
+            Some(PropertySpec::Number)
+        }
+        (EVENT_SETTINGS_SNAPSHOT, PERSON_SET_KEY) => Some(PropertySpec::PersonSet),
+        (EVENT_SETTINGS_SNAPSHOT, key) => super::settings_snapshot::property_spec(key),
         _ => None,
     }
 }
@@ -509,6 +668,10 @@ fn person_property_spec(key: &str) -> Option<PropertySpec> {
         | "extension_count"
         | "remote_machine_count"
         | "days_since_install" => Some(PropertySpec::Number),
+        // CDXC:Telemetry 2026-11-20: the few snapshot fields worth a breakdown on the person.
+        key if super::settings_snapshot::PERSON_KEYS.contains(&key) => {
+            super::settings_snapshot::property_spec(key)
+        }
         /*
         `interface`, `default_agent`, `project_bucket`, and
         `identity_source` reuse the profile table verbatim rather than being
@@ -562,6 +725,43 @@ fn encode_property(spec: PropertySpec, value: &PropertyValue) -> Option<Value> {
     match (spec, value) {
         (PropertySpec::Number, PropertyValue::Number(number)) => {
             Number::from_f64(*number).map(Value::Number)
+        }
+        (PropertySpec::Bool, PropertyValue::Bool(value)) => Some(Value::Bool(*value)),
+        (PropertySpec::SettingChoice(key), PropertyValue::Enum(member)) => {
+            super::settings_snapshot::setting_choices(key)
+                .contains(member)
+                .then(|| Value::String((*member).to_string()))
+        }
+        (PropertySpec::BoostList, PropertyValue::EnumList(members)) => members
+            .iter()
+            .all(|member| {
+                ghostex_gx_chat_core::extras::boosts::boost(member)
+                    .is_some_and(|boost| boost.id == *member)
+            })
+            .then(|| {
+                Value::Array(
+                    members
+                        .iter()
+                        .map(|member| Value::String((*member).to_string()))
+                        .collect(),
+                )
+            }),
+        (PropertySpec::StoreExtensionVersionList, PropertyValue::ExtensionVersionList(entries)) => {
+            if entries.len() > super::extensions::MAX_STORE_EXTENSION_LIST_LENGTH {
+                return None;
+            }
+            entries
+                .iter()
+                .map(|(extension, version)| {
+                    let super::extensions::ExtensionRef::Store(_) = extension else {
+                        return None;
+                    };
+                    let id = extension.sendable()?;
+                    let version = normalize_version_string(version)?;
+                    Some(Value::String(format!("{id}@{version}")))
+                })
+                .collect::<Option<Vec<Value>>>()
+                .map(Value::Array)
         }
         (PropertySpec::Enum(table), PropertyValue::Enum(member)) => table
             .contains(member)

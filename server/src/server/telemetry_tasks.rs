@@ -25,10 +25,12 @@ pub(crate) fn spawn_telemetry_tasks(
     crate::telemetry::init(state.paths.clone(), state.metadata.server_id.as_str());
     let flush = crate::telemetry::spawn_flush_task(state.shutdown_tx.subscribe());
     let heartbeat_state = state.clone();
+    let snapshot_state = state.clone();
     let heartbeat = crate::telemetry::spawn_heartbeat_task(
         state.paths.clone(),
         state.shutdown_tx.subscribe(),
         move || collect_heartbeat_snapshot(&heartbeat_state, &install_created_at),
+        move || collect_settings_snapshot_facts(&snapshot_state),
     );
     TelemetryTasks { flush, heartbeat }
 }
@@ -80,4 +82,77 @@ fn collect_heartbeat_snapshot(
         remote_machine_count: settings.remote_machine_count,
         days_since_install: crate::telemetry::heartbeat::days_since_install(install_created_at),
     })
+}
+
+/*
+CDXC:Telemetry 2026-11-20:
+What the daily `settings.snapshot` reports beyond the settings file
+(telemetry/settings_snapshot.rs). Runs on the heartbeat's blocking worker, only
+when the heartbeat is due. A part that cannot be read is left out of the event
+(`None`), never reported as zero.
+
+Accounts come from the snapshot gxserver already keeps for Settings > Accounts
+and the sidebar meters (`accounts::runtime::current_snapshot`); it is read, not
+refreshed, so the snapshot never runs Claude Swap or Codex Swap itself. When no
+client has listed the accounts since gxserver started there is nothing to read,
+and the account fields are left out.
+*/
+fn collect_settings_snapshot_facts(
+    state: &Arc<AppState>,
+) -> crate::telemetry::settings_snapshot::SnapshotFacts {
+    use crate::telemetry::settings_snapshot::{AccountsReport, SnapshotFacts};
+    let settings = crate::shared_settings_file::read_shared_settings(&state.paths);
+    let remote_machine_count = settings
+        .as_ref()
+        .and_then(|settings| settings.get("remoteMachines"))
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
+    let workspace_count = open_gxserver_database(&state.paths)
+        .ok()
+        .and_then(|db| crate::workspaces::read_sidebar_workspaces(&db).ok())
+        .and_then(|value| value.get("workspaces")?.as_object().map(|map| map.len()));
+    let discovered = crate::accounts::runtime::current_snapshot();
+    let accounts = discovered.fetched_at.map(|_| {
+        let mut report = AccountsReport::default();
+        for account in &discovered.accounts {
+            *report.counts.entry(account.provider.id()).or_default() += 1;
+            let plans = match account.provider {
+                crate::accounts::model::Provider::Claude => &mut report.claude_plans,
+                crate::accounts::model::Provider::Codex => &mut report.codex_plans,
+            };
+            if let Some(plan) = account.plan {
+                if !plans.contains(&plan) {
+                    plans.push(plan);
+                }
+            }
+        }
+        report.claude_plans.sort_unstable();
+        report.codex_plans.sort_unstable();
+        if let Some(counts) = crate::accounts::usage_only::provider_counts(&state.paths) {
+            report.counts.extend(counts);
+        }
+        report
+    });
+    crate::telemetry::extensions::load_official_store_ids(&state.paths.extensions_dir);
+    let mut store_extensions = Vec::new();
+    let mut custom_extensions_installed = 0;
+    for extension in state.extension_registry.list().unwrap_or_default() {
+        if crate::telemetry::extensions::is_official_store_id(&extension.id) {
+            store_extensions.push((extension.id.clone(), extension.manifest.version.clone()));
+        } else {
+            custom_extensions_installed += 1;
+        }
+    }
+    store_extensions.sort();
+    store_extensions.truncate(crate::telemetry::extensions::MAX_STORE_EXTENSION_LIST_LENGTH);
+    SnapshotFacts {
+        linux: crate::telemetry::settings_snapshot::read_linux_report(),
+        remote_machine_count,
+        workspace_count,
+        boosts: crate::boosts::telemetry_summary(&state.paths),
+        accounts,
+        store_extensions,
+        custom_extensions_installed,
+    }
 }

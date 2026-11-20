@@ -19,7 +19,7 @@ use tokio::sync::broadcast;
 
 use crate::paths::GxserverPaths;
 
-use super::{client, gate, heartbeat, queue, state};
+use super::{client, extensions::ExtensionRef, gate, heartbeat, queue, settings_snapshot, state};
 
 pub const DEFAULT_FLUSH_INTERVAL: Duration = Duration::from_secs(30);
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
@@ -92,21 +92,29 @@ pub fn spawn_flush_task(mut shutdown_rx: broadcast::Receiver<()>) -> tokio::task
 /// The daily heartbeat. Runs its due-check immediately at start (so an install
 /// that is only ever open for twenty minutes a day still reports), then on a
 /// 24h interval.
-pub fn spawn_heartbeat_task<F>(
+pub fn spawn_heartbeat_task<F, G>(
     paths: GxserverPaths,
     mut shutdown_rx: broadcast::Receiver<()>,
     collect: F,
+    collect_snapshot: G,
 ) -> tokio::task::JoinHandle<()>
 where
     F: Fn() -> Option<heartbeat::HeartbeatSnapshot> + Send + Sync + 'static,
+    G: Fn() -> settings_snapshot::SnapshotFacts + Send + Sync + 'static,
 {
     let collect = Arc::new(collect);
+    let collect_snapshot = Arc::new(collect_snapshot);
     tokio::spawn(async move {
         loop {
             let pass_paths = paths.clone();
             let pass_collect = collect.clone();
+            let pass_collect_snapshot = collect_snapshot.clone();
             let _ = tokio::task::spawn_blocking(move || {
-                run_heartbeat_once(&pass_paths, pass_collect.as_ref());
+                run_heartbeat_once(
+                    &pass_paths,
+                    pass_collect.as_ref(),
+                    pass_collect_snapshot.as_ref(),
+                );
             })
             .await;
 
@@ -118,9 +126,10 @@ where
     })
 }
 
-fn run_heartbeat_once<F>(paths: &GxserverPaths, collect: &F)
+fn run_heartbeat_once<F, G>(paths: &GxserverPaths, collect: &F, collect_snapshot: &G)
 where
     F: Fn() -> Option<heartbeat::HeartbeatSnapshot>,
+    G: Fn() -> settings_snapshot::SnapshotFacts,
 {
     if !gate::is_enabled(paths) {
         return;
@@ -154,6 +163,34 @@ where
         return;
     }
     heartbeat::emit(&snapshot);
+    /*
+    CDXC:Telemetry 2026-11-20:
+    The settings snapshot rides the heartbeat's once-a-day clock rather than
+    keeping one of its own, so an install sends both or neither and the two
+    always describe the same day. A built-in extension switched on or off since
+    the last snapshot becomes an `extension.enabled` / `extension.disabled`
+    here: built-in extensions are settings any client can change (the desktop,
+    the web build, the phone, `ghostex settings`), and this is the one place
+    that sees every one of them. The first snapshot only records the list.
+    */
+    let settings = crate::shared_settings_file::read_shared_settings(paths);
+    settings_snapshot::emit(settings.as_ref(), &collect_snapshot());
+    let previous = state::read_built_in_extensions_on(&db);
+    if let Some(previous) = previous {
+        for id in &snapshot.built_in_extensions_on {
+            if !previous.iter().any(|known| known == id) {
+                super::capture::extension_toggled(ExtensionRef::BuiltIn(id), "built_in", true);
+            }
+        }
+        for id in &previous {
+            if !snapshot.built_in_extensions_on.contains(&id.as_str()) {
+                if let Some(id) = ghostex_settings_catalog::built_in_extensions::switchable_id(id) {
+                    super::capture::extension_toggled(ExtensionRef::BuiltIn(id), "built_in", false);
+                }
+            }
+        }
+    }
+    state::write_built_in_extensions_on(&db, &snapshot.built_in_extensions_on);
     state::write_last_heartbeat_at(
         &db,
         &chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
