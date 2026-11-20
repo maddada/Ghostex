@@ -210,6 +210,14 @@ pub(crate) enum GpuiAppToastAction {
         /// Settings > Security switch, or a gxserver from before plain approvals).
         require_presence: bool,
     },
+    /// "Let <this computer> manage <that computer>" on a connected computer's approval notice this
+    /// app can't answer yet: asks that computer to let this app in, then shows `request` again
+    /// (app/owner_security/ui.rs).
+    AskToManage {
+        label: String,
+        machine_id: String,
+        request: Box<ghostex_gx_protocol::approval::ApprovalRequest>,
+    },
 }
 
 impl GpuiAppToastAction {
@@ -223,9 +231,9 @@ impl GpuiAppToastAction {
             Self::RepairSpaceo => "Repair",
             Self::SecurityApproval { deny: false, .. } => "Approve",
             Self::SecurityApproval { deny: true, .. } => "Deny",
-            Self::NativeProjectPathAction { label, .. } | Self::RunInNewTerminal { label, .. } => {
-                label
-            }
+            Self::NativeProjectPathAction { label, .. }
+            | Self::RunInNewTerminal { label, .. }
+            | Self::AskToManage { label, .. } => label,
         }
     }
 }

@@ -353,12 +353,14 @@ impl GhostexGpuiApp {
                         devices,
                         asked,
                         note,
+                        can_ask,
                     } => this.owner_security_show_approve_elsewhere(
                         &chosen,
                         &request,
                         &devices,
                         asked,
                         note.as_deref(),
+                        can_ask,
                         cx,
                     ),
                 }
@@ -367,8 +369,14 @@ impl GhostexGpuiApp {
         .detach();
     }
 
+    /*
+    CDXC:Security 2026-11-20 FIX:
+    The user pasted M7-Desktop's computer code on m7-arch and the Mac showed "M7-Desktop asks for your approval … Approve it in Ghostex on …" with nothing to click: the Mac could approve nothing there (it was added again, CDXC:Security 2026-11-20 in re_added.rs), and asking to be let in waits for the user's own click (CDXC:Security 2026-11-17 at `ensure_owner_session`), which no notice offered. The user (11.12.0): "when the Mac truly can't approve, the notice offers a real 'Let <this Mac> manage <computer>?' action that starts the normal owner enrollment (the user's click and the owner flow decide; nothing auto-approves)." Its button asks there once (`owner_security::ask_to_manage`): that computer's owners get the "Let <this Mac> manage <computer>?" card with its key words, which the notice then names; where this app still holds a key that computer lists (an entry removed and added again, the old shared key), the unlock card shows too, and only its own Approve signs.
+    */
     /// A connected computer's request this app can't answer: a notice (no Approve) that says what
-    /// it asks and where to approve it; it goes when the request is answered there.
+    /// it asks and where to approve it; it goes when the request is answered there. `can_ask`: it
+    /// offers to ask that computer to let this app in.
+    #[allow(clippy::too_many_arguments)]
     fn owner_security_show_approve_elsewhere(
         &mut self,
         machine_id: &str,
@@ -376,6 +384,7 @@ impl GhostexGpuiApp {
         devices: &[String],
         asked: bool,
         note: Option<&str>,
+        can_ask: bool,
         cx: &mut gpui::Context<Self>,
     ) {
         let computer = crate::app::helpers::gpui_remote_machine_name_from_settings(machine_id)
@@ -409,7 +418,11 @@ impl GhostexGpuiApp {
                 title: format!("{computer} asks for your approval"),
                 description: Some(format!("{summary} Approve it {where_to}.{then}")),
                 copy_text: None,
-                action: None,
+                action: can_ask.then(|| GpuiAppToastAction::AskToManage {
+                    label: format!("Let {} manage {computer}", super::this_computer_name()),
+                    machine_id: machine_id.to_string(),
+                    request: Box::new(request.clone()),
+                }),
                 loading: false,
                 persistent: true,
                 duration_ms: 0,
@@ -417,6 +430,55 @@ impl GhostexGpuiApp {
             },
             cx,
         );
+    }
+
+    /// The notice's "Let <this computer> manage <that computer>" (CDXC:Security 2026-11-20 at
+    /// `owner_security_show_approve_elsewhere`): asks there once, shows the unlock card where an
+    /// old key of this app may let it in, and shows `request` again, now approvable here or naming
+    /// the ask's key words.
+    pub(crate) fn owner_security_ask_to_manage(
+        &mut self,
+        machine_id: String,
+        request: ApprovalRequest,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(target) = self.gpui_remote_gxserver_request_target(&machine_id) else {
+            self.dispatch_gpui_workspace_action_toast(
+                "warning",
+                "Computer not connected",
+                "Connect to that computer again, then ask.",
+                cx,
+            );
+            return;
+        };
+        let computer = crate::app::helpers::gpui_remote_machine_name_from_settings(&machine_id)
+            .unwrap_or_else(|| machine_id.clone());
+        let asked = cx.background_executor().spawn(async move {
+            let asked = super::ask_to_manage(&target, None);
+            let offer = asked
+                .as_ref()
+                .ok()
+                .and_then(|_| super::old_key_unlock_offer(&target));
+            (asked, offer)
+        });
+        cx.spawn(async move |this, cx| {
+            let (asked, offer) = asked.await;
+            let _ = this.update(cx, |this, cx| match asked {
+                Ok(_) => {
+                    if let Some(offer) = offer {
+                        this.owner_security_show_unlock_card(machine_id.clone(), offer, cx);
+                    }
+                    this.owner_security_show_card(Some(machine_id), request, cx);
+                }
+                Err(error) => this.dispatch_gpui_workspace_action_toast(
+                    "warning",
+                    &format!("Couldn't ask {computer}"),
+                    &error,
+                    cx,
+                ),
+            });
+        })
+        .detach();
     }
 
     /// The card that lets this app in on a locked connected computer with its old shared owner

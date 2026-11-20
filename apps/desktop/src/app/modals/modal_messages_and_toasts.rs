@@ -262,6 +262,13 @@ impl GhostexGpuiApp {
             } => {
                 self.owner_security_decide(request, *deny, machine_id.as_deref(), cx);
             }
+            GpuiAppToastAction::AskToManage {
+                machine_id,
+                request,
+                ..
+            } => {
+                self.owner_security_ask_to_manage(machine_id.clone(), (**request).clone(), cx);
+            }
         }
     }
 
