@@ -534,6 +534,7 @@ impl NativeChatView {
                 minutes => format!("{} h ago", minutes / 60),
             };
             rows.push(json!({
+                "iconPath": "titlebar/microphone.svg",
                 "label": format!(
                     "Transcribe previous ({}, {when})",
                     crate::app::voice_agent::dictation_clock(Duration::from_millis(duration_ms))
@@ -543,6 +544,7 @@ impl NativeChatView {
         }
         rows.push(json!({
             "label": "Dictation history…",
+            "iconPath": "titlebar/history.svg",
             "command": {"type":"composerHost","action":"dictationHistory"},
         }));
         self.menu_side = Some(super::option_menu::MenuSide::Right);

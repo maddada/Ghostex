@@ -121,6 +121,8 @@ fn lazy_menu(session_id: &str, action: Option<HoverAction>) -> Vec<MenuItem> {
     let owner = format!("session:{session_id}");
     vec![MenuItem {
         label: Some("Loading…".to_string()),
+        // CDXC:ContextMenus 2026-11-20 DECISION: User: "fix these context menu items not having an icon". The placeholder shows the spinner the app draws for every loading state, so the menu's rows all carry an icon.
+        icon: Some("loader2".to_string()),
         disabled: true,
         menu_owner: Some(owner.clone()),
         on_open: Some(MenuCommand::session_menu(
@@ -453,6 +455,7 @@ fn move_to_group_item(id: &str, moves: Option<&SessionGroupMoves>, stale: bool) 
     for group in &moves.groups {
         children.push(MenuItem {
             label: Some(group.title.clone()),
+            icon: Some("folder".to_string()),
             checked: group.is_current,
             command: (!group.is_current)
                 .then(|| MenuCommand::command(message::move_session_to_group(id, &group.group_id))),
