@@ -685,6 +685,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/readSessionChatSkills"
         | "/api/readSessionChatFiles"
         | "/api/sendSessionChatMessage"
+        // CDXC:SessionChat 2026-11-20 WHY: remote-allowed like sendSessionChatMessage, whose `--with-next` holds the messages it lists and withdraws on the machine that runs the session (session_chat_send/with_next.rs). It carries ids and the held text.
+        | "/api/heldWithNext"
         // CDXC:SessionChat 2026-11-13 WHY: remote-allowed like sendSessionChatMessage: answers brought back from an exported page are a message to a session on the machine that runs it (visual_pages/import.rs).
         | "/api/importVisualPageAnswers"
         | "/api/saveSessionChatImage"

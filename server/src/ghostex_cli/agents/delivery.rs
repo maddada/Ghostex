@@ -274,7 +274,9 @@ fn hold_with_next(
         &json!({
             "globalRef": recipient["globalRef"], "projectId": recipient["projectId"],
             "sessionId": recipient["sessionId"], "text": message, "withNext": true,
-            "sendRequestId": send_request_id, "via": via,
+            "sendRequestId": send_request_id, "via": via, "body": body,
+            "senderProjectId": sender.map(|sender| &sender["projectId"]),
+            "senderSessionId": sender.map(|sender| &sender["sessionId"]),
         }),
         flags,
     )
@@ -284,14 +286,21 @@ fn hold_with_next(
             "The recipient's Ghostex is too old to hold a message for its next one, so it took it as a normal message and sent it now.".into(),
         ));
     }
+    let duplicate = result["duplicate"] == json!(true);
+    let count = result["count"].as_u64().unwrap_or(1);
     Ok(json!({
         "ok": true,
         "status": "held",
-        "note": format!(
-            "Held: it goes in right after the next message the recipient gets ({} held now). It never starts a turn by itself.",
-            result["count"].as_u64().unwrap_or(1)
-        ),
+        "note": if duplicate {
+            format!("This request id is already held; Ghostex did not hold it again ({count} held now).")
+        } else {
+            format!(
+                "Held: it goes in with the next message the recipient gets ({count} held now). It never starts a turn by itself. ghostex agents held {reference} lists what is held; ghostex agents unhold {reference} {send_request_id} withdraws this one.",
+                reference = text(recipient, "globalRef"),
+            )
+        },
         "mode": "with-next",
+        "duplicate": duplicate,
         "sendRequestId": send_request_id,
         "sender": sender_summary(sender),
         "recipient": identity::summary(recipient),
@@ -436,4 +445,78 @@ fn compacted_first_note(result: &Value) -> Option<String> {
         "Ghostex compacted this worker first ({size} of context, idle {}, past its {cache} prompt cache), to save tokens; your message waits in its queue and is typed as soon as the compaction ends. Do not send it again.",
         span(number("idleMinutes"))
     ))
+}
+
+/// `ghostex agents held [<session-ref>]`: what `--with-next` holds for that session, or, with no
+/// session, what the calling session holds for others (on this computer, or `--computer`).
+pub(super) fn held(args: &Arguments) -> CliResult<Value> {
+    let mut params = json!({ "action": "list" });
+    let flags = match args.positional.first() {
+        Some(reference) => {
+            let flags = identity::inventory_flags(&args.flags, reference)?;
+            let recipient = selector::resolve_live_or_closed_session(reference, &flags)?;
+            params["projectId"] = recipient["projectId"].clone();
+            params["sessionId"] = recipient["sessionId"].clone();
+            params["globalRef"] = recipient["globalRef"].clone();
+            flags
+        }
+        None => {
+            // Without a session: what the calling session holds for others.
+            let caller = identity::caller().map_err(|error| {
+                CliError::Other(format!(
+                    "{error} To see what a session holds, name it: ghostex agents held <session-ref>."
+                ))
+            })?;
+            params["senderProjectId"] = caller["projectId"].clone();
+            params["senderSessionId"] = caller["sessionId"].clone();
+            args.flags.clone()
+        }
+    };
+    let result = call_gxserver_rpc(
+        crate::session_chat_send::HELD_WITH_NEXT_ENDPOINT,
+        &params,
+        &flags,
+    )
+    .map_err(|error| CliError::Other(format!("Could not read what is held: {error}")))?;
+    Ok(json!({ "ok": true, "held": result["held"] }))
+}
+
+/// `ghostex agents unhold <session-ref> (<request-id>... | --all)`: withdraws messages
+/// `--with-next` holds for that session. A session withdraws only what it sent; the user, from
+/// their own terminal, anything.
+pub(super) fn unhold(args: &Arguments) -> CliResult<Value> {
+    let reference = &args.positional[0];
+    let flags = identity::inventory_flags(&args.flags, reference)?;
+    let recipient = selector::resolve_live_or_closed_session(reference, &flags)?;
+    // A session withdraws as itself; only the user's own terminal (outside every session) goes
+    // as the user, who may withdraw anything.
+    let caller = match identity::caller() {
+        Ok(caller) => Some(caller),
+        Err(error) => {
+            identity::sender(true).map_err(|_| error)?;
+            None
+        }
+    };
+    let result = call_gxserver_rpc(
+        crate::session_chat_send::HELD_WITH_NEXT_ENDPOINT,
+        &json!({
+            "action": "withdraw",
+            "globalRef": recipient["globalRef"], "projectId": recipient["projectId"],
+            "sessionId": recipient["sessionId"],
+            "sendRequestIds": &args.positional[1..], "all": args.all,
+            "senderProjectId": caller.as_ref().map(|caller| &caller["projectId"]),
+            "senderSessionId": caller.as_ref().map(|caller| &caller["sessionId"]),
+        }),
+        &flags,
+    )
+    .map_err(|error| CliError::Other(format!("Nothing was withdrawn: {error}")))?;
+    let withdrawn = result["withdrawn"].as_array().map_or(0, Vec::len);
+    Ok(json!({
+        "ok": true,
+        "status": if withdrawn > 0 { "withdrawn" } else { "nothing-withdrawn" },
+        "withdrawn": result["withdrawn"],
+        "notHeld": result["notHeld"],
+        "stillHeld": result["count"],
+        "recipient": identity::summary(&recipient),
+    }))
 }

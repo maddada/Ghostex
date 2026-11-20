@@ -92,6 +92,12 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         "send" => {
             print_json(&delivery::send(&args)?);
         }
+        "held" => {
+            print_json(&delivery::held(&args)?);
+        }
+        "unhold" => {
+            print_json(&delivery::unhold(&args)?);
+        }
         "create" => {
             print_json(&lifecycle::create(&args)?);
         }

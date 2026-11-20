@@ -244,6 +244,26 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                 return Err(CliError::Other("--all is only available for list.".into()));
             }
         }
+        "held" | "unhold" => {
+            if parsed.body_file.is_some() || parsed.delivery != Delivery::Normal {
+                return Err(CliError::Other(format!(
+                    "{} does not accept a message or a delivery flag.",
+                    parsed.command
+                )));
+            }
+            if parsed.command == "held" && (parsed.positional.len() > 1 || parsed.all) {
+                return Err(CliError::Other(
+                    "Usage: ghostex agents held [<session-ref>].".into(),
+                ));
+            }
+            if parsed.command == "unhold"
+                && (parsed.positional.is_empty() || (parsed.positional.len() == 1) != parsed.all)
+            {
+                return Err(CliError::Other(
+                    "Usage: ghostex agents unhold <session-ref> <request-id>... (or --all for every one you sent).".into(),
+                ));
+            }
+        }
         "send" => {
             if parsed.all {
                 return Err(CliError::Other("--all is only available for list.".into()));

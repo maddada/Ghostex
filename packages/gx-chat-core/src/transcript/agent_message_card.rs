@@ -332,7 +332,10 @@ const SEND_TIME_SLACK_MS: i64 = 1_000;
 /// (`?<fingerprint>|<project>|<session>|<called>|<answered>`, an unknown part left empty).
 pub fn live_delivery_key(recipient: &Value) -> Option<String> {
     if recipient["failed"] == true
-        || !matches!(text(recipient, "status"), "pending" | "accepted" | "queued")
+        || !matches!(
+            text(recipient, "status"),
+            "pending" | "accepted" | "queued" | "held"
+        )
     {
         return None;
     }
@@ -451,6 +454,13 @@ fn delivery_status(recipient: &Value) -> Value {
     match text(recipient, "status") {
         "delivered" => status("Delivered", "Delivered", "good", "check"),
         "queued" => status("Queued", "Queued until its turn ends", "waiting", "clock"),
+        // `agents send --with-next`: it goes in with the recipient's next message (GitHub #677).
+        "held" => status(
+            "Held",
+            "Held for the recipient's next message",
+            "waiting",
+            "clock",
+        ),
         "pending" => status("Waiting for agent", "Waiting for agent", "waiting", "clock"),
         "accepted" => status("Sent", "Sent", "good", "check"),
         // A waiting send Ghostex does not follow: it went out, and nothing says where it is now.

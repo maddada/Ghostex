@@ -234,6 +234,12 @@ pub(super) async fn route_chat_http(
             .await;
             response
         }
+        "/api/heldWithNext" => crate::session_chat_send::handle_held_with_next_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+        ),
         "/api/saveSessionChatImage" => {
             handle_save_session_chat_image_http(&state, endpoint.path, request_id, &body_json)
         }

@@ -450,6 +450,14 @@ pub(crate) async fn send_session_chat_message_with_draft(
     let _owned = lock.lock().await;
     // Read before the message goes, so the open questions it answers by tag are left out.
     let notes = coordinator_playbook_note(state, project_id, session_id, text, source);
+    // What `agents send --with-next` held for this session goes with this message: inside it for
+    // Claude Code, as messages of their own right after it for other agents (`send_held_with_next`).
+    let held = if carries_held_notes(text, source) {
+        crate::session_chat_send::take_held_with_next(state, project_id, session_id)
+    } else {
+        Vec::new()
+    };
+    let folded = !held.is_empty() && takes_held_notes_inside(state, project_id, session_id);
     let sent = send_session_chat_message_locked(
         state,
         project_id,
@@ -459,49 +467,75 @@ pub(crate) async fn send_session_chat_message_with_draft(
         source,
         draft_version,
         interrupt,
+        if folded { held.as_slice() } else { &[] },
     )
     .await;
     if sent.is_ok() {
         settle_work_replies(state, project_id, session_id, text, image_paths, source);
-        send_held_with_next(state, project_id, session_id, text, source).await;
+        if !folded {
+            send_held_with_next(state, project_id, session_id, held, source).await;
+        }
         if let Some(notes) = notes {
             send_ghostex_notes(state, project_id, session_id, &notes).await;
         }
+    } else {
+        crate::session_chat_send::put_back_held_with_next(state, project_id, session_id, &held);
     }
     sent
 }
 
-/// The messages `agents send --with-next` held for this session, each typed as a message of its
-/// own right after the one just sent, under the same send lock (session_chat_send/with_next.rs).
-/// Only a message someone sent carries them (the chat box, another session's message, a queued
-/// row), never a slash or shell command. One that does not go is held again for the next.
-async fn send_held_with_next(
-    state: &AppState,
-    project_id: &str,
-    session_id: &str,
-    text: &str,
-    source: SessionChatMessageSource,
-) {
-    if !matches!(
+/// Whether `text` carries what `agents send --with-next` held: a message someone sent (the chat
+/// box, another session's message, a queued row), never a slash or shell command.
+fn carries_held_notes(text: &str, source: SessionChatMessageSource) -> bool {
+    matches!(
         source,
         SessionChatMessageSource::Composer
             | SessionChatMessageSource::AutomaticQueue
             | SessionChatMessageSource::ManualQueue
-    ) || matches!(text.trim_start().chars().next(), Some('/' | '!'))
-    {
-        return;
-    }
-    let held = crate::session_chat_send::take_held_with_next(state, project_id, session_id);
-    for (index, message) in held.iter().enumerate() {
+    ) && !matches!(text.trim_start().chars().next(), Some('/' | '!'))
+}
+
+/// Whether the held messages go inside the releasing message: Claude Code queues a message typed
+/// while it works and, when its reply ends without a tool call, runs it as a turn of its own
+/// (GitHub #677: one message and two held notes made three turns and three replies). Codex and
+/// the others take a message typed mid-turn into the running turn, and show each note as the
+/// agent message it is.
+fn takes_held_notes_inside(state: &AppState, project_id: &str, session_id: &str) -> bool {
+    open_gxserver_database(&state.paths)
+        .ok()
+        .and_then(|db| {
+            crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str())
+                .get_session(project_id, session_id)
+                .ok()
+                .flatten()
+        })
+        .is_some_and(|session| {
+            session_chat_agent_for_session(&session).as_deref() == Some("claude")
+        })
+}
+
+/// The messages `agents send --with-next` held for this session, each typed as a message of its
+/// own right after the one just sent, under the same send lock (session_chat_send/with_next.rs).
+/// One that does not go is held again for the next.
+async fn send_held_with_next(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    held: Vec<Value>,
+    source: SessionChatMessageSource,
+) {
+    for (index, note) in held.iter().enumerate() {
+        let message = crate::session_chat_send::held_note_message(note);
         let sent = Box::pin(send_session_chat_message_locked(
             state,
             project_id,
             session_id,
-            message,
+            &message,
             &[],
             source,
             None,
             false,
+            &[],
         ))
         .await;
         if sent.is_err() {
@@ -565,6 +599,7 @@ async fn send_ghostex_notes(
         SessionChatMessageSource::GhostexNote,
         None,
         false,
+        &[],
     ))
     .await;
     match sent {
@@ -677,6 +712,7 @@ async fn send_session_chat_message_locked(
     source: SessionChatMessageSource,
     draft_version: Option<&crate::session_chat_draft_versions::DraftVersion>,
     interrupt: bool,
+    held: &[Value],
 ) -> std::result::Result<usize, DomainStateError> {
     if let Some(version) = draft_version {
         let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
@@ -713,6 +749,15 @@ async fn send_session_chat_message_locked(
     };
     // Each Boost pill's prompt goes under the message (CDXC:Boosts 2026-11-20 in boosts.rs).
     let expanded = crate::boosts::with_boosts(&state.paths, &expanded);
+    // Held `--with-next` messages for Claude Code, in the block every chat leaves out of the
+    // user's row (`takes_held_notes_inside`; CDXC:SessionChat 2026-11-20 in with_next.rs).
+    let expanded = match crate::session_chat_send::held_notes_block(held) {
+        Some(block) => ghostex_gx_chat_core::session::appended_notes::with_system_notes(
+            &expanded,
+            &[block.as_str()],
+        ),
+        None => expanded,
+    };
     let text = expanded.as_str();
     let mut params = Map::new();
     params.insert("projectId".to_string(), json!(project_id));

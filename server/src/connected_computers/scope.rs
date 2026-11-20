@@ -37,6 +37,8 @@ pub(crate) const PEER_ALLOWED_ENDPOINTS: &[&str] = &[
     "/api/reloadSessionAgent",
     // Messages, answers and keys.
     "/api/sendSessionChatMessage",
+    // What `agents send --with-next` holds there: `agents held` and `agents unhold`.
+    "/api/heldWithNext",
     "/api/queueSessionChatPrompt",
     "/api/updateSessionChatQueuedPrompt",
     "/api/answerSessionChatPrompt",

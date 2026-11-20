@@ -3956,9 +3956,14 @@ next input boundary and wakes a sleeping one, so it is right for almost every
 message. Use `--body-file` for multiline messages, `--interrupt` for an urgent
 correction, `--queue` to leave the message waiting until the current turn
 finishes, or `--with-next` for a note that needs nothing from the recipient now:
-Ghostex holds it and types it right after the next message that session gets
+Ghostex holds it and gives it to that session with the next message it gets
 (yours, another session's, a queued one), so it never starts a turn by itself
-and never wakes a sleeping session; it works for any session. A queued message waits as long as that turn does, so send normally
+and never wakes a sleeping session; it works for any session. Claude Code gets
+the held notes inside that message (one turn); other agents get each right
+after it, in the same turn. `agents held [<session-ref>]` lists what is held,
+`agents unhold <session-ref> <request-id>` withdraws a note, a closed session
+is refused, and a note whose recipient is closed before its next message is
+dropped and its sender told it was not delivered. A queued message waits as long as that turn does, so send normally
 unless the point is to have the next task ready for an agent whose final
 message you have already read. A send reports `delivered` once the recipient's
 transcript shows the message, `accepted` when the agent took it but has not
