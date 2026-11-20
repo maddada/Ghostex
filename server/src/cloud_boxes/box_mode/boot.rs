@@ -212,6 +212,15 @@ fn start_relay(bin: &Path, gxserver_port: u16) -> Result<(), String> {
 /// only"): a box publishes no port and answers only the user's own devices. tailcat with an empty
 /// allow-list admits every client that has the address, so a boot that asks for tailcat without
 /// device keys is refused instead of serving an open box.
+///
+/// CDXC:CloudBoxes 2026-11-21 FIX:
+/// GitHub #698: since 11.7.0 (7be3fc18d) no key can be added while Easy Connect is off, and the
+/// boot sent the devices first and turned Easy Connect on second, so every Instabox box failed its
+/// boot. Turning it on first would start the helper on the list the disk already had (a snapshot's
+/// or the last boot's devices) until the new one landed. The boot now sends one
+/// `enableForBoxDevices` update: gxserver reads the devices from this box's ticket and saves them
+/// with Easy Connect on in one write, so the helper only ever starts on the ticket's devices. That
+/// update is refused on a computer that isn't a box, so the off rule holds for every other caller.
 fn start_tailcat(ticket: &BoxBootTicket) -> Result<String, String> {
     if ticket.allow_device_keys.is_empty() {
         return Err(
@@ -220,15 +229,12 @@ fn start_tailcat(ticket: &BoxBootTicket) -> Result<String, String> {
         );
     }
     let flags = Flags::default();
-    let call = |params: Value| {
-        rpc::call_gxserver_rpc("/api/updateTailcatState", &params, &flags)
-            .map_err(|error| format!("The box's gxserver did not set up tailcat: {error}"))
-    };
-    call(json!({
-        "kind": "setAllowedClientKeys",
-        "allowed_client_keys": ticket.allow_device_keys,
-    }))?;
-    call(json!({ "kind": "setEnabled", "enabled": true }))?;
+    rpc::call_gxserver_rpc(
+        "/api/updateTailcatState",
+        &json!({ "kind": "enableForBoxDevices" }),
+        &flags,
+    )
+    .map_err(|error| format!("The box's gxserver did not set up tailcat: {error}"))?;
     let started = Instant::now();
     loop {
         let status = rpc::call_gxserver_rpc("/api/tailcatStatus", &json!({}), &flags).ok();
@@ -252,6 +258,29 @@ fn start_tailcat(ticket: &BoxBootTicket) -> Result<String, String> {
         }
         std::thread::sleep(Duration::from_millis(250));
     }
+}
+
+/// The devices this box's boot ticket lets reach it, for gxserver's `enableForBoxDevices` update.
+/// Refused on a computer that isn't a box, for a ticket that doesn't ask for tailcat (`local`) and
+/// for one that names no device.
+pub(crate) fn ticket_device_keys() -> Result<Vec<String>, String> {
+    let ticket = state::read_ticket().ok_or_else(|| super::not_in_box_mode().message)?;
+    if !ticket.tailcat {
+        return Err("This Cloud Box's boot ticket doesn't ask for Easy Connect.".to_string());
+    }
+    let keys: Vec<String> = ticket
+        .allow_device_keys
+        .into_iter()
+        .map(|key| key.trim().to_string())
+        .filter(|key| !key.is_empty() && key != crate::tailcat::TAILCAT_ALLOW_NONE)
+        .collect();
+    if keys.is_empty() {
+        return Err(
+            "This Cloud Box's boot ticket names no device allowed to reach it, so Easy Connect stays off."
+                .to_string(),
+        );
+    }
+    Ok(keys)
 }
 
 pub(crate) fn run_boot(ticket: &BoxBootTicket) -> Result<BoxBootResult, String> {

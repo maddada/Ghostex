@@ -126,8 +126,11 @@ pub(crate) async fn handle_tailcat_http(
             CDXC:RemotePairing 2026-11-11 FIX:
             GitHub #559: Easy Connect was turned on with no helper on the computer and nothing ever installed one, so it stayed on, stopped, with "Reinstall Ghostex" under it. Turning it on now starts the helper's install when it is missing; Easy Connect starts on the helper the moment it is in place, and the pages show the install's steps from the status below.
             */
-            if matches!(update, TailcatStateUpdate::SetEnabled { enabled: true })
-                && !status.binary_found
+            if matches!(
+                update,
+                TailcatStateUpdate::SetEnabled { enabled: true }
+                    | TailcatStateUpdate::EnableForBoxDevices {}
+            ) && !status.binary_found
             {
                 super::install::start_installation(
                     state.paths.clone(),
@@ -178,6 +181,10 @@ fn easy_connect_audit_action(update: &TailcatStateUpdate) -> crate::audit::Actio
         TailcatStateUpdate::SetEnabled { enabled: false } => {
             Action::new("easyConnect.disable", "Turned off Easy Connect")
         }
+        TailcatStateUpdate::EnableForBoxDevices {} => Action::new(
+            "easyConnect.enable",
+            "Turned on Easy Connect for the devices this Cloud Box's boot names",
+        ),
         TailcatStateUpdate::SetPorts { ports } => Action::new(
             "easyConnect.ports",
             format!(
