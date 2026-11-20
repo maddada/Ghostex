@@ -200,6 +200,9 @@ pub(crate) struct NativeSidebarMachine {
     /// Rows waiting for approval: the red dot (gx-core `SessionRow::needs_you`).
     #[serde(default)]
     pub(crate) approval_count: usize,
+    /// Rows with the red failed dot, not waiting for approval (gx-core `TileStatus::Failed`).
+    #[serde(default)]
+    pub(crate) failed_count: usize,
     pub(crate) id: String,
     pub(crate) label: String,
     pub(crate) state: String,
@@ -224,6 +227,37 @@ pub(crate) struct NativeSidebarSpace {
     /// Rows waiting for approval: the red dot (gx-core `SessionRow::needs_you`).
     #[serde(default)]
     pub(crate) approval_count: usize,
+    /// Rows with the red failed dot, not waiting for approval (gx-core `TileStatus::Failed`).
+    #[serde(default)]
+    pub(crate) failed_count: usize,
+}
+
+impl NativeSidebarSpace {
+    /// What the Space's tile dot and tooltip draw (status.rs `TileCounts`).
+    pub(crate) fn tile_counts(&self) -> super::status::TileCounts {
+        super::status::TileCounts {
+            approval: self.approval_count,
+            failed: self.failed_count,
+            question: self.question_count,
+            attention: self.attention_count,
+            working: self.working_count,
+            background_work: self.background_work_count,
+        }
+    }
+}
+
+impl NativeSidebarMachine {
+    /// What the computer's tile dot and tooltip draw (status.rs `TileCounts`).
+    pub(crate) fn tile_counts(&self) -> super::status::TileCounts {
+        super::status::TileCounts {
+            approval: self.approval_count,
+            failed: self.failed_count,
+            question: self.question_count,
+            attention: self.attention_count,
+            working: self.working_count,
+            background_work: self.background_work_count,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]

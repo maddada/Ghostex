@@ -22,8 +22,8 @@ use super::spaces::{
     SpaceSelection, SpacesState, OTHER_SPACE_ICON, OTHER_SPACE_ID, OTHER_SPACE_LABEL,
 };
 use super::view::{
-    CollectionView, EmptyState, GroupSummary, GroupView, MachineSummary, MachineTabView, NeedsYou,
-    OrderItem, OrderKind, ShowAllProjectsRow, SidebarView, SpaceProject, SpaceView,
+    CollectionView, EmptyState, GroupSummary, GroupView, MachineSummary, MachineTabView, OrderItem,
+    OrderKind, ShowAllProjectsRow, SidebarView, SpaceProject, SpaceView,
 };
 use crate::keys::{parse_workspace_subgroup_id, MachineId};
 
@@ -314,11 +314,8 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
                 SpaceSelection::Space(row.id.clone())
             };
             let mut session_ids: BTreeSet<&str> = BTreeSet::new();
-            let mut working_count = 0;
-            let mut attention_count = 0;
-            let mut background_work_count = 0;
-            let mut question_count = 0;
-            let mut approval_count = 0;
+            // Each session once, under its most urgent state (`TileStatus`, CDXC:Spaces 2026-11-20).
+            let mut counts = MachineSummary::default();
             for group_id in group_ids
                 .iter()
                 .filter(|group_id| shows_group(&view, group_id))
@@ -331,18 +328,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
                     if !session_ids.insert(session.row.sidebar_session_id.as_str()) {
                         continue;
                     }
-                    if session.row.activity == "working" {
-                        working_count += 1;
-                    }
-                    match session.row.needs_you() {
-                        Some(NeedsYou::Approval) => approval_count += 1,
-                        Some(NeedsYou::Question) => question_count += 1,
-                        Some(NeedsYou::Attention) => attention_count += 1,
-                        None => {}
-                    }
-                    if session.row.shows_background_work() {
-                        background_work_count += 1;
-                    }
+                    counts.count(session.row.tile_status());
                 }
             }
             // The Hermes button is the selected slot while Bots is showing.
@@ -351,11 +337,12 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
             // CDXC:Spaces 2026-10-21 DECISION:
             // User: "if a space is active please don't show the dots under it's space button". The Space being shown has its sessions on screen, so only the other Spaces carry status counts.
             if !row.selected {
-                row.working_count = working_count;
-                row.attention_count = attention_count;
-                row.background_work_count = background_work_count;
-                row.question_count = question_count;
-                row.approval_count = approval_count;
+                row.working_count = counts.working_count;
+                row.attention_count = counts.attention_count;
+                row.background_work_count = counts.background_work_count;
+                row.question_count = counts.question_count;
+                row.approval_count = counts.approval_count;
+                row.failed_count = counts.failed_count;
             }
         }
         spaces = rows;
@@ -658,18 +645,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
             .iter()
             .filter(|session| !session.row.is_borrowed_thread())
         {
-            if session.row.activity == "working" {
-                machine_summary.working_count += 1;
-            }
-            match session.row.needs_you() {
-                Some(NeedsYou::Approval) => machine_summary.approval_count += 1,
-                Some(NeedsYou::Question) => machine_summary.question_count += 1,
-                Some(NeedsYou::Attention) => machine_summary.attention_count += 1,
-                None => {}
-            }
-            if session.row.shows_background_work() {
-                machine_summary.background_work_count += 1;
-            }
+            machine_summary.count(session.row.tile_status());
         }
     }
     // The selected machine's tab draws the counts of the list just built; every other tab draws the
@@ -701,6 +677,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
                 background_work_count: counts.background_work_count,
                 question_count: counts.question_count,
                 approval_count: counts.approval_count,
+                failed_count: counts.failed_count,
             }
         })
         .collect();

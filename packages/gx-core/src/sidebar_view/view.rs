@@ -148,7 +148,8 @@ impl SidebarView {
     }
 }
 
-/// The working and attention counts of a machine tab.
+/// The counts behind a machine tab's status dot and its tooltip: each session in one count, its
+/// [`TileStatus`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MachineSummary {
     pub working_count: usize,
@@ -159,6 +160,73 @@ pub struct MachineSummary {
     pub question_count: usize,
     /// Rows waiting for approval (the red dot); counted here only, not as questions or attention.
     pub approval_count: usize,
+    /// Rows with the red failed dot (a failed model change or send, a program error, blocked or
+    /// stuck) that are not waiting for approval.
+    pub failed_count: usize,
+}
+
+impl MachineSummary {
+    /// Counts one session under its tile status.
+    pub(crate) fn count(&mut self, status: Option<TileStatus>) {
+        match status {
+            Some(TileStatus::Approval) => self.approval_count += 1,
+            Some(TileStatus::Failed) => self.failed_count += 1,
+            Some(TileStatus::Question) => self.question_count += 1,
+            Some(TileStatus::Attention) => self.attention_count += 1,
+            Some(TileStatus::Working) => self.working_count += 1,
+            Some(TileStatus::BackgroundWork) => self.background_work_count += 1,
+            None => {}
+        }
+    }
+}
+
+/// The one count a session falls in on a Space or computer tile, the most urgent first: what blocks
+/// it (an approval, then a failure), then what waits on the user (a question, then an unseen
+/// finished turn), then work in progress (working, then a background shell).
+///
+/// CDXC:Spaces 2026-11-20 DECISION:
+/// User picked A of the one-dot page (Q4264): a Space tile, and a computer tile, shows at most one
+/// status dot, in the colour of its most urgent state, with the counts on hover (on the phone, in
+/// the long-press menu). "blocker is higher than needs you": a session waiting for approval, and
+/// one whose row draws the red failed dot (a failed model change or send, a program error, blocked
+/// or stuck), outrank a question and an unseen finished turn, which outrank working and the grey
+/// shell dot. Each session counts once, under its most urgent state, so the hover counts add up to
+/// the sessions behind the dot. This supersedes the overlapping stack of 2026-10-20 on these tiles
+/// only; a folded coordinator row and the chat's pills keep their stacks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TileStatus {
+    Approval,
+    Failed,
+    Question,
+    Attention,
+    Working,
+    BackgroundWork,
+}
+
+/// [`TileStatus`] from a session's facts; `failed` is the row's red failed dot, `question` its pink
+/// one (after any side-chat rollup).
+pub(crate) fn tile_status(
+    approval: bool,
+    failed: bool,
+    question: bool,
+    activity: &str,
+    background_work: bool,
+) -> Option<TileStatus> {
+    if approval {
+        Some(TileStatus::Approval)
+    } else if failed {
+        Some(TileStatus::Failed)
+    } else if question {
+        Some(TileStatus::Question)
+    } else if activity == "attention" {
+        Some(TileStatus::Attention)
+    } else if activity == "working" {
+        Some(TileStatus::Working)
+    } else if background_work {
+        Some(TileStatus::BackgroundWork)
+    } else {
+        None
+    }
 }
 
 /// One machine tab: what the host said about it, plus the counts its badge draws.
@@ -175,6 +243,8 @@ pub struct MachineTabView {
     pub question_count: usize,
     /// Rows waiting for approval (the red dot); counted here only, not as questions or attention.
     pub approval_count: usize,
+    /// Rows with the red failed dot, not waiting for approval ([`TileStatus::Failed`]).
+    pub failed_count: usize,
 }
 
 /// The machine a drawn group belongs to; absent for this computer's groups.
@@ -643,6 +713,23 @@ impl SessionRow {
             && !self.awaiting_approval
     }
 
+    /// The row draws the red failed dot: a failed model change or send, blocked, a program error
+    /// or stuck (apps/desktop/src/app/native_sidebar/sessions.rs).
+    pub fn has_failed(&self) -> bool {
+        self.model_selection_failed || self.program_status_failed || self.stuck
+    }
+
+    /// The one count this row falls in on a Space or computer tile.
+    pub fn tile_status(&self) -> Option<TileStatus> {
+        tile_status(
+            self.awaiting_approval,
+            self.has_failed(),
+            self.has_question(),
+            &self.activity,
+            self.has_background_work,
+        )
+    }
+
     /// Which needs-you dot a header counts this row under, the most urgent first: the red approval
     /// dot, the pink question dot, then the blue attention dot.
     ///
@@ -939,6 +1026,8 @@ pub struct SpaceView {
     pub question_count: usize,
     /// Rows waiting for approval (the red dot); counted here only, not as questions or attention.
     pub approval_count: usize,
+    /// Rows with the red failed dot, not waiting for approval ([`TileStatus::Failed`]).
+    pub failed_count: usize,
 }
 
 /// A collection (a colored folder of projects).

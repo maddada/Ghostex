@@ -39,6 +39,9 @@ pub(crate) fn background_work_color() -> gpui::Rgba {
 /// CDXC:SessionStatus 2026-10-14 WHY: a session whose program reported `error` over OSC 7501 (while those reports drive its status) draws the same red dot until the user has seen it; the row's tooltip carries the program's message.
 pub(crate) const FAILED_COLOR: u32 = 0xef4444;
 
+/// The blue dot of a session whose finished turn the user has not seen (`attention`).
+pub(crate) const ATTENTION_COLOR: u32 = 0x95d7f6;
+
 /// The pink dot of a session with an unanswered question card.
 pub(crate) const QUESTION_COLOR: u32 = 0xf472b6;
 
@@ -106,7 +109,7 @@ pub(crate) fn activity_indicator(
     )
 }
 
-/// What a [`status_dot_stack`] sits on, so each dot's ring matches it: the colour at rest, the colour while the pointer is over the owner, and the owner's GPUI group name (the owner calls `.group(..)` with the same name).
+/// What a tile's status dot sits on, so each dot's ring matches it: the colour at rest, the colour while the pointer is over the owner, and the owner's GPUI group name (the owner calls `.group(..)` with the same name).
 pub(crate) struct DotBackdrop {
     rest: Hsla,
     hover: Hsla,
@@ -129,31 +132,96 @@ impl DotBackdrop {
     }
 }
 
-/// CDXC:Spaces 2026-10-20 DECISION:
-/// User: the status dots under a Space, and on a remote machine tab, overlap by half instead of sitting side by side: blue most right and on top, orange in the middle, the grey shell-running dot (which never shows with orange) behind them. The pink question dot is shown there too, "as last one from the left covered by the orange status dot", so a session with an unanswered question counts pink instead of blue, as its session card shows it. Every dot is `STATUS_DOT_SIZE`, and "when we show the dots on top of each other we need to have 1px border around the dots": each dot has a 1px ring in the colour of what is behind the stack (the sidebar, a selected Space's fill, the hover fill), outside its 8px. This supersedes the 2026-09-26 "no outline on these indicator dots please at all" and its mixed 8/7/6px sizes.
-/// CDXC:Spaces 2026-09-26 WHY:
-/// The stack has an explicit width with each dot placed at a fixed offset instead of negative flex margins, which left the measured box narrower than the drawn dots and pushed two or more of them right of centre.
-pub(crate) fn status_dot_stack(
-    working_count: usize,
-    attention_count: usize,
-    background_work_count: usize,
-    question_count: usize,
-    approval_count: usize,
-    scale: f32,
-    backdrop: DotBackdrop,
-) -> gpui::Div {
-    let dots = stack_colors(
-        working_count > 0,
-        attention_count > 0,
-        background_work_count > 0,
-        question_count > 0,
-        approval_count > 0,
-    );
-    let hover = backdrop.hover;
-    overlapped_dots(dots, scale, backdrop.rest, Some((hover, backdrop.group)))
+/// CDXC:Spaces 2026-11-20 DECISION:
+/// User picked A of the one-dot page (Q4264): a Space tile and a computer tile show at most one
+/// status dot, in the colour of their most urgent state, and hovering the tile lists the counts.
+/// "blocker is higher than needs you": red (an approval, or a failed, blocked or stuck session)
+/// outranks pink (a question) and blue (an unseen finished turn), which outrank amber (working)
+/// and grey (a shell still running). gx-core counts each session once under that order
+/// (`TileStatus`), so the hover counts add up. The dot keeps the 2026-10-20 size and its 1px ring
+/// in the colour behind it. This supersedes the 2026-10-20 overlapping stack on these tiles; a
+/// folded coordinator row and the chat's pills keep theirs (`folded_status_indicator`,
+/// `sized_overlapped_dots`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct TileCounts {
+    pub(crate) approval: usize,
+    pub(crate) failed: usize,
+    pub(crate) question: usize,
+    pub(crate) attention: usize,
+    pub(crate) working: usize,
+    pub(crate) background_work: usize,
 }
 
-/// The colours of a [`status_dot_stack`], back to front: the red approval dot is the front one.
+impl TileCounts {
+    pub(crate) fn has_status(&self) -> bool {
+        self.color().is_some()
+    }
+
+    /// The dot's colour: the most urgent state with a session in it.
+    fn color(&self) -> Option<Hsla> {
+        if self.approval + self.failed > 0 {
+            Some(rgb(FAILED_COLOR).into())
+        } else if self.question > 0 {
+            Some(rgb(QUESTION_COLOR).into())
+        } else if self.attention > 0 {
+            Some(rgb(ATTENTION_COLOR).into())
+        } else if self.working > 0 {
+            Some(rgb(WORKING_COLOR).into())
+        } else if self.background_work > 0 {
+            Some(background_work_color().into())
+        } else {
+            None
+        }
+    }
+
+    /// The tooltip's lines under the tile's name, the most urgent first, one state a line.
+    pub(crate) fn tooltip_lines(&self) -> Vec<String> {
+        let line = |count: usize, one: &str, many: &str| {
+            (count > 0).then(|| format!("{count} {}", if count == 1 { one } else { many }))
+        };
+        [
+            line(
+                self.approval,
+                "waiting for approval",
+                "waiting for approval",
+            ),
+            line(self.failed, "blocked or failed", "blocked or failed"),
+            line(self.question, "question", "questions"),
+            line(self.attention, "finished", "finished"),
+            line(self.working, "working", "working"),
+            line(self.background_work, "shell running", "shells running"),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    }
+
+    /// `heading`, then [`Self::tooltip_lines`] under it.
+    pub(crate) fn tooltip(&self, heading: &str) -> String {
+        std::iter::once(heading.to_string())
+            .chain(self.tooltip_lines())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
+/// A Space or computer tile's one status dot ([`TileCounts`]), with the 1px ring of what it sits
+/// on; `None` while nothing in it has a state.
+pub(crate) fn tile_status_dot(
+    counts: TileCounts,
+    scale: f32,
+    backdrop: DotBackdrop,
+) -> Option<gpui::Div> {
+    let color = counts.color()?;
+    Some(overlapped_dots(
+        vec![color],
+        scale,
+        backdrop.rest,
+        Some((backdrop.hover, backdrop.group)),
+    ))
+}
+
+/// The colours of a folded coordinator's overlapping stack, back to front: the red approval dot is the front one.
 fn stack_colors(
     working: bool,
     attention: bool,
@@ -174,7 +242,7 @@ fn stack_colors(
     .collect()
 }
 
-/// A folded coordinator's [`status_dot_stack`] (gx-core `RowNesting::folded_status`), in a session row's status slot; `ring` is the row's fill.
+/// A folded coordinator's overlapping status dots (gx-core `RowNesting::folded_status`), in a session row's status slot; `ring` is the row's fill.
 pub(crate) fn folded_status_indicator(
     working: bool,
     attention: bool,
@@ -200,7 +268,7 @@ pub(crate) fn folded_status_indicator(
         .into_any_element()
 }
 
-/// The overlapped dots of [`status_dot_stack`], each with a 1px ring in `ring` (what the stack sits on); `hover` is the ring colour while the pointer is over the owner group.
+/// The overlapped dots of a status stack, each with a 1px ring in `ring` (what the stack sits on); `hover` is the ring colour while the pointer is over the owner group.
 fn overlapped_dots(
     dots: Vec<Hsla>,
     scale: f32,
@@ -246,7 +314,7 @@ pub(crate) fn sized_overlapped_dots(
 }
 
 /// CDXC:SessionStatus 2026-10-23 DECISION:
-/// User: "also 1 more thing if there's question + working or question + done then show those 2 dots overlapping like we show it at the bottom of the space button". A row with a pending question draws the pink dot, and when the session is also working (orange) or done (blue attention) a second dot overlaps it, as `status_dot_stack` draws the Space buttons' dots: the pink one behind and to the left, the other in front, a 1px ring in `ring` (the row's fill) between them. The pair is centred in the same `STATUS_SLOT_WIDTH` slot as every other indicator.
+/// User: "also 1 more thing if there's question + working or question + done then show those 2 dots overlapping like we show it at the bottom of the space button". A row with a pending question draws the pink dot, and when the session is also working (orange) or done (blue attention) a second dot overlaps it, as the Space buttons drew their dots then: the pink one behind and to the left, the other in front, a 1px ring in `ring` (the row's fill) between them. The pair is centred in the same `STATUS_SLOT_WIDTH` slot as every other indicator.
 pub(crate) fn question_indicator(activity: &str, scale: f32, ring: Hsla) -> AnyElement {
     let front: Option<Hsla> = match activity {
         "working" => Some(rgb(WORKING_COLOR).into()),

@@ -20,7 +20,7 @@ use super::collections::CollectionsState;
 use super::inputs::{SidebarHostInputs, SidebarUiState, LOCAL_MACHINE_ID};
 use super::membership::project_members;
 use super::rows::side_chat_needs;
-use super::view::MachineSummary;
+use super::view::{tile_status, MachineSummary};
 
 /// The projects a machine draws: everything loaded, minus the ones it parked as Recent Projects
 /// and the ones a local close hid. The same filter `build_project_meta` applies before it orders
@@ -111,28 +111,17 @@ pub(crate) fn machine_tab_summary(
                 .get(&(session.project_id.clone(), session.session_id.clone()))
                 .copied()
                 .unwrap_or_default();
-            let awaiting_approval = session.awaiting_approval || side_chats.approval;
-            if session.activity.as_str() == "working" {
-                summary.working_count += 1;
-            }
-            // `SessionRow::needs_you`'s order, after the same side-chat rollup as the row.
-            if awaiting_approval {
-                summary.approval_count += 1;
-            } else if ghostex_gx_protocol::session_has_question(
-                session.pending_question_count + side_chats.questions,
-                session.awaiting_answer || side_chats.awaiting_answer,
-            ) {
-                summary.question_count += 1;
-            } else if session.activity.as_str() == "attention" {
-                summary.attention_count += 1;
-            }
-            if session.background_work_detected_at.is_some()
-                && session.activity.as_str() != "working"
-                && session.activity.as_str() != "attention"
-                && !awaiting_approval
-            {
-                summary.background_work_count += 1;
-            }
+            // `SessionRow::tile_status`, after the same side-chat rollup as the row.
+            summary.count(tile_status(
+                session.awaiting_approval || side_chats.approval,
+                super::rows::session_failed(&session),
+                ghostex_gx_protocol::session_has_question(
+                    session.pending_question_count + side_chats.questions,
+                    session.awaiting_answer || side_chats.awaiting_answer,
+                ),
+                session.activity.as_str(),
+                session.background_work_detected_at.is_some(),
+            ));
         }
     }
     summary
