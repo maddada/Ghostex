@@ -239,9 +239,23 @@ pub(crate) fn presentation_session_work(project: &Value, session: &Value) -> Opt
                 && offers_work_cleanup(session, &key)
             {
                 output.insert("offerCleanup".to_string(), json!(true));
+                // This computer answers it together with the coordinator's other threads
+                // (`/api/answerWorkCleanupThreads`), so a client may group it in the banner; an
+                // older one leaves it out and the offer stays on the row.
+                output.insert("offerCleanupAll".to_string(), json!(true));
             }
         }
         output.insert("pullRequest".to_string(), pull_request);
+    }
+    // A cleanup gxserver did by itself, which the coordinator's banner reports with Undo, and
+    // whether the worktree is gone for a merged PR (the thread folds as finished).
+    if let Some(auto_cleaned) =
+        presentation_auto_cleaned(session, chrono::Utc::now().timestamp_millis())
+    {
+        output.insert("autoCleaned".to_string(), auto_cleaned);
+    }
+    if work_cleaned_up(session) {
+        output.insert("cleanedUp".to_string(), json!(true));
     }
     // The menu's "Back to automatic" only means something when a link was set by hand.
     let manual = manual_work_links(session);

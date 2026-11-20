@@ -50,6 +50,16 @@ struct Chip {
     tooltip: String,
 }
 
+/// The row's merged-PR offer is answered in its coordinator's banner (gx-core
+/// `RowNesting::cleanup_in_banner`, sidebar_snapshot.rs `cleanupInBanner`).
+pub(crate) fn offer_in_banner(session: &NativeSidebarSession) -> bool {
+    session
+        .details
+        .get("cleanupInBanner")
+        .and_then(serde_json::Value::as_bool)
+        == Some(true)
+}
+
 impl GhostexGpuiApp {
     /// CDXC:SessionLinks 2026-10-24 DECISION:
     /// User: "i think i we don't need a separate thing called "work mode" and instead we can just do this". A Work mode card no longer draws its own permanent line of links (CDXC:WorkMode 2026-10-09, superseded): its links follow "Session links in the sidebar" like every card's. Only the merged-PR Clean up / Keep offer still takes a second line, with the PR chip, while it waits for an answer.
@@ -61,7 +71,12 @@ impl GhostexGpuiApp {
         appearance: &SidebarAppearance,
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
-        let work = session.work.as_ref().filter(|work| work.offer_cleanup)?;
+        // A thread whose coordinator's banner answers its offer draws none of its own
+        // (cleanup_banner.rs).
+        let work = session
+            .work
+            .as_ref()
+            .filter(|work| work.offer_cleanup && !offer_in_banner(session))?;
         let scale = appearance.scale;
         let project_id = ghostex_gx_core::SessionKey::parse_sidebar_session_id(&session.session_id)
             .filter(|key| key.machine.is_local())

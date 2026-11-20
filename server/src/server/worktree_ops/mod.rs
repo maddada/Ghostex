@@ -21,10 +21,10 @@ pub(crate) use sessions::*;
 
 #[derive(Clone)]
 pub(crate) struct ProjectWorktreeOperationContext {
-    parent_path: String,
+    pub(crate) parent_path: String,
     parent_project: Value,
     parent_project_id: String,
-    projects: Vec<Value>,
+    pub(crate) projects: Vec<Value>,
     source_path: String,
     source_project_id: String,
 }

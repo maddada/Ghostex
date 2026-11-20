@@ -9,8 +9,8 @@ use std::collections::{BTreeSet, HashMap};
 
 use crate::keys::SessionKey;
 use crate::sidebar_view::{
-    is_recent_thread, recent_thread_deadline_ms, session_is_snoozed, CoordinatorBadge,
-    FoldedStatus, RowNesting, SessionRow, ThreadTally,
+    is_finished_thread, is_recent_thread, offer_in_banner, recent_thread_deadline_ms,
+    session_is_snoozed, CoordinatorBadge, FoldedStatus, RowNesting, SessionRow, ThreadTally,
 };
 
 use super::build::{came_back_ms, machine_key, UnifiedFilter, UnifiedRow, UnifiedSettings};
@@ -77,6 +77,19 @@ pub struct UnifiedCrew {
     /// The focused session is one of its threads, at any depth, drawn or not
     /// (`RowNesting::holds_active_below`).
     pub active_below: bool,
+    /// Its older threads that are finished (`RowNesting::finished_threads`).
+    pub finished: u16,
+    /// What its merged-worktrees banner says (`RowNesting::cleanup_offers`, `auto_cleaned`).
+    pub cleanup_offers: u16,
+    pub auto_cleaned: u16,
+    pub auto_cleaned_undo: u16,
+}
+
+impl UnifiedCrew {
+    /// Its merged-worktrees banner is drawn after its threads.
+    pub fn has_banner(&self) -> bool {
+        self.open && (self.cleanup_offers > 0 || self.auto_cleaned > 0)
+    }
 }
 
 impl UnifiedCrew {
@@ -89,6 +102,10 @@ impl UnifiedCrew {
             collapsed: !self.open,
             older_threads: if self.older_row { self.older } else { 0 },
             older_threads_shown: self.older_shown,
+            finished_threads: if self.older_row { self.finished } else { 0 },
+            cleanup_offers: self.cleanup_offers,
+            auto_cleaned: self.auto_cleaned,
+            auto_cleaned_undo: self.auto_cleaned_undo,
             contains_active_session: self.contains_active,
             holds_active_below: self.active_below,
             folded_status: self.folded_status,
@@ -321,7 +338,23 @@ fn lay_out(
     };
     let mut tally = ThreadTally::default();
     let bump = |count: &mut u16| *count = count.saturating_add(1);
+    let (mut finished, mut cleanup_offers, mut auto_cleaned, mut auto_cleaned_undo) =
+        (0_u16, 0_u16, 0_u16, 0_u16);
     for child in &mut row.threads {
+        let session = &child.session.row;
+        if !child.shown && is_finished_thread(session) {
+            bump(&mut finished);
+        }
+        child.cleanup_in_banner = offer_in_banner(session, &row.session.row);
+        if child.cleanup_in_banner {
+            bump(&mut cleanup_offers);
+        }
+        if let Some(undo) = session.work.as_ref().and_then(|work| work.auto_cleaned) {
+            bump(&mut auto_cleaned);
+            if undo {
+                bump(&mut auto_cleaned_undo);
+            }
+        }
         let session = &child.session.row;
         tally.total = tally.total.saturating_add(1);
         match session.thread_state.as_deref() {
@@ -368,6 +401,10 @@ fn lay_out(
         team_status,
         contains_active: false,
         active_below: false,
+        finished,
+        cleanup_offers,
+        auto_cleaned,
+        auto_cleaned_undo,
     });
     for child in &mut row.threads {
         let matched = child.subtree_matched;

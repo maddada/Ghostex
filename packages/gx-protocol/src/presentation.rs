@@ -804,6 +804,40 @@ pub struct PresentationSessionWork {
         skip_serializing_if = "std::ops::Not::not"
     )]
     pub offer_cleanup: bool,
+    /// This computer answers the offer together with its coordinator's other threads
+    /// (`/api/answerWorkCleanupThreads`), so a client may group it in the coordinator's banner.
+    /// Older computers leave it out and the offer stays on the row.
+    #[serde(
+        default,
+        deserialize_with = "crate::de::null_as_default",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub offer_cleanup_all: bool,
+    /// gxserver cleaned this merged thread up by itself and its coordinator's banner still says so
+    /// (server/src/server/work_cleanup_threads.rs).
+    #[serde(
+        default,
+        deserialize_with = "crate::de::null_as_default",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub auto_cleaned: Option<PresentationWorkAutoCleaned>,
+    /// The worktree was cleaned up for the merged PR, by the user or by itself.
+    #[serde(
+        default,
+        deserialize_with = "crate::de::null_as_default",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub cleaned_up: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresentationWorkAutoCleaned {
+    #[serde(default)]
+    pub at: String,
+    /// The worktree can be put back.
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub undo: bool,
 }
 
 impl PresentationSessionWork {

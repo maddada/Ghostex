@@ -194,6 +194,7 @@ pub(crate) mod tests;
 pub mod title_generation;
 pub(crate) mod title_job_recovery;
 pub mod typed_operation_http;
+mod work_cleanup_threads;
 mod work_mode_sync;
 mod workspaces_switch;
 pub(crate) use workspaces_switch::publish_presentation_snapshot;

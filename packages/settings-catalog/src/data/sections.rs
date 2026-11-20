@@ -537,6 +537,7 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "sidebarSessionLinks",
             "titleSessionsByBranch",
             "offerCleanupWhenPrMerges",
+            "cleanUpMergedThreads",
             "sidebarSessionTagListItems",
             "dimSleepingSessions",
             "dimInactiveProjects",

@@ -874,6 +874,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         // session by its ids, like the links themselves.
         | "/api/listWorkLinkCandidates"
         | "/api/answerWorkCleanup"
+        // A coordinator's banner answers its threads' offers together, by the coordinator's ids.
+        | "/api/answerWorkCleanupThreads"
         // CDXC:SessionLinks 2026-10-24 WHY: a sidebar or phone showing a remote machine's sessions adds, removes and reads their links like work links: opaque ids and a link's text.
         | "/api/addSessionLink"
         | "/api/removeSessionLink"

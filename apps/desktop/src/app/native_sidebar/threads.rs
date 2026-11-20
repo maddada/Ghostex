@@ -399,12 +399,26 @@ pub(crate) struct OlderThreadsRow {
     pub(crate) shown: bool,
     /// The tree lines that run past the row, toward the coordinator's next sibling or an ancestor's.
     pub(crate) passing_lines: u64,
+    /// How many of the `count` older threads are finished: when all are, the row reads "N finished
+    /// threads" (gx-core `RowNesting::finished_threads`).
+    pub(crate) finished: u64,
+    /// The coordinator's merged-worktrees banner, drawn above the row (cleanup_banner.rs). A
+    /// coordinator with a banner and no older threads draws only the banner (`count` 0).
+    pub(crate) banner: Option<super::cleanup_banner::CleanupBanner>,
 }
 
 fn older_threads_row(session: &NativeSidebarSession) -> Option<OlderThreadsRow> {
     let threads = session.details.get("coordinatorThreads")?;
-    let count = threads.get("older").and_then(Value::as_u64).unwrap_or(0);
-    if count == 0 || threads.get("collapsed").and_then(Value::as_bool) == Some(true) {
+    let number = |key: &str| threads.get(key).and_then(Value::as_u64).unwrap_or(0);
+    let count = number("older");
+    let banner = super::cleanup_banner::CleanupBanner::new(
+        u16::try_from(number("cleanupOffers")).unwrap_or(u16::MAX),
+        u16::try_from(number("autoCleaned")).unwrap_or(u16::MAX),
+        u16::try_from(number("autoCleanedUndo")).unwrap_or(u16::MAX),
+    );
+    if (count == 0 && banner.is_none())
+        || threads.get("collapsed").and_then(Value::as_bool) == Some(true)
+    {
         return None;
     }
     Some(OlderThreadsRow {
@@ -413,10 +427,9 @@ fn older_threads_row(session: &NativeSidebarSession) -> Option<OlderThreadsRow> 
         depth: thread_depth(session),
         count,
         shown: threads.get("olderShown").and_then(Value::as_bool) == Some(true),
-        passing_lines: threads
-            .get("passingLinesBelow")
-            .and_then(Value::as_u64)
-            .unwrap_or(0),
+        passing_lines: number("passingLinesBelow"),
+        finished: number("finished"),
+        banner,
     })
 }
 
@@ -477,7 +490,8 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    /// The quiet row that lists a coordinator's older threads, or tucks them away again.
+    /// What follows a coordinator's threads: its merged-worktrees banner (cleanup_banner.rs), then
+    /// the quiet row that lists its older threads, or tucks them away again.
     pub(crate) fn render_older_threads_row(
         &self,
         row: OlderThreadsRow,
@@ -485,14 +499,32 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let scale = appearance.scale;
-        let label = match (row.shown, row.count) {
-            (true, _) => "Hide older threads".to_string(),
-            (false, 1) => "1 older thread".to_string(),
-            (false, count) => format!("{count} older threads"),
+        let banner = row.banner.map(|banner| {
+            self.render_cleanup_banner(
+                &row.coordinator,
+                banner,
+                5.0 + (row.depth + 1.0) * THREAD_INDENT + 15.0 + 6.0,
+                passing_lines(row.passing_lines, banner.height(), scale).collect(),
+                appearance,
+                cx,
+            )
+        });
+        if row.count == 0 {
+            return v_flex().w_full().children(banner).into_any_element();
+        }
+        // CDXC:WorkMode 2026-11-20 SEE-ALSO: gx-core `is_finished_thread` (the user's decision, Q4286): the row names finished threads when they are all it holds.
+        let finished = row.finished == row.count;
+        let label = match (row.shown, row.count, finished) {
+            (true, _, true) => "Hide finished threads".to_string(),
+            (true, _, false) => "Hide older threads".to_string(),
+            (false, 1, true) => "1 finished thread".to_string(),
+            (false, count, true) => format!("{count} finished threads"),
+            (false, 1, false) => "1 older thread".to_string(),
+            (false, count, false) => format!("{count} older threads"),
         };
         let coordinator = row.coordinator.clone();
         let unified_key = row.unified_key.clone();
-        div()
+        let older = div()
             .id(gpui::SharedString::from(format!(
                 "native-sidebar-older-threads-{}",
                 row.coordinator
@@ -539,7 +571,15 @@ impl GhostexGpuiApp {
                     cx,
                 )
             })
-            .into_any_element()
+            .into_any_element();
+        match banner {
+            Some(banner) => v_flex()
+                .w_full()
+                .child(banner)
+                .child(older)
+                .into_any_element(),
+            None => older,
+        }
     }
 }
 

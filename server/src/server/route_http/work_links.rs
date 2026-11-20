@@ -74,6 +74,23 @@ pub(super) async fn route_work_links_http(
                 ),
             }
         }
+        // A coordinator's banner: every thread's offer at once (work_cleanup_threads.rs).
+        "/api/answerWorkCleanupThreads" => {
+            match super::super::work_cleanup_threads::answer_work_cleanup_threads(
+                &state, &body_json,
+            )
+            .await
+            {
+                Ok(result) => routed_json(
+                    Some(endpoint.path),
+                    StatusCode::OK,
+                    rpc_success(request_id, result),
+                ),
+                Err(error) => {
+                    project_worktree_operation_error_response(endpoint.path, request_id, error)
+                }
+            }
+        }
         "/api/answerWorkCleanup" => match answer_work_cleanup(&state, &body_json).await {
             Ok(result) => routed_json(
                 Some(endpoint.path),
@@ -142,7 +159,7 @@ fn open_repository_db(
 /// session the way the Park action does (`isParked`, then a sleep when "Sleep session when
 /// parking" is on). A worktree with uncommitted changes is kept and the session still parks, so
 /// nothing is lost. Either answer is recorded for the PR so the offer never comes back for it.
-async fn answer_work_cleanup(
+pub(in crate::server) async fn answer_work_cleanup(
     state: &Arc<AppState>,
     body: &Value,
 ) -> std::result::Result<Value, ProjectWorktreeOperationError> {
@@ -255,7 +272,11 @@ async fn answer_work_cleanup(
     }))
 }
 
-async fn sleep_work_cleanup_session(state: &Arc<AppState>, project_id: &str, session_id: &str) {
+pub(in crate::server) async fn sleep_work_cleanup_session(
+    state: &Arc<AppState>,
+    project_id: &str,
+    session_id: &str,
+) {
     let sleeper = state.clone();
     let (sleep_project_id, sleep_session_id) = (project_id.to_string(), session_id.to_string());
     let _ = tokio::task::spawn_blocking(move || {

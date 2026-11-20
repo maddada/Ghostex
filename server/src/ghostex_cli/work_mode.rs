@@ -11,7 +11,7 @@ use super::args::parse_args;
 use super::output::print_json;
 use super::rpc::{self, CliError, CliResult};
 
-/// `ghostex issues status|linear-key|source|tracker|create-ticket|start|cleanup …`. `on|off` are left from
+/// `ghostex issues status|linear-key|source|tracker|create-ticket|start|cleanup|cleanup-threads …`. `on|off` are left from
 /// the retired per-project switch: they change nothing and print what the project has.
 pub(super) fn work_mode_command(args: &[String]) -> CliResult<()> {
     let parsed = parse_args(args);
@@ -68,8 +68,9 @@ pub(super) fn work_mode_command(args: &[String]) -> CliResult<()> {
             Ok(())
         }
         "cleanup" => answer_cleanup(&parsed.rest[1..], flags),
+        "cleanup-threads" => answer_cleanup_threads(&parsed.rest[1..], flags),
         other => Err(CliError::Other(format!(
-            "Unknown issues command \"{other}\". Use status, linear-key, source, tracker, create-ticket, start or cleanup."
+            "Unknown issues command \"{other}\". Use status, linear-key, source, tracker, create-ticket, start, cleanup or cleanup-threads."
         ))),
     }
 }
@@ -366,6 +367,46 @@ fn answer_cleanup(rest: &[String], flags: &super::args::Flags) -> CliResult<()> 
         "/api/answerWorkCleanup",
         &Value::Object(params),
         &with_default_timeout(flags, "60000"),
+    )?;
+    print_json(&result);
+    Ok(())
+}
+
+/// `ghostex issues cleanup-threads <coordinator> clean-up|keep|undo|dismiss`: a coordinator's
+/// banner, for all its threads at once: answers each merged-PR offer, puts back the worktrees
+/// cleaned up by themselves, or hides the line about them (`/api/answerWorkCleanupThreads`).
+fn answer_cleanup_threads(rest: &[String], flags: &super::args::Flags) -> CliResult<()> {
+    let usage = "Pass the coordinator and the answer: ghostex issues cleanup-threads <coordinator> clean-up|keep|undo|dismiss.";
+    let (selector, answer) = match rest {
+        [answer] => (None, answer),
+        [selector, answer] => (Some(selector), answer),
+        _ => return Err(CliError::Other(usage.to_string())),
+    };
+    let answer = match answer.trim().to_ascii_lowercase().as_str() {
+        "clean-up" | "cleanup" => "cleanUp",
+        "keep" => "keep",
+        "undo" => "undo",
+        "dismiss" => "dismiss",
+        _ => return Err(CliError::Other(usage.to_string())),
+    };
+    let mut payload = Map::new();
+    if let Some(selector) = flags
+        .string_value("sessionId")
+        .map(str::to_string)
+        .or_else(|| selector.cloned())
+    {
+        payload.insert("sessionId".to_string(), json!(selector));
+    }
+    let mut params = with_resolved_gxserver_session_params(&Value::Object(payload), flags)?
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    params.insert("answer".to_string(), json!(answer));
+    // Each thread's worktree is removed or put back in turn.
+    let result = rpc::call_gxserver_rpc(
+        "/api/answerWorkCleanupThreads",
+        &Value::Object(params),
+        &with_default_timeout(flags, "180000"),
     )?;
     print_json(&result);
     Ok(())

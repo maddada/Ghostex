@@ -19,13 +19,41 @@ fn is_busy_thread(row: &SessionRow) -> bool {
     matches!(row.thread_state.as_deref(), Some("working" | "waiting")) || row.activity == "working"
 }
 
+/// A thread whose work is over: its PR is merged (or its worktree was cleaned up for it), and it
+/// neither works nor waits on the user.
+///
+/// CDXC:WorkMode 2026-11-20 SEE-ALSO: the user's decision in server/src/server/work_cleanup_threads.rs (Q4286, C): finished threads fold away behind the coordinator's older-threads row however recently they were active, and the row reads "N finished threads" while every thread it holds is finished.
+pub(crate) fn is_finished_thread(row: &SessionRow) -> bool {
+    !is_busy_thread(row)
+        && row.needs_you().is_none()
+        && row
+            .work
+            .as_ref()
+            .is_some_and(super::work::SessionWork::is_finished)
+}
+
 /// A thread an expanded coordinator lists without its "N older threads" row.
 pub(crate) fn is_recent_thread(row: &SessionRow, now_ms: u64) -> bool {
     is_busy_thread(row)
-        || row
-            .timing
-            .last_interaction_ms
-            .is_some_and(|at| at + RECENT_THREAD_MS > now_ms as i64)
+        || (!is_finished_thread(row)
+            && row
+                .timing
+                .last_interaction_ms
+                .is_some_and(|at| at + RECENT_THREAD_MS > now_ms as i64))
+}
+
+/// A thread whose merged-PR offer its coordinator's banner answers (`RowNesting::cleanup_offers`):
+/// its computer answers it for all the coordinator's threads at once, and it runs on the
+/// coordinator's computer, which is the one that answers.
+pub(crate) fn offer_in_banner(thread: &SessionRow, coordinator: &SessionRow) -> bool {
+    thread
+        .work
+        .as_ref()
+        .is_some_and(|work| work.offer_cleanup && work.offer_cleanup_all)
+        && match (&thread.key, &coordinator.key) {
+            (Some(thread), Some(coordinator)) => thread.machine == coordinator.machine,
+            _ => false,
+        }
 }
 
 /// When an idle thread stops being recent, so the list is rebuilt then.
@@ -350,6 +378,33 @@ pub(crate) fn nest_threads(
         })
         .collect();
 
+    // The coordinator banner's counts over its direct threads, folded or not (a lead has none).
+    let mut banner: HashMap<usize, (u16, u16, u16)> = HashMap::new();
+    let mut in_banner = vec![false; sessions.len()];
+    for (parent, list) in &children {
+        if lead_parent[*parent] {
+            continue;
+        }
+        let counts = banner.entry(*parent).or_default();
+        for child in list {
+            let row = &sessions[*child].row;
+            if offer_in_banner(row, &sessions[*parent].row) {
+                in_banner[*child] = true;
+                counts.0 = counts.0.saturating_add(1);
+            }
+            if let Some(undo) = row.work.as_ref().and_then(|work| work.auto_cleaned) {
+                counts.1 = counts.1.saturating_add(1);
+                if undo {
+                    counts.2 = counts.2.saturating_add(1);
+                }
+            }
+        }
+    }
+
+    let is_finished: Vec<bool> = sessions
+        .iter()
+        .map(|session| is_finished_thread(&session.row))
+        .collect();
     let mut sessions: Vec<Option<SessionView>> = sessions.into_iter().map(Some).collect();
     let mut nested = Vec::with_capacity(order.len());
     let mut sections = Vec::with_capacity(order.len());
@@ -375,6 +430,21 @@ pub(crate) fn nest_threads(
                         .unwrap_or(u16::MAX)
                 }),
             older_threads_shown: shows_older[index],
+            finished_threads: children.get(&index).filter(|_| !lead_parent[index]).map_or(
+                0,
+                |list| {
+                    u16::try_from(
+                        list.iter()
+                            .filter(|child| is_older[**child] && is_finished[**child])
+                            .count(),
+                    )
+                    .unwrap_or(u16::MAX)
+                },
+            ),
+            cleanup_offers: banner.get(&index).map_or(0, |counts| counts.0),
+            auto_cleaned: banner.get(&index).map_or(0, |counts| counts.1),
+            auto_cleaned_undo: banner.get(&index).map_or(0, |counts| counts.2),
+            cleanup_in_banner: in_banner[index],
             older_hidden: older_hidden_of[index],
             contains_active_session: holds_active == Some(index),
             holds_active_below: active_above.contains(&index),

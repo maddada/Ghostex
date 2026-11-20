@@ -1067,6 +1067,10 @@ pub(crate) fn insert_coordinator_nesting(
                 Value::from(nesting.passing_lines),
             );
         }
+        // Its merged-PR offer is answered in its coordinator's banner (native_sidebar/threads.rs).
+        if nesting.cleanup_in_banner {
+            details.insert("cleanupInBanner".to_string(), Value::Bool(true));
+        }
     }
     if row.is_coordinator {
         let badge = nesting.coordinator_badge();
@@ -1085,6 +1089,10 @@ pub(crate) fn insert_coordinator_nesting(
                 "collapsed": nesting.collapsed,
                 "older": nesting.older_threads,
                 "olderShown": nesting.older_threads_shown,
+                "finished": nesting.finished_threads,
+                "cleanupOffers": nesting.cleanup_offers,
+                "autoCleaned": nesting.auto_cleaned,
+                "autoCleanedUndo": nesting.auto_cleaned_undo,
                 "passingLinesBelow": nesting.passing_lines_below(),
                 "containsActive": nesting.contains_active_session,
                 "activeBelow": nesting.holds_active_below,
