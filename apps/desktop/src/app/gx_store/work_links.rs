@@ -109,7 +109,12 @@ impl GhostexGpuiApp {
                         .cloned()
                         .unwrap_or_default(),
                     Err(error) => {
-                        this.dispatch_gpui_workspace_action_toast("error", title, &error.message, cx);
+                        this.dispatch_gpui_workspace_action_toast(
+                            "error",
+                            title,
+                            &error.message,
+                            cx,
+                        );
                         return;
                     }
                 };
@@ -120,13 +125,24 @@ impl GhostexGpuiApp {
                 let kept_dirty = threads
                     .iter()
                     .filter(|thread| {
-                        thread.pointer("/result/keptDirtyWorktree").and_then(Value::as_bool)
+                        thread
+                            .pointer("/result/keptDirtyWorktree")
+                            .and_then(Value::as_bool)
                             == Some(true)
                     })
                     .count();
                 if let Some(first) = failed.first() {
                     this.dispatch_gpui_workspace_action_toast("error", title, first, cx);
                 } else if kept_dirty > 0 {
+                    // gxserver's warning names why: uncommitted changes, files git ignores or edits
+                    // git status hides.
+                    let why = threads
+                        .iter()
+                        .find_map(|thread| {
+                            thread.pointer("/result/warnings/0").and_then(Value::as_str)
+                        })
+                        .unwrap_or("A worktree with uncommitted changes was not removed.")
+                        .to_string();
                     this.dispatch_gpui_workspace_action_toast(
                         "warning",
                         if kept_dirty == 1 {
@@ -134,7 +150,7 @@ impl GhostexGpuiApp {
                         } else {
                             "Some worktrees kept"
                         },
-                        "A worktree with uncommitted changes was not removed; its thread is asleep.",
+                        &why,
                         cx,
                     );
                 }
@@ -201,10 +217,21 @@ impl GhostexGpuiApp {
             let _ = this.update(cx, |this, cx| match result {
                 Ok(answer) if clean_up => {
                     if answer.get("keptDirtyWorktree").and_then(Value::as_bool) == Some(true) {
+                        // Why it was kept: uncommitted changes, files git ignores, or edits git
+                        // status hides (gxserver's warning names the files).
+                        let why = answer
+                            .get("warnings")
+                            .and_then(Value::as_array)
+                            .and_then(|warnings| warnings.first())
+                            .and_then(Value::as_str)
+                            .unwrap_or(
+                                "The worktree has uncommitted changes, so it was not removed.",
+                            )
+                            .to_string();
                         this.dispatch_gpui_workspace_action_toast(
                             "warning",
-                            "Session parked, worktree kept",
-                            "The worktree has uncommitted changes, so it was not removed.",
+                            "Worktree kept",
+                            &why,
                             cx,
                         );
                     }

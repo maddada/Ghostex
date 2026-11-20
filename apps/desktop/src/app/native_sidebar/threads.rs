@@ -415,6 +415,8 @@ fn older_threads_row(session: &NativeSidebarSession) -> Option<OlderThreadsRow> 
         u16::try_from(number("cleanupOffers")).unwrap_or(u16::MAX),
         u16::try_from(number("autoCleaned")).unwrap_or(u16::MAX),
         u16::try_from(number("autoCleanedUndo")).unwrap_or(u16::MAX),
+        u16::try_from(number("autoKept")).unwrap_or(u16::MAX),
+        u8::try_from(number("autoKeptReasons")).unwrap_or(0),
     );
     if (count == 0 && banner.is_none())
         || threads.get("collapsed").and_then(Value::as_bool) == Some(true)
