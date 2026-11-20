@@ -10076,7 +10076,7 @@
     {
       "key": "autopilotScope",
       "title": "Which sessions",
-      "subtitle": "Every session, only the projects you pick (and their worktrees), or only sessions you pick one by one. A session's Autopilot pill in its chat takes it out or puts it back; a project's right-click menu, Advanced > Autopilot, does the same for the project and its worktrees. The projects and sessions left out are listed here, each with a switch to put it back.",
+      "subtitle": "Every session, only the projects you pick (and their worktrees), or only sessions you pick one by one. A session's Autopilot pill in its chat takes it out or puts it back; a project's right-click menu, More > Autopilot, does the same for the project and its worktrees. The projects and sessions left out are listed here, each with a switch to put it back.",
       "tab": "autopilot",
       "tabTitle": "Autopilot",
       "section": "switch",
