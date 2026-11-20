@@ -148,7 +148,30 @@ fn session_title(repository: &DomainRepository<'_>, key: &SessionKey) -> String 
 /// with `agents link X --lead self`, and the report owed to that lead then went to it. A session
 /// already linked elsewhere is now refused to an agent ("only the user can move it"), and any
 /// change of lead starts the link afresh (records.rs `write_lead_link`).
+///
+/// CDXC:LeadLinks 2026-11-20 FIX:
+/// Opus review of #678, finding 8: the "one level deep" checks and the write ran separately, so A
+/// linking B under itself while B linked A under itself could both pass and leave each leading
+/// the other. They run in one `BEGIN IMMEDIATE` transaction now, so the second waits for the first
+/// and then sees it.
 pub(crate) fn link_checked(
+    db: &Connection,
+    by_session: bool,
+    linked: &SessionKey,
+    lead: &SessionKey,
+    owed: bool,
+) -> Result<Option<SessionKey>, DomainStateError> {
+    let transaction =
+        rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Immediate)
+            .map_err(crate::coordinators::sql_error)?;
+    let before = link_rules_and_write(&transaction, by_session, linked, lead, owed)?;
+    transaction
+        .commit()
+        .map_err(crate::coordinators::sql_error)?;
+    Ok(before)
+}
+
+fn link_rules_and_write(
     db: &Connection,
     by_session: bool,
     linked: &SessionKey,
