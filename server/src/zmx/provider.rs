@@ -45,6 +45,10 @@ pub(crate) fn create_attach_session_metadata_with_observed_state(
             DomainStateError::not_found(format!("Project {} does not exist.", lifecycle.project_id))
         })?;
     let existing_session = require_session(repository, &lifecycle)?;
+    // A coordinator's thread whose worktree was cleaned up never runs in the project's folder.
+    if let Some(message) = crate::work_mode::cleaned_thread_wake_refusal(&existing_session) {
+        return Err(DomainStateError::bad_request(message).into());
+    }
     let existing_session = crate::worktree_sessions::move_session_out_of_removed_worktree(
         repository,
         &project,
@@ -226,6 +230,12 @@ pub(crate) fn start_session_provider_with_observed_state(
         .and_then(Value::as_str)
         .map(str::to_string);
     crate::project_folder_move::refuse_if_moving(&lifecycle.project_id, session_cwd.as_deref())?;
+    // A coordinator's thread whose worktree was cleaned up never runs in the project's folder.
+    if let Some(message) =
+        crate::work_mode::cleaned_thread_wake_refusal(&require_session(repository, &lifecycle)?)
+    {
+        return Err(DomainStateError::bad_request(message).into());
+    }
     crate::worktree_sessions::move_session_out_of_removed_worktree(
         repository,
         &project,

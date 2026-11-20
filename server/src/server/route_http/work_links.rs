@@ -225,6 +225,30 @@ pub(in crate::server) async fn answer_work_cleanup(
     // put to sleep before its worktree goes (it cannot run on in a deleted folder anyway), and a
     // removal that still fails is a warning: the session is parked either way.
     let mut slept = false;
+    let mut kept_reason: Option<Value> = None;
+    let mut kept_detail: Option<Value> = None;
+    // A coordinator's thread keeps its place when its worktree goes: it is never moved into the
+    // project's folder, and waking it is refused until Undo (CDXC:WorkMode 2026-11-20 at
+    // `cleaned_thread_wake_refusal` in work_mode/cleanup.rs). Its answer is written first, so a
+    // wake in between never moves it either.
+    let is_thread = {
+        let db = open_repository_db(state)?;
+        crate::coordinators::read_thread(&db, &project_id, &session_id)?.is_some()
+    };
+    if answer == "cleanUp" && is_thread {
+        let db = open_repository_db(state)?;
+        crate::work_mode::write_work_cleanup_record(
+            &db,
+            &project_id,
+            &session_id,
+            &json!({
+                "pullRequest": pull_request_key,
+                "answer": answer,
+                "answeredAt": now_iso(),
+                "thread": true,
+            }),
+        )?;
+    }
     if answer == "cleanUp" {
         if let Some(worktree_path) = worktree_path {
             sleep_work_cleanup_session(state, &project_id, &session_id).await;
@@ -232,12 +256,19 @@ pub(in crate::server) async fn answer_work_cleanup(
             let mut remove_params = Map::new();
             remove_params.insert("projectId".to_string(), json!(project_id));
             remove_params.insert("worktreePath".to_string(), json!(worktree_path));
+            if is_thread {
+                remove_params.insert("keepSessions".to_string(), json!(true));
+            }
             match remove_session_worktree(state, &remove_params).await {
                 Ok(removed) => {
                     removed_worktree =
                         removed.get("removed").and_then(Value::as_bool) == Some(true);
                     kept_dirty_worktree = !removed_worktree
                         && removed.get("dirty").and_then(Value::as_bool) == Some(true);
+                    if kept_dirty_worktree {
+                        kept_reason = removed.get("kept").cloned();
+                        kept_detail = removed.get("keptDetail").cloned();
+                    }
                     if let Some(more) = removed.get("warnings").and_then(Value::as_array) {
                         warnings.extend(more.iter().cloned());
                     }
@@ -267,14 +298,16 @@ pub(in crate::server) async fn answer_work_cleanup(
             update.insert("isParked".to_string(), Value::Bool(true));
             repository.update_session(&update)?;
         }
-        write_work_cleanup_answer(
-            &db,
-            &project_id,
-            &session_id,
-            &pull_request_key,
-            &answer,
-            &now_iso(),
-        )?;
+        if !(answer == "cleanUp" && is_thread) {
+            write_work_cleanup_answer(
+                &db,
+                &project_id,
+                &session_id,
+                &pull_request_key,
+                &answer,
+                &now_iso(),
+            )?;
+        }
         schedule_presentation_session_delta(state, &db, &repository, &project_id, &session_id)?;
     }
     if parked && !slept && sleep_session_when_parking(state) {
@@ -285,6 +318,9 @@ pub(in crate::server) async fn answer_work_cleanup(
         "parked": parked,
         "removedWorktree": removed_worktree,
         "keptDirtyWorktree": kept_dirty_worktree,
+        // Why it was kept: `uncommitted`, `ignored`, `hidden` or `unchecked`, and the files.
+        "keptReason": kept_reason,
+        "keptDetail": kept_detail,
         "warnings": warnings,
     }))
 }

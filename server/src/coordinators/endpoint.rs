@@ -4,6 +4,7 @@ use chrono::Utc;
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 
+use super::records::STARTED_BY_COORDINATOR_KEY;
 use super::records::{
     acknowledge_thread_pending_message, drop_thread_pending_message, link_thread,
     list_coordinators, list_threads_for, now_iso, read_coordinator, read_thread,
@@ -349,6 +350,30 @@ pub fn handle_coordinator_endpoint(
                 &coordinator_key.1,
                 &task,
             )?;
+            // `start-thread` and `agents create` made this session for the coordinator, so it is
+            // the coordinator's own work, never the user's: what the merged-thread cleanup tests
+            // (server/work_cleanup_threads.rs). `coordinator link` of an existing session sets none.
+            if params
+                .get(STARTED_BY_COORDINATOR_KEY)
+                .and_then(Value::as_bool)
+                == Some(true)
+            {
+                db.execute(
+                    &format!(
+                        "UPDATE sessions SET runtimeSettingsJson = json_set(COALESCE(runtimeSettingsJson, '{{}}'), '$.{STARTED_BY_COORDINATOR_KEY}', json(?3)) WHERE projectId = ?1 AND sessionId = ?2"
+                    ),
+                    rusqlite::params![
+                        thread_key.0,
+                        thread_key.1,
+                        json!({
+                            "coordinatorProjectId": coordinator_key.0,
+                            "coordinatorSessionId": coordinator_key.1,
+                        })
+                        .to_string()
+                    ],
+                )
+                .map_err(super::records::sql_error)?;
+            }
             let watching = watch_pending_message(db, &thread_key, params)?;
             Ok(CoordinatorEndpointOutput {
                 result: json!({
@@ -372,10 +397,11 @@ pub fn handle_coordinator_endpoint(
                 ));
             }
             unlink_thread(db, &thread_key.0, &thread_key.1)?;
-            // Now the user's own session: no longer a lean Codex worker (agents/codex_lean.rs).
+            // Now the user's own session: no longer a lean Codex worker (agents/codex_lean.rs), nor
+            // the coordinator's work.
             db.execute(
                 &format!(
-                    "UPDATE sessions SET runtimeSettingsJson = json_remove(runtimeSettingsJson, '$.{}') WHERE projectId = ?1 AND sessionId = ?2",
+                    "UPDATE sessions SET runtimeSettingsJson = json_remove(runtimeSettingsJson, '$.{}', '$.{STARTED_BY_COORDINATOR_KEY}') WHERE projectId = ?1 AND sessionId = ?2",
                     crate::agents::codex_lean::COORDINATOR_THREAD_KEY
                 ),
                 rusqlite::params![thread_key.0, thread_key.1],

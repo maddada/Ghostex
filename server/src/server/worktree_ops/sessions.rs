@@ -1140,9 +1140,49 @@ pub(crate) async fn remove_session_worktree(
         return Ok(json!({
             "dirty": true,
             "removed": false,
+            "kept": "uncommitted",
             "warnings": [WORKTREE_SESSION_DIRTY_WARNING],
         }));
     }
+    // What `git worktree remove` deletes though `git status` shows nothing: files git ignores and
+    // changes hidden by skip-worktree (CDXC:WorkMode 2026-11-20 in worktree_sessions.rs). Answered
+    // like uncommitted changes, so a client asks before it forces.
+    if !force {
+        let checked = requested.clone();
+        let hidden =
+            tokio::task::spawn_blocking(move || worktree_sessions::worktree_hidden_work(&checked))
+                .await
+                .ok()
+                .flatten();
+        match hidden {
+            Some(None) => {}
+            Some(Some(work)) => {
+                return Ok(json!({
+                    "dirty": true,
+                    "removed": false,
+                    "kept": work.code(),
+                    "keptDetail": work.describe(),
+                    "warnings": [format!(
+                        "The worktree has {}, which removing it would delete.",
+                        work.describe()
+                    )],
+                }));
+            }
+            None => {
+                return Ok(json!({
+                    "dirty": true,
+                    "removed": false,
+                    "kept": "unchecked",
+                    "warnings": ["Ghostex could not check the worktree for files git ignores, so it was kept."],
+                }));
+            }
+        }
+    }
+    // The merged-PR cleanup keeps the branch (`keepBranch`: the pass that cleans up by itself, so
+    // Undo always finds it) and keeps a coordinator's thread where it was (`keepSessions`, see
+    // `cleaned_thread_wake_refusal` in work_mode/cleanup.rs).
+    let keep_branch = params.get("keepBranch").and_then(Value::as_bool) == Some(true);
+    let keep_sessions = params.get("keepSessions").and_then(Value::as_bool) == Some(true);
 
     let branch = worktree_session_branch_for_path(&context, &requested)
         .await?
@@ -1170,8 +1210,9 @@ pub(crate) async fn remove_session_worktree(
     }
 
     let mut warnings = Vec::new();
-    if let Some(branch) =
-        branch.filter(|branch| worktree_sessions::is_managed_worktree_branch(branch))
+    if let Some(branch) = branch
+        .filter(|_| !keep_branch)
+        .filter(|branch| worktree_sessions::is_managed_worktree_branch(branch))
     {
         let mut branch_params = Map::new();
         branch_params.insert("branch".to_string(), Value::String(branch));
@@ -1201,7 +1242,10 @@ pub(crate) async fn remove_session_worktree(
             "The worktree was removed, but stale worktree records could not be pruned."
         ));
     }
-    move_sessions_out_of_removed_worktree(state, &context.source_project_id, &requested)?;
+    // Any other session left in the folder moves when it next starts (zmx/provider.rs).
+    if !keep_sessions {
+        move_sessions_out_of_removed_worktree(state, &context.source_project_id, &requested)?;
+    }
     schedule_worktree_session_project_delta(state, &context.source_project_id)?;
     Ok(json!({
         "dirty": dirty,

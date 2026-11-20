@@ -636,6 +636,8 @@ pub async fn run_gxserver_foreground(
     let session_lifecycle_sweep_task = spawn_session_lifecycle_sweep_task(&state);
     let session_git_status_refresh_task = spawn_session_git_status_refresh_task(&state);
     let worktree_branch_rename_task = spawn_worktree_branch_rename_task(&state);
+    // A coordinator's merged threads cleaned up by themselves (work_cleanup_threads.rs).
+    let work_auto_cleanup_task = super::work_cleanup_threads::spawn_work_auto_cleanup_task(&state);
     let session_chat_follower_sync_task = spawn_session_chat_follower_sync_task(&state);
     let session_chat_fleet_status_task =
         crate::session_chat_fleet_status::spawn_fleet_status_task(&state);
@@ -719,6 +721,7 @@ pub async fn run_gxserver_foreground(
     session_lifecycle_sweep_task.abort();
     session_git_status_refresh_task.abort();
     worktree_branch_rename_task.abort();
+    work_auto_cleanup_task.abort();
     session_chat_follower_sync_task.abort();
     session_chat_fleet_status_task.abort();
     session_chat_async_question_status_task.abort();

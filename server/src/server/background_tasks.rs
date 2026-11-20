@@ -349,9 +349,6 @@ pub(crate) fn spawn_session_git_status_refresh_task(
             if pass_result.is_err() {
                 log_session_git_status_refresh_failure(&refresh_state, "refresh task join failed");
             }
-            // A coordinator's merged threads are cleaned up by themselves after the work-mode
-            // pass above, whose caches say which PRs merged (work_cleanup_threads.rs).
-            super::work_cleanup_threads::run_auto_cleanup_once(&refresh_state).await;
             let abandoned_readers = session_git_status::take_abandoned_command_readers();
             if abandoned_readers > 0 {
                 log_session_git_status_reader_abandoned(&refresh_state, abandoned_readers);

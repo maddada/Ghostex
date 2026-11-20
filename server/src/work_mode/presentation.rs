@@ -243,6 +243,13 @@ pub(crate) fn presentation_session_work(project: &Value, session: &Value) -> Opt
                 // (`/api/answerWorkCleanupThreads`), so a client may group it in the banner; an
                 // older one leaves it out and the offer stays on the row.
                 output.insert("offerCleanupAll".to_string(), json!(true));
+                // Why the pass that cleans up by itself kept it, which its banner says.
+                if let Some((reason, detail)) = work_cleanup_kept(session, &key) {
+                    output.insert("autoKept".to_string(), json!(reason));
+                    if !detail.is_empty() {
+                        output.insert("autoKeptDetail".to_string(), json!(detail));
+                    }
+                }
             }
         }
         output.insert("pullRequest".to_string(), pull_request);

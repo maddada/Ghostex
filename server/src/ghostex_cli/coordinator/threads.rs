@@ -320,6 +320,7 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
                 "task": task.trim(),
                 "pendingMessage": task.trim(),
                 "sendRequestId": brief_send_id,
+                crate::coordinators::STARTED_BY_COORDINATOR_KEY: true,
             }),
             &flags,
         )?,
