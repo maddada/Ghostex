@@ -68,13 +68,16 @@ pub fn welcome_agent_icon(agent_label: Option<&str>, agent_icon: Option<&str>) -
         .or_else(|| family_icon.map(str::to_string))
 }
 
-/// `sessionChatNewSessionWelcomeTitle`: the headline, already wrapped.
+/// `sessionChatNewSessionWelcomeTitle`: the headline, on one line.
+/// CDXC:SessionChat 2026-11-20 DECISION: User: the two-line headline "looks very ugly, make the
+/// text there not wrap". Every client draws it on one line, shrinking it to fit a narrow chat
+/// (desktop `new_session_welcome.rs`, phone `EmptyTranscript.tsx`); supersedes the 2026-09-20 wrap
+/// below, which no headline uses now.
 pub fn new_session_welcome_title(agent_name: Option<&str>) -> String {
-    let title = match agent_name {
+    match agent_name {
         Some(name) if !name.is_empty() => format!("What should we build with {name}?"),
         _ => "What should we work on?".to_string(),
-    };
-    wrap_new_session_welcome_title(&title)
+    }
 }
 
 /// CDXC:SessionChat 2026-09-20 DECISION:

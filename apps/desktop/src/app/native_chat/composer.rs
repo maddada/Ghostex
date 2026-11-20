@@ -804,6 +804,12 @@ impl NativeChatView {
             self.set_where_pill_shows_project(shows, cx);
             strip
         };
+        // "Try a Boost" on a new chat, just above the box (boosts.rs).
+        let try_a_boost = (!maximized && !self.collab_guest())
+            .then(|| self.render_try_a_boost(p, cx))
+            .flatten();
+        let lead_in = if try_a_boost.is_some() { 0.0 } else { lead_in };
+        footer = footer.children(try_a_boost.map(|row| div().mt(px(8.0 * s)).w_full().child(row)));
         footer = footer.child(
             div()
                 .relative()

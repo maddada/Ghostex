@@ -86,6 +86,14 @@ impl NativeChatView {
             .px(px(24.0 * s));
 
         if let Some(welcome) = state["newSessionWelcome"].as_object() {
+            // The width the headline may take: the pane less the region's padding.
+            let room = (self.bounds.get().size.width.as_f32() - 48.0 * s).max(0.0);
+            let title = welcome
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or("What should we work on?")
+                .replace('\n', " ");
+            let title_size = welcome_title_size(&title, room, s);
             let icon = welcome
                 .get("icon")
                 .and_then(Value::as_str)
@@ -112,23 +120,14 @@ impl NativeChatView {
                                 .min_w_0()
                                 .text_center()
                                 .whitespace_nowrap()
-                                .text_size(px(TITLE_TEXT_SIZE * s))
-                                .line_height(px(TITLE_TEXT_SIZE * 1.25 * s))
+                                .truncate()
+                                .text_size(px(title_size))
+                                .line_height(px(title_size * 1.25))
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                 .text_color(p.foreground)
-                                .child(new_session_welcome_title_wrap(
-                                    welcome
-                                        .get("title")
-                                        .and_then(Value::as_str)
-                                        .unwrap_or("What should we work on?"),
-                                )),
+                                .child(title),
                         )
                     },
-                )
-                // "Try a Boost" (boosts.rs), under a regular new chat's headline.
-                .when(
-                    welcome.get("showTitle").and_then(Value::as_bool) != Some(false),
-                    |this| this.children(self.render_try_a_boost(p, cx)),
                 )
                 // The tips card (new_chat_tips.rs): under a regular new chat's headline only; a
                 // coordinator's welcome hides the headline and has its own intro.
@@ -183,21 +182,21 @@ impl NativeChatView {
     }
 }
 
-/// CDXC:SessionChat 2026-09-20 DECISION:
-/// User: when GPUI chat is very narrow, the welcome title wraps, is center aligned, and the second line has 2 or 3 words, never 1.
-/// GPUI treats U+00A0 as a wrap point, so a hard newline is the break; `whitespace_nowrap` keeps the last line from splitting again. A 6+ word headline keeps 3 words on the last line ("What should we" / "build with Codex?"); shorter ones keep 2.
-/// SEE-ALSO: packages/gx-chat-core/src/extras/welcome.rs (`wrap_new_session_welcome_title`).
-fn new_session_welcome_title_wrap(title: &str) -> String {
-    if title.contains('\n') {
-        return title.to_owned();
+/// The headline's size (scaled): `TITLE_TEXT_SIZE`, or smaller when the title, on one line, would
+/// not fit `room` (about 0.54em a glyph at this weight), never under 14px.
+/// CDXC:SessionChat 2026-11-20 DECISION: User, of "What should we / build with Claude?": "this
+/// looks very ugly, make the text there not wrap". The headline is one line at every width; a
+/// narrow chat shrinks it instead of breaking it (supersedes the 2026-09-20 two-line wrap), and
+/// below 14px it ends in an ellipsis.
+/// SEE-ALSO: packages/gx-chat-core/src/extras/welcome.rs (the title, no longer wrapped).
+fn welcome_title_size(title: &str, room: f32, s: f32) -> f32 {
+    let full = TITLE_TEXT_SIZE * s;
+    let natural = title.chars().count() as f32 * 0.54 * full;
+    if natural <= room || natural <= 0.0 {
+        full
+    } else {
+        (full * room / natural).max(14.0 * s)
     }
-    let words: Vec<&str> = title.split_whitespace().collect();
-    if words.len() < 4 {
-        return title.to_owned();
-    }
-    let last_count = if words.len() >= 6 { 3 } else { 2 };
-    let split = words.len() - last_count;
-    format!("{}\n{}", words[..split].join(" "), words[split..].join(" "))
 }
 
 /// The agent's brand mark, or the generic robot glyph when the agent has no artwork.

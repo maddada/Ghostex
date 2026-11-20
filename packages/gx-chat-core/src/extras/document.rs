@@ -187,9 +187,7 @@ pub fn document_with_board(
             title: if coordinator_threads::is_coordinator(
                 state.session.coordinator_threads.as_deref(),
             ) {
-                crate::extras::welcome::wrap_new_session_welcome_title(
-                    "What should this coordinator work on?",
-                )
+"What should this coordinator work on?".to_string()
             } else {
                 new_session_welcome_title(agent_name.as_deref())
             },
