@@ -39,21 +39,30 @@ fn is_absolute(path: &str) -> bool {
 }
 
 /// `path` as the session's machine can open it: a `file://` address unwrapped, a relative path
-/// put under the session's folder, and `None` when it still is not absolute.
+/// put under the session's folder, and a home-relative `~/…` path left out.
+///
+/// CDXC:SessionChat 2026-11-20 WHY:
+/// Without the session's folder (the phone's chat host never passes one, and the desktop's has none
+/// for a session whose folder its sidebar does not know) a relative path stays as the agent wrote
+/// it: gxserver reads it from the session's folder (`readSessionChatImage`, issue #680), where
+/// dropping it showed no picture for a Pi `read` of `sample.png`.
 fn session_path(path: &str, working_directory: Option<&str>) -> Option<String> {
     let path = js_trim(path);
     let path = path.strip_prefix("file://").unwrap_or(path);
-    if path.is_empty() {
+    if path.is_empty() || path.starts_with('~') {
         return None;
     }
     if is_absolute(path) {
         return Some(path.to_string());
     }
-    let folder = working_directory
-        .map(js_trim)
-        .filter(|folder| is_absolute(folder))?;
     let relative = path.strip_prefix("./").unwrap_or(path);
-    Some(format!("{}/{relative}", folder.trim_end_matches('/')))
+    match working_directory
+        .map(js_trim)
+        .filter(|folder| is_absolute(folder))
+    {
+        Some(folder) => Some(format!("{}/{relative}", folder.trim_end_matches('/'))),
+        None => Some(relative.to_string()),
+    }
 }
 
 /// The tool's name with case, `_`, `-` and `.` folded away, the way `tool_label` reads it.

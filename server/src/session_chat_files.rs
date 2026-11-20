@@ -338,6 +338,49 @@ pub(crate) fn write_session_chat_image(
     Ok(path)
 }
 
+/// Where a picture an agent's tool returned as bytes is kept: the folder pasted pictures use,
+/// under a name taken from its bytes. `None` when the bytes are not a picture or cannot be kept.
+///
+/// CDXC:SessionChat 2026-11-20 WHY:
+/// A picture a tool returned with no file behind it (a Pi `codemode` screenshot, issue #680) reached
+/// the chat as a nameless "Pasted image" chip, because a transcript's image bytes never ride the
+/// chat's frames (`image_ref_block`). Kept as a file on this machine, its path is read like any
+/// other picture (`readSessionChatImage`), on every client. The name comes from the bytes, so
+/// reading the transcript again finds the file it wrote the first time instead of writing another.
+pub(crate) fn tool_picture_path(base64_data: &str) -> Option<std::path::PathBuf> {
+    use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+    use sha2::{Digest, Sha256};
+    let base64_data = base64_data.trim();
+    if base64_data.is_empty() {
+        return None;
+    }
+    let digest = hex::encode(Sha256::digest(base64_data.as_bytes()));
+    let directory = ghostex_paths::GhostexPaths::resolve().data_dir.join("i");
+    let stem = format!("tool-{}", &digest[..32]);
+    if let Some(kept) = ["png", "jpg", "gif", "webp", "bmp"]
+        .iter()
+        .map(|extension| directory.join(format!("{stem}.{extension}")))
+        .find(|path| path.is_file())
+    {
+        return Some(kept);
+    }
+    let bytes = BASE64_STANDARD.decode(base64_data).ok()?;
+    if bytes.is_empty() || bytes.len() > SESSION_CHAT_IMAGE_MAX_BYTES {
+        return None;
+    }
+    let extension = session_chat_image_extension(&bytes, None);
+    let path = directory.join(format!("{stem}.{extension}"));
+    session_chat_image_media_type(&bytes, &path)?;
+    std::fs::create_dir_all(&directory).ok()?;
+    let partial = directory.join(format!(".{stem}.{}.partial", std::process::id()));
+    std::fs::write(&partial, &bytes).ok()?;
+    if std::fs::rename(&partial, &path).is_err() {
+        let _ = std::fs::remove_file(&partial);
+        return None;
+    }
+    Some(path)
+}
+
 pub(crate) fn handle_save_session_chat_image_http(
     state: &AppState,
     endpoint_path: String,
@@ -751,11 +794,43 @@ pub(crate) fn session_chat_image_media_type(
     }
 }
 
+/// The folder the session the request names works in (its own `cwd`, else its project's path,
+/// `effective_session_git_cwd`), for a picture an agent named relative to it.
+pub(crate) fn session_chat_folder(
+    state: &AppState,
+    params: &serde_json::Map<String, Value>,
+) -> Option<std::path::PathBuf> {
+    let id = |key: &str| {
+        params
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+    };
+    let (project_id, session_id) = (id("projectId")?, id("sessionId")?);
+    let db = open_gxserver_database(&state.paths).ok()?;
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let session = repository.get_session(project_id, session_id).ok()??;
+    let project = repository.get_project(project_id).ok().flatten();
+    crate::session_git_status::effective_session_git_cwd(&session, project.as_ref())
+        .map(std::path::PathBuf::from)
+        .filter(|folder| folder.is_absolute())
+}
+
 /// Runs on a blocking thread: it reads a file, or (for a loopback address) fetches it.
+///
+/// CDXC:SessionChat 2026-11-20 WHY:
+/// An agent links the pictures it made the way it names files, relative to its folder (issue #680:
+/// a Pi reply's `![Screenshot](./sample.png)`), and every client asks for them as written, with the
+/// session they came from (`projectId`/`sessionId`, which the desktop and phone chat hosts add to
+/// each call). A relative path is read from that session's folder (`session_folder`), so the
+/// picture shows on every client and on phones that have not updated; with no session it is
+/// refused as before.
 pub(crate) fn handle_read_session_chat_image_http(
     endpoint_path: String,
     request_id: String,
     body: &Value,
+    session_folder: impl FnOnce(&serde_json::Map<String, Value>) -> Option<std::path::PathBuf>,
 ) -> RoutedResponse {
     use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
     let params = match read_domain_rpc_params(body) {
@@ -783,7 +858,12 @@ pub(crate) fn handle_read_session_chat_image_http(
             Err(error) => domain_error_response(endpoint_path, request_id, error),
         };
     }
-    let path = std::path::Path::new(raw_path);
+    let written = std::path::Path::new(raw_path);
+    let in_folder = (!raw_path.is_empty() && !written.is_absolute() && !raw_path.starts_with('~'))
+        .then(|| session_folder(&params))
+        .flatten()
+        .map(|folder| folder.join(written));
+    let path = in_folder.as_deref().unwrap_or(written);
     if raw_path.is_empty() || !path.is_absolute() {
         return domain_error_response(
             endpoint_path,

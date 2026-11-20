@@ -55,6 +55,7 @@ fn saved_image_above_old_preview_limit_can_be_read() {
         "/api/readSessionChatImage".to_string(),
         "preview-limit-test".to_string(),
         &json!({"params":{"path":path}}),
+        |_| None,
     );
     assert_eq!(response.response.status(), StatusCode::OK);
 }
