@@ -31,12 +31,12 @@ use crate::ghostex_cli::rpc::{
 /// conversation so the staged handover link lands in its chat composer, and `runGitAction`, for
 /// the phone's read-only Changes screen, which may only ask for `changesDiff` through this verb
 /// (`READ_ONLY_GIT_ACTIONS`), and the Beads view's three calls (`beadsView`, `beadsGenerateTitle`,
-/// `runBeadsAction` limited to `BEADS_VIEW_ACTIONS`) for the phone's Beads screen. It stays a chat bridge
+/// `runBeadsAction` limited to `BEADS_VIEW_ACTIONS`) for the phone's Beads screen. `refreshAgentModelLineup` is the model picker's Fetch latest models. It stays a chat bridge
 /// rather than a door to every gxserver path, the same rule `saved_prompts.rs` keeps. Params travel
 /// base64-encoded so no shell
 /// (POSIX, PowerShell, WSL) can re-quote a JSON body on its way through.
 /// SEE-ALSO: packages/gx-chat-core/src/wire/rpc.rs, apps/mobile/app/src/chat/rust/transport.ts
-const SESSION_CHAT_RPC_METHODS: [&str; 50] = [
+const SESSION_CHAT_RPC_METHODS: [&str; 51] = [
     "readSessionChat",
     "readSessionChatSkills",
     "readSessionChatFiles",
@@ -87,6 +87,7 @@ const SESSION_CHAT_RPC_METHODS: [&str; 50] = [
     "beadsView",
     "beadsGenerateTitle",
     "runBeadsAction",
+    "refreshAgentModelLineup",
 ];
 
 /// The Git actions `runGitAction` may run through this verb: reading a project's Changes diff.

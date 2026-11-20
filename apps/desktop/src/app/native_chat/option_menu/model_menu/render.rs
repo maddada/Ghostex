@@ -3,6 +3,7 @@ use super::style::{
     BAR_HEIGHT, BUTTON_GAP, ERROR_HEIGHT, HINTS_HEIGHT, ITEM_RADIUS, LIST_HEIGHT, Palette, ROW_GAP,
     SEARCH_HEIGHT, TRAIT_ROW_HEIGHT, button_lines,
 };
+use crate::app::helpers::ThrottledAnimationExt as _;
 use crate::app::native_chat::appearance::ChatAppearance;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -610,6 +611,88 @@ impl ChatOptionMenuPanel {
             .into_any_element()
     }
 
+    /// Fetch latest models, at the right end of the search row: the core's `refresh` says whether
+    /// the open tab's agent can be read again, whether it is being read, and the tooltip
+    /// (packages/gx-chat-core/src/menus/picker/refresh.rs). The search text, the open tab and the
+    /// highlighted row stay as they are while the new list arrives.
+    fn render_model_refresh(
+        &self,
+        view: &Value,
+        scale: f32,
+        palette: &Palette,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let refresh = view["refresh"].as_object()?;
+        let available = refresh.get("available") == Some(&Value::Bool(true));
+        let busy = refresh.get("busy") == Some(&Value::Bool(true));
+        let tooltip = refresh
+            .get("tooltip")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        let tab = view["tab"].clone();
+        let hover = palette.ink(0.08);
+        let icon = svg().size(px(14.0 * scale)).text_color(if available {
+            palette.muted
+        } else {
+            palette.muted.opacity(0.4)
+        });
+        let icon = if busy {
+            icon.path("titlebar/loader2.svg")
+                .with_throttled_animation(
+                    "model-menu-refresh-spinner",
+                    std::time::Duration::from_millis(900),
+                    |svg, delta| {
+                        svg.with_transformation(gpui::Transformation::rotate(gpui::radians(
+                            delta * std::f32::consts::TAU,
+                        )))
+                    },
+                )
+                .into_any_element()
+        } else {
+            icon.path("titlebar/refresh.svg").into_any_element()
+        };
+        let label = tooltip.clone();
+        Some(
+            div()
+                .id("model-menu-refresh")
+                .role(gpui::Role::Button)
+                .aria_label(label)
+                .flex_shrink_0()
+                .h(px((SEARCH_HEIGHT - 8.0) * scale))
+                .w(px((SEARCH_HEIGHT - 8.0) * scale))
+                .mr(px(-4.0 * scale))
+                .rounded(px(ITEM_RADIUS * scale))
+                .flex()
+                .items_center()
+                .justify_center()
+                .when(available && !busy, |button| {
+                    button
+                        .cursor_pointer()
+                        .hover(move |style| style.bg(hover))
+                        .on_click(cx.listener(move |panel, _, _, cx| {
+                            cx.stop_propagation();
+                            panel.model_menu_send(
+                                json!({"type":"modelMenuRefresh","tab":tab.clone()}),
+                                cx,
+                            );
+                        }))
+                })
+                .tooltip(move |window, cx| {
+                    let tooltip = tooltip.clone();
+                    gpui_component::tooltip::Tooltip::element(move |window, _| {
+                        div()
+                            .max_w(hint_tooltip_width(scale, window))
+                            .whitespace_normal()
+                            .child(tooltip.clone())
+                    })
+                    .build(window, cx)
+                })
+                .child(icon)
+                .into_any_element(),
+        )
+    }
+
     pub(in crate::app::native_chat::option_menu) fn render_model_menu(
         &mut self,
         window: &mut gpui::Window,
@@ -760,6 +843,10 @@ impl ChatOptionMenuPanel {
                                     .text_color(palette.text)
                                     .placeholder_color(palette.muted.opacity(0.6)),
                             ),
+                        )
+                        .when_some(
+                            self.render_model_refresh(&view, scale, &palette, cx),
+                            |row, button| row.child(button),
                         ),
                 )
             })

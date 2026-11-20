@@ -148,7 +148,7 @@ pub fn settle(
         } => {
             if let Some(round) = settle_outbox_answer(state, context, *request_id, outcome) {
                 effects.extend(round);
-            } else {
+            } else if !crate::menus::picker::refresh::settle_rpc(state, *request_id) {
                 settle_fork_branches(state, *request_id, outcome);
             }
         }

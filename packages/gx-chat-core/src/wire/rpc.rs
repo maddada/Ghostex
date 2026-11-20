@@ -116,6 +116,9 @@ pub enum ChatRpcMethod {
     HoldSessionChatSend,
     ListHeldSessionChatSends,
     CancelHeldSessionChatSend,
+    /// The model picker's Fetch latest models: reads one agent's model list from its CLI again
+    /// (`menus/picker/refresh.rs`).
+    RefreshAgentModelLineup,
     /// A method this build does not know; kept verbatim.
     Other(String),
 }
@@ -184,6 +187,7 @@ impl ChatRpcMethod {
             Self::HoldSessionChatSend => "holdSessionChatSend",
             Self::ListHeldSessionChatSends => "listHeldSessionChatSends",
             Self::CancelHeldSessionChatSend => "cancelHeldSessionChatSend",
+            Self::RefreshAgentModelLineup => "refreshAgentModelLineup",
             Self::Other(name) => name.as_str(),
         }
     }
@@ -251,6 +255,7 @@ impl ChatRpcMethod {
             "holdSessionChatSend" => Self::HoldSessionChatSend,
             "listHeldSessionChatSends" => Self::ListHeldSessionChatSends,
             "cancelHeldSessionChatSend" => Self::CancelHeldSessionChatSend,
+            "refreshAgentModelLineup" => Self::RefreshAgentModelLineup,
             other => Self::Other(other.to_string()),
         }
     }

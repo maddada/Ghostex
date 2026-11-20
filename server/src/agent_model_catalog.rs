@@ -277,6 +277,98 @@ fn adopt_lineup(agent: &str, entry: Value) -> bool {
     true
 }
 
+/// One lineup read at a time per agent, so the model picker's Fetch latest models and the
+/// background pass never start the same CLI twice at once.
+fn lineup_read_gate(agent: &str) -> Option<&'static std::sync::Mutex<()>> {
+    static GATES: OnceLock<Vec<std::sync::Mutex<()>>> = OnceLock::new();
+    let agents = crate::agent_model_lineups::RUNTIME_AGENTS;
+    let index = agents.iter().position(|known| *known == agent)?;
+    GATES
+        .get_or_init(|| agents.iter().map(|_| std::sync::Mutex::new(())).collect())
+        .get(index)
+}
+
+/// Reads one agent's lineup and, when it changed, serves it, caches it and tells every client.
+/// `Some(changed)` when the CLI answered, `None` when it did not (its last lineup stays).
+fn read_and_adopt_lineup(
+    agent: &str,
+    fresh: bool,
+    paths: &GxserverPaths,
+    event_hub: &GxserverEventHub,
+    server_id: &str,
+) -> Option<bool> {
+    let gate = lineup_read_gate(agent)?;
+    let _reading = gate.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let entry = crate::agent_model_lineups::read_lineup(agent, &paths.app_cache_dir, fresh)
+        .filter(is_valid_agent)?;
+    let changed = adopt_lineup(agent, entry);
+    if changed {
+        write_cached_lineups(paths);
+        event_hub.broadcast(changed_event(server_id, &current()));
+    }
+    Some(changed)
+}
+
+/// CDXC:AgentProviders 2026-11-20 WHY:
+/// The model picker's Fetch latest models (`/api/refreshAgentModelLineup`) reads one agent's lineup now instead of at the next [`LINEUP_TTL`] pass, and reads its `/model` picker again even when the cached read is of the installed version: Antigravity's list follows the account and the server as well as the CLI (Gemini 4 Neon reached `agy models` with 1.5.13 while Ghostex still served the lineup it read on 1.5.8). A changed lineup reaches every client through the usual `agentModelCatalogChanged`. `Err` names an agent whose list is not read from its CLI.
+pub(crate) fn refresh_lineup_now(
+    agent: &str,
+    paths: &GxserverPaths,
+    event_hub: &GxserverEventHub,
+    server_id: &str,
+) -> Result<Value, String> {
+    if !crate::agent_model_lineups::RUNTIME_AGENTS.contains(&agent) {
+        return Err(format!("{agent}'s model list is not read from its CLI."));
+    }
+    let outcome = read_and_adopt_lineup(agent, true, paths, event_hub, server_id);
+    Ok(json!({
+        "agent": agent,
+        "answered": outcome.is_some(),
+        "changed": outcome == Some(true),
+    }))
+}
+
+/// `/api/refreshAgentModelLineup {agent}`: [`refresh_lineup_now`], answered once the read ends.
+pub(crate) async fn handle_refresh_agent_model_lineup_http(
+    state: &crate::server::AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> crate::server::RoutedResponse {
+    let agent = body
+        .pointer("/params/agent")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string();
+    let (paths, event_hub, server_id) = (
+        state.paths.clone(),
+        state.event_hub.clone(),
+        state.metadata.server_id.clone(),
+    );
+    let outcome = tokio::task::spawn_blocking(move || {
+        refresh_lineup_now(&agent, &paths, &event_hub, &server_id)
+    })
+    .await
+    .map_err(|error| error.to_string())
+    .and_then(|outcome| outcome);
+    match outcome {
+        Ok(result) => crate::server::routed_json(
+            Some(endpoint_path),
+            axum::http::StatusCode::OK,
+            crate::protocol::rpc_success(request_id, result),
+        ),
+        Err(message) => crate::server::domain_error_response(
+            endpoint_path,
+            request_id,
+            crate::domain::DomainStateError {
+                code: "invalidParams",
+                message,
+            },
+        ),
+    }
+}
+
 /// Reads each CLI's lineup now and again every [`LINEUP_TTL`] for as long as the server runs,
 /// telling every client when one changed. A CLI that cannot answer keeps its last lineup.
 fn refresh_lineups(paths: GxserverPaths, event_hub: GxserverEventHub, server_id: String) {
@@ -287,18 +379,9 @@ fn refresh_lineups(paths: GxserverPaths, event_hub: GxserverEventHub, server_id:
             if Instant::now() < due[index] {
                 continue;
             }
-            let entry = crate::agent_model_lineups::read_lineup(agent, &paths.app_cache_dir)
-                .filter(is_valid_agent);
-            due[index] = Instant::now()
-                + if entry.is_some() {
-                    LINEUP_TTL
-                } else {
-                    LINEUP_RETRY
-                };
-            if entry.is_some_and(|entry| adopt_lineup(agent, entry)) {
-                write_cached_lineups(&paths);
-                event_hub.broadcast(changed_event(&server_id, &current()));
-            }
+            let answered =
+                read_and_adopt_lineup(agent, false, &paths, &event_hub, &server_id).is_some();
+            due[index] = Instant::now() + if answered { LINEUP_TTL } else { LINEUP_RETRY };
         }
         std::thread::sleep(LINEUP_TICK);
     }

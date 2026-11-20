@@ -246,6 +246,8 @@ action_kinds! {
     ModelMenuFavorite => "modelMenuFavorite",
     ModelMenuPick => "modelMenuPick",
     ModelMenuTrait => "modelMenuTrait",
+    // The picker's Fetch latest models button (`menus/picker/refresh.rs`).
+    ModelMenuRefresh => "modelMenuRefresh",
     Accounts => "accounts",
     SwitchDraftAgent => "switchDraftAgent",
     SwitchDraftRunLocation => "switchDraftRunLocation",

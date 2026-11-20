@@ -307,6 +307,8 @@ pub fn model_menu_projection(
         "query": query,
         "searchEnabled": search_enabled,
         "placeholder": MODEL_MENU_SEARCH_PLACEHOLDER,
+        // Fetch latest models at the right end of the search row (`picker/refresh.rs`).
+        "refresh": crate::menus::picker::refresh::projection(tab, view.refreshing),
         "tabs": model_menu_tabs(&entries, tab)
             .into_iter()
             .map(|mut entry| {

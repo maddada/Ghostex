@@ -153,6 +153,7 @@ fn rpc_method_name(wire: &str) -> &'static str {
         ChatRpcMethod::HoldSessionChatSend => "holdSessionChatSend",
         ChatRpcMethod::ListHeldSessionChatSends => "listHeldSessionChatSends",
         ChatRpcMethod::CancelHeldSessionChatSend => "cancelHeldSessionChatSend",
+        ChatRpcMethod::RefreshAgentModelLineup => "refreshAgentModelLineup",
         ChatRpcMethod::Other(_) => "other",
     }
 }
