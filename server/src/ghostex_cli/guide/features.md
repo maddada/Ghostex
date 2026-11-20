@@ -2436,11 +2436,18 @@ inline HTML, inline questions and inline graphs. **Boosts** ask for these, and m
 of the strip on top of the chat box opens one list of them in sections: Show (Live page; Chart it, a Live page of charts and tables;
 Side by side, Map it, Ask me in a form), Actions (Computer & Browser use, where the agent
 drives your apps and Chrome or another browser itself with Cua Driver; Embedded Browser
-use, where it drives pages in Ghostex's own browser; Show screenshots; Second opinion, where another agent
-checks the answer), Work (Triage requests, which explains issues, pull requests or tickets
-one by one on a Live page with a decision for each; Plan with workers; Try it in a
-worktree; Save to Docs; Steps for me, which lists what only you can do under Needs you;
-Tell me when done) and Custom, your own. The chips at the bottom of the menu jump to a
+use, where it drives pages in Ghostex's own browser; Fix and prove, where the agent reproduces
+the problem first, then shows the same screenshot or test passing after its fix (it took the
+place of Show screenshots, whose pill still works); Second opinion, where an agent on another
+model checks the answer and, when code changed, reviews the diff), Work (Triage requests,
+which explains issues, pull requests or tickets one by one on a Live page with a decision for
+each; Plan with workers; Try it in a worktree; Ship it, which commits the work on a branch,
+pushes it and opens a pull request, never merging it; Save to Docs; Steps for me, which lists
+what only you can do under Needs you; Inbox it!, where the agent answers on your Needs you
+list instead of in the chat: your ask and its answer arrive as one to-do with Done (or
+choices), which Details opens in full; Schedule it, which saves the job as an automation that
+runs once later or on repeat and reports back, changed or stopped in All Automations; Tell me
+when done) and Custom, your own. The chips at the bottom of the menu jump to a
 section, and Edit… beside them opens Settings > Boosts. Pointing at a Boost shows a small
 preview of what comes back, with its whole description. You can also type `*` at the start of a word in the chat box
 to pick one (`*ch` finds Chart it; a space right after the `*` closes the list, so lists
