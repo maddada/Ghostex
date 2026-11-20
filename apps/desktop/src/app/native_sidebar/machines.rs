@@ -158,7 +158,7 @@ impl GhostexGpuiApp {
                 icon,
                 size,
                 appearance.scale,
-                true,
+                crate::app::gx_chat::session_directory::mark_this_computer(),
                 appearance.muted,
                 if lifted {
                     HERE_DOT_LIFTED_GAP
@@ -206,6 +206,8 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let scale = appearance.scale;
+        // The computer you're on wears its dot (computer_mark.rs `with_here_dot`).
+        let here = crate::app::gx_chat::session_directory::mark_this_computer();
         let id = machine.id.clone();
         let reconnect = id.clone();
         let local = id == ghostex_gx_core::LOCAL_MACHINE_ID;
@@ -237,12 +239,14 @@ impl GhostexGpuiApp {
                     .size(px(9.0 * scale))
                     .text_color(appearance.foreground)
             });
-        let has_status = !selected
-            && (machine.working_count > 0
-                || machine.attention_count > 0
-                || machine.background_work_count > 0
-                || machine.question_count > 0
-                || machine.approval_count > 0);
+        // The picked computer's sessions are listed below, so its tile carries no dot or counts.
+        let tile_counts = if selected {
+            super::status::TileCounts::default()
+        } else {
+            machine.tile_counts()
+        };
+        let has_status = tile_counts.has_status();
+        let tooltip = tile_counts.tooltip(&tooltip);
         let stop_key = format!("machine-tab:{id}");
         div()
             .id(format!("native-sidebar-machine-{id}"))
@@ -278,9 +282,9 @@ impl GhostexGpuiApp {
                     systems,
                     appearance,
                     15.0 * scale,
-                    local && has_status,
+                    local && has_status && here,
                 ),
-                local && has_status,
+                local && has_status && here,
                 scale,
             ))
             /*
@@ -288,17 +292,14 @@ impl GhostexGpuiApp {
             User: stop showing the status on the machine we're on and show it on the other machines as dots, not numbers, exactly like the Spaces. The picked computer's sessions are already listed below.
             Since 2026-11-11 they sit at the bottom centre of the computer's tile (`machine_dots`).
             */
-            .when(has_status, |tile| {
-                tile.child(machine_dots(scale).child(super::status::status_dot_stack(
-                    machine.working_count,
-                    machine.attention_count,
-                    machine.background_work_count,
-                    machine.question_count,
-                    machine.approval_count,
+            .children(
+                super::status::tile_status_dot(
+                    tile_counts,
                     scale,
                     super::status::DotBackdrop::new(appearance, None, dot_group.clone()),
-                )))
-            })
+                )
+                .map(|dot| machine_dots(scale).child(dot)),
+            )
             .children(update.map(|glyph| {
                 div()
                     .absolute()
@@ -374,6 +375,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let scale = appearance.scale;
+        let here = crate::app::gx_chat::session_directory::mark_this_computer();
         let picked = snapshot
             .machines
             .iter()
@@ -387,14 +389,15 @@ impl GhostexGpuiApp {
         };
         let sum =
             |count: fn(&NativeSidebarMachine) -> usize| -> usize { others().map(count).sum() };
-        let (working, attention, background, question, approval) = (
-            sum(|machine| machine.working_count),
-            sum(|machine| machine.attention_count),
-            sum(|machine| machine.background_work_count),
-            sum(|machine| machine.question_count),
-            sum(|machine| machine.approval_count),
-        );
-        let has_status = working + attention + background + question + approval > 0;
+        let tile_counts = super::status::TileCounts {
+            approval: sum(|machine| machine.approval_count),
+            failed: sum(|machine| machine.failed_count),
+            question: sum(|machine| machine.question_count),
+            attention: sum(|machine| machine.attention_count),
+            working: sum(|machine| machine.working_count),
+            background_work: sum(|machine| machine.background_work_count),
+        };
+        let has_status = tile_counts.has_status();
         let items: Vec<_> = snapshot
             .machines
             .iter()
@@ -420,7 +423,10 @@ impl GhostexGpuiApp {
         let items = serde_json::Value::Array(items);
         let owner = super::menus::MenuOwner::default();
         let menu_owner = owner.clone();
-        let tooltip = format!("Computers: {}", self.native_machine_tooltip(picked));
+        let tooltip = tile_counts.tooltip(&format!(
+            "Computers: {}",
+            self.native_machine_tooltip(picked)
+        ));
         let tooltip_span = super::tooltips::SidebarTooltipSpan::sidebar(self.sidebar_width, scale);
         let dot_group = "native-machines-button-dots";
         div()
@@ -446,22 +452,19 @@ impl GhostexGpuiApp {
                     systems,
                     appearance,
                     15.0 * scale,
-                    picked.id == ghostex_gx_core::LOCAL_MACHINE_ID && has_status,
+                    picked.id == ghostex_gx_core::LOCAL_MACHINE_ID && has_status && here,
                 ),
-                picked.id == ghostex_gx_core::LOCAL_MACHINE_ID && has_status,
+                picked.id == ghostex_gx_core::LOCAL_MACHINE_ID && has_status && here,
                 scale,
             ))
-            .when(has_status, |tile| {
-                tile.child(machine_dots(scale).child(super::status::status_dot_stack(
-                    working,
-                    attention,
-                    background,
-                    question,
-                    approval,
+            .children(
+                super::status::tile_status_dot(
+                    tile_counts,
                     scale,
                     super::status::DotBackdrop::new(appearance, None, dot_group.to_string()),
-                )))
-            })
+                )
+                .map(|dot| machine_dots(scale).child(dot)),
+            )
             .when(
                 self.native_sidebar.pointer_inside
                     && self.native_sidebar.menu.is_none()

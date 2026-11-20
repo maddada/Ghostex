@@ -303,11 +303,8 @@ impl GhostexGpuiApp {
             }),
         };
         let drop_position = self.native_sidebar_drop_position("targetSpaceId", &id);
-        let has_status = space.working_count > 0
-            || space.attention_count > 0
-            || space.background_work_count > 0
-            || space.question_count > 0
-            || space.approval_count > 0;
+        let tile_counts = space.tile_counts();
+        let has_status = tile_counts.has_status();
         let icon = gpui::svg()
             .path(path)
             .size(px(16.0 * scale))
@@ -326,7 +323,12 @@ impl GhostexGpuiApp {
             .group(dot_group)
             .on_prepaint(super::menus::record_menu_owner(&owner))
             .role(gpui::Role::Button)
-            .aria_label(format!("Space {name}"))
+            .aria_label(
+                std::iter::once(format!("Space {name}"))
+                    .chain(tile_counts.tooltip_lines())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            )
             .aria_selected(space.selected)
             .relative()
             .h(px(28.0 * scale))
@@ -358,9 +360,9 @@ impl GhostexGpuiApp {
             .children(
                 drop_position.map(|position| super::space_drag::insertion_line(position, scale)),
             )
-            // CDXC:Spaces 2026-09-22 DECISION: User: remove the numbers for now and match the dots exactly to the session card status dots. The 2026-09-25 overlap layout lives on `status_dot_stack`.
-            .when(has_status, |row| {
-                row.child(
+            // CDXC:Spaces 2026-09-22 DECISION: User: remove the numbers for now and match the dots exactly to the session card status dots. Since 2026-11-20 one dot, the most urgent (status.rs `TileCounts`).
+            .children(
+                super::status::tile_status_dot(tile_counts, scale, dot_backdrop).map(|dot| {
                     h_flex()
                         .absolute()
                         .top(px(20.5 * scale))
@@ -368,17 +370,9 @@ impl GhostexGpuiApp {
                         .w_full()
                         .justify_center()
                         .h(px(11.0 * scale))
-                        .child(super::status::status_dot_stack(
-                            space.working_count,
-                            space.attention_count,
-                            space.background_work_count,
-                            space.question_count,
-                            space.approval_count,
-                            scale,
-                            dot_backdrop,
-                        )),
-                )
-            })
+                        .child(dot)
+                }),
+            )
             .when(
                 self.native_sidebar.pointer_inside
                     && self.native_sidebar.menu.is_none()
@@ -389,7 +383,7 @@ impl GhostexGpuiApp {
                         appearance.tooltip_delay,
                         move |window, cx| {
                             super::tooltips::sidebar_free_width_tooltip(
-                                name.to_string(),
+                                tile_counts.tooltip(&name),
                                 tooltip_span,
                                 scale,
                                 window,

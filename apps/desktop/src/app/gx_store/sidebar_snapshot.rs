@@ -380,6 +380,7 @@ pub(super) fn snapshot_from_view(
                 background_work_count: machine.background_work_count,
                 question_count: machine.question_count,
                 approval_count: machine.approval_count,
+                failed_count: machine.failed_count,
                 id: machine.id.clone(),
                 label: machine.label.clone(),
                 state: machine.state.clone(),
@@ -406,6 +407,7 @@ pub(super) fn snapshot_from_view(
                     background_work_count: space.background_work_count,
                     question_count: space.question_count,
                     approval_count: space.approval_count,
+                    failed_count: space.failed_count,
                 },
             )
             .collect(),

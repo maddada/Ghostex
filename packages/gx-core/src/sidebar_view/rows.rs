@@ -155,6 +155,21 @@ pub(crate) fn delayed_send(
 }
 
 /// A daemon session as a sidebar row.
+/// The row draws the red failed dot ([`SessionRow::has_failed`]), read off the session itself: a
+/// failed model change or send, blocked, a program error it has not been seen past, or stuck. The
+/// machine tabs count with it (`machines.rs`), so a tab agrees with the rows it stands for.
+pub(crate) fn session_failed(session: &PresentationSession) -> bool {
+    session.model_selection_failure.is_some()
+        || session.send_failure.is_some()
+        || session.blocked_since.is_some()
+        || session.stuck_since.is_some()
+        || (session.activity.as_str() == "attention"
+            && session
+                .program_status
+                .as_ref()
+                .is_some_and(|status| status.governs && status.state == "error"))
+}
+
 pub(crate) fn session_row(
     key: SessionKey,
     session: &PresentationSession,
