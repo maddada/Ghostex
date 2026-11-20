@@ -523,6 +523,13 @@ fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
     if let Some(machine) = state().get_mut(&job.machine_id) {
         machine.server_id = Some(remote_server_id.clone());
     }
+    // The id it first registered with, kept for good (CDXC:Security 2026-11-20 in
+    // owner_security/re_added.rs).
+    crate::app::owner_security::re_added::note_registered(
+        &job.machine_id,
+        &remote_server_id,
+        &job.name,
+    );
     if !job.agent_access {
         // Turning Agent access off and on asks again for a pair that was declined.
         if let Some(machine) = state().get_mut(&job.machine_id) {

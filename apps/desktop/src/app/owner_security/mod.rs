@@ -23,7 +23,7 @@
 
 pub(crate) mod handover;
 pub(crate) mod plain;
-mod re_added;
+pub(crate) mod re_added;
 pub(crate) mod ui;
 
 use std::{
@@ -104,9 +104,10 @@ struct OwnerSession {
     /// for): a click is for that server id, so it still finishes after its request lapsed and
     /// was asked again ([`unlock_with_old_key`]).
     old_key_cards: HashMap<String, String>,
-    /// The unlock card offered signs with a removed entry's key: this computer was added here again
-    /// (CDXC:Security 2026-11-20 in re_added.rs), which its words say.
-    old_key_re_added: bool,
+    /// The unlock card offered signs with a removed entry's key (CDXC:Security 2026-11-20 in
+    /// re_added.rs): the name this app had for that entry ("" when it kept none), which its words
+    /// say.
+    old_key_removed_name: Option<String>,
 }
 
 /// A door session is opened again after this, well before gxserver lets it lapse (12 hours,
@@ -302,8 +303,9 @@ fn owner_refusal(transport: &Transport) -> Option<String> {
         // The old owner key may let this app in there: only on the user's Approve of its card.
         (false, true, _) if offered => {
             let (computer, _) = machine_and_host(transport);
+            let title = offered_unlock_title(transport);
             Some(format!(
-                "First approve \"Let this Mac manage {computer} again?\" on this Mac. Then you can show {computer}'s pairing code and approve its devices from here."
+                "First approve \"{title}\" on this Mac. Then you can show {computer}'s pairing code and approve its devices from here."
             ))
         }
         (false, false, _) if flooded.is_some() => flooded,
@@ -379,10 +381,15 @@ fn status_for_places(transport: &Transport) -> Value {
                 crate::app::remote_conn::connected_computers::gpui_remote_machine_server_id(
                     &target.machine_id,
                 );
-            json!({
-                "exceptKeyIds": re_added::own_key_ids(&target.machine_id, server_id.as_deref()),
-                "exceptName": this_computer_name(),
-            })
+            // Its keys' ids only to a computer this app signed for before (review finding 5).
+            if re_added::is_pinned(&target.machine_id) {
+                json!({
+                    "exceptKeyIds": re_added::own_key_ids(&target.machine_id, server_id.as_deref()),
+                    "exceptName": this_computer_name(),
+                })
+            } else {
+                json!({ "exceptName": this_computer_name() })
+            }
         }
     };
     in_security_flow(|| rpc(transport, "/api/securityStatus", params)).unwrap_or_default()
@@ -1006,9 +1013,9 @@ struct OldKeyUnlock {
     shared_key_id: String,
     server_id: String,
     signs_one_approval: bool,
-    /// `shared` is a removed entry's key for this computer, not the old shared one
-    /// (CDXC:Security 2026-11-20 in re_added.rs).
-    re_added: bool,
+    /// `shared` is a removed entry's key, not the old shared one (CDXC:Security 2026-11-20 in
+    /// re_added.rs): the name this app had for that entry.
+    removed_name: Option<String>,
 }
 
 fn check_old_key_unlock(
@@ -1053,10 +1060,10 @@ fn check_old_key_unlock(
     };
     let shared =
         ghostex_owner_keys::load_or_create_owner_key().map_err(|error| error.to_string())?;
-    let Some((shared, re_added)) = removed
+    let Some((shared, removed_name)) = removed
         .into_iter()
-        .map(|key| (key, true))
-        .chain(std::iter::once((shared, false)))
+        .map(|removed| (removed.key, Some(removed.name)))
+        .chain(std::iter::once((shared, None)))
         .find(|(key, _)| re_added::lists_key(&status, key))
     else {
         return Ok(None);
@@ -1075,7 +1082,7 @@ fn check_old_key_unlock(
         shared_key_id,
         server_id,
         signs_one_approval,
-        re_added,
+        removed_name,
     }))
 }
 
@@ -1152,9 +1159,9 @@ fn presence_for_unlock(transport: &Transport) -> Result<(), String> {
     }
     // macOS shows it as "Ghostex is trying to <reason>." (CDXC:Security 2026-11-17 at
     // `machine_and_host`).
-    let (computer, _) = machine_and_host(transport);
-    let confirmed =
-        ghostex_owner_keys::confirm_presence(&format!("let this Mac manage {computer} again"));
+    let title = offered_unlock_title(transport);
+    let reason = title.trim_end_matches('?').replacen("Let", "let", 1);
+    let confirmed = ghostex_owner_keys::confirm_presence(&reason);
     PROMPT_OPEN.store(false, Ordering::Release);
     confirmed.map(|_| ()).map_err(|error| error.to_string())
 }
@@ -1256,7 +1263,7 @@ pub(crate) fn old_key_unlock_offer(
         Ok(Some(unlock)) => {
             with_session(&key, |session| {
                 session.old_key_offer = Some(unlock.request.clone());
-                session.old_key_re_added = unlock.re_added;
+                session.old_key_removed_name = unlock.removed_name.clone();
                 session
                     .old_key_cards
                     .insert(unlock.request.id.clone(), unlock.server_id.clone());
@@ -1286,6 +1293,7 @@ fn lists_old_shared_key(transport: &Transport) -> bool {
         .unwrap_or_default();
     removed
         .iter()
+        .map(|removed| &removed.key)
         .chain(ghostex_owner_keys::load_or_create_owner_key().ok().as_ref())
         .any(|key| re_added::lists_key(&status, key))
 }
@@ -1305,22 +1313,45 @@ pub(crate) fn old_key_unlock_card(
     // is" (notice_modal_host.rs `notice_item`), with "Approve only if that is the computer you
     // expect." under it; this is the plain body (the approval cards page, 2026-11-17).
     let _ = request;
-    let re_added = with_session(&Transport::Remote(target.clone()).key(), |session| {
-        session.old_key_re_added
+    let removed = with_session(&Transport::Remote(target.clone()).key(), |session| {
+        session.old_key_removed_name.clone()
     });
-    let why = if re_added {
-        format!(
-            "{computer} was added to this Mac again, so it doesn't know this Mac's new key yet, and this Mac can't approve its phones and computers."
-        )
-    } else {
-        format!(
+    // A removed entry's key: what this app itself recorded, never what that computer says, so a
+    // computer answering as another reads wrong here (CDXC:Security 2026-11-20 in re_added.rs).
+    let why = match removed.as_deref().map(str::trim) {
+        Some("") => format!(
+            "This Mac managed a computer with the same server id before, under an entry you removed from Settings > Remote. Approve only if {computer} is that computer."
+        ),
+        Some(name) => format!(
+            "This Mac managed it before as \"{name}\", an entry you removed from Settings > Remote. Approve only if {computer} is that computer."
+        ),
+        None => format!(
             "After the last update, {computer} no longer knows this Mac, so nobody can add phones or computers to it."
-        )
+        ),
     };
     (
-        format!("Let this Mac manage {computer} again?"),
+        unlock_card_title(&computer, removed.is_some()),
         format!("{why}{reached}"),
     )
+}
+
+/// The unlock card's question: "again" only for the old shared key, which that computer listed as
+/// this app's; a removed entry's key may be for another entry's computer (re_added.rs).
+fn unlock_card_title(computer: &str, removed_entry: bool) -> String {
+    if removed_entry {
+        format!("Let this Mac manage {computer}?")
+    } else {
+        format!("Let this Mac manage {computer} again?")
+    }
+}
+
+/// The unlock card's question for `transport`'s machine as last offered.
+fn offered_unlock_title(transport: &Transport) -> String {
+    let (computer, _) = machine_and_host(transport);
+    let removed = with_session(&transport.key(), |session| {
+        session.old_key_removed_name.is_some()
+    });
+    unlock_card_title(&computer, removed)
 }
 
 /// Approve on the unlock card for `request`, the user's own click: the old shared owner key
@@ -1345,7 +1376,7 @@ pub(crate) fn unlock_with_old_key(
         if error == OWNER_WAITING_ERROR {
             let (computer, _) = machine_and_host(transport);
             format!(
-                "This Mac couldn't manage {computer} again just now. Try again in a minute. If it keeps failing, approve this Mac in Ghostex on the computer or phone that owns {computer}."
+                "This Mac couldn't manage {computer} just now. Try again in a minute. If it keeps failing, approve this Mac in Ghostex on the computer or phone that owns {computer}."
             )
         } else {
             error
@@ -1493,22 +1524,19 @@ fn check_server_id(transport: &Transport, server_id: &str, pin: bool) -> Result<
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
         .unwrap_or_default();
-    if let Some(pinned) = pins.get(&target.machine_id) {
-        if pinned != server_id {
-            log::warn!("owner session not signed: a machine answered with another server id");
-            return Err(REFUSED.to_string());
-        }
+    // A removed entry's pin doesn't block an entry that first registered with its server id
+    // (CDXC:Security 2026-11-20 in re_added.rs).
+    let configured = re_added::configured_machine_ids();
+    if !re_added::pins_allow_for(&pins, &target.machine_id, server_id, configured.as_ref()) {
+        log::warn!(
+            "owner session not signed: that server id is another machine's, or not this one's"
+        );
+        return Err(REFUSED.to_string());
+    }
+    if pins.contains_key(&target.machine_id) {
         // Pinned before: another machine reporting the same id later doesn't lock it out
         // (second review, finding 4).
         return Ok(());
-    }
-    // A removed entry's pin blocks nobody (CDXC:Security 2026-11-20 in re_added.rs).
-    let configured = re_added::configured_machine_ids();
-    if pins.iter().any(|(machine, pinned)| {
-        pinned == server_id && !re_added::is_removed(machine, configured.as_ref())
-    }) {
-        log::warn!("owner session not signed: that server id is another machine's");
-        return Err(REFUSED.to_string());
     }
     /*
     CDXC:Security 2026-11-17 FIX:
@@ -1526,7 +1554,8 @@ fn check_server_id(transport: &Transport, server_id: &str, pin: bool) -> Result<
         return Ok(());
     }
     pins.retain(|machine, pinned| {
-        pinned != server_id || !re_added::is_removed(machine, configured.as_ref())
+        pinned != server_id
+            || !re_added::takes_over(&target.machine_id, server_id, machine, configured.as_ref())
     });
     pins.insert(target.machine_id.clone(), server_id.to_string());
     if let Some(parent) = path.parent() {
@@ -1963,12 +1992,12 @@ pub(crate) fn answerer_for(transport: &Transport, request: &ApprovalRequest) -> 
     });
     let there = expected_computer(transport);
     if offered {
-        let (computer, _) = machine_and_host(transport);
+        let title = offered_unlock_title(transport);
         return Answerer::Elsewhere {
             devices: Vec::new(),
             asked,
             note: Some(format!(
-                "Or first approve \"Let this Mac manage {computer} again?\" on this Mac, then approve this here."
+                "Or first approve \"{title}\" on this Mac, then approve this here."
             )),
             can_ask: false,
         };
