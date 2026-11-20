@@ -4173,7 +4173,10 @@ version of the Projects features in Cursor and Claude Code.
   threads sit indented right under it with their own status dots: the ones
   working, waiting, or active in the last 2 hours. Older threads wait behind an
   "N older threads" row at the end, which lists them all (and "Hide older
-  threads" tucks them away again; both remembered across restarts). The chevron
+  threads" tucks them away again; both remembered across restarts). A thread
+  whose PR merged and that neither works nor waits on you counts as finished and
+  goes behind that row too, which reads "N finished threads" when they are all
+  finished; merged threads' Clean up and Keep share one banner above it. The chevron
   that replaces the crown when you hover the coordinator folds its threads away
   and back (folding it while one of its threads is the open chat switches that
   window to the coordinator's chat), and a folded coordinator keeps its number
@@ -7057,8 +7060,19 @@ Clean up (remove the session's worktree and park the session; a worktree with
 uncommitted changes is kept) or Keep, once per PR; `ghostex issues cleanup
 <session> clean-up|keep` answers it from a terminal. The offer takes the card's
 second line until you answer; on the phone's session list, tap Clean up or Keep.
-Turn **Offer Clean up when a PR merges** off in Settings > Session Cards to never
-get it (on by default). With **Title sessions by their branch** on (same page, off
+A coordinator's threads share one banner under their coordinator instead: "N merged
+worktrees" with Clean up all and Keep, which answer them all at once (`ghostex issues
+cleanup-threads <coordinator> clean-up|keep`). With **Clean up merged threads by
+themselves** on (Settings > Session Cards, on by default), Ghostex removes a merged
+thread's worktree and puts the thread to sleep on its own, but only for a thread a
+coordinator started whose worktree has no uncommitted or unpushed changes and that
+neither works nor waits on you; a coordinator and your own sessions are never
+touched. The banner then says "Cleaned up N worktrees" with Undo, which puts
+the worktrees back on their branches (`ghostex issues cleanup-threads <coordinator>
+undo`, or `dismiss` to hide the line); anything it could not clean up stays in the
+banner. Finished threads (PR merged, nothing running or waiting) fold behind the
+coordinator's "N finished threads" row however recently they ran. Turn **Offer Clean
+up when a PR merges** off in Settings > Session Cards to never get it (on by default). With **Title sessions by their branch** on (same page, off
 by default), a session on a branch other than main is titled by that branch,
 without your name and the ticket ID, until you rename it. Linear status needs a
 Linear API key: set one per workspace in Settings > Workspaces, or for one

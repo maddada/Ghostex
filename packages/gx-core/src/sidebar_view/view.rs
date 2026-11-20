@@ -536,6 +536,19 @@ pub struct RowNesting {
     pub older_threads: u16,
     /// On a coordinator row: the user listed its older threads.
     pub older_threads_shown: bool,
+    /// On a coordinator row: how many of its older threads are finished (`is_finished_thread`);
+    /// when they all are, its older-threads row reads "N finished threads".
+    pub finished_threads: u16,
+    /// On a coordinator row: its threads whose merged-PR Clean up / Keep offer its banner answers
+    /// for all of them at once (server/src/server/work_cleanup_threads.rs).
+    pub cleanup_offers: u16,
+    /// On a coordinator row: its threads gxserver cleaned up by itself that the banner reports,
+    /// and how many of them Undo can put back.
+    pub auto_cleaned: u16,
+    pub auto_cleaned_undo: u16,
+    /// On a thread row: its merged-PR offer is answered in its coordinator's banner, so the row
+    /// draws none of its own.
+    pub cleanup_in_banner: bool,
     /// On a thread row: it is one of its coordinator's older threads and they are not listed.
     pub older_hidden: bool,
     /// On a coordinator row: the focused session is one of its threads that a fold hides, so this

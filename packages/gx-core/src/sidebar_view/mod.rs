@@ -59,7 +59,8 @@ mod threads;
 #[cfg(test)]
 pub(crate) use threads::MAX_DEPTH as MAX_THREAD_DEPTH;
 pub(crate) use threads::{
-    is_recent_thread, lay_out_tree, recent_thread_deadline_ms, TreeChildren, TreeSpot, TreeStep,
+    is_finished_thread, is_recent_thread, lay_out_tree, offer_in_banner, recent_thread_deadline_ms,
+    TreeChildren, TreeSpot, TreeStep,
 };
 pub(crate) mod view;
 mod work;

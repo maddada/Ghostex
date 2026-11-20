@@ -236,6 +236,9 @@ pub struct UnifiedRow {
     pub subtree_matched: bool,
     /// Set on a row with threads under it.
     pub crew: Option<super::tree::UnifiedCrew>,
+    /// On a thread: its coordinator's banner answers its merged-PR offer
+    /// (`RowNesting::cleanup_in_banner`).
+    pub cleanup_in_banner: bool,
 }
 
 impl UnifiedRow {
@@ -269,8 +272,13 @@ impl UnifiedRow {
                         nesting: row.nesting_at(spot),
                     });
                 }
+                // The coordinator's end-of-threads line: its older-threads row and its
+                // merged-worktrees banner (the desktop draws whichever it has).
                 TreeStep::Done(row, spot)
-                    if row.crew.as_ref().is_some_and(|crew| crew.older_row) =>
+                    if row
+                        .crew
+                        .as_ref()
+                        .is_some_and(|crew| crew.older_row || crew.has_banner()) =>
                 {
                     lines.push(UnifiedTreeLine::Older {
                         coordinator: row,
@@ -295,6 +303,7 @@ impl UnifiedRow {
         nesting.last_child = spot.depth > 0 && spot.last;
         nesting.passing_lines = spot.passing_lines;
         nesting.lines_below = spot.lines_below;
+        nesting.cleanup_in_banner = self.cleanup_in_banner;
         nesting
     }
 
@@ -756,6 +765,7 @@ pub fn build_unified_sidebar_folded(
                     matched: false,
                     subtree_matched: false,
                     crew: None,
+                    cleanup_in_banner: false,
                 });
             }
         }

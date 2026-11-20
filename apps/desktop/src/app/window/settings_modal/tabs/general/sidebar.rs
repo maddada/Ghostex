@@ -572,6 +572,15 @@ fn session_cards_section(
     rows.extend(page.toggle(
         g,
         s,
+        "cleanUpMergedThreads",
+        "Clean up merged threads by themselves",
+        "A coordinator's thread whose pull request is merged has its worktree removed and goes to sleep by itself, but only when the worktree has no uncommitted or unpushed changes and the thread neither works nor waits on you. The coordinator's banner says which ones were cleaned up, with Undo; the rest wait in the banner for Clean up all or Keep.",
+        false,
+        cx,
+    ));
+    rows.extend(page.toggle(
+        g,
+        s,
         "showSessionCardHoverButtonsInContextMenu",
         "Hover buttons also in context menu",
         "Also list the enabled hover buttons in the session right-click menu, in their usual place in the menu. Close is never listed while it is on the card. Turn off to leave every button out of the menu once it is on the card.",

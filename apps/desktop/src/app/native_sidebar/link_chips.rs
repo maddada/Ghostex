@@ -299,7 +299,11 @@ impl GhostexGpuiApp {
     /// offer for a merged PR (work_chips.rs), which takes the line while it waits.
     pub(crate) fn native_session_has_second_line(&self, session: &NativeSidebarSession) -> bool {
         let row = self.native_session_links_row(session);
-        session.work.as_ref().is_some_and(|work| work.offer_cleanup) || !row.line.is_empty()
+        session
+            .work
+            .as_ref()
+            .is_some_and(|work| work.offer_cleanup && !super::work_chips::offer_in_banner(session))
+            || !row.line.is_empty()
     }
 
     /// The badge a row's title shows with the Badge option: the pinned (or only, or most pressing)
@@ -351,7 +355,11 @@ impl GhostexGpuiApp {
         appearance: &SidebarAppearance,
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
-        if session.work.as_ref().is_some_and(|work| work.offer_cleanup) {
+        if session
+            .work
+            .as_ref()
+            .is_some_and(|work| work.offer_cleanup && !super::work_chips::offer_in_banner(session))
+        {
             return None;
         }
         let row = self.native_session_links_row(session);

@@ -69,6 +69,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // SEE-ALSO: server/src/work_mode/settings.rs (gxserver reads both), server/src/work_mode/presentation.rs (`work_display_title`, `offerCleanup`).
     ("titleSessionsByBranch", J::Bool(false)),
     ("offerCleanupWhenPrMerges", J::Bool(true)),
+    // CDXC:WorkMode 2026-11-20 SEE-ALSO: server/src/server/work_cleanup_threads.rs (the user decision, Q4286, and the rules a thread must pass); on by default as the user asked for merged threads to be "cleaned up by themselves".
+    ("cleanUpMergedThreads", J::Bool(true)),
     // CDXC:Navigation 2026-10-17 SEE-ALSO: these replace markdownFileOpenView, htmlFileOpenView and imageFileOpenTarget, which still decide until documentFileOpenTarget is saved (file_opening.rs).
     ("documentFileOpenTarget", J::Str("files")),
     ("fileChangesOpenTarget", J::Str("changes")),

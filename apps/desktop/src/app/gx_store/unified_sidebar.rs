@@ -25,11 +25,11 @@ use serde_json::Value;
 
 use super::sidebar_snapshot::{SnapshotCache, SnapshotInput, snapshot_from_view};
 use crate::GhostexGpuiApp;
-use crate::app::native_sidebar::OlderThreadsRow;
 use crate::app::native_sidebar::model::{NativeSidebarGroup, NativeSidebarSession};
 use crate::app::native_sidebar::unified::model::{
     UnifiedCard, UnifiedCardLine, UnifiedGroupView, UnifiedShelfView, UnifiedSidebarSnapshot,
 };
+use crate::app::native_sidebar::{CleanupBanner, OlderThreadsRow};
 
 /// One machine's neutral list and the snapshot cache its rows are drawn through.
 #[derive(Default)]
@@ -585,9 +585,23 @@ impl UnifiedSidebarHost {
                             coordinator: coordinator.session.row.sidebar_session_id.clone(),
                             unified_key: Some(crew.key.clone()),
                             depth: f32::from(nesting.depth),
-                            count: u64::from(crew.older),
+                            count: if crew.older_row {
+                                u64::from(crew.older)
+                            } else {
+                                0
+                            },
                             shown: crew.older_shown,
                             passing_lines: u64::from(nesting.passing_lines_below()),
+                            finished: if crew.older_row {
+                                u64::from(crew.finished)
+                            } else {
+                                0
+                            },
+                            banner: CleanupBanner::new(
+                                crew.cleanup_offers,
+                                crew.auto_cleaned,
+                                crew.auto_cleaned_undo,
+                            ),
                         }))
                     }
                 })

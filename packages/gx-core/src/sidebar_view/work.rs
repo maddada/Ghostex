@@ -21,6 +21,24 @@ pub struct SessionWork {
     pub hand_set: bool,
     /// The linked PR is merged and the Clean up / Keep offer for it is unanswered.
     pub offer_cleanup: bool,
+    /// Its computer answers the offer for all of a coordinator's threads at once, so the offer goes
+    /// in the coordinator's banner instead of on the row.
+    pub offer_cleanup_all: bool,
+    /// Cleaned up by itself: `Some(can_undo)` while the coordinator's banner reports it.
+    pub auto_cleaned: Option<bool>,
+    /// The worktree was cleaned up for the merged PR.
+    pub cleaned_up: bool,
+}
+
+impl SessionWork {
+    /// The work behind the row is over: its PR is merged, or its worktree was cleaned up for it.
+    pub fn is_finished(&self) -> bool {
+        self.cleaned_up
+            || self
+                .pull_request
+                .as_ref()
+                .is_some_and(|pull_request| pull_request.state == "merged")
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -135,6 +153,9 @@ impl SessionWork {
                 }),
             hand_set: work.hand_set,
             offer_cleanup: work.offer_cleanup,
+            offer_cleanup_all: work.offer_cleanup_all,
+            auto_cleaned: work.auto_cleaned.as_ref().map(|line| line.undo),
+            cleaned_up: work.cleaned_up,
         }
     }
 
