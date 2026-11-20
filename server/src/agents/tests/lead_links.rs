@@ -145,3 +145,43 @@ fn the_report_is_the_reply_to_the_leads_own_message_never_a_later_user_turn() {
     let stale = vec![row(true, &lead_message, 1_000), row(false, "Old.", 1_500)];
     assert_eq!(lead_turn_reply(&stale, lead_ref, 100_000), None);
 }
+
+#[test]
+fn a_long_lead_turn_is_found_and_notices_stop_once_the_user_types() {
+    use crate::agents::lead_links::{lead_turn, LeadTurn, TurnRow};
+    use crate::coordinators::{agent_message, MessageSender};
+    let lead_ref = "S1:P1:GA";
+    let lead_message = agent_message(
+        &MessageSender {
+            agent_name: "Claude".into(),
+            title: "Lead".into(),
+            session_id: "GA".into(),
+            agent_id: "claude".into(),
+            agent_session_id: "x".into(),
+            global_ref: lead_ref.into(),
+        },
+        "Refactor the settings page.",
+    );
+    let row = |user: bool, text: String, at: i64| TurnRow {
+        user,
+        text,
+        at: Some(at),
+    };
+    // The lead's message, then a turn of 500 rows of the agent's own (the watcher reads back in
+    // pages until it reaches the message, lead_runtime.rs `lead_turn_rows`).
+    let mut rows = vec![row(true, lead_message, 10_000)];
+    rows.extend((0..500).map(|step| row(false, format!("step {step}"), 11_000 + step)));
+    assert_eq!(
+        lead_turn(&rows, lead_ref, 10_000),
+        Some(LeadTurn {
+            reply: Some("step 499".to_string()),
+            user_after: false,
+        })
+    );
+    // The user types there afterwards: the lead's turn is over, so a waiting or quiet notice now
+    // would be about the user's own turn and is not sent.
+    rows.push(row(true, "Now something of mine.".to_string(), 20_000));
+    let turn = lead_turn(&rows, lead_ref, 10_000).unwrap();
+    assert!(turn.user_after);
+    assert_eq!(turn.reply.as_deref(), Some("step 499"));
+}

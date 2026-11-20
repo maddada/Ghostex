@@ -19,15 +19,14 @@
 use super::*;
 
 use crate::agents::lead_links::{
-    lead_turn_reply, list_lead_links, read_lead_link, remove_lead_link, set_link_observed_working,
-    settle_finished, settle_quiet, settle_waiting, LeadLink, TurnRow,
+    lead_turn, list_lead_links, read_lead_link, remove_lead_link, set_link_observed_working,
+    settle_finished, settle_quiet, settle_waiting, LeadLink, TurnRow, LEAD_TURN_SLACK_MS,
 };
 use crate::coordinators::{
     agent_message, classify_thread_session, report_body, SessionKey, ThreadProgress, ThreadReport,
     ThreadState,
 };
 use crate::presentation::effective_lifecycle_state;
-use crate::session_chat_queue_runtime::SessionChatTranscriptGate;
 
 use super::coordinator_runtime::{
     agent_names, send_to_coordinator, session_sender, waiting_report_prompt,
@@ -43,8 +42,75 @@ const CLOSED_GRACE_MS: i64 = 60_000;
 const RETRY_AFTER_MS: i64 = 30_000;
 /// A session's activity stamp may lead the lead's `owedSince` by the send's own time.
 const ACTIVITY_SLACK_MS: i64 = 30_000;
-/// How many of a linked session's newest transcript rows are read for the lead's turn.
-const TURN_TAIL_MESSAGES: usize = 60;
+/// Transcript rows read per page, and the most pages read back for the lead's message.
+const TURN_PAGE_ROWS: usize = 200;
+const TURN_MAX_PAGES: usize = 25;
+
+/// A linked session's transcript rows from the lead's turn on, kept while the file is unchanged.
+#[derive(Default)]
+struct TurnCache {
+    path: Option<std::path::PathBuf>,
+    /// The file's length and modification time, and the `owedSince` the rows were read for.
+    read_for: Option<((u64, Option<std::time::SystemTime>), i64)>,
+    rows: Vec<TurnRow>,
+}
+
+/// BLOCKING (transcript reads, only when the file changed). The transcript's rows back to the
+/// lead's message: page by page from the end until a row older than `owed_ms` minus the slack, or
+/// `TURN_MAX_PAGES` pages.
+///
+/// CDXC:LeadLinks 2026-11-20 FIX:
+/// Opus re-review of #678 (the blocker): the lead's message was looked for in the newest 60 rows
+/// only, and every tool call and result is a row, so a real turn (hundreds of rows) never found it
+/// and was never reported. The rows are now read back in pages (`before_offset`, as
+/// session_chat_history.rs reads them) until they reach the time of the lead's message.
+fn lead_turn_rows(cache: &mut TurnCache, session: &Value, owed_ms: i64) -> Vec<TurnRow> {
+    use crate::session_chat_tail::{read_session_chat_tail_page, SessionChatTailPage};
+    let Some(agent) = crate::coordinators::resolve_thread_transcript(session, &mut cache.path)
+    else {
+        return Vec::new();
+    };
+    let Some(path) = cache.path.clone() else {
+        return Vec::new();
+    };
+    let Some(stamp) = std::fs::metadata(&path)
+        .ok()
+        .map(|metadata| (metadata.len(), metadata.modified().ok()))
+    else {
+        return Vec::new();
+    };
+    if cache.read_for == Some((stamp, owed_ms)) {
+        return cache.rows.clone();
+    }
+    let floor = owed_ms - LEAD_TURN_SLACK_MS;
+    let mut messages = Vec::new();
+    let mut before = None;
+    for _ in 0..TURN_MAX_PAGES {
+        let Ok(SessionChatTailPage::Page {
+            messages: page,
+            has_more,
+            before_offset,
+            ..
+        }) = read_session_chat_tail_page(agent, &path, TURN_PAGE_ROWS, before)
+        else {
+            break;
+        };
+        let reached = page
+            .iter()
+            .find_map(|message| message.timestamp)
+            .is_some_and(|at| at < floor);
+        let mut older = page;
+        older.append(&mut messages);
+        messages = older;
+        if reached || !has_more {
+            break;
+        }
+        before = Some(before_offset);
+    }
+    cache.rows = turn_rows(&messages);
+    cache.read_for = Some((stamp, owed_ms));
+    cache.rows.clone()
+}
 
 /// A transcript's rows as `lead_turn_reply` reads them: what someone typed (a tool result, a
 /// background job's notice or a Ghostex note is nobody's message) and the agent's words.
@@ -96,7 +162,7 @@ struct WatchMemory {
     /// The send id of each report still on its way, so a retried report is the same send.
     send_ids: HashMap<(SessionKey, String), String>,
     /// Each owed link's transcript tail, read again only when the file changed.
-    transcripts: HashMap<SessionKey, SessionChatTranscriptGate>,
+    transcripts: HashMap<SessionKey, TurnCache>,
 }
 
 enum LeadReport {
@@ -333,6 +399,20 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
             has_run: true,
         };
         let hook_state = classify_thread_session(Some(&session), as_run, &now_iso, false);
+        let lead_ref = crate::ids::create_global_session_ref(
+            state.metadata.server_id.as_str(),
+            &lead_key.0,
+            &lead_key.1,
+        );
+        // The lead's turn as the transcript shows it, read only where a report could go out.
+        let lead_turn_now = |memory: &mut WatchMemory| {
+            let rows = lead_turn_rows(
+                memory.transcripts.entry(key.clone()).or_default(),
+                &session,
+                owed_ms,
+            );
+            lead_turn(&rows, &lead_ref, owed_ms)
+        };
         let report = match hook_state {
             ThreadState::Working => {
                 memory.idle_since.remove(&key);
@@ -342,6 +422,8 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
                 crate::coordinators::session_quiet(&key.0, &key.1)
                     .filter(|quiet| quiet.stalled)
                     .filter(|quiet| link.reported_quiet_since != Some(quiet.quiet_since))
+                    // Only while it works on the lead's turn, not on the user's own.
+                    .filter(|_| lead_turn_now(&mut memory).is_some_and(|turn| !turn.user_after))
                     .map(|quiet| LeadReport::Quiet {
                         since: quiet.quiet_since,
                         minutes: crate::coordinators::minutes_of(now - quiet.quiet_since).max(1),
@@ -350,12 +432,13 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
             ThreadState::Waiting => {
                 memory.idle_since.remove(&key);
                 let (prompt_key, summary) = waiting_report_prompt(&session);
-                (link.reported_prompt_key.as_deref() != Some(prompt_key.as_str())).then_some(
-                    LeadReport::Waiting {
-                        key: prompt_key,
-                        summary,
-                    },
-                )
+                // Only a question of the lead's turn, never one of the user's own.
+                (link.reported_prompt_key.as_deref() != Some(prompt_key.as_str())
+                    && lead_turn_now(&mut memory).is_some_and(|turn| !turn.user_after))
+                .then_some(LeadReport::Waiting {
+                    key: prompt_key,
+                    summary,
+                })
             }
             ThreadState::Finished | ThreadState::Sleeping => {
                 let since = *memory.idle_since.entry(key.clone()).or_insert(now);
@@ -365,27 +448,14 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
                     // The reply to the lead's own message (`lead_turn_reply`): a turn too short for
                     // a tick to see it working still counts, and a turn the user started after it
                     // is never the one sent.
-                    let lead_ref = crate::ids::create_global_session_ref(
-                        state.metadata.server_id.as_str(),
-                        &lead_key.0,
-                        &lead_key.1,
-                    );
                     // Nothing moved since the lead's message: no reply to read yet (Opus review of
                     // #678, finding 9). A row with no activity stamp is read anyway.
                     let moved = super::coordinator_remote_runtime::activity_marker_ms(&session)
                         .is_none_or(|at| at + ACTIVITY_SLACK_MS >= owed_ms);
-                    let rows = if moved {
-                        memory
-                            .transcripts
-                            .entry(key.clone())
-                            .or_default()
-                            .tail(&session, TURN_TAIL_MESSAGES)
-                            .map(|tail| turn_rows(&tail.messages))
-                            .unwrap_or_default()
-                    } else {
-                        Vec::new()
-                    };
-                    lead_turn_reply(&rows, &lead_ref, owed_ms)
+                    moved
+                        .then(|| lead_turn_now(&mut memory))
+                        .flatten()
+                        .and_then(|turn| turn.reply)
                         .map(|message| LeadReport::Finished { message })
                 }
             }
