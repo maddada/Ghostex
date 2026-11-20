@@ -199,6 +199,7 @@ pub const HOTKEY_SETTINGS_SECTIONS: J = J::Arr(&[
                 J::Str("openSettings"),
                 J::Str("openExtensions"),
                 J::Str("openGhostexHelp"),
+                J::Str("toggleScreenshotMode"),
                 J::Str("openFileInFiles"),
                 J::Str("searchProjectFiles"),
                 J::Str("findInFocusedView"),

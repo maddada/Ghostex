@@ -66,6 +66,7 @@ pub(crate) mod threads;
 // The Unified store builds the Project sidebar's "N older threads" row for its cards (gx_store/unified_sidebar.rs).
 pub(crate) use cleanup_banner::CleanupBanner;
 pub(crate) use threads::OlderThreadsRow;
+mod screenshot_chip;
 pub(crate) mod tooltips;
 pub(crate) mod unified;
 pub(crate) mod usage;

@@ -162,6 +162,23 @@ pub struct AccountsState {
 }
 
 impl AccountsState {
+    /// The same accounts with nothing that names one: each is "Account <n>" in list order, with
+    /// no email and no mark. Ids and slots stay, so switching still works. Screenshot mode's
+    /// (CDXC:ScreenshotMode 2026-11-20 in apps/desktop/src/app/screenshot_mode.rs).
+    pub fn unnamed(mut self) -> Self {
+        for (index, account) in self
+            .accounts
+            .iter_mut()
+            .chain(self.usage_accounts.iter_mut())
+            .enumerate()
+        {
+            account.name = format!("Account {}", index + 1);
+            account.email = None;
+            account.indicator = None;
+        }
+        self
+    }
+
     /// Reads the answer. A shape the TypeScript would read as empty reads as empty here.
     pub fn from_value(value: &Value) -> Self {
         let object = value.as_object();

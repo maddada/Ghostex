@@ -242,7 +242,7 @@ pub fn compute_native_chat_options(state: &ChatState, _context: &ChatContext) ->
             .iter()
             .find(|agent| Some(agent.agent_id.as_str()) == draft_agent_id.as_deref())
     });
-    let accounts = menus.accounts.as_ref().map(AccountsState::from_value);
+    let accounts = accounts_state(state);
     let mut option_labels = OptionLabels {
         model: pill_values.model.clone(),
         model_display: pill_values.model_display.clone(),
@@ -253,7 +253,10 @@ pub fn compute_native_chat_options(state: &ChatState, _context: &ChatContext) ->
         agent_chip: None,
         fast: pill_values.fast,
         plan: pill_values.plan,
-        account_indicator: account_indicator(accounts.as_ref()),
+        // Screenshot mode names no account (CDXC:ScreenshotMode 2026-11-20 in
+        // apps/desktop/src/app/screenshot_mode.rs).
+        account_indicator: account_indicator(accounts.as_ref())
+            .filter(|_| !state.core.screenshot_mode),
         account_sign_in_note: account_sign_in_note(
             accounts.as_ref(),
             state
@@ -387,7 +390,15 @@ pub fn option_storage_key(
 
 /// The `accounts` answer parsed, for the surfaces that need more than the raw value.
 pub fn accounts_state(state: &ChatState) -> Option<AccountsState> {
-    state.menus.accounts.as_ref().map(AccountsState::from_value)
+    let accounts = state
+        .menus
+        .accounts
+        .as_ref()
+        .map(AccountsState::from_value)?;
+    Some(match state.core.screenshot_mode {
+        true => accounts.unnamed(),
+        false => accounts,
+    })
 }
 
 /// `chat.selectedOptions` as the option store folds it.

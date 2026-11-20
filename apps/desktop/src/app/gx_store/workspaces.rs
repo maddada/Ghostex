@@ -207,12 +207,16 @@ impl GhostexGpuiApp {
             return None;
         }
         let workspace = self.gx_store_window_workspace()?;
+        // Screenshot mode names no other workspace: the tile's click opens the menu, which lists
+        // only this one (CDXC:ScreenshotMode 2026-11-20 in app/screenshot_mode.rs).
+        let screenshot_mode = crate::app::screenshot_mode::screenshot_mode_on();
         let switch_to = ghostex_gx_core::workspace_switch_target(
             state,
             &workspace.workspace_id,
             self.gx_store_window_recent_workspace_ids(),
         )
-        .map(|target| (target.workspace_id.clone(), target.name.clone()));
+        .map(|target| (target.workspace_id.clone(), target.name.clone()))
+        .filter(|_| !screenshot_mode);
         let switch_hotkey = switch_to.as_ref().and_then(|(target, _)| {
             let position = state
                 .ordered()
@@ -263,6 +267,17 @@ impl GhostexGpuiApp {
             &workspace.workspace_id,
             &in_windows,
         ));
+        // Screenshot mode lists no other workspace (CDXC:ScreenshotMode 2026-11-20 in
+        // app/screenshot_mode.rs).
+        if crate::app::screenshot_mode::screenshot_mode_on()
+            && let Some(rows) = menu.as_array_mut()
+        {
+            let current = workspace.workspace_id.clone();
+            rows.retain(|row| {
+                row["command"]["type"] != "selectWorkspace"
+                    || row["command"]["workspaceId"] == current.as_str()
+            });
+        }
         for row in menu.as_array_mut().into_iter().flatten() {
             let Some(label) = row["hotkey"]
                 .as_str()

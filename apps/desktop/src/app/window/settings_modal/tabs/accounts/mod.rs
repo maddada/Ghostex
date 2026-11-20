@@ -359,8 +359,11 @@ impl AccountsTab {
         .unwrap_or_else(|| div().into_any_element())
     }
 
+    /// Whether this page masks account emails: Hide emails, or screenshot mode
+    /// (CDXC:ScreenshotMode 2026-11-20 in app/screenshot_mode.rs).
     pub(crate) fn hide_emails(&self, cx: &App) -> bool {
-        self.store.read(cx).bool("hideAccountEmails")
+        let store = self.store.read(cx);
+        store.bool("hideAccountEmails") || store.bool("screenshotMode")
     }
 
     /// The page opened (read the accounts, watch sign-ins, read the helper tools) or closed.
@@ -610,22 +613,52 @@ impl AccountsTab {
             )
         };
         let refresh = connected.then(|| self.render_page_menu(&p, cx));
-        let mut rows: Vec<AnyElement> = vec![toggle_field_with(
-            &p,
-            "hide-account-emails",
-            RowSpec::new("Hide emails").description(
-                "Show only the first and last address characters and obscure the domain.",
+        let (hide_switch, screenshot_mode) = {
+            let store = self.store.read(cx);
+            (
+                store.bool("hideAccountEmails"),
+                store.bool("screenshotMode"),
+            )
+        };
+        let mut rows: Vec<AnyElement> = vec![
+            toggle_field_with(
+                &p,
+                "hide-account-emails",
+                RowSpec::new("Hide emails").description(
+                    "Show only the first and last address characters and obscure the domain.",
+                ),
+                hide_switch,
+                None,
+                |page: &mut Self, next, _window, cx| {
+                    let store = page.store.clone();
+                    store.update(cx, |store, cx| {
+                        store.update_setting("hideAccountEmails", json!(next), cx)
+                    });
+                },
+                cx,
             ),
-            hide,
-            None,
-            |page: &mut Self, next, _window, cx| {
-                let store = page.store.clone();
-                store.update(cx, |store, cx| {
-                    store.update_setting("hideAccountEmails", json!(next), cx)
-                });
-            },
-            cx,
-        )];
+            // CDXC:ScreenshotMode 2026-11-20 DECISION in app/screenshot_mode.rs.
+            toggle_field_with(
+                &p,
+                "screenshot-mode",
+                RowSpec::new("Screenshot mode").description(
+                    "Hide account names and emails, the sidebar's account tiles, the account on the model pill and your other workspaces, for screenshots and screen shares. A Screenshot mode chip shows while it is on. Stays on this computer.",
+                ),
+                screenshot_mode,
+                None,
+                |page: &mut Self, next, _window, cx| {
+                    let store = page.store.clone();
+                    store.update(cx, |store, cx| {
+                        store.update_setting(
+                            "screenshotMode",
+                            json!(next),
+                            cx,
+                        )
+                    });
+                },
+                cx,
+            ),
+        ];
         if connected && data {
             let setup = self.render_helper_setup_rows(&p, cx);
             rows.splice(0..0, setup);

@@ -352,6 +352,18 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
         retired_default_keys: &[],
         action: J::Obj(&[("id", J::Str("openGhostexHelp")), ("kind", J::Str("openGhostexHelp"))]),
     },
+    // CDXC:ScreenshotMode 2026-11-20 DECISION in apps/desktop/src/app/screenshot_mode.rs: the
+    // command palette turns screenshot mode on and off; no key until the user picks one.
+    HotkeyDefinition {
+        id: "toggleScreenshotMode",
+        title: "Toggle Screenshot Mode",
+        description: "Hide account names and emails, the account tiles and your other workspaces for screenshots, or show them again.",
+        default_key: "",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("toggleScreenshotMode")), ("kind", J::Str("toggleScreenshotMode"))]),
+    },
     // CDXC:Docs 2026-09-27 DECISION:
     // User: an "Open file" hotkey and button let you type or paste the path of any file to view it in the Files view. The key is unassigned until the user picks one: the Cmd+Shift+O / Ctrl+Shift+O they asked for is New Agent Session's (CDXC:Hotkeys 2026-09-25 DECISION).
     HotkeyDefinition {

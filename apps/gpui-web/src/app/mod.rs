@@ -64,6 +64,7 @@ pub(crate) mod remote_conn;
 mod rename_session_modal_lifecycle;
 mod rename_worktree_modal_lifecycle;
 pub(crate) mod render;
+pub(crate) mod screenshot_mode;
 pub(crate) mod session_handoff_modal_lifecycle;
 mod session_note_modal_lifecycle;
 /// Whether Session notes is on for the computer serving the page (the desktop's `app/session_notes.rs` twin).

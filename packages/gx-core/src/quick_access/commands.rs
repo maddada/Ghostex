@@ -597,6 +597,7 @@ fn hotkey_action_icon(action: &J) -> &'static str {
         "openCommandsPanel" => "terminal-2",
         "openSettings" => "settings",
         "openHotkeys" => "keyboard",
+        "toggleScreenshotMode" => "camera",
         "toggleSidebarCollapsed" => "layout-sidebar",
         "toggleViewPanel" => "layout-sidebar-right-expand",
         "expandViewPanel" | "expandViewPanelFully" => "arrows-diagonal",

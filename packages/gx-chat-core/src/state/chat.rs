@@ -53,6 +53,9 @@ pub struct CoreState {
     pub operation_error_code: Option<String>,
     /// Masks account text everywhere the chat shows it.
     pub hide_account_emails: bool,
+    /// Screenshot mode: no account mark on the model pill and no account named
+    /// (CDXC:ScreenshotMode 2026-11-20 in apps/desktop/src/app/screenshot_mode.rs).
+    pub screenshot_mode: bool,
     /// The Catch me up setting (`chatCatchMeUp`), from the chat settings or the latest read.
     pub catch_up_enabled: bool,
     /// The chat box row switches (Settings > Experience), from the host; all on by default.

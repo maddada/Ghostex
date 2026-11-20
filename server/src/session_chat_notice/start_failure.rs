@@ -101,7 +101,12 @@ pub(crate) fn card_account_name(selector: &str, name: Option<&str>, email: Optio
     fn known(value: Option<&str>) -> Option<&str> {
         value.map(str::trim).filter(|value| !value.is_empty())
     }
-    let Some(label) = known(name).or_else(|| known(email)) else {
+    // Screenshot mode names no account (CDXC:ScreenshotMode 2026-11-20 in
+    // apps/desktop/src/app/screenshot_mode.rs).
+    let label = known(name)
+        .or_else(|| known(email))
+        .filter(|_| !screenshot_mode_on());
+    let Some(label) = label else {
         return format!("Account {selector}");
     };
     if account_emails_hidden() {
@@ -117,10 +122,20 @@ pub(crate) fn claude_slot_card_name(slot: &str) -> String {
     card_account_name(slot, name.as_deref(), claude_slot_email(slot).as_deref())
 }
 
-/// Settings > Accounts > Hide account emails, read fresh from the shared settings file.
+/// Settings > Accounts > Hide account emails, or screenshot mode (which hides them too), read
+/// fresh from the shared settings file.
 pub(crate) fn account_emails_hidden() -> bool {
+    shared_setting_on("hideAccountEmails") || shared_setting_on("screenshotMode")
+}
+
+/// Settings > Accounts > Screenshot mode, read fresh from the shared settings file.
+pub(crate) fn screenshot_mode_on() -> bool {
+    shared_setting_on("screenshotMode")
+}
+
+fn shared_setting_on(key: &str) -> bool {
     crate::shared_settings_file::read_shared_settings(&crate::paths::get_gxserver_paths(None))
-        .and_then(|settings| settings.get("hideAccountEmails").and_then(Value::as_bool))
+        .and_then(|settings| settings.get(key).and_then(Value::as_bool))
         .unwrap_or(false)
 }
 

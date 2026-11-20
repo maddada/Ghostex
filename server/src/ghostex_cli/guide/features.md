@@ -3683,6 +3683,18 @@ Context details dialog previews and hover text. It also covers account choices
 and selected dropdown values, account setup and reconnect fields, and account
 errors and recovery messages in Settings, launchers, and the account usage popup.
 
+Screenshot mode (Settings > Accounts, or Toggle Screenshot Mode in the command
+palette, where you can also give it a hotkey) hides what is private before a
+screenshot or a screen share: it masks every email the way Hide emails does,
+calls each account "Account" and its number instead of its name, hides the
+account tiles at the bottom of the sidebar (and the rail's usage button), drops
+the account mark from the chat's model pill, and leaves your other workspaces
+out of the workspace tile's tooltip and menu (a click on the tile opens the menu
+instead of switching). A Screenshot mode chip shows at the bottom of the sidebar
+while it is on; click it to turn screenshot mode off. It is off by default, stays
+on this computer and never syncs to your other computers. An agent can turn it
+on or off with `ghostex settings set screenshotMode true` (or `false`).
+
 The context meter above the chat box opens a popover whose More details rows
 are grouped under Usage & cost, Context & cache, and Session. Its pen icon
 opens the Context details dialog: the filter bar at the top finds a row by its

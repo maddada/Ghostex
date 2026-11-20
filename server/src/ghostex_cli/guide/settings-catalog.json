@@ -9734,6 +9734,7 @@
         "openSettings": "cmd+,",
         "openExtensions": "",
         "openGhostexHelp": "",
+        "toggleScreenshotMode": "",
         "openFileInFiles": "",
         "openHotkeys": "cmd+/",
         "toggleSidebarCollapsed": "cmd+b",
@@ -10061,6 +10062,18 @@
       "type": "boolean",
       "default": false,
       "agentWritable": false
+    },
+    {
+      "key": "screenshotMode",
+      "title": "Screenshot mode",
+      "subtitle": "Hide account names and emails, the sidebar's account tiles, the account on the model pill and your other workspaces, for screenshots and screen shares. A Screenshot mode chip shows while it is on. Stays on this computer; it never syncs.",
+      "tab": "accounts",
+      "tabTitle": "Accounts",
+      "section": "accounts",
+      "sectionTitle": "Configuration",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
     },
     {
       "key": "autopilotEnabled",
@@ -14617,6 +14630,13 @@
       "id": "openGhostexHelp",
       "title": "Ask Ghostex Help",
       "description": "Open the Ghostex Help menu: sample questions an agent can answer and settings it can change for you.",
+      "defaultKey": "",
+      "terminalDefaultKey": ""
+    },
+    {
+      "id": "toggleScreenshotMode",
+      "title": "Toggle Screenshot Mode",
+      "description": "Hide account names and emails, the account tiles and your other workspaces for screenshots, or show them again.",
       "defaultKey": "",
       "terminalDefaultKey": ""
     },
