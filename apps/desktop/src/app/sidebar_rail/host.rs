@@ -101,17 +101,16 @@ impl GhostexGpuiApp {
     }
 
     /// The pointer is on the rail's top half (`Some(true)`), its bottom half (`Some(false)`) or
-    /// off it (`None`, also on a press). Resting `RAIL_REVEAL_DWELL` on the top half while the
-    /// sidebar is hidden floats the sidebar out, through the left edge's own reveal.
+    /// off it (`None`, also on a press). Resting `RAIL_REVEAL_DWELL` on a half while the sidebar is
+    /// hidden floats out what the left edge's same half does (`floating_reveal_edge_want`).
     ///
     /// CDXC:Sidebar 2026-11-21 DECISION:
-    /// User (Q4322): "top half when sidebar is hidden shows the sidebar, bottom half shows the chat". With the rail on and the sidebar hidden, resting on the rail's top half floats out the sidebar exactly as the left edge's hover does (`arm_floating_reveal_from_strip`): the same panel, slide, grace and dismissal; the panel's keep zone runs from the window's left edge, so the rail and the panel keep it out, and the pointer can move onto it. It waits a short dwell first (coordinator: "the reveal shouldn't fight clicks on icons"), so a click or a passing pointer opens nothing and icons keep their tooltips; a press on the rail starts the wait again. The bottom half does nothing yet: the sidebar has no chat view of its own (the rail's Claude and Grok Bot open full-window pages), so what "the chat" is waits on the user (the left edge's bottom half floats the folded sessions column, `floating_reveal_edge_want`).
+    /// User (Q4322): "top half when sidebar is hidden shows the sidebar, bottom half shows the chat". With the rail on and the sidebar hidden, resting on the rail's top half floats out the sidebar exactly as the left edge's hover does (`arm_floating_reveal_from_strip`): the same panel, slide, grace and dismissal; the panel's keep zone runs from the window's left edge, so the rail and the panel keep it out, and the pointer can move onto it. It waits a short dwell first (coordinator: "the reveal shouldn't fight clicks on icons"), so a click or a passing pointer opens nothing and icons keep their tooltips; a press on the rail starts the wait again. The bottom half is "the chat": the sidebar has no chat view of its own (the rail's Claude and Grok Bot open full-window pages), so, coordinator's call, the rail mirrors the left edge's halves (`floating_reveal_edge_want`): the bottom half floats the Agents Panel while an expanded view has folded it away, and while it is on screen the whole rail floats the sidebar.
     pub(crate) fn sidebar_rail_reveal_hover(
         &mut self,
         top_half: Option<bool>,
         cx: &mut gpui::Context<Self>,
     ) {
-        use crate::app::floating_reveal::model::FloatingRevealContent;
         const RAIL_REVEAL_DWELL: std::time::Duration = std::time::Duration::from_millis(300);
         if self.sidebar_rail.reveal_half == top_half {
             return;
@@ -122,10 +121,10 @@ impl GhostexGpuiApp {
             // A panel already out leaves through its own dismissal.
             self.disarm_floating_reveal_edge();
         }
-        if top_half != Some(true)
-            || !self.sidebar_collapsed
-            || self.floating_reveal.panel.is_some()
-        {
+        let Some(half) = top_half else {
+            return;
+        };
+        if !self.sidebar_collapsed || self.floating_reveal.panel.is_some() {
             return;
         }
         let generation = self.sidebar_rail.reveal_generation;
@@ -133,17 +132,17 @@ impl GhostexGpuiApp {
             cx.background_executor().timer(RAIL_REVEAL_DWELL).await;
             let _ = app.update(cx, |app, cx| {
                 if app.sidebar_rail.reveal_generation != generation
-                    || app.sidebar_rail.reveal_half != Some(true)
+                    || app.sidebar_rail.reveal_half != Some(half)
                     || !app.sidebar_collapsed
                     || app.floating_reveal.panel.is_some()
                 {
                     return;
                 }
                 app.sidebar_rail.reveal_armed = true;
-                app.arm_floating_reveal_from_strip(FloatingRevealContent {
-                    sidebar: true,
-                    agents_column: false,
-                });
+                // The left edge's halves: the sidebar from the top, the Agents Panel from the
+                // bottom while it is folded away, the sidebar from either otherwise.
+                let want = app.floating_reveal_edge_want(half);
+                app.arm_floating_reveal_from_strip(want);
                 // Wakes the reveal's sweep, which opens the panel.
                 cx.notify();
             });
