@@ -35,6 +35,12 @@ pub(crate) const OBSERVABLE_EVENTS: &[&str] = &[
 const FRESH_ROLLOUT: Duration = Duration::from_secs(20);
 const MAX_READ: u64 = 4 * 1024 * 1024;
 const BASELINE_READ: u64 = 256 * 1024;
+const CODEX_FAMILY: &str = "codex";
+
+fn is_codex_session(session: &Value) -> bool {
+    crate::session_chat_composer::session_chat_composer_agent_id(session).as_deref()
+        == Some(CODEX_FAMILY)
+}
 
 struct Tail {
     path: PathBuf,
@@ -50,6 +56,9 @@ pub(super) struct CodexObserver {
     /// The root rollout each session's Codex process holds open, with its conversation id, read
     /// off the process (`find_open_rollouts`); preferred over the ids the hook reported.
     open_rollouts: HashMap<(String, String), (String, PathBuf)>,
+    /// Live Codex sessions whose latest open-file scan completed cleanly with no open root
+    /// rollout; `poll` drops their stale bound rollout instead of keeping it via `agentSessionPath`.
+    confirmed_no_rollout: HashSet<(String, String)>,
     open_rollouts_read_at: Option<Instant>,
     /// Each open file's conversation id if it is a root rollout (`None`: not one, such as a
     /// subagent's): a rollout's first line never changes, so it is read once.
@@ -124,7 +133,7 @@ impl CodexObserver {
         let mut names = Vec::new();
         let mut keys = HashMap::new();
         for session in sessions {
-            if read_session_text(session, "agentId").as_deref() != Some("codex") {
+            if !is_codex_session(session) {
                 continue;
             }
             let (Some(project_id), Some(session_id), Some(name)) = (
@@ -143,9 +152,41 @@ impl CodexObserver {
             // A failed scan keeps what the last one found.
             return;
         };
-        self.open_rollouts = open_rollouts_from(&keys, &identities, &mut self.root_rollouts);
+        self.apply_process_scan(&keys, &identities);
         if self.root_rollouts.len() > 1024 {
             self.root_rollouts.clear();
+        }
+    }
+
+    fn apply_process_scan(
+        &mut self,
+        keys: &HashMap<String, (String, String)>,
+        identities: &HashMap<String, crate::zmx::ZmxProcessIdentity>,
+    ) {
+        let open = open_rollouts_from(keys, identities, &mut self.root_rollouts);
+        let missing = confirmed_missing_rollouts_from(keys, identities, &open, &self.root_rollouts);
+        let live_keys: HashSet<&(String, String)> = keys.values().collect();
+        self.open_rollouts.retain(|key, _| live_keys.contains(key));
+        self.confirmed_no_rollout
+            .retain(|key| live_keys.contains(key));
+        for (name, key) in keys {
+            if let Some(found) = open.get(key) {
+                self.open_rollouts.insert(key.clone(), found.clone());
+                self.confirmed_no_rollout.remove(key);
+            } else if missing.contains(key) {
+                self.open_rollouts.remove(key);
+                self.confirmed_no_rollout.insert(key.clone());
+            } else if identities
+                .get(name)
+                .is_none_or(|identity| identity.agent_id.as_deref() != Some(CODEX_FAMILY))
+            {
+                // Codex is no longer running in this terminal; drop cached scan decisions.
+                self.open_rollouts.remove(key);
+                self.confirmed_no_rollout.remove(key);
+            }
+            // Otherwise Codex is running but the scan was inconclusive (e.g. open-file read
+            // unavailable or an open rollout's first line is not written yet): keep the last
+            // confirmed decision and tail offset for this session.
         }
     }
 
@@ -153,7 +194,7 @@ impl CodexObserver {
         let mut events = Vec::new();
         let mut active = Vec::new();
         for session in sessions {
-            if read_session_text(session, "agentId").as_deref() != Some("codex") {
+            if !is_codex_session(session) {
                 continue;
             }
             let (Some(project_id), Some(session_id)) = (
@@ -163,6 +204,9 @@ impl CodexObserver {
                 continue;
             };
             let key = (project_id.clone(), session_id.clone());
+            if self.confirmed_no_rollout.contains(&key) {
+                continue;
+            }
             let open = self
                 .open_rollouts
                 .get(&key)
@@ -187,10 +231,10 @@ impl CodexObserver {
                     (thread, path)
                 }
             };
-            active.push(key.clone());
             let Some(path) = path else {
                 continue;
             };
+            active.push(key.clone());
             let Ok(meta) = std::fs::metadata(&path) else {
                 continue;
             };
@@ -302,7 +346,7 @@ fn open_rollouts_from(
 ) -> HashMap<(String, String), (String, PathBuf)> {
     let mut found = HashMap::new();
     for (name, identity) in identities {
-        if identity.agent_id.as_deref() != Some("codex") {
+        if identity.agent_id.as_deref() != Some(CODEX_FAMILY) {
             continue;
         }
         let Some(key) = keys.get(name) else {
@@ -341,6 +385,41 @@ fn open_rollouts_from(
         }
     }
     found
+}
+
+/// Live Codex sessions whose open-file scan completed cleanly with no open root rollout.
+/// A session with an open rollout whose first line is still unwritten is left undecided so its
+/// previous state is not dropped on a transient read.
+fn confirmed_missing_rollouts_from(
+    keys: &HashMap<String, (String, String)>,
+    identities: &HashMap<String, crate::zmx::ZmxProcessIdentity>,
+    open: &HashMap<(String, String), (String, PathBuf)>,
+    root_rollouts: &HashMap<PathBuf, Option<String>>,
+) -> HashSet<(String, String)> {
+    let mut missing = HashSet::new();
+    for (name, identity) in identities {
+        if identity.agent_id.as_deref() != Some(CODEX_FAMILY) {
+            continue;
+        }
+        let Some(key) = keys.get(name) else {
+            continue;
+        };
+        if open.contains_key(key) {
+            continue;
+        }
+        let Some(paths) = identity.open_file_paths.as_deref() else {
+            continue;
+        };
+        // A candidate rollout whose first line could not be read yet is not in `root_rollouts`.
+        let has_unready_rollout = paths.iter().any(|path| {
+            crate::zmx::codex_session_id_from_transcript_path(path).is_some()
+                && !root_rollouts.contains_key(path)
+        });
+        if !has_unready_rollout {
+            missing.insert(key.clone());
+        }
+    }
+    missing
 }
 
 /// Whether an open file is a Codex root rollout, with its conversation id: under `sessions/`,
