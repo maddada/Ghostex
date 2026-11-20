@@ -15,6 +15,8 @@ pub(super) async fn run_session_chat_send_worker(
             zmx_name,
             generation: job_generation,
             steps,
+            // Held to the end of this job, then counted out of the session's pending writes.
+            pending: _pending,
         } = job;
         if job_generation != generation.load(Ordering::SeqCst) {
             if let Some(completion) = completion.take() {

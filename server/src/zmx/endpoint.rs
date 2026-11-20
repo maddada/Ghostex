@@ -1015,8 +1015,10 @@ impl ZmxQueuedSessionMessage {
 
     /// Awaited delivery that is never run again: no `RetryAfterPrompt` step, so a job a prompt or
     /// a missing input box refused answers with that refusal and is never typed later (only a
-    /// leftover in the input box is cleared once the prompt closes). For `ghostex clear-command`,
-    /// whose caller must know whether the command was typed (server/session_clear_http.rs).
+    /// leftover in the input box is cleared once the prompt closes), and only while no other write
+    /// is queued or running for the session (`writes_pending` otherwise). For `ghostex
+    /// clear-command`, whose caller must know whether the command was typed
+    /// (server/session_clear_http.rs).
     pub async fn execute_once(
         self,
     ) -> Result<Value, crate::session_chat_send::SessionChatSendError> {
@@ -1030,7 +1032,7 @@ impl ZmxQueuedSessionMessage {
                 )
             })
             .collect();
-        crate::session_chat_send::execute_session_chat_send(
+        crate::session_chat_send::execute_session_chat_send_if_idle(
             &self.project_id,
             &self.session_id,
             &self.zmx_name,
