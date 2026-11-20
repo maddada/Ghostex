@@ -80,7 +80,7 @@ pub fn keep_old_dark_look_once() {
 /// revision check, which also reopens setup for long-time users). Reads the onboarding state file
 /// itself (`load_gpui_first_run_onboarding_state`), since this module is built into binaries
 /// without the app.
-fn setup_in_progress(state_dir: &Path, gxserver_database: &Path) -> bool {
+pub(super) fn setup_in_progress(state_dir: &Path, gxserver_database: &Path) -> bool {
     let complete = fs::read_to_string(state_dir.join("gpui-first-run-onboarding-state.json"))
         .ok()
         .and_then(|text| serde_json::from_str::<Value>(&text).ok())

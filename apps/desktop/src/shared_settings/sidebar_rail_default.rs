@@ -21,6 +21,16 @@ pub fn migrate_sidebar_rail_default_once() {
     let settings_file = shared_sidebar_settings_path();
     let outcome = match ghostex_paths::settings_file::read(&settings_file) {
         Ok(read) => match read.object {
+            // Settings written by a setup that never finished belong to someone new: they start on
+            // Rail, as the dark look's step treats them (dark_look_default.rs).
+            Some(_)
+                if super::dark_look_default::setup_in_progress(
+                    &paths.state_dir,
+                    &paths.gxserver_state_dir().join("state.db"),
+                ) =>
+            {
+                "settings from an unfinished setup, rail by default"
+            }
             Some(mut object) => {
                 if ghostex_settings_catalog::keep_classic_sidebar_for_existing_settings(&mut object)
                 {
