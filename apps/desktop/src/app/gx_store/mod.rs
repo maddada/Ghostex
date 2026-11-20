@@ -158,6 +158,7 @@ pub(crate) mod unified_sidebar;
 mod work_links;
 mod work_mode;
 mod workspace_groups;
+mod workspace_return;
 mod workspaces;
 
 /// The client-storage doors, for the other Rust hosts in this app that own catalogued stores of
@@ -195,3 +196,4 @@ pub(crate) use rpc::{gx_rpc, gx_rpc_with_timeout};
 pub(crate) use rpc_types::GxRpcError;
 pub(crate) use session_deep_link::note_app_started_for_session_links;
 pub(crate) use workspace_groups::note_native_host_message_dropped;
+pub(crate) use workspace_return::WorkspacePlace;

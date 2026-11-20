@@ -1139,9 +1139,10 @@ window comes forward instead. Right-click the tile for the workspace menu: pick 
 workspace (each row shows its icon and hotkey), open Workspace settings, or make a New workspace. In the menu, a
 workspace that no window shows yet has a new-window button at the right end of
 its row, which opens it in a new window. With a single workspace nothing is
-shown; make another in Settings > Workspaces. Switching reopens the session this window
-last had open in that workspace (or its first project with no session, or
-nothing if it is empty), and puts to sleep the open views of projects outside
+shown; make another in Settings > Workspaces. Switching back to a workspace returns
+to where this window was in it: the same Space, and the session this window last
+had open there (or the project it had open with no session, else the workspace's
+first project, or nothing if it is empty). It also puts to sleep the open views of projects outside
 it; their tabs stay and reload when you come back (with Keep views loaded on,
 nothing is put to sleep). To move a project,
 right-click it and choose Organise > Move to Workspace; its sessions and worktrees go with
