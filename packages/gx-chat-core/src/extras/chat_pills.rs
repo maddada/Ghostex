@@ -41,8 +41,11 @@ fn count(value: &Value, key: &str) -> u64 {
     value.get(key).and_then(Value::as_u64).unwrap_or(0)
 }
 
-/// A pill's status dots, in the order every pill shows them: working (amber), waiting on an
-/// approval (red), waiting on an answer (pink); each only while its count is above zero.
+/// A pill's status dots, in the order every pill shows them, most urgent first: waiting on an
+/// approval (red), waiting on an answer (pink), working (amber); each only while its count is
+/// above zero. Since 2026-11-20 (CDXC:SessionStatus in apps/desktop/src/app/native_sidebar/
+/// status.rs `stack_colors`, the user's "make question and blocker higher priority here than the
+/// working indicator") the blocker and the question lead; amber came first before.
 ///
 /// CDXC:SessionChat 2026-11-05 DECISION:
 /// User, of the strip with the ? and Workers pills' corner dots beside Board's inline coloured
@@ -54,9 +57,9 @@ fn count(value: &Value, key: &str) -> u64 {
 /// 2026-10-24 and 2026-10-27 above and the ? pill's ping and count swap.
 pub fn pill_dots(working: u64, approval: u64, question: u64) -> Vec<PillDot> {
     [
-        ("working", working),
         ("approval", approval),
         ("question", question),
+        ("working", working),
     ]
     .into_iter()
     .filter(|(_, count)| *count > 0)
@@ -541,7 +544,7 @@ mod tests {
             .collect();
         assert_eq!(
             dots,
-            [("working", "2"), ("approval", "1"), ("question", "1")]
+            [("approval", "1"), ("question", "1"), ("working", "2")]
         );
         let quiet = json!({"inFlight": 0, "working": 0, "meta": "", "rows": []});
         let pills = chat_pills(
