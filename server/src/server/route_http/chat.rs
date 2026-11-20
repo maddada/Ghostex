@@ -394,6 +394,7 @@ pub(super) async fn route_chat_http(
             }
             let mut response = if endpoint.path == "/api/queueSessionChatPrompt" {
                 let queue_state = state.clone();
+                let queue_caller = caller.clone();
                 crate::session_chat_send_requests::send_once(
                     &state,
                     endpoint.path,
@@ -418,6 +419,14 @@ pub(super) async fn route_chat_http(
                             crate::session_chat_send::sender_mark::withdraw_user_send(
                                 &queue_state.paths,
                                 noted,
+                            );
+                        } else {
+                            // A lead's prompt queued for its linked session (`agents send
+                            // --queue`) owes the turn it starts (agents/lead_links).
+                            crate::agents::lead_links::note_lead_send_body(
+                                &queue_state.paths,
+                                &queue_caller,
+                                &body,
                             );
                         }
                         response
