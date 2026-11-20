@@ -2,7 +2,7 @@
 //! answers with a Live page, a chart, a form, does it in a browser or an app, plans it with workers,
 //! and so on, instead of only words.
 //!
-//! The Boost pill in the chat box's strip opens a menu of the Boosts in four tabs (Show, Do, Work
+//! The Boost pill in the chat box's strip opens a menu of the Boosts in four tabs (Show, Actions, Work
 //! and Custom); picking one puts a Boost pill in the message (`[Live page](boost:live-page)`, a
 //! reference pill of kind `boost`), and picking it again takes it out. `*` at the start of a word
 //! opens the same Boosts as a picker above the chat box. gxserver adds each Boost's prompt under
@@ -24,7 +24,7 @@
 //! CDXC:Boosts 2026-11-20 DECISION:
 //! Then, on the menu and hint page (Q4257 to Q4261): the menu is a 280px list with every
 //! description in full and a preview card beside it (A); the first-time hint is a one-time callout
-//! bubble pointing at the Boost pill, nothing inside the chat box (C); the gallery holds Show, Do,
+//! bubble pointing at the Boost pill, nothing inside the chat box (C); the gallery holds Show, Actions,
 //! Work and Custom tabs over that list (A), Computer & Browser use telling the agent to read
 //! the `cua-driver` skill; `*` at the start of any word opens the Boost picker and a space right
 //! after it closes it (A); the user's own Boosts come from "Save as Boost" on selected text and
@@ -79,7 +79,9 @@ pub struct Boost {
 /// The menu's tabs, in order, with what each one is called.
 pub const TABS: [(&str, &str); 4] = [
     ("show", "Show"),
-    ("do", "Do"),
+    // CDXC:Boosts 2026-11-20 DECISION: the second tab is named Actions (it was Do); its id stays
+    // `do`, which the open tab and each Boost's category are saved under.
+    ("do", "Actions"),
     ("work", "Work"),
     ("custom", "Custom"),
 ];

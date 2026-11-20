@@ -747,7 +747,7 @@ impl Render for BoostsTab {
                 if let Some(section) = self.custom_section(&p, cx) {
                     blocks.push(PageBlock::section("customBoosts", section));
                 }
-                for (category, title) in [("show", "Show"), ("do", "Do"), ("work", "Work")] {
+                for (category, title) in [("show", "Show"), ("do", "Actions"), ("work", "Work")] {
                     if let Some(section) = self.category_section(&p, category, title, cx) {
                         blocks.push(PageBlock::section(category, section));
                     }
