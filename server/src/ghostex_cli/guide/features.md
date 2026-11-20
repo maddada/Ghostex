@@ -734,18 +734,19 @@ Settings > Extensions.
 
 The rail is a narrow column of icons at the window's left edge, left of the
 sidebar. It stays when you hide the sidebar. By default it holds Search,
-Notifications (with the unread count), Main Hub, Agents Hub, All Automations,
-Hermes, Claude and Grok Bot (each only while its feature is on), then ⋯. Its ⋯
-menu lists everything else too: Commands, Voice Call, Files, Changes, Browser,
+Main Hub, Agents Hub, All Automations, Hermes, Claude and Grok Bot (each only
+while its feature is on), then ⋯. Its ⋯ menu lists everything else too:
+Notifications (pin it to have the bell, with its unread count, on the rail as
+well), Commands, Voice Call, Files, Changes, Browser,
 Project Board, Dev servers, Resources, Extensions, Connect a Phone and Settings.
 Point at a row and click its pin to put it on the rail; click the filled pin to
 take it off. Drag icons on the rail into your own order, or right-click one to
 move it up or down or unpin it. Clicking a row you have not pinned opens it at
 once. When that row opens a view or a page (Files, Changes, Browser, Project
-Board, Notifications, Hermes, Claude, Grok Bot, the Hubs or Voice Call), its icon
+Board, Hermes, Claude, Grok Bot, the Hubs or Voice Call), its icon
 shows on the rail under a dashed line, in an outline, while it is open, then
-leaves when you go elsewhere; Search, Commands, Settings, Connect a Phone, Dev
-servers, Resources and Extensions just open. Agents Hub and All Automations open across the
+leaves when you go elsewhere; Search, Notifications, Commands, Settings,
+Connect a Phone, Dev servers, Resources and Extensions just open. Agents Hub and All Automations open across the
 whole window like Claude and Grok Bot: the sidebar, the side panel and the
 Commands pane step aside, and clicking the lit icon again (or showing the
 sidebar, or opening a session) brings them back as they were. Agents Hub opened
@@ -755,8 +756,11 @@ switch, right-click for the workspace menu) and the account usage switch (once
 an account is starred): one click shows or hides the usage tiles at the bottom
 of the sidebar. Toggle sidebar is the rail's last button, in its bottom corner,
 so it stays in the same place whether the sidebar is shown or hidden (the
-Toggle Sidebar hotkey, Cmd+B on macOS, still works). With the rail on, Search and the bell leave the sidebar's top
-row, Toggle sidebar leaves the sidebar's top row and the work area header,
+Toggle Sidebar hotkey, Cmd+B on macOS, still works). With the rail on, the
+notifications bell sits at the top left of the sidebar's top bar, where Toggle
+sidebar was (right after the window buttons on macOS), and in the same spot of
+the work area header while the sidebar is hidden. Search leaves the sidebar's
+top row, Toggle sidebar leaves the sidebar's top row and the work area header,
 Hermes leaves the Spaces row, the workspace tile leaves the Spaces row and
 Claude and Grok Bot leave the work area header. Pick Rail or Classic (the
 sidebar without the rail) in Settings > Sidebar > Sidebar layout
