@@ -72,6 +72,7 @@ pub mod identity;
 pub mod ids;
 pub(crate) mod live_activity;
 pub mod logging;
+pub(crate) mod machine_extensions;
 pub(crate) mod machine_integrations;
 pub(crate) mod managed_tools;
 pub(crate) mod memory_guard;

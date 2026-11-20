@@ -340,6 +340,25 @@ pub fn turned_off_message(id: &str) -> String {
 }
 
 /*
+CDXC:Extensions 2026-11-21 DECISION:
+User (GitHub #695, Q4326 = A): Main Hub and GBots are switched on per computer, so turning them on in the laptop's app left a headless server's Chief of Staff refusing to start with no way to turn them on there. Settings > Extensions gets the machine picker Agents and Integrations have, and the owner's own app turns these switches on or off for a connected computer through that computer's gxserver (`/api/machineExtensions`, server/src/machine_extensions.rs); agents still can't. The refusal names the computer and says to pick it in Settings > Extensions. CLIProxyAPI joins them: its switch is per computer and only the user may flip it too.
+SEE-ALSO: apps/desktop/src/app/window/settings_modal/tabs/extensions/remote_machine.rs, apps/desktop/src/app/remote_conn/settings_rpc.rs.
+*/
+/// The built-in extensions whose switch the owner's app may flip on a connected computer from
+/// Settings > Extensions with that computer picked: features gxserver itself turns on or off on
+/// the computer it runs on.
+pub const COMPUTER_SWITCHES: &[&str] = &[CHIEF, GBOTS, CLI_PROXY_API];
+
+/// [`turned_off_message`] naming the computer whose switch is off, for a refusal that may reach
+/// another computer's app: where to turn it on, there or from a computer connected to it.
+pub fn turned_off_on_message(id: &str, computer: &str) -> String {
+    format!(
+        "{} is turned off on {computer}. Turn it on in Settings > Extensions; from another computer, pick {computer} at the top of that page first.",
+        title(id)
+    )
+}
+
+/*
 CDXC:Extensions 2026-11-09 WHY:
 "Connectors is turned off … From a terminal: ghostex settings set connectorsHidden false" sent people
 to a command the CLI refuses: Connectors' switch is not agent-writable (only the owner turns it on, in

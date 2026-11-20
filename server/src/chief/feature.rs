@@ -39,9 +39,14 @@ pub(crate) fn remember_chief_shown(on: bool) {
 }
 
 /// What a caller is told while Chief is off. Only the user turns it back on (the key is not
-/// agent-writable), so the message names Settings, not a command.
+/// agent-writable), so the message names Settings, not a command, and this computer, since the
+/// caller may be another computer's app (CDXC:Extensions 2026-11-21 in the settings catalog's
+/// built_in_extensions.rs).
 pub(crate) fn chief_off_message() -> String {
-    built_in_extensions::turned_off_message(CHIEF)
+    built_in_extensions::turned_off_on_message(
+        CHIEF,
+        &crate::connected_computers::this_computer_name(),
+    )
 }
 
 /// The routes that put a message or keystrokes into a session (`ghostex agents send` uses the

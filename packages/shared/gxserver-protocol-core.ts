@@ -142,6 +142,12 @@ export type GxserverEndpointPath =
    */
   | '/api/machineIntegrations'
   /**
+   * The built-in extension switches gxserver obeys on its own computer (Main Hub, GBots, CLIProxyAPI)
+   * (server/src/machine_extensions.rs), for Settings > Extensions with that computer picked; only
+   * the owner's own apps may flip them.
+   */
+  | '/api/machineExtensions'
+  /**
    * CDXC:AgentBox 2026-10-01 SEE-ALSO:
    * agentbox readiness, the box list, box web app / screen URLs, stop/destroy, and the setup
    * commands the Cloud Boxes page runs (server/src/agentbox/endpoint.rs).

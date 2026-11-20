@@ -4767,6 +4767,12 @@ itself ("what's stuck?", "how do I pair my phone?").
 - **Turning it off again** hides Main Hub and Chief of Staff, puts Chief of
   Staff's agent to sleep and takes away its control over your other agents; its
   chat and memory are kept for when you turn it back on.
+- **Each computer has its own switch**: Main Hub, GBots and CLIProxyAPI are
+  turned on per computer, so turning them on here leaves a connected computer
+  as it was. For a computer you reach through Settings > Remote (a server
+  without the desktop app, too), open **Settings > Extensions** here, pick that
+  computer at the top, and turn them on there. The message that says Main Hub
+  is turned off names the computer it means.
 
 `ghostex chief status`, `ghostex chief guide`, `ghostex chief new-chat`,
 `ghostex chief set-agent <agent-id>`, `ghostex chief send [--computer <name>]
@@ -5092,7 +5098,8 @@ Setting: `botAutomationsHidden` (on by default, which keeps the feed hidden).
 GBots (beta) are your own team of bots, led by Chief of Staff in Main Hub. Each GBot
 has a name, a role, standing instructions, an icon and a colour, and a memory
 it keeps in every chat; its chats run on your own Claude Code or Codex. Turn
-them on in Settings > Extensions, on the Experimental tab: they are off by
+them on in Settings > Extensions, on the Experimental tab (for a connected
+computer, pick it at the top of that page first): they are off by
 default, need Main Hub on, and turning them on asks for your approval (Touch
 ID), so an agent can only ask. While GBots or Main Hub are off, nothing of
 GBots shows, on your computer or the phone: no GBots group in Main Hub, no GBot

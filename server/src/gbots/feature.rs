@@ -28,13 +28,15 @@ pub(crate) fn gbots_on(paths: &GxserverPaths) -> bool {
     crate::chief::chief_on(paths) && switch_on_in(settings.as_ref())
 }
 
-/// What a caller is told while GBots are off. Only the user turns them on (neither key is
-/// agent-writable), so it names Settings, not a command.
+/// What a caller is told while GBots are off: it names Settings, and this computer, since the
+/// caller may be another computer's app (CDXC:Extensions 2026-11-21 in the settings catalog's
+/// built_in_extensions.rs).
 pub(crate) fn gbots_off_message(paths: &GxserverPaths) -> String {
+    let computer = crate::connected_computers::this_computer_name();
     if crate::chief::chief_on(paths) {
-        built_in_extensions::turned_off_message(GBOTS)
+        built_in_extensions::turned_off_on_message(GBOTS, &computer)
     } else {
-        "GBots need Main Hub. Turn on Main Hub, then GBots, in Settings > Extensions.".to_string()
+        format!("GBots need Main Hub, which is turned off on {computer}. Turn on Main Hub, then GBots, in Settings > Extensions; from another computer, pick {computer} at the top of that page first.")
     }
 }
 

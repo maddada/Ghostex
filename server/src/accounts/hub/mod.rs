@@ -38,7 +38,10 @@ pub(crate) fn enabled(paths: &GxserverPaths) -> bool {
 }
 
 fn turned_off() -> DomainStateError {
-    DomainStateError::bad_request(built_in_extensions::turned_off_message(CLI_PROXY_API))
+    DomainStateError::bad_request(built_in_extensions::turned_off_on_message(
+        CLI_PROXY_API,
+        &crate::connected_computers::this_computer_name(),
+    ))
 }
 
 /// One hub account as last read.

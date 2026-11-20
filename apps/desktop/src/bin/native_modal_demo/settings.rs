@@ -326,6 +326,17 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 ..
             } => {
                 eprintln!("remote gxserver rpc ({machine_id}): {path} {params}");
+                if settings_machines::forwards_extensions(&host_state, &path) {
+                    let background = cx.background_executor().clone();
+                    cx.spawn(async move |cx| {
+                        let result = background
+                            .spawn(async move { settings_machines::forward_extensions(&params) })
+                            .await;
+                        let _ = cx.update(|cx| reply(result, cx));
+                    })
+                    .detach();
+                    return;
+                }
                 if settings_machines::forwards_accounts(&host_state, &path) {
                     let background = cx.background_executor().clone();
                     cx.spawn(async move |cx| {
@@ -443,7 +454,10 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     if state == "updates-computers-open" {
         request.open_select = Some("settings-machine-picker".to_string());
     }
-    if state == "machines-agents-open" || state == "machines-dictation-open" {
+    if state == "machines-agents-open"
+        || state == "machines-dictation-open"
+        || state == "machines-extensions-open"
+    {
         request.open_select = Some("settings-machine-picker".to_string());
     }
     request.gxserver_rpc_available = if settings_sync::owns(&state) {
