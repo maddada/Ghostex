@@ -13,6 +13,7 @@ mod guest;
 mod images;
 mod import;
 mod kit;
+mod linked;
 mod notice;
 mod pick_markdown;
 mod prepare;
@@ -40,6 +41,7 @@ pub(crate) use import::{
     handle_import_http as handle_import_visual_page_answers_http,
     IMPORT_VISUAL_PAGE_ANSWERS_ENDPOINT,
 };
+pub(crate) use linked::{follow as follow_page_link, is_link_route};
 pub(crate) use notice::{dismiss as dismiss_page_notice, is_notice_route};
 pub(crate) use prepare::{page_too_large, prepare_page};
 pub(crate) use publish::{
