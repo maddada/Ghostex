@@ -112,6 +112,8 @@ const SESSION_INPUT_ROUTES: &[&str] = &[
     "/api/queueSessionChatPrompt",
     "/api/updateSessionChatQueuedPrompt",
     "/api/interruptSessionChat",
+    // `ghostex clear-command` types the agent's own clear command (session_clear_http.rs).
+    "/api/clearSessionConversation",
 ];
 
 /*

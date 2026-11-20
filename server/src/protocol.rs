@@ -986,6 +986,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         // A session's to-dos for the user (session_needs_you/): kept by the `ghostex needs-you`
         // an agent runs on this computer. The user's Done arrives as `/api/coordinatorBoard`.
         "/api/sessionNeedsYou" => full_local(path),
+        // `ghostex clear-command` (server/session_clear_http.rs): this computer only.
+        "/api/clearSessionConversation" => full_local(path),
         // The user's numbered messages, read by the `ghostex message` an agent runs on this
         // computer (chat_message_numbers.rs).
         crate::chat_message_numbers::CHAT_MESSAGES_ENDPOINT => full_local(path),

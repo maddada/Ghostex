@@ -20,6 +20,7 @@ pub mod browser_mcp;
 mod built_in_extensions;
 mod chief;
 mod claude_cloud_cli;
+mod clear_command;
 mod cloud_attach;
 mod cloud_cli;
 mod computer_code;
@@ -162,6 +163,7 @@ fn adopt_caller_session_from_process_tree() {
 /// global help gate.
 const HELP_GATE_EXCLUDED: &[&str] = &[
     "account-login",
+    "clear-command",
     "theme",
     "chief",
     "security",
@@ -472,6 +474,7 @@ fn is_known_command(name: &str) -> bool {
         "count-transcript-turns",
         "wait-for-text",
         "rename-command",
+        "clear-command",
         "set-visible-count",
         "set-view-mode",
         "open-browser",
@@ -1076,6 +1079,8 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "rename-command" => {
             run_resolved_session_bridge_action("renameCommand", Parser::RenameRequest, plain, args)
         }
+        // A session's agent starts a new conversation in place (GitHub #685, clear_command.rs).
+        "clear-command" => clear_command::clear_command(args),
         "set-visible-count" => {
             run_bridge_action("setVisibleCount", Parser::VisibleCount, plain, args)
         }
