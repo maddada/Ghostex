@@ -127,6 +127,7 @@ const WRAPPER_OPENINGS: &[&str] = &[
     "<local-command",
     "<task-notification>",
     "<system-reminder>",
+    "<scheduled-wakeup>",
 ];
 
 fn is_wrapper(text: &str) -> bool {
