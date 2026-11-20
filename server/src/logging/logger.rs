@@ -146,8 +146,9 @@ impl GxserverLogger {
 
     /// Persists a record the user asked to keep for every occurrence, whatever the diagnostics
     /// switches say. Only for rare, metadata-only events: one line per session close
-    /// (`session_close_log.rs`), and the hooks Ghostex removes or puts back in an agent's config
-    /// (hookless_activity/hook_free_fallback.rs).
+    /// (`session_close_log.rs`), the hooks Ghostex removes or puts back in an agent's config
+    /// (hookless_activity/hook_free_fallback.rs), and each worktree gxserver cleans up by itself
+    /// (server/work_cleanup_threads.rs).
     pub fn log_record(&self, entry: GxserverLogInput) -> Result<()> {
         self.persist(entry)
     }
