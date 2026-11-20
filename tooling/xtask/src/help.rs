@@ -2,7 +2,7 @@
 //! Settings catalog crate (`packages/settings-catalog`).
 //!
 //! CDXC:AgentSkills 2026-10-01 WHY:
-//! `skills/ghostex-help/references/settings.md`, `hotkeys.md` and `settings-catalog.json` are committed because gxserver embeds the Markdown in `ghostex guide` and the skill ships from GitHub `main`; `help-check` (part of `cargo xtask typecheck`) fails while they differ from what the crate renders. This replaces `tooling/ghostex-help/generate.ts`, whose output it reproduces byte for byte.
+//! `server/src/ghostex_cli/guide/settings.md`, `hotkeys.md` and `settings-catalog.json` are committed because gxserver embeds the Markdown in `ghostex guide` and the skill ships from GitHub `main`; `help-check` (part of `cargo xtask typecheck`) fails while they differ from what the crate renders. This replaces `tooling/ghostex-help/generate.ts`, whose output it reproduces byte for byte.
 //! SEE-ALSO: packages/settings-catalog/src/help/, server/src/ghostex_cli/guide.rs.
 
 use std::fs;
@@ -15,15 +15,15 @@ use crate::util::{root, Res};
 fn outputs() -> [(&'static str, String); 3] {
     [
         (
-            "skills/ghostex-help/references/settings-catalog.json",
+            "server/src/ghostex_cli/guide/settings-catalog.json",
             help::published_catalog_json(),
         ),
         (
-            "skills/ghostex-help/references/hotkeys.md",
+            "server/src/ghostex_cli/guide/hotkeys.md",
             help::hotkeys_markdown(),
         ),
         (
-            "skills/ghostex-help/references/settings.md",
+            "server/src/ghostex_cli/guide/settings.md",
             help::settings_markdown(),
         ),
     ]

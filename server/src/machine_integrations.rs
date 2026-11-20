@@ -246,56 +246,24 @@ mod tests {
     fn listed_skills_leave_out_the_orchestrator_playbook_and_repeat_none() {
         let names = listed_skill_names();
         assert!(!names.contains(&"ghostex-coordinator"));
-        assert!(names.contains(&"ghostex-cli"));
-        let mut unique = names.clone();
-        unique.dedup();
-        assert_eq!(unique.len(), names.len());
-        assert_eq!(
-            names
-                .iter()
-                .filter(|name| **name == "ghostex-manage-beads")
-                .count(),
-            1
-        );
-    }
-
-    #[test]
-    fn macos_only_skills_say_why_on_other_platforms() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let row = |platform: &str| {
-            skill_rows(temp.path(), platform)
-                .into_iter()
-                .find(|row| row["skillName"] == "ghostex-spaceo")
-                .expect("spaceo row")
-        };
-        assert_eq!(row("linux")["unavailableReason"], SPACEO_MACOS_ONLY_MESSAGE);
-        assert_eq!(
-            row("windows")["unavailableReason"],
-            SPACEO_MACOS_ONLY_MESSAGE
-        );
-        assert!(row("macos")["unavailableReason"].is_null());
+        // Only the `ghostex` skill is still bundled (CDXC:AgentSkills 2026-11-20, Q4262).
+        assert_eq!(names, vec!["ghostex"]);
     }
 
     #[test]
     fn a_skill_is_installed_when_its_canonical_copy_has_a_skill_file() {
         let temp = tempfile::tempdir().expect("tempdir");
-        write_skill(
-            &temp.path().join(".agents/skills/ghostex-cli"),
-            "ghostex-cli",
-        );
-        // A copy only in an agent's own folder is not the canonical one the desktop reads.
-        write_skill(
-            &temp.path().join(".claude/skills/ghostex-help"),
-            "ghostex-help",
-        );
-        let rows = skill_rows(temp.path(), "linux");
-        let installed = |skill: &str| {
-            rows.iter()
-                .find(|row| row["skillName"] == skill)
+        let installed = || {
+            skill_rows(temp.path(), "linux")
+                .iter()
+                .find(|row| row["skillName"] == "ghostex")
                 .map(|row| row["installed"] == true)
         };
-        assert_eq!(installed("ghostex-cli"), Some(true));
-        assert_eq!(installed("ghostex-help"), Some(false));
+        // A copy only in an agent's own folder is not the canonical one the desktop reads.
+        write_skill(&temp.path().join(".claude/skills/ghostex"), "ghostex");
+        assert_eq!(installed(), Some(false));
+        write_skill(&temp.path().join(".agents/skills/ghostex"), "ghostex");
+        assert_eq!(installed(), Some(true));
     }
 
     #[test]
@@ -304,9 +272,9 @@ mod tests {
         let rows = skill_rows(temp.path(), "linux");
         let cli = rows
             .iter()
-            .find(|row| row["skillName"] == "ghostex-cli")
-            .expect("cli row");
-        assert_eq!(cli["name"], "Ghostex CLI");
+            .find(|row| row["skillName"] == "ghostex")
+            .expect("ghostex row");
+        assert_eq!(cli["name"], "Ghostex");
         assert!(cli["description"]
             .as_str()
             .is_some_and(|text| !text.is_empty()));
@@ -325,34 +293,29 @@ mod tests {
     async fn install_then_uninstall_round_trips_through_the_status() {
         let temp = tempfile::tempdir().expect("tempdir");
         let source = tempfile::tempdir().expect("source");
-        write_skill(&source.path().join("ghostex-help"), "ghostex-help");
+        write_skill(&source.path().join("ghostex"), "ghostex");
         let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
         let home = paths.agent_config_home_dir().to_path_buf();
-        install_skill_from(
-            &paths,
-            "ghostex-help",
-            &source.path().to_string_lossy(),
-            false,
-        )
-        .await
-        .expect("install");
+        install_skill_from(&paths, "ghostex", &source.path().to_string_lossy(), false)
+            .await
+            .expect("install");
         let installed = |home: &Path| {
             skill_rows(home, "linux")
                 .into_iter()
-                .find(|row| row["skillName"] == "ghostex-help")
+                .find(|row| row["skillName"] == "ghostex")
                 .map(|row| row["installed"] == true)
         };
         assert_eq!(installed(&home), Some(true));
-        let claude_link = home.join(".claude/skills/ghostex-help");
+        let claude_link = home.join(".claude/skills/ghostex");
         assert!(fs::symlink_metadata(&claude_link).is_ok_and(|meta| meta.file_type().is_symlink()));
         // A real folder of the same name in another agent's folder is the user's.
-        write_skill(&home.join(".gemini/skills/ghostex-help"), "ghostex-help");
-        uninstall_skill(&home, "ghostex-help").expect("uninstall");
+        write_skill(&home.join(".gemini/skills/ghostex"), "ghostex");
+        uninstall_skill(&home, "ghostex").expect("uninstall");
         assert_eq!(installed(&home), Some(false));
         assert!(fs::symlink_metadata(&claude_link).is_err());
-        assert!(home.join(".gemini/skills/ghostex-help/SKILL.md").is_file());
+        assert!(home.join(".gemini/skills/ghostex/SKILL.md").is_file());
         // Uninstalling what is not there succeeds.
-        uninstall_skill(&home, "ghostex-help").expect("uninstall again");
+        uninstall_skill(&home, "ghostex").expect("uninstall again");
     }
 
     #[tokio::test]

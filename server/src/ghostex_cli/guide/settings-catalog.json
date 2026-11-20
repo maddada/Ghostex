@@ -10843,7 +10843,7 @@
     {
       "key": "bundledAgentSkills",
       "title": "Bundled Agent Skills",
-      "subtitle": "Install the Ghostex skills you want agents to discover. Ghostex Computer Use and Ghostex Browser Use need Fast Computer & Browser Use installed first and also install its cua-driver skill, and Ghostex SpaceO needs SpaceO (Mac only). Each Ghostex skill is copied to ~/.agents/skills and can be updated or uninstalled independently, or removed together with Uninstall All.",
+      "subtitle": "Install the Ghostex skill: type /ghostex ($ghostex in Codex) and any agent reads what Ghostex can do, and the guide for each job, from the ghostex CLI, which always matches this Ghostex. It is copied to ~/.agents/skills and can be updated or uninstalled. For computer and browser use, agents read the cua-driver skill that Fast Computer & Browser Use installs.",
       "tab": "integrations",
       "tabTitle": "Integrations",
       "section": "integrations",
@@ -10851,56 +10851,8 @@
       "type": "ui",
       "options": [
         {
-          "label": "Ghostex CLI",
-          "value": "ghostex-cli"
-        },
-        {
-          "label": "Ghostex Help",
-          "value": "ghostex-help"
-        },
-        {
-          "label": "Ghostex Agent Guide",
-          "value": "ghostex-agent-guide"
-        },
-        {
-          "label": "Ghostex Visuals",
-          "value": "ghostex-visuals"
-        },
-        {
-          "label": "Ghostex Secrets",
-          "value": "ghostex-secrets"
-        },
-        {
-          "label": "Ghostex Computer Use",
-          "value": "ghostex-computer-use"
-        },
-        {
-          "label": "Ghostex SpaceO",
-          "value": "ghostex-spaceo"
-        },
-        {
-          "label": "Ghostex Browser Use",
-          "value": "ghostex-browser-use"
-        },
-        {
-          "label": "Ghostex Embedded Browser Use",
-          "value": "ghostex-embedded-browser-use"
-        },
-        {
-          "label": "Ghostex Agents",
-          "value": "ghostex-agents"
-        },
-        {
-          "label": "Ghostex Auto Rename Session",
-          "value": "ghostex-auto-rename-session"
-        },
-        {
-          "label": "Ghostex Project Board Beads",
-          "value": "ghostex-manage-beads"
-        },
-        {
-          "label": "Ghostex Move Codex Session",
-          "value": "ghostex-move-codex-session"
+          "label": "Ghostex",
+          "value": "ghostex"
         }
       ],
       "agentWritable": false
@@ -10919,7 +10871,7 @@
     {
       "key": "spaceo",
       "title": "SpaceO",
-      "subtitle": "On an Apple Silicon Mac with macOS 14 or later, install SpaceO so agents can use Mac apps on their own hidden screen while you keep your own screen, pointer and focus. Ghostex runs the official installer, keeps SpaceO running in the background, and installs the Ghostex SpaceO skill; once installed, update, reinstall or uninstall it from the same row.",
+      "subtitle": "On an Apple Silicon Mac with macOS 14 or later, install SpaceO so agents can use Mac apps on their own hidden screen while you keep your own screen, pointer and focus. Ghostex runs the official installer and keeps SpaceO running in the background, and agents read ghostex spaceo guide to use it; once installed, update, reinstall or uninstall it from the same row.",
       "tab": "integrations",
       "tabTitle": "Integrations",
       "section": "integrations",

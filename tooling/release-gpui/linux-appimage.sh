@@ -234,7 +234,7 @@ for required in /AppRun /.ghostex-appimage /ghostex.desktop /ghostex.png /.DirIc
 	/opt/ghostex/Ghostex /opt/ghostex/ghostex-gpui-runtime /opt/ghostex/gxserver/bin/gxserver \
 	/opt/ghostex/gxserver/bin/ghostex /opt/ghostex/gxserver/bin/tailcat \
 	/opt/ghostex/resources/on-demand-resources.json \
-	/opt/ghostex/gxserver/skills/ghostex-cli/SKILL.md /opt/ghostex/libxkbcommon-x11.so.0; do
+	/opt/ghostex/gxserver/skills/ghostex/SKILL.md /opt/ghostex/libxkbcommon-x11.so.0; do
 	grep -qxF "$required" <<<"$MEMBERS" || {
 		echo "AppImage is missing $required" >&2
 		exit 1

@@ -421,8 +421,6 @@ fn now_ms() -> i64 {
 
 struct PromptAgent {
     id: String,
-    /// The agent family, which decides how the skill is spelled (`/ghostex-help` for Claude).
-    family: String,
 }
 
 /// The default prompt agent (Settings > Agents), which Ask Ghostex starts its chats on.
@@ -435,8 +433,7 @@ fn default_prompt_agent(flags: &Flags) -> CliResult<PromptAgent> {
         .filter(|id| !id.is_empty())
         .unwrap_or(crate::agents::DEFAULT_PROMPT_AGENT_ID)
         .to_string();
-    let agent = hud
-        .get("agents")
+    hud.get("agents")
         .and_then(Value::as_array)
         .and_then(|agents| agents.iter().find(|agent| text(agent, "agentId") == id))
         .ok_or_else(|| {
@@ -444,9 +441,7 @@ fn default_prompt_agent(flags: &Flags) -> CliResult<PromptAgent> {
                 "The default prompt agent \"{id}\" isn't set up. Choose one in Settings > Agents."
             ))
         })?;
-    let family = crate::agents::infer_agent_id_from_command_executable(text(agent, "command"))
-        .unwrap_or_else(|| id.clone());
-    Ok(PromptAgent { id, family })
+    Ok(PromptAgent { id })
 }
 
 /// A new Ghostex Help session in the Ghostex config folder's project, started like `ghostex

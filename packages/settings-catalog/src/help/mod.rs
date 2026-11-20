@@ -591,7 +591,7 @@ impl Catalog {
     }
 }
 
-/// `skills/ghostex-help/references/settings-catalog.json`.
+/// `server/src/ghostex_cli/guide/settings-catalog.json`.
 pub fn catalog_json() -> String {
     format!("{}\n", catalog().to_json().to_pretty_string())
 }

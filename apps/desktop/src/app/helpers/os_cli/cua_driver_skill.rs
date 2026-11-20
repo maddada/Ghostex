@@ -88,22 +88,21 @@ pub(crate) fn gpui_install_cua_driver_skill() -> Result<String, String> {
 
 /// CDXC:AgentSkills 2026-10-06 DECISION:
 /// User: "make the browser/computer use ones install cua-driver and also tell the agent to read that skill". Installing Ghostex Computer Use or Ghostex Browser Use also installs Trycua's `cua-driver` skill, which both send the agent to first. The Ghostex skill installs even when the driver is missing or its skill fetch fails; the message then says how to add the cua-driver skill.
-pub(crate) fn gpui_install_cua_driver_wrapper_skill_action(
+///
+/// CDXC:AgentSkills 2026-11-20 DECISION:
+/// User (Q4262 "B", "for browser and computer use let's just refer to the /cua-driver skill, tell the agent to read that"): the Ghostex Computer Use and Browser Use wrapper skills are retired, so their install (Settings, onboarding) installs only the `cua-driver` skill. Without the driver it still succeeds, as the wrapper did, and says how to add it.
+pub(crate) fn gpui_install_cua_driver_skill_for_agents_action(
     action: GpuiGhostexCliSettingsAction,
-    args: &[&str],
-    display_name: &str,
 ) -> GpuiGhostexCliActionResult {
-    let message = match gpui_install_bundled_ghostex_skill(args, display_name) {
-        Ok(message) => message,
-        Err(message) => return GpuiGhostexCliActionResult::failure(action, message),
-    };
-    let note = if gpui_cua_driver_executable_path().is_none() {
-        " Install Fast Computer & Browser Use to add the cua-driver skill it reads.".to_string()
-    } else {
-        match gpui_install_cua_driver_skill() {
-            Ok(skill_message) => format!(" {skill_message}"),
-            Err(_) => " The cua-driver skill could not be installed; use Install skill on the Fast Computer & Browser Use row.".to_string(),
-        }
-    };
-    GpuiGhostexCliActionResult::success(action, format!("{message}{note}"))
+    if gpui_cua_driver_executable_path().is_none() {
+        return GpuiGhostexCliActionResult::success(
+            action,
+            "Install Fast Computer & Browser Use to add the cua-driver skill agents read."
+                .to_string(),
+        );
+    }
+    match gpui_install_cua_driver_skill() {
+        Ok(message) => GpuiGhostexCliActionResult::success(action, message),
+        Err(message) => GpuiGhostexCliActionResult::failure(action, message),
+    }
 }

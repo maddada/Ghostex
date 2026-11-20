@@ -1,7 +1,0 @@
-interface:
-  display_name: 'Ghostex SpaceO'
-  short_description: 'Drive Mac apps on a hidden SpaceO display through the spaceo CLI'
-  default_prompt: 'Use $ghostex-spaceo to drive a Mac app on its own SpaceO virtual display through the spaceo CLI, without touching my screen, pointer or focus.'
-
-policy:
-  allow_implicit_invocation: false

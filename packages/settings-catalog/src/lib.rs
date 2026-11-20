@@ -7,7 +7,7 @@
 //!
 //! CDXC:Settings 2026-10-01 DECISION:
 //! User (answer 33A, docs/2026-10-01/zero-ts/NEXT-STEPS.md): move the Settings search rows, defaults and hotkeys from TypeScript to Rust, so the native app owns them and the Help files are generated from Rust. This crate is that one source; it supersedes `CDXC:Settings 2026-09-28`, which kept `packages/core-ui/settings-modal/search-catalog.ts` as the source and embedded a generated JSON copy in the desktop.
-//! SEE-ALSO: apps/desktop/src/app/window/settings_modal/catalog.rs, server/src/ghostex_cli/settings.rs, packages/gx-core/src/quick_access/hotkeys.rs, tooling/xtask/src/help.rs, skills/ghostex-help/references/.
+//! SEE-ALSO: apps/desktop/src/app/window/settings_modal/catalog.rs, server/src/ghostex_cli/settings.rs, packages/gx-core/src/quick_access/hotkeys.rs, tooling/xtask/src/help.rs, server/src/ghostex_cli/guide/.
 //!
 //! To add a setting: give it a default in `data/defaults.rs`, a row in the `general/` or `pages/`
 //! file of the page that shows it, and run `cargo xtask help-generate`.

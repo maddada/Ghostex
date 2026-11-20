@@ -168,96 +168,27 @@ pub(crate) fn gpui_run_ghostex_cli_settings_action(
                 Err(message) => GpuiGhostexCliActionResult::failure(action, message),
             }
         }
-        GpuiGhostexCliSettingsAction::InstallBrowserControl => {
-            gpui_install_bundled_ghostex_skill_action(
-                action,
-                &["browser", "install-skill"],
-                "Ghostex Embedded Browser Use",
-            )
-        }
-        GpuiGhostexCliSettingsAction::InstallBrowserUseSkill => {
-            gpui_install_cua_driver_wrapper_skill_action(
-                action,
-                &["browser-use", "install-skill"],
-                "Ghostex Browser Use",
-            )
-        }
-        GpuiGhostexCliSettingsAction::InstallComputerUseSkill => {
-            gpui_install_cua_driver_wrapper_skill_action(
-                action,
-                &["computer-use", "install-skill"],
-                "Ghostex Computer Use",
-            )
-        }
-        GpuiGhostexCliSettingsAction::InstallSpaceoSkill => {
-            gpui_install_bundled_ghostex_skill_action(
-                action,
-                &["spaceo", "install-skill"],
-                "Ghostex SpaceO",
-            )
-        }
-        GpuiGhostexCliSettingsAction::InstallCliSkill => {
-            gpui_install_bundled_ghostex_skill_action(
-                action,
-                &["cli", "install-skill"],
-                "Ghostex CLI skill",
-            )
-        }
-        GpuiGhostexCliSettingsAction::InstallAgentsOrchestrationSkill => {
-            gpui_install_bundled_ghostex_skill_action(
-                action,
-                &["agents-orchestration", "install-skill"],
-                "Ghostex Agents",
-            )
-        }
-        GpuiGhostexCliSettingsAction::InstallManageBeadsSkill => {
-            gpui_install_bundled_ghostex_skill_action(
-                action,
-                &["manage-beads", "install-skill"],
-                "Ghostex Manage Beads",
-            )
-        }
-        GpuiGhostexCliSettingsAction::InstallGenerateTitleSkill => {
-            gpui_install_bundled_ghostex_skill_action(
-                action,
-                &["generate-title", "install-skill"],
-                "Ghostex Auto Rename Session",
-            )
-        }
-        GpuiGhostexCliSettingsAction::InstallMoveCodexSessionSkill => {
-            gpui_install_bundled_ghostex_skill_action(
-                action,
-                &["move-codex-session", "install-skill"],
-                "Ghostex Move Codex Session",
-            )
-        }
-        GpuiGhostexCliSettingsAction::InstallHelpSkill => {
-            gpui_install_bundled_ghostex_skill_action(
-                action,
-                &["guide", "install-skill"],
-                "Ghostex Help",
-            )
-        }
-        GpuiGhostexCliSettingsAction::InstallAgentGuideSkill => {
+        // CDXC:AgentSkills 2026-11-20 DECISION: User (Q4262 "B"): Ghostex's own skills are retired for CLI help, keeping only `ghostex`. A button or onboarding step that still asks for a retired one installs that skill instead, and browser and computer use install Trycua's `cua-driver` skill, which agents now read directly.
+        GpuiGhostexCliSettingsAction::InstallAgentGuideSkill
+        | GpuiGhostexCliSettingsAction::InstallBrowserControl
+        | GpuiGhostexCliSettingsAction::InstallSpaceoSkill
+        | GpuiGhostexCliSettingsAction::InstallCliSkill
+        | GpuiGhostexCliSettingsAction::InstallAgentsOrchestrationSkill
+        | GpuiGhostexCliSettingsAction::InstallManageBeadsSkill
+        | GpuiGhostexCliSettingsAction::InstallGenerateTitleSkill
+        | GpuiGhostexCliSettingsAction::InstallMoveCodexSessionSkill
+        | GpuiGhostexCliSettingsAction::InstallHelpSkill
+        | GpuiGhostexCliSettingsAction::InstallVisualsSkill
+        | GpuiGhostexCliSettingsAction::InstallSecretsSkill => {
             gpui_install_bundled_ghostex_skill_action(
                 action,
                 &["agent-guide", "install-skill"],
-                "Ghostex Agent Guide",
+                "Ghostex",
             )
         }
-        GpuiGhostexCliSettingsAction::InstallVisualsSkill => {
-            gpui_install_bundled_ghostex_skill_action(
-                action,
-                &["visual", "install-skill"],
-                "Ghostex Visuals",
-            )
-        }
-        GpuiGhostexCliSettingsAction::InstallSecretsSkill => {
-            gpui_install_bundled_ghostex_skill_action(
-                action,
-                &["secret", "install-skill"],
-                "Ghostex Secrets",
-            )
+        GpuiGhostexCliSettingsAction::InstallBrowserUseSkill
+        | GpuiGhostexCliSettingsAction::InstallComputerUseSkill => {
+            gpui_install_cua_driver_skill_for_agents_action(action)
         }
         GpuiGhostexCliSettingsAction::InstallCuaDriverSkill => {
             match gpui_install_cua_driver_skill() {

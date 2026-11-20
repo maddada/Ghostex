@@ -501,20 +501,11 @@ pub(crate) const GPUI_BUNDLED_GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     CDXC:AgentSkills 2026-06-26-13:47:
     GPUI packages the same app-bundled Codex session-move skill as the native sidebar so settings repair and install flows expose a consistent Ghostex skill set.
     */
-    "ghostex-browser-use",
-    "ghostex-embedded-browser-use",
-    "ghostex-computer-use",
-    "ghostex-spaceo",
-    "ghostex-cli",
-    "ghostex-help",
-    "ghostex-agents",
-    "ghostex-manage-beads",
-    "ghostex-auto-rename-session",
-    "ghostex-move-codex-session",
-    "ghostex-manage-beads",
-    "ghostex-visuals",
-    "ghostex-secrets",
-    "ghostex-agent-guide",
+    /*
+    CDXC:AgentSkills 2026-11-20 DECISION:
+    User (Q4262 "B"): Ghostex's own skills are retired for CLI help, keeping only `ghostex` (gxserver's `GHOSTEX_AGENT_SKILL_NAMES`); gxserver removes the retired ones it shipped at startup.
+    */
+    "ghostex",
 ];
 
 /// CDXC:Resources 2026-09-06 WHY:

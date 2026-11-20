@@ -127,5 +127,6 @@ hotkeys Every shortcut and its default binding
 `ghostex` (alias `gx`) is installed with the app. Agents use it to list and
 control sessions, create agent sessions and send them prompts, read output,
 manage automations and the board, search prompt history, and now to read this
-guide and change settings. `ghostex --help` is the command catalog; the
-`$ghostex-cli` skill teaches the help-first workflow.
+guide and change settings. `ghostex --help` is the command catalog
+(`ghostex <command> --help` for one command), and `ghostex agent-guide` tells
+an agent what it can do in Ghostex and which guide to read.

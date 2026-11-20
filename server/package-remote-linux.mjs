@@ -430,8 +430,8 @@ async function stageBundledSkills(stageDir) {
     }
     skillNames.push(entry.name);
   }
-  if (!skillNames.includes('ghostex-cli')) {
-    throw new Error(`Bundled skills under ${sourceRoot} do not include ghostex-cli.`);
+  if (!skillNames.includes('ghostex')) {
+    throw new Error(`Bundled skills under ${sourceRoot} do not include ghostex.`);
   }
   skillNames.sort();
   for (const skillName of skillNames) {
@@ -444,7 +444,7 @@ async function stageBundledSkills(stageDir) {
 }
 
 async function validateLinuxPackage(packageDir, config) {
-  const requiredFiles = ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'bin/tailcat', 'skills/ghostex-cli/SKILL.md'];
+  const requiredFiles = ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'bin/tailcat', 'skills/ghostex/SKILL.md'];
   for (const relativePath of requiredFiles) {
     await assertFile(path.join(packageDir, relativePath), relativePath);
   }

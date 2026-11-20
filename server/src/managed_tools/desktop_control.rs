@@ -419,15 +419,6 @@ fn trycua_skills_verb(operation: &str, linked: bool, pack: bool) -> Option<&'sta
     }
 }
 
-/// The Ghostex skill an install adds after the tool itself.
-pub(crate) fn ghostex_skill(tool: ToolId) -> &'static str {
-    if tool == ToolId::Trycua {
-        "ghostex-computer-use"
-    } else {
-        "ghostex-spaceo"
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -385,7 +385,7 @@ impl IntegrationsTab {
                 link: None,
                 label: "Install command".to_string(),
                 description: format!(
-                    "Install {name} runs this command in the background, then keeps {name} running and installs the Ghostex SpaceO skill. You can also run it yourself."
+                    "Install {name} runs this command in the background, then keeps {name} running; agents read ghostex spaceo guide to use it. You can also run it yourself."
                 ),
                 badge: None,
                 pill: None,

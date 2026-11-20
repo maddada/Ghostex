@@ -337,7 +337,7 @@
       "id": "use-ghostex-embedded-browser-use-skill",
       "icon": "browser",
       "title": "Agents that drive the Browser",
-      "body": "Install Embedded Browser Use in Settings > Integrations so agents can click and read Browser tabs.",
+      "body": "Agents can click and read Browser tabs: ask one to use the Ghostex browser, and it reads ghostex browser --help.",
       "requires": "browser"
     },
     {

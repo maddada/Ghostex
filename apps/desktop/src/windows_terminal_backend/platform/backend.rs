@@ -99,7 +99,7 @@ printf '%s\n' \
   "$(test -f "$skills_root/ghostex-help/SKILL.md" && printf 1 || printf 0)" \
   "$(test -f "$skills_root/ghostex-visuals/SKILL.md" && printf 1 || printf 0)" \
   "$(test -f "$skills_root/ghostex-secrets/SKILL.md" && printf 1 || printf 0)" \
-  "$(test -f "$skills_root/ghostex-agent-guide/SKILL.md" && printf 1 || printf 0)"
+  "$(test -f "$skills_root/ghostex/SKILL.md" && printf 1 || printf 0)"
 "#,
         posix_single_quote(&package_dir),
     );
@@ -127,7 +127,7 @@ printf '%s\n' \
         "ghostex-help",
         "ghostex-visuals",
         "ghostex-secrets",
-        "ghostex-agent-guide",
+        "ghostex",
     ];
     let mut skill_paths = Vec::with_capacity(skill_names.len());
     for skill_name in skill_names {

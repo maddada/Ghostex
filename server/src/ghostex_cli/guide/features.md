@@ -385,8 +385,9 @@ view from the strip.
   Settings: `codeServerLinkVscodeUserConfig`, `codeServerNewWindowsAsTabs`,
   `webLinkOpenTarget`.
 - **Browser**: embedded Chromium tabs with profiles, splits, annotations,
-  DevTools, and agent control through the `$ghostex-embedded-browser-use`
-  skill, which reaches the pages through gxserver with its token. Chromium's
+  DevTools, and agent control through `ghostex browser` (agents read
+  `ghostex browser --help`), which reaches the pages through gxserver with its
+  token. Chromium's
   remote DevTools port stays closed, so other programs on the computer cannot
   drive Ghostex's pages, unless Settings > Debugging > Show debug UI controls
   was on when Ghostex started. Its tabs sit in the view panel's tab strip, in
@@ -2428,10 +2429,10 @@ the agent publishes for the browser opens in the browser on desktop, and pages
 on web open in the browser. Every page is fitted to a phone's width: side-by-side
 columns stack, small pills stay on one line, and a mockup wider than the screen
 scrolls sideways inside its own box instead of shrinking the whole page.
-Agents do this when you ask for `$ghostex-visuals` in your
-prompt; they never use it on their own. Install the skill from Settings >
-Integrations (Ghostex Visuals) or with `ghostex visual install-skill`. Pages
-open in a sandbox and can't reach your computer's files or Ghostex.
+Agents do this when you ask for a Live page, a Ghostex form or Ghostex visuals
+in your prompt (or a Boost asks for one); they never use it on their own, and
+there is nothing to install. Pages open in a sandbox and can't reach your
+computer's files or Ghostex.
 When the agent needs your decisions, it asks them in a Ghostex form right in
 the chat on desktop, web, and mobile: every question at once, with choices you click
 and a note box for each. Nothing is picked for you (the agent may mark the
@@ -2926,12 +2927,14 @@ Settings: `markedHandovers` (`off`, `coordinators`, `all`), `markedHandoversStyl
 Tell agents about Ghostex (Settings > Agents > Defaults, on by default) gives every agent
 session Ghostex starts a short note that it runs in Ghostex: Ghostex can show
 Live pages, Ghostex forms and Ghostex visuals in the chat, open pages the agent
-builds in its own browser, run other agents and install Ghostex skills. The
-agent uses it only when you ask for one of those things, and then reads the
-details from `ghostex agent-guide`. It reaches Claude Code, Codex, ZCode, Pi
-and Factory Droid at launch; other agents (OpenCode, Cursor, Copilot and
-the rest) get the same note from the Ghostex Agent Guide skill (`ghostex
-agent-guide install-skill`). A change applies to sessions started or resumed
+builds in its own browser, run other agents and coordinators, and explain or
+change its own settings. The agent uses it only when you ask for one of those
+things, and then reads the details from `ghostex agent-guide`. It reaches
+Claude Code, Codex, ZCode, Pi and Factory Droid at launch; in other agents
+(OpenCode, Cursor, Copilot and the rest) type `/ghostex` (`$ghostex` in
+Codex) to send the agent to `ghostex agent-guide`. That Ghostex skill installs
+from Settings > Integrations > Agent skills or with `ghostex agent-guide
+install-skill`. A change applies to sessions started or resumed
 afterwards. Agents can also ask Ghostex Help themselves with `ghostex help ask
 "<question>"`, which starts (or reuses) a Ghostex Help chat in the Ghostex
 project and prints its answer. Asking again while that chat is still answering
@@ -3373,7 +3376,7 @@ accounts for that agent, Switch Account in the sidebar and terminal bar menus
 says "Uses its own login", and Ghostex never moves its sessions to an account,
 not even at a usage limit. Keep such a profile in `~/.claude-profiles/<name>`
 (or `~/.codex-profiles/<name>`) so Ghostex finds its conversations, then choose
-Install hook for that agent in Settings > Agents. Ghostex's skills live in
+Install hook for that agent in Settings > Agents. The Ghostex skill lives in
 `~/.agents/skills`, which Codex profiles read on their own; for a Claude
 profile, link its `skills` folder to `~/.claude/skills` to use them.
 A custom agent that starts Claude Code or Codex through Wally
@@ -3998,12 +4001,11 @@ every session, plus its project id and status; add `--full` for everything
 Ghostex knows about each one.
 On older versions without `agents`, use the existing commands below.
 
-Cross-agent orchestration also works through the `$ghostex-cli` skill. For
-"make Claude Code control Codex":
+Cross-agent orchestration also works straight from the `ghostex` command,
+with nothing to install. For "make Claude Code control Codex":
 
-1. Install the Ghostex CLI skill (Settings > Integrations, or
-   `ghostex cli install-skill`). It is installed on first launch by default.
-2. In a Claude Code session, ask it to use `$ghostex-cli`. It can then run
+1. In a Claude Code session, ask it to use the `ghostex` command (or type
+   `/ghostex`, which sends it to `ghostex agent-guide`). It can then run
    `ghostex create-agent codex --project-id <id> --first-input-draft "<task>"`
    or `ghostex create-session --input "<prompt>" --start`, send follow-ups with
    `ghostex send-message <selector> "<text>"`, read output with
@@ -4018,12 +4020,11 @@ Cross-agent orchestration also works through the `$ghostex-cli` skill. For
    worker is created; a reused linked worker keeps its existing model and effort.
    Model and effort overrides require a single agent launch command, without
    shell operators, command substitutions, comments, or line continuations.
-3. The Ghostex Agents skill (`$ghostex-agents`, installed
-   from Settings > Integrations or `ghostex agents-orchestration install-skill`)
-   teaches an agent to read `ghostex agents --help` and `ghostex --help`, then
-   launch other agents with the model and effort you ask for, message them to
-   hand off tasks and coordinate work, read their replies, and verify what they
-   did. Agents message each other the same way, so several sessions can split a
+2. `ghostex agents guide`, built into the command, teaches an agent to launch
+   other agents with the model and effort you ask for, message them to hand off
+   tasks and coordinate work, read their replies and another thread, verify
+   what they did, rename a session and move a Codex session to another folder.
+   Agents message each other the same way, so several sessions can split a
    job between them and report back without you relaying every step.
 
 Related settings: Settings > Agents (agent switches, Add custom agent, Default
@@ -4083,12 +4084,10 @@ version of the Projects features in Cursor and Claude Code.
   says "You might get a degraded experience." under the list (on the phone, the
   agent's row gets an (i) with that line). Claude (cloud) is not offered: a
   coordinator runs on a computer with Ghostex.
-  Its first message is always "Read and adhere to this skill:
-  /ghostex-coordinator", written the way its agent runs a skill
-  (`$ghostex-coordinator` on Codex and most others), shown locked in the
-  dialog: Ghostex installs the ghostex-coordinator skill for that agent, and the
-  skill is the coordinator's playbook. An agent that does not load skills from a
-  folder Ghostex knows is told to run `ghostex coordinator guide` instead. A Claude or Codex coordinator keeps its role after `/clear` or a
+  Its first message is always "Read and adhere to this skill: run `ghostex
+  coordinator guide` and follow what it prints for the whole session.", the
+  same for every agent, shown locked in the dialog: that guide is the
+  coordinator's playbook, built into the `ghostex` command. A Claude or Codex coordinator keeps its role after `/clear` or a
   compaction: Ghostex hands it that line again before its next message. Then it opens in chat, where you write your first request. The name
   is what its sidebar row shows, and the coordinator keeps it: unlike other
   sessions it is not renamed from your first message (Rename in the sidebar
@@ -4122,10 +4121,10 @@ version of the Projects features in Cursor and Claude Code.
   sidebar, open **Advanced** and choose **Make
   Coordinator** (optionally with a goal); on the phone it is in the session's
   menu too. The session keeps its conversation and is never restarted or
-  interrupted: it gets the coordinator crown right away, Ghostex installs the
-  ghostex-coordinator skill for its agent, and a message telling it to read
-  the skill waits in its chat queue until its current turn is over. Sessions
-  it started before are not its threads yet; ask it to adopt them. A thread of
+  interrupted: it gets the coordinator crown right away, and a message telling
+  it to run `ghostex coordinator guide` (its playbook) waits in its chat
+  queue until its current turn is over. Sessions it started before are not its
+  threads yet; ask it to adopt them. A thread of
   another coordinator, a session in a box, or a draft cannot be made an
   coordinator.
 - **Threads in the Project sidebar**: a coordinator's row shows the coordinator crown (a three-point outline) in
@@ -4535,7 +4534,7 @@ keeps its playbook in `~/.empryo/agents/ghostex-coordinator.md` and switches the
 session to it with `/agent ghostex-coordinator` before anything else, so leave that
 file in place. From a terminal or another agent: `ghostex coordinator create --title <name>
 [--path <folder> | --project-id <id>] [--model <m>] [--effort <e>] [--goal <text>] [--task <first request>] [--start]` (its first message waits for Start in its chat unless `--start` sends it at once), `ghostex coordinator
-promote <session> [--goal <text>] [--computer <name>]` (make an existing session a coordinator; in versions after 10.49.0 this works on a connected computer's session too, and so does the sidebar's Advanced > Make Coordinator on its rows: that computer installs the coordinator skill and keeps the coordinator), `ghostex coordinator status`,
+promote <session> [--goal <text>] [--computer <name>]` (make an existing session a coordinator; in versions after 10.49.0 this works on a connected computer's session too, and so does the sidebar's Advanced > Make Coordinator on its rows: that computer keeps the coordinator), `ghostex coordinator status`,
 `ghostex coordinator options` (the agents, models and efforts a coordinator can use),
 `ghostex coordinator start-thread --title <title> --task <brief> [--worktree]
 [--agent <id>] [--model <m>] [--effort <e>] [--account <number|email>] [--read-only]` (`--read-only`, from 11.6.0, starts a thread in its agent's read-only mode, with accept-all taken off its command: Codex in its read-only sandbox with approval on request, which refuses writes; Claude in Plan mode, which blocks its file edits but, as Claude Code designs Plan mode, can still run shell commands while it plans (ones Claude's auto-mode check or your own allow rules approve), so a command can still change files; it stays read-only whenever it is resumed, restarted, woken or started in a worktree, an agent without a read-only mode is refused before any session exists, and a thread on another computer whose Ghostex is too old to honour it is ended before its brief instead of running with full rights; `--path <folder>`, here and on `coordinator create` and `ghostex agents create`, adds that folder as a project, creating it if needed, and starts there; `--account`, in versions after 10.45.0, starts a Claude or Codex thread on that saved account instead of the Account for new sessions rule; one that needs signing in is refused), `ghostex coordinator resolve
@@ -4813,8 +4812,8 @@ stays on one line: search is an icon until you press it (then the field takes th
   changed only when that computer runs a Ghostex that supports them; the
   phone needs Ghostex 11.5 or later on the computer, and a newer one when it
   connects over SSH.
-- The `$ghostex-manage-beads` skill teaches agents the same workflow from the
-  command line. Ask a coordinator to "work the ready beads with high priority"
+- `ghostex board guide` teaches agents the same workflow from the command
+  line with `bd`. Ask a coordinator to "work the ready beads with high priority"
   to have it pick beads and start workers.
 - **Open in New Window** (the pop-out control at the top right of the view, or
   the tab's right-click menu) moves the board to a window of its own, for a
@@ -4971,10 +4970,11 @@ you turn them back on.
 - **Its folder**: each GBot has a folder holding its instructions (`SOUL.md`),
   its memory (`MEMORY.md` and `memory/`) and its working files (`files/`);
   `ghostex gbots show <bot>` says where. A new chat starts with its
-  instructions and memory loaded, and `ghostex gbots brief --bot <bot>` shows
-  what it loads. Change its instructions with `ghostex gbots edit <bot>
-  --soul-file <file>`: editing `SOUL.md` itself changes nothing, and `show`
-  points such an edit out.
+  instructions and memory loaded: its first message tells it to run `ghostex
+  gbots guide` (the GBot playbook) and `ghostex gbots brief`, and `ghostex
+  gbots brief --bot <bot>` shows what it loads. Change its instructions with
+  `ghostex gbots edit <bot> --soul-file <file>`: editing `SOUL.md` itself
+  changes nothing, and `show` points such an edit out.
 - **Its memory**: a GBot keeps dated notes in `MEMORY.md` (`ghostex gbots
   memory add "<note>"`, with `--until <date>` for something that stops being
   true), longer detail in topic notes it reads when needed (`--topic <name>`),
@@ -6145,8 +6145,8 @@ agents, a connection from either side is enough.
   and the machines connected right now ("Only connected machines shown" at the bottom of
   its list), and a picked machine that disconnects goes back to this computer;
   one whose Ghostex is too old says to update it first. On a remote Mac, Integrations also installs and updates Fast Computer &
-  Browser Use and SpaceO, each in its own section with its skills (never on
-  Linux or Windows). Their
+  Browser Use and SpaceO, each in its own section (never on Linux or
+  Windows). Their
   Accessibility and Screen Recording permissions can only be allowed by someone
   at that Mac, so until then the row says so. The Session resume hooks card
   below the list shows that machine's hooks, with Install all and Uninstall all
@@ -6192,9 +6192,10 @@ agents, a connection from either side is enough.
   Settings > Agents, their names, commands and flags, and their order; an
   agent a computer doesn't have shows Not installed here with Install CLI, and
   Install all missing installs them all (nothing installs until you click).
-  Skills keeps your own skills in `~/.agents/skills` and the Ghostex skills you
-  installed; a skill over 512 KB stays on its computer, and a skill removed on
-  one computer is put aside in Ghostex's backups folder on the others.
+  Skills keeps your own skills in `~/.agents/skills` and the Ghostex skill if
+  you installed it; a skill over 512 KB stays on its computer, and a skill
+  removed on one computer is put aside in Ghostex's backups folder on the
+  others.
   Accounts keeps the Claude and Codex account list (names, numbers, Use this
   account, the sidebar pins) but never the logins: Claude and Codex sign one
   of two computers out when they share a login, so an account that arrives
@@ -6500,9 +6501,9 @@ open the chat box still works: typing goes to the card until you click into the
 chat box, and from then on to the chat. If something you send from the chat box
 looks like a key or password, Ghostex warns you inside the box and sends it only
 when you press Send again. Agents ask with
-`ghostex secret request`; the bundled `$ghostex-secrets` skill teaches them
-when and how, so tell an agent "ask me for the token privately" if it asks in
-the chat instead.
+`ghostex secret request`; the note every session gets at launch and `ghostex
+secret guide` teach them when and how, so tell an agent "ask me for the token
+privately" if it asks in the chat instead.
 
 Settings > Secrets lists the 1Password accounts Ghostex reads keys from, adds
 one (a name and the 1Password account, such as my.1password.com) and removes
@@ -7561,36 +7562,41 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   header's Open button, the Open In page and the Open In rows in Quick Access
   and menus, and keeps your apps and custom targets for when you turn it back
   on (`openInTitlebarButtonHidden`).
-- Settings > Integrations installs the bundled agent skills and shows their
-  install status: Ghostex CLI, Ghostex Help, Ghostex Visuals, Ghostex Agents and
-  Project Board Beads under Agent skills, and each computer or browser skill
-  right under its tool in that tool's own section (below). Uninstall all under
-  Agent skills removes all of them; an installed skill's row shows the command you
-  type to use it, such as `$ghostex-computer-use`. Each skill is installed
-  once, in `~/.agents/skills`; agents that do not read that folder (Claude
-  Code, Kiro, Droid, Hermes and others) get a link to it in their own skills
-  folder, so every agent uses the same copy. In a Claude Code session you
-  start yourself, outside Ghostex, Ghostex's skills work only when you type
-  their command (`/ghostex-help`, `/ghostex-coordinator`): no agent picks a
-  Ghostex skill up on its own, and Ghostex names the one a session needs (a
-  coordinator's first message names its playbook). An extension's skill that
+- Settings > Integrations > Agent skills installs the one Ghostex skill,
+  Ghostex (it used to be called Ghostex Agent Guide), and shows whether it is
+  installed, with Update and Uninstall. Type `/ghostex` (`$ghostex` in Codex)
+  and the agent reads `ghostex agent-guide`, which says what Ghostex can do and
+  which guide to read. Every guide is built into the `ghostex` command, so it
+  always matches your Ghostex: `ghostex --help` and `ghostex <command> --help`
+  for the commands, `ghostex help guide` for Ghostex Help, `ghostex visual guide
+  visuals|forms|pages` for Ghostex visuals, forms and Live pages, `ghostex
+  secret guide`, `ghostex agents guide`, `ghostex board guide`, `ghostex
+  browser --help` and `ghostex spaceo guide`. Ghostex's other skills (Ghostex
+  CLI, Ghostex Help, Ghostex Visuals, Ghostex Agents, Project Board Beads,
+  Ghostex Computer Use, Ghostex Browser Use, Ghostex SpaceO, the coordinator
+  and GBot playbooks and the rest) are retired: copies Ghostex installed
+  earlier are removed when Ghostex starts, and their `install-skill` commands
+  only say the skill is retired. The skill is installed once, in
+  `~/.agents/skills`; agents that do not read that folder (Claude Code, Kiro,
+  Droid, Hermes and others) get a link to it in their own skills folder, so
+  every agent uses the same copy. No agent picks the Ghostex skill up on its
+  own: it works only when you type `/ghostex`. An extension's skill that
   agents may pick up by themselves, such as Thread brief, is kept at
   `user-invocable-only` under `skillOverrides` in Claude's settings and turned
   back on for the sessions Ghostex starts. A value you set there yourself is
   left alone. When the computer is
-  online they are downloaded from the Ghostex GitHub repository, so skill fixes
-  arrive between releases, and installed skills are refreshed automatically
-  each time Ghostex starts; a copy an older Ghostex left in an agent's own
-  folder is replaced by a link then. Offline installs use the copy inside the
-  app.
+  online the Ghostex skill is downloaded from the Ghostex GitHub repository, so
+  fixes arrive between releases, and an installed copy is refreshed
+  automatically each time Ghostex starts; a copy an older Ghostex left in an
+  agent's own folder is replaced by a link then. Offline installs use the copy
+  inside the app.
   Its Computer & browser use section holds everything for Fast Computer &
   Browser Use, Trycua's open-source driver (the `trycua/cua` link next to its
-  name opens the project on GitHub): its install row, the Ghostex Computer Use
-  and Ghostex Browser Use skills right under it, then its permissions.
-  Installing it, Ghostex Computer Use or Ghostex Browser Use also
-  installs Trycua's cua-driver skill (`cua-driver skills install`), which
-  teaches agents the driver's own commands and which both Ghostex skills read
-  first; if that skill is missing, the row shows an Install skill button.
+  name opens the project on GitHub): its install row, then its permissions.
+  Installing it also installs Trycua's cua-driver skill (`cua-driver skills
+  install`), which agents read for pages in Chrome, Edge or an Electron app
+  and for desktop apps (type `/cua-driver`); if that skill is missing, the row
+  shows an Install skill button.
   Every update of the driver (this row, the Updates page, Update all or an
   automatic update) also refreshes the cua-driver skill to match the new
   driver while any agent still has it, fetching it again if an earlier
@@ -7607,12 +7613,12 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   Screen Recording permissions. Hover them to see the installed and latest
   versions.
   On an Apple Silicon Mac with macOS 14 or later, the Computer use on a hidden
-  screen section holds SpaceO, its Ghostex SpaceO skill and its permissions.
+  screen section holds SpaceO and its permissions.
   SpaceO gives agents their own hidden screen: apps open on a
   virtual display, so agents click, type and take screenshots there while you
   keep your own screen, pointer and focus. Install SpaceO runs its official
-  installer, keeps SpaceO running in the background and installs the Ghostex
-  SpaceO skill; it does not add SpaceO to your agents' MCP settings. Its row
+  installer and keeps SpaceO running in the background; it installs no skill
+  and does not add SpaceO to your agents' MCP settings. Its row
   gets the same update, reinstall and uninstall buttons: Settings checks
   SpaceO's latest GitHub release the way it checks Fast Computer & Browser
   Use's, the update button turns blue when a newer version is out (hover it
@@ -7642,11 +7648,11 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   already on but the row stays Not granted, the entry is out of date: select
   it, remove it with the minus button, and click Grant again. Close the tag
   any time with its x. SpaceO is macOS only: on Windows and Linux its rows
-  are hidden and `ghostex spaceo install-skill` says so. Ask agents
-  to use $ghostex-spaceo (or /ghostex-spaceo in Claude).
-  The Embedded browser section holds the Chromium runtime (CEF) and the Ghostex
-  Embedded Browser Use skill, which lets agents control Ghostex's browser panes.
-  Commands: `ghostex spaceo install-skill`, `spaceo doctor`.
+  are hidden. Ask agents to use SpaceO; they read `ghostex spaceo guide` to
+  drive a Mac app on its hidden display.
+  The Embedded browser section holds the Chromium runtime (CEF); agents control
+  Ghostex's browser panes with `ghostex browser` (`ghostex browser --help`).
+  Commands: `ghostex spaceo guide`, `spaceo doctor`.
 - Settings > Integrations > Tools lists the tools Ghostex can install for you
   when something you set up needs them: Node.js and npm, uv, Homebrew (Mac),
   System tools (curl, certificates, unzip and git on Linux), Beads, the
@@ -8502,4 +8508,4 @@ terminalViewWidthMode match-chat`.
   sidebar bell (kept visible with `notificationsTitlebarButtonHidden false`)
   lists every finished turn with what the agent said.
 - "What does the Beads view do, and how do I start work on a bead?" (also asked as "What does the Kanban board do"): see Beads view (was Kanban); on the Board, Start work on a card dispatches an agent to it, and from the command line `ghostex board start-work <bead-id>`.
-- "Does a coordinator use the Kanban board?": not on its own. A coordinator's Work panel is its own list of work (see Coordinators, Work items and The Work panel); the Beads view shows the Beads issues in the repository (Beads view). Tell the coordinator "use Beads to manage the work" (with the Ghostex Project Board Beads skill installed) or "work the high-priority beads on the board" and it keeps tasks as cards and starts a thread per card. Docs: ghostex.dev/docs/workflows/orchestrators.
+- "Does a coordinator use the Kanban board?": not on its own. A coordinator's Work panel is its own list of work (see Coordinators, Work items and The Work panel); the Beads view shows the Beads issues in the repository (Beads view). Tell the coordinator "use Beads to manage the work" (it reads `ghostex board guide`) or "work the high-priority beads on the board" and it keeps tasks as cards and starts a thread per card. Docs: ghostex.dev/docs/workflows/orchestrators.

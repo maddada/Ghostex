@@ -3,15 +3,15 @@
 //!
 //! CDXC:Boosts 2026-11-20 DECISION:
 //! User (Q4217 on the Boosts page): agents learn how to make these from the CLI help, not skills ("if we say use ghostex cli to read instructions the agent always gets latest info and he always can read this info, unlike with skills cuz they need to be invoked with /skillname always"), and the help must be "complete enough that a Boost's prompt can just point to it". So the guide is the ghostex-visuals skill's own text, embedded when the CLI is built, split by topic so an agent reads only what its Boost needs; the skill stays for people who invoke it by name, and the two can never differ.
-//! SEE-ALSO: skills/ghostex-visuals/SKILL.md (the text), packages/gx-chat-core/src/extras/boosts.rs (the prompts that point here), server/src/ghostex_cli/agent_guide.rs.
+//! SEE-ALSO: server/src/ghostex_cli/visual_guide.md (the text), packages/gx-chat-core/src/extras/boosts.rs (the prompts that point here), server/src/ghostex_cli/agent_guide.rs.
 
 use serde_json::{json, Value};
 
 use super::args::Flags;
 use super::rpc::{call_gxserver_rpc, CliError, CliResult};
 
-const SKILL: &str = include_str!("../../../skills/ghostex-visuals/SKILL.md");
-const EXAMPLE: &str = include_str!("../../../skills/ghostex-visuals/examples/plan-review.html");
+const SKILL: &str = include_str!("visual_guide.md");
+const EXAMPLE: &str = include_str!("visual_guide_example.html");
 
 const GUIDE_HELP: &str = "Usage: ghostex visual guide <topic>
 
@@ -122,7 +122,8 @@ pub(crate) fn guide_command(args: &[String]) -> CliResult<()> {
     }
 }
 
-const BOOSTS_HELP: &str = "Usage: ghostex visual boosts [list|show <id>|set <id> <prompt|->|reset <id>|on|off] [--json]
+const BOOSTS_HELP: &str =
+    "Usage: ghostex visual boosts [list|show <id>|set <id> <prompt|->|reset <id>|on|off] [--json]
 
 Boosts are the pills a person adds to a chat message from the Boost pill in
 the chat box, or by typing * (Live page, Chart it, Computer use, Plan with

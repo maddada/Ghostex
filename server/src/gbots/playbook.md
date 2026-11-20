@@ -65,8 +65,9 @@ on your home computer.
   `ghostex gbots` commands can't reach home: when something should be
   remembered, end your final message with a short "To remember:" list.
 - If your brief has "Using the computer's screen and apps", you may drive apps
-  there with `$ghostex-spaceo` (your own virtual display, one session per chat,
-  destroyed when you're done) or `$ghostex-computer-use`. Without it, don't.
+  there with SpaceO (`ghostex spaceo guide`: your own virtual display, one session
+  per chat, destroyed when you're done) or the `cua-driver` skill. Without it,
+  don't.
 
 ## Keeping your memory
 

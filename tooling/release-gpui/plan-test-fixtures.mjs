@@ -110,7 +110,7 @@ const FIXTURE_FILES = {
   'tooling/validate-macos-app-bundle.mjs': '// bundle\n',
   'packages/shared/ghostex-settings.ts': 'export const settings = {};\n',
   'packages/core-ui/sidebar-app.tsx': 'export const SidebarApp = () => null;\n',
-  'skills/ghostex-cli/SKILL.md': '# skill\n',
+  'skills/ghostex/SKILL.md': '# skill\n',
   'tsconfig.json': '{"compilerOptions":{}}\n',
 };
 

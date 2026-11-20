@@ -490,10 +490,10 @@ pub fn usage() -> String {
             "guide [overview|features|settings|hotkeys]",
             "Print the built-in Ghostex guide, or one chapter of it",
         ),
-        format_help_command("guide --help", "Show Ghostex Help skill setup"),
+        format_help_command("guide --help", "Show Ghostex Help: the built-in guide's chapters"),
         format_help_command(
             "agent-guide",
-            "Print what an agent running in Ghostex can do: Live pages, Ghostex forms and visuals in the chat, the browser, other agents, secrets, Ghostex skills",
+            "Print what an agent running in Ghostex can do: Live pages, Ghostex forms and visuals in the chat, the browser, other agents, secrets, and the guide to read for each job",
         ),
         format_help_command(
             "help guide",
@@ -501,7 +501,7 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "help ask \"<question>\" [--new] [--timeout-seconds N] [--json]",
-            "Ask a Ghostex Help session (the default prompt agent with the ghostex-help skill) and print its answer once it finishes",
+            "Ask a Ghostex Help session (the default prompt agent following `ghostex help guide`) and print its answer once it finishes",
         ),
     ]
     .join("\n");
@@ -694,15 +694,15 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "browser-use --help",
-            "Show Cua Driver browser-page skill setup",
+            "Pages in Chrome, Edge or Electron apps: read the cua-driver skill",
         ),
         format_help_command(
             "computer-use --help",
-            "Show Ghostex Computer Use skill setup for Cua Driver",
+            "Desktop apps through Cua Driver: read the cua-driver skill",
         ),
         format_help_command(
             "spaceo --help",
-            "Show Ghostex SpaceO skill setup for driving Mac apps on SpaceO's virtual displays (macOS only)",
+            "SpaceO: drive Mac apps on hidden virtual displays (macOS only)",
         ),
         format_help_command(
             "spaceo guide",
@@ -718,7 +718,7 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "cli --help",
-            "Show general Ghostex CLI discovery and agent skill setup",
+            "How to work with the Ghostex CLI, and the guide for each job",
         ),
         format_help_command(
             "agents --help",
@@ -762,21 +762,21 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "agents-orchestration --help",
-            "Show Ghostex Agents skill setup (launch and coordinate other agents)",
+            "Launching and coordinating other agents (ghostex agents guide)",
         ),
         format_help_command(
             "manage-beads --help",
-            "Show Ghostex Manage Beads project-board skill setup",
+            "Project Board beads (ghostex board guide)",
         ),
         format_help_command(
             "generate-title --help",
-            "Show Ghostex Auto Rename Session skill setup",
+            "Naming a session (ghostex agents guide)",
         ),
         format_help_command(
             "move-codex-session --help",
-            "Show Ghostex Move Codex Session skill setup",
+            "Moving a Codex session to another folder",
         ),
-        format_help_command("guide --help", "Show Ghostex Help skill setup"),
+        format_help_command("guide --help", "Show Ghostex Help: the built-in guide's chapters"),
         format_help_command(
             "agent-sync status | plan | apply [--agent id] [--json]",
             "Point every agent at the shared ~/.agents skills, instructions, and hooks",
@@ -901,7 +901,7 @@ Global flags:
   --token <token>       Bridge token; legacy remote one-shot only because argv can expose secrets
   --timeout <ms>        Bridge request timeout
   automations --help    Show focused scheduled automation help
-  cli --help            Show general CLI agent skill setup
+  cli --help            How to work with the Ghostex CLI
   quick-actions --help  Show focused project quick-action help
   server --help         Show server command help
   help                  Show this help

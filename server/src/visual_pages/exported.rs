@@ -8,7 +8,7 @@
 //!
 //! CDXC:SessionChat 2026-11-13 DECISION:
 //! User: "let's add the ability to do standalone briefs that gives you an html file you can download from Ghostex and attach anywhere so people can answer and give you back the json export of the answers", then: every Ghostex page can be exported this way (no special page type), inside Ghostex a page works exactly as before, and the action is named plainly: an Export button on every page card and page window downloads the "exported page", whose Send button reads Export answers (Q2909).
-//! SEE-ALSO: theme.rs `PAGE_API` (exported mode, the answers dialog), kit.rs `KIT_SCRIPT` (the per-question detail and the Export answers button), import.rs (taking the answers back), skills/ghostex-visuals/SKILL.md and skills/ghostex-help/references/features.md (described there).
+//! SEE-ALSO: theme.rs `PAGE_API` (exported mode, the answers dialog), kit.rs `KIT_SCRIPT` (the per-question detail and the Export answers button), import.rs (taking the answers back), server/src/ghostex_cli/visual_guide.md and server/src/ghostex_cli/guide/features.md (described there).
 
 use std::{fs, path::Path};
 

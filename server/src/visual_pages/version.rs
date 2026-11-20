@@ -4,7 +4,7 @@
 //!
 //! CDXC:SessionChat 2026-10-27 DECISION:
 //! User, on pages made before the v2 template: "i dont care about old pages … i dont want code to fix old ones just need future created ones to be good", but tell the reader when an opened page is missing "something that indicates whether if this inline html is v2", and "mention it again to his sessions". So nothing repairs a v1 page: serve.rs hands the page `oldLayout` and the page API (theme.rs) shows a one-line notice above it until the reader dismisses it (notice.rs), and `ghostex show` tells the publishing agent when the file it publishes lacks the marker (ghostex_cli/show.rs).
-//! SEE-ALSO: skills/ghostex-visuals/SKILL.md (the skeleton that writes the marker), kit.rs (the theme switch only v2 pages get).
+//! SEE-ALSO: server/src/ghostex_cli/visual_guide.md (the skeleton that writes the marker), kit.rs (the theme switch only v2 pages get).
 
 /// The marker's `name`.
 pub(crate) const PAGE_VERSION_META_NAME: &str = "ghostex-page";

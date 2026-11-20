@@ -13,28 +13,16 @@ pub const GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     CDXC:AgentSkills 2026-06-26-13:47:
     Ghostex ships `$ghostex-move-codex-session` as an app-bundled skill, so gxserver must accept it in the same install/status allow-list as the existing first-launch skills.
     */
-    "ghostex-browser-use",
-    "ghostex-embedded-browser-use",
-    "ghostex-computer-use",
-    "ghostex-spaceo",
-    "ghostex-cli",
-    "ghostex-manage-beads",
-    "ghostex-agents",
-    "ghostex-auto-rename-session",
-    "ghostex-move-codex-session",
-    "ghostex-help",
     /*
     CDXC:ProjectBoard 2026-08-24:
     The Project Board beads skill teaches agents `ghostex board associate`, the
     only way a hand-started session gets onto its card, so it must be installable
     through the same allow-list as the other bundled skills.
     */
-    "ghostex-manage-beads",
     /*
     CDXC:AgentSkills 2026-10-06 DECISION:
     User: the visuals skill is used "only when I mention the skill". `$ghostex-visuals` teaches the chat's ```visual blocks and `ghostex show` pages, and ships with `disable-model-invocation: true` and `allow_implicit_invocation: false` so an agent never picks it up on its own.
     */
-    "ghostex-visuals",
     /*
     CDXC:Secrets 2026-11-02 WHY:
     `$ghostex-secrets` is the one bundled skill agents may pick up on their own: an agent that needs a password or token must find `ghostex secret request` at that moment, whichever agent family it is, or it asks for the secret in chat. Agents that never get the skill's description in context (it is not installed, or the agent reads no skills) fall back to asking, so the CLI help names the verb too.
@@ -43,22 +31,24 @@ pub const GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     CDXC:AgentSkills 2026-11-17 DECISION (supersedes the WHY above for loading on its own):
     User (Q1 "C"): no Ghostex skill is picked up by a model on its own, in Ghostex or not, so `$ghostex-secrets` and `$ghostex-agent-guide` ship `disable-model-invocation: true` and `allow_implicit_invocation: false` like the rest. Sessions Ghostex starts learn `ghostex secret request` from the launch note (agents/ghostex_note.rs `SECRETS_NOTE`) and threads from their brief; the guide is that same note. Agents Ghostex can't hand a note (OpenCode, Cursor, Amp…) find them only when named.
     */
-    "ghostex-secrets",
     /*
     CDXC:AgentGuide 2026-11-02 WHY:
     `$ghostex-agent-guide` carries the Ghostex note (agents/ghostex_note.rs) as its description, for agents Ghostex can't hand a system prompt at launch (OpenCode, Cursor, Copilot, Amp and the rest), so it is the second bundled skill agents may pick up on their own. Its body only sends the agent to `ghostex agent-guide`, so it stays current with the CLI.
     */
-    "ghostex-agent-guide",
     /*
     CDXC:Coordinators 2026-10-17 WHY:
     The coordinator playbook (the `ghostex-coordinator` skill, `ghostex-orchestrator` until 2026-11-11, agent_skills_renamed.rs) is a bundled skill gxserver installs when an orchestrator is created or promoted (coordinators/role.rs), so it is listed here for the startup refresh from GitHub main, but left out of the default install set (`COORDINATOR_ONLY_GHOSTEX_AGENT_SKILL_NAMES`): an ordinary session never needs it.
     */
-    crate::coordinators::COORDINATOR_SKILL_NAME,
     /*
     CDXC:GBots 2026-11-09 WHY:
     Every GBot chat's first message says "Read and adhere to this skill: $ghostex-gbots" (gbots/session.rs `first_message`), but nothing installed it, so the chat looked for a skill that was not there. gxserver now installs it when a GBot chat starts (gbots/skill.rs), here and on a connected computer that opens a GBot's chat. Like the orchestrator playbook it is listed for the startup refresh from GitHub main and left out of the default install set (`GBOT_ONLY_GHOSTEX_AGENT_SKILL_NAMES`): an ordinary session never needs it.
     */
-    "ghostex-gbots",
+
+    /*
+    CDXC:AgentSkills 2026-11-20 DECISION:
+    User (Q4262 "B" on the skills-vs-CLI page, then "pls make sure we don't break stuff"): Ghostex's own skills are retired for CLI help, keeping one tiny `ghostex` skill (once `ghostex-agent-guide`, agent_skills_renamed.rs) that sends the agent to `ghostex agent-guide` and the `ghostex <area> guide` or `--help` it names. The CLI always matches the installed Ghostex, while a skill is copied once and refreshed from GitHub main. Every other name above is retired (`RETIRED_GHOSTEX_AGENT_SKILL_NAMES`); their playbooks moved into the CLI (`ghostex gbots|agents|board|secret|spaceo|help guide`, `ghostex browser --help`), and browser and computer use go to Trycua's `cua-driver` skill. This list is now only that skill.
+    */
+    "ghostex",
 ];
 
 /// Bundled skills installed only for the agent an orchestrator runs on, never by a plain "install
@@ -1151,6 +1141,14 @@ installed copies are retired the same way.
 CDXC:AgentSkills 2026-09-24 WHY:
 `ghostex-agents-orchestration` was renamed to `ghostex-agents`, so copies
 installed under the old name are retired the same way.
+
+CDXC:AgentSkills 2026-11-20 DECISION:
+User (Q4262 "B"): Ghostex's own skills are retired for CLI help, keeping only `ghostex`, so the
+fifteen below are retired the same way (`ghostex-orchestrator` is the coordinator skill's name
+before 2026-11-11). Their shipped revisions are in agent_skills_retired_sha256.txt. Two of them
+carried more than SKILL.md: `ghostex-help` its `references/` chapters and `ghostex-visuals` its
+`examples/` page, which were regenerated too often to list; a copy whose SKILL.md is a shipped
+revision is Ghostex's, so those two folders are accepted by name.
 */
 pub const RETIRED_GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     "ghostex-manage-automations",
@@ -1159,7 +1157,29 @@ pub const RETIRED_GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     "ghostex-fable-5.6-orchestration",
     "ghostex-fable-56-orchestration",
     "ghostex-agents-orchestration",
+    "ghostex-agents",
+    "ghostex-auto-rename-session",
+    "ghostex-browser-use",
+    "ghostex-cli",
+    "ghostex-computer-use",
+    "ghostex-coordinator",
+    "ghostex-orchestrator",
+    "ghostex-embedded-browser-use",
+    "ghostex-gbots",
+    "ghostex-help",
+    "ghostex-manage-beads",
+    "ghostex-move-codex-session",
+    "ghostex-secrets",
+    "ghostex-spaceo",
+    "ghostex-visuals",
 ];
+
+/// The shipped revisions of the skills retired for CLI help (2026-11-20), one sha256 per line,
+/// `#` lines naming the file each group belongs to.
+const RETIRED_FOR_CLI_HELP_SHIPPED_SHA256: &str = include_str!("agent_skills_retired_sha256.txt");
+
+/// Folders a retired skill shipped besides SKILL.md and agents/ (see the 2026-11-20 decision).
+const RETIRED_SKILL_SHIPPED_FOLDERS: &[&str] = &["references", "examples"];
 
 /// sha256 of every SKILL.md / agents/openai.yaml revision the retired skills
 /// ever shipped with (collected from the repository history at removal time).
@@ -1207,6 +1227,12 @@ fn file_matches_shipped_retired_skill_content(path: &Path) -> bool {
     };
     let digest = hex::encode(Sha256::digest(&bytes));
     RETIRED_GHOSTEX_AGENT_SKILL_SHIPPED_SHA256.contains(&digest.as_str())
+        || RETIRED_FOR_CLI_HELP_SHIPPED_SHA256
+            .lines()
+            .any(|line| line.trim() == digest)
+        || crate::gbots::retired_gbots_skill_files_written_by_this_build()
+            .iter()
+            .any(|text| text.as_bytes() == bytes.as_slice())
 }
 
 /// True when the directory holds exactly the files Ghostex shipped for a
@@ -1237,11 +1263,27 @@ fn retired_skill_dir_is_unmodified_shipped_copy(skill_dir: &Path) -> bool {
             }
         } else if name == ".DS_Store" {
             continue;
+        } else if RETIRED_SKILL_SHIPPED_FOLDERS
+            .iter()
+            .any(|folder| name == *folder)
+            && entry.file_type().is_ok_and(|kind| kind.is_dir())
+            && saw_only_files(&entry.path())
+        {
+            continue;
         } else {
             return false;
         }
     }
     saw_skill_md
+}
+
+/// True when `dir` holds only plain files (no folders, no links).
+fn saw_only_files(dir: &Path) -> bool {
+    fs::read_dir(dir).is_ok_and(|entries| {
+        entries
+            .flatten()
+            .all(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
+    })
 }
 
 /// Startup migration: delete unmodified shipped copies of the retired skills
@@ -1263,6 +1305,15 @@ pub fn remove_retired_ghostex_agent_skills(paths: &GxserverPaths) -> Vec<String>
                 continue;
             };
             let remove_result = if metadata.file_type().is_symlink() {
+                // CDXC:AgentSkills 2026-11-20 WHY: a link to a copy the user changed (the
+                // canonical one kept below, or their own) stays, so that agent keeps reading it;
+                // found live on a test server, where `.claude/skills/ghostex-cli` was removed while
+                // the edited `~/.agents/skills/ghostex-cli` it pointed at was kept.
+                if fs::metadata(&skill_dir).is_ok_and(|target| target.is_dir())
+                    && !retired_skill_dir_is_unmodified_shipped_copy(&skill_dir)
+                {
+                    continue;
+                }
                 // A symlinked skill points at user-managed content; remove
                 // only the link itself (a Windows folder link or junction too).
                 ghostex_agent_sync::fsx::remove_link(&skill_dir)
@@ -1364,91 +1415,61 @@ mod tests {
 
     #[test]
     fn agent_skill_status_checks_global_repository_and_plugin_roots() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let repo = tempfile::tempdir().expect("repo");
-        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
-        write_skill(
-            &temp
-                .path()
-                .join(".claude")
-                .join("skills")
-                .join("ghostex-browser-use"),
-            "ghostex-browser-use",
-        );
-        write_skill(
-            &temp
-                .path()
-                .join(".agents")
-                .join("skills")
-                .join("ghostex-computer-use"),
-            "ghostex-computer-use",
-        );
-        write_skill(
-            &temp
-                .path()
-                .join(".agents")
-                .join("skills")
-                .join("ghostex-embedded-browser-use"),
-            "ghostex-embedded-browser-use",
-        );
-        write_skill(
-            &temp
-                .path()
-                .join(".codex")
-                .join("plugins")
-                .join("cache")
-                .join("plugin")
-                .join("skills")
-                .join("ghostex-auto-rename-session"),
-            "ghostex-auto-rename-session",
-        );
-        write_skill(
-            &repo
-                .path()
-                .join(".agents")
-                .join("skills")
-                .join("ghostex-manage-beads"),
-            "ghostex-manage-beads",
-        );
-        let status = read_agent_skill_status(
-            &paths,
-            json!({ "repositoryPaths": [path_string(repo.path())] })
-                .as_object()
-                .expect("params"),
-        )
-        .expect("status");
-        let skills = status
-            .get("skills")
-            .and_then(Value::as_array)
-            .expect("skills");
-        assert_eq!(skill_installed(skills, "ghostex-browser-use"), Some(true));
-        assert_eq!(
-            skill_installed(skills, "ghostex-embedded-browser-use"),
-            Some(true)
-        );
-        assert_eq!(skill_installed(skills, "ghostex-computer-use"), Some(true));
-        assert_eq!(skill_installed(skills, "ghostex-manage-beads"), Some(true));
-        assert_eq!(
-            skill_installed(skills, "ghostex-auto-rename-session"),
-            Some(true)
-        );
-        assert_eq!(skill_installed(skills, "ghostex-cli"), Some(false));
-        let roots = status
-            .get("roots")
-            .and_then(Value::as_array)
-            .expect("roots");
-        assert!(roots.iter().any(|root| {
-            root.get("path")
-                == Some(&json!(path_string(
-                    &temp.path().join(".codex").join("skills")
-                )))
-        }));
-        assert!(roots.iter().any(|root| {
-            root.get("path")
-                == Some(&json!(path_string(
-                    &repo.path().join(".agents").join("skills")
-                )))
-        }));
+        // Only `ghostex` is bundled since 2026-11-20 (Q4262), so each kind of root is checked with
+        // it in turn: an agent's own folder, the canonical one, a plugin cache and a repository.
+        let places: [fn(&Path, &Path) -> PathBuf; 4] = [
+            |home, _| home.join(".claude").join("skills"),
+            |home, _| home.join(".agents").join("skills"),
+            |home, _| {
+                home.join(".codex")
+                    .join("plugins")
+                    .join("cache")
+                    .join("plugin")
+                    .join("skills")
+            },
+            |_, repo| repo.join(".agents").join("skills"),
+        ];
+        for place in places {
+            let temp = tempfile::tempdir().expect("tempdir");
+            let repo = tempfile::tempdir().expect("repo");
+            let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+            let status = || {
+                read_agent_skill_status(
+                    &paths,
+                    json!({ "repositoryPaths": [path_string(repo.path())] })
+                        .as_object()
+                        .expect("params"),
+                )
+                .expect("status")
+            };
+            let installed = |status: &Value| {
+                skill_installed(
+                    status
+                        .get("skills")
+                        .and_then(Value::as_array)
+                        .expect("skills"),
+                    "ghostex",
+                )
+            };
+            assert_eq!(installed(&status()), Some(false));
+            let root = place(temp.path(), repo.path());
+            write_skill(&root.join("ghostex"), "ghostex");
+            assert_eq!(installed(&status()), Some(true), "{}", root.display());
+            let roots = status();
+            let roots = roots.get("roots").and_then(Value::as_array).expect("roots");
+            assert!(roots.iter().any(|root| {
+                root.get("path")
+                    == Some(&json!(path_string(
+                        &temp.path().join(".codex").join("skills")
+                    )))
+            }));
+            assert!(roots.iter().any(|root| {
+                root.get("path")
+                    == Some(&json!(path_string(
+                        &repo.path().join(".agents").join("skills")
+                    )))
+            }));
+        }
     }
 
     #[test]
@@ -1473,12 +1494,8 @@ mod tests {
         let repo = tempfile::tempdir().expect("repo");
         let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
         let target = temp.path().join("target-skill");
-        write_skill(&target, "ghostex-browser-use");
-        let link = repo
-            .path()
-            .join(".agents")
-            .join("skills")
-            .join("ghostex-browser-use");
+        write_skill(&target, "ghostex");
+        let link = repo.path().join(".agents").join("skills").join("ghostex");
         fs::create_dir_all(link.parent().expect("parent")).expect("mkdir");
         symlink_dir(&target, &link).expect("symlink");
         let status = read_agent_skill_status(
@@ -1492,7 +1509,7 @@ mod tests {
             .get("skills")
             .and_then(Value::as_array)
             .expect("skills");
-        assert_eq!(skill_installed(skills, "ghostex-browser-use"), Some(false));
+        assert_eq!(skill_installed(skills, "ghostex"), Some(false));
     }
 
     fn write_skill(directory_path: &Path, skill_name: &str) {

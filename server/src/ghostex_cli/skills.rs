@@ -27,7 +27,7 @@ const GHOSTEX_MOVE_CODEX_SESSION_SKILL_NAME: &str = "ghostex-move-codex-session"
 const GHOSTEX_HELP_SKILL_NAME: &str = "ghostex-help";
 const GHOSTEX_VISUALS_SKILL_NAME: &str = "ghostex-visuals";
 const GHOSTEX_SECRETS_SKILL_NAME: &str = "ghostex-secrets";
-const GHOSTEX_AGENT_GUIDE_SKILL_NAME: &str = "ghostex-agent-guide";
+const GHOSTEX_AGENT_GUIDE_SKILL_NAME: &str = "ghostex";
 
 /// JS stringFlag: trimmed non-empty string or nothing.
 fn string_flag(value: Option<String>) -> Option<String> {
@@ -254,6 +254,17 @@ fn install_ghostex_agent_skill(
     Ok(())
 }
 
+/// What `install-skill` answers for a skill retired for CLI help: nothing is installed, and the
+/// message names what agents read instead.
+///
+/// CDXC:AgentSkills 2026-11-20 DECISION:
+/// User (Q4262 "B"): Ghostex's own skills are retired for CLI help; only `ghostex` (`ghostex agent-guide install-skill`) still installs. The verbs stay so a script or an older app that still runs one gets a clear answer instead of "unknown command".
+fn retired_skill_install(_args: &[String], name: &str, instead: &str) -> CliResult<()> {
+    Err(CliError::Other(format!(
+        "The {name} skill is retired: agents read {instead} instead, which always matches this Ghostex. Nothing to install."
+    )))
+}
+
 /// Shared shape of the skill-surface commands (help/install-skill dispatch).
 fn skill_surface_command(
     args: &[String],
@@ -285,14 +296,10 @@ pub fn install_browser_skill_command(args: &[String]) -> CliResult<()> {
     `$ghostex-embedded-browser-use`, not the implementation-shaped
     `$ghostex-browser-devtools-mcp`.
     */
-    install_ghostex_agent_skill(
+    retired_skill_install(
         args,
-        "ghostex browser mcp",
-        &[
-            "GHOSTEX_EMBEDDED_BROWSER_USE_SKILL_SOURCE",
-            "GHOSTEX_BROWSER_SKILL_SOURCE",
-        ],
         GHOSTEX_EMBEDDED_BROWSER_SKILL_NAME,
+        "`ghostex browser --help`",
     )
 }
 
@@ -310,12 +317,7 @@ pub fn install_browser_use_skill_command(args: &[String]) -> CliResult<()> {
     Browser Use is the Cua Driver page-content workflow. Keep it distinct from
     `ghostex browser`, which owns Ghostex's embedded CEF pane MCP server.
     */
-    install_ghostex_agent_skill(
-        args,
-        "cua-driver",
-        &["GHOSTEX_BROWSER_USE_SKILL_SOURCE"],
-        GHOSTEX_BROWSER_SKILL_NAME,
-    )
+    retired_skill_install(args, GHOSTEX_BROWSER_SKILL_NAME, "the `cua-driver` skill")
 }
 
 pub fn computer_use_command(args: &[String]) -> CliResult<()> {
@@ -334,11 +336,10 @@ pub fn install_computer_use_skill_command(args: &[String]) -> CliResult<()> {
     Ghostex-named wrapper instead of remembering the lower-level `$cua-driver`
     skill name.
     */
-    install_ghostex_agent_skill(
+    retired_skill_install(
         args,
-        "cua-driver",
-        &["GHOSTEX_COMPUTER_USE_SKILL_SOURCE"],
         GHOSTEX_COMPUTER_USE_SKILL_NAME,
+        "the `cua-driver` skill",
     )
 }
 
@@ -371,17 +372,7 @@ pub fn spaceo_command(args: &[String]) -> CliResult<()> {
 /// CDXC:ManagedTools 2026-10-14 DECISION:
 /// User: "SpaceO is macOS-only for now": on Windows and Linux every SpaceO surface is hidden, and the CLI refuses with a clear "SpaceO is only available on macOS" instead of failing oddly.
 pub fn install_spaceo_skill_command(args: &[String]) -> CliResult<()> {
-    if !cfg!(target_os = "macos") {
-        return Err(CliError::Other(
-            crate::agent_skills::SPACEO_MACOS_ONLY_MESSAGE.to_string(),
-        ));
-    }
-    install_ghostex_agent_skill(
-        args,
-        "spaceo help",
-        &["GHOSTEX_SPACEO_SKILL_SOURCE"],
-        GHOSTEX_SPACEO_SKILL_NAME,
-    )
+    retired_skill_install(args, GHOSTEX_SPACEO_SKILL_NAME, "`ghostex spaceo guide`")
 }
 
 pub fn cli_command(args: &[String]) -> CliResult<()> {
@@ -389,12 +380,7 @@ pub fn cli_command(args: &[String]) -> CliResult<()> {
 }
 
 pub fn install_cli_skill_command(args: &[String]) -> CliResult<()> {
-    install_ghostex_agent_skill(
-        args,
-        "ghostex --help",
-        &["GHOSTEX_CLI_SKILL_SOURCE"],
-        GHOSTEX_CLI_SKILL_NAME,
-    )
+    retired_skill_install(args, GHOSTEX_CLI_SKILL_NAME, "`ghostex --help`")
 }
 
 /*
@@ -433,11 +419,10 @@ pub fn install_manage_beads_skill_command(args: &[String]) -> CliResult<()> {
     CLI; the skill teaches the swimlane statuses, session-link comments, and
     safety rules around it.
     */
-    install_ghostex_agent_skill(
+    retired_skill_install(
         args,
-        "bd --help",
-        &["GHOSTEX_MANAGE_BEADS_SKILL_SOURCE"],
         GHOSTEX_MANAGE_BEADS_SKILL_NAME,
+        "`ghostex board guide`",
     )
 }
 
@@ -456,11 +441,10 @@ pub fn install_agents_orchestration_skill_command(args: &[String]) -> CliResult<
     `ghostex agents --help` and `ghostex --help` and adds model-independent
     orchestration habits on top.
     */
-    install_ghostex_agent_skill(
+    retired_skill_install(
         args,
-        "ghostex agents --help",
-        &["GHOSTEX_AGENTS_ORCHESTRATION_SKILL_SOURCE"],
         GHOSTEX_AGENTS_ORCHESTRATION_SKILL_NAME,
+        "`ghostex agents guide`",
     )
 }
 
@@ -479,11 +463,10 @@ pub fn install_generate_title_skill_command(args: &[String]) -> CliResult<()> {
     through the supported `rename-command` session input path using stable
     self-session selectors.
     */
-    install_ghostex_agent_skill(
+    retired_skill_install(
         args,
-        "ghostex rename-command --session-id \"${GHOSTEX_GLOBAL_SESSION_REF:-${GHOSTEX_SESSION_ID:-${ZMX_SESSION:-}}}\" --title \"<title>\"",
-        &["GHOSTEX_GENERATE_TITLE_SKILL_SOURCE"],
         GHOSTEX_AUTO_RENAME_SESSION_SKILL_NAME,
+        "`ghostex agents guide`",
     )
 }
 
@@ -493,12 +476,7 @@ pub fn install_help_skill_command(args: &[String]) -> CliResult<()> {
     to change settings through `ghostex settings`, so the configure command it
     advertises is the guide entry point rather than a session command.
     */
-    install_ghostex_agent_skill(
-        args,
-        "ghostex guide",
-        &["GHOSTEX_HELP_SKILL_SOURCE"],
-        GHOSTEX_HELP_SKILL_NAME,
-    )
+    retired_skill_install(args, GHOSTEX_HELP_SKILL_NAME, "`ghostex help guide`")
 }
 
 pub fn install_visuals_skill_command(args: &[String]) -> CliResult<()> {
@@ -506,23 +484,13 @@ pub fn install_visuals_skill_command(args: &[String]) -> CliResult<()> {
     `$ghostex-visuals` teaches agents the chat's ```visual blocks and `ghostex show` pages; its
     entry point is the `visual` verb that checks a block before the agent replies.
     */
-    install_ghostex_agent_skill(
-        args,
-        "ghostex visual --help",
-        &["GHOSTEX_VISUALS_SKILL_SOURCE"],
-        GHOSTEX_VISUALS_SKILL_NAME,
-    )
+    retired_skill_install(args, GHOSTEX_VISUALS_SKILL_NAME, "`ghostex visual guide`")
 }
 
 /// `$ghostex-secrets` teaches agents to ask for a password or token with `ghostex secret request`
 /// instead of in the chat.
 pub fn install_secrets_skill_command(args: &[String]) -> CliResult<()> {
-    install_ghostex_agent_skill(
-        args,
-        "ghostex secret --help",
-        &["GHOSTEX_SECRETS_SKILL_SOURCE"],
-        GHOSTEX_SECRETS_SKILL_NAME,
-    )
+    retired_skill_install(args, GHOSTEX_SECRETS_SKILL_NAME, "`ghostex secret guide`")
 }
 
 /// `$ghostex-agent-guide` gives agents without a launch note the Ghostex note as a skill they may
@@ -551,11 +519,10 @@ pub fn install_move_codex_session_skill_command(args: &[String]) -> CliResult<()
     `/status` plus `codex fork --yolo -C <folder-path> <SESSION_ID>` workflow
     instead of inventing an in-place `/cd` command.
     */
-    install_ghostex_agent_skill(
+    retired_skill_install(
         args,
-        "codex fork --yolo -C <target-folder> <SESSION_ID>",
-        &["GHOSTEX_MOVE_CODEX_SESSION_SKILL_SOURCE"],
         GHOSTEX_MOVE_CODEX_SESSION_SKILL_NAME,
+        "`ghostex agents guide`",
     )
 }
 

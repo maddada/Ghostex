@@ -3,7 +3,7 @@
 //! reads too.
 //!
 //! CDXC:SessionChat 2026-10-11 SEE-ALSO:
-//! native_markdown.rs marks the fence with the form's id; questions/forms.rs keeps the reader's picks and sends them; apps/desktop/src/app/native_chat/question_form.rs and apps/mobile/app/src/chat/native/transcript/QuestionForm.tsx draw it; skills/ghostex-visuals/SKILL.md teaches the grammar. Change them together.
+//! native_markdown.rs marks the fence with the form's id; questions/forms.rs keeps the reader's picks and sends them; apps/desktop/src/app/native_chat/question_form.rs and apps/mobile/app/src/chat/native/transcript/QuestionForm.tsx draw it; server/src/ghostex_cli/visual_guide.md teaches the grammar. Change them together.
 
 use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};

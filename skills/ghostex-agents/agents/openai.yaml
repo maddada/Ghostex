@@ -1,7 +1,0 @@
-interface:
-  display_name: 'Ghostex Agents'
-  short_description: 'Launch, message, and read other agents through the Ghostex CLI'
-  default_prompt: 'Use $ghostex-agents to read the Ghostex CLI help, launch the agents this task needs with the right model and effort, send them their tasks, and read and verify their results.'
-
-policy:
-  allow_implicit_invocation: false

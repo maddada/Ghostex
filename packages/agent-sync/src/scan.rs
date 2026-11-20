@@ -267,9 +267,10 @@ pub struct SyncReport {
     pub summary: ReportSummary,
 }
 
-/// Skill folder names Ghostex ships and installs itself.
+/// Skill folder names Ghostex ships and installs itself: `ghostex` (CDXC:AgentSkills 2026-11-20,
+/// the one skill left after Q4262) and the `ghostex-` ones older versions shipped.
 pub fn is_ghostex_bundled_skill(name: &str) -> bool {
-    name.starts_with("ghostex-")
+    name == "ghostex" || name.starts_with("ghostex-")
 }
 
 fn is_skill_dir(path: &Path) -> bool {

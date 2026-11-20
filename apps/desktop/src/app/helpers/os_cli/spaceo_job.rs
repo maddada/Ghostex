@@ -80,7 +80,7 @@ pub(crate) fn gpui_spaceo_uninstall_command_action() -> GpuiInstallJobAction {
     }
 }
 
-/// After the installer exits: install the Ghostex SpaceO skill, or report why setup stopped.
+/// After the installer exits: say SpaceO is ready, or report why setup stopped.
 pub(crate) fn gpui_finish_spaceo_setup(
     installed: bool,
     was_update: bool,
@@ -95,21 +95,16 @@ pub(crate) fn gpui_finish_spaceo_setup(
             .to_string(),
         );
     }
-    match gpui_install_bundled_ghostex_skill(&["spaceo", "install-skill"], "Ghostex SpaceO") {
-        Ok(_) => Ok(if was_update {
-            format!(
-                "SpaceO is up to date. Ghostex SpaceO is ready.{}",
-                gpui_spaceo_permissions_lost_after_update()
-            )
-        } else {
-            "SpaceO installed. Grant its Accessibility and Screen Recording permissions in Settings."
-                .to_string()
-        }),
-        Err(message) => Err(format!(
-            "SpaceO {}, but the Ghostex SpaceO skill could not be installed. {message}",
-            if was_update { "updated" } else { "installed" }
-        )),
-    }
+    // CDXC:AgentSkills 2026-11-20: the Ghostex SpaceO skill is retired (Q4262); agents read `ghostex spaceo guide`, so nothing is installed after SpaceO.
+    Ok(if was_update {
+        format!(
+            "SpaceO is up to date.{}",
+            gpui_spaceo_permissions_lost_after_update()
+        )
+    } else {
+        "SpaceO installed. Grant its Accessibility and Screen Recording permissions in Settings."
+            .to_string()
+    })
 }
 
 /// CDXC:ManagedTools 2026-10-14 WHY:

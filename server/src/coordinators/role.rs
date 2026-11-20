@@ -38,16 +38,16 @@ use ghostex_settings_catalog::MarkedHandovers;
 ///
 /// CDXC:Coordinators 2026-10-10 DECISION:
 /// User: "let's please rename "Coordinator" to "Orchestrator" everywhere so it's clearer to everyone." The playbook and the guide pointer call the role an orchestrator and name `ghostex orchestrator` verbs; the role file's name on disk and every internal name keep "coordinator".
-pub const COORDINATOR_SKILL_MD: &str = include_str!("../../../skills/ghostex-coordinator/SKILL.md");
-
+///
 /// The playbook Ghostex ships, which `ghostex coordinator guide` prints.
 ///
 /// CDXC:Coordinators 2026-11-11 WHY:
 /// The playbook used to be the skill's own body, so a coordinator held it twice from its first turn: the skill loads it, then the skill sends it to the guide, which prints the same text with the reply format and overrides. Claude Code also attaches an invoked skill again after every compaction, right before the coordinator re-reads the guide, so the copy came back each time. In the user's coordinator transcripts the skill body was 6,000 to 12,000 tokens a load and the playbook's two copies were 9 to 21% of the input cost of the coordinators with fewer than 150 model calls. So the skill (`COORDINATOR_SKILL_MD`) is a short pointer to the guide and the text lives here, built into gxserver with the CLI verbs it names. A user's kept copy of an older full skill still works: it also sends its coordinator to the guide. Older apps refresh the skill from GitHub main and get the pointer too, while their own guide still prints the playbook built into them.
-/// SEE-ALSO: skills/ghostex-coordinator/SKILL.md (the pointer), apps/desktop/src/bin/native_modal_demo/new_coordinator.rs (`demo_guide`).
+///
+/// CDXC:AgentSkills 2026-11-20 DECISION:
+/// User (Q4262 "B"): Ghostex's own skills are retired for CLI help. The pointer skill is gone: every coordinator's first line sends it to `ghostex coordinator guide` itself (gx-chat-core `COORDINATOR_GUIDE_LINE`), nothing installs `ghostex-coordinator` any more, and the startup pass removes the copies Ghostex shipped (agent_skills.rs `RETIRED_GHOSTEX_AGENT_SKILL_NAMES`). An app from before this keeps its own copy, since the signed skill list no longer has it.
+/// SEE-ALSO: apps/desktop/src/bin/native_modal_demo/new_coordinator.rs (`demo_guide`).
 pub const COORDINATOR_PLAYBOOK_MD: &str = include_str!("playbook.md");
-pub const COORDINATOR_SKILL_OPENAI_YAML: &str =
-    include_str!("../../../skills/ghostex-coordinator/agents/openai.yaml");
 
 /// The bundled skill every coordinator works by (the name is written once, in
 /// packages/gx-chat-core/src/composer/skill_invocation.rs).
@@ -354,26 +354,12 @@ fn orchestrator_skill_agent(family: &str) -> Option<&'static str> {
     }
 }
 
-/// Installs the orchestrator skill for `family` ([`ensure_bundled_skill_installed`]).
-pub fn ensure_coordinator_skill_installed(
-    paths: &GxserverPaths,
-    family: &str,
-) -> Result<PathBuf, DomainStateError> {
-    ensure_bundled_skill_installed(
-        paths,
-        family,
-        COORDINATOR_SKILL_NAME,
-        COORDINATOR_SKILL_MD,
-        COORDINATOR_SKILL_OPENAI_YAML,
-    )
-}
-
 /// Installs the bundled skill `name` for `family`: one copy in `~/.agents/skills`, written from
 /// this build (`skill_md`, `openai_yaml`) when it is missing, and a link in the agent's own skills
 /// folder when the agent does not read `~/.agents/skills` itself (the shape Settings installs
-/// make). An existing copy is left as it is: the startup refresh keeps it equal to GitHub main
-/// (agent_skills_remote.rs). Used for the skills a role is handed in its first message: the
-/// orchestrator playbook and the GBot playbook (gbots/skill.rs).
+/// make). An existing copy is left as it is. Since the skills were retired for CLI help
+/// (2026-11-20, Q4262) it is used only for the GBot playbook a chat from an older computer still
+/// names in its first message (gbots/skill.rs).
 pub fn ensure_bundled_skill_installed(
     paths: &GxserverPaths,
     family: &str,

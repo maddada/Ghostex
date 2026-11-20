@@ -8,7 +8,9 @@ use crate::ghostex_cli::rpc::{CliError, CliResult};
 /// User: "i hate saying 'inline html' and 'inline q' and inline graphs", then "ghostex page / gx page, ghostex form / gx form, ghostex visuals / gx visuals", everywhere: agents understand the new words, the old ones keep working quietly, and agents use the new names when they talk to the user.
 /// CDXC:AgentGuide 2026-11-19 DECISION:
 /// User picked "Live page" (Q4207, Q4208) for what the decision above named Ghostex page / gx page, superseding that part; the guide names Live pages and lists the old words beside them.
-/// SEE-ALSO: server/src/agents/ghostex_note.rs (the note and the browser setting), skills/ghostex-agent-guide/SKILL.md.
+/// CDXC:AgentSkills 2026-11-20 DECISION:
+/// User (Q4262 "B"): Ghostex's own skills are retired for CLI help, superseding the "installing Ghostex skills for the user" part of Q1065 above: the guide's Guides section names the `ghostex … guide` to read for each job instead, and the one remaining skill, `ghostex`, only sends an agent here.
+/// SEE-ALSO: server/src/agents/ghostex_note.rs (the note and the browser setting), skills/ghostex/SKILL.md.
 const GUIDE: &str = "Ghostex agent guide
 
 You run inside Ghostex, an app where the user runs coding agents in sessions listed in a sidebar, as a chat or a terminal. Use this only as the user asks.
@@ -22,7 +24,7 @@ Show things in the chat (use these names with the user; older words mean the sam
 
 Open a page you built (a site or app preview)
 {browser}
-- Ghostex browser: `ghostex browser open <url>` opens or reuses a tab in the project's Browser. To inspect or drive it (snapshot, console, click, fill, screenshot) use the ghostex-embedded-browser-use skill (`ghostex browser install-skill`) or `ghostex browser --help`.
+- Ghostex browser: `ghostex browser open <url>` opens or reuses a tab in the project's Browser. To inspect or drive it (snapshot, console, click, fill, screenshot) read `ghostex browser --help`.
 - Their default browser: the system opener (open, xdg-open or start).
 - If the Ghostex browser can't open it, say what failed; don't switch browsers on your own.
 
@@ -38,8 +40,9 @@ Secrets
 Steps only the user can do
 - A sudo command, a phone tap, a sign-in, a check by eye: unasked, run `ghostex needs-you add \"<what to do>\" --detail \"<why>\" [--command \"…\"]` and list it under Needs you in your reply. It sits above the chat box with a Done button; the answer arrives as \"Q<n>: Done\". Done: `ghostex needs-you done Q<n>`; not needed: `ghostex needs-you drop Q<n>`.
 
-Ghostex skills
-- Install when wanted: `ghostex visual install-skill` (ghostex-visuals), `ghostex browser install-skill` (ghostex-embedded-browser-use), `ghostex browser-use install-skill` (other browsers through Cua Driver), `ghostex computer-use install-skill` (drive desktop apps), `ghostex agents-orchestration install-skill` (ghostex-agents), `ghostex guide install-skill` (ghostex-help).
+Guides (built into this Ghostex; read the one for the job)
+- `ghostex agents guide` (other agents, reading a thread, renaming a session), `ghostex coordinator guide` (if you are one), `ghostex help guide` (explain Ghostex, change its settings for the user), `ghostex board guide` (Project Board beads), `ghostex secret guide`, `ghostex spaceo guide` (a Mac app on a hidden display).
+- Pages in Chrome, Edge or an Electron app, and desktop apps: read the `cua-driver` skill.
 
 Anything else
 - `ghostex guide` explains Ghostex; `ghostex settings get <key>` / `set <key> <value>` read and change settings; `ghostex --help` lists every command, `ghostex <command> --help` one area.
@@ -70,7 +73,7 @@ pub fn agent_guide_command(args: &[String]) -> CliResult<()> {
             Ok(())
         }
         Some("help" | "-h" | "--help") => {
-            println!("Usage: ghostex agent-guide\n       ghostex agent-guide install-skill [--json]\n\nPrint what an agent running in Ghostex can do with the ghostex CLI: Live pages, Ghostex forms and visuals in the chat, the browser, other agents, secrets, Ghostex skills and Ghostex Help. install-skill installs the ghostex-agent-guide skill, which gives agents Ghostex can't hand a launch note the same short note.");
+            println!("Usage: ghostex agent-guide\n       ghostex agent-guide install-skill [--json]\n\nPrint what an agent running in Ghostex can do with the ghostex CLI: Live pages, Ghostex forms and visuals in the chat, the browser, other agents, secrets, the guide for each job and Ghostex Help. install-skill installs the ghostex skill (/ghostex, $ghostex in Codex), which sends any agent here.");
             Ok(())
         }
         Some(other) => Err(CliError::Other(format!(

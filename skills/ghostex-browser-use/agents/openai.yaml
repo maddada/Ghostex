@@ -1,7 +1,0 @@
-interface:
-  display_name: 'Ghostex Browser Use'
-  short_description: 'Drive browser pages with the cua-driver skill and CLI'
-  default_prompt: 'Use $ghostex-browser-use to operate a browser page: read the cua-driver skill and its BROWSER.md, and act through the cua-driver CLI, not MCP.'
-
-policy:
-  allow_implicit_invocation: false

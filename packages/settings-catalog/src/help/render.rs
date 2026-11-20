@@ -120,7 +120,7 @@ fn render_entry(entry: &CatalogEntry) -> String {
     )
 }
 
-/// `skills/ghostex-help/references/settings.md`, without the settings held until their release
+/// `server/src/ghostex_cli/guide/settings.md`, without the settings held until their release
 /// (`HELD_FROM_HELP_FILES`).
 pub fn settings_markdown() -> String {
     let catalog = super::published_catalog();
@@ -175,7 +175,7 @@ pub fn settings_markdown() -> String {
     trim_double_newline(text)
 }
 
-/// `skills/ghostex-help/references/hotkeys.md`, with the descriptions held until their release
+/// `server/src/ghostex_cli/guide/hotkeys.md`, with the descriptions held until their release
 /// (`HELD_HOTKEY_WORDING`).
 pub fn hotkeys_markdown() -> String {
     let catalog = super::published_catalog();

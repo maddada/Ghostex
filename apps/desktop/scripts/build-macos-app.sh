@@ -180,22 +180,8 @@ completion_sound_assets=(
 )
 
 bundled_cli_skill_assets=(
-	ghostex-browser-use
-	ghostex-embedded-browser-use
-	ghostex-computer-use
-	ghostex-spaceo
-	ghostex-cli
-	ghostex-help
-	ghostex-agents
-	ghostex-manage-beads
-	ghostex-auto-rename-session
-	ghostex-move-codex-session
-	ghostex-manage-beads
-	ghostex-visuals
-	ghostex-secrets
-	ghostex-agent-guide
-	ghostex-coordinator
-	ghostex-gbots
+	# CDXC:AgentSkills 2026-11-20: Ghostex's own skills are retired for CLI help (Q4262); only `ghostex` ships.
+	ghostex
 )
 
 validate_completion_sound_assets() {

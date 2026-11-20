@@ -971,7 +971,12 @@ async fn a_session_on_a_connected_computer_is_made_a_coordinator_there() {
             .join("ghostex-coordinator")
             .join("SKILL.md")
     };
-    assert!(skill(&remote).is_file(), "installed on the other computer");
+    // The coordinator skill is retired for CLI help (CDXC:AgentSkills 2026-11-20, Q4262): a
+    // promoted coordinator reads `ghostex coordinator guide`, so neither computer installs it.
+    assert!(
+        !skill(&remote).is_file(),
+        "not installed on the other computer"
+    );
     assert!(!skill(&local).is_file(), "not on this one");
 }
 
