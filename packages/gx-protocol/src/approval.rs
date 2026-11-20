@@ -440,6 +440,11 @@ pub struct OpenOwnerSessionParams {
     /// unless the key may open door sessions only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
+    /// The computer's name now, as its app calls it ("Macbook 16 (Ghostex app)"): the key's
+    /// label is kept current with it once the signature checks out, so "approve it in Ghostex on
+    /// …" names the computer as it is called today. Older apps don't send it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 /// `scope` on `/api/enrollOwnerKey` and `/api/openOwnerSession`: pairing codes, approvals and

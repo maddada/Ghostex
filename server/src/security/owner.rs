@@ -86,6 +86,25 @@ impl std::fmt::Display for OwnerError {
     }
 }
 
+/*
+CDXC:Security 2026-11-20 FIX:
+The user's Mac, renamed to "Macbook 16", was still named "Mohamads-MacBook-Pro-2" in M7-Desktop's "approve it in Ghostex on …", the name its key was enrolled under weeks before: a key's label was written once, at enrollment. The app now sends the computer's name each time its key opens a session, and the label follows it once the signature checks out (only the key's holder can rename it; it is a display name and grants nothing). A phone's label is left alone.
+*/
+/// The label an app sent with its owner session (`OpenOwnerSessionParams::label`), cleaned for
+/// showing: one line, no control characters, at most 80 characters. `None` when nothing is left.
+pub fn current_key_label(label: &str) -> Option<String> {
+    let cleaned: String = label
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let cleaned: String = cleaned.chars().take(80).collect();
+    let cleaned = cleaned.trim().to_string();
+    (!cleaned.is_empty()).then_some(cleaned)
+}
+
 impl SecurityState {
     /*
     CDXC:Security 2026-11-08 DECISION:
@@ -125,12 +144,14 @@ impl SecurityState {
     User (after the review of the m7-arch unlock): "Old/pre-16-Nov owner keys get door-only sessions on new gxservers, so they can never open a full owner session." The scope was never part of what the key signs, so a signature relayed from another computer without `scope` opened a full owner session (every capability, no end) wherever the key was enrolled without one (every key from an app before 16 Nov, like this app's old shared key). Every owner session is now a door session: pairing codes, approvals and paired devices only, lapsing after `DOOR_SESSION_TTL_MS`. Apps since 16 Nov ask for nothing else; an app from before (11.2.2 and earlier) gets the door session too, and its other calls fall back to the token file. `scope` is still read for older callers and changes nothing.
     */
     /// Checks the owner key's signature over the challenge and mints a door session (the only
-    /// kind of owner session since 17 Nov, above).
+    /// kind of owner session since 17 Nov, above). `label`: the computer's name now, as its app
+    /// sends it (CDXC:Security 2026-11-20 at [`current_key_label`]).
     pub fn open_owner_session(
         &self,
         key_id: &str,
         challenge: &str,
         signature_b64: &str,
+        label: Option<&str>,
         now_ms: u64,
     ) -> Result<OpenOwnerSessionResult, OwnerError> {
         if !self.owner_challenges.take(challenge, now_ms) {
@@ -146,6 +167,13 @@ impl SecurityState {
         let payload = owner_session_signing_payload(&self.server_id, challenge, key_id)
             .map_err(|_| OwnerError::BadChallenge)?;
         verify_approval_signature(&key, &payload, signature_b64).map_err(OwnerError::Key)?;
+        if let Some(label) = label.and_then(current_key_label) {
+            if label != key.label && !matches!(key.platform.as_str(), "ios" | "android") {
+                let mut renamed = key.clone();
+                renamed.label = label;
+                let _ = self.owner_keys.insert(renamed);
+            }
+        }
         // Door sessions only (CDXC:Security 2026-11-17 above; review M2 in security/policy.rs).
         let until = now_ms + super::DOOR_SESSION_TTL_MS;
         let token = self.session_tokens.mint_door(&key.device_id, until, now_ms);
