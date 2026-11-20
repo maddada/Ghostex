@@ -135,7 +135,11 @@ pub fn is_agent_conversation(message: &ChatMessage) -> bool {
     if message.role != ChatRole::User {
         return false;
     }
-    let text = crate::transcript::prose::prose_markdown(&message.blocks);
+    // Without Ghostex's notes: a message that carries them (a held note's own sender block among
+    // them) ends in the block, not in its sender block (the #677 review).
+    let text = crate::session::appended_notes::without_notes(
+        &crate::transcript::prose::prose_markdown(&message.blocks),
+    );
     let body = js_trim(&text);
     body.starts_with("Ghostex thread report:")
         || crate::transcript::agent_message::parse_inter_agent_message(body).is_some()

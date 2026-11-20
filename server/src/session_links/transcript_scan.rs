@@ -228,6 +228,8 @@ impl Scanner {
 /// Another agent's message on a user row (its sender block above or below the body, or a
 /// `<cross-session-message>` envelope: a forwarded brief too) or a Ghostex thread report.
 fn is_agent_message(text: &str) -> bool {
+    // Without Ghostex's notes, whose held notes carry sender blocks of their own (the #677 review).
+    let text = ghostex_gx_chat_core::session::appended_notes::without_notes(text);
     let text = text.trim();
     text.starts_with("Ghostex thread report:")
         || ghostex_gx_chat_core::transcript::agent_message::parse_inter_agent_message(text)
