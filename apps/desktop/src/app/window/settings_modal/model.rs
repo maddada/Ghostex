@@ -42,6 +42,7 @@ pub(crate) enum SettingsTabId {
     Agents,
     Accounts,
     Autopilot,
+    Boosts,
     Collab,
     Secrets,
     Security,
@@ -109,7 +110,7 @@ impl SettingsTabId {
     /// `RailTier`) ending with About, then the Extensions page (the catalog) at the rail's bottom with the pages
     /// that fold under it ([`Self::EXTENSIONS_GROUP`]). Pages the shell filters (OS Integration,
     /// Connectors, Debugging, the built-in extensions' pages) leave the rail while they are off.
-    pub(crate) const RAIL_ORDER: [SettingsTabId; 35] = [
+    pub(crate) const RAIL_ORDER: [SettingsTabId; 36] = [
         SettingsTabId::Updates,
         SettingsTabId::Experience,
         SettingsTabId::Theme,
@@ -117,6 +118,7 @@ impl SettingsTabId {
         SettingsTabId::SizeZoom,
         SettingsTabId::WindowLayout,
         SettingsTabId::Chat,
+        SettingsTabId::Boosts,
         SettingsTabId::Sidebar,
         SettingsTabId::Terminal,
         SettingsTabId::FilesLinks,
@@ -184,6 +186,7 @@ impl SettingsTabId {
             | SettingsTabId::Sidebar
             | SettingsTabId::Terminal
             | SettingsTabId::FilesLinks
+            | SettingsTabId::Boosts
             | SettingsTabId::Projects => RailTier::Working,
             SettingsTabId::Hotkeys | SettingsTabId::Dictation | SettingsTabId::VoiceAgent => {
                 RailTier::KeyboardVoice
@@ -257,6 +260,7 @@ impl SettingsTabId {
             SettingsTabId::Agents => "agents",
             SettingsTabId::Accounts => "accounts",
             SettingsTabId::Autopilot => "autopilot",
+            SettingsTabId::Boosts => "boosts",
             SettingsTabId::Collab => "collab",
             SettingsTabId::Secrets => "secrets",
             SettingsTabId::Security => "security",
@@ -313,6 +317,7 @@ impl SettingsTabId {
             SettingsTabId::Agents => "Agents",
             SettingsTabId::Accounts => "Accounts",
             SettingsTabId::Autopilot => "Autopilot",
+            SettingsTabId::Boosts => "Boosts",
             SettingsTabId::Collab => "Collab",
             SettingsTabId::Secrets => "Secrets",
             SettingsTabId::Security => "Security",
@@ -354,6 +359,7 @@ impl SettingsTabId {
             SettingsTabId::Agents => "modals/settings/code-dots.svg",
             SettingsTabId::Accounts => "modals/settings/users.svg",
             SettingsTabId::Autopilot => "modals/settings/plane.svg",
+            SettingsTabId::Boosts => "modals/settings/sparkles.svg",
             SettingsTabId::Collab => "modals/settings/users-group.svg",
             SettingsTabId::Secrets => "modals/settings/key.svg",
             SettingsTabId::Security => "modals/settings/shield-check.svg",
@@ -381,6 +387,9 @@ pub(crate) struct SettingsOpenRequest {
     /// A section to scroll to (`MainSettingsScrollTargetId` for the General pages, which also
     /// picks the page that renders it: `SettingsStore::initial_tab`).
     pub(crate) initial_section: Option<String>,
+    /// Text for a new Boost (Save as Boost on selected text), with `initialSection: "newBoost"`
+    /// (tabs/boosts.rs).
+    pub(crate) initial_boost_text: Option<String>,
     /// `createTag`: open Sidebar Tags' New tag form on arrival.
     pub(crate) initial_sidebar_tags_action: Option<String>,
     pub(crate) initial_search_query: Option<String>,
@@ -449,6 +458,7 @@ impl SettingsOpenRequest {
                 .and_then(Value::as_str)
                 .and_then(SettingsTabId::from_id),
             initial_section: optional_text(message, "initialSection"),
+            initial_boost_text: optional_text(message, "initialBoostText"),
             initial_sidebar_tags_action: optional_text(message, "initialSidebarTagsAction")
                 .filter(|action| action == "createTag"),
             initial_search_query: optional_text(message, "initialSearchQuery"),
@@ -628,6 +638,7 @@ mod tests {
                     "Working",
                     vec![
                         "Chat",
+                        "Boosts",
                         "Sidebar & Sessions",
                         "Terminal",
                         "Files & Links",

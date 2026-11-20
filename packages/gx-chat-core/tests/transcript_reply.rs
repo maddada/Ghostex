@@ -15,7 +15,10 @@ fn labels(rows: &[ghostex_gx_chat_core::composer::reference_menu::ReferenceMenuR
 #[test]
 fn reply_follows_add_to_chat_when_text_is_selected() {
     let rows = transcript_menu_rows(None, "the selected words", false);
-    assert_eq!(labels(&rows), ["Copy", "Add to Chat", "Reply"]);
+    assert_eq!(
+        labels(&rows),
+        ["Copy", "Add to Chat", "Reply", "Save as Boost"]
+    );
     let reply = serde_json::to_value(&rows[2]).unwrap();
     assert_eq!(
         reply["command"],
@@ -29,7 +32,8 @@ fn reply_is_absent_without_a_selection_and_disabled_with_add_to_chat() {
     assert_eq!(labels(&transcript_menu_rows(None, "", false)), ["Copy"]);
     let rows = transcript_menu_rows(None, "words", true);
     let disabled: Vec<_> = rows.iter().map(|row| row.disabled).collect();
-    assert_eq!(disabled, [Some(false), Some(true), Some(true)]);
+    // Save as Boost leaves the chat box alone, so an open question does not turn it off.
+    assert_eq!(disabled, [Some(false), Some(true), Some(true), Some(false)]);
 }
 
 #[test]

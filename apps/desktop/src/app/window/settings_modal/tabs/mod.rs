@@ -5,6 +5,7 @@ pub(crate) mod accounts;
 pub(crate) mod actions;
 pub(crate) mod agents;
 pub(crate) mod autopilot;
+mod boosts;
 mod autopilot_log;
 pub(crate) mod cloud_boxes;
 pub(crate) mod collab;
@@ -75,6 +76,7 @@ pub(crate) fn settings_tab_view(
         SettingsTabId::Extensions => extensions::extensions_tab_view(store, window, cx),
         SettingsTabId::Accounts => accounts::accounts_tab_view(store, window, cx),
         SettingsTabId::Autopilot => autopilot::autopilot_tab_view(store, cx),
+        SettingsTabId::Boosts => boosts::boosts_tab_view(store, cx),
         SettingsTabId::Collab => collab::collab_tab_view(store, cx),
         SettingsTabId::Secrets => secrets::secrets_tab_view(store, window, cx),
         SettingsTabId::Security => security::security_tab_view(store, cx),

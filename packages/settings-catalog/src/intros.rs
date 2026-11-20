@@ -24,6 +24,7 @@ pub const PAGE_INTROS: &[(&str, &str)] = &[
     ("hotkeys", "Every keyboard shortcut in Ghostex, to look up or change."),
     ("agents", "The coding agents Ghostex runs: which are on, their defaults, approvals and resume hooks."),
     ("accounts", "Your agent accounts, their usage, and moving on when one hits a limit."),
+    ("boosts", "The pills that ask the agent for a Live page, a chart, a browser run and more: edit what each one tells the agent, or make your own."),
     ("autopilot", "Keeps your sessions going while you're away, within limits you set, and logs what it did."),
     ("collab", "Share a chat through a link that opens in a browser, and what guests may do in it."),
     ("secrets", "Where Ghostex reads keys from (1Password), and how agents ask you for a secret privately."),

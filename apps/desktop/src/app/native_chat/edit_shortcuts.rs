@@ -321,7 +321,6 @@ impl NativeChatView {
             });
         self.note_input
             .iter()
-            .chain(self.boost_editor_input.iter().map(|(_, input)| input))
             .chain(self.answer_input.iter().map(|(_, input)| input))
             .chain(self.async_answer_input.iter().map(|(_, input)| input))
             .chain(self.form_inputs.values().map(|entry| &entry.input))
@@ -590,7 +589,6 @@ impl NativeChatView {
         self.input
             .iter()
             .chain(self.note_input.iter())
-            .chain(self.boost_editor_input.iter().map(|(_, input)| input))
             .chain(self.answer_input.iter().map(|(_, input)| input))
             .chain(self.async_answer_input.iter().map(|(_, input)| input))
             .chain(self.form_inputs.values().map(|entry| &entry.input))

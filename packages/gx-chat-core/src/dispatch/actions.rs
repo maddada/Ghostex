@@ -217,6 +217,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::ToggleBoost
         | ActionKind::SetBoostTab
         | ActionKind::RefreshBoosts
+        | ActionKind::SaveAsBoost
         | ActionKind::DismissBoostHint
         | ActionKind::DismissCoordinatorQuality
         | ActionKind::SetCollabGuest
@@ -410,6 +411,7 @@ fn clears_error(kind: &ActionKind) -> bool {
         | ActionKind::ToggleBoost
         | ActionKind::SetBoostTab
         | ActionKind::RefreshBoosts
+        | ActionKind::SaveAsBoost
         | ActionKind::DismissBoostHint
         | ActionKind::DismissCoordinatorQuality
         | ActionKind::SetCollabGuest
@@ -492,6 +494,7 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::ToggleBoost
             | ActionKind::SetBoostTab
             | ActionKind::RefreshBoosts
+            | ActionKind::SaveAsBoost
             | ActionKind::DismissBoostHint
             | ActionKind::DismissCoordinatorQuality
             | ActionKind::SetCollabGuest

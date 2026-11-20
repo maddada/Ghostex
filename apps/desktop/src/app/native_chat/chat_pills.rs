@@ -178,6 +178,7 @@ fn trigger_id(id: &str) -> &'static str {
         super::coordinator_intro::INTRO_MENU => super::coordinator_intro::INTRO_TRIGGER,
         super::where_pill::WHERE_MENU => super::where_pill::WHERE_TRIGGER,
         ghostex_gx_chat_core::extras::autopilot::AUTOPILOT_PILL => AUTOPILOT_TRIGGER,
+        super::boosts::BOOST_MENU => super::boosts::BOOST_TRIGGER,
         _ => "chat-pill-subagents",
     }
 }
@@ -219,6 +220,7 @@ fn menu_width(id: &str) -> f32 {
         super::relayed_approval::APPROVALS_MENU => super::relayed_approval::APPROVALS_MENU_WIDTH,
         super::coordinator_intro::INTRO_MENU => super::coordinator_intro::INTRO_MENU_WIDTH,
         super::where_pill::WHERE_MENU => super::where_pill::WHERE_MENU_WIDTH,
+        super::boosts::BOOST_MENU => super::boosts::BOOST_MENU_WIDTH,
         _ => 520.0,
     }
 }
@@ -772,6 +774,12 @@ impl NativeChatView {
         if id == super::where_pill::WHERE_MENU {
             return self.where_menu_height();
         }
+        if id == super::boosts::BOOST_MENU {
+            return self.boost_menu_height();
+        }
+        if id == super::boosts::BOOST_PREVIEW {
+            return self.boost_preview_height();
+        }
         if id == "filesLinks" {
             let scale = ChatAppearance::current(&self.snapshot).scale;
             let pane = f32::from(self.bounds.get().size.height) / scale;
@@ -806,6 +814,8 @@ impl NativeChatView {
             super::relayed_approval::APPROVALS_MENU => self.approvals_menu_body(p, cx),
             super::coordinator_intro::INTRO_MENU => self.coordinator_intro_menu_body(p, cx),
             super::where_pill::WHERE_MENU => self.where_menu_body(p, cx),
+            super::boosts::BOOST_MENU => self.boost_menu_body(p, window, cx),
+            super::boosts::BOOST_PREVIEW => self.boost_preview_body(p),
             super::coordinator_board::BOARD_MENU => self.coordinator_board_menu_body(p, cx),
             super::coordinator_board::BOARD_COLUMNS_MENU => self.board_columns_body(p, cx),
             super::session_details::SESSION_DETAILS_MENU => {
@@ -846,6 +856,9 @@ impl NativeChatView {
         }
         if trigger == super::coordinator_intro::INTRO_TRIGGER {
             self.coordinator_intro_menu_closed(cx);
+        }
+        if trigger == super::boosts::BOOST_TRIGGER {
+            self.boost_preview = None;
         }
     }
 }

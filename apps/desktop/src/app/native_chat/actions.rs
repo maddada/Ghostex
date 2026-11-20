@@ -508,6 +508,11 @@ impl NativeChatView {
                 json!({"type":"insertSkill","name":action.command["name"],"text":self.draft,"start":start,"end":end}),
                 cx,
             );
+        } else if action.command["type"] == "saveAsBoost" {
+            // Save as Boost on selected words (gx-chat-core `composer/transcript_menu.rs`): a new
+            // Boost holding them, named in Settings > Boosts (tabs/boosts.rs).
+            let text = action.command["text"].as_str().unwrap_or_default().to_string();
+            self.open_boost_settings(Some("newBoost".to_string()), Some(text), cx);
         } else if action.command["type"] == "copyText" {
             // Copy Path, Copy URL and the transcript's Copy, with the feedback every other chat copy gives.
             if let Some(text) = action.command["text"].as_str() {
