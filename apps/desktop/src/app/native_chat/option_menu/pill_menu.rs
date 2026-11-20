@@ -23,7 +23,11 @@ impl ChatOptionMenuPanel {
         let height = pill["height"].as_f64().unwrap_or(0.0) as f32;
         let (appearance, chat) = {
             let menu = self.menu.read(cx);
-            (menu.appearance.clone(), menu.chat.clone())
+            let strip_menu = menu.pill().is_some_and(|pill| pill.starts_with("chat-pill-"));
+            (
+                body_appearance(menu.appearance.clone(), strip_menu),
+                menu.chat.clone(),
+            )
         };
         let body = chat
             .update(cx, |chat, cx| {
@@ -85,4 +89,26 @@ impl ChatOptionMenuPanel {
             menu.refit_panel_height(depth, outer, rows, cx);
         });
     }
+}
+
+/// The look a pill menu's body is drawn in. A menu the chat box's pill strip opened sits on the
+/// sidebar dropdowns' surface, which follows the app's theme (render.rs `strip_menu`), so its body
+/// takes that theme too; any other menu keeps the chat's.
+/// CDXC:Boosts 2026-11-20 WHY: with the chat in light and the app in dark, the Boost menu stayed
+/// dark (the app's surface) while its rows took the light chat's dark ink, so every title was
+/// unreadable. The body now reads its colours from the surface it sits on; the chat's scale, font
+/// and window glass carry over.
+fn body_appearance(
+    appearance: crate::app::native_chat::appearance::ChatAppearance,
+    strip_menu: bool,
+) -> crate::app::native_chat::appearance::ChatAppearance {
+    let light = crate::CHROME_LIGHT_APPEARANCE.load(std::sync::atomic::Ordering::Relaxed);
+    if !strip_menu || light == appearance.light {
+        return appearance;
+    }
+    let mut body = crate::app::native_chat::appearance::ChatAppearance::for_variant(light);
+    body.scale = appearance.scale;
+    body.font = appearance.font;
+    body.window_glass = appearance.window_glass;
+    body
 }
