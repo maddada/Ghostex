@@ -61,7 +61,8 @@ commands; each step below says which one to run.
 - **How long:** about 10 minutes after the build (the build adds about 1 to 6,
   the typecheck before it about 1 to 3).
 - **Windows and Linux** run a short GUI pass of their own in parallel (see
-  "Windows pass" and "Linux pass" below), and the phone gets its own step (7).
+  "Windows pass" and "8. Linux GUI pass" below), and the phone gets its own
+  step (7), on the Android emulator on m7-arch.
 
 ## Before the first step
 
@@ -300,7 +301,9 @@ say them in the report. `$ref` is a step's `globalRef` (`$S show`).
 | 4.1, 4.2 | Stop if keys don't land; otherwise Warn |
 | 5.1 to 5.4 | Stop |
 | 6.1, 6.2 | Stop if stray text is left in the input box; otherwise Warn |
-| 7 Phone | to be written (see step 7) |
+| 7.1 Phone launch | Stop on a crash |
+| 7.2 Phone connect | NOT RUN (owner approval) unless the user pairs it |
+| 7.3 Phone chat (demo) | Warn |
 
 ### 1. The last crash (crash checks; see "Keeping the list")
 
@@ -512,13 +515,77 @@ answer, printing the reply's model. On the 11.12.0 run the defaults waited
 until the clean-up and every new Claude session in between ran on Haiku.
 The picker label and the empty input box are still yours to read in the GUI.
 
-### 7. Phone (Android emulator on Arch Chungus)
+### 7. The phone (Android emulator on the Arch PC, m7-arch)
 
-*Placeholder: the coordinator brings this step's text and script from Arch
-Chungus.* Every release ships an over-the-air phone update and nothing above
-opens the phone app. The step runs on the Android emulator on the Arch machine,
-not on the Mac: open a chat, send a message, see the reply. Its On failure
-column, commands and pass check go here when they arrive.
+*From Arch Chungus's trial on m7-arch (2026-11-20), its text as written. The
+scripts run on m7-arch from the paths below; this repo keeps copies in
+`scripts/android/` (put them back at those paths if m7-arch loses them).*
+
+Runs on the Arch machine, not the MacBook (user, 11.12.0 run). Everything lives under
+`~/.local/share/agent-work/android/` (SDK, AVD `gx-smoke-api35`, scripts); no sudo, headless,
+nothing on the user's screen. Its adb server listens on port 5047 and the emulator on 5682, so it
+never touches `~/Android/Sdk` or another agent's adb.
+
+1. First time only: `~/.local/share/agent-work/android/scripts/setup-sdk.sh` (cmdline-tools,
+   platform-tools, emulator, `system-images;android-35;google_apis;x86_64`, the AVD). It stops
+   with the exact `usermod` line if `/dev/kvm` isn't writable.
+2. The published `ghostex-android.apk` is arm64-only and **can't run on the x86_64 emulator**: it
+   dies at launch in the ARM translator (`berberis: Undefined instruction 0xd5380600`, an `MRS
+   ID_AA64ISAR0_EL1` CPU-feature read in `libgojni.so`, the Easy Connect bridge). Build the
+   same tag for x86_64: `scripts/build-x86_64-apk.sh vX.Y.Z` (about 10 minutes cold: shared
+   clones of the tag, the chat core wasm, Gradle release build, a throwaway signing key). It
+   needs the gomobile bridge staged in the main checkout
+   (`apps/mobile/app/modules/ghostex-native/android/{libs,src/main/jniLibs}`) and the bridge
+   unchanged since it was staged (`git log <stage date>.. -- apps/mobile/tailcat-bridge`).
+   Say in the report that the phone ran this x86_64 build of the tag, not the shipped file.
+3. `scripts/phone-smoke.sh up` (cold boot about 3 minutes; on a first boot tap Wait on "System
+   UI isn't responding"), then `GX_SMOKE_DIR=$W phone-smoke.sh install ~/.local/share/agent-work/android/apk/ghostex-x86_64-vX.Y.Z.apk`
+   and `phone-smoke.sh launch`. Screenshots: `phone-smoke.sh shot <name>` (full size,
+   `adb exec-out screencap -p`); find tap targets with `phone-smoke.sh ui` (the uiautomator
+   dump: `text=`/`content-desc=` and `bounds=`), type with `phone-smoke.sh text '...'`.
+4. **7.1 Launch.** The first screen (Ghostex, Scan the code, Use Tailscale, Use SSH details, Try
+   demo experience) shows and `adb logcat -b crash` has no `io.ghostex` line. **Stop** on a crash.
+5. **7.2 Connect, up to the approval.** Machines > Add a computer > Scan. Every real route
+   needs the owner: a Connect a Phone code only the computer's window makes, then Approve on
+   the computer; Use SSH details needs the user's password and reaches the real gxserver.
+   Agents stop at the Scan the code screen (screenshot) and never approve, mint codes or type
+   passwords. Mark the connected chat NOT RUN (owner approval) unless the user pairs it.
+6. **7.3 Chat (demo).** Try demo experience > Atlas API > the session; type a message, Send;
+   **Pass:** the bubble shows, a reply follows, the box empties. **Warn** otherwise.
+7. Clean up: `phone-smoke.sh uninstall`, `phone-smoke.sh down`. Keep the SDK and AVD.
+
+### 8. Linux GUI pass (GPUI web build, headless, Arch)
+
+*From Arch Chungus's trial on m7-arch (2026-11-20), its text as written. The
+`webdrive` scripts run on m7-arch from the paths below; this repo keeps copies
+in `scripts/linux/`.*
+
+Steps 2, 4.1 and 5 against a throwaway gxserver and the GPUI web build in headless Chromium.
+1. `cargo xtask test-server start --name <n> --projects <scratch folder>`, `cargo xtask
+   web-build`, then `source …/test-servers/<n>/env.sh && ghostex web --dist-dir
+   "$PWD/apps/gpui-web/www/dist" --no-open --port <free>` (backgrounded). Each run prints a
+   new `#bootstrap=` key; a second tab with the same key never loads ("Sessions are taking
+   longer than usual to load"): restart `ghostex web` for a new tab.
+2. Create Claude threads in a project folder Claude already trusts (the repo): in a new
+   folder Claude stops at its own "trust this folder" prompt, which agents don't answer.
+3. Send messages by typing in the page's chat box: from an agent's shell the CLI refuses
+   `agents send` and `send-session-chat-message` on the test server ("its session can't be
+   identified", the 2026-11-19 guard).
+4. Drive it with `~/.local/share/agent-work/Ghostex/smoke/scripts/webdrive-chrome.sh start
+   <url>` and `webdrive.mjs click|type|key|shot|a11y|act` (real CDP mouse and key events;
+   `a11y` reads `window.gpuiA11y`). Paste: `webdrive.mjs eval` a `ClipboardEvent('paste')` with
+   a `DataTransfer` on `document.activeElement` (the headless clipboard refuses writes).
+5. Known limits on this machine: about 15 s after a chat whose transcript has a reply opens,
+   the page's main thread pins at 100% after "Failed to poll device during resize: Timeout"
+   (SwiftShader WebGL2; the real GPU path renders blank), so read replies with `ghostex
+   read-session-chat` and screenshot only empty chats, the sidebar and terminals. The web build
+   has no Settings window and no Browser pane (5.1 and 4.2 NOT RUN there), and Ctrl+P goes to
+   a focused terminal.
+
+**Stop rule for the Linux pass: not decided yet (2026-11-20).** The web build
+can't run 4.2, 5.1 or 5.2, so those are `NOT RUN (web build)` there. Report the
+Linux lines under the Mac's, each marked `Linux`, until the coordinator writes
+the rule here.
 
 ### Windows pass: steps 2, 4 and 5 (runs beside the Mac smoke)
 
@@ -636,12 +703,6 @@ and delete `<run>\gx`. Close the real step 2 threads with
   to run it, that is a `NOT RUN`, so wait for a quiet moment instead of
   skipping it.
 - Put the Windows lines in the report under the Mac's, each marked `Windows`.
-
-### Linux pass (Arch Chungus)
-
-*Placeholder: the coordinator brings this text and its scripts from Arch
-Chungus.* Steps 2, 4 and 5 on the Arch machine, in parallel with the Mac run,
-reported in the same format as the Windows pass.
 
 ### One-time pop-ups (extras)
 
