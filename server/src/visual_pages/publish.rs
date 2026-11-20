@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::http::StatusCode;
 use serde_json::{json, Value};
 
@@ -29,7 +31,7 @@ pub(crate) const PUBLISH_VISUAL_PAGE_BODY_LIMIT_BYTES: usize =
 /// CDXC:SessionChat 2026-11-11 DECISION:
 /// User, of the dock above the chat box that lists what needs him: "and if it's just a page that i can look at (doesn't have questions) then still show it but i need to scroll to bottom and reply with Mark as seen and should have area to reply on the document of course". `ghostex show` sends `awaitsSeen: true` for a page with no `<gx-questions>` and no `ghostex.submit` of its own, and prints `"awaitsSeen": true` in its block. The kit then ends the page with a reply box and Mark as seen (kit.rs `SEEN_FOOTER`), which posts `{"seen": true, "reply": …}` through the page's answers route, so gxserver stores it and tells the publishing agent as it does a page's answers. Until then the chat counts the page as waiting (packages/gx-chat-core/src/transcript/open_questions.rs) and the page window's hidden tab shows its dot (`page_questions_left`). Only pages published from now on carry the mark: a page published before it has no `awaitsSeen` on its record or its block, so it neither shows the footer nor waits in the dock. Older apps and phones read neither field and treat the page as before.
 pub(crate) fn handle_publish_visual_page_http(
-    state: &AppState,
+    state: &Arc<AppState>,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -84,6 +86,9 @@ pub(crate) fn handle_publish_visual_page_http(
         Ok(id) => {
             if params.get("awaitsSeen").and_then(Value::as_bool) == Some(true) {
                 let _ = note_awaits_seen(&state.paths.root_dir, &id);
+            }
+            if let Some(source) = source {
+                super::retire::retire_earlier_from_same_file(state, &id, &source.to_string_lossy());
             }
             id
         }

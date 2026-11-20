@@ -46,7 +46,7 @@ use crate::session_status::TURN_COMPLETE_ATTENTION_SOURCE;
 use crate::storage::open_gxserver_database;
 
 /// Where a session's open questions are kept.
-const RUNTIME_KEY: &str = "sessionChatOpenQuestions";
+pub(crate) const RUNTIME_KEY: &str = "sessionChatOpenQuestions";
 /// Where the forms and pages the user put off "For later" are kept (form or page ids). They stay
 /// answerable but leave the count, so no pink dot, no `answer requested (n)` and no notification
 /// (the SessionStatus 2026-10-27 DECISION in gx-chat-core's questions/later.rs).
@@ -448,28 +448,42 @@ pub(crate) fn set_removed(
     id: &str,
 ) -> anyhow::Result<()> {
     let db = open_gxserver_database(&state.paths)?;
-    let mut removed = read_removed_ids(&db, project_id, session_id);
+    if remove_without_refresh(state, &db, project_id, session_id, id)? {
+        refresh(state, project_id, session_id, None);
+    }
+    Ok(())
+}
+
+/// [`set_removed`]'s lists alone, for a caller that brings the count up to date itself (`refresh`
+/// taking back a page its agent retired elsewhere). `false` when it was already removed.
+pub(crate) fn remove_without_refresh(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    project_id: &str,
+    session_id: &str,
+    id: &str,
+) -> anyhow::Result<bool> {
+    let mut removed = read_removed_ids(db, project_id, session_id);
     if removed.iter().any(|known| known == id) {
-        return Ok(());
+        return Ok(false);
     }
     removed.push(id.to_string());
     if removed.len() > REMOVED_LIMIT {
         removed.drain(..removed.len() - REMOVED_LIMIT);
     }
-    let mut later = read_later_ids(&db, project_id, session_id);
+    let mut later = read_later_ids(db, project_id, session_id);
     if later.iter().any(|known| known == id) {
         later.retain(|known| known != id);
-        write_later(state, &db, project_id, session_id, &later)?;
+        write_later(state, db, project_id, session_id, &later)?;
     }
     // A removed page is no longer opened either (`set_opened`).
-    let mut opened = read_opened_page_ids(&db, project_id, session_id);
+    let mut opened = read_opened_page_ids(db, project_id, session_id);
     if opened.iter().any(|known| known.eq_ignore_ascii_case(id)) {
         opened.retain(|known| !known.eq_ignore_ascii_case(id));
-        write_id_list(state, &db, project_id, session_id, OPENED_KEY, &opened)?;
+        write_id_list(state, db, project_id, session_id, OPENED_KEY, &opened)?;
     }
-    write_id_list(state, &db, project_id, session_id, REMOVED_KEY, &removed)?;
-    refresh(state, project_id, session_id, None);
-    Ok(())
+    write_id_list(state, db, project_id, session_id, REMOVED_KEY, &removed)?;
+    Ok(true)
 }
 
 /// The pages starred in this session's chat (`STARRED_KEY`), for the chat's frames
@@ -1348,7 +1362,20 @@ pub(crate) fn refresh(
     // For later questions still wait, but they are not counted and never notify. A mark whose
     // question was answered, withdrawn or asked again is forgotten; a snooze still running is
     // kept until its end whatever this reading says (`leave_out_later`).
-    let (open, newly) = leave_out_removed(open, newly, &removed_ids(&session));
+    // A page its agent retired stops waiting here too, also when this chat showed it only after
+    // the retire or its index had not listed it yet (visual_pages/retire.rs).
+    let mut removed = removed_ids(&session);
+    let retired = crate::visual_pages::take_back_retired_pages(
+        state,
+        &db,
+        project_id,
+        session_id,
+        open.iter()
+            .filter(|asker| asker.kind == AskerKind::Page && !removed.contains(&asker.id))
+            .map(|asker| asker.id.as_str()),
+    );
+    removed.extend(retired);
+    let (open, newly) = leave_out_removed(open, newly, &removed);
     // An opened page that waits only to be seen is still listed by every client, but not counted.
     // One whose page no longer waits (answered, its own Mark as seen, withdrawn) is forgotten.
     let opened = opened_ids(&session);
