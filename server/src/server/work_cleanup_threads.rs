@@ -2,7 +2,7 @@
 //! (`/api/answerWorkCleanupThreads`), and the pass that cleans a merged thread up by itself.
 //!
 //! CDXC:WorkMode 2026-11-20 DECISION:
-//! User, of a coordinator whose five threads each showed their own Clean up / Keep line (Q4286, picked B and C): one "N merged worktrees · Clean up all · Keep" banner per coordinator instead of one line per row, and finished threads fold away with the merged ones cleaned up by themselves. Strictly: only a worktree with no uncommitted or unpushed changes whose PR is merged; never a coordinator, never the user's own session (only a thread a coordinator started, not one it adopted), never a session that works or waits on the user; the session stays (asleep, under its coordinator), the banner says what was cleaned with Undo, and anything that fails a rule stays and shows in the banner instead. **Clean up merged threads by themselves** (`cleanUpMergedThreads`, on by default) turns the pass off.
+//! User, of a coordinator whose five threads each showed their own Clean up / Keep line (Q4286, picked B and C): one "N merged worktrees · Clean up all · Keep" banner per coordinator instead of one line per row, and finished threads fold away with the merged ones cleaned up by themselves. Strictly: only a worktree with no uncommitted or unpushed changes whose PR is merged; never a coordinator, never the user's own session (only a thread a coordinator started, not one it adopted), never a session that works or waits on the user; the session stays (asleep, under its coordinator), the banner says what was cleaned with Undo, and anything that fails a rule stays and shows in the banner instead. Then, on the default: "Ship it as the page described", so **Clean up merged threads by themselves** (`cleanUpMergedThreads`) is off by default and the banner asks until it is turned on; and manual Clean up / Clean up all skip a thread whose coordinator's message is still on its way, as this pass does.
 //!
 //! SEE-ALSO: server/src/work_mode/cleanup.rs (the stored answer, `autoCleaned`), route_http/work_links.rs
 //! (`/api/answerWorkCleanup`, one session), packages/gx-core/src/sidebar_view/threads.rs (the banner's
@@ -487,7 +487,7 @@ fn log_auto_cleanup(
     candidate: &Candidate,
     error: Option<String>,
 ) {
-    let _ = state.logger.log(GxserverLogInput {
+    let entry = GxserverLogInput {
         level,
         event: event.to_string(),
         server_id: Some(state.metadata.server_id.clone()),
@@ -500,7 +500,14 @@ fn log_auto_cleanup(
             "sessionId": candidate.session_id,
             "pullRequest": candidate.pull_request_key,
         })),
-    });
+    };
+    // A worktree removed by itself is kept in the log every time, so what went can always be
+    // traced (`log_record`); skips carry their rule as the error and are kept as it is.
+    let _ = if event == "workAutoCleanedUp" {
+        state.logger.log_record(entry)
+    } else {
+        state.logger.log(entry)
+    };
 }
 
 /// One pass: cleans up every merged thread that passes the rules. Runs after the work-mode pass,

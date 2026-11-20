@@ -1385,7 +1385,7 @@
       "section": "sessionCards",
       "sectionTitle": "Session Cards",
       "type": "boolean",
-      "default": true,
+      "default": false,
       "agentWritable": true
     },
     {

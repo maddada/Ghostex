@@ -7063,11 +7063,12 @@ second line until you answer; on the phone's session list, tap Clean up or Keep.
 A coordinator's threads share one banner under their coordinator instead: "N merged
 worktrees" with Clean up all and Keep, which answer them all at once (`ghostex issues
 cleanup-threads <coordinator> clean-up|keep`). With **Clean up merged threads by
-themselves** on (Settings > Session Cards, on by default), Ghostex removes a merged
+themselves** on (Settings > Session Cards, off by default), Ghostex removes a merged
 thread's worktree and puts the thread to sleep on its own, but only for a thread a
 coordinator started whose worktree has no uncommitted or unpushed changes and that
 neither works nor waits on you; a coordinator and your own sessions are never
-touched. The banner then says "Cleaned up N worktrees" with Undo, which puts
+touched (Clean up and Clean up all wait, too, for a thread that hasn't read its
+coordinator's last message). The banner then says "Cleaned up N worktrees" with Undo, which puts
 the worktrees back on their branches (`ghostex issues cleanup-threads <coordinator>
 undo`, or `dismiss` to hide the line); anything it could not clean up stays in the
 banner. Finished threads (PR merged, nothing running or waiting) fold behind the

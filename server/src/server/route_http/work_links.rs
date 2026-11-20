@@ -159,6 +159,8 @@ fn open_repository_db(
 /// session the way the Park action does (`isParked`, then a sleep when "Sleep session when
 /// parking" is on). A worktree with uncommitted changes is kept and the session still parks, so
 /// nothing is lost. Either answer is recorded for the PR so the offer never comes back for it.
+/// Clean up is refused for a thread whose coordinator's message has not reached it yet; the offer
+/// stays.
 pub(in crate::server) async fn answer_work_cleanup(
     state: &Arc<AppState>,
     body: &Value,
@@ -189,6 +191,21 @@ pub(in crate::server) async fn answer_work_cleanup(
         );
         if !offers_work_cleanup(&session, &key) {
             return Ok(json!({ "answered": false }));
+        }
+        // CDXC:WorkMode 2026-11-20 WHY: a thread whose coordinator's message is still on its way
+        // is woken to read it, in a worktree that would be gone; Clean up waits until it has read
+        // it, as the pass that cleans up by itself does (work_cleanup_threads.rs). Keep is fine.
+        if answer == "cleanUp" {
+            let project_id = value_text(&project, "projectId")?;
+            let session_id = value_text(&session, "sessionId")?;
+            if crate::coordinators::read_thread(&db, &project_id, &session_id)?
+                .is_some_and(|thread| thread.pending_message.is_some())
+            {
+                return Err(DomainStateError::bad_request(
+                    "This thread hasn't read its coordinator's last message yet. Clean it up once it has.",
+                )
+                .into());
+            }
         }
         (
             value_text(&project, "projectId")?,
