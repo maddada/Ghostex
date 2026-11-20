@@ -252,6 +252,9 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) {
         if details_put_away {
+            if self.session_details.docked {
+                self.swap_side_panels_in_place();
+            }
             self.session_details.docked = false;
         }
         self.pill_bounds
@@ -334,14 +337,28 @@ impl NativeChatView {
     /// The Work panel docked by any way in (its pill, a count, Show in Work): Session details,
     /// sharing the spot beside the chat, goes away (one panel at a time).
     pub(super) fn work_panel_takes_the_spot(&mut self, cx: &mut Context<Self>) {
+        if self.session_details.docked {
+            self.swap_side_panels_in_place();
+        }
         if self.session_details.wanted {
             self.session_details.docked = false;
             self.host("closeSessionDetails", json!({}), cx);
         }
     }
 
+    /// One docked panel takes the other's place: both have the same width (session_details/mod.rs
+    /// `PANEL_WIDTH`), so the next frame snaps them instead of sliding one out while the other
+    /// slides in, and the chat beside them keeps its width.
+    fn swap_side_panels_in_place(&mut self) {
+        self.board.motion.reset();
+        self.session_details.motion.reset();
+    }
+
     /// Session details opened in this chat's spot: the Work panel makes way.
     pub(crate) fn close_work_panel(&mut self, cx: &mut Context<Self>) {
+        if self.board.docked {
+            self.swap_side_panels_in_place();
+        }
         if self.board.open {
             self.board.open = false;
             cx.notify();

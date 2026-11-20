@@ -37,6 +37,13 @@ use serde_json::{Value, json};
 pub(crate) const BOARD_WIDTH: f32 = 380.0;
 /// The chat keeps at least this much (unscaled) beside a docked board; narrower, the board floats.
 const CHAT_MIN_WIDTH: f32 = 620.0;
+
+/// A pane `pane` wide (scaled) has room for a panel docked beside the chat: the Work panel's rule,
+/// which Session details follows too (session_details/mod.rs). One panel holds the spot at a time,
+/// so the other's width never counts.
+pub(super) fn side_panel_fits(pane: f32, scale: f32) -> bool {
+    pane >= (BOARD_WIDTH + CHAT_MIN_WIDTH) * scale
+}
 /// The pill's menu-toggle key and its pill-menu id (chat_pills.rs).
 pub(super) const BOARD_TRIGGER: &str = "chat-pill-board";
 pub(super) const BOARD_MENU: &str = ghostex_gx_chat_core::extras::coordinator_board::BOARD_PILL;
@@ -576,15 +583,11 @@ impl NativeChatView {
         Some(&self.snapshot["coordinatorBoard"]).filter(|board| board.is_object())
     }
 
-    /// The pane has room for the docked board beside the chat (and the docked Session details).
+    /// The pane has room for the docked board beside the chat. A docked Session details doesn't
+    /// count: the board takes its spot (`work_panel_takes_the_spot`).
     pub(super) fn board_fits(&self, p: &ChatAppearance) -> bool {
         let pane = self.session_details_pane_bounds().get().size.width.as_f32();
-        let details = if self.session_details.docked {
-            super::session_details::PANEL_WIDTH
-        } else {
-            0.0
-        };
-        pane >= (BOARD_WIDTH + CHAT_MIN_WIDTH + details) * p.scale
+        side_panel_fits(pane, p.scale)
     }
 
     /// The view the Board pill opens: the switch's pick here, else the setting, else the list.

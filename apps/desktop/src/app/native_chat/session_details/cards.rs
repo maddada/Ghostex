@@ -16,7 +16,7 @@ use serde_json::Value;
 use std::time::Duration;
 
 /// Unscaled measures, shared with `panel_height` so the floating card knows its size up front.
-const CARD_GAP: f32 = 8.0;
+pub(super) const CARD_GAP: f32 = 8.0;
 const CARD_PADDING_Y: f32 = 8.0;
 const HEADER_HEIGHT: f32 = 24.0;
 const ROW_HEIGHT: f32 = 24.0;
@@ -124,9 +124,10 @@ pub(super) fn usage_height(details: &Value) -> f32 {
     total + ROW_HEIGHT + 4.0
 }
 
-/// How far down the first tab the Context card starts, for the rings that open the panel there.
+/// How far down the first tab's scrolling cards the Context card starts, for the rings that open
+/// the panel there. The tab bar stays above the scroll, so it doesn't count.
 pub(super) fn context_offset(details: &Value, open: &mut dyn FnMut(&str, bool) -> f32) -> f32 {
-    let mut total = tabs_height(details);
+    let mut total = 0.0;
     for section in details["sections"].as_array().into_iter().flatten() {
         if section["id"] == "context" {
             break;
@@ -377,11 +378,9 @@ impl NativeChatView {
                     .child(error.to_string()),
             );
         }
-        let tabs = details["tabs"].as_array().cloned().unwrap_or_default();
-        if tabs.len() > 1 {
-            column = column.child(self.session_details_tabs(&tabs, p, cx));
-        }
-        if tabs.len() > 1 && self.session_details.tab == 1 {
+        // The tab bar is drawn above the scroll by the dock and the floating card
+        // (`session_details_tab_bar`), so it stays put while the cards scroll.
+        if len(&details, "tabs") > 1 && self.session_details.tab == 1 {
             column = column.child(self.session_details_usage(&details["usage"], p, cx));
         } else {
             for section in details["sections"].as_array().into_iter().flatten() {
@@ -393,6 +392,19 @@ impl NativeChatView {
             window.request_animation_frame();
         }
         column.into_any_element()
+    }
+
+    /// The tab bar over the scrolling cards, while the core names more than one tab.
+    pub(super) fn session_details_tab_bar(
+        &mut self,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let tabs = self.snapshot["sessionDetails"]["tabs"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        (tabs.len() > 1).then(|| self.session_details_tabs(&tabs, p, cx))
     }
 
     /// The tab bar: the core's tab names (`TABS` in gx-chat-core `session_details/document.rs`).
@@ -441,6 +453,10 @@ impl NativeChatView {
                     .on_click(cx.listener(move |this, _, _, cx| {
                         cx.stop_propagation();
                         this.session_details.tab = index;
+                        // The tab bar stays put above the scroll: the new tab starts at its top.
+                        let top = gpui::point(px(0.0), px(0.0));
+                        this.session_details.scroll.set_offset(top);
+                        this.session_details.menu_scroll.set_offset(top);
                         cx.notify();
                     })),
             );
