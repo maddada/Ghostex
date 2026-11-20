@@ -67,8 +67,8 @@ pub mod unified_sidebar;
 mod workspace_groups;
 
 pub use crate::active_project_context::{
-    active_project_context_payload, project_context_payload, quick_automations_payload,
-    quick_projectless_payload, ACTIVE_PROJECT_CONTEXT_MESSAGE_TYPE,
+    active_project_context_payload, project_context_payload, quick_automations_board_id,
+    quick_automations_payload, quick_projectless_payload, ACTIVE_PROJECT_CONTEXT_MESSAGE_TYPE,
     ACTIVE_PROJECT_CONTEXT_MESSAGE_VERSION,
 };
 pub use crate::agentbox::{

@@ -217,6 +217,10 @@ impl GhostexGpuiApp {
         if self.gx_store_run_work_mode(&command, cx) {
             return;
         }
+        // The rail's ⋯ menu, its pins and its icons' right-click menu (app/sidebar_rail/menu.rs).
+        if self.run_sidebar_rail_command(&command, cx) {
+            return;
+        }
         // The workspace tile's menu and a project's Move to workspace (gx_store/workspaces.rs).
         if self.gx_store_run_workspaces(&command, cx) {
             return;

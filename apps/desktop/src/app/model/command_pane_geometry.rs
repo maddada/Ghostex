@@ -294,7 +294,13 @@ pub(crate) fn command_pane_workspace_width(
     } else {
         0.0
     };
-    (window.bounds().size.width.as_f32() - sidebar_chrome_width).max(0.0)
+    // The rail stays beside the sidebar, shown or hidden (app/sidebar_rail/).
+    let rail = if crate::app::sidebar_rail::sidebar_rail_on() {
+        crate::app::sidebar_rail::RAIL_WIDTH
+    } else {
+        0.0
+    };
+    (window.bounds().size.width.as_f32() - sidebar_chrome_width - rail).max(0.0)
 }
 
 pub(crate) fn command_pane_panel_chrome_width(workspace_width: f32, floating: bool) -> f32 {

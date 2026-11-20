@@ -79,3 +79,41 @@ impl WebPlace {
         Self::ALL.into_iter().find(|place| place.slug() == slug)
     }
 }
+
+/// What a takeover shows in the sessions column's place (claude_web/takeover.rs): Claude's or
+/// Grok's page, or one of the app's own pages opened from the rail.
+///
+/// CDXC:Sidebar 2026-11-20 DECISION:
+/// User (rail build brief): "Agents Hub and All Automations open as full takeovers of the work area + side panel like the Claude/Grok embeds (Agents Hub stops being its own window when opened from the rail)". They share Claude's takeover instead of copying it: one page is on at a time, the sidebar, the side panel and the Commands pane step aside and come back the same way, a session opened any way turns it off, and its rail icon shows as on and turns it off again. Agents Hub opened from anywhere else (the sidebar menu, the palette, Session details) is still its own window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TakeoverPage {
+    Web(WebPlace),
+    AgentsHub,
+    AllAutomations,
+}
+
+impl TakeoverPage {
+    pub(crate) fn web(self) -> Option<WebPlace> {
+        match self {
+            Self::Web(place) => Some(place),
+            Self::AgentsHub | Self::AllAutomations => None,
+        }
+    }
+
+    /// The name the window's shell state saves it under.
+    pub(crate) fn slug(self) -> &'static str {
+        match self {
+            Self::Web(place) => place.slug(),
+            Self::AgentsHub => "agentsHub",
+            Self::AllAutomations => "allAutomations",
+        }
+    }
+
+    pub(crate) fn from_slug(slug: &str) -> Option<Self> {
+        match slug {
+            "agentsHub" => Some(Self::AgentsHub),
+            "allAutomations" => Some(Self::AllAutomations),
+            _ => WebPlace::from_slug(slug).map(Self::Web),
+        }
+    }
+}

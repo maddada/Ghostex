@@ -35,7 +35,7 @@ const BADGE_SIZE: f32 = 18.0;
 /// `assets/titlebar/<id>.svg`) in white on a filled disc of its colour, `size` across (already
 /// scaled). The tile, the menus' workspace rows and the icon rail draw this one element
 /// (Settings > Workspaces, built into the native-modal demo too, draws its own copy).
-pub(super) fn workspace_badge(icon: &str, color: gpui::Hsla, size: f32) -> AnyElement {
+pub(crate) fn workspace_badge(icon: &str, color: gpui::Hsla, size: f32) -> AnyElement {
     div()
         .size(px(size))
         .flex_shrink_0()
@@ -54,7 +54,7 @@ pub(super) fn workspace_badge(icon: &str, color: gpui::Hsla, size: f32) -> AnyEl
 }
 
 /// A workspace colour (`#rrggbb`) as a fill, `fallback` when it does not parse.
-pub(super) fn workspace_color(color: &str, fallback: gpui::Hsla) -> gpui::Hsla {
+pub(crate) fn workspace_color(color: &str, fallback: gpui::Hsla) -> gpui::Hsla {
     u32::from_str_radix(color.trim_start_matches('#'), 16)
         .map(gpui::rgb)
         .map(gpui::Hsla::from)
@@ -66,12 +66,15 @@ impl GhostexGpuiApp {
     /// and its daemon has two or more workspaces (gxserver publishes none while the Workspaces
     /// feature is off).
     pub(super) fn native_sidebar_workspace_tile_shown(&self) -> bool {
-        self.native_sidebar
-            .snapshot
-            .as_ref()
-            .is_some_and(|snapshot| {
-                snapshot.selected_machine_id == ghostex_gx_core::LOCAL_MACHINE_ID
-            })
+        // With the rail on, the workspace is at the rail's foot instead (app/sidebar_rail/).
+        !self.sidebar_rail_shown()
+            && self
+                .native_sidebar
+                .snapshot
+                .as_ref()
+                .is_some_and(|snapshot| {
+                    snapshot.selected_machine_id == ghostex_gx_core::LOCAL_MACHINE_ID
+                })
             && self.gx_store_workspace_tile().is_some()
     }
 

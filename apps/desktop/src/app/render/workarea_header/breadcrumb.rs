@@ -101,12 +101,15 @@ impl GhostexGpuiApp {
             // Inside the work area frame's card the header starts one gutter plus the card's 1pt
             // border in from the window's edge, so the inset drops by both and the toggles land at
             // the window x `sidebar_toggle_leading_x` gives.
-            let toggle_x = sidebar_toggle_leading_x(self.window_controls_reserved());
+            // The rail stays left of the card when the sidebar hides (app/sidebar_rail/).
+            let toggle_x = sidebar_toggle_leading_x(self.window_controls_reserved())
+                - self.sidebar_rail_width();
             if work_area_frame_active() {
                 toggle_x - WORK_AREA_FRAME_MARGIN - WORK_AREA_FRAME_BORDER
             } else {
                 toggle_x
             }
+            .max(WORKAREA_HEADER_EDGE_PADDING)
         } else {
             WORKAREA_HEADER_EDGE_PADDING
         };

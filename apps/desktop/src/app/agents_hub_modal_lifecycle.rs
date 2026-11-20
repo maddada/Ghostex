@@ -12,6 +12,14 @@ use crate::app::helpers::*;
 use crate::app::window::*;
 use crate::*;
 
+/// Which Hub a command came from and its answers go to: its own window, or the rail's takeover
+/// drawn in the main window's sessions column (claude_web/place.rs `TakeoverPage::AgentsHub`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AgentsHubTarget {
+    Window,
+    Takeover,
+}
+
 impl GhostexGpuiApp {
     /// Opens the Hub for the `agentsHub` modal's open message. `initialTab` picks the first tab
     /// (the React host never sent it, so the Hub opens on MDs as the React one did).
@@ -42,7 +50,7 @@ impl GhostexGpuiApp {
             word_wrap: crate::app::native_docs::storage::read_word_wrap(),
         };
         let host: AgentsHubModalHost = self.native_app_modal_host(cx, |app, command, cx| {
-            app.handle_gpui_agents_hub_modal_command(command, cx);
+            app.handle_gpui_agents_hub_modal_command(command, AgentsHubTarget::Window, cx);
         });
         self.open_native_app_modal(
             GpuiAppModalKind::AgentsHub,
@@ -53,14 +61,68 @@ impl GhostexGpuiApp {
         );
     }
 
+    /// The Hub drawn in the sessions column while the rail's Agents Hub takeover is on, made in the
+    /// main window the first time it draws (the window's inputs belong to it).
+    pub(crate) fn agents_hub_takeover_view(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Entity<GpuiAgentsHubModalWindow> {
+        if let Some(view) = self.agents_hub_takeover.clone() {
+            return view;
+        }
+        let config = AgentsHubModalConfig {
+            palette: self.gpui_native_panel_palette(),
+            initial_tab: AgentsHubTab::Mds,
+            initial_skill: None,
+            initial_skill_path: None,
+            word_wrap: crate::app::native_docs::storage::read_word_wrap(),
+        };
+        let host: AgentsHubModalHost = self.native_app_modal_host(cx, |app, command, cx| {
+            app.handle_gpui_agents_hub_modal_command(command, AgentsHubTarget::Takeover, cx);
+        });
+        let view = cx.new(|cx| GpuiAgentsHubModalWindow::new(config, host, window, cx));
+        self.agents_hub_takeover = Some(view.clone());
+        view
+    }
+
+    /// Runs `update` against the Hub `target` names: its window while it is open, or the
+    /// takeover's Hub in the main window.
+    fn update_agents_hub<R>(
+        &mut self,
+        target: AgentsHubTarget,
+        cx: &mut gpui::Context<Self>,
+        update: impl FnOnce(
+            &mut GpuiAgentsHubModalWindow,
+            &mut Window,
+            &mut gpui::Context<GpuiAgentsHubModalWindow>,
+        ) -> R,
+    ) -> Option<R> {
+        match target {
+            AgentsHubTarget::Window => {
+                self.update_native_app_modal(GpuiAppModalKind::AgentsHub, cx, update)
+            }
+            AgentsHubTarget::Takeover => {
+                let view = self.agents_hub_takeover.clone()?;
+                let main = self.main_window_handle?;
+                main.update(cx, |_, window, cx| {
+                    view.update(cx, |modal, cx| update(modal, window, cx))
+                })
+                .ok()
+            }
+        }
+    }
+
     fn handle_gpui_agents_hub_modal_command(
         &mut self,
         command: AgentsHubModalCommand,
+        target: AgentsHubTarget,
         cx: &mut gpui::Context<Self>,
     ) {
         match command {
             AgentsHubModalCommand::RequestCatalog => {
                 self.run_gpui_agents_hub_task(
+                    target,
                     || AgentsHubCatalog::from_json(gpui_agents_hub_catalog_message()),
                     |modal, catalog, window, cx| {
                         if let Some(catalog) = catalog {
@@ -75,6 +137,7 @@ impl GhostexGpuiApp {
                 request_id,
             } => {
                 self.run_gpui_agents_hub_task(
+                    target,
                     move || {
                         AgentsHubFileContent::from_json(gpui_agents_hub_file_content_message(
                             file_path, request_id,
@@ -89,7 +152,7 @@ impl GhostexGpuiApp {
                 );
             }
             AgentsHubModalCommand::SaveFile { file_path, content } => {
-                self.save_gpui_agents_hub_file(file_path, content, cx);
+                self.save_gpui_agents_hub_file(file_path, content, target, cx);
             }
             AgentsHubModalCommand::OpenPath { path } => {
                 self.open_gpui_agents_hub_path(path, cx);
@@ -107,6 +170,7 @@ impl GhostexGpuiApp {
                 Agent Sync scans, plans, and applies through the shared ghostex-agent-sync crate on the background executor, the same code `ghostex agent-sync` runs.
                 */
                 self.run_gpui_agents_hub_task(
+                    target,
                     || SyncReport::from_json(gpui_agent_sync_report_message()),
                     |modal, report, _window, cx| {
                         if let Some(report) = report {
@@ -118,6 +182,7 @@ impl GhostexGpuiApp {
             }
             AgentsHubModalCommand::RequestSyncPlan { scope } => {
                 self.run_gpui_agents_hub_task(
+                    target,
                     move || SyncPlan::from_json(gpui_agent_sync_plan_message(scope)),
                     |modal, plan, _window, cx| {
                         if let Some(plan) = plan {
@@ -129,6 +194,7 @@ impl GhostexGpuiApp {
             }
             AgentsHubModalCommand::ApplySyncPlan { scope, groups } => {
                 self.run_gpui_agents_hub_task(
+                    target,
                     move || {
                         SyncApplyResult::from_json(gpui_agent_sync_apply_message(scope, groups))
                     },
@@ -140,11 +206,21 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
-            AgentsHubModalCommand::Close => {
-                if self.native_app_modal_kind() == Some(GpuiAppModalKind::AgentsHub) {
-                    self.close_native_app_modal_from_bridge(cx);
+            AgentsHubModalCommand::Close => match target {
+                AgentsHubTarget::Window => {
+                    if self.native_app_modal_kind() == Some(GpuiAppModalKind::AgentsHub) {
+                        self.close_native_app_modal_from_bridge(cx);
+                    }
                 }
-            }
+                // The takeover's Hub closes the way its rail icon does.
+                AgentsHubTarget::Takeover => {
+                    if self.takeover_page_on()
+                        == Some(crate::app::claude_web::TakeoverPage::AgentsHub)
+                    {
+                        self.turn_claude_off(cx);
+                    }
+                }
+            },
         }
     }
 
@@ -179,6 +255,7 @@ impl GhostexGpuiApp {
     /// Runs `task` on the background executor and hands its answer to the open Hub.
     fn run_gpui_agents_hub_task<T: Send + 'static>(
         &mut self,
+        target: AgentsHubTarget,
         task: impl FnOnce() -> T + Send + 'static,
         deliver: impl FnOnce(
             &mut GpuiAgentsHubModalWindow,
@@ -192,8 +269,8 @@ impl GhostexGpuiApp {
         cx.spawn(async move |this, cx| {
             let answer = background.spawn(async move { task() }).await;
             let _ = this.update(cx, |app, cx| {
-                app.update_native_app_modal(
-                    GpuiAppModalKind::AgentsHub,
+                app.update_agents_hub(
+                    target,
                     cx,
                     |modal: &mut GpuiAgentsHubModalWindow, window, cx| {
                         deliver(modal, answer, window, cx)
@@ -210,6 +287,7 @@ impl GhostexGpuiApp {
         &mut self,
         file_path: String,
         content: String,
+        target: AgentsHubTarget,
         cx: &mut gpui::Context<Self>,
     ) {
         let background = cx.background_executor().clone();
@@ -222,8 +300,8 @@ impl GhostexGpuiApp {
             let _ = this.update(cx, |app, cx| match result {
                 Ok(catalog) => {
                     if let Some(catalog) = catalog {
-                        app.update_native_app_modal(
-                            GpuiAppModalKind::AgentsHub,
+                        app.update_agents_hub(
+                            target,
                             cx,
                             |modal: &mut GpuiAgentsHubModalWindow, window, cx| {
                                 modal.receive_catalog(catalog, window, cx)
@@ -253,6 +331,10 @@ impl GhostexGpuiApp {
     /// The Hub steps aside before "Open in built-in editor" moves to the Code view: the native
     /// Hub when it is open, else the React modal window.
     pub(crate) fn close_gpui_agents_hub_for_navigation(&mut self, cx: &mut gpui::Context<Self>) {
+        // The takeover's Hub steps aside the way its rail icon closes it.
+        if self.takeover_page_on() == Some(crate::app::claude_web::TakeoverPage::AgentsHub) {
+            self.turn_claude_off(cx);
+        }
         if self.native_app_modal_kind() == Some(GpuiAppModalKind::AgentsHub) {
             self.close_native_app_modal_from_bridge(cx);
             return;

@@ -179,6 +179,29 @@ pub fn boosts_used(
     capture(taxonomy::EVENT_BOOSTS_USED, &properties);
 }
 
+/// The sidebar's layout changed (Settings, or the Meet the rail intro), forwarded from
+/// `/api/recordClientEvent`.
+pub fn sidebar_layout_changed(layout: &'static str, source: &'static str) {
+    capture(
+        taxonomy::EVENT_SIDEBAR_LAYOUT_CHANGED,
+        &[
+            ("layout", PropertyValue::Enum(layout)),
+            ("source", PropertyValue::Enum(source)),
+        ],
+    );
+}
+
+/// The one-time Meet the rail intro was answered: the layouts tried in it and the one kept.
+pub fn rail_intro_answered(tried: &'static str, chose: &'static str) {
+    capture(
+        taxonomy::EVENT_RAIL_INTRO_ANSWERED,
+        &[
+            ("tried", PropertyValue::Enum(tried)),
+            ("chose", PropertyValue::Enum(chose)),
+        ],
+    );
+}
+
 /// The desktop startup ping, forwarded from `/api/recordClientEvent`.
 pub fn app_launched(
     app_version: String,

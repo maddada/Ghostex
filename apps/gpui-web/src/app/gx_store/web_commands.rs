@@ -137,6 +137,7 @@ impl GhostexGpuiApp {
             return;
         }
         if self.web_answer_session_menu(&command, cx)
+            || self.run_sidebar_rail_command(&command, cx)
             || self.gx_store_run_unified_sidebar_command(&command, cx)
             || self.gx_store_run_sidebar_accounts(&command, cx)
             || self.gx_store_run_sidebar_git(&command, cx)

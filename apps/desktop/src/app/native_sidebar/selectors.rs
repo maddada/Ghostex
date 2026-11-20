@@ -87,6 +87,8 @@ impl GhostexGpuiApp {
         with_machines: bool,
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
+        // With the rail on, Hermes is the rail's (app/sidebar_rail/).
+        let with_bots = with_bots && !self.sidebar_rail_shown();
         let scale = appearance.scale;
         let insets = self.native_sidebar_side_insets(scale);
         let row_room = (self.sidebar_width - insets.left - insets.right) / scale;

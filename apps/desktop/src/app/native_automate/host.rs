@@ -93,7 +93,38 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        let Some(scope) = self.native_automate_scope() else {
+        let scope = self.native_automate_scope();
+        self.render_native_automate_surface_for(scope, window, cx)
+    }
+
+    /// The All Automations overview, whatever project is active: the rail's All Automations
+    /// takeover (claude_web/place.rs `TakeoverPage::AllAutomations`). It shares the Automate view,
+    /// which the side panel hides while the takeover is on.
+    pub(crate) fn render_native_automate_all_projects_surface(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let scope = AutomateScope {
+            all_projects: true,
+            project_id: GPUI_QUICK_AUTOMATIONS_PROJECT_ID.to_string(),
+            project_path: String::new(),
+            project_name: GPUI_QUICK_AUTOMATIONS_DISPLAY_TITLE.to_string(),
+            editor_id: ghostex_gx_core::quick_automations_board_id(),
+            coming_soon: !self
+                .sidebar_runtime_settings_snapshot
+                .all_automations_enabled,
+        };
+        self.render_native_automate_surface_for(Some(scope), window, cx)
+    }
+
+    fn render_native_automate_surface_for(
+        &mut self,
+        scope: Option<AutomateScope>,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let Some(scope) = scope else {
             let signature = ProjectEditorPlaceholderSignature::for_mode(TitlebarMode::Automate)
                 .expect("Automate placeholder signature must exist");
             return self.render_project_editor_placeholder(signature, cx);

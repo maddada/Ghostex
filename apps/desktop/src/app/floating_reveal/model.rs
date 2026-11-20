@@ -179,11 +179,14 @@ impl GhostexGpuiApp {
     /// CDXC:Sidebar 2026-11-11 DECISION:
     /// User: "shift the floating left sidebar a bit to the right (by 5px) so it's not directly on the edge. do this for chat and sidebar actually when shown as overlay on the left border itself". A panel floated at the window's left border (the sidebar, the sessions column, or both together) starts `FLOATING_REVEAL_LEFT_GAP` in from it, so a thin gap shows between the window's border and the panel; its width, top and bottom are unchanged. The work area frame's gutter (6pt) already is such a gap, so the larger of the two applies. The hover zone still reaches the window's very edge: the edge strip stays where it is, and the native keep zone while the panel is out (`keep` in GhostexGpuiNativeRevealUpdate) runs from the window's left edge, so the gap does not close the panel. A panel beside a docked sidebar is not at the border and does not change.
     pub(crate) fn floating_reveal_left_inset(&self) -> f32 {
+        // The rail stays at the window's left edge, so a panel floats beside it (app/sidebar_rail/).
+        let rail = self.sidebar_rail_width();
         if self.sidebar_collapsed {
-            self.floating_reveal_card_inset(self.floating_reveal_content())
+            rail + self
+                .floating_reveal_card_inset(self.floating_reveal_content())
                 .max(FLOATING_REVEAL_LEFT_GAP)
         } else {
-            self.sidebar_width + SIDEBAR_DIVIDER_WIDTH
+            rail + self.sidebar_width + SIDEBAR_DIVIDER_WIDTH
         }
     }
 

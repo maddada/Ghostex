@@ -114,6 +114,21 @@ fn sidebar_section(
             cx,
         ));
     }
+    // Rail or Classic (CDXC:Sidebar 2026-11-20 on SIDEBAR_LAYOUT_OPTIONS).
+    if g.visible(s, "sidebarLayout") {
+        let spec = RowSpec::new("Sidebar layout")
+            .description("Rail adds a narrow column of icons at the window's left edge for Search, notifications, Main Hub, Agents Hub, All Automations, Hermes, Claude and Grok Bot, with everything else under its ⋯ menu, where you pin, unpin and drag icons into your own order. It stays when the sidebar is hidden. Classic is the sidebar without the rail, with Search and the bell in its top row.")
+            .modified(g.values.is_modified("sidebarLayout"));
+        rows.extend(page.segmented(
+            g,
+            s,
+            "sidebarLayout",
+            spec,
+            Some(reset_key::<GeneralTab>("sidebarLayout")),
+            g.options("SIDEBAR_LAYOUT_OPTIONS"),
+            cx,
+        ));
+    }
     // One list for every computer unless this is on (CDXC:RemoteMachines 2026-11-05 in gx-core
     // sidebar_view/merged.rs).
     rows.extend(page.toggle(

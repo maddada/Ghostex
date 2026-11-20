@@ -38,6 +38,8 @@ pub(crate) struct GhostexGpuiApp {
     pub(crate) session_details_button_bounds: Rc<std::cell::Cell<Bounds<Pixels>>>,
     /// Where the header's Work button was painted, which the Work panel's floating card opens under.
     pub(crate) work_button_bounds: Rc<std::cell::Cell<Bounds<Pixels>>>,
+    /// Where the rail's buttons were painted (app/sidebar_rail/).
+    pub(crate) sidebar_rail: crate::app::sidebar_rail::SidebarRailState,
     pub(crate) session_details_dismissed_at: Option<web_time::Instant>,
     pub(crate) sidebar_usage_visible: bool,
     pub(crate) gpui_reduce_motion_enabled: bool,
@@ -135,6 +137,7 @@ impl GhostexGpuiApp {
             session_details_choices: Default::default(),
             session_details_button_bounds: Rc::default(),
             work_button_bounds: Rc::default(),
+            sidebar_rail: Default::default(),
             session_details_dismissed_at: None,
             // Pinned by default, as on the desktop (CDXC:Sidebar 2026-11-03 in shell_layout.rs).
             sidebar_usage_visible: true,
