@@ -10,9 +10,10 @@ use crate::server::AppState;
 use super::store::{
     bounded_notification_body, clear_notification_feed, defer_session_notification,
     dismiss_notification, insert_notification_feed_row, mark_all_notifications_read,
-    mark_notification_read, mark_notification_unread, mark_session_notifications_read,
-    notification_agent_icon, notification_exists, read_notification_feed_state,
-    unread_notification_session_ids, NewNotificationFeedRow, NOTIFICATION_FEED_KIND_CUSTOM,
+    mark_finished_notifications_seen, mark_notification_read, mark_notification_unread,
+    mark_session_notifications_read, notification_agent_icon, notification_exists,
+    read_notification_feed_state, unread_notification_session_ids, NewNotificationFeedRow,
+    NOTIFICATION_FEED_KIND_CUSTOM,
 };
 use super::thread_read::acknowledge_read_notification_sessions;
 
@@ -73,6 +74,9 @@ pub(crate) fn update_notification_feed_endpoint(
         "markAllRead" => {
             read_session_ids = unread_notification_session_ids(db, None)?;
             mark_all_notifications_read(db)?;
+        }
+        "markFinishedSeen" => {
+            mark_finished_notifications_seen(db)?;
         }
         "clearAll" => {
             clear_notification_feed(db)?;

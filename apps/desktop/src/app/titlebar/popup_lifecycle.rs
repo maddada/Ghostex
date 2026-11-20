@@ -194,6 +194,18 @@ impl GhostexGpuiApp {
             trigger_bounds,
         });
         self.titlebar_popup_window = Some(popup_window);
+        if kind == GpuiTitlebarPopupKind::Notifications {
+            /*
+            CDXC:Notifications 2026-11-20 DECISION:
+            User: "make the notifications thingy lose the dot shown there if it's just a completion dot when I click to see the content there (marks as read)". Opening the bell reads every computer's "finished" rows so the badge drops to what still needs the user (a question, an approval, a failure, a message not sent). It does not touch the sessions: their blue "finished, not seen" dots clear when the session is opened, as before.
+            */
+            self.request_notification_feed_command(
+                "markFinishedSeen",
+                None,
+                ghostex_gx_core::NotificationFeedTab::All,
+                cx,
+            );
+        }
         cx.notify();
     }
 
