@@ -2365,8 +2365,9 @@ UI mockup, a comparison or a small interactive tool. Ask for them by name
 visuals"); agents still understand the older words Ghostex page, gx page,
 inline HTML, inline questions and inline graphs. **Boosts** ask for these, and more, in one click. The Boost pill at the right
 of the strip on top of the chat box opens a short menu in tabs: Show (Live page, Chart it,
-Side by side, Map it, Ask me in a form), Do (Computer use and Browser use, where the agent
-drives an app or a browser itself; Show screenshots; Second opinion, where another agent
+Side by side, Map it, Ask me in a form), Do (Computer & Browser use, where the agent
+drives your apps and Chrome or another browser itself with Cua Driver; Embedded Browser
+use, where it drives pages in Ghostex's own browser; Show screenshots; Second opinion, where another agent
 checks the answer), Work (Triage requests, which explains issues, pull requests or tickets
 one by one on a Live page with a decision for each; Plan with workers; Try it in a
 worktree; Save to Docs; Steps for me, which lists what only you can do under Needs you;
