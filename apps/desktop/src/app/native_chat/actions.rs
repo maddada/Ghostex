@@ -512,6 +512,12 @@ impl NativeChatView {
             // Save as Boost on selected words (gx-chat-core `composer/transcript_menu.rs`): a new
             // Boost holding them, named in Settings > Boosts (tabs/boosts.rs).
             let text = action.command["text"].as_str().unwrap_or_default().to_string();
+            // CDXC:Boosts 2026-11-20 WHY: the web page has no Settings ("Settings is not available
+            // in the browser"), so there Save as Boost saves at once through the core, named by its
+            // first words, as the phone does; Settings > Boosts on the computer renames it.
+            #[cfg(ghostex_web)]
+            self.invoke(json!({"type": "saveAsBoost", "text": text}), cx);
+            #[cfg(not(ghostex_web))]
             self.open_boost_settings(Some("newBoost".to_string()), Some(text), cx);
         } else if action.command["type"] == "copyText" {
             // Copy Path, Copy URL and the transcript's Copy, with the feedback every other chat copy gives.

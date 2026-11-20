@@ -706,9 +706,7 @@ impl NativeChatView {
                         .on_mouse_down(
                             gpui::MouseButton::Right,
                             cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
-                                if this.show_composer_reference_menu(event, window, cx)
-                                    || this.show_composer_selection_menu(event, window, cx)
-                                {
+                                if this.show_composer_reference_menu(event, window, cx) {
                                     cx.stop_propagation();
                                 }
                             }),
@@ -716,6 +714,8 @@ impl NativeChatView {
                         .child(
                             Textarea::new(&input)
                                 .on_paste(Self::paste_handler(cx.entity().downgrade(), None))
+                                // Cut, Copy, Paste, Select All and Save as Boost (boosts.rs).
+                                .context_menu(Self::composer_context_menu(cx.entity().downgrade()))
                                 .placeholder_color(p.muted.opacity(0.6))
                                 // CDXC:SessionChat 2026-09-27 WHY: The chat draws in its own palette (sessionChatTheme can differ from the app theme, and the web page never switches GPUI Kit off its light default), so the kit theme's caret vanished against the composer. Every chat field takes its caret from the chat palette.
                                 .caret_color(p.foreground)
