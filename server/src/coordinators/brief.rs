@@ -205,7 +205,7 @@ pub fn thread_brief(coordinator: &BriefContext<'_>, task: &str) -> String {
     );
     // CDXC:Coordinators 2026-11-20 WHY: user: "people really love screenshots ... when a coordinator has a worker use cua-driver (or test a website, any GUI work), it should tell the worker to take screenshots". The coordinator playbook asks for them in its brief; this line makes the thread do it even when the brief forgot, but only when it already drives a GUI, where they cost nothing.
     brief.push_str(
-        "\n- If you drove an app or a browser (cua-driver, the embedded browser, Playwright or headless Chrome), save a screenshot of every state of the UI as it changes (before, each step, after) under `~/.local/share/ghostex/i/` and link them in your final report, so the coordinator can show them to the user. Never tiny: at least 1650x962 points, so size the window or viewport first (`--window-size=1650,962` or larger, cua-driver `set_window_frame`). Take none when you did no GUI work.",
+        "\n- If you drove an app or a browser (cua-driver, the embedded browser, Playwright or headless Chrome), save a screenshot of every state of the UI as it changes (before, each step, after) under `~/.local/share/ghostex/i/` and link them in your final report, so the coordinator can show them to the user. Never tiny: at least 1650x962 points, so size the window or viewport first (`--window-size=1650,962` or larger, cua-driver `set_window_frame`). For a desktop app, every once in a while also take a full-screen screenshot of the whole app on the desktop (wallpaper and glass included, not just its window), saved with `-fullscreen` in the name. Take none when you did no GUI work.",
     );
     brief
 }
