@@ -26,6 +26,9 @@ fn action_label(action: &str) -> Option<&'static str> {
         "confirm" => "Confirm",
         "cancel" => "Back / Cancel",
         "sessionOnly" => "Use for this session",
+        // Claude's `/effort` slider: Tab flips the Ultracode switch beside its rail.
+        "ultracodeOn" => "Turn Ultracode on",
+        "ultracodeOff" => "Turn Ultracode off",
         "sort" => "Change sort",
         "reset" => "Reset to auto",
         "day" => "Day view",
@@ -142,6 +145,19 @@ pub fn terminal_dialog_presentation(dialog: &TerminalDialog) -> Value {
                 .to_string()
             } else if action == "confirm" && dialog.footer.contains("set as default") {
                 "Set as default".to_string()
+            } else if action == "confirm"
+                && dialog.footer.contains("Enter to use this session only")
+            {
+                // Claude's `/effort` slider once its Ultracode switch moved: Enter applies it to
+                // this session only, and nothing on it saves a default.
+                "Use for this session".to_string()
+            } else if action == "confirm"
+                && dialog.footer.contains("Enter to save")
+                && dialog.footer.contains("session only")
+            {
+                // Claude's `/model` list and `/effort` slider: beside "Use for this session", Enter
+                // saves the pick as the default for new sessions.
+                "Save as default".to_string()
             } else if action == "confirm" && dialog.footer.contains("Enter to retry") {
                 "Retry".to_string()
             } else if action == "confirm" && dialog.footer.contains("Enter to continue") {

@@ -2647,6 +2647,12 @@ the same command accepts `--mode <mode>` and `--fast-mode on|off`.
 Claude's default-effort pricing notice also appears in chat with its original
 explanation and choices, so you can keep the current effort or switch to the
 recommended effort there without opening Terminal.
+Claude's `/effort` slider shows in chat as a card: click a level to move it, Turn
+Ultracode on or Turn Ultracode off flips Claude's Ultracode switch, Use for this
+session applies the choice to this session only, and Save as default keeps it for new
+sessions. A Claude session started on an effort level (Low to Max) starts with
+Ultracode off even when Claude's own settings turn it on; pick Ultracode as the
+effort to start in it.
 Escape interrupts the agent. While the agent is working, the first Escape shows
 "Press Escape again to interrupt" at the bottom of the chat, and a second Escape
 within 2 seconds interrupts; Settings > Chat > Press Escape twice to interrupt
