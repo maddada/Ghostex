@@ -8,6 +8,9 @@
 //! User picked option A of the one-click switch mockup (the switch rule is gx-core `workspace_switch_target`): "i want 1 click to switch workspaces between work and personal one in my case (but still have access to the dropdown we have now basically)".
 //!
 //! CDXC:Workspaces 2026-11-20 DECISION:
+//! User (picked on the 11.12.0 smoke improvements page): the tile's right-click menu opens through accessibility too (AXShowMenu, gpui `ShowContextMenu`), on this tile and the rail's, so screen readers and automation reach it without a pixel press. macOS offers the action only through the patched `.dependencies/accesskit_macos`.
+//!
+//! CDXC:Workspaces 2026-11-20 DECISION:
 //! User picked "F. The first tile of the Spaces row" (Q4296): "single click switches workspace; right click shows the workspace menu; each workspace gets its own ICON (not just a colour dot), and those icons must look different from the Spaces icons". The tile leaves the bottom left for the start of the Spaces row (after the computers, which switch machines; the workspace belongs to this computer), and with Spaces off it still leads that row. It is the account tiles' fill (`usage_card_fills`) with no hairline, at a Space tile's height and radius, holding the workspace's icon in white on an 18pt disc of its colour: a Space is an outline glyph in its colour on a hairline tile, and the workspace icons are a set of their own (gx-protocol `WORKSPACE_ICONS`). With a single workspace nothing is drawn (`gx_store_workspace_tile`). This supersedes the dot-and-name button at the bottom left of the same day (Q4254 A) and its later card-fill tile.
 
 use gpui::prelude::FluentBuilder;
@@ -107,6 +110,8 @@ impl GhostexGpuiApp {
         let owner = super::menus::MenuOwner::default();
         let click_owner = owner.clone();
         let right_owner = owner.clone();
+        let a11y_owner = owner.clone();
+        let sidebar = cx.entity().downgrade();
         let aria_label = format!("Workspace {}", tile.name);
         let element = div()
             .id("native-sidebar-workspace-tile")
@@ -178,6 +183,21 @@ impl GhostexGpuiApp {
                         cx,
                     );
                 }),
+            )
+            // The right-click menu for VoiceOver and automation (AXShowMenu), hung below the tile.
+            .on_a11y_action(
+                gpui::AccessibleAction::ShowContextMenu,
+                move |_, window, cx| {
+                    let _ = sidebar.update(cx, |app, cx| {
+                        let Some(menu) = app.gx_store_workspace_menu(cx) else {
+                            return;
+                        };
+                        let owner = a11y_owner.get();
+                        let at =
+                            owner.map_or(gpui::Point::default(), |bounds| bounds.bottom_left());
+                        Self::show_native_sidebar_context_menu(&menu, owner, at, scale, window, cx);
+                    });
+                },
             );
         Some(
             self.sidebar_focus_stop(

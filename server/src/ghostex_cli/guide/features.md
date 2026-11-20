@@ -1136,7 +1136,9 @@ of its own. Ctrl+Option+1 to 9 (Alt+Shift+1 to 9
 on Windows and Linux) go to the first to ninth workspace of the menu (Go to
 Workspace in Settings > Hotkeys). If another window already shows that workspace, that
 window comes forward instead. Right-click the tile for the workspace menu: pick any
-workspace (each row shows its icon and hotkey), open Workspace settings, or make a New workspace. In the menu, a
+workspace (each row shows its icon and hotkey), open Workspace settings, or make a New workspace.
+Screen readers and automation open the same menu with the tile's Show menu
+action (AXShowMenu on macOS, VoiceOver's VO-Shift-M). In the menu, a
 workspace that no window shows yet has a new-window button at the right end of
 its row, which opens it in a new window. With a single workspace nothing is
 shown; make another in Settings > Workspaces. Switching back to a workspace returns
