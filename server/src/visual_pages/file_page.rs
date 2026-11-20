@@ -102,6 +102,32 @@ pub(crate) fn page_for_file(
     }))
 }
 
+/// The page a link in another page opens for `file` (linked.rs): the one [`page_for_file`] gives
+/// a Ghostex page file, else the page `ghostex show` published from the file whatever its layout,
+/// as published. `Ok(None)` for any other file.
+pub(super) fn page_for_linked_file(
+    gxserver_state_dir: &Path,
+    file: &Path,
+) -> Result<Option<FilePage>, String> {
+    if let Some(page) = page_for_file(gxserver_state_dir, file)? {
+        return Ok(Some(page));
+    }
+    let Ok(file) = fs::canonicalize(file) else {
+        return Ok(None);
+    };
+    Ok(published_from(gxserver_state_dir, &file)
+        .filter(|(_, record)| has_session(record))
+        .map(|(id, record)| FilePage {
+            id,
+            title: record
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or("Live page")
+                .to_string(),
+            answerable: true,
+        }))
+}
+
 fn has_session(record: &Value) -> bool {
     record
         .get("sessionRef")

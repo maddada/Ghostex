@@ -594,6 +594,12 @@ works.
 2. The page runs in a sandbox with no origin of its own: `localStorage`,
    cookies and requests to `http://` or `localhost` don't work. Keep state in
    memory. The one way back to you is the reader's answers (below).
+   A set of pages (a cover page and its decks) can link to each other by a
+   path relative to the HTML file (`<a href="decks/sales.html">`): on
+   Ghostex newer than 11.12.0 the reader goes to that file's own page in
+   place. Write each linked file as a Live page (the skeleton above) or
+   publish it with `ghostex show` too; on older versions such a link says
+   404, so give each page its own card there.
 3. Publish it:
 
    ```bash
