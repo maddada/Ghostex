@@ -64,7 +64,10 @@ const SIDEBAR_USAGE_HANDLE_WIDTH: f32 = 30.0;
 const SIDEBAR_USAGE_HANDLE_HEIGHT: f32 = 16.0;
 
 /// A meter card's height, before the zoom scale.
-const SIDEBAR_USAGE_METER_HEIGHT: f32 = 26.0;
+pub(super) const SIDEBAR_USAGE_METER_HEIGHT: f32 = 26.0;
+/// A usage card's corner radius. The workspace switcher (native_sidebar/workspace_tile.rs) uses it
+/// too, so it reads as the same surface as the cards.
+pub(super) const SIDEBAR_USAGE_CARD_RADIUS: f32 = 7.0;
 
 /// The strip's space above its first row of cards and below its last.
 const SIDEBAR_USAGE_TOP_PADDING: f32 = 10.0;
@@ -391,7 +394,7 @@ impl GhostexGpuiApp {
             anchor_key_prefix: "native-sidebar-usage-meter-anchor",
             height: SIDEBAR_USAGE_METER_HEIGHT * scale,
             padding_x: 4.0 * scale,
-            corner_radius: 7.0 * scale,
+            corner_radius: SIDEBAR_USAGE_CARD_RADIUS * scale,
             background: card,
             fill_width: true,
             hover_background: card_hover,
