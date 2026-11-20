@@ -172,6 +172,18 @@ impl GhostexGpuiApp {
         appearance: &SidebarAppearance,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
+        // As on the sidebar's tile: the workspace belongs to this computer, so not on another
+        // computer's tab (native_sidebar/workspace_tile.rs).
+        let local = self
+            .native_sidebar
+            .snapshot
+            .as_ref()
+            .is_some_and(|snapshot| {
+                snapshot.selected_machine_id == ghostex_gx_core::LOCAL_MACHINE_ID
+            });
+        if !local {
+            return None;
+        }
         let tile = self.gx_store_workspace_tile()?;
         let color = crate::app::native_sidebar::workspace_tile::workspace_color(
             &tile.color,
