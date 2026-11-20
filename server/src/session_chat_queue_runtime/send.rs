@@ -183,6 +183,22 @@ impl CoordinatorNotes {
     fn asks_action(&self) -> bool {
         self.playbook.is_some() || self.drift.is_some()
     }
+
+    /// Every note, in the order they go: the playbook note, the drift reminder, the open
+    /// questions, the dismissed questions.
+    fn all(&self) -> Vec<&str> {
+        self.playbook
+            .iter()
+            .map(|(note, _)| note.as_str())
+            .chain(
+                self.drift
+                    .iter()
+                    .flat_map(|drift| drift.notes.iter().map(String::as_str)),
+            )
+            .chain(self.open_questions.as_deref())
+            .chain(self.dismissed.as_ref().map(|(_, note)| note.as_str()))
+            .collect()
+    }
 }
 
 /// The notes that go under this message to an orchestrator (CDXC:Coordinators 2026-11-05 in
@@ -457,7 +473,20 @@ pub(crate) async fn send_session_chat_message_with_draft(
     } else {
         Vec::new()
     };
-    let folded = !held.is_empty() && takes_held_notes_inside(state, project_id, session_id);
+    // Claude Code gets both inside this message's `<ghostex-system>` block: a second submit typed
+    // while it works is queued and, after a reply with no tool call, run as a turn of its own.
+    let inside = (!held.is_empty() || notes.is_some())
+        && takes_held_notes_inside(state, project_id, session_id);
+    let riders: Vec<String> = if inside {
+        notes
+            .iter()
+            .flat_map(CoordinatorNotes::all)
+            .map(str::to_string)
+            .chain(crate::session_chat_send::held_notes_block(&held))
+            .collect()
+    } else {
+        Vec::new()
+    };
     let sent = send_session_chat_message_locked(
         state,
         project_id,
@@ -467,16 +496,19 @@ pub(crate) async fn send_session_chat_message_with_draft(
         source,
         draft_version,
         interrupt,
-        if folded { held.as_slice() } else { &[] },
+        &riders,
     )
     .await;
     if sent.is_ok() {
         settle_work_replies(state, project_id, session_id, text, image_paths, source);
-        if !folded {
+        if inside {
+            // They went in with the message: recorded as sent, like a note delivered on its own.
+            record_coordinator_playbook_note(state, project_id, session_id, notes.as_ref());
+        } else {
             send_held_with_next(state, project_id, session_id, held, source).await;
-        }
-        if let Some(notes) = notes {
-            send_ghostex_notes(state, project_id, session_id, &notes).await;
+            if let Some(notes) = notes {
+                send_ghostex_notes(state, project_id, session_id, &notes).await;
+            }
         }
     } else {
         crate::session_chat_send::put_back_held_with_next(state, project_id, session_id, &held);
@@ -563,25 +595,22 @@ async fn send_held_with_next(
 /// own separate message, not inside the user's message". Before, they rode inside the user's
 /// message (2026-11-05 to 2026-11-16); the chat drops a row that holds only the block
 /// (gx-chat-core `session::appended_notes::is_system_only`).
+///
+/// CDXC:Coordinators 2026-11-20 DECISION:
+/// Not for Claude Code any more. Typed while it works, Claude Code queues this second submit and,
+/// when its reply ends without a tool call, runs it as a turn of its own, the same extra turn
+/// GitHub #677 found for held `--with-next` notes. The user said yes to the follow-up ("should
+/// ride in the next message's <ghostex-system> block (or the same paste) instead of a separate
+/// submit, so it never costs an extra turn"): for Claude Code the notes go in the user's message's
+/// own `<ghostex-system>` block, still kept out of every chat's view (`send_session_chat_message_with_draft`),
+/// and this separate message stays for the other agents, which take it into the running turn.
 async fn send_ghostex_notes(
     state: &AppState,
     project_id: &str,
     session_id: &str,
     notes: &CoordinatorNotes,
 ) {
-    let all: Vec<&str> = notes
-        .playbook
-        .iter()
-        .map(|(note, _)| note.as_str())
-        .chain(
-            notes
-                .drift
-                .iter()
-                .flat_map(|drift| drift.notes.iter().map(String::as_str)),
-        )
-        .chain(notes.open_questions.as_deref())
-        .chain(notes.dismissed.as_ref().map(|(_, note)| note.as_str()))
-        .collect();
+    let all = notes.all();
     let Some(message) = ghostex_gx_chat_core::session::appended_notes::system_message(&all) else {
         return;
     };
@@ -712,7 +741,7 @@ async fn send_session_chat_message_locked(
     source: SessionChatMessageSource,
     draft_version: Option<&crate::session_chat_draft_versions::DraftVersion>,
     interrupt: bool,
-    held: &[Value],
+    riders: &[String],
 ) -> std::result::Result<usize, DomainStateError> {
     if let Some(version) = draft_version {
         let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
@@ -749,14 +778,14 @@ async fn send_session_chat_message_locked(
     };
     // Each Boost pill's prompt goes under the message (CDXC:Boosts 2026-11-20 in boosts.rs).
     let expanded = crate::boosts::with_boosts(&state.paths, &expanded);
-    // Held `--with-next` messages for Claude Code, in the block every chat leaves out of the
-    // user's row (`takes_held_notes_inside`; CDXC:SessionChat 2026-11-20 in with_next.rs).
-    let expanded = match crate::session_chat_send::held_notes_block(held) {
-        Some(block) => ghostex_gx_chat_core::session::appended_notes::with_system_notes(
-            &expanded,
-            &[block.as_str()],
-        ),
-        None => expanded,
+    // Ghostex's notes and the held `--with-next` messages for Claude Code, in the block every chat
+    // leaves out of the user's row (`takes_held_notes_inside`; CDXC:SessionChat 2026-11-20 in
+    // with_next.rs, CDXC:Coordinators 2026-11-20 at `send_ghostex_notes`).
+    let expanded = if riders.is_empty() {
+        expanded
+    } else {
+        let riders: Vec<&str> = riders.iter().map(String::as_str).collect();
+        ghostex_gx_chat_core::session::appended_notes::with_system_notes(&expanded, &riders)
     };
     let text = expanded.as_str();
     let mut params = Map::new();
