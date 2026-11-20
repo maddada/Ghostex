@@ -55,6 +55,12 @@ pub(super) struct Arguments {
     /// `--lead <session-ref|self>`: create and link make the session report to that lead
     /// (agents/lead_links in gxserver).
     pub lead: Option<String>,
+    /// `wait-reply --contains <text>`: wait for a reply holding this text (any case).
+    pub contains: Option<String>,
+    /// `wait-reply --timeout <seconds>`.
+    pub timeout: Option<String>,
+    /// `wait-reply --after <message-id|now>`: the reply must come after this row.
+    pub after: Option<String>,
     pub flags: Flags,
 }
 
@@ -80,6 +86,9 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
         if_none: None,
         as_user: false,
         lead: None,
+        contains: None,
+        timeout: None,
+        after: None,
         flags: Flags::default(),
     };
     let mut args = args.iter();
@@ -123,7 +132,8 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                 };
             }
             "--body-file" | "--server" | "--computer" | "--task" | "--title" | "--project-id"
-            | "--path" | "--request-id" | "--account" | "--lead" => {
+            | "--path" | "--request-id" | "--account" | "--lead" | "--contains" | "--timeout"
+            | "--after" => {
                 let value = args
                     .next()
                     .filter(|value| !value.starts_with("--") && !value.is_empty())
@@ -137,6 +147,9 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                     "--request-id" => Some(&mut parsed.request_id),
                     "--account" => Some(&mut parsed.account),
                     "--lead" => Some(&mut parsed.lead),
+                    "--contains" => Some(&mut parsed.contains),
+                    "--timeout" => Some(&mut parsed.timeout),
+                    "--after" => Some(&mut parsed.after),
                     _ => None,
                 };
                 if let Some(slot) = slot {
@@ -196,6 +209,13 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
     if parsed.lead.is_some() && parsed.flags.contains("computer") {
         return Err(CliError::Other(
             "Lead links work on this computer only: --lead can't go with --computer.".into(),
+        ));
+    }
+    if (parsed.contains.is_some() || parsed.timeout.is_some() || parsed.after.is_some())
+        && parsed.command != "wait-reply"
+    {
+        return Err(CliError::Other(
+            "--contains, --timeout and --after are only available for wait-reply.".into(),
         ));
     }
     if parsed.as_user && parsed.command != "send" {
@@ -363,6 +383,17 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                 return Err(CliError::Other(format!(
                     "Usage: {usage}. See ghostex agents link --help."
                 )));
+            }
+        }
+        "wait-reply" => {
+            if parsed.positional.len() != 1
+                || parsed.all
+                || parsed.body_file.is_some()
+                || parsed.delivery != Delivery::Normal
+            {
+                return Err(CliError::Other(
+                    "Usage: ghostex agents wait-reply <session-ref> [--contains <text>] [--timeout <seconds>] [--after <message-id>|now] [--json]. See ghostex agents --help.".into(),
+                ));
             }
         }
         "switch-account" | "reload" => {

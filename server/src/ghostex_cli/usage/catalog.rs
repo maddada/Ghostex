@@ -738,6 +738,10 @@ pub fn usage() -> String {
             "Stop a stuck session's agent and start it again on the same conversation (its current turn is lost)",
         ),
         format_help_command(
+            "agents wait-reply <session-ref> [--contains <text>] [--timeout <seconds>] [--after <message-id>|now] [--json]",
+            "Wait until the agent's next reply finishes (optionally one holding the text) and print it; exits 1 with a timeout message",
+        ),
+        format_help_command(
             "chief --help",
             "Chief of Staff, the Ghostex-wide coordinator pinned at the top of Main Hub: its status, its playbook, a new chat, its agent, and messaging another computer's Chief of Staff",
         ),

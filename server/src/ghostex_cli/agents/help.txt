@@ -22,6 +22,8 @@ USAGE
   ghostex agents switch-account <session-ref> --account <number|email>
                                [--force] [--json]
   ghostex agents reload <session-ref> [--json]
+  ghostex agents wait-reply <session-ref> [--contains <text>] [--timeout <seconds>]
+                          [--after <message-id> | now] [--json]
   ghostex agents link | unlink | links  Only when the user asks for sessions to report to you:
                                        ghostex agents link --help
 
@@ -258,6 +260,25 @@ READ AND REPLY
   Results come to you: do not poll or sleep to watch an agent.
 
   Reply with agents send using the sender's Reply to reference.
+
+WAIT FOR A REPLY (scripts and checks)
+  ghostex agents wait-reply <session-ref> --contains "PASS" --timeout 300
+
+  wait-reply blocks until the agent's next reply finishes (its turn ends) and
+  prints that reply: the agent's text after its last tool call. --json adds
+  messageId and timestamp. --contains waits for a reply holding that text
+  (any case) and lets other replies pass. --after <message-id> counts only
+  replies after that message; the default, now, counts replies after the
+  newest message at the start (a turn already running counts when it ends).
+  To be sure a fast reply is not missed, take the newest id before you send:
+  ghostex read-session-chat <session-ref> --last 1 --json (messages[0].id).
+  It waits up to 600 seconds unless --timeout says otherwise, then exits 1
+  with "Timed out: no reply from <ref> within <n> seconds." gxserver holds
+  each read until the chat changes, so it costs nothing while it waits.
+  Works for Claude, Codex and the other chat agents, and for a session on
+  another computer (its ref, or --computer <name>).
+  For a step that must block on the answer (a script, a smoke test); a
+  session's own results still come to you without it.
 
 READ ANOTHER THREAD (past or present)
   ghostex read-session-chat <session> --all --format text

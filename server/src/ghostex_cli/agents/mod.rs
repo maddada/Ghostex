@@ -7,6 +7,7 @@ mod lifecycle;
 mod main_coordinator;
 pub(super) mod outbound;
 mod visibility;
+mod wait_reply;
 
 pub(super) use command::run;
 pub(super) use delivery::{chat_shows, confirm_coordinator_delivery, TranscriptRows};

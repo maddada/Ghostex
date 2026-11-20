@@ -4101,6 +4101,11 @@ still starting, and fails with the reason when the agent did not take it. If Gho
 a queued message, the row stays in the recipient's queue marked Not delivered
 with Retry and Delete, and the sending agent gets a note saying so. `agents close
 <session-ref>` ends that session, including any unfinished work. `ghostex read-session-chat` and `ghostex read-text` read replies.
+A script or a check that must block on an answer runs `ghostex agents wait-reply
+<session-ref> [--contains <text>] [--timeout <seconds>] [--after <message-id>|now]`:
+it waits until that agent's next reply finishes, prints it (`--json` adds its
+message id), and exits 1 with a timeout message when none comes in time
+(600 seconds by default).
 In the chat, a message between agents is one line with that agent's logo and
 the other session's title: Message from <session title> for one another agent
 sent (thread reports included), Message to <session title> for one this
