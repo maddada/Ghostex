@@ -43,6 +43,12 @@ use super::AppState;
 
 pub(crate) const CLEAR_SESSION_ENDPOINT: &str = "/api/clearSessionConversation";
 
+/// The refusal for a screen that can't take the command yet (no input box drawn, a screen that
+/// can't be read): the only one `ghostex clear-command` asks again on after waking a session, so a
+/// woken session that turns out to be working or holding messages is refused, not cleared once it
+/// goes idle (Fable review of 6d5889f7f, finding 6).
+pub(crate) const INPUT_BOX_NOT_READY: &str = "inputBoxNotReady";
+
 fn refused(code: &'static str, message: impl Into<String>) -> DomainStateError {
     DomainStateError {
         code,
@@ -159,11 +165,17 @@ fn screen_refusal(
     agent: &str,
     project_id: &str,
     session_id: &str,
-) -> Option<String> {
+) -> Option<DomainStateError> {
+    let not_ready = |message: String| {
+        Some(refused(
+            INPUT_BOX_NOT_READY,
+            format!("The conversation was not cleared. {message}"),
+        ))
+    };
     let capture =
         match crate::zmx::read_zmx_session_history_capture_vt(repository, project_id, session_id) {
             Ok(capture) if !capture.truncated => capture,
-            _ => return Some("Its screen could not be read. Try again in a moment.".into()),
+            _ => return not_ready("Its screen could not be read. Try again in a moment.".into()),
         };
     let notice = crate::session_chat_options::cached_session_chat_terminal_notice(
         state, project_id, session_id,
@@ -174,7 +186,7 @@ fn screen_refusal(
         notice.as_ref(),
     );
     if composer.state != crate::session_chat_composer::SessionChatComposerState::Ready {
-        return Some(match composer.reason {
+        return not_ready(match composer.reason {
             Some(reason) => format!("Its input box is not ready: {reason}"),
             None => "Its input box is not ready (it may still be starting).".into(),
         });
@@ -182,7 +194,10 @@ fn screen_refusal(
     if crate::session_chat_composer::session_chat_composer_input(agent, &capture.text)
         .is_some_and(|input| !input.is_empty())
     {
-        return Some("Its input box holds unsent text. Send or remove it first.".into());
+        return Some(refused(
+            "agentBusy",
+            "The conversation was not cleared. Its input box holds unsent text. Send or remove it first.",
+        ));
     }
     None
 }
@@ -245,14 +260,11 @@ fn prepare_clear(
             format!("The conversation was not cleared. {reason}"),
         ));
     }
-    if let Some(reason) = (!daemon_missing)
+    if let Some(refusal) = (!daemon_missing)
         .then(|| screen_refusal(state, repository, &agent, project_id, session_id))
         .flatten()
     {
-        return Err(refused(
-            "agentBusy",
-            format!("The conversation was not cleared. {reason}"),
-        ));
+        return Err(refusal);
     }
     if daemon_missing {
         // A sleeping session is only woken here, and the caller asks again once it is up. Codex
@@ -321,7 +333,11 @@ fn send_error(error: crate::session_chat_send::SessionChatSendError) -> DomainSt
     use crate::session_chat_send::SessionChatSendFailure as Failure;
     match error.failure {
         Failure::PromptWaiting | Failure::ComposerNotReady | Failure::ComposerNotCleared => refused(
-            "agentBusy",
+            if error.failure == Failure::ComposerNotReady {
+                INPUT_BOX_NOT_READY
+            } else {
+                "agentBusy"
+            },
             format!(
                 "The conversation was not cleared: the session stopped taking input before the command was typed ({}). Nothing will be typed later.",
                 error.message.trim_end_matches('.')
@@ -410,7 +426,20 @@ pub(crate) async fn handle_clear_session_http(
             crate::protocol::rpc_success(request_id, result),
         ),
         Err(error) => {
-            super::http_endpoints::domain_error_response(endpoint_path, request_id, error)
+            // A refusal of the session's state is a conflict, not a server error, which
+            // `domain_error_response` makes of a code it does not know.
+            if matches!(
+                error.code,
+                "agentBusy" | INPUT_BOX_NOT_READY | "unsupportedAgent"
+            ) {
+                super::routed_json(
+                    Some(endpoint_path),
+                    axum::http::StatusCode::CONFLICT,
+                    crate::protocol::rpc_error(error.code, error.message, Some(request_id)),
+                )
+            } else {
+                super::http_endpoints::domain_error_response(endpoint_path, request_id, error)
+            }
         }
     }
 }

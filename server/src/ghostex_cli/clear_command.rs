@@ -44,8 +44,12 @@ pub fn clear_command(args: &[String]) -> CliResult<()> {
     // `GHOSTEX_SESSION_TOKEN` skipped the 11.11.1 variable check), so it is refused whatever the
     // variables say. Codex and Empryo panes get their token back from the process tree before this
     // runs (agent_hooks/ancestor_session.rs).
-    let holds_session_token = std::env::var(crate::security::SESSION_TOKEN_ENV)
-        .is_ok_and(|token| token.trim().starts_with(crate::security::SESSION_TOKEN_PREFIX));
+    let holds_session_token =
+        std::env::var(crate::security::SESSION_TOKEN_ENV).is_ok_and(|token| {
+            token
+                .trim()
+                .starts_with(crate::security::SESSION_TOKEN_PREFIX)
+        });
     if !holds_session_token && crate::agent_hooks::caller_ancestry().in_session_pane {
         return Err(CliError::Other("This runs inside a Ghostex session but without its session token (GHOSTEX_SESSION_TOKEN), so the clear would run as yours. Run it from the agent's own shell, or from your own terminal outside Ghostex.".into()));
     }
@@ -67,8 +71,9 @@ pub fn clear_command(args: &[String]) -> CliResult<()> {
                     answer = next;
                     break;
                 }
-                // Starting up: its input box is not drawn yet.
-                Err(CliError::Rpc { response, .. }) if response["error"] == "agentBusy" => {}
+                // Only "its input box is not ready yet" is asked again (Fable review finding 6): a
+                // woken session that is working or holds messages is refused, not cleared later.
+                Err(CliError::Rpc { response, .. }) if response["error"] == "inputBoxNotReady" => {}
                 Err(error) => return Err(error),
             }
         }
