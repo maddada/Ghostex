@@ -3,6 +3,8 @@
 //!
 //! CDXC:Boosts 2026-11-20 DECISION:
 //! User (Q4217 on the Boosts page): agents learn how to make these from the CLI help, not skills ("if we say use ghostex cli to read instructions the agent always gets latest info and he always can read this info, unlike with skills cuz they need to be invoked with /skillname always"), and the help must be "complete enough that a Boost's prompt can just point to it". So the guide is the ghostex-visuals skill's own text, embedded when the CLI is built, split by topic so an agent reads only what its Boost needs; the skill stays for people who invoke it by name, and the two can never differ.
+//! CDXC:AgentSkills 2026-11-20 DECISION:
+//! User (Q4262 "B"): Ghostex's own skills are retired for CLI help, superseding "the skill stays for people who invoke it by name" above: the ghostex-visuals skill is gone, its text lives on as visual_guide.md beside this file, and `ghostex visual guide` is the only way agents read it (the remaining `ghostex` skill sends them here).
 //! SEE-ALSO: server/src/ghostex_cli/visual_guide.md (the text), packages/gx-chat-core/src/extras/boosts.rs (the prompts that point here), server/src/ghostex_cli/agent_guide.rs.
 
 use serde_json::{json, Value};
