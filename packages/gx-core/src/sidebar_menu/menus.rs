@@ -360,6 +360,23 @@ impl<'a> SidebarMenus<'a> {
         Some(menu)
     }
 
+    /// The rows each place of the one session menu holds for this row, for a menu outside the
+    /// sidebar (the chat box ⋯; layout.rs). `None` when the list does not draw the row.
+    pub fn row_menu_places(
+        &self,
+        sidebar_session_id: &str,
+    ) -> Option<Vec<(&'static str, Vec<MenuItem>)>> {
+        let (group, session) = self.find_row(sidebar_session_id)?;
+        let menu_group = self.row_menu_group(group, &session.row);
+        let group_moves = self.group_moves(group, &session.row);
+        Some(session::session_menu_places(&self.session_input(
+            &menu_group,
+            &session.row,
+            &[],
+            group_moves.as_ref(),
+        )))
+    }
+
     /// What the row's Copy ID copies (`[<session title>](<Global Ref>)`), which a session row
     /// dropped on a chat's composer types too. `None` when the list does not draw the row or its
     /// machine's daemon id is not known yet.

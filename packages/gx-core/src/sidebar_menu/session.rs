@@ -17,7 +17,8 @@ use super::commands::{message, MenuCommand};
 use super::group::MenuGroup;
 use super::hover::{hover_strip, HoverAction, HoverStrip};
 use super::item::MenuItem;
-use super::text::{js_trim, transcript_agent};
+use super::layout::{self, SessionMenuSpot};
+use super::text::transcript_agent;
 
 /// The four snooze presets and their labels.
 const SNOOZE_PRESETS: [(&str, &str); 4] = [
@@ -202,9 +203,9 @@ fn action_rows(
     let caps = SessionCapabilities::resolve(row, input.group.is_remote);
     let tags = tag_items(input, include_menu);
     let parked = row.is_parked;
-    let mut park = MenuItem::row(
-        if parked { "Unpark" } else { "Park" },
-        "archive",
+    let mut park = layout_row(
+        "park",
+        parked,
         MenuCommand::command(message::set_session_parked(id, !parked)),
     );
     if !parked && settings.show_tag_menu_when_parking && caps.can_tag_session && !tags.is_empty() {
@@ -260,59 +261,48 @@ fn action_rows(
     // the identical millisecond.
     let snoozed = session_is_snoozed(row.timing.snoozed_until_ms, input.now_ms);
     let rows = ActionRows {
-        close: Some(
-            MenuItem::row(
-                "Close",
-                "x",
-                MenuCommand::command(message::close_session(id)),
-            )
-            .with_danger(),
-        ),
-        rename: caps.can_rename_session.then(|| {
-            MenuItem::row(
-                "Rename",
-                "pencil",
-                MenuCommand::session_action(id, "rename"),
-            )
-        }),
+        close: Some(layout_row(
+            "close",
+            false,
+            MenuCommand::command(message::close_session(id)),
+        )),
+        rename: caps
+            .can_rename_session
+            .then(|| layout_row("rename", false, MenuCommand::session_action(id, "rename"))),
         note: (settings.session_notes_enabled && caps.can_open_session_note)
-            .then(|| MenuItem::row("Note", "note", MenuCommand::session_action(id, "note"))),
+            .then(|| layout_row("note", false, MenuCommand::session_action(id, "note"))),
         sleep: caps.can_sleep_session.then(|| {
-            MenuItem::row(
-                if sleeping { "Wake" } else { "Sleep" },
-                if sleeping { "player-play" } else { "moon" },
+            layout_row(
+                "sleep",
+                sleeping,
                 MenuCommand::command(message::set_session_sleeping(id, !sleeping)),
             )
         }),
         pin: caps.can_pin_session.then(|| {
-            MenuItem::row(
-                if row.is_pinned { "Unpin" } else { "Pin" },
-                if row.is_pinned {
-                    "pin-filled"
-                } else {
-                    "pin-outline"
-                },
+            layout_row(
+                "pin",
+                row.is_pinned,
                 MenuCommand::command(message::set_session_pinned(id, !row.is_pinned)),
             )
         }),
         park: (!caps.is_browser_session && settings.enable_session_parking).then_some(park),
         tag: (caps.can_tag_session && !tags.is_empty())
-            .then(|| MenuItem::submenu("Tag As", "tag", tags.clone())),
+            .then(|| layout_submenu("tagAs", tags.clone())),
         snooze: (!caps.is_browser_session).then(|| {
             if snoozed {
-                MenuItem::row(
-                    "Unsnooze",
-                    "alarm",
+                layout_row(
+                    "snooze",
+                    true,
                     MenuCommand::command(message::unsnooze_session(id)),
                 )
             } else {
-                MenuItem::submenu("Snooze", "alarm", snooze_presets)
+                layout_submenu("snooze", snooze_presets)
             }
         }),
         close_after_done: caps.can_close_after_done.then(|| {
-            MenuItem::row(
-                "Close After Done",
-                "clock",
+            layout_row(
+                "closeAfterDone",
+                false,
                 MenuCommand::command(message::toggle_close_after_done(id)),
             )
         }),
@@ -480,17 +470,33 @@ fn move_to_group_item(id: &str, moves: Option<&SessionGroupMoves>, stale: bool) 
     MenuItem::submenu("Move to Group", "layout-sidebar-right-expand", children).with_page()
 }
 
-/// An orchestrator's Goal & Instructions, Memory, View playbook and Playbook overrides, and a thread's Mark Thread Done or
-/// Reopen Thread, after a separator. An orchestrator's rows (and Sleep Inactive Threads) sit in one Coordinator submenu.
+/// A coordinator's rows (Make main coordinator and the Coordinator submenu), a lead link's Unlink
+/// and a lead's Stop leading: the menu's `coordinator` place. A thread's Mark Thread Done or Reopen
+/// Thread is `thread_rows`.
 ///
 /// CDXC:Coordinators 2026-10-13 DECISION:
-/// User: "Mark done / Reopen on threads, Goal & instructions and Memory editing on coordinators on both the phone and the desktop" (2026-10-01), ported onto the Orchestrator menus ("port all of it, rebased onto main"). Goal & Instructions and Memory open editors that save through gxserver; Mark Thread Done does what `ghostex orchestrator resolve` does (marks the thread done and closes its session) and is disabled while the thread works or waits on an answer, which resolve refuses; Reopen Thread shows instead on a done thread still in the list. A machine that is not connected gets none of them. The phone's menu (`apps/mobile/app/src/screens/sessions-screen/sidebar-menus.ts`) must match.
+/// User: "Mark done / Reopen on threads, Goal & instructions and Memory editing on coordinators on both the phone and the desktop" (2026-10-01), ported onto the Orchestrator menus ("port all of it, rebased onto main"). Goal & Instructions and Memory open editors that save through gxserver; Mark Thread Done does what `ghostex orchestrator resolve` does (marks the thread done and closes its session) and is disabled while the thread works or waits on an answer, which resolve refuses; Reopen Thread shows instead on a done thread still in the list. A machine that is not connected gets none of them. The phone's menus fill the same places (layout.rs).
 fn coordinator_rows(row: &SessionRow, stale: bool, has_inactive_threads: bool) -> Vec<MenuItem> {
-    if stale || row.is_draft {
-        return Vec::new();
-    }
     let id = row.sidebar_session_id.as_str();
-    let mut rows = vec![MenuItem::separator()];
+    let mut rows = Vec::new();
+    if row.is_draft {
+        return rows;
+    }
+    if stale {
+        // A coordinator whose computer is not connected has no Coordinator submenu, so its Sleep
+        // Inactive Threads stays a row of its own, as before.
+        if row.is_coordinator {
+            rows.push(
+                MenuItem::row(
+                    "Sleep Inactive Threads",
+                    "moon",
+                    MenuCommand::command(message::sleep_inactive_coordinator_threads(id)),
+                )
+                .with_disabled(!has_inactive_threads),
+            );
+        }
+        return rows;
+    }
     if row.is_coordinator {
         // CDXC:Coordinators 2026-11-10 SEE-ALSO: the user's decision in
         // server/src/coordinators/main_coordinator.rs ("i should be able to give it to another
@@ -499,7 +505,7 @@ fn coordinator_rows(row: &SessionRow, stale: bool, has_inactive_threads: bool) -
         // (use-sessions-screen-menus.tsx) offers the same.
         if !row.is_main_coordinator && !row.is_chief {
             rows.push(MenuItem::row(
-                "Make main coordinator",
+                "Make Main Coordinator",
                 "coordinator-crown-points",
                 MenuCommand::coordinator_session(id, "makeMain"),
             ));
@@ -508,10 +514,9 @@ fn coordinator_rows(row: &SessionRow, stale: bool, has_inactive_threads: bool) -
         // User (Android screenshot of the long-press menu of a coordinator): "the context menu for
         // coordinator is too long. Also view playbook didn't have icon. Pls put all these under 1
         // menu", then confirmed the desktop gets the same. Goal & Instructions, Memory, View
-        // playbook, Playbook overrides and Sleep Inactive Threads are one "Coordinator" submenu
-        // (the coordinator's crown icon) where the loose rows were; Make main coordinator stays a
-        // row of its own above it. View playbook's icon (`book`) is drawn on the phone too. The
-        // phone's menu (`apps/mobile/app/src/screens/sessions-screen/sidebar-menus.ts`) must match.
+        // Playbook, Playbook Overrides and Sleep Inactive Threads are one "Coordinator" submenu
+        // (the coordinator's crown icon) where the loose rows were; Make Main Coordinator stays a
+        // row of its own above it. View Playbook's icon (`book`) is drawn on the phone too.
         let mut children = vec![
             MenuItem::row(
                 "Goal & Instructions…",
@@ -528,34 +533,28 @@ fn coordinator_rows(row: &SessionRow, stale: bool, has_inactive_threads: bool) -
             // user can see the coordinator playbook". The playbook this coordinator reads (Ghostex's,
             // the reply format, then the user's overrides) opens straight from its own menu.
             MenuItem::row(
-                "View playbook",
+                "View Playbook",
                 "book",
                 MenuCommand::coordinator_session(id, "viewPlaybook"),
             ),
             // CDXC:Coordinators 2026-11-07: the user's playbook overrides (for every coordinator on
             // this one's computer) open from here too; see server/src/coordinators/playbook.rs.
             MenuItem::row(
-                "Playbook overrides…",
+                "Playbook Overrides…",
                 "pencil",
                 MenuCommand::coordinator_session(id, "playbookOverrides"),
             ),
         ];
         // CDXC:Coordinators 2026-10-13 SEE-ALSO: the user's decision on `coordinator_thread_keys` in sidebar_actions/bulk.rs ("right click on orchestrator and sleep", "Should just be sleep inactive not park"). Disabled, like the project menu's Sleep Inactive, when no thread can be slept.
-        if !row.is_draft {
-            children.push(
-                MenuItem::row(
-                    "Sleep Inactive Threads",
-                    "moon",
-                    MenuCommand::command(message::sleep_inactive_coordinator_threads(id)),
-                )
-                .with_disabled(!has_inactive_threads),
-            );
-        }
-        rows.push(MenuItem::submenu(
-            "Coordinator",
-            "coordinator-crown-points",
-            children,
-        ));
+        children.push(
+            MenuItem::row(
+                "Sleep Inactive Threads",
+                "moon",
+                MenuCommand::command(message::sleep_inactive_coordinator_threads(id)),
+            )
+            .with_disabled(!has_inactive_threads),
+        );
+        rows.push(layout_submenu("coordinator", children));
     } else if row.lead_linked {
         // CDXC:LeadLinks 2026-11-20 SEE-ALSO: server/src/agents/lead_links/mod.rs (the user: "Unlink
         // is fine to add but I don't want linking sessions to be a context menu item at all"). A
@@ -565,249 +564,192 @@ fn coordinator_rows(row: &SessionRow, stale: bool, has_inactive_threads: bool) -
             "unlink",
             MenuCommand::coordinator_session(id, "unlinkLead"),
         ));
-    } else if row.coordinator_parent.is_some() {
-        let state = row.thread_state.as_deref();
-        if state == Some("done") {
-            rows.push(MenuItem::row(
-                "Reopen Thread",
-                "rotate-clockwise",
-                MenuCommand::coordinator_session(id, "reopen"),
-            ));
-        } else {
-            rows.push(
-                MenuItem::row(
-                    "Mark Thread Done",
-                    "circle-check",
-                    MenuCommand::coordinator_session(id, "markDone"),
-                )
-                .with_disabled(matches!(state, Some("working" | "waiting"))),
-            );
-        }
     }
     if row.is_lead && !row.is_coordinator && row.lead_link_count > 0 {
         let count = row.lead_link_count;
         rows.push(MenuItem::row(
             &if count == 1 {
-                "Stop leading 1 session".to_string()
+                "Stop Leading 1 Session".to_string()
             } else {
-                format!("Stop leading {count} sessions")
+                format!("Stop Leading {count} Sessions")
             },
             "unlink",
             MenuCommand::coordinator_session(id, "stopLeading"),
         ));
     }
-    if rows.len() == 1 {
-        return Vec::new();
-    }
     rows
 }
 
-fn full_menu(
-    input: &SessionMenuInput<'_>,
-    rows: &ActionRows,
-    caps: &SessionCapabilities,
-    strip: &HoverStrip,
-) -> Vec<MenuItem> {
-    let row = input.row;
-    let settings = input.settings;
-    let group = input.group;
+/// A thread's Mark Thread Done, or Reopen Thread once it is done.
+fn thread_rows(row: &SessionRow, stale: bool) -> Vec<MenuItem> {
+    if stale || row.is_draft || row.is_coordinator || row.lead_linked {
+        return Vec::new();
+    }
+    if row.coordinator_parent.is_none() {
+        return Vec::new();
+    }
     let id = row.sidebar_session_id.as_str();
-    let enabled = strip.enabled();
-    // An action the hover strip offers is repeated in the menu too, with the two that would be
-    // duplicated by their own rows left out.
-    let mirror: Vec<HoverAction> = if settings.show_session_card_hover_buttons_in_context_menu {
-        if caps.is_browser_session {
-            vec![HoverAction::Sleep]
-        } else {
-            enabled
-                .iter()
-                .copied()
-                .filter(|action| {
-                    *action != HoverAction::Close && *action != HoverAction::CloseAfterDone
-                })
-                .collect()
-        }
+    let state = row.thread_state.as_deref();
+    if state == Some("done") {
+        vec![layout_row(
+            "markThreadDone",
+            true,
+            MenuCommand::coordinator_session(id, "reopen"),
+        )]
     } else {
-        Vec::new()
-    };
-    /*
-    CDXC:ContextMenus 2026-10-01 DECISION:
-    The user wants the session menu in ChatGPT's conversation-menu order (Rename, Pin, Mark as unread, Archive, then Section after a line), mirrored hover buttons included: "why is rename below those other buttons? match the order of ChatGPT". The rows run Rename, Pin, Snooze, Park, Sleep, Note, then Tag As after a separator, whether a row is there as a mirrored hover button or on its own; this supersedes the mirrored buttons leading the menu in the card's right-to-left order. Note shows here only as a mirrored hover button and otherwise sits first in Advanced. Close keeps its hover-strip rule, and Fork stays in Advanced (Copy Details moved into the Copy submenu on 2026-10-09, sidebar_menu/copy.rs). The phone's menu (`apps/mobile/app/src/screens/sessions-screen/sidebar-menus.ts`) must match.
-    */
-    /*
-    CDXC:ContextMenus 2026-11-15 DECISION:
-    User (Android screenshot of the long-press menu running off the screen): "This is too long", then picked the quick row with "Put sleep under advanced, 4 quick actions only pls" (Q3420 C) and the same change on the desktop's right-click menu (Q3421 Yes). The menu opens with a row of icon buttons, Rename, Pin and Copy ID (the phone adds Voice Call, which the desktop has no row for), then Snooze, Park, Note and Tag As as rows with no line between them; Sleep (or Wake) moves to the top of Advanced. Each keeps its hover-strip rule (`shown`). Supersedes Copy ID's own row above Tag As (2026-11-12, copy.rs); the order inside the list is still ChatGPT's (2026-10-01). The phone's menu (`apps/mobile/app/src/screens/sessions-screen/sidebar-menus.ts`) must match.
-    Since 2026-11-18 Copy ID is the first row of the Copy submenu (copy.rs) and the desktop's Open in a Popup is the quick row's third button (gx_store/sidebar_menus.rs), so this row holds Rename and Pin here.
-    */
-    let shown = |action: HoverAction| {
-        mirror.contains(&action) || (action != HoverAction::Note && !enabled.contains(&action))
-    };
-    let mut menu: Vec<MenuItem> = Vec::new();
-    let mut quick: Vec<MenuItem> = Vec::new();
-    for action in [HoverAction::Rename, HoverAction::Pin] {
-        if let Some(item) = rows.get(action).filter(|_| shown(action)) {
-            quick.push(if action == HoverAction::Pin && !row.is_pinned {
-                MenuItem {
-                    icon: Some("pin-outline".to_string()),
-                    ..item.clone()
-                }
-            } else {
-                item.clone()
-            });
-        }
+        vec![layout_row(
+            "markThreadDone",
+            false,
+            MenuCommand::coordinator_session(id, "markDone"),
+        )
+        .with_disabled(matches!(state, Some("working" | "waiting")))]
     }
-    if !quick.is_empty() {
-        menu.push(MenuItem::quick_row(quick));
-    }
-    for action in [
-        HoverAction::Snooze,
-        HoverAction::Park,
-        HoverAction::Note,
-        HoverAction::Tag,
-    ] {
-        if let Some(item) = rows.get(action).filter(|_| shown(action)) {
-            menu.push(item.clone());
-        }
-    }
+}
 
-    let mut coordinator_block = coordinator_rows(row, group.is_stale, input.has_inactive_threads);
-    let has_coordinator_block = !coordinator_block.is_empty();
-    // Its separator only divides it from rows above, so a menu never opens on a line.
-    if has_coordinator_block && menu.is_empty() {
-        coordinator_block.remove(0);
+/// A row named and drawn as the one session menu names it (layout.rs); `alt` takes the reverse a
+/// toggle reads (Unpin, Wake, Reopen Thread).
+fn layout_row(id: &str, alt: bool, command: MenuCommand) -> MenuItem {
+    let entry = layout::entry(id).unwrap_or_else(|| panic!("no session menu entry {id}"));
+    let label = if alt {
+        entry.alt_label.unwrap_or(entry.label)
+    } else {
+        entry.label
+    };
+    let icon = if alt {
+        entry.alt_icon.unwrap_or(entry.icon)
+    } else {
+        entry.icon
+    };
+    let mut item = MenuItem::row(label, icon, command);
+    if let Some(hotkey) = entry.hotkey {
+        item = item.with_hotkey(hotkey);
     }
-    menu.extend(coordinator_block);
+    if entry.danger {
+        item = item.with_danger();
+    }
+    item
+}
 
-    // A coordinator whose computer is not connected has no Coordinator submenu (`coordinator_rows`), so its Sleep Inactive Threads stays a row of its own, as before.
-    if row.is_coordinator && !row.is_draft && !has_coordinator_block {
-        if !menu.is_empty() {
-            menu.push(MenuItem::separator());
-        }
-        menu.push(
+fn layout_submenu(id: &str, children: Vec<MenuItem>) -> MenuItem {
+    let entry = layout::entry(id).unwrap_or_else(|| panic!("no session menu entry {id}"));
+    MenuItem::submenu(entry.label, entry.icon, children)
+}
+
+/// A box session's Open Box Web App, Open Box Screen, Stop Box and Destroy Box…, in one submenu.
+/// Only this computer's rows: `/api/agentbox` answers for the gxserver the app talks to, and a
+/// remote row's box lives on that machine.
+fn box_rows(id: &str, row: &SessionRow, group: &MenuGroup<'_>) -> Vec<MenuItem> {
+    if row.agentbox.is_none() || group.is_remote || group.is_stale {
+        return Vec::new();
+    }
+    vec![layout_submenu(
+        "box",
+        vec![
             MenuItem::row(
-                "Sleep Inactive Threads",
-                "moon",
-                MenuCommand::command(message::sleep_inactive_coordinator_threads(id)),
-            )
-            .with_disabled(!input.has_inactive_threads),
-        );
-    }
-
-    // A box session's own section. Only this computer's rows: `/api/agentbox` answers for the
-    // gxserver the app talks to, and a remote row's box lives on that machine.
-    if row.agentbox.is_some() && !group.is_remote && !group.is_stale {
-        if !menu.is_empty() {
-            menu.push(MenuItem::separator());
-        }
-        menu.push(MenuItem::row(
-            "Open Box Web App",
-            "world",
-            MenuCommand::agentbox_session(id, "openWeb"),
-        ));
-        menu.push(MenuItem::row(
-            "Open Box Screen",
-            "device-desktop",
-            MenuCommand::agentbox_session(id, "openScreen"),
-        ));
-        menu.push(MenuItem::row(
-            "Stop Box",
-            "player-stop",
-            MenuCommand::agentbox_session(id, "stop"),
-        ));
-        menu.push(
+                "Open Box Web App",
+                "world",
+                MenuCommand::agentbox_session(id, "openWeb"),
+            ),
+            MenuItem::row(
+                "Open Box Screen",
+                "device-desktop",
+                MenuCommand::agentbox_session(id, "openScreen"),
+            ),
+            MenuItem::row(
+                "Stop Box",
+                "player-stop",
+                MenuCommand::agentbox_session(id, "stop"),
+            ),
             MenuItem::row(
                 "Destroy Box…",
                 "trash",
                 MenuCommand::agentbox_session(id, "destroy"),
             )
             .with_danger(),
-        );
-    }
+        ],
+    )]
+}
 
-    // A Claude cloud session's own section. Only this computer's rows: the session's link and the
-    // worktree it comes back to belong to the gxserver that started it.
-    // CDXC:ClaudeCloud 2026-10-23 DECISION: User: Bring to this computer goes "into a new worktree; the new local row takes over and the cloud row parks", and the row's menu also opens the session on claude.ai.
-    if let Some(cloud) = row
+/// A Claude cloud session's own rows, in one submenu. Only this computer's rows: the session's
+/// link and the worktree it comes back to belong to the gxserver that started it.
+/// CDXC:ClaudeCloud 2026-10-23 DECISION: User: Bring to this computer goes "into a new worktree; the new local row takes over and the cloud row parks", and the row's menu also opens the session on claude.ai.
+fn claude_cloud_rows(id: &str, row: &SessionRow, group: &MenuGroup<'_>) -> Vec<MenuItem> {
+    let Some(cloud) = row
         .claude_cloud
         .as_ref()
         .filter(|_| !group.is_remote && !group.is_stale)
-    {
-        if !menu.is_empty() {
-            menu.push(MenuItem::separator());
-        }
-        let has_page = cloud.url.is_some();
-        menu.push(
-            MenuItem::row(
-                "Open on claude.ai",
-                "external-link",
-                MenuCommand::claude_cloud_session(id, "open"),
-            )
-            .with_disabled(!has_page),
-        );
-        menu.push(
-            MenuItem::row(
-                "Bring to This Computer",
-                "device-laptop",
-                MenuCommand::claude_cloud_session(id, "bringBack"),
-            )
-            .with_disabled(!has_page || cloud.state == "moved"),
-        );
-        // Offered while the session's account is out of usage (CDXC:ClaudeCloud in
-        // server/src/claude_cloud/accounts.rs).
-        if cloud.limit_notice.is_some() && cloud.state == "running" {
-            menu.push(MenuItem::row(
-                "Start a Copy on Another Account…",
-                "copy",
-                MenuCommand::claude_cloud_session(id, "copy"),
-            ));
-        }
+    else {
+        return Vec::new();
+    };
+    let has_page = cloud.url.is_some();
+    let mut children = vec![
+        MenuItem::row(
+            "Open on claude.ai",
+            "external-link",
+            MenuCommand::claude_cloud_session(id, "open"),
+        )
+        .with_disabled(!has_page),
+        MenuItem::row(
+            "Bring to This Computer",
+            "device-laptop",
+            MenuCommand::claude_cloud_session(id, "bringBack"),
+        )
+        .with_disabled(!has_page || cloud.state == "moved"),
+    ];
+    // Offered while the session's account is out of usage (CDXC:ClaudeCloud in
+    // server/src/claude_cloud/accounts.rs).
+    if cloud.limit_notice.is_some() && cloud.state == "running" {
+        children.push(MenuItem::row(
+            "Start a Copy on Another Account…",
+            "copy",
+            MenuCommand::claude_cloud_session(id, "copy"),
+        ));
     }
+    vec![layout_submenu("claudeAi", children)]
+}
 
-    let mut advanced: Vec<MenuItem> = vec![MenuItem::heading("Session")];
-    // Sleep sits first in Advanced (CDXC:ContextMenus 2026-11-15 above).
-    if let Some(item) = rows
-        .get(HoverAction::Sleep)
-        .filter(|_| shown(HoverAction::Sleep))
-    {
-        advanced.push(item.clone());
+/// The Postpone By presets, Edit Delayed Send and Disable Delayed Send, while a delayed send is
+/// armed.
+fn postpone_rows(id: &str, row: &SessionRow, caps: &SessionCapabilities) -> Vec<MenuItem> {
+    let armed = row
+        .delayed_send
+        .as_ref()
+        .is_some_and(|delayed| delayed.deadline_at.is_some());
+    if !caps.can_delayed_send || !armed {
+        return Vec::new();
     }
-    if !enabled.contains(&HoverAction::Note) {
-        if let Some(item) = &rows.note {
-            advanced.push(item.clone());
-        }
-    }
-    if caps.can_delayed_send {
-        advanced.push(MenuItem::row(
-            "Delayed Send",
-            "clock",
-            MenuCommand::session_action(id, "delayedSend"),
-        ));
-    }
-    if caps.can_close_after_done
-        && (!enabled.contains(&HoverAction::CloseAfterDone)
-            || settings.show_session_card_hover_buttons_in_context_menu)
-    {
-        if let Some(item) = &rows.close_after_done {
-            advanced.push(item.clone());
-        }
-    }
-    // A box session has no transcript on this computer to fork, export or move to another account.
-    // A Claude cloud session's conversation lives on claude.ai, so none of these apply to it either.
-    let in_box = row.agentbox.is_some() || row.claude_cloud.is_some();
-    if caps.can_fork_session && !in_box {
-        advanced.push(MenuItem::row(
-            "Fork",
-            "git-fork",
-            MenuCommand::command(message::fork_session(id)),
-        ));
-    }
-    if caps.can_full_reload_session {
-        advanced.push(MenuItem::row(
-            "Full Reload",
-            "refresh",
-            MenuCommand::command(message::full_reload_session(id)),
-        ));
-    }
+    let mut children: Vec<MenuItem> = POSTPONE_PRESETS
+        .iter()
+        .map(|(label, delay_ms)| {
+            MenuItem::row(
+                label,
+                "clock",
+                MenuCommand::command(message::postpone_delayed_send(id, *delay_ms)),
+            )
+        })
+        .collect();
+    children.push(MenuItem::separator());
+    children.push(MenuItem::row(
+        "Edit Delayed Send",
+        "pencil",
+        MenuCommand::session_action(id, "delayedSend"),
+    ));
+    children.push(MenuItem::row(
+        "Disable Delayed Send",
+        "x",
+        MenuCommand::command(message::cancel_delayed_send(id)),
+    ));
+    vec![layout_submenu("postponeBy", children)]
+}
+
+/// Switch Account, for a Claude or Codex session (or a cloud one before it starts on claude.ai).
+fn switch_account_rows(
+    id: &str,
+    row: &SessionRow,
+    group: &MenuGroup<'_>,
+    caps: &SessionCapabilities,
+    in_box: bool,
+) -> Vec<MenuItem> {
     let account_provider = transcript_agent(
         row.menu_facts.agent_name.as_deref(),
         row.agent_icon.as_deref(),
@@ -817,22 +759,35 @@ fn full_menu(
     let cloud_account_open = row.claude_cloud.as_ref().is_some_and(|cloud| {
         !group.is_remote && matches!(cloud.state.as_str(), "draft" | "failed")
     });
-    if !caps.is_browser_session
-        && !group.is_stale
-        && ((!in_box && matches!(account_provider, Some("claude") | Some("codex")))
+    if caps.is_browser_session
+        || group.is_stale
+        || !((!in_box && matches!(account_provider, Some("claude") | Some("codex")))
             || cloud_account_open)
     {
-        advanced.push(MenuItem {
-            label: Some("Switch Account".to_string()),
-            icon: Some("users-group".to_string()),
-            keep_open: true,
-            command: Some(MenuCommand::session_accounts_load(id)),
-            ..MenuItem::default()
-        });
+        return Vec::new();
     }
-    // CDXC:Coordinators 2026-10-04 SEE-ALSO: promote_session_to_coordinator in server/src/coordinators/promote.rs (the user's decision that Make Coordinator lives here and never disturbs the running session); gxserver refuses the same sessions this row is hidden on, by the same agent list (`COORDINATOR_AGENT_FAMILIES` in gx-protocol). The phone's session menu (apps/mobile/app/src/screens/sessions-screen/sidebar-menus.ts) offers it too.
-    // CDXC:Coordinators 2026-11-07 FIX: a reporter on Discord asked "why orchestrator cannot be promoted to a session in a remote machine from the desktop app?" (they had found it only in the CLI), and the user answered "I'll add that command too looks like it's not showing in ui". A connected computer's row offers Make Coordinator too: the desktop sends `/api/promoteCoordinator` to the gxserver that runs the session (gx_store/create/coordinator.rs), which installs the orchestrator skill on that computer and queues the playbook there.
-    if !caps.is_browser_session
+    let entry = layout::entry("switchAccount").expect("switchAccount entry");
+    vec![MenuItem {
+        label: Some(entry.label.to_string()),
+        icon: Some(entry.icon.to_string()),
+        keep_open: true,
+        command: Some(MenuCommand::session_accounts_load(id)),
+        ..MenuItem::default()
+    }]
+}
+
+/// Make Coordinator, on a session of an agent that can coordinate.
+///
+/// CDXC:Coordinators 2026-10-04 SEE-ALSO: promote_session_to_coordinator in server/src/coordinators/promote.rs (the user's decision that Make Coordinator lives here and never disturbs the running session); gxserver refuses the same sessions this row is hidden on, by the same agent list (`COORDINATOR_AGENT_FAMILIES` in gx-protocol). The phone's menus offer it too.
+/// CDXC:Coordinators 2026-11-07 FIX: a reporter on Discord asked "why orchestrator cannot be promoted to a session in a remote machine from the desktop app?" (they had found it only in the CLI), and the user answered "I'll add that command too looks like it's not showing in ui". A connected computer's row offers Make Coordinator too: the desktop sends `/api/promoteCoordinator` to the gxserver that runs the session (gx_store/create/coordinator.rs), which installs the orchestrator skill on that computer and queues the playbook there.
+fn make_coordinator_rows(
+    id: &str,
+    row: &SessionRow,
+    group: &MenuGroup<'_>,
+    caps: &SessionCapabilities,
+    in_box: bool,
+) -> Vec<MenuItem> {
+    let offered = !caps.is_browser_session
         && !group.is_stale
         && !in_box
         && !row.is_draft
@@ -843,58 +798,24 @@ fn full_menu(
             .as_deref()
             .or(row.menu_facts.agent_name.as_deref())
             .map(|agent| crate::default_agent_id_for_icon(Some(agent)).unwrap_or(agent))
-            .is_some_and(ghostex_gx_protocol::coordinator_agent_family_supported)
-    {
-        advanced.push(MenuItem::row(
-            "Make Coordinator",
-            "users-group",
-            MenuCommand::session_action(id, "makeCoordinator"),
-        ));
+            .is_some_and(ghostex_gx_protocol::coordinator_agent_family_supported);
+    if !offered {
+        return Vec::new();
     }
-    if caps.can_export_transcript && !in_box {
-        advanced.push(MenuItem::row(
-            "Handoff / Export",
-            "file-export",
-            MenuCommand::command(message::export_session_transcript(id)),
-        ));
+    vec![layout_row(
+        "makeCoordinator",
+        false,
+        MenuCommand::session_action(id, "makeCoordinator"),
+    )]
+}
+
+/// Sleep Below and Close Below, for the rows drawn under this one in its group.
+fn below_rows(id_rows: &[&SessionRow], which: &str) -> Vec<MenuItem> {
+    if id_rows.is_empty() {
+        return Vec::new();
     }
-    if row
-        .menu_facts
-        .first_user_message
-        .as_deref()
-        .is_some_and(|message| !js_trim(message).is_empty())
-    {
-        advanced.push(MenuItem::row(
-            "View 1st Message",
-            "message-circle",
-            MenuCommand::session_action(id, "firstMessage"),
-        ));
-    }
-    if caps.can_generate_session_title {
-        advanced.push(MenuItem::row(
-            "Generate Title",
-            "sparkles",
-            MenuCommand::command(message::generate_session_title(
-                id,
-                row.menu_facts.first_user_message.as_deref().unwrap_or(""),
-            )),
-        ));
-    }
-    if group.can_create_session_group {
-        advanced.push(move_to_group_item(id, input.group_moves, group.is_stale));
-    }
-    if group.can_focus_mode {
-        advanced.push(MenuItem::row(
-            "Focus",
-            "focus-2",
-            MenuCommand::command(message::focus_session_mode(id)),
-        ));
-    }
-    if !input.below.is_empty() {
-        advanced.push(MenuItem::separator());
-        advanced.push(MenuItem::heading("Below"));
-        let sleepable: Vec<String> = input
-            .below
+    if which == "sleepBelow" {
+        let sleepable: Vec<String> = id_rows
             .iter()
             // CDXC:SessionSleep 2026-10-01 DECISION: User: "please don't sleep terminal sessions that have shell running or a question status", and Sleep Below is a bulk sweep too, so it skips rows with the grey shell-running dot or an unanswered question.
             .filter(|row| {
@@ -905,72 +826,187 @@ fn full_menu(
             })
             .map(|row| row.sidebar_session_id.clone())
             .collect();
-        if !sleepable.is_empty() {
-            advanced.push(MenuItem::row(
-                "Sleep Below",
-                "moon",
-                MenuCommand::command(message::sleep_sessions_below(&sleepable)),
-            ));
+        if sleepable.is_empty() {
+            return Vec::new();
         }
-        let below_ids: Vec<String> = input
-            .below
-            .iter()
-            .map(|row| row.sidebar_session_id.clone())
-            .collect();
-        advanced.push(
-            MenuItem::row(
-                "Close Below",
-                "x",
-                MenuCommand::command(message::close_sessions(&below_ids, "closeBelow")),
-            )
-            .with_danger(),
-        );
+        return vec![layout_row(
+            "sleepBelow",
+            false,
+            MenuCommand::command(message::sleep_sessions_below(&sleepable)),
+        )];
+    }
+    let below_ids: Vec<String> = id_rows
+        .iter()
+        .map(|row| row.sidebar_session_id.clone())
+        .collect();
+    vec![layout_row(
+        "closeBelow",
+        false,
+        MenuCommand::command(message::close_sessions(&below_ids, "closeBelow")),
+    )]
+}
+
+/// What fills each place of the one session menu (layout.rs) for one row.
+struct Places<'a, 'b> {
+    input: &'a SessionMenuInput<'b>,
+    rows: &'a ActionRows,
+    caps: &'a SessionCapabilities,
+    /// The row's hover strip, in the sidebar: a row the strip already shows stays out of the menu
+    /// unless the strip's actions are mirrored into it (Show each thing once). `None` where the
+    /// menu has no strip beside it (the chat box ⋯), which shows every row.
+    strip: Option<(Vec<HoverAction>, Vec<HoverAction>)>,
+}
+
+impl Places<'_, '_> {
+    fn new<'a, 'b>(
+        input: &'a SessionMenuInput<'b>,
+        rows: &'a ActionRows,
+        caps: &'a SessionCapabilities,
+        strip: Option<&HoverStrip>,
+    ) -> Places<'a, 'b> {
+        let strip = strip.map(|strip| {
+            let enabled = strip.enabled();
+            // An action the hover strip offers is repeated in the menu too, with the two that
+            // would be duplicated by their own rows left out.
+            let mirror: Vec<HoverAction> = if input
+                .settings
+                .show_session_card_hover_buttons_in_context_menu
+            {
+                if caps.is_browser_session {
+                    vec![HoverAction::Sleep]
+                } else {
+                    enabled
+                        .iter()
+                        .copied()
+                        .filter(|action| {
+                            *action != HoverAction::Close && *action != HoverAction::CloseAfterDone
+                        })
+                        .collect()
+                }
+            } else {
+                Vec::new()
+            };
+            (enabled, mirror)
+        });
+        Places {
+            input,
+            rows,
+            caps,
+            strip,
+        }
     }
 
-    if caps.can_delayed_send
-        && row
-            .delayed_send
+    fn in_strip(&self, action: HoverAction) -> bool {
+        self.strip
             .as_ref()
-            .is_some_and(|delayed| delayed.deadline_at.is_some())
-    {
-        let mut children: Vec<MenuItem> = POSTPONE_PRESETS
-            .iter()
-            .map(|(label, delay_ms)| {
-                MenuItem::row(
-                    label,
-                    "clock",
-                    MenuCommand::command(message::postpone_delayed_send(id, *delay_ms)),
-                )
-            })
-            .collect();
-        children.push(MenuItem::separator());
-        children.push(MenuItem::row(
-            "Edit Delayed Send",
-            "pencil",
-            MenuCommand::session_action(id, "delayedSend"),
-        ));
-        children.push(MenuItem::row(
-            "Disable Delayed Send",
-            "x",
-            MenuCommand::command(message::cancel_delayed_send(id)),
-        ));
-        menu.push(MenuItem::submenu("Postpone By", "clock", children));
+            .is_some_and(|(enabled, _)| enabled.contains(&action))
     }
-    if !menu.is_empty() {
-        menu.push(MenuItem::separator());
-    }
-    if let Some(link) = super::link_menu::link_submenu(id, row, group) {
-        menu.push(link);
-    }
-    menu.push(super::copy::copy_submenu(id, row, group));
-    if advanced.len() > 1 {
-        menu.push(MenuItem::submenu("Advanced", "dots", advanced));
-    }
-    if !enabled.contains(&HoverAction::Close) {
-        menu.push(MenuItem::separator());
-        if let Some(close) = &rows.close {
-            menu.push(close.clone());
+
+    fn shown(&self, action: HoverAction) -> bool {
+        match &self.strip {
+            None => true,
+            Some((enabled, mirror)) => mirror.contains(&action) || !enabled.contains(&action),
         }
     }
-    menu
+
+    fn action(&self, action: HoverAction) -> Vec<MenuItem> {
+        self.rows
+            .get(action)
+            .filter(|_| self.shown(action))
+            .cloned()
+            .into_iter()
+            .collect()
+    }
+
+    fn fill(&self, place: &str) -> Vec<MenuItem> {
+        let input = self.input;
+        let (row, group, caps) = (input.row, input.group, self.caps);
+        let id = row.sidebar_session_id.as_str();
+        // A box session has no transcript on this computer to fork, export or move to another
+        // account. A Claude cloud session's conversation lives on claude.ai, so none of these
+        // apply to it either.
+        let in_box = row.agentbox.is_some() || row.claude_cloud.is_some();
+        match place {
+            "rename" => self.action(HoverAction::Rename),
+            "pin" => self.action(HoverAction::Pin),
+            "snooze" => self.action(HoverAction::Snooze),
+            "park" => self.action(HoverAction::Park),
+            "box" => box_rows(id, row, group),
+            "claudeAi" => claude_cloud_rows(id, row, group),
+            "coordinator" => coordinator_rows(row, group.is_stale, input.has_inactive_threads),
+            "markThreadDone" => thread_rows(row, group.is_stale),
+            "copy" => vec![super::copy::copy_submenu(id, row, group)],
+            "tagAs" => self.action(HoverAction::Tag),
+            "sleep" => self.action(HoverAction::Sleep),
+            "fork" if caps.can_fork_session && !in_box => vec![layout_row(
+                "fork",
+                false,
+                MenuCommand::command(message::fork_session(id)),
+            )],
+            "fullReload" if caps.can_full_reload_session => vec![layout_row(
+                "fullReload",
+                false,
+                MenuCommand::command(message::full_reload_session(id)),
+            )],
+            "switchAccount" => switch_account_rows(id, row, group, caps, in_box),
+            "delayedSend" if caps.can_delayed_send => vec![layout_row(
+                "delayedSend",
+                false,
+                MenuCommand::session_action(id, "delayedSend"),
+            )],
+            "note" => self.action(HoverAction::Note),
+            "closeAfterDone"
+                if !self.in_strip(HoverAction::CloseAfterDone)
+                    || input
+                        .settings
+                        .show_session_card_hover_buttons_in_context_menu =>
+            {
+                self.rows.close_after_done.clone().into_iter().collect()
+            }
+            "export" if caps.can_export_transcript && !in_box => vec![layout_row(
+                "export",
+                false,
+                MenuCommand::command(message::export_session_transcript(id)),
+            )],
+            "linkTo" => super::link_menu::link_submenu(id, row, group)
+                .into_iter()
+                .collect(),
+            "makeCoordinator" => make_coordinator_rows(id, row, group, caps, in_box),
+            "postponeBy" => postpone_rows(id, row, caps),
+            "moveToGroup" if group.can_create_session_group => {
+                vec![move_to_group_item(id, input.group_moves, group.is_stale)]
+            }
+            "sleepBelow" | "closeBelow" => below_rows(input.below, place),
+            "close" if !self.in_strip(HoverAction::Close) => {
+                self.rows.close.clone().into_iter().collect()
+            }
+            // Popout is the desktop's own tile (gx_store/sidebar_menus.rs), Branches lives in the
+            // chat's core, and the chat box's and the phone's own rows are theirs to fill.
+            _ => Vec::new(),
+        }
+    }
+}
+
+/// The row's whole menu: the one session menu (layout.rs) as the sidebar fills it.
+fn full_menu(
+    input: &SessionMenuInput<'_>,
+    rows: &ActionRows,
+    caps: &SessionCapabilities,
+    strip: &HoverStrip,
+) -> Vec<MenuItem> {
+    let places = Places::new(input, rows, caps, Some(strip));
+    layout::assemble_session_menu(SessionMenuSpot::Sidebar, |place| places.fill(place))
+}
+
+/// The rows the sidebar would put in each place of the one session menu, for a spot with no hover
+/// strip beside it (the chat box ⋯) to fill its shared places with the sidebar's own rows, so
+/// both run the same commands. Places with nothing to show are left out.
+pub fn session_menu_places(input: &SessionMenuInput<'_>) -> Vec<(&'static str, Vec<MenuItem>)> {
+    let (rows, caps) = action_rows(input, true);
+    let places = Places::new(input, &rows, &caps, None);
+    layout::ENTRIES
+        .iter()
+        .map(|entry| (entry.id, places.fill(entry.id)))
+        .filter(|(_, items)| !items.is_empty())
+        .collect()
 }

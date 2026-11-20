@@ -233,6 +233,15 @@ pub use crate::sidebar_menu::{
     MENU_PANEL_EXTENSIONS, MENU_PANEL_HELP, MENU_PANEL_MESSAGE_TYPE, MENU_PANEL_RESOURCES,
     UNIFIED_TOGGLE_GROUPS_ACTION,
 };
+/// The one session menu the sidebar row, the chat box ⋯ and the phone's menus all show
+/// (sidebar_menu/layout.rs).
+pub mod session_menu_layout {
+    pub use crate::sidebar_menu::{
+        assemble_session_menu, session_menu_entry as entry, session_menu_layout as layout,
+        session_menu_layout_json as layout_json, tidy_separators, LayoutNode, SessionMenuEntry,
+        SessionMenuSpot, SESSION_MENU_ENTRIES as ENTRIES, SESSION_MENU_MORE as MORE,
+    };
+}
 pub use crate::sidebar_menu::{
     AgentChoicePlace, AgentChoiceScope, AgentChoices, AGENT_CHOICES_STORAGE_KEY,
     AGENT_CHOICE_SCOPE_SETTING_KEY,

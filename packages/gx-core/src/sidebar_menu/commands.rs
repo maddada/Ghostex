@@ -399,15 +399,6 @@ pub(crate) mod message {
         json!({ "type": "exportSessionTranscript", "sessionId": session_id })
     }
 
-    pub(crate) fn generate_session_title(session_id: &str, title: &str) -> Value {
-        json!({
-            "type": "renameSession",
-            "sessionId": session_id,
-            "title": title,
-            "shouldGenerateTitle": true,
-        })
-    }
-
     pub(crate) fn create_group_from_session(session_id: &str) -> Value {
         json!({ "type": "createGroupFromSession", "sessionId": session_id })
     }
@@ -416,10 +407,6 @@ pub(crate) mod message {
     /// moves the row into it, the project's own group id takes it out of every user-made group.
     pub(crate) fn move_session_to_group(session_id: &str, group_id: &str) -> Value {
         json!({ "type": "moveSessionToGroup", "sessionId": session_id, "groupId": group_id })
-    }
-
-    pub(crate) fn focus_session_mode(session_id: &str) -> Value {
-        json!({ "type": "focusSessionMode", "sessionId": session_id })
     }
 
     pub(crate) fn copy_session_details(session_id: &str, details_text: &str) -> Value {
