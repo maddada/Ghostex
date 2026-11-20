@@ -27,7 +27,7 @@ static WINDOW_GLASS_WALLPAPER: AtomicBool = AtomicBool::new(false);
 static WINDOW_GLASS_PICTURE_FOLLOWS_SCREEN: AtomicBool = AtomicBool::new(false);
 
 /// CDXC:Theming 2026-09-30 DECISION:
-/// User: "i'm not able to set the transparency blur level in ghostex on macos please add sliders for this (hope they can work on other oses too)". Settings has a Blur slider (`windowGlassBlurRadius`, 0 to 100 points, default 4 since 2026-11-20, 60 before) and a Menu blur slider (`windowGlassMenuBlurRadius`, default 20: `FROSTED_MENU_BLUR_RADIUS`). Blur reaches every GPUI backend through `set_background_blur_style`: on macOS it sets the live blur, the wallpaper and picture blur and the video blur; on Windows and Linux the system draws the Desktop and windows blur and has no radius to set, so there it sets the wallpaper, picture and video blur. Menu blur is macOS only for the same reason. 0 shows what is behind the glass sharp. On Windows with Desktop and windows the slider gives way to the Windows blur choice (`WINDOW_GLASS_WINDOWS_BLUR`), and Menu blur is hidden off macOS (`availability.rs` in the settings catalog).
+/// User: "i'm not able to set the transparency blur level in ghostex on macos please add sliders for this (hope they can work on other oses too)". Settings has a Blur slider (`windowGlassBlurRadius`, 0 to 100 points, default 4 since 2026-11-20, 60 before) and a Menu blur slider (`windowGlassMenuBlurRadius`, default 17 since 2026-11-20, 20 before: `FROSTED_MENU_BLUR_RADIUS`). Blur reaches every GPUI backend through `set_background_blur_style`: on macOS it sets the live blur, the wallpaper and picture blur and the video blur; on Windows and Linux the system draws the Desktop and windows blur and has no radius to set, so there it sets the wallpaper, picture and video blur. Menu blur is macOS only for the same reason. 0 shows what is behind the glass sharp. On Windows with Desktop and windows the slider gives way to the Windows blur choice (`WINDOW_GLASS_WINDOWS_BLUR`), and Menu blur is hidden off macOS (`availability.rs` in the settings catalog).
 static WINDOW_GLASS_BLUR_RADIUS: AtomicU8 = AtomicU8::new(WINDOW_GLASS_BLUR_RADIUS_DEFAULT);
 
 /// CDXC:Theming 2026-10-16 DECISION:
@@ -883,7 +883,7 @@ pub(crate) fn frosted_menu_alpha() -> f32 {
 /// frosted surface but a tooltip blurs `FROSTED_SURFACE_BLUR_SCALE` times it.
 /// Narrower than the main window's glass so the shapes and colours behind a menu still read
 /// through it.
-pub(crate) const FROSTED_MENU_BLUR_RADIUS: f32 = 20.0;
+pub(crate) const FROSTED_MENU_BLUR_RADIUS: f32 = 17.0;
 
 /// Whether a frosted menu's backdrop keeps the colour saturation the main window's glass strips.
 pub(crate) const FROSTED_MENU_KEEP_SATURATION: bool = true;
@@ -918,7 +918,7 @@ fn frosted_menu_blur_value() -> f32 {
 }
 
 /// How much more than the Menu blur value a frosted surface other than a tooltip blurs: 25% more,
-/// so the default 20 points become 25 (CDXC:AppModal 2026-10-29 on `frosted_dialog_fill`).
+/// so the default 17 points become 21.25 (CDXC:AppModal 2026-10-29 on `frosted_dialog_fill`).
 pub(crate) const FROSTED_SURFACE_BLUR_SCALE: f32 = 1.25;
 
 /// The fill of a menu or panel that has a window of its own (the header's dropdowns): the frosted
@@ -1164,7 +1164,7 @@ mod frosted_dialog_tests {
 
     #[test]
     fn frosted_surfaces_blur_a_quarter_more_than_the_menu_blur() {
-        assert_eq!(FROSTED_MENU_BLUR_RADIUS * FROSTED_SURFACE_BLUR_SCALE, 25.0);
+        assert_eq!(FROSTED_MENU_BLUR_RADIUS * FROSTED_SURFACE_BLUR_SCALE, 21.25);
     }
 
     /// Every frosted surface is one material (CDXC:Theming 2026-10-29 on `frosted_menu_fill`): the

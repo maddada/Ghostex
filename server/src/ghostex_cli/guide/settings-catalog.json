@@ -4340,7 +4340,7 @@
       "section": "theming",
       "sectionTitle": "Themes",
       "type": "number",
-      "default": 20,
+      "default": 17,
       "agentWritable": true,
       "availability": "Only on macOS."
     },
@@ -9169,7 +9169,7 @@
       "section": "windowLayout",
       "sectionTitle": "Window & Layout",
       "type": "number",
-      "default": 0,
+      "default": 6,
       "agentWritable": true
     },
     {

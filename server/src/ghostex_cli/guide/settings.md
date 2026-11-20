@@ -263,7 +263,7 @@ How to use this file:
 - **Live background brightness** `windowGlassLiveBrightness` (number default 60): How bright the Live animation glows behind the glass. Lower keeps it a subtle glow.
 - **Blur** `windowGlassBlurRadius` (number default 4): How soft what shows behind the window looks, in points. 0 shows it sharp. On Windows and Linux, Desktop and windows uses the system blur, so this sets the wallpaper, picture and video blur; on Windows, Blur on Windows picks that system blur. Not shown on Windows while Behind the glass is Desktop and windows.
 - **Blur on Windows** `windowGlassWindowsBlur` (one of acrylic | plain | off; default acrylic): How Windows blurs what shows behind the window while Desktop and windows shows behind the glass. Windows has no blur amount to set, so pick Acrylic (Windows' own frosted blur), Plain blur (the same blur without Windows' grey frost, so the tints can go fully clear; it takes more work to draw) or Off (sharp, the fastest). Option labels: acrylic = Acrylic, plain = Plain blur, off = Off. Only on Windows.
-- **Menu blur** `windowGlassMenuBlurRadius` (number default 20): How soft what shows behind menus, panels, dialogs and tooltips looks, in points. Menus, panels and dialogs blur a quarter more than this number; tooltips use it as is. 0 shows it sharp. Only on macOS.
+- **Menu blur** `windowGlassMenuBlurRadius` (number default 17): How soft what shows behind menus, panels, dialogs and tooltips looks, in points. Menus, panels and dialogs blur a quarter more than this number; tooltips use it as is. 0 shows it sharp. Only on macOS.
 - **Sidebar tint in dark mode** `windowGlassSidebarOpacityDark` (number default 88): How much of the desktop the sidebar hides in dark mode. Lower shows more of your desktop through it.
 - **Work area tint in dark mode** `windowGlassWorkAreaTintDark` (number default 88): How much of the desktop the work area hides in dark mode, set on its own so either area can be the darker one. Lower shows more of your desktop through it.
 - **Sidebar tint in light mode** `windowGlassSidebarOpacityLight` (number default 93): How much of the desktop the sidebar hides in light mode. Lower shows more of your desktop through it.
@@ -326,7 +326,7 @@ How to use this file:
 - **Animations (fold speed, set with Animations)** `sidebarCollapseAnimationDurationMs` (number 0 to 1000 step 100 default 400): Set how quickly sidebar sections, groups, and projects expand or collapse, and how quickly the floating sidebar and Agents Panel slide in from the window edge. Set to 0 for no animation.
 - **Close side panel with its last tab** `closeSidePanelWithLastTab` (boolean, default true): Close the side panel when you close its last tab, instead of showing the Open a view picker.
 - **Commands pane side** `commandsPanelSide` (one of bottom | right; default bottom): Dock the command pane below the workspace or to its right. Option labels: bottom = Bottom, right = Right.
-- **Pane gap** `workspacePaneGap` (number default 0): Gap in pixels between split panes in the Agents view.
+- **Pane gap** `workspacePaneGap` (number default 6): Gap in pixels between split panes in the Agents view.
 ## Updates (tab `updates`)
 
 ### Updates
