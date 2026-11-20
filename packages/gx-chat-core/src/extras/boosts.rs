@@ -134,7 +134,7 @@ pub const BOOSTS: [Boost; 15] = [
         category: "do",
         description: "The agent drives a desktop app for you with Cua Driver and shows what it did.",
         preview: "app",
-        prompt: "Do this by driving the app yourself with computer use. Read the cua-driver skill first and follow it (if it isn't installed, `ghostex computer-use install-skill` adds Ghostex's copy), then show me what you did with a screenshot.",
+        prompt: "Do this by driving the app yourself with computer use. Read the cua-driver skill first and follow it (if it isn't installed, `ghostex computer-use install-skill` adds it), then show me what you did with a screenshot.",
     },
     Boost {
         id: "browser-use",
@@ -143,7 +143,7 @@ pub const BOOSTS: [Boost; 15] = [
         category: "do",
         description: "The agent opens and drives pages in Ghostex's own browser: clicks, forms, screenshots.",
         preview: "browser",
-        prompt: "Do this in a browser yourself. Read the cua-driver skill first and follow it (if it isn't installed, `ghostex browser-use install-skill` adds Ghostex's copy); open pages in Ghostex's browser with `ghostex browser open <url>`, and show me what you did with a screenshot.",
+        prompt: "Do this in a browser yourself. Read the cua-driver skill first and follow it (if it isn't installed, `ghostex browser-use install-skill` adds it); open pages in Ghostex's browser with `ghostex browser open <url>`, and show me what you did with a screenshot.",
     },
     Boost {
         id: "screenshots",

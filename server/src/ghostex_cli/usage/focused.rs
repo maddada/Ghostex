@@ -800,6 +800,7 @@ pub fn computer_use_usage() -> String {
 
 Usage:
   gx computer-use --help
+  gx computer-use install-skill [--json]   Install Trycua's cua-driver skill for every agent
 
 To drive a desktop app, read the cua-driver skill (Trycua's Cua Driver,
 installed with it) and follow it.
@@ -858,6 +859,7 @@ pub fn browser_use_usage() -> String {
 
 Usage:
   gx browser-use --help
+  gx browser-use install-skill [--json]    Install Trycua's cua-driver skill for every agent
 
 For Chrome, Chromium, Edge and Electron page content, read the cua-driver
 skill (Trycua's Cua Driver) and use its typed browser tools.
