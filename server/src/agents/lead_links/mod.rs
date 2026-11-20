@@ -235,7 +235,30 @@ const LEAD_MESSAGE_SLACK_MS: i64 = 30_000;
 /// session busy with the user's turn could send the lead the user's own turn, and then count the
 /// lead's turn as reported. The reply is now found from the lead's own message (its sender block),
 /// so a retry gives the same reply and a turn the user starts afterwards is never sent.
+#[cfg(test)]
 pub(crate) fn lead_turn_reply(rows: &[TurnRow], lead_ref: &str, owed_ms: i64) -> Option<String> {
+    lead_turn(rows, lead_ref, owed_ms)?.reply
+}
+
+/// Where the lead's turn stands in a linked session's transcript: found from the lead's newest
+/// message (`lead_turn_reply`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct LeadTurn {
+    /// The agent's last words after the lead's message, before the user typed anything there.
+    pub reply: Option<String>,
+    /// The user typed a message after the lead's: the session is on the user's own turn now.
+    pub user_after: bool,
+}
+
+/// The lead's turn, or `None` while its message is not in `rows` (not typed yet, or older than
+/// what is owed).
+///
+/// CDXC:LeadLinks 2026-11-20 FIX:
+/// Opus re-review of #678: the waiting and quiet notices fired for whatever the session was doing
+/// while a turn was owed, so a turn left owed passed the user's own later turns (and the waiting
+/// prompt's summary) to the lead. They are sent only while the lead's turn is open: its message is
+/// in the transcript and the user has typed nothing since (`user_after`).
+pub(crate) fn lead_turn(rows: &[TurnRow], lead_ref: &str, owed_ms: i64) -> Option<LeadTurn> {
     let from_lead = |row: &TurnRow| {
         row.user && crate::coordinators::find_own_agent_message_block(&row.text, lead_ref).is_some()
     };
@@ -245,13 +268,21 @@ pub(crate) fn lead_turn_reply(rows: &[TurnRow], lead_ref: &str, owed_ms: i64) ->
                 .at
                 .is_none_or(|at| at + LEAD_MESSAGE_SLACK_MS >= owed_ms)
     })?;
-    rows[start + 1..]
+    let after = &rows[start + 1..];
+    let reply = after
         .iter()
         .take_while(|row| !row.user || from_lead(row))
         .filter(|row| !row.user && !row.text.trim().is_empty())
         .last()
-        .map(|row| row.text.clone())
+        .map(|row| row.text.clone());
+    Some(LeadTurn {
+        reply,
+        user_after: after.iter().any(|row| row.user && !from_lead(row)),
+    })
 }
+
+/// How far a lead's message may come before `owedSince` (the send is marked after it is typed).
+pub(crate) const LEAD_TURN_SLACK_MS: i64 = LEAD_MESSAGE_SLACK_MS;
 
 /// How new a session may be for a link to say its first task is the lead's (`owed`).
 const FRESH_SESSION_MS: i64 = 60_000;
