@@ -14,9 +14,21 @@
 //! (2026-11-12, native_chat/actions.rs). The phone reads this list through its chat core
 //! (`gx_session_menu_layout` in packages/gx-chat-wasm), so its menus cannot drift from it.
 //!
+//! CDXC:ContextMenus 2026-11-20 DECISION:
+//! User: the project right-click menu is "way too long" (17 rows on main), then picked layout A
+//! (Q4313) on the drawn proposals, with "New Browser Tab" named "New Tab" and "Rename" named
+//! "Rename Project". The project menu follows the session menu's rules from this same list: a tile
+//! row (Rename Project, Add Worktree, New Terminal, New Tab), Copy ›, Organise › (Project Group,
+//! Spaces, Move to Workspace), Hide, one More › with everything else (Advanced › Autopilot became
+//! More › Autopilot), then Close Inactive and Close Project. Every action stays; a worktree's own
+//! short menu is unchanged. `project_menu_layout` is it, for the sidebar (desktop and web) and the
+//! phone's project menu.
+//!
 //! CDXC:ContextMenus 2026-11-20 SEE-ALSO: session.rs (the sidebar fills this list),
 //! apps/desktop/src/app/native_chat/actions.rs (the chat box ⋯), apps/mobile/app/src/session-menu/
-//! (the phone's three menus), packages/gx-chat-wasm/src/lib.rs (the phone's door to it).
+//! (the phone's three menus), packages/gx-chat-wasm/src/lib.rs (the phone's door to it), project.rs
+//! (the sidebar's project menu fills `project_menu_layout`), apps/mobile/app/src/screens/
+//! sessions-screen/sidebar-menus.ts `buildProjectMenu` (the phone's).
 
 use serde_json::{json, Map, Value};
 
@@ -53,6 +65,26 @@ impl SessionMenuSpot {
             SessionMenuSpot::PhoneRow => "phoneRow",
             SessionMenuSpot::PhoneChat => "phoneChat",
             SessionMenuSpot::PhoneTerminal => "phoneTerminal",
+        }
+    }
+}
+
+/// Where a project's menu opens.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProjectMenuSpot {
+    /// The project header's right-click and ⋯ (desktop and web).
+    Sidebar,
+    /// The phone's project header menu.
+    Phone,
+}
+
+impl ProjectMenuSpot {
+    pub const ALL: [ProjectMenuSpot; 2] = [ProjectMenuSpot::Sidebar, ProjectMenuSpot::Phone];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ProjectMenuSpot::Sidebar => "project",
+            ProjectMenuSpot::Phone => "phoneProject",
         }
     }
 }
@@ -189,10 +221,44 @@ pub const ENTRIES: &[SessionMenuEntry] = &[
     row("terminalSettings", "Settings", "settings"),
     danger(row("disconnect", "Disconnect", "plug-x")),
     danger(row("killSession", "Kill Session", "x")),
+    // The project menu's (`project_menu_layout`). New Terminal, Copy, More and Full Reload are the
+    // session menu's rows above, under the same names.
+    row("renameProject", "Rename Project", "pencil"),
+    row("addWorktree", "Add Worktree", "git-branch"),
+    keyed(row("newTab", "New Tab", "world"), "openBrowserPane"),
+    row("copyPath", "Copy Path", "copy"),
+    row("copyRemoteUrl", "Copy Remote URL", "link"),
+    row("organise", "Organise", "folders"),
+    row("projectGroup", "Project Group", "folder"),
+    row("spaces", "Spaces", "stack"),
+    row("moveToWorkspace", "Move to Workspace", "switch-horizontal"),
+    toggle("hide", "Hide", "eye-off", "Unhide", "eye"),
+    row("history", "History", "history"),
+    row("openFolder", "Open Folder", "folder-open"),
+    row("openIn", "Open in", "external-link"),
+    row("cloneOn", "Clone on…", "copy-plus"),
+    toggle(
+        "sleepInactive",
+        "Sleep Inactive",
+        "moon",
+        "Wake",
+        "player-play",
+    ),
+    row("autopilot", "Autopilot", "plane"),
+    danger(row("closeInactive", "Close Inactive", "x")),
+    danger(row("closeProject", "Close Project", "x")),
+    danger(row("deleteWorktree", "Delete Worktree", "trash")),
+    row("moveProjectUp", "Move Project Up", "arrow-up"),
+    row("moveProjectDown", "Move Project Down", "arrow-down"),
+    row("refreshSessions", "Refresh Sessions", "refresh"),
+    row("projectDetails", "Details", "info-circle"),
     // Rows a spot draws itself in a fixed place.
     host("chatToolbar"),
     host("chatOptions"),
     host("terminalLeading"),
+    // The project's Create Linear Ticket… or Create GitHub Issue…, and its pinned Actions.
+    host("createTicket"),
+    host("pinnedActions"),
 ];
 
 /// The More submenu's own row.
@@ -211,6 +277,9 @@ pub enum LayoutNode {
     Separator,
     /// The More submenu.
     More(Vec<LayoutNode>),
+    /// A submenu named by its entry (the project menu's Copy and Organise). A submenu left with
+    /// one row shows that row in its place.
+    Submenu(&'static str, Vec<LayoutNode>),
 }
 
 const SEP: &str = "-";
@@ -345,44 +414,154 @@ pub fn tidy_separators<T>(items: Vec<T>, is_separator: impl Fn(&T) -> bool) -> V
     out
 }
 
+/// The project menu a spot shows (CDXC:ContextMenus 2026-11-20, Q4313 A): its tiles, Copy ›,
+/// Organise ›, Hide, More ›, then the two Close rows. The phone has no Rename Project, Add
+/// Worktree, New Tab, Hide or Close Project of its own, and adds its own rows to More.
+pub fn project_menu_layout(spot: ProjectMenuSpot) -> Vec<LayoutNode> {
+    use LayoutNode::{More, Row, Separator, Submenu, Tiles};
+    match spot {
+        ProjectMenuSpot::Sidebar => vec![
+            Tiles(vec![
+                "renameProject",
+                "addWorktree",
+                "newTerminal",
+                "newTab",
+            ]),
+            Submenu("copy", nodes(&["copyPath", "copyRemoteUrl"])),
+            Submenu(
+                "organise",
+                nodes(&["projectGroup", "spaces", "moveToWorkspace"]),
+            ),
+            Row("hide"),
+            More(nodes(&[
+                "history",
+                "openFolder",
+                "openIn",
+                "createTicket",
+                "pinnedActions",
+                "cloneOn",
+                SEP,
+                "sleepInactive",
+                "fullReload",
+                "autopilot",
+            ])),
+            Separator,
+            Row("closeInactive"),
+            Row("closeProject"),
+            Row("deleteWorktree"),
+        ],
+        ProjectMenuSpot::Phone => vec![
+            Tiles(vec!["newTerminal", "projectActions"]),
+            Submenu("copy", nodes(&["copyPath"])),
+            Submenu("organise", nodes(&["projectGroup"])),
+            Row("files"),
+            More(nodes(&[
+                "projectDetails",
+                "moveProjectUp",
+                "moveProjectDown",
+                "refreshSessions",
+                SEP,
+                "sleepInactive",
+                "fullReload",
+            ])),
+            Separator,
+            Row("closeInactive"),
+        ],
+    }
+}
+
+/// A menu built from `layout`: `fill` answers each row id with the rows shown for it right now
+/// (none, one, or a block such as a coordinator's). Tiles become one quick row, More and a
+/// Submenu one submenu each (a Submenu left with one row shows that row instead); any of them is
+/// left out when empty, and stray lines are dropped.
+pub fn assemble_menu(
+    layout: &[LayoutNode],
+    fill: &mut dyn FnMut(&str) -> Vec<MenuItem>,
+) -> Vec<MenuItem> {
+    fn rows_of(
+        children: &[LayoutNode],
+        fill: &mut dyn FnMut(&str) -> Vec<MenuItem>,
+    ) -> Vec<MenuItem> {
+        let rows: Vec<MenuItem> = children
+            .iter()
+            .flat_map(|child| match child {
+                LayoutNode::Row(id) => fill(id),
+                _ => vec![MenuItem::separator()],
+            })
+            .collect();
+        tidy_separators(rows, |item| item.separator)
+    }
+    let mut items = Vec::new();
+    for node in layout {
+        match node {
+            LayoutNode::Row(id) => items.extend(fill(id)),
+            LayoutNode::Separator => items.push(MenuItem::separator()),
+            LayoutNode::Tiles(ids) => {
+                let tiles: Vec<MenuItem> = ids.iter().flat_map(|id| fill(id)).collect();
+                if !tiles.is_empty() {
+                    items.push(MenuItem::quick_row(tiles));
+                }
+            }
+            LayoutNode::More(children) => {
+                let rows = rows_of(children, fill);
+                if !rows.is_empty() {
+                    items.push(MenuItem::submenu(MORE.label, MORE.icon, rows));
+                }
+            }
+            LayoutNode::Submenu(id, children) => {
+                let mut rows = rows_of(children, fill);
+                if rows.len() == 1 {
+                    items.append(&mut rows);
+                } else if !rows.is_empty() {
+                    let head = entry(id).copied().unwrap_or(MORE);
+                    items.push(MenuItem::submenu(head.label, head.icon, rows));
+                }
+            }
+        }
+    }
+    tidy_separators(items, |item| item.separator)
+}
+
 /// A spot's menu built from its layout: `fill` answers each row id with the rows the spot shows
 /// for it right now (none, one, or a block such as a coordinator's).
 pub fn assemble_session_menu(
     spot: SessionMenuSpot,
     mut fill: impl FnMut(&str) -> Vec<MenuItem>,
 ) -> Vec<MenuItem> {
-    let place = |node: &LayoutNode, fill: &mut dyn FnMut(&str) -> Vec<MenuItem>| match node {
-        LayoutNode::Row(id) => fill(id),
-        LayoutNode::Separator => vec![MenuItem::separator()],
-        LayoutNode::Tiles(ids) => {
-            let tiles: Vec<MenuItem> = ids.iter().flat_map(|id| fill(id)).collect();
-            if tiles.is_empty() {
-                Vec::new()
-            } else {
-                vec![MenuItem::quick_row(tiles)]
-            }
-        }
-        LayoutNode::More(children) => {
-            let rows: Vec<MenuItem> = children
-                .iter()
-                .flat_map(|child| match child {
-                    LayoutNode::Row(id) => fill(id),
-                    _ => vec![MenuItem::separator()],
-                })
-                .collect();
-            let rows = tidy_separators(rows, |item| item.separator);
-            if rows.is_empty() {
-                Vec::new()
-            } else {
-                vec![MenuItem::submenu(MORE.label, MORE.icon, rows)]
-            }
-        }
+    assemble_menu(&session_menu_layout(spot), &mut fill)
+}
+
+/// A spot's project menu built from its layout, as [`assemble_session_menu`].
+pub fn assemble_project_menu(
+    spot: ProjectMenuSpot,
+    mut fill: impl FnMut(&str) -> Vec<MenuItem>,
+) -> Vec<MenuItem> {
+    assemble_menu(&project_menu_layout(spot), &mut fill)
+}
+
+/// A row from the list: its one name and icon (the reverse when `alt`), its hotkey and colour.
+pub(crate) fn entry_row(id: &str, alt: bool, command: super::commands::MenuCommand) -> MenuItem {
+    let Some(entry) = entry(id) else {
+        return MenuItem::row(id, "", command);
     };
-    let items: Vec<MenuItem> = session_menu_layout(spot)
-        .iter()
-        .flat_map(|node| place(node, &mut fill))
-        .collect();
-    tidy_separators(items, |item| item.separator)
+    let label = if alt {
+        entry.alt_label.unwrap_or(entry.label)
+    } else {
+        entry.label
+    };
+    let icon = if alt {
+        entry.alt_icon.unwrap_or(entry.icon)
+    } else {
+        entry.icon
+    };
+    let mut item = MenuItem::row(label, icon, command);
+    if let Some(hotkey) = entry.hotkey {
+        item = item.with_hotkey(hotkey);
+    }
+    if entry.danger {
+        item = item.with_danger();
+    }
+    item
 }
 
 fn node_json(node: &LayoutNode) -> Value {
@@ -393,6 +572,10 @@ fn node_json(node: &LayoutNode) -> Value {
         LayoutNode::More(children) => {
             json!({ "more": children.iter().map(node_json).collect::<Vec<_>>() })
         }
+        LayoutNode::Submenu(id, children) => json!({
+            "submenu": id,
+            "rows": children.iter().map(node_json).collect::<Vec<_>>(),
+        }),
     }
 }
 
@@ -419,14 +602,15 @@ fn entry_json(entry: &SessionMenuEntry) -> Value {
 }
 
 /// The whole list as JSON, for the phone: `{ entries: {id: {label, icon, altLabel?, altIcon?,
-/// hotkey?, danger?, host?}}, more: {label, icon}, spots: {phoneRow: [node…], …} }`, where a node is
-/// `{tiles: [id…]}`, `{row: id}`, `{separator: true}` or `{more: [node…]}`.
+/// hotkey?, danger?, host?}}, more: {label, icon}, spots: {phoneRow: [node…], …, project: […],
+/// phoneProject: […]} }`, where a node is `{tiles: [id…]}`, `{row: id}`, `{separator: true}`,
+/// `{more: [node…]}` or `{submenu: id, rows: [node…]}`.
 pub fn session_menu_layout_json() -> Value {
     let entries: Map<String, Value> = ENTRIES
         .iter()
         .map(|entry| (entry.id.to_string(), entry_json(entry)))
         .collect();
-    let spots: Map<String, Value> = SessionMenuSpot::ALL
+    let mut spots: Map<String, Value> = SessionMenuSpot::ALL
         .iter()
         .map(|spot| {
             (
@@ -435,9 +619,143 @@ pub fn session_menu_layout_json() -> Value {
             )
         })
         .collect();
+    for spot in ProjectMenuSpot::ALL {
+        spots.insert(
+            spot.as_str().to_string(),
+            Value::Array(project_menu_layout(spot).iter().map(node_json).collect()),
+        );
+    }
     json!({
         "entries": entries,
         "more": { "label": MORE.label, "icon": MORE.icon },
         "spots": spots,
     })
+}
+
+#[cfg(test)]
+mod project_layout_tests {
+    use super::*;
+    use crate::sidebar_menu::commands::MenuCommand;
+
+    fn labels(items: &[MenuItem]) -> Vec<String> {
+        items
+            .iter()
+            .map(|item| {
+                if item.separator {
+                    "-".to_string()
+                } else if let Some(tiles) = &item.quick {
+                    format!("[{}]", labels(tiles).join(", "))
+                } else if let Some(children) = &item.children {
+                    format!(
+                        "{} › ({})",
+                        item.label.as_deref().unwrap_or(""),
+                        labels(children).join(", ")
+                    )
+                } else {
+                    item.label.clone().unwrap_or_default()
+                }
+            })
+            .collect()
+    }
+
+    fn filled(spot: ProjectMenuSpot, shown: &[&str]) -> Vec<String> {
+        labels(&assemble_project_menu(spot, |id| {
+            if shown.contains(&id) {
+                vec![entry_row(
+                    id,
+                    false,
+                    MenuCommand::command(serde_json::json!({})),
+                )]
+            } else {
+                Vec::new()
+            }
+        }))
+    }
+
+    /// Q4313 A: tiles, Copy ›, Organise ›, Hide, More ›, then the two Close rows.
+    #[test]
+    fn the_sidebar_project_menu_is_layout_a() {
+        let every: Vec<&str> = ENTRIES.iter().map(|entry| entry.id).collect();
+        assert_eq!(
+            filled(ProjectMenuSpot::Sidebar, &every),
+            [
+                "[Rename Project, Add Worktree, New Terminal, New Tab]",
+                "Copy › (Copy Path, Copy Remote URL)",
+                "Organise › (Project Group, Spaces, Move to Workspace)",
+                "Hide",
+                "More › (History, Open Folder, Open in, , , Clone on…, -, Sleep Inactive, Full Reload, Autopilot)",
+                "-",
+                "Close Inactive",
+                "Close Project",
+                "Delete Worktree",
+            ]
+        );
+    }
+
+    /// A submenu left with one row shows that row; an empty one and its stray lines go.
+    #[test]
+    fn a_submenu_of_one_row_shows_the_row() {
+        assert_eq!(
+            filled(
+                ProjectMenuSpot::Sidebar,
+                &[
+                    "newTerminal",
+                    "copyPath",
+                    "projectGroup",
+                    "hide",
+                    "openFolder",
+                    "closeProject"
+                ]
+            ),
+            [
+                "[New Terminal]",
+                "Copy Path",
+                "Project Group",
+                "Hide",
+                "More › (Open Folder)",
+                "-",
+                "Close Project",
+            ]
+        );
+    }
+
+    #[test]
+    fn the_phone_project_menu_folds_its_own_rows_into_more() {
+        let every: Vec<&str> = ENTRIES.iter().map(|entry| entry.id).collect();
+        assert_eq!(
+            filled(ProjectMenuSpot::Phone, &every),
+            [
+                "[New Terminal, Actions…]",
+                "Copy Path",
+                "Project Group",
+                "Files",
+                "More › (Details, Move Project Up, Move Project Down, Refresh Sessions, -, Sleep Inactive, Full Reload)",
+                "-",
+                "Close Inactive",
+            ]
+        );
+    }
+
+    #[test]
+    fn every_project_place_has_an_entry() {
+        for spot in ProjectMenuSpot::ALL {
+            fn walk(nodes: &[LayoutNode]) {
+                for node in nodes {
+                    match node {
+                        LayoutNode::Row(id) => assert!(entry(id).is_some(), "{id}"),
+                        LayoutNode::Tiles(ids) => ids
+                            .iter()
+                            .for_each(|id| assert!(entry(id).is_some(), "{id}")),
+                        LayoutNode::More(children) => walk(children),
+                        LayoutNode::Submenu(id, children) => {
+                            assert!(entry(id).is_some(), "{id}");
+                            walk(children);
+                        }
+                        LayoutNode::Separator => {}
+                    }
+                }
+            }
+            walk(&project_menu_layout(spot));
+        }
+    }
 }

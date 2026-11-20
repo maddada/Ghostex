@@ -1,4 +1,4 @@
-//! The workspace tile's menu (the first tile of the Spaces row) and a project's "Move to workspace"
+//! The workspace tile's menu (the first tile of the Spaces row) and a project's "Move to Workspace"
 //! submenu.
 //!
 //! CDXC:Workspaces 2026-10-09 DECISION:
@@ -17,7 +17,7 @@
 //!
 //! CDXC:Workspaces 2026-11-20 DECISION:
 //! User picked "F. The first tile of the Spaces row" (Q4296), with an icon per workspace: every
-//! workspace row here (the tile's menu and each "Move to workspace" list) shows the workspace's
+//! workspace row here (the tile's menu and each "Move to Workspace" list) shows the workspace's
 //! icon on a disc in its colour (`badge`), the same mark as the tile. Supersedes the dot above.
 
 use ghostex_gx_protocol::{SidebarWorkspace, SidebarWorkspacesState};
@@ -106,7 +106,7 @@ pub fn workspace_switch_target<'a>(
         .find(|workspace| workspace.workspace_id != current)
 }
 
-/// "Move to workspace ▸" for a project in `project_workspace_id`: every other workspace, then
+/// "Move to Workspace ▸" for a project in `project_workspace_id`: every other workspace, then
 /// "New workspace…", which creates one and moves the project into it.
 pub(crate) fn move_to_workspace_menu(
     state: &SidebarWorkspacesState,
@@ -139,10 +139,10 @@ pub(crate) fn move_to_workspace_menu(
         "plus",
         MenuCommand::host(json!({ "type": "newWorkspace", "moveProjectId": project_id })),
     ));
-    MenuItem::submenu("Move to workspace", "switch-horizontal", children)
+    MenuItem::submenu("Move to Workspace", "switch-horizontal", children)
 }
 
-/// "Move to workspace ▸" for a remote machine's project in `project_workspace_id` (this
+/// "Move to Workspace ▸" for a remote machine's project in `project_workspace_id` (this
 /// computer's workspace it shows in): every other workspace of this computer.
 pub(crate) fn move_remote_project_to_workspace_menu(
     state: &SidebarWorkspacesState,
@@ -169,10 +169,10 @@ pub(crate) fn move_remote_project_to_workspace_menu(
             row
         })
         .collect();
-    MenuItem::submenu("Move to workspace", "switch-horizontal", children)
+    MenuItem::submenu("Move to Workspace", "switch-horizontal", children)
 }
 
-/// "Move to workspace ▸" on a remote machine's tab: every workspace of this computer other than
+/// "Move to Workspace ▸" on a remote machine's tab: every workspace of this computer other than
 /// the one the tab shows in now (`SidebarWorkspacesState::machine_workspace`).
 pub fn machine_workspace_menu(state: &SidebarWorkspacesState, machine_id: &str) -> MenuItem {
     let current = state.machine_workspace(machine_id);
@@ -194,5 +194,5 @@ pub fn machine_workspace_menu(state: &SidebarWorkspacesState, machine_id: &str) 
             row
         })
         .collect();
-    MenuItem::submenu("Move to workspace", "switch-horizontal", children)
+    MenuItem::submenu("Move to Workspace", "switch-horizontal", children)
 }

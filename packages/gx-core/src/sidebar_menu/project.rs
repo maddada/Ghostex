@@ -9,8 +9,10 @@ use crate::sidebar_view::view::SessionView;
 
 use super::commands::{message, MenuCommand};
 use super::group::MenuGroup;
+use super::header::ProjectHeaderRows;
 use super::host::MenuOpenTarget;
 use super::item::MenuItem;
+use super::layout::{assemble_project_menu, entry_row, ProjectMenuSpot};
 use super::membership::project_membership_menu;
 
 /// Everything the project menu reads besides the group.
@@ -33,6 +35,11 @@ pub struct ProjectMenuInput<'a> {
     pub remote_workspace: Option<RemoteProjectWorkspace<'a>>,
     /// Clone on… (`clone_on.rs`), when some known machine lacks the project.
     pub clone_on: Option<MenuItem>,
+    /// The header buttons the menu carries (header.rs), empty for a bot or a sessions group.
+    pub header: ProjectHeaderRows,
+    /// The worktrees whose sessions this project lists (`sidebar_view/worktree_fold.rs`), as
+    /// `(label, group id)`: they have no header of their own, so their Delete Worktree is here.
+    pub folded_worktrees: &'a [(String, String)],
 }
 
 /// [`ProjectMenuInput::remote_workspace`].
@@ -108,40 +115,22 @@ pub fn project_menu(input: &ProjectMenuInput<'_>) -> Vec<MenuItem> {
         return menu;
     };
 
-    let mut menu = vec![
-        MenuItem::row(
+    if project.worktree.is_some() {
+        // A worktree's own short menu (unchanged by Q4313): the header buttons, then its rows.
+        let mut menu = input.header.in_order();
+        if !menu.is_empty() {
+            menu.push(MenuItem::separator());
+        }
+        menu.push(MenuItem::row(
             "Copy Path",
             "copy",
             MenuCommand::command(message::copy_project_path(group_id)),
-        ),
-        MenuItem::row(
+        ));
+        menu.push(MenuItem::row(
             "Open Folder",
             "folder-open",
             MenuCommand::command(message::open_project_in_finder(group_id)),
-        ),
-    ];
-    if project.bot_profile.is_some() && !group.is_remote && !input.open_targets.is_empty() {
-        menu.push(MenuItem::submenu(
-            "Open in",
-            "external-link",
-            input
-                .open_targets
-                .iter()
-                .map(|target| {
-                    MenuItem::row(
-                        &target.label,
-                        &target.icon,
-                        MenuCommand::command(message::open_project_in_target(
-                            group_id,
-                            &target.target_id,
-                            &target.label,
-                        )),
-                    )
-                })
-                .collect(),
         ));
-    }
-    if project.worktree.is_some() {
         menu.push(MenuItem::row(
             "Rename Worktree",
             "pencil",
@@ -158,158 +147,233 @@ pub fn project_menu(input: &ProjectMenuInput<'_>) -> Vec<MenuItem> {
             .with_disabled(!group.can_remove_project)
             .with_danger(),
         );
+        menu.extend(unified_delete_worktree_menu(input.folded_worktrees));
         return menu;
     }
-    // CDXC:Projects 2026-11-19 WHY: a project had no way to change its name but remove + add, which lost its session records. Rename edits the name in place on the header (native_sidebar/rename.rs) and changes the name only. A bot's name comes from its profile and a stale machine's project can't be reached, so neither gets the row; a worktree has Rename Worktree above.
-    if project.bot_profile.is_none() && !group.is_stale {
-        menu.push(MenuItem {
-            label: Some("Rename".to_string()),
-            icon: Some("pencil".to_string()),
-            command: Some(MenuCommand::rename_project(group_id)),
-            ..MenuItem::default()
-        });
-    }
-    if let Some(remote_url) = group.git_remote_origin_url.filter(|url| !url.is_empty()) {
-        menu.push(MenuItem::row(
-            "Copy Remote URL",
-            "link",
-            MenuCommand::command(message::copy_project_remote_url(remote_url)),
-        ));
-    }
-    if project.bot_profile.is_none() {
-        menu.extend(input.clone_on.clone());
-    }
-    if project.bot_profile.is_none() {
-        menu.extend(project_membership_menu(
-            group_id,
-            Some(project.project_id.as_str()),
-            input.collection_id,
-            input.collections,
-            input.spaces,
-        ));
-    }
-    // CDXC:Workspaces 2026-10-09 WHY:
-    // Move to workspace belongs to the Workspaces built-in extension. A daemon with it off publishes no workspaces document, so `input.workspace` is `None` and the row does not show, on the desktop and the web build alike.
-    // CDXC:WorkMode 2026-10-24 DECISION: User: Issues Workflow has "No switch", so the Work Mode row that sat here is gone (supersedes the 2026-10-09 "right-click the project → Work mode" decision).
-    if let Some((workspaces, project_workspace_id)) = input
-        .workspace
-        .filter(|_| project.bot_profile.is_none() && !group.is_remote && !group.is_stale)
-    {
-        menu.push(super::workspace::move_to_workspace_menu(
-            workspaces,
-            project.project_id.as_str(),
-            project_workspace_id,
-        ));
-    }
-    // A remote machine's project moves on this computer only (CDXC:Workspaces 2026-11-19 in
-    // server/src/workspaces/store.rs `assign_remote_project_workspace_in`).
-    if let Some(remote) = input.remote_workspace.as_ref().filter(|remote| {
-        project.bot_profile.is_none()
-            && group.is_remote
-            && !group.is_stale
-            && remote.state.workspaces.len() > 1
-    }) {
-        menu.push(super::workspace::move_remote_project_to_workspace_menu(
-            remote.state,
-            remote.machine_id,
-            remote.project_id,
-            remote.workspace_id,
-        ));
-    }
-    menu.push(MenuItem::separator());
-    // CDXC:ContextMenus 2026-09-29 DECISION:
-    // User: a project's menu does not have both a sessions group row and Add to Group > New Group; only
-    // the second stays. A session still starts a sessions group with its own Move to New
-    // Group (Q1312, 2026-11-05: the project menu stays without one).
-    menu.push(MenuItem::row(
-        if input.hidden_group { "Unhide" } else { "Hide" },
-        "eye-off",
-        MenuCommand::project_membership(group_id, "hide", None),
-    ));
-    let all_sleeping = sleeping && !running;
-    let has_inactive = input.sessions.iter().any(|session| {
-        let row = &session.row;
-        row.session_kind.as_deref() == Some("terminal")
-            && row.lifecycle_state == "running"
-            && row.activity != "working"
-            && row.activity != "attention"
-            && !row.has_background_work
-    });
-    menu.push(
-        MenuItem::row(
-            if all_sleeping {
-                "Wake"
-            } else {
-                "Sleep Inactive"
-            },
-            if all_sleeping { "player-play" } else { "moon" },
-            MenuCommand::command(if all_sleeping {
-                message::wake_project_sleeping_sessions(group_id)
-            } else {
-                message::sleep_inactive_project_sessions(group_id)
-            }),
-        )
-        .with_disabled(!all_sleeping && !has_inactive),
-    );
-    if !input.sessions.is_empty() {
-        menu.push(MenuItem::row(
-            "Full Reload",
-            "refresh",
-            MenuCommand::command(message::full_reload_project_sessions(group_id)),
-        ));
-    }
-    // CDXC:Autopilot 2026-11-07 DECISION:
-    // User: "we need to be able to right click on a project and in advanced we disable it for it (also applies for that project's worktrees)". The row shows while Autopilot is on and goes by project (gxserver sends `autopilot` on the project only then), ticked while Autopilot covers the project; a worktree follows its main project, so its own menu has no row. Projects of a connected computer are left out: their Autopilot is that computer's.
-    if let Some(inside) = project
-        .autopilot
-        .filter(|_| !group.is_remote && project.bot_profile.is_none())
-    {
-        menu.push(MenuItem::submenu(
-            "Advanced",
-            "dots",
-            vec![MenuItem::row(
-                "Autopilot",
-                "plane",
-                MenuCommand::command(message::set_project_autopilot(
-                    project.project_id.as_str(),
-                    !inside,
-                )),
-            )
-            .with_checked(inside)],
-        ));
-    }
-    menu.push(MenuItem::separator());
-    menu.push(
-        MenuItem::row(
-            "Close Inactive",
-            "x",
-            MenuCommand::command(message::close_inactive_project_sessions(group_id)),
-        )
-        .with_disabled(!has_inactive)
-        .with_danger(),
-    );
-    menu.push(
-        MenuItem::row(
-            "Close Project",
-            "x",
-            MenuCommand::command(message::close_project(group_id)),
-        )
-        .with_disabled(!group.can_remove_project && !group.is_remote)
-        .with_danger(),
-    );
-    menu
+    let places = ProjectPlaces {
+        input,
+        project,
+        sleeping,
+        running,
+    };
+    assemble_project_menu(ProjectMenuSpot::Sidebar, |place| places.fill(place))
 }
 
-/// `menu` without the Rename row, for a project menu shown away from the project's header (the
-/// Unified sidebar names a row by its repository, and an extension panel draws no header), where
-/// the name field it opens has nowhere to show.
+/// What each place of the project menu's layout shows for one project right now.
+struct ProjectPlaces<'i, 'a> {
+    input: &'i ProjectMenuInput<'a>,
+    project: &'a crate::sidebar_view::view::ProjectContextView,
+    sleeping: bool,
+    running: bool,
+}
+
+impl ProjectPlaces<'_, '_> {
+    fn has_inactive(&self) -> bool {
+        self.input.sessions.iter().any(|session| {
+            let row = &session.row;
+            row.session_kind.as_deref() == Some("terminal")
+                && row.lifecycle_state == "running"
+                && row.activity != "working"
+                && row.activity != "attention"
+                && !row.has_background_work
+        })
+    }
+
+    fn fill(&self, place: &str) -> Vec<MenuItem> {
+        let input = self.input;
+        let group = input.group;
+        let group_id = group.group_id;
+        let project = self.project;
+        let bot = project.bot_profile.is_some();
+        if let Some(rows) = input.header.place(place) {
+            return rows;
+        }
+        let command = MenuCommand::command;
+        match place {
+            // CDXC:Projects 2026-11-19 WHY: a project had no way to change its name but remove + add, which lost its session records. Rename Project edits the name in place on the header (native_sidebar/rename.rs) and changes the name only. A bot's name comes from its profile and a stale machine's project can't be reached, so neither gets the tile; a worktree has Rename Worktree.
+            "renameProject" if !bot && !group.is_stale => vec![entry_row(
+                "renameProject",
+                false,
+                MenuCommand::rename_project(group_id),
+            )],
+            "copyPath" => vec![entry_row(
+                "copyPath",
+                false,
+                command(message::copy_project_path(group_id)),
+            )],
+            "copyRemoteUrl" => group
+                .git_remote_origin_url
+                .filter(|url| !url.is_empty())
+                .map(|url| {
+                    entry_row(
+                        "copyRemoteUrl",
+                        false,
+                        command(message::copy_project_remote_url(url)),
+                    )
+                })
+                .into_iter()
+                .collect(),
+            "openFolder" => vec![entry_row(
+                "openFolder",
+                false,
+                command(message::open_project_in_finder(group_id)),
+            )],
+            "openIn" if bot && !group.is_remote && !input.open_targets.is_empty() => {
+                vec![MenuItem::submenu(
+                    "Open in",
+                    "external-link",
+                    input
+                        .open_targets
+                        .iter()
+                        .map(|target| {
+                            MenuItem::row(
+                                &target.label,
+                                &target.icon,
+                                command(message::open_project_in_target(
+                                    group_id,
+                                    &target.target_id,
+                                    &target.label,
+                                )),
+                            )
+                        })
+                        .collect(),
+                )]
+            }
+            "cloneOn" if !bot => input.clone_on.iter().cloned().collect(),
+            // Project Group, then Spaces for a project in no group (a group owns its projects'
+            // Space membership).
+            "projectGroup" | "spaces" if !bot => {
+                let mut rows = project_membership_menu(
+                    group_id,
+                    Some(project.project_id.as_str()),
+                    input.collection_id,
+                    input.collections,
+                    input.spaces,
+                )
+                .into_iter();
+                let row = if place == "projectGroup" {
+                    rows.next()
+                } else {
+                    rows.nth(1)
+                };
+                row.into_iter().collect()
+            }
+            "moveToWorkspace" if !bot && !group.is_stale => self.move_to_workspace(),
+            // CDXC:ContextMenus 2026-09-29 DECISION:
+            // User: a project's menu does not have both a sessions group row and Add to Group > New Group; only
+            // the second stays. A session still starts a sessions group with its own Move to New
+            // Group (Q1312, 2026-11-05: the project menu stays without one).
+            "hide" => vec![entry_row(
+                "hide",
+                input.hidden_group,
+                MenuCommand::project_membership(group_id, "hide", None),
+            )],
+            "sleepInactive" => {
+                let all_sleeping = self.sleeping && !self.running;
+                vec![entry_row(
+                    "sleepInactive",
+                    all_sleeping,
+                    command(if all_sleeping {
+                        message::wake_project_sleeping_sessions(group_id)
+                    } else {
+                        message::sleep_inactive_project_sessions(group_id)
+                    }),
+                )
+                .with_disabled(!all_sleeping && !self.has_inactive())]
+            }
+            // The session menu's Full Reload, without its key: the key reloads one session.
+            "fullReload" if !input.sessions.is_empty() => vec![MenuItem {
+                hotkey: None,
+                ..entry_row(
+                    "fullReload",
+                    false,
+                    command(message::full_reload_project_sessions(group_id)),
+                )
+            }],
+            // CDXC:Autopilot 2026-11-07 DECISION:
+            // User: "we need to be able to right click on a project and in advanced we disable it for it (also applies for that project's worktrees)". The row shows while Autopilot is on and goes by project (gxserver sends `autopilot` on the project only then), ticked while Autopilot covers the project; a worktree follows its main project, so its own menu has no row. Projects of a connected computer are left out: their Autopilot is that computer's. Since Q4313 (2026-11-20) it is More › Autopilot.
+            "autopilot" if !group.is_remote && !bot => project
+                .autopilot
+                .map(|inside| {
+                    entry_row(
+                        "autopilot",
+                        false,
+                        command(message::set_project_autopilot(
+                            project.project_id.as_str(),
+                            !inside,
+                        )),
+                    )
+                    .with_checked(inside)
+                })
+                .into_iter()
+                .collect(),
+            "closeInactive" => vec![entry_row(
+                "closeInactive",
+                false,
+                command(message::close_inactive_project_sessions(group_id)),
+            )
+            .with_disabled(!self.has_inactive())],
+            "closeProject" => vec![entry_row(
+                "closeProject",
+                false,
+                command(message::close_project(group_id)),
+            )
+            .with_disabled(!group.can_remove_project && !group.is_remote)],
+            "deleteWorktree" => unified_delete_worktree_menu(input.folded_worktrees),
+            _ => Vec::new(),
+        }
+    }
+
+    fn move_to_workspace(&self) -> Vec<MenuItem> {
+        let input = self.input;
+        let group = input.group;
+        // CDXC:Workspaces 2026-10-09 WHY:
+        // Move to Workspace belongs to the Workspaces built-in extension. A daemon with it off publishes no workspaces document, so `input.workspace` is `None` and the row does not show, on the desktop and the web build alike.
+        // CDXC:WorkMode 2026-10-24 DECISION: User: Issues Workflow has "No switch", so the Work Mode row that sat here is gone (supersedes the 2026-10-09 "right-click the project → Work mode" decision).
+        if let Some((workspaces, project_workspace_id)) =
+            input.workspace.filter(|_| !group.is_remote)
+        {
+            return vec![super::workspace::move_to_workspace_menu(
+                workspaces,
+                self.project.project_id.as_str(),
+                project_workspace_id,
+            )];
+        }
+        // A remote machine's project moves on this computer only (CDXC:Workspaces 2026-11-19 in
+        // server/src/workspaces/store.rs `assign_remote_project_workspace_in`).
+        input
+            .remote_workspace
+            .as_ref()
+            .filter(|remote| group.is_remote && remote.state.workspaces.len() > 1)
+            .map(|remote| {
+                super::workspace::move_remote_project_to_workspace_menu(
+                    remote.state,
+                    remote.machine_id,
+                    remote.project_id,
+                    remote.workspace_id,
+                )
+            })
+            .into_iter()
+            .collect()
+    }
+}
+
+/// `menu` without the Rename Project tile, for a project menu shown away from the project's
+/// header (the Unified sidebar names a row by its repository, and an extension panel draws no
+/// header), where the name field it opens has nowhere to show.
 pub fn without_project_rename(menu: &mut Vec<MenuItem>) {
-    menu.retain(|item| {
-        !item
-            .command
+    let is_rename = |item: &MenuItem| {
+        item.command
             .as_ref()
             .is_some_and(MenuCommand::is_rename_project)
-    });
+    };
+    menu.retain(|item| !is_rename(item));
+    for item in menu.iter_mut() {
+        if let Some(tiles) = item.quick.as_mut() {
+            tiles.retain(|tile| !is_rename(tile));
+        }
+    }
+    menu.retain(|item| item.quick.as_ref().is_none_or(|tiles| !tiles.is_empty()));
 }
 
 /// The Delete Worktree row: it opens the Delete Worktree dialog for the worktree project
