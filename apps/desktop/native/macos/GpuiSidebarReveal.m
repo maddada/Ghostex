@@ -627,7 +627,8 @@ int GhostexGpuiNativeSidebarRevealRequest(void *rootPtr, double width, double ti
 
 static const void *GhostexGpuiRevealEdgeKey = &GhostexGpuiRevealEdgeKey;
 
-void GhostexGpuiRevealEdgeSync(void *rootPtr, bool visible, double width) {
+// `x` is where the zone starts: right of the rail when the window shows one (app/sidebar_rail/).
+void GhostexGpuiRevealEdgeSync(void *rootPtr, bool visible, double x, double width) {
   NSView *root = (__bridge NSView *)rootPtr;
   if (!root) return;
   GhostexGpuiRevealEdgeView *edge = objc_getAssociatedObject(root, GhostexGpuiRevealEdgeKey);
@@ -642,7 +643,8 @@ void GhostexGpuiRevealEdgeSync(void *rootPtr, bool visible, double width) {
     edge = [[GhostexGpuiRevealEdgeView alloc] initWithFrame:NSZeroRect];
     objc_setAssociatedObject(root, GhostexGpuiRevealEdgeKey, edge, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   }
-  NSRect frame = NSMakeRect(0, 0, MIN(width, root.bounds.size.width), root.bounds.size.height);
+  double left = MAX(0, MIN(x, root.bounds.size.width));
+  NSRect frame = NSMakeRect(left, 0, MIN(width, root.bounds.size.width - left), root.bounds.size.height);
   if (!NSEqualRects(edge.frame, frame)) edge.frame = frame;
   // A CEF page created or reparented since the last sweep is added above this view.
   if (edge.superview != root || root.subviews.lastObject != edge) {

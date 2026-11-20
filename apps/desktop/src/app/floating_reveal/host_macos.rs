@@ -34,7 +34,7 @@ unsafe extern "C" {
         radii: *const f64,
     ) -> bool;
     fn GhostexGpuiNativeSidebarRevealLeaving(popup: *mut c_void) -> bool;
-    fn GhostexGpuiRevealEdgeSync(root: *mut c_void, visible: bool, width: f64);
+    fn GhostexGpuiRevealEdgeSync(root: *mut c_void, visible: bool, x: f64, width: f64);
     fn GhostexGpuiRevealEdgeTake(root: *mut c_void, y_fraction: *mut f64) -> i32;
     fn GhostexGpuiSetWindowControlsHidden(root: *mut c_void, hidden: bool);
 }
@@ -109,6 +109,7 @@ impl GhostexGpuiApp {
             GhostexGpuiRevealEdgeSync(
                 self.parent_ns_view,
                 visible,
+                self.floating_reveal_edge_x() as f64,
                 FLOATING_REVEAL_EDGE_WIDTH as f64,
             )
         };

@@ -58,7 +58,8 @@ impl GhostexGpuiApp {
             .id("ghostex-gpui-floating-reveal-edge")
             .absolute()
             .top_0()
-            .left_0()
+            // Right of the rail, which keeps the window's left edge (app/sidebar_rail/).
+            .left(px(self.sidebar_rail_width()))
             .flex()
             .flex_col()
             .w(px(FLOATING_REVEAL_EDGE_WIDTH))
