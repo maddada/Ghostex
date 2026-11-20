@@ -715,6 +715,17 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         user_only: false,
     },
     Supplemental {
+        key: "screenshotMode",
+        tab: ACCOUNTS,
+        group: None,
+        section: "accounts",
+        section_title: "Configuration",
+        title: "Screenshot mode",
+        subtitle: "Hide account names and emails, the sidebar's account tiles, the account on the model pill and your other workspaces, for screenshots and screen shares. A Screenshot mode chip shows while it is on. Stays on this computer; it never syncs.",
+        options: &[],
+        user_only: false,
+    },
+    Supplemental {
         key: "expandCollapsedProjectsOnJump",
         tab: HOTKEYS,
         group: None,

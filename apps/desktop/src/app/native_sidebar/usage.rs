@@ -585,6 +585,8 @@ impl GhostexGpuiApp {
             .children(zone)
             .children(line)
             .children(self.render_native_sidebar_usage(appearance, pinned_meters, window, cx))
+            // Where the account tiles were, while screenshot mode hides them.
+            .children(self.render_native_sidebar_screenshot_chip(appearance, cx))
             .into_any_element()
     }
 

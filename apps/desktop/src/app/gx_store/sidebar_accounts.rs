@@ -357,11 +357,7 @@ impl GhostexGpuiApp {
 
 /// Settings' Hide account emails, as the titlebar and the New Thread picker read it.
 fn hide_account_emails() -> bool {
-    crate::shared_settings::shared_sidebar_settings_snapshot()
-        .object()
-        .get("hideAccountEmails")
-        .and_then(Value::as_bool)
-        == Some(true)
+    crate::app::screenshot_mode::account_emails_hidden()
 }
 
 /// The key `accountSwitchProgress` builds from its `projectId`, `sessionId` and `machineId`.

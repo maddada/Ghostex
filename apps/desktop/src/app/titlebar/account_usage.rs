@@ -451,16 +451,20 @@ fn icon(codex: bool) -> Arc<gpui::Image> {
 /// The account's name as the user wants it shown: masked when Settings hides
 /// account emails. Shared by the titlebar account popup and the New Thread picker.
 pub(crate) fn account_display_name(account: &Value) -> String {
+    // Screenshot mode names no account, only its slot (CDXC:ScreenshotMode 2026-11-20 in
+    // app/screenshot_mode.rs).
+    if crate::app::screenshot_mode::screenshot_mode_on() {
+        return match text(account, "selector") {
+            "" => "Account".to_string(),
+            selector => format!("Account {selector}"),
+        };
+    }
     account_display_text(text(account, "name"))
 }
 
 /// CDXC:AgentProviders 2026-09-10 WHY: Account errors can include email addresses too; mask each address while preserving the surrounding explanation in native pickers and usage popups.
 pub(crate) fn account_display_text(value: &str) -> String {
-    let hidden = shared_settings::shared_sidebar_settings_snapshot()
-        .object()
-        .get("hideAccountEmails")
-        .and_then(Value::as_bool)
-        == Some(true);
+    let hidden = crate::app::screenshot_mode::account_emails_hidden();
     if !hidden {
         return value.to_string();
     }
@@ -941,8 +945,13 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// Every account the user asked to see, in the order gxserver publishes them, once each.
+    /// Every account the user asked to see, in the order gxserver publishes them, once each; none
+    /// in screenshot mode, which hides the account tiles (CDXC:ScreenshotMode 2026-11-20 in
+    /// app/screenshot_mode.rs).
     pub(crate) fn account_usage_meters(&self) -> Vec<GpuiAccountUsageMeter> {
+        if crate::app::screenshot_mode::screenshot_mode_on() {
+            return Vec::new();
+        }
         distinct_account_copies(&self.titlebar_accounts)
             .into_iter()
             .filter_map(|copies| {

@@ -24,6 +24,7 @@ pub(crate) mod helpers;
 pub(crate) mod hotkeys;
 pub(crate) mod model;
 pub(crate) mod remote_browser;
+pub(crate) mod screenshot_mode;
 pub(crate) mod shell_hotkeys;
 pub(crate) mod window;
 

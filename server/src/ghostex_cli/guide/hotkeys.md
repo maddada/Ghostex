@@ -37,6 +37,7 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Open Settings | `cmd+,` |  | `cmd+,` |  | Open app settings. | `openSettings` |
 | Open Extensions | unassigned |  | unassigned |  | Open Settings > Extensions to manage built-in features and installed extensions. | `openExtensions` |
 | Ask Ghostex Help | unassigned |  | unassigned |  | Open the Ghostex Help menu: sample questions an agent can answer and settings it can change for you. | `openGhostexHelp` |
+| Toggle Screenshot Mode | unassigned |  | unassigned |  | Hide account names and emails, the account tiles and your other workspaces for screenshots, or show them again. | `toggleScreenshotMode` |
 | Open File | unassigned |  | unassigned |  | Open the Files view with its search box ready: type a file name, or paste the path of any file on this computer, and press Enter. | `openFileInFiles` |
 | Hotkeys | `cmd+/` |  | `cmd+/` | `cmd+alt+/` | Open app hotkeys. | `openHotkeys` |
 | Toggle Sidebar | `cmd+b` |  | `cmd+b` | `cmd+shift+b` | Collapse or expand the sidebar. | `toggleSidebarCollapsed` |

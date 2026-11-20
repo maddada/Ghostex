@@ -522,7 +522,10 @@ impl WorkspacesTab {
             label: "Account for new sessions (Accounts page)".into(),
             value: String::new(),
         }];
-        let hide_emails = self.store.read(cx).bool("hideAccountEmails");
+        let hide_emails = {
+            let store = self.store.read(cx);
+            store.bool("hideAccountEmails") || store.bool("screenshotMode")
+        };
         options.extend(
             self.claude_accounts
                 .iter()

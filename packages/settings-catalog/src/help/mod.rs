@@ -133,6 +133,11 @@ fn agent_denied_key(key: &str) -> bool {
 /// Tabs whose rows are account or pairing state, never plain preferences.
 const AGENT_DENIED_TABS: &[&str] = &["accounts", "remote"];
 
+/// Keys on a denied tab that agents may still write.
+///
+/// CDXC:ScreenshotMode 2026-11-20 WHY: Screenshot mode sits on the Accounts page beside Hide emails, but it only hides things and gives no account or access away, and the user asked for it in `ghostex settings` too, so it is writable there although the rest of the Accounts page is not.
+const AGENT_ALLOWED_ON_DENIED_TABS: &[&str] = &["screenshotMode"];
+
 /*
 CDXC:Security 2026-11-10 DECISION:
 User (Q2140 = B): agents may change every setting again; gxserver's API and `ghostex settings set` write every agent-writable key and the Help marks them so. This supersedes the 2026-11-08 decision (Q1866 "settings only") that made the keys loosening security the owner's alone.
@@ -242,8 +247,10 @@ fn catalog_entry(row: &SettingRow, location: &Location) -> CatalogEntry {
         value_type,
         ValueType::Boolean | ValueType::Number | ValueType::String | ValueType::Enum
     );
-    let agent_writable =
-        primitive && !AGENT_DENIED_TABS.contains(&location.tab.0) && !agent_denied_key(row.key);
+    let agent_writable = primitive
+        && (!AGENT_DENIED_TABS.contains(&location.tab.0)
+            || AGENT_ALLOWED_ON_DENIED_TABS.contains(&row.key))
+        && !agent_denied_key(row.key);
     CatalogEntry {
         key: row.key.to_string(),
         title: row.title.clone(),

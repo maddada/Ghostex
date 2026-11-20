@@ -315,6 +315,11 @@ pub struct StorageRecord {
 pub struct ChatSettings {
     /// Masks account text everywhere the chat shows it.
     pub hide_account_emails: bool,
+    /// Screenshot mode (`screenshotMode`): masks account text like `hide_account_emails` and also
+    /// drops the model pill's account mark, so no account is named. Absent from a host that has
+    /// no settings file (the phone).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub screenshot_mode: Option<bool>,
     /// The session's display title, or `null` when it has none.
     pub title: Option<String>,
     /// The Catch me up setting (`chatCatchMeUp`); absent from a host that has no settings file

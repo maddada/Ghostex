@@ -250,6 +250,7 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("openSettings", "cmd+,"),
     ("openExtensions", ""),
     ("openGhostexHelp", ""),
+    ("toggleScreenshotMode", ""),
     ("openFileInFiles", ""),
     ("openHotkeys", "cmd+/"),
     ("toggleSidebarCollapsed", "cmd+b"),
@@ -824,7 +825,11 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(
     // The picker handler resolves the actual chat pane; sidebar and shell responders must not swallow this command.
     if matches!(
         action_id,
-        "openExtensions" | "openGhostexHelp" | "openModelPicker" | "openFileInFiles"
+        "openExtensions"
+            | "openGhostexHelp"
+            | "toggleScreenshotMode"
+            | "openModelPicker"
+            | "openFileInFiles"
     ) {
         return true;
     }

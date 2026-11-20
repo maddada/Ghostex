@@ -213,6 +213,10 @@ impl GhostexGpuiApp {
                     self.open_gpui_settings_extensions_page(Some(window), cx);
                     return;
                 }
+                if action_id == "toggleScreenshotMode" {
+                    self.toggle_screenshot_mode(cx);
+                    return;
+                }
                 if action_id == "openGhostexHelp" {
                     self.show_gpui_titlebar_help_menu(window, cx);
                     return;

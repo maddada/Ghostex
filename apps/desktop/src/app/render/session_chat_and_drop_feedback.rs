@@ -144,11 +144,7 @@ impl GhostexGpuiApp {
                 // created or mapped, so the pane shows the transcript skeleton, not a sentence.
                 return self.render_session_chat_skeleton();
             };
-            let hide_emails = shared_settings::shared_sidebar_settings_snapshot()
-                .object()
-                .get("hideAccountEmails")
-                .and_then(serde_json::Value::as_bool)
-                == Some(true);
+            let hide_emails = crate::app::screenshot_mode::account_emails_hidden();
             let message = if switching.is_some() && hide_emails {
                 match message.split_once('@') {
                     Some((address, _)) => {
