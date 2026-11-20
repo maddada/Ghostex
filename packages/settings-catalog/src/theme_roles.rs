@@ -8,7 +8,7 @@
 //!
 //! CDXC:Theming 2026-11-14 DECISION:
 //! User (Q3113 B and Q3195, agent theming page): after the look settings, agents restyle Ghostex through about sixteen named theme roles, "border, hairline, muted text, accent, surfaces, menu", that override what the palettes derive, per appearance, in one synced setting, so "the white borders feel too bright, tone them down" works. Borders, dividers and grey text are washes of the ink by default, so on window glass they stay see-through and on a solid fill they read the same: a role set as an opacity keeps that, and one set as a colour paints that colour on both.
-//! SEE-ALSO: apps/desktop/src/app/helpers/theme_roles.rs (the desktop applies them), server/src/theme/ (`ghostex theme`), skills/ghostex-help/SKILL.md.
+//! SEE-ALSO: apps/desktop/src/app/helpers/theme_roles.rs (the desktop applies them), server/src/theme/ (`ghostex theme`), server/src/ghostex_cli/help_guide.md.
 
 use serde_json::{Map, Value};
 

@@ -8,7 +8,7 @@
 //!
 //! CDXC:Theming 2026-11-14 DECISION:
 //! User (Q3113 B, Q3115, Q3118, agent theming page): agents restyle Ghostex through a `ghostex theme` command, first with the look settings Settings already has (stage A), then theme roles. Any agent may change the look; the chat of the agent that changed it shows a "Theme changed" card naming the agent, listing what changed, with Undo. A change saves through the app's own settings save, as `ghostex settings set` does, so it shows at once.
-//! SEE-ALSO: server/src/ghostex_cli/theme_cli.rs (the command), packages/gx-chat-core/src/transcript/theme_cards.rs (the card), skills/ghostex-help/SKILL.md (the theme chapter agents read).
+//! SEE-ALSO: server/src/ghostex_cli/theme_cli.rs (the command), packages/gx-chat-core/src/transcript/theme_cards.rs (the card), server/src/ghostex_cli/help_guide.md (`ghostex help guide`: the theme part agents read).
 
 use std::path::Path;
 use std::sync::Arc;

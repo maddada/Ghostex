@@ -5,7 +5,7 @@
 //!
 //! CDXC:Secrets 2026-11-02 WHY:
 //! Ghostex runs every agent in a terminal, so a CLI verb the agent runs in its own shell is the one channel every agent family shares (no MCP tool or provider-specific hook needed). The answer travels over its own RPC, never `answerSessionChatPrompt`, whose send ledger and diagnostics record the submitted text.
-//! SEE-ALSO: packages/gx-chat-core/src/secret_requests.rs (the card's document and its answer RPC), apps/desktop/src/app/native_chat/secret_request.rs and apps/mobile/app/src/chat/native/cards/SecretRequestCard.tsx (the two cards, which keep the typed text to themselves), skills/ghostex-secrets/SKILL.md (tells agents when and how to ask).
+//! SEE-ALSO: packages/gx-chat-core/src/secret_requests.rs (the card's document and its answer RPC), apps/desktop/src/app/native_chat/secret_request.rs and apps/mobile/app/src/chat/native/cards/SecretRequestCard.tsx (the two cards, which keep the typed text to themselves), server/src/ghostex_cli/secret_guide.md (`ghostex secret guide`: tells agents when and how to ask).
 
 mod api;
 mod store;

@@ -10508,7 +10508,7 @@
     {
       "key": "agentGhostexNote",
       "title": "Tell agents about Ghostex",
-      "subtitle": "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Live pages, Ghostex forms and visuals in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.",
+      "subtitle": "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Live pages, Ghostex forms and visuals in the chat, run other agents and coordinators, explain or change its own settings, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "config",

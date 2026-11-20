@@ -26,7 +26,7 @@ use crate::server::{
 
 /// The `runtimeSettings` key that marks a GBot chat.
 pub(crate) const CHAT_KEY: &str = "gbot";
-/// The skill every GBot chat is told to follow (skills/ghostex-gbots/).
+/// The retired GBot skill, named only for an older computer (the playbook is gbots/playbook.md).
 pub(crate) const GBOTS_SKILL: &str = "ghostex-gbots";
 
 /// The bot and opener a session's chat belongs to, from `runtimeSettings.gbot`.

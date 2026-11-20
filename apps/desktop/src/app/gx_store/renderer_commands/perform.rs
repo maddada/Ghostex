@@ -147,7 +147,7 @@ impl GhostexGpuiApp {
                 // every surface). The renderer command carries only a flat key/value patch; the
                 // CLI validates keys and values against the generated settings catalog before it
                 // dispatches.
-                // SEE-ALSO: server/src/ghostex_cli/settings.rs, skills/ghostex-help.
+                // SEE-ALSO: server/src/ghostex_cli/settings.rs, server/src/ghostex_cli/help_guide.md.
                 self.handle_gpui_app_modal_update_settings_patch_message(
                     &json!({
                         "patch": Value::Object(patch),

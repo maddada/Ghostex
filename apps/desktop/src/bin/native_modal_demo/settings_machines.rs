@@ -128,17 +128,7 @@ fn linux_rpc(state: &str, path: &str, params: &Value) -> Result<Value, String> {
             "platform": "linux",
             "ghostexCli": { "installed": true, "path": "/home/madda/.local/bin/ghostex" },
             "skills": [
-                { "skillName": "ghostex-cli", "installed": true, "unavailableReason": null },
-                { "skillName": "ghostex-help", "installed": true, "unavailableReason": null },
-                { "skillName": "ghostex-agents", "installed": false, "unavailableReason": null },
-                { "skillName": "ghostex-browser-use", "installed": false, "unavailableReason": null },
-                { "skillName": "ghostex-computer-use", "installed": false, "unavailableReason": null },
-                { "skillName": "ghostex-embedded-browser-use", "installed": false, "unavailableReason": null },
-                { "skillName": "ghostex-manage-beads", "installed": false, "unavailableReason": null },
-                { "skillName": "ghostex-auto-rename-session", "installed": true, "unavailableReason": null },
-                { "skillName": "ghostex-move-codex-session", "installed": false, "unavailableReason": null },
-                { "skillName": "ghostex-visuals", "installed": false, "unavailableReason": null },
-                { "skillName": "ghostex-spaceo", "installed": false, "unavailableReason": "SpaceO is only available on macOS." }
+                { "skillName": "ghostex", "installed": true, "unavailableReason": null }
             ],
         })),
         // The Session resume hooks card (tabs/agents/remote_hooks.rs): Claude's hook is missing
