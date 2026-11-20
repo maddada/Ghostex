@@ -149,7 +149,8 @@ impl GhostexGpuiApp {
                 .dispatch_native_sidebar_ui(sidebar_action(ghostex_gx_core::COMMANDS_ACTION), cx),
             "connectPhone" => self.dispatch_native_sidebar_ui(sidebar_action("remoteSetup"), cx),
             "settings" => self.dispatch_native_sidebar_ui(sidebar_action("settings"), cx),
-            // The feed hangs beside the rail's bell, or ⋯ when the bell is not pinned (render.rs).
+            // The feed hangs beside the rail's bell when that was clicked, else beside the bell in
+            // the sidebar's top bar or the header, or ⋯ while neither is on screen (render.rs).
             "notifications" => self.toggle_gpui_titlebar_notifications_popup(window, cx),
             "mainHub" => self.handle_native_sidebar_action(
                 &NativeSidebarAction {

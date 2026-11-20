@@ -186,7 +186,7 @@ impl GhostexGpuiApp {
                         if !self.header_control_shown(HeaderControl::Breadcrumb) {
                             this.child(self.render_claude_header_leading(window, cx))
                         } else {
-                            this.child(self.render_workarea_header_breadcrumb(compact, cx))
+                            this.child(self.render_workarea_header_breadcrumb(compact, window, cx))
                         }
                     }),
             )

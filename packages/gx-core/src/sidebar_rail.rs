@@ -55,9 +55,11 @@ pub const RAIL_ITEMS: &[RailItem] = &[
 ];
 
 /// Pinned when `sidebarRailPins` is missing.
+///
+/// CDXC:Sidebar 2026-11-20 DECISION:
+/// User (Q4318 B): with the rail on, the notifications bell sits in the sidebar's top bar at its top left, the corner Toggle sidebar left for the rail's foot. So the bell is no longer pinned by default; it stays in ⋯ for anyone who wants it on the rail too, and a saved `sidebarRailPins` that has it keeps it (coordinator's call).
 pub const RAIL_DEFAULT_PINS: &[&str] = &[
     "search",
-    "notifications",
     "mainHub",
     "agentsHub",
     "allAutomations",

@@ -585,10 +585,14 @@ impl GhostexGpuiApp {
     /// User: the notification bell belongs in the sidebar's top row beside the sidebar's own controls, not in the titlebar after the Next button; this supersedes the 2026-09-11 placement. It keeps its unread badge, its Settings switch, and its per-view scope gate.
     /// CDXC:Notifications 2026-11-02 DECISION:
     /// User: "show red dot here instead of blue with number of unread notifications there pls", then, after seeing it red with no permission waiting: "the color of the circle above notifications is red, even tho there's no permisison notifiation now... pls fix". The count badge takes the sidebar's approval red while an unread row is a permission or approval request still waiting for an answer; otherwise it keeps its earlier colors (red for an unsent message or an expiring reset, blue for the rest).
-    /// It is drawn as a sidebar row button so it matches the menu button beside it.
+    /// It is drawn as a sidebar row button so it matches the menu button beside it. `in_sidebar`
+    /// is false for the work area header's copy, which stands in for it while the sidebar is
+    /// hidden with the rail on (render/workarea_header/breadcrumb.rs): that one is not a stop of
+    /// the sidebar's focus order.
     pub(crate) fn render_sidebar_notification_bell(
         &self,
         appearance: &crate::app::native_sidebar::appearance::SidebarAppearance,
+        in_sidebar: bool,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let scale = appearance.scale;
@@ -658,6 +662,9 @@ impl GhostexGpuiApp {
             }))
             // A stop of the sidebar's focus order (it sits in the sidebar's top row).
             .map(|bell| {
+                if !in_sidebar {
+                    return bell;
+                }
                 self.sidebar_focus_stop(
                     bell,
                     "navigation:notifications",

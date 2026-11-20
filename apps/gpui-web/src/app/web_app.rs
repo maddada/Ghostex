@@ -216,6 +216,7 @@ impl GhostexGpuiApp {
     pub(crate) fn render_sidebar_notification_bell(
         &self,
         _appearance: &SidebarAppearance,
+        _in_sidebar: bool,
         _cx: &mut Context<Self>,
     ) -> AnyElement {
         div().into_any_element()

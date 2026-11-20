@@ -71,6 +71,7 @@ impl GhostexGpuiApp {
     pub(crate) fn render_workarea_header_breadcrumb(
         &self,
         compact: bool,
+        window: &gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         let project_icon = self
@@ -123,22 +124,32 @@ impl GhostexGpuiApp {
             // While docked, the sidebar's Search row draws the toggle (native_sidebar/navigation.rs).
             // The docked Search row puts the button's top at 5pt, while this 36pt row centres the
             // 27pt button at 4.5pt; the half point keeps it from jumping when the sidebar collapses.
-            // With the rail on, the toggle is the rail's, at its foot (app/sidebar_rail/render.rs).
-            .when(
-                self.sidebar_collapsed && !self.sidebar_rail_shown(),
-                |this| {
-                    // The window's traffic lights show here through the floating sidebar, so the
-                    // toggles under them draw nothing meanwhile (`window_lights_over_header`).
-                    let under_lights = self.window_lights_over_header();
+            // With the rail on, the toggle is the rail's, at its foot (app/sidebar_rail/render.rs),
+            // and the bell takes its place here, as it does in the sidebar's top bar (CDXC:Sidebar
+            // 2026-11-20 in native_sidebar/navigation.rs), so it stays in reach while the sidebar
+            // is hidden.
+            .when(self.sidebar_collapsed, |this| {
+                let button = if !self.sidebar_rail_shown() {
+                    Some(
+                        self.render_sidebar_collapse_button(None, cx)
+                            .into_any_element(),
+                    )
+                } else {
+                    self.workarea_header_rail_bell(window, cx)
+                };
+                // The window's traffic lights show here through the floating sidebar, so the
+                // toggles under them draw nothing meanwhile (`window_lights_over_header`).
+                let under_lights = self.window_lights_over_header();
+                this.when_some(button, |this, button| {
                     this.child(
                         div()
                             .relative()
                             .top(px(0.5))
                             .when(under_lights, |button| button.invisible())
-                            .child(self.render_sidebar_collapse_button(None, cx)),
+                            .child(button),
                     )
-                },
-            )
+                })
+            })
             /*
             CDXC:Navigation 2026-08-19:
             Back/Forward sit LEFT of the project name, next to the sidebar
@@ -230,5 +241,25 @@ impl GhostexGpuiApp {
                         )
                     }),
             )
+    }
+
+    /// The sidebar's bell, drawn in the header while the sidebar is hidden with the rail on: the
+    /// sidebar's look at the header's own size (it does not zoom with the sidebar, like the
+    /// toggle it replaces), and no stop of the sidebar's focus order. None while the bell is off.
+    fn workarea_header_rail_bell(
+        &self,
+        window: &gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        if !self.titlebar_notification_bell_visible() {
+            return None;
+        }
+        let snapshot = self.native_sidebar.snapshot.as_ref()?;
+        let mut appearance = crate::app::native_sidebar::appearance::SidebarAppearance::from_hud(
+            &snapshot.hud,
+            window,
+        );
+        appearance.scale = 1.0;
+        Some(self.render_sidebar_notification_bell(&appearance, false, cx))
     }
 }

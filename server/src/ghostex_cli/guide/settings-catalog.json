@@ -765,7 +765,7 @@
     {
       "key": "sidebarLayout",
       "title": "Sidebar layout",
-      "subtitle": "Rail adds a narrow column of icons at the window's left edge for Search, notifications, Main Hub, Agents Hub, All Automations, Hermes, Claude and Grok Bot, with everything else under its ⋯ menu, where you pin, unpin and drag icons into your own order. It stays when the sidebar is hidden. Classic is the sidebar without the rail, with Search and the bell in its top row.",
+      "subtitle": "Rail adds a narrow column of icons at the window's left edge for Search, Main Hub, Agents Hub, All Automations, Hermes, Claude and Grok Bot, with everything else under its ⋯ menu, where you pin, unpin and drag icons into your own order, and Toggle sidebar at its foot. It stays when the sidebar is hidden, and the bell moves to the top left of the sidebar's top bar. Classic is the sidebar without the rail, with Search and the bell in its top row.",
       "tab": "sidebar",
       "tabTitle": "Sidebar & Sessions",
       "section": "sidebar",

@@ -106,9 +106,11 @@ impl GhostexGpuiApp {
                 cx,
             ));
         }
-        // An unpinned item opened from ⋯ shows here while its view or page is on screen.
+        // An unpinned item opened from ⋯ shows here while its view or page is on screen. Not the
+        // feed: its bell is in the sidebar's top bar or the header (CDXC:Sidebar 2026-11-20 in
+        // native_sidebar/navigation.rs), so it does not need a second one here.
         let temporary = RAIL_ITEMS.iter().find(|item| {
-            !pins.contains(&item.key) && {
+            item.key != "notifications" && !pins.contains(&item.key) && {
                 let state = self.sidebar_rail_item_state(item.key, cx);
                 state.available && state.showing
             }
@@ -300,10 +302,12 @@ impl GhostexGpuiApp {
         let temporary_border = appearance.muted.opacity(0.55);
         let drop_line = appearance.foreground;
         let bounds = self.sidebar_rail.item_bounds(key);
-        // The notifications feed hangs beside the rail's bell, which stands in for the sidebar's.
+        // Opened from a bell pinned here, the feed hangs beside it. Only on its click: the bell in
+        // the sidebar's top bar or the header, painted after the rail, sets the anchor otherwise.
         let bell_anchor = (key == "notifications")
             .then(|| self.sidebar_rail_bell_anchor())
             .flatten();
+        let click_bounds = bounds.clone();
         let button = div()
             .id(gpui::SharedString::from(format!(
                 "ghostex-gpui-sidebar-rail-{key}"
@@ -328,9 +332,6 @@ impl GhostexGpuiApp {
             .hover(move |button| button.bg(if look.on { selected } else { hover }))
             .on_prepaint(move |rect, _, _| {
                 bounds.set(Some(rect));
-                if let Some(anchor) = &bell_anchor {
-                    anchor.set(Some(rail_popup_anchor(rect)));
-                }
             })
             .child(
                 div()
@@ -344,6 +345,9 @@ impl GhostexGpuiApp {
             .when_some(state.badge, |button, badge| button.child(rail_badge(badge)))
             .on_click(cx.listener(move |app, _, window, cx| {
                 cx.stop_propagation();
+                if let (Some(anchor), Some(rect)) = (&bell_anchor, click_bounds.get()) {
+                    anchor.set(Some(rail_popup_anchor(rect)));
+                }
                 app.run_sidebar_rail_item(key, window, cx);
             }))
             // Move and unpin save the pins, which the web build cannot (menu.rs), so it offers
@@ -408,7 +412,9 @@ impl GhostexGpuiApp {
         let bounds = self.sidebar_rail.more_bounds.clone();
         let hover = appearance.hover;
         let drop_line = appearance.foreground;
-        // Without the bell on the rail, the feed (from ⋯ or its hotkey) hangs beside ⋯.
+        // Without the bell on the rail, the feed (from ⋯ or its hotkey) hangs beside ⋯ unless the
+        // bell in the sidebar's top bar or the header is on screen: they paint after the rail, so
+        // theirs is the anchor then.
         let bell_on_rail = sidebar_rail_pins().contains(&"notifications");
         let bell_anchor = (!bell_on_rail)
             .then(|| self.sidebar_rail_bell_anchor())
@@ -527,7 +533,7 @@ impl GhostexGpuiApp {
     /// Toggle sidebar, in the rail's bottom corner.
     ///
     /// CDXC:Sidebar 2026-11-20 DECISION:
-    /// User, after 11.12.0: "pls move the left sidebar collapse expand to the new rail when rail is enabled and keep the notification on the top left of the sidebar". With the rail on, Toggle sidebar is the rail's last button, at its foot, so it stays in one place whether the sidebar is shown or hidden (the rail stays when the sidebar hides), and the bell and Search keep their places at the rail's top. The sidebar's top row and the hidden sidebar's header (and Claude's copy of that row) draw no toggle then (native_sidebar/navigation.rs, render/workarea_header/breadcrumb.rs). Same action, hotkey and tooltip as the header's (`render_sidebar_collapse_button`). Classic is unchanged.
+    /// User, after 11.12.0: "pls move the left sidebar collapse expand to the new rail when rail is enabled and keep the notification on the top left of the sidebar". With the rail on, Toggle sidebar is the rail's last button, at its foot, so it stays in one place whether the sidebar is shown or hidden (the rail stays when the sidebar hides). Asked what "keep the notification on the top left of the sidebar" meant, the user picked Q4318 B: the bell takes the corner the toggle left in the sidebar's top bar (CDXC:Sidebar 2026-11-20 in native_sidebar/navigation.rs). The sidebar's top row and the hidden sidebar's header (and Claude's copy of that row) draw no toggle then (native_sidebar/navigation.rs, render/workarea_header/breadcrumb.rs). Same action, hotkey and tooltip as the header's (`render_sidebar_collapse_button`). Classic is unchanged.
     fn render_sidebar_rail_sidebar_toggle(
         &self,
         appearance: &SidebarAppearance,

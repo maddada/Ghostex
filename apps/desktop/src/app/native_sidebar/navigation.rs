@@ -290,13 +290,14 @@ impl GhostexGpuiApp {
         still read one value, `sidebar_toggle_leading_x`.
         */
         // With Spaces on, the Hermes button is the Space row's last slot instead.
-        // With the rail on, Hermes, Search and the bell are the rail's (app/sidebar_rail/).
+        // With the rail on, Hermes and Search are the rail's (app/sidebar_rail/); the bell stays
+        // here, in the corner Toggle sidebar left (`corner_bell`).
         let rail_on = self.sidebar_rail_shown();
         let bots_toggle = (snapshot.bots_enabled && !snapshot.spaces_enabled && !rail_on)
             .then_some(snapshot.bots_mode);
         // Each sidebar extension with a mode has its button here, after Bots (extension_panel/).
         let extension_modes = self.native_extension_sidebar_view().modes;
-        let bell_visible = self.titlebar_notification_bell_visible() && !rail_on;
+        let bell_visible = self.titlebar_notification_bell_visible();
         let tooltip_label: gpui::SharedString = match shortcut.as_deref() {
             Some(shortcut) if !shortcut.is_empty() => format!("{label} ({shortcut})").into(),
             _ => label.into(),
@@ -311,6 +312,14 @@ impl GhostexGpuiApp {
         // app/sidebar_rail/render.rs); the row keeps the corner's leading padding, so it still
         // clears the traffic lights.
         let toggle_here = owns_window_corner && !rail;
+        // CDXC:Sidebar 2026-11-20 DECISION:
+        // User (Q4318 B): with the rail on, the notifications bell sits at the top left of the
+        // sidebar's top bar, in the corner Toggle sidebar left for the rail's foot. With the sidebar
+        // hidden the work area header draws it there instead (render/workarea_header/breadcrumb.rs);
+        // the floating sidebar's row keeps it in its usual place, before the menu.
+        let corner_bell = owns_window_corner && rail && bell_visible;
+        // Whether a button holds the corner, left of a spacer that sends the rest right.
+        let corner_button = toggle_here || corner_bell;
         let corner_toggle_x = owns_window_corner.then(|| {
             (crate::app::helpers::sidebar_toggle_leading_x(self.window_controls_reserved())
                 - self.sidebar_rail_width())
@@ -362,6 +371,8 @@ impl GhostexGpuiApp {
             let toggle = if toggle_here {
                 (TITLEBAR_SIDEBAR_COLLAPSE_ICON_SIZE + 2.0 * TITLEBAR_BUTTON_HORIZONTAL_PADDING)
                     * scale
+            } else if corner_bell {
+                SIDEBAR_TOP_ROW_BUTTON_WIDTH * scale
             } else {
                 0.0
             };
@@ -372,13 +383,13 @@ impl GhostexGpuiApp {
             };
             let buttons = 2
                 + usize::from(!rail)
-                + usize::from(bell_visible)
+                + usize::from(bell_visible && !corner_bell)
                 + usize::from(bots_toggle.is_some())
                 + extension_modes.len();
             top_row_fit(
                 width - leading - toggle,
                 buttons,
-                toggle_here,
+                corner_button,
                 trailing,
                 scale,
             )
@@ -409,8 +420,8 @@ impl GhostexGpuiApp {
             buttons right of the spacer narrow to `SIDEBAR_TOP_ROW_BUTTON_MIN_WIDTH` before
             anything overflows, so the toggle keeps its reserved x at every width.
             */
-            // Without the toggle (the rail's then) there is no spacer, so the row aligns right.
-            .when(!toggle_here, |row| row.justify_end())
+            // Without a corner button there is no spacer, so the row aligns right.
+            .when(!corner_button, |row| row.justify_end())
             .when_some(corner_toggle_x, |row, toggle_x| {
                 window_drag_region(row.pl(px(toggle_x)))
             })
@@ -432,7 +443,7 @@ impl GhostexGpuiApp {
             notification bell there, so this row draws its icon in the sidebar's icon grey rather
             than the header's bright one (since 2026-10-29 that grey is the header's own icon colour, see `SidebarAppearance::chrome_icon`).
             */
-            .when(toggle_here, |row| {
+            .when(corner_button, |row| {
                 // The header's copy of this row (Claude's) sits under the traffic lights the
                 // floating sidebar shows, so its toggles draw nothing there meanwhile
                 // (`window_lights_over_header`).
@@ -440,11 +451,17 @@ impl GhostexGpuiApp {
                 // The row's unscaled leading padding puts the button on the header's x, whatever
                 // the zoom; from there it scales like the rest of the row (GitHub #375). The spacer
                 // keeps it left of the row's other buttons, which align right.
+                let button = if corner_bell {
+                    self.render_sidebar_notification_bell(appearance, true, cx)
+                } else {
+                    self.render_sidebar_collapse_button(Some(appearance), cx)
+                        .into_any_element()
+                };
                 row.child(
                     div()
                         .flex_shrink_0()
                         .when(under_lights, |button| button.invisible())
-                        .child(self.render_sidebar_collapse_button(Some(appearance), cx)),
+                        .child(button),
                 )
                 // The negative margin cancels the row gap this zero-width spacer adds, so the
                 // buttons right of it keep their even slots.
@@ -564,8 +581,8 @@ impl GhostexGpuiApp {
             })
             // CDXC:Notifications 2026-09-20 DECISION:
             // User: the notification bell sits in the sidebar's top row, before the sidebar menu button.
-            .when(bell_visible, |row| {
-                row.child(self.render_sidebar_notification_bell(appearance, cx))
+            .when(bell_visible && !corner_bell, |row| {
+                row.child(self.render_sidebar_notification_bell(appearance, true, cx))
             })
             .map(|row| {
                 let more_menu_now_keyboard = more_menu_now.clone();
