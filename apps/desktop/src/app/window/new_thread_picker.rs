@@ -835,9 +835,11 @@ impl GpuiNewThreadPickerWindow {
             .unwrap_or_default()
     }
 
-    /// The CLIProxyAPI hubs a `provider` session can start on; none for a Claude cloud session.
+    /// The CLIProxyAPI hubs a `provider` session can start on; none for a Claude cloud session or a
+    /// Cloud Box.
     fn provider_hubs(&self, provider: &str) -> Vec<usize> {
-        if self.cloud_scope() {
+        // A hub runs on this computer, so a Cloud Box or Claude cloud session never offers one.
+        if self.cloud_scope() || self.run_on.run_location() == Some(CLOUD_BOX_RUN_LOCATION) {
             return Vec::new();
         }
         self.accounts
