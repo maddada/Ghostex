@@ -235,7 +235,25 @@ pub(in crate::server) async fn answer_work_cleanup(
         let db = open_repository_db(state)?;
         crate::coordinators::read_thread(&db, &project_id, &session_id)?.is_some()
     };
+    // Its folder, branch and commit go with the answer, so Undo in the coordinator's banner can put
+    // the worktree back, as after a cleanup the pass did by itself (work_cleanup_threads.rs).
     if answer == "cleanUp" && is_thread {
+        let (branch, head) = match worktree_path.clone() {
+            Some(folder) => tokio::task::spawn_blocking(move || {
+                let read = |args: &[&str]| {
+                    crate::session_git_status::run_git_probe_command(&folder, args)
+                        .map(|text| text.trim().to_string())
+                        .filter(|text| !text.is_empty() && text != "HEAD")
+                };
+                (
+                    read(&["rev-parse", "--abbrev-ref", "HEAD"]),
+                    read(&["rev-parse", "--verify", "HEAD"]),
+                )
+            })
+            .await
+            .unwrap_or((None, None)),
+            None => (None, None),
+        };
         let db = open_repository_db(state)?;
         crate::work_mode::write_work_cleanup_record(
             &db,
@@ -246,6 +264,9 @@ pub(in crate::server) async fn answer_work_cleanup(
                 "answer": answer,
                 "answeredAt": now_iso(),
                 "thread": true,
+                "worktreePath": worktree_path,
+                "branch": branch,
+                "head": head,
             }),
         )?;
     }
@@ -256,8 +277,10 @@ pub(in crate::server) async fn answer_work_cleanup(
             let mut remove_params = Map::new();
             remove_params.insert("projectId".to_string(), json!(project_id));
             remove_params.insert("worktreePath".to_string(), json!(worktree_path));
+            // A coordinator's thread keeps its place and its branch, for Undo.
             if is_thread {
                 remove_params.insert("keepSessions".to_string(), json!(true));
+                remove_params.insert("keepBranch".to_string(), json!(true));
             }
             match remove_session_worktree(state, &remove_params).await {
                 Ok(removed) => {
