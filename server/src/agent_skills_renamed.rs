@@ -64,7 +64,7 @@ fn shipped_sha256(old_name: &str) -> &'static [&'static str] {
 }
 
 /// `ghostex-agent-guide` SKILL.md and agents/openai.yaml, every revision in the repository.
-const AGENT_GUIDE_SHIPPED_SHA256: &[&str] = &[
+pub(crate) const AGENT_GUIDE_SHIPPED_SHA256: &[&str] = &[
     // SKILL.md
     "29a01ff3e22ad40724b6d4bae3c441fb0d696aeae5791920cf299a9e649bdd33",
     "30f6f3d6a8c77db5674525307d5760defc0973804af06f0794fcc64f1e5a5653",
@@ -150,7 +150,19 @@ fn migrate_one(home: &Path, skill: &RenamedSkill, report: &mut Report) -> bool {
     if entries.is_empty() {
         return false;
     }
-    // 1. The new skill in `~/.agents/skills`, from this build, before anything old goes.
+    // 1. The new skill in `~/.agents/skills`, from this build, before anything old goes. A
+    // `ghostex` of the user's own there is kept, and so is everything old (agent_skills.rs
+    // `is_own_ghostex_skill`).
+    if canonical_new.join("SKILL.md").is_file()
+        && skill.new == crate::agent_skills::GHOSTEX_SKILL_NAME
+        && !crate::agent_skills::is_own_ghostex_skill(&canonical_new, &[])
+    {
+        report.keep(
+            &canonical_new,
+            "A skill of the user's already has this name, so it and the old skill were kept.",
+        );
+        return true;
+    }
     if !canonical_new.join("SKILL.md").is_file() {
         if fs::symlink_metadata(&canonical_new).is_ok() {
             // Something of the user's holds the new name (a link that leads nowhere, a folder
@@ -162,7 +174,12 @@ fn migrate_one(home: &Path, skill: &RenamedSkill, report: &mut Report) -> bool {
             return true;
         }
         match write_skill_folder(&canonical_new, skill.new_files) {
-            Ok(()) => report.installed.push(path_string(&canonical_new)),
+            Ok(()) => {
+                if skill.new == crate::agent_skills::GHOSTEX_SKILL_NAME {
+                    crate::agent_skills::record_own_ghostex_skill(&canonical_new);
+                }
+                report.installed.push(path_string(&canonical_new))
+            }
             Err(error) => {
                 report.fail(&canonical_new, error);
                 return true;

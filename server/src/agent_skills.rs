@@ -274,6 +274,121 @@ fn install_agent_skills_blocking(
     Ok(Value::Object(status))
 }
 
+/// The one bundled skill's name, which a user may also give a skill of their own.
+pub(crate) const GHOSTEX_SKILL_NAME: &str = "ghostex";
+
+/// The file in `~/.agents/skills` where Ghostex records the sha256 of every `ghostex` skill file it
+/// writes, so a later Ghostex knows an unedited copy of any revision is its own. A dotfile, which
+/// agents and Agent Sync skip.
+pub(crate) const OWN_GHOSTEX_SKILL_RECORD: &str = ".ghostex-own-skill-sha256";
+
+/// CDXC:AgentSkills 2026-11-20 DECISION:
+/// User (via the coordinator, on the Opus review's finding 5): `ghostex` is the obvious name for a
+/// user's own skill, so the install, the startup refresh, linking into an agent's folder, the
+/// rename from `ghostex-agent-guide` and Uninstall only touch a `ghostex` folder whose every file
+/// matches a revision Ghostex shipped or wrote (this build's, a `ghostex-agent-guide` revision, the
+/// signed list's, or one recorded in [`OWN_GHOSTEX_SKILL_RECORD`]); anything else is reported as
+/// kept. A link that leads anywhere but Ghostex's own copy is the user's too.
+pub(crate) fn is_own_ghostex_skill(dir: &Path, also_shipped: &[String]) -> bool {
+    use sha2::{Digest, Sha256};
+    let Ok(metadata) = fs::symlink_metadata(dir) else {
+        return false;
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_dir() || !dir.join("SKILL.md").is_file() {
+        return false;
+    }
+    let bundled = [
+        include_str!("../../skills/ghostex/SKILL.md"),
+        include_str!("../../skills/ghostex/agents/openai.yaml"),
+    ]
+    .map(|text| hex::encode(Sha256::digest(text.as_bytes())));
+    let recorded = dir
+        .parent()
+        .and_then(|root| fs::read_to_string(root.join(OWN_GHOSTEX_SKILL_RECORD)).ok())
+        .unwrap_or_default();
+    let mut files = Vec::new();
+    if !collect_skill_files(dir, &mut files) {
+        return false;
+    }
+    files.iter().all(|file| {
+        let Ok(bytes) = fs::read(file) else {
+            return false;
+        };
+        let sha = hex::encode(Sha256::digest(&bytes));
+        bundled.contains(&sha)
+            || crate::agent_skills_renamed::AGENT_GUIDE_SHIPPED_SHA256.contains(&sha.as_str())
+            || also_shipped.iter().any(|shipped| *shipped == sha)
+            || recorded.lines().any(|line| line.trim() == sha)
+    })
+}
+
+/// Every plain file under `dir` but `.DS_Store`; false when it holds anything else (a link).
+fn collect_skill_files(dir: &Path, files: &mut Vec<PathBuf>) -> bool {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let Ok(kind) = entry.file_type() else {
+            return false;
+        };
+        if kind.is_dir() {
+            if !collect_skill_files(&entry.path(), files) {
+                return false;
+            }
+        } else if kind.is_file() {
+            if entry.file_name() != ".DS_Store" {
+                files.push(entry.path());
+            }
+        } else {
+            return false;
+        }
+    }
+    true
+}
+
+/// Whether `entry` (`ghostex` in some skills folder) is something of the user's that Ghostex must
+/// not replace or remove: a folder that is not [`is_own_ghostex_skill`], or a link that does not
+/// lead to Ghostex's copy at `canonical_dir`. Nothing there is not the user's.
+pub(crate) fn is_users_ghostex_entry(
+    entry: &Path,
+    canonical_dir: &Path,
+    also_shipped: &[String],
+) -> bool {
+    let Ok(metadata) = fs::symlink_metadata(entry) else {
+        return false;
+    };
+    if metadata.file_type().is_symlink() {
+        !ghostex_agent_sync::fsx::same_entry(entry, canonical_dir)
+    } else {
+        !is_own_ghostex_skill(entry, also_shipped)
+    }
+}
+
+/// Records the sha256 of every file of the `ghostex` skill Ghostex just wrote at `dir`.
+pub(crate) fn record_own_ghostex_skill(dir: &Path) {
+    use sha2::{Digest, Sha256};
+    let Some(root) = dir.parent() else {
+        return;
+    };
+    let record = root.join(OWN_GHOSTEX_SKILL_RECORD);
+    let mut lines: Vec<String> = fs::read_to_string(&record)
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let mut files = Vec::new();
+    collect_skill_files(dir, &mut files);
+    for file in files {
+        if let Ok(bytes) = fs::read(&file) {
+            let sha = hex::encode(Sha256::digest(&bytes));
+            if !lines.contains(&sha) {
+                lines.push(sha);
+            }
+        }
+    }
+    let _ = fs::write(&record, format!("{}\n", lines.join("\n")));
+}
+
 /// Copies the skill folder into the first root (`~/.agents/skills`, the only real copy) and links
 /// it into every other root. Returns the paths that changed.
 fn place_skill(
@@ -283,10 +398,24 @@ fn place_skill(
 ) -> Result<Vec<String>, DomainStateError> {
     let mut written = Vec::new();
     let canonical_dir = target_roots[0].join(skill_name);
+    let ghostex = skill_name == GHOSTEX_SKILL_NAME;
+    if ghostex && is_users_ghostex_entry(&canonical_dir, &canonical_dir, &[]) {
+        return Err(DomainStateError::bad_request(format!(
+            "A skill named ghostex that Ghostex didn't install is already at {}, so it was kept and Ghostex's was not installed. Rename or remove it, then install again.",
+            canonical_dir.display()
+        )));
+    }
     for (index, target_root) in target_roots.iter().enumerate() {
         let destination = target_root.join(skill_name);
+        if ghostex && index > 0 && is_users_ghostex_entry(&destination, &canonical_dir, &[]) {
+            continue;
+        }
         let changed = if index == 0 {
-            copy_skill_directory_into_place(source_dir, &destination)?
+            let changed = copy_skill_directory_into_place(source_dir, &destination)?;
+            if ghostex {
+                record_own_ghostex_skill(&destination);
+            }
+            changed
         } else {
             link_skill_into_agent_root(&canonical_dir, &destination)?
         };
