@@ -840,10 +840,11 @@ fn handle(
                 key_id,
                 challenge,
                 signature,
+                label,
                 ..
             } = parse(params)?;
             security
-                .open_owner_session(&key_id, &challenge, &signature, now)
+                .open_owner_session(&key_id, &challenge, &signature, label.as_deref(), now)
                 .map(|opened| json!(opened))
                 .map_err(|error| ("forbidden", error.to_string()))
         }
@@ -1041,7 +1042,7 @@ fn handle(
             "approverKeys": security.approver_keys.list(),
             // Who can approve here, in plain names, for the apps' "approve it in Ghostex on …"
             // and `ghostex computer-code` (CDXC:Security 2026-11-17 at `approvers_here`).
-            "approvesHere": approvers_here(state),
+            "approvesHere": approvers_here(state, caller, &params),
             "pendingApprovals": if caller.has(security::Capability::DecideApprovals) {
                 security.approvals.list_pending(now).len()
             } else {
@@ -1059,55 +1060,114 @@ fn handle(
 CDXC:Security 2026-11-17 FIX:
 The user ran `ghostex computer-code --copy` in a terminal on their Windows PC, which they use headless, to connect their Linux computer: "i dont want to look for approval screen on the windows machine cuz that machine is supposed to be connected to headlessly", and then "it's asking M7-Desktop to let this computer in even tho i'm using headless command to get the code from there man. this doesn't make sense." Both asks (show the code, let the new computer in) can only be approved by this computer's door keepers (its owner apps, on any computer, and its paired phones and computers; never the terminal once there is one, the user's Q-3A), yet every message said "the Ghostex app on this computer or your phone", or "Approve on <this computer>". gxserver now names them: `approvesHere` in `/api/securityStatus` lists, in plain names, each app that owns this computer (on whichever computer it runs; this computer's own app says so) and each paired phone or computer, for `ghostex computer-code`, the CLI's approval wait and the apps' "approve it in Ghostex on …". Older gxservers don't send it; their readers keep the old words.
 */
-/// Who can approve this computer's asks (its door keepers), in plain names: `{name, kind}` with
-/// kind `app` (an owner app on another computer), `thisApp` (this computer's own app), `phone` or
-/// `computer` (a paired device). Never keys or ids.
-fn approvers_here(state: &AppState) -> Vec<Value> {
+/*
+CDXC:Security 2026-11-20 FIX:
+The user pasted M7-Desktop's computer code on m7-arch and the Mac's notice said "Approve it in Ghostex on Mohamads-MacBook-Pro-2 or Mohamad's MacBook Pro (2) or your phone (samsung SM-F976B) or M7-DESKTOP": the Mac reading it was named twice, by old names (its key's label from enrollment and its paired-computer record), though it could approve nothing there, and the Windows PC was named in capitals while every other place says M7-Desktop. `approvesHere` now lists one entry per computer: a paired computer is never an entry of its own (it gets no device token, only phones do, so it approves nothing; its app's owner key does), and only names that key's computer when the two names are the same letters and digits (macOS's host name "Mohamads-MacBook-Pro-2" is its computer name "Mohamad's MacBook Pro (2)" that way); this computer's own app is named as this computer is now; and the computer asking is left out: an owner session's own key, and the keys and name a caller sends (`exceptKeyIds`, `exceptName`; an app reaching here with this computer's token file is otherwise nobody in particular). Keys keep current names as they open sessions (CDXC:Security 2026-11-20 at `current_key_label` in security/owner.rs). Supersedes the "each paired phone or computer" of CDXC:Security 2026-11-17 above.
+*/
+/// Who can approve this computer's asks (its door keepers), in plain names, one per computer:
+/// `{name, kind}` with kind `app` (an owner app on another computer), `thisApp` (this computer's
+/// own app) or `phone`. Never keys or ids. Leaves out the computer asking (`caller`'s owner key,
+/// and `exceptKeyIds` / `exceptName` in `params`).
+fn approvers_here(state: &AppState, caller: &Principal, params: &Map<String, Value>) -> Vec<Value> {
     let security = &state.security;
     let this_name = crate::remote_access::cached_remote_access_identity()
         .map(|identity| identity.computer_name)
         .ok();
-    let mut out: Vec<Value> = Vec::new();
-    let mut push = |name: String, kind: &str| {
-        let name = name.trim().to_string();
-        if !name.is_empty() && !out.iter().any(|seen| seen["name"] == name.as_str()) {
-            out.push(json!({ "name": name, "kind": kind }));
-        }
+    let devices = crate::storage::open_gxserver_database(&state.paths)
+        .ok()
+        .and_then(|db| crate::remote_access::paired_devices::list_paired_devices_json(&db).ok());
+    let paired: Vec<(String, bool)> = devices
+        .as_ref()
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|device| device["status"] == "paired")
+        .filter_map(|device| {
+            let name = device["name"].as_str()?.trim().to_string();
+            let phone = matches!(device["platform"].as_str(), Some("ios" | "android"));
+            (!name.is_empty()).then_some((name, phone))
+        })
+        .collect();
+    let except_ids: Vec<&str> = params
+        .get("exceptKeyIds")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    let caller_device = match caller {
+        Principal::Owner { device_id } => Some(device_id.as_str()),
+        _ => None,
     };
+    let mut asking: Vec<String> = params
+        .get("exceptName")
+        .and_then(Value::as_str)
+        .map(same_computer_name)
+        .filter(|name| !name.is_empty())
+        .into_iter()
+        .collect();
+    let mut entries: Vec<(String, &'static str)> = Vec::new();
     for key in security.listed_owner_keys() {
         let label = key
             .label
             .trim_end_matches("(Ghostex app)")
             .trim()
             .to_string();
+        if label.is_empty() {
+            continue;
+        }
         let here = security.is_app_owner_key(&key.key_id)
             || this_name
                 .as_deref()
-                .is_some_and(|name| name.eq_ignore_ascii_case(&label));
-        match key.platform.as_str() {
-            "ios" | "android" => push(label, "phone"),
-            _ if here => push(label, "thisApp"),
-            _ => push(label, "app"),
+                .is_some_and(|name| same_computer_name(name) == same_computer_name(&label));
+        if except_ids.contains(&key.key_id.as_str())
+            || caller_device == Some(key.device_id.as_str())
+        {
+            asking.push(same_computer_name(&label));
+            continue;
         }
-    }
-    let devices = crate::storage::open_gxserver_database(&state.paths)
-        .ok()
-        .and_then(|db| crate::remote_access::paired_devices::list_paired_devices_json(&db).ok());
-    for device in devices
-        .as_ref()
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter(|device| device["status"] == "paired")
-    {
-        let name = device["name"].as_str().unwrap_or_default().to_string();
-        let kind = match device["platform"].as_str().unwrap_or_default() {
-            "ios" | "android" => "phone",
-            _ => "computer",
+        let entry = match key.platform.as_str() {
+            "ios" | "android" => (label, "phone"),
+            _ if here => (this_name.clone().unwrap_or(label), "thisApp"),
+            // Its paired-computer record names it as that computer names itself.
+            _ => (
+                paired
+                    .iter()
+                    .find(|(name, phone)| {
+                        !phone && same_computer_name(name) == same_computer_name(&label)
+                    })
+                    .map_or(label, |(name, _)| name.clone()),
+                "app",
+            ),
         };
-        push(name, kind);
+        entries.push(entry);
+    }
+    entries.extend(
+        paired
+            .iter()
+            .filter(|(_, phone)| *phone)
+            .map(|(name, _)| (name.clone(), "phone")),
+    );
+    let mut out: Vec<Value> = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+    for (name, kind) in entries {
+        let same = same_computer_name(&name);
+        if same.is_empty() || asking.contains(&same) || seen.contains(&same) {
+            continue;
+        }
+        seen.push(same);
+        out.push(json!({ "name": name, "kind": kind }));
     }
     out
+}
+
+/// A computer's name as its letters and digits, lower-case: "M7-DESKTOP" and "M7-Desktop", or
+/// "Mohamads-MacBook-Pro-2" and "Mohamad's MacBook Pro (2)", are one computer.
+fn same_computer_name(name: &str) -> String {
+    name.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
 }
 
 /// The terminal approved `request` under CDXC:Security 2026-11-17 DECISION at
