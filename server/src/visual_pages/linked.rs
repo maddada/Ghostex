@@ -14,10 +14,19 @@
 //! redirect names only a path, so the reader stays on whatever address reached this gxserver (a
 //! tunnel from another computer, the phone's forward).
 //! The page id is the only grant on these routes (serve.rs), so a link opens only when the page's
-//! own HTML holds it as an `href`, and only to an `.html` file that declares itself a Ghostex page
-//! or that `ghostex show` published: a reader reaches what the page's agent linked, nothing else.
+//! own markup holds it as an `<a href>` (not text, a comment or script), and only to an `.html`
+//! file that declares itself a Ghostex page or that `ghostex show` published: a reader reaches what
+//! the page's agent linked, nothing else. Inside the page's own folder and its subfolders that is
+//! the whole rule; a link that leads out of it (`../cover.html`, after symlinks are resolved) opens
+//! only a page `ghostex show` already published from that file, so a deck's link back to its cover
+//! works and nothing elsewhere on the disk is published by a link. The route sends no cross-origin
+//! headers (http_dispatch.rs), so only a navigation follows it: a page's own script cannot fetch it
+//! to read the linked page.
 
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use axum::{
     http::{header, HeaderValue, StatusCode},
@@ -27,7 +36,8 @@ use axum::{
 use crate::server::RoutedResponse;
 
 use super::{
-    file_page::page_for_linked_file,
+    file_page::{page_for_linked_file, page_show_published},
+    prepare::anchor_hrefs,
     serve::{PAGE_SCRIPT_QUERY, READ_ONLY_QUERY, VISUAL_PAGE_ROUTE_PREFIX},
     store::{is_page_id, page_source_path, read_page},
 };
@@ -91,15 +101,25 @@ pub(crate) async fn follow(
 fn linked_page(gxserver_state_dir: &Path, id: &str, href: &str) -> Option<String> {
     let relative = relative_html_path(href)?;
     let page = read_page(gxserver_state_dir, id)?;
-    if !page_links_to(&String::from_utf8_lossy(&page), href) {
+    let href = href.trim();
+    if !anchor_hrefs(&String::from_utf8_lossy(&page))
+        .iter()
+        .any(|written| written == href)
+    {
         return None;
     }
     let source = page_source_path(gxserver_state_dir, id)?;
-    let file = Path::new(&source).parent()?.join(relative);
-    page_for_linked_file(gxserver_state_dir, &file)
-        .ok()
-        .flatten()
-        .map(|page| page.id)
+    // Symlinks resolved on both sides, so a link inside the folder cannot lead out of it.
+    let folder = fs::canonicalize(Path::new(&source).parent()?).ok()?;
+    let file = fs::canonicalize(folder.join(relative)).ok()?;
+    let linked = if file.starts_with(&folder) {
+        page_for_linked_file(gxserver_state_dir, &file)
+            .ok()
+            .flatten()
+    } else {
+        page_show_published(gxserver_state_dir, &file)
+    };
+    linked.map(|page| page.id)
 }
 
 /// The file a relative link to an HTML file names, percent-decoded, without its query and
@@ -121,6 +141,19 @@ fn relative_html_path(href: &str) -> Option<PathBuf> {
     if path.contains('\0') || !(lower.ends_with(".html") || lower.ends_with(".htm")) {
         return None;
     }
+    // The same checks on the decoded path, so `%2Fetc%2Fx.html`, `%5C%5Chost%5C…` and `C%3A%5C…`
+    // are no way around them.
+    if path.contains('\\')
+        || has_scheme(&path)
+        || Path::new(path.as_ref()).components().any(|part| {
+            matches!(
+                part,
+                std::path::Component::RootDir | std::path::Component::Prefix(_)
+            )
+        })
+    {
+        return None;
+    }
     Some(PathBuf::from(path.as_ref()))
 }
 
@@ -135,41 +168,6 @@ fn has_scheme(href: &str) -> bool {
         && scheme
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
-}
-
-/// Whether the page's HTML holds `href` as the value of an `href` attribute (quoted or not, with
-/// `&amp;` read as `&`, as the browser reads it).
-fn page_links_to(html: &str, href: &str) -> bool {
-    let lower = html.to_ascii_lowercase();
-    let mut from = 0;
-    while let Some(at) = lower[from..].find("href") {
-        let start = from + at;
-        from = start + "href".len();
-        // `href` must be a whole attribute name: `xlink:href` counts, `data-href` does not.
-        if lower[..start]
-            .chars()
-            .next_back()
-            .is_some_and(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-        {
-            continue;
-        }
-        let rest = html[from..].trim_start();
-        let Some(rest) = rest.strip_prefix('=') else {
-            continue;
-        };
-        let rest = rest.trim_start();
-        let value = match rest.chars().next() {
-            Some(quote @ ('"' | '\'')) => rest[1..].split(quote).next().unwrap_or_default(),
-            _ => rest
-                .split(|c: char| c.is_ascii_whitespace() || c == '>')
-                .next()
-                .unwrap_or_default(),
-        };
-        if value.replace("&amp;", "&").trim() == href.trim() {
-            return true;
-        }
-    }
-    false
 }
 
 fn page_of(path: &str) -> Option<String> {

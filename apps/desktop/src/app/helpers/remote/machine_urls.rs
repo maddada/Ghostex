@@ -126,7 +126,7 @@ pub(crate) fn gpui_remote_machine_page_link_url(
 ) -> GpuiRemoteMachineUrl {
     let on_tunnel = normalize_address(url)
         .and_then(|url| Url::parse(&url).ok())
-        .is_some_and(|parsed| {
+        .filter(|parsed| {
             parsed.scheme() == "http"
                 && parsed
                     .host_str()
@@ -139,8 +139,11 @@ pub(crate) fn gpui_remote_machine_page_link_url(
                     })
                 && parsed.port_or_known_default() == Some(target.local_port)
         });
-    if on_tunnel {
-        return GpuiRemoteMachineUrl::Gxserver(url.to_string());
+    // The tunnel listens on 127.0.0.1 only, as `gpui_remote_machine_url` writes its addresses.
+    if let Some(mut parsed) = on_tunnel
+        && parsed.set_host(Some("127.0.0.1")).is_ok()
+    {
+        return GpuiRemoteMachineUrl::Gxserver(parsed.to_string());
     }
     gpui_remote_machine_url(url, target)
 }

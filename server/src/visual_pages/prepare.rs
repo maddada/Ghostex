@@ -645,6 +645,47 @@ fn scan_document(html: &str) -> DocumentScan {
     scan
 }
 
+/// The `href` of every `<a>` start tag that is real markup, with `&amp;` read as `&`: the walk of
+/// [`scan_document`], so a link written in a comment, in script or style text, or as plain text
+/// is not one. linked.rs follows a page's link only when the page holds it here.
+pub(super) fn anchor_hrefs(html: &str) -> Vec<String> {
+    let mut hrefs = Vec::new();
+    let mut index = 0;
+    while let Some(offset) = html[index..].find('<') {
+        let at = index + offset;
+        let rest = &html[at..];
+        if rest.starts_with("<!--") {
+            index = rest[4..]
+                .find("-->")
+                .map_or(html.len(), |end| at + 4 + end + 3);
+            continue;
+        }
+        if rest.starts_with("<!") || rest.starts_with("<?") || rest.starts_with("</") {
+            index = rest.find('>').map_or(html.len(), |end| at + end + 1);
+            continue;
+        }
+        let Some(tag) = parse_start_tag(html, at) else {
+            index = at + 1;
+            continue;
+        };
+        index = tag.end;
+        if tag.name == "a" {
+            if let Some(href) = tag.attribute("href") {
+                hrefs.push(href.replace("&amp;", "&").trim().to_string());
+            }
+        }
+        if RAW_TEXT_ELEMENTS.contains(&tag.name.as_str()) {
+            let close = find_ignore_case(html, index, &format!("</{}", tag.name));
+            index = close.map_or(html.len(), |close| {
+                html[close..]
+                    .find('>')
+                    .map_or(html.len(), |end| close + end + 1)
+            });
+        }
+    }
+    hrefs
+}
+
 /// A start tag at `at` (which holds `<`), or None when it is not one.
 fn parse_start_tag(html: &str, at: usize) -> Option<StartTag> {
     let bytes = html.as_bytes();

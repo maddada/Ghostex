@@ -61,6 +61,10 @@ async fn handle_http_request_inner(
         .uri()
         .path()
         .starts_with(crate::file_links::FILE_LINK_ROUTE_PREFIX);
+    // A Live page's link route (visual_pages/linked.rs) answers navigations only, so it gets no
+    // cross-origin headers either: with the API's rule (origin `null` allowed) the page's own script
+    // could fetch it, follow the redirect and read the linked page, its id and its saved draft.
+    let page_link = crate::visual_pages::is_link_route(request.uri().path());
     let request_id = request_id(&headers);
     let gzip_wanted = super::link_compression::wants_gzip(&headers);
     // Who asked, for the security log (server/src/audit/caller.rs).
@@ -77,7 +81,7 @@ async fn handle_http_request_inner(
         Box::pin(route_http(state.clone(), request, request_id)),
     )
     .await;
-    if !file_link {
+    if !file_link && !page_link {
         apply_cors_headers(&headers, &mut routed.response, &state.config);
     }
     let status = routed.response.status().as_u16();
