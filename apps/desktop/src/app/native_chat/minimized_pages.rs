@@ -274,6 +274,7 @@ impl NativeChatView {
             .items_center()
             .flex_shrink_0()
             .w(px(width * s))
+            .h(px(super::chat_pills::PILL_HEIGHT * s))
             .gap(px(GAP * s))
             .px(px(if tier == PageTier::Full {
                 PAD_FULL

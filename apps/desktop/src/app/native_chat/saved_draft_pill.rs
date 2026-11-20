@@ -109,6 +109,7 @@ impl NativeChatView {
                 .items_center()
                 .flex_shrink_0()
                 .gap(px(5.0 * s))
+                .h(px(super::chat_pills::PILL_HEIGHT * s))
                 // Icon alone, it keeps room on the right for the corner dot.
                 .pl(px(if label.is_some() { 8.0 } else { 7.0 } * s))
                 .pr(px(if label.is_some() { 8.0 } else { 10.0 } * s))
