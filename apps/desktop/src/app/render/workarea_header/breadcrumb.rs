@@ -123,18 +123,22 @@ impl GhostexGpuiApp {
             // While docked, the sidebar's Search row draws the toggle (native_sidebar/navigation.rs).
             // The docked Search row puts the button's top at 5pt, while this 36pt row centres the
             // 27pt button at 4.5pt; the half point keeps it from jumping when the sidebar collapses.
-            .when(self.sidebar_collapsed, |this| {
-                // The window's traffic lights show here through the floating sidebar, so the
-                // toggles under them draw nothing meanwhile (`window_lights_over_header`).
-                let under_lights = self.window_lights_over_header();
-                this.child(
-                    div()
-                        .relative()
-                        .top(px(0.5))
-                        .when(under_lights, |button| button.invisible())
-                        .child(self.render_sidebar_collapse_button(None, cx)),
-                )
-            })
+            // With the rail on, the toggle is the rail's, at its foot (app/sidebar_rail/render.rs).
+            .when(
+                self.sidebar_collapsed && !self.sidebar_rail_shown(),
+                |this| {
+                    // The window's traffic lights show here through the floating sidebar, so the
+                    // toggles under them draw nothing meanwhile (`window_lights_over_header`).
+                    let under_lights = self.window_lights_over_header();
+                    this.child(
+                        div()
+                            .relative()
+                            .top(px(0.5))
+                            .when(under_lights, |button| button.invisible())
+                            .child(self.render_sidebar_collapse_button(None, cx)),
+                    )
+                },
+            )
             /*
             CDXC:Navigation 2026-08-19:
             Back/Forward sit LEFT of the project name, next to the sidebar

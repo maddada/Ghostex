@@ -307,6 +307,10 @@ impl GhostexGpuiApp {
         // With the rail on, the sidebar starts the rail's width in from the window's edge (the rail
         // sits left of it, app/sidebar_rail/), so the same window x is that much less in this row.
         let rail = self.sidebar_rail_shown();
+        // With the rail on, Toggle sidebar is the rail's, at its foot (CDXC:Sidebar 2026-11-20 in
+        // app/sidebar_rail/render.rs); the row keeps the corner's leading padding, so it still
+        // clears the traffic lights.
+        let toggle_here = owns_window_corner && !rail;
         let corner_toggle_x = owns_window_corner.then(|| {
             (crate::app::helpers::sidebar_toggle_leading_x(self.window_controls_reserved())
                 - self.sidebar_rail_width())
@@ -355,7 +359,7 @@ impl GhostexGpuiApp {
                 width => width,
             };
             let leading = corner_toggle_x.or(lights_reserve).unwrap_or(5.0 * scale);
-            let toggle = if owns_window_corner {
+            let toggle = if toggle_here {
                 (TITLEBAR_SIDEBAR_COLLAPSE_ICON_SIZE + 2.0 * TITLEBAR_BUTTON_HORIZONTAL_PADDING)
                     * scale
             } else {
@@ -374,7 +378,7 @@ impl GhostexGpuiApp {
             top_row_fit(
                 width - leading - toggle,
                 buttons,
-                owns_window_corner,
+                toggle_here,
                 trailing,
                 scale,
             )
@@ -405,7 +409,8 @@ impl GhostexGpuiApp {
             buttons right of the spacer narrow to `SIDEBAR_TOP_ROW_BUTTON_MIN_WIDTH` before
             anything overflows, so the toggle keeps its reserved x at every width.
             */
-            .when(!owns_window_corner, |row| row.justify_end())
+            // Without the toggle (the rail's then) there is no spacer, so the row aligns right.
+            .when(!toggle_here, |row| row.justify_end())
             .when_some(corner_toggle_x, |row, toggle_x| {
                 window_drag_region(row.pl(px(toggle_x)))
             })
@@ -427,7 +432,7 @@ impl GhostexGpuiApp {
             notification bell there, so this row draws its icon in the sidebar's icon grey rather
             than the header's bright one (since 2026-10-29 that grey is the header's own icon colour, see `SidebarAppearance::chrome_icon`).
             */
-            .when(owns_window_corner, |row| {
+            .when(toggle_here, |row| {
                 // The header's copy of this row (Claude's) sits under the traffic lights the
                 // floating sidebar shows, so its toggles draw nothing there meanwhile
                 // (`window_lights_over_header`).
