@@ -1,4 +1,4 @@
-use super::{arguments, delivery, identity, leads, lifecycle, main_coordinator};
+use super::{arguments, delivery, identity, leads, lifecycle, main_coordinator, wait_reply};
 use crate::ghostex_cli::{output::print_json, rpc::CliResult, sessions};
 use serde_json::json;
 
@@ -184,6 +184,14 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             }
             if result["ok"] != json!(true) {
                 crate::ghostex_cli::set_exit_code(1);
+            }
+        }
+        "wait-reply" => {
+            let result = wait_reply::wait_reply(&args)?;
+            if args.json {
+                print_json(&result);
+            } else {
+                println!("{}", identity::text(&result, "reply"));
             }
         }
         "reload" => {
