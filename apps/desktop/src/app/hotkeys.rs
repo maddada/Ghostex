@@ -938,10 +938,14 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(
                 | "navigateHistoryForward"
                 | "openNotifications"
         ),
+        // CDXC:Hotkeys 2026-11-20 WHY:
+        // Previous/Next Session onto a session kept asleep (Wake sleeping sessions when selected off) released the hidden terminal, so the owner became `FirstResponder(None)`; the router passed Ctrl+Tab on and no responder ran the walk, leaving the keys dead on the sleeping card until a click. With no native surface holding the keyboard, the router runs the walk itself.
+        GpuiKeyboardOwner::FirstResponder(FirstResponderTarget::None) => {
+            gpui_sidebar_session_walk_hotkey_reverse(action_id).is_some()
+        }
         GpuiKeyboardOwner::FirstResponder(FirstResponderTarget::CefSurface(_))
         | GpuiKeyboardOwner::FirstResponder(FirstResponderTarget::GpuiWindow)
-        | GpuiKeyboardOwner::FirstResponder(FirstResponderTarget::Other)
-        | GpuiKeyboardOwner::FirstResponder(FirstResponderTarget::None) => false,
+        | GpuiKeyboardOwner::FirstResponder(FirstResponderTarget::Other) => false,
     }
 }
 
