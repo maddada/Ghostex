@@ -16,7 +16,7 @@ fn switch() -> Section {
         "Autopilot",
         vec![
             row("autopilotEnabled", "Autopilot", "Off, Careful, Full or Custom. It keeps sessions going while you are away: carries on a session that stopped mid-task or while its background job finished, interrupts one stuck on a hung command, reloads one that stays frozen, moves one at a usage limit to an account with room, restarts one whose terminal ended. Careful also answers questions after 15 minutes and approves safe steps; Full answers questions after 10 minutes and approves anything that is not a hard limit. Stays on until you turn it off. Also from a coordinator's chat (its Autopilot pill) and ghostex autopilot on|off."),
-            row("autopilotScope", "Which sessions", "Every session, only the projects you pick (and their worktrees), or only sessions you pick one by one. A session's Autopilot pill in its chat takes it out or puts it back; a project's right-click menu, Advanced > Autopilot, does the same for the project and its worktrees. The projects and sessions left out are listed here, each with a switch to put it back."),
+            row("autopilotScope", "Which sessions", "Every session, only the projects you pick (and their worktrees), or only sessions you pick one by one. A session's Autopilot pill in its chat takes it out or puts it back; a project's right-click menu, More > Autopilot, does the same for the project and its worktrees. The projects and sessions left out are listed here, each with a switch to put it back."),
         ],
     )
 }

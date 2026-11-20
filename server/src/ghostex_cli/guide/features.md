@@ -930,7 +930,7 @@ sessions leave every project, and a project only it has is hidden, until it
 reconnects. Off, its last sessions stay, faded. The Unified sidebar always
 leaves a disconnected computer out. The phone follows this setting.
 To put a project on a computer that doesn't have it yet, right-click it and
-pick Clone on… and the computer: Ghostex clones its git remote into that
+pick More > Clone on… and the computer: Ghostex clones its git remote into that
 computer's usual projects folder (Settings > Projects > Global settings > Default
 projects folder on this computer, the home folder on another one), using `<name>-2` and so on
 when the folder name is taken, shows the clone in the header's jobs button, and
@@ -973,9 +973,16 @@ the agent you pick (`newSessionAgentScope`: `project`, `space` or `everywhere`).
 The phone app remembers its own picks for each project's agent button the same
 way and follows this setting of the computer it shows.
 The ⋯ button, or a right-click on the project,
-opens the project menu: Add Worktree (or Create PR), History,
-New Browser Tab, Create Terminal, pinned Actions, Open Folder in the file
-manager and Project Group.
+opens the project menu. Its top row has four buttons: Rename Project, Add
+Worktree, New Terminal and New Tab. Below them are Copy (Copy Path, Copy Remote
+URL), Organise (Project Group, Spaces, Move to Workspace) and Hide. More holds
+History, Open Folder in the file manager, Create Linear Ticket… (or Create
+GitHub Issue…), pinned Actions, Clone on…, Sleep Inactive, Full Reload and
+Autopilot. Close Inactive and Close Project come last. A submenu with only one
+row shows that row instead, so a project with no git remote shows Copy Path.
+A worktree's menu is shorter: its header buttons (Create PR in place of Add
+Worktree), Copy Path, Open Folder, Rename Worktree, Delete Worktree and Remove
+Worktree.
 A project's Sleep, Wake, Sleep Inactive and Close Inactive act on that
 project's sessions only; its browser tabs are slept and closed from the tab
 strip above the view, where they live.
@@ -1021,7 +1028,7 @@ Close Project parks the project in Recent Projects (a remote machine's project
 goes to that machine's Recent Projects, which Quick Access lists); when it held
 the active session, Ghostex stays in the current Space and switches to an awake
 session of the next project in the list.
-To change a project's name, choose Rename in its right-click menu and type the
+To change a project's name, choose Rename Project in its right-click menu and type the
 new name, or run `ghostex rename-project` with `--project-id`, `--path` or
 `--name` and the new name (`--computer <name>` renames a project on a connected
 computer). Only the name changes: the folder on disk, the project's sessions,
@@ -1097,7 +1104,7 @@ extension, off by default: turn it on with its switch in Settings > Extensions >
 Experimental. It also
 brings the team backend (see Git and worktrees); Issues Workflow works without it.
 While it is off there is no workspace button, every window shows every project,
-the project menu has no Move to workspace, and the `ghostex workspace`, `team`
+the project menu has no Move to Workspace, and the `ghostex workspace`, `team`
 and `slack` commands say it is turned off; your workspaces, their Linear keys
 and team connections are kept and come back when you turn it on (`workspacesHidden`).
 Each workspace has its own projects, Spaces,
@@ -1124,7 +1131,7 @@ last had open in that workspace (or its first project with no session, or
 nothing if it is empty), and puts to sleep the open views of projects outside
 it; their tabs stay and reload when you come back (with Keep views loaded on,
 nothing is put to sleep). To move a project,
-right-click it and choose Move to workspace; its sessions and worktrees go with
+right-click it and choose Organise > Move to Workspace; its sessions and worktrees go with
 it, and it leaves its group and Spaces and shows under Other in the new
 workspace. A project you add with Add Project (or clone from it) joins the
 workspace of the window you are in, also on a remote machine; a worktree joins
@@ -1137,8 +1144,8 @@ in a window already showing that workspace or by switching the window to it.
 The Ghostex project that holds Help chats shows in every workspace. A Space you
 create joins the window's workspace too. A remote machine's tab shows in one
 workspace of this computer, Personal until you right-click the tab and choose
-Move to workspace. To place one of its projects in another workspace, right-click
-the project and choose Move to workspace: it shows there, and the machine's tab
+Move to Workspace. To place one of its projects in another workspace, right-click
+the project and choose Organise > Move to Workspace: it shows there, and the machine's tab
 shows in every workspace that holds one of its projects. This placement is this
 computer's own; on the remote machine the project keeps its workspace there. On the
 phone, when a computer has two or more workspaces, the one its Sessions list shows is
@@ -1202,8 +1209,8 @@ the empty sidebar area) joins the Space that is open at the time and appears at
 the top of it; add a project while Other is selected to leave it out of every
 Space. A project made with New project folder goes where its form says (see
 below).
-Grouping never moves a project out of its Space: a group made with Project Group
-> New Group joins the Space its project is in, and a project taken out
+Grouping never moves a project out of its Space: a group made with Organise >
+Project Group > New Group joins the Space its project is in, and a project taken out
 of a group (Remove from Group, Ungroup, or dragging it out) stays in that
 group's Space. Adding a project to an existing group in another Space moves it
 to that group's Space, and the sidebar switches there with the project focused.
@@ -1236,8 +1243,8 @@ Project suggests the folder that holds the selected project's folder (else
 is made in as the setting. Local folder and a clone's destination on this
 computer start in that folder too. A sessions group (Move to New
 Group) only sorts sessions inside a project and never makes a folder; use New
-project folder when the work needs its own folder, and Project Group > New Group
-to group projects together.
+project folder when the work needs its own folder, and Organise > Project Group >
+New Group to group projects together.
 Right-click a Space icon for its menu: Manage (Edit Space, New Space) and
 Sleep. Sleep Inactive sleeps only the Space's sessions that are awake but
 neither working nor waiting on you; unanswered question cards, approvals and
@@ -4814,7 +4821,7 @@ put it back), only **Projects I pick** (their switches show on the page,
 worktrees included), or only **Sessions I pick**. Each session's chat shows an **Autopilot** pill while
 Autopilot is on (on the phone too): tap it to leave that session out (it reads
 **Autopilot off**) or put it back. Right-click a project in the sidebar and use
-**Advanced > Autopilot** to take the project and its worktrees out, or put them
+**More > Autopilot** to take the project and its worktrees out, or put them
 back. A session you stop yourself is left alone for 30 minutes. Each kind of
 action has an hourly limit per session, so nothing loops.
 
