@@ -757,9 +757,13 @@ of the sidebar. With the rail on, Search and the bell leave the sidebar's top
 row, Hermes leaves the Spaces row, the workspace tile leaves the Spaces row and
 Claude and Grok Bot leave the work area header. Pick Rail or Classic (the
 sidebar without the rail) in Settings > Sidebar > Sidebar layout
-(`sidebarLayout`: `rail` or `classic`). New installs start on Rail; if you had
-Ghostex before the rail, you keep Classic and see Meet the rail once, where you
-can try both and keep one. The pinned icons are saved per computer
+(`sidebarLayout`: `rail` or `classic`). New installs start on Rail. If you had
+Ghostex before the rail, the first start of 11.12.0 switches you to it and shows
+Meet the rail once: what the rail gives you, a Switch button that flips the
+window between Rail and Classic as often as you like (it says which way it goes),
+and Done, which keeps the layout on screen. It opens once per computer, never
+again after you close it however you close it, and another computer never shows
+it because of this one. The pinned icons are saved per computer
 (`sidebarRailPins`). The web app shows the rail with the items a browser can
 open; pinning, dragging and moving icons are on the computer only.
 
@@ -8522,8 +8526,9 @@ What is collected, all of it anonymous:
   Lean Codex workers. Numbers such as tints, zoom and sidebar width are sent as
   ranges, and a background picture or video only as "set or not".
 - The sidebar layout: Rail or Classic (also in the daily setup), when you switch
-  it and whether from Settings or Meet the rail, and in Meet the rail which
-  layouts you tried and which you kept; never your pinned icons or their order.
+  it and whether from Settings or Meet the rail's Switch, and the layout Meet
+  the rail opened on and the one kept on Done; never your pinned icons or their
+  order.
 - Accounts: how many Claude, Codex, Cursor, Gemini and Copilot accounts you have,
   and the plan Claude and Codex report for them (such as Pro, Max, Team or Plus).
 
