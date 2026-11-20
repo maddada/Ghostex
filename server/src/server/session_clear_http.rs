@@ -17,22 +17,24 @@
 //!   and Enter on a permission prompt answers it, so a waiting session is never typed into.
 //! - Who may call it, decided from the caller's token, never from the text or the CLI's
 //!   environment: you (the desktop app, a paired phone, and the token file: the `ghostex` CLI in
-//!   your own terminal outside Ghostex, Grok Bot, the phone over SSH) for any session here; an
-//!   agent's session token only for a coordinator thread it leads (the `coordinator_threads` row
-//!   naming it, the rule interrupting already uses). An agent can't clear itself (it is mid-turn
-//!   whenever it runs a command), its coordinator, or anyone else's session: clearing throws away
-//!   the context a session works from while it keeps its name and place, so a session the user
-//!   relies on could be emptied and handed a new brief without the user seeing anything change.
-//!   Connected computers' agents (peers), Collab guests and extensions never reach the route
-//!   (`full_local` in protocol.rs; peers have their own allow-list).
+//!   your own terminal outside Ghostex, Grok Bot, the phone over SSH) and any agent's session
+//!   token, for any session on this computer. User (Q4280, after the Fable review of 6d5889f7f
+//!   found the first rule, "only a coordinator thread it leads", was one an agent could grant
+//!   itself by promoting itself and linking any session): "let agents clear sessions, why block
+//!   this". It is the reach `send-text` already gives agents, with the checks above on top. A
+//!   session can't clear itself (it is mid-turn whenever it runs a command). Connected computers'
+//!   agents (peers), Collab guests and extensions never reach the route (`full_local` in
+//!   protocol.rs; peers have their own allow-list), and a GBot API chat stays the owner's
+//!   (`SESSION_INPUT_ROUTES` in security_gates.rs). Every clear is in the security log with its
+//!   caller (`chat.clearConversation`).
 //! - The CLI refuses to fall back to the token file inside a Ghostex session pane whose variables
 //!   are missing, the same check 11.11.1 added for the raw message verbs, so an agent can't pass
 //!   itself off as your terminal by dropping its variables.
 //! What this does not change: raw terminal input into another session (`send-text`, `send-key`)
 //! stays open to agents by the 2026-11-08 decision in security/policy.rs; this route is the
 //! supported, checked path, not the only gate.
-//! SEE-ALSO: server/src/session_chat_send/sender_mark.rs, server/src/server/security_gates.rs
-//! `interrupt_action`/`is_own_thread`, server/src/ghostex_cli/clear_command.rs.
+//! SEE-ALSO: server/src/session_chat_send/sender_mark.rs, server/src/server/security_gates.rs,
+//! server/src/ghostex_cli/clear_command.rs.
 
 use serde_json::{json, Map, Value};
 
@@ -77,36 +79,17 @@ fn clear_command_for(agent: &str) -> Option<&'static str> {
 }
 
 /// Why `caller` may not clear session `session_id` of `project_id`, or `None` when it may.
-fn caller_refusal(
-    state: &AppState,
-    caller: &Principal,
-    project_id: &str,
-    session_id: &str,
-) -> Option<&'static str> {
+fn caller_refusal(caller: &Principal, project_id: &str, session_id: &str) -> Option<&'static str> {
     match caller {
         Principal::Owner { .. } | Principal::Device { .. } | Principal::LocalAgent => None,
         Principal::Session {
             project_id: own_project,
             session_id: own_session,
             ..
-        } => {
-            if own_project == project_id && own_session == session_id {
-                return Some("A session can't clear its own conversation: it is in the middle of a turn whenever it runs a command. Ask the user to clear it, or end the turn and let the session that leads it run clear-command.");
-            }
-            if super::security_gates::is_own_thread(
-                state,
-                own_project,
-                own_session,
-                project_id,
-                session_id,
-            ) {
-                return None;
-            }
-            Some("An agent can clear only a coordinator thread it leads. Clearing throws away the context a session works from, so any other session is cleared by the user: from Ghostex, or with `ghostex clear-command` in their own terminal outside Ghostex.")
-        }
-        _ => Some(
-            "Only you, or a coordinator for its own threads, can clear a session's conversation.",
+        } => (own_project == project_id && own_session == session_id).then_some(
+            "A session can't clear its own conversation: it is in the middle of a turn whenever it runs a command. Ask the user, or another session, to clear it once this turn ends.",
         ),
+        _ => Some("Only you and the agents on this computer can clear a session's conversation."),
     }
 }
 
@@ -234,7 +217,7 @@ fn prepare_clear(
         .ok_or_else(|| DomainStateError::bad_request("clear-command needs a projectId."))?;
     let session_id = text(params, "sessionId")
         .ok_or_else(|| DomainStateError::bad_request("clear-command needs a sessionId."))?;
-    if let Some(message) = caller_refusal(state, caller, project_id, session_id) {
+    if let Some(message) = caller_refusal(caller, project_id, session_id) {
         return Err(refused("forbidden", message));
     }
     let session = repository
