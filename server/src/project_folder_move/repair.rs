@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use super::checks::git;
 use super::journal::Journal;
 
-/// `git worktree repair` from each moved checkout, the submodule fix in worktrees that had
-/// submodules set up (risk 7), then `git status` in every checkout and worktree as the check.
+/// `git worktree repair` from each moved checkout, `git submodule absorbgitdirs` in worktrees that
+/// had submodules set up (risk 7), then `git status` in every checkout and worktree as the check.
 pub(crate) fn repair_git(journal: &Journal) -> Vec<String> {
     let root = journal.root();
     let mut notes = Vec::new();
@@ -40,17 +40,12 @@ pub(crate) fn repair_git(journal: &Journal) -> Vec<String> {
         if !path.exists() {
             continue;
         }
-        for args in [
-            &["submodule", "absorbgitdirs"][..],
-            &["submodule", "update", "--init", "--recursive", "--no-fetch"][..],
-        ] {
-            if let Err(error) = git(&path, args) {
-                notes.push(format!(
-                    "git {} in {} failed: {error}",
-                    args.join(" "),
-                    path.display()
-                ));
-            }
+        // CDXC:Projects 2026-11-20 WHY: `absorbgitdirs` alone repoints the submodules' `.git`. A `git submodule update` after it would check out the commit the worktree recorded, resetting a submodule's own local commits on its detached HEAD (and setting up submodules the user left uninitialised), so it is not run (Opus review of move-project-folder, finding 1; `repair_keeps_worktree_submodule_commits` below).
+        if let Err(error) = git(&path, &["submodule", "absorbgitdirs"]) {
+            notes.push(format!(
+                "git submodule absorbgitdirs in {} failed: {error}",
+                path.display()
+            ));
         }
     }
     let mut checked: Vec<PathBuf> = journal.checkouts.iter().map(|path| moved(path)).collect();
@@ -166,4 +161,119 @@ pub(crate) fn carry_agent_history(journal: &Journal) -> Vec<String> {
     }
     notes.push("Codex resumes these sessions in the new folder; its own codex resume list shows the old ones with --all.".to_string());
     notes
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::project_folder_move::journal::{JournalWorktree, Phase};
+
+    /// git with a fixed identity and none of the user's settings (signing, hooks).
+    fn run_git(dir: &Path, args: &[&str]) -> String {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args([
+                "-c",
+                "protocol.file.allow=always",
+                "-c",
+                "commit.gpgsign=false",
+            ])
+            .args(args)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_AUTHOR_NAME", "t")
+            .env("GIT_AUTHOR_EMAIL", "t@example.com")
+            .env("GIT_COMMITTER_NAME", "t")
+            .env("GIT_COMMITTER_EMAIL", "t@example.com")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    fn commit_file(dir: &Path, name: &str, text: &str) {
+        std::fs::write(dir.join(name), text).unwrap();
+        run_git(dir, &["add", name]);
+        run_git(dir, &["commit", "-qm", name]);
+    }
+
+    /// Opus review of move-project-folder, finding 1: a worktree's submodule with its own local
+    /// commit (the usual detached-HEAD submodule work) keeps it, and its uncommitted edit, through
+    /// the repair after its main checkout's folder moved.
+    #[test]
+    fn repair_keeps_worktree_submodule_commits() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = std::fs::canonicalize(temp.path()).unwrap();
+        let library = dir.join("lib-src");
+        std::fs::create_dir(&library).unwrap();
+        run_git(&library, &["init", "-q", "-b", "main"]);
+        commit_file(&library, "lib.txt", "one");
+
+        let repo = dir.join("Repo");
+        std::fs::create_dir(&repo).unwrap();
+        run_git(&repo, &["init", "-q", "-b", "main"]);
+        commit_file(&repo, "app.txt", "app");
+        run_git(&repo, &["submodule", "add", "-q", "../lib-src", "sm"]);
+        run_git(&repo, &["commit", "-qm", "submodule"]);
+        let feature = dir.join("Repo-feat");
+        run_git(
+            &repo,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "-b",
+                "feat",
+                feature.to_str().unwrap(),
+            ],
+        );
+        run_git(&feature, &["submodule", "update", "--init", "-q"]);
+        let submodule = feature.join("sm");
+        commit_file(&submodule, "local.txt", "a local commit");
+        std::fs::write(submodule.join("lib.txt"), "an uncommitted edit").unwrap();
+        let local_commit = run_git(&submodule, &["rev-parse", "HEAD"]);
+
+        let kiwi = dir.join("Kiwi");
+        std::fs::rename(&repo, &kiwi).unwrap();
+        let old_path = repo.to_string_lossy().to_string();
+        let journal = Journal {
+            version: 1,
+            project_id: "p".to_string(),
+            old_path: old_path.clone(),
+            new_path: kiwi.to_string_lossy().to_string(),
+            old_spellings: vec![old_path.clone()],
+            ignore_case: false,
+            case_only: false,
+            project_ids: vec!["p".to_string()],
+            checkouts: vec![old_path.clone()],
+            worktrees: vec![JournalWorktree {
+                checkout: old_path,
+                path: feature.to_string_lossy().to_string(),
+                has_submodules: true,
+            }],
+            claude_old_keys: Vec::new(),
+            trusted_by: Vec::new(),
+            phase: Phase::Recorded,
+            started_at: String::new(),
+            notes: Vec::new(),
+        };
+        let notes = repair_git(&journal);
+        assert!(notes.is_empty(), "{notes:?}");
+
+        assert_eq!(run_git(&submodule, &["rev-parse", "HEAD"]), local_commit);
+        assert_eq!(
+            std::fs::read_to_string(submodule.join("lib.txt")).unwrap(),
+            "an uncommitted edit"
+        );
+        assert!(run_git(&submodule, &["status", "--porcelain"]).contains("lib.txt"));
+        run_git(&feature, &["status", "--porcelain"]);
+        run_git(&kiwi, &["status", "--porcelain"]);
+        let link = std::fs::read_to_string(submodule.join(".git")).unwrap();
+        assert!(link.contains("Kiwi"), "{link}");
+    }
 }
