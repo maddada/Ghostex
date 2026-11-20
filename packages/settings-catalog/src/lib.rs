@@ -333,6 +333,42 @@ pub fn keep_work_area_frame_off_for_existing_settings(
     true
 }
 
+/// The look settings whose default changed on 2026-11-20 (the user's own dark look became the
+/// default), each with the default it had before.
+pub const DARK_LOOK_2026_11_20_OLD_DEFAULTS: &[(&str, J)] = &[
+    ("darkThemePreset", J::Str("gray")),
+    ("windowGlassSidebarOpacityDark", J::Num(94.0)),
+    ("windowGlassWorkAreaTintDark", J::Num(94.0)),
+    ("windowGlassSidebarOpacityLight", J::Num(97.0)),
+    ("windowGlassWorkAreaTintLight", J::Num(97.0)),
+    ("windowGlassBlurRadius", J::Num(60.0)),
+    ("terminalGhosttyTheme", J::Str("GitHub Dark")),
+    ("themeRoles", J::Obj(&[])),
+    ("windowGlassLiveStyleDark", J::Str("aurora")),
+    ("workspacePaneGap", J::Num(0.0)),
+    ("windowGlassMenuBlurRadius", J::Num(20.0)),
+];
+
+/// Writes the old default of every look setting in `DARK_LOOK_2026_11_20_OLD_DEFAULTS` that the
+/// settings of an existing user do not carry, so their window keeps the look it had. Returns
+/// whether it changed anything; a saved value (whatever it is) is left alone.
+///
+/// CDXC:Theming 2026-11-20 DECISION:
+/// User (Q4290), on whether long-time users who never touched these settings should get the new dark look on update: keep their current look. Stored settings leave a key out until it is saved, so without this every existing user with a key missing would switch to Black, 88 tints, a 4 point blur, Kanagawa Dragon, the dark theme colours, Ink, pane gap 6 and menu blur 17 on update. The desktop runs this once, behind a marker file, at start-up and only for a settings file that already exists from a finished setup (`keep_old_dark_look_once` in apps/desktop/src/shared_settings/dark_look_default.rs); a new install, or one whose setup never finished, gets the new defaults.
+pub fn keep_old_dark_look_for_existing_settings(
+    settings: &mut serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    use crate::json::ToJson;
+    let mut changed = false;
+    for (key, old_default) in DARK_LOOK_2026_11_20_OLD_DEFAULTS {
+        if !settings.contains_key(*key) {
+            settings.insert((*key).to_string(), old_default.to_json().to_value());
+            changed = true;
+        }
+    }
+    changed
+}
+
 /// Rows a page folds into its collapsed Advanced section (`isAdvancedMainSetting`).
 pub fn is_advanced_setting(key: &str) -> bool {
     data::ADVANCED_MAIN_SETTING_KEYS.contains(&key)

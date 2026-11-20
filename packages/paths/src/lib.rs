@@ -143,6 +143,12 @@ impl GhostexPaths {
         self.state_dir.join("work-area-frame-default-migrated")
     }
 
+    /// Written once the 2026-11-20 dark look's one-time step has run over the settings file
+    /// (`keep_old_dark_look_once` in the desktop app).
+    pub fn dark_look_default_marker_file(&self) -> PathBuf {
+        self.state_dir.join("dark-look-default-migrated")
+    }
+
     pub fn hub_secret_folders_marker_file(&self) -> PathBuf {
         self.state_dir.join("hub-secret-folders-added")
     }
