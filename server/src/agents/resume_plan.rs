@@ -381,8 +381,9 @@ pub(crate) fn to_agent_resume_input(
         // here (agent_skills_session.rs).
         let command =
             crate::agent_skills_session::with_ghostex_skills_on(agent_id.as_deref(), &command);
-        // The home folder's secret folders (home_secret_folders.rs), and a GBot's screen tools
-        // when it may not use them (gbot_computer_use.rs).
+        // The home folder's secret folders (home_secret_folders.rs), a GBot's screen tools when
+        // it may not use them (gbot_computer_use.rs), and a coordinator's Codex thread lean while
+        // Lean Codex workers is on (codex_lean.rs).
         let command = super::with_home_secret_folders_denied(
             agent_id.as_deref(),
             read_text_value(session, "cwd")
@@ -391,7 +392,12 @@ pub(crate) fn to_agent_resume_input(
             super::is_gbot_chat(session.get("runtimeSettings").and_then(Value::as_object)),
             &command,
         );
-        super::with_gbot_computer_use(
+        let command = super::with_gbot_computer_use(
+            agent_id.as_deref(),
+            session.get("runtimeSettings").and_then(Value::as_object),
+            &command,
+        );
+        super::with_lean_codex_worker(
             agent_id.as_deref(),
             session.get("runtimeSettings").and_then(Value::as_object),
             &command,

@@ -357,9 +357,11 @@ pub(super) fn title_generation_preview(agent: &str, command: Option<&str>) -> St
         prompt
     };
     match agent {
+        // gxserver passes only the features the installed Codex knows (CDXC:AgentProviders
+        // 2026-11-20 in server/src/agents/codex_lean.rs); a current Codex knows them all.
         "codex" => here_doc(
             &format!(
-                "{read_only} exec --sandbox read-only --ephemeral --skip-git-repo-check -m gpt-6-luna -c 'model_reasoning_effort=\"low\"'"
+                "{read_only} exec --sandbox read-only --ephemeral --skip-git-repo-check -m gpt-6-luna -c 'model_reasoning_effort=\"low\"' --disable plugins --disable apps --disable remote_plugin --disable plugin_sharing --disable browser_use --disable browser_use_external --disable computer_use --disable image_generation --disable in_app_browser --disable skill_search --disable skill_mcp_dependency_install"
             ),
             &prompt,
         ),

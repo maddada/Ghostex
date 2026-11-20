@@ -207,6 +207,8 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
         "launchSettings": launch_settings_for(&agent_rows, &agent_id),
         "title": title,
         "markedHandovers": true,
+        // Kept on the session, for Lean Codex workers (agents/codex_lean.rs).
+        crate::agents::codex_lean::COORDINATOR_THREAD_KEY: true,
     });
     if project_id.is_empty() {
         if let Some(folder) = &folder {

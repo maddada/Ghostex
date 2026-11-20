@@ -56,6 +56,8 @@ const NEW_SESSION_AGENT_SCOPE: &str = "newSessionAgentScope";
 const GHOSTEX_NOTE: &str = "agentGhostexNote";
 /// Claude's task list tools, for the Session details panel (server/src/session_details/gate.rs).
 const CLAUDE_TASK_TOOLS: &str = "sessionDetailsClaudeTaskTools";
+/// Coordinators' Codex threads run lean (server/src/agents/codex_lean.rs).
+const LEAN_CODEX_WORKERS: &str = "leanCodexWorkers";
 /// A shadcn `Select` with this many items becomes the searchable dropdown.
 const SEARCHABLE_SELECT_ITEMS: usize = 8;
 
@@ -354,6 +356,20 @@ impl AgentsTab {
                     )
                     .keyed(&values, CLAUDE_TASK_TOOLS),
                 values.bool(CLAUDE_TASK_TOOLS),
+                cx,
+            ));
+        }
+        if should_show_setting(&section, LEAN_CODEX_WORKERS, None) {
+            rows.push(toggle_field(
+                self,
+                p,
+                LEAN_CODEX_WORKERS,
+                RowSpec::new("Lean Codex workers")
+                    .description(
+                        "Codex threads a coordinator starts run without Codex's own computer use, browser use, image generation, apps and plugins, so each request is about 12% smaller and they start faster. Sessions you start yourself keep all of them. Applies to threads started or resumed after you change it.",
+                    )
+                    .keyed(&values, LEAN_CODEX_WORKERS),
+                values.bool(LEAN_CODEX_WORKERS),
                 cx,
             ));
         }

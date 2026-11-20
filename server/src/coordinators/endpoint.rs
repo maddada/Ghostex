@@ -372,6 +372,15 @@ pub fn handle_coordinator_endpoint(
                 ));
             }
             unlink_thread(db, &thread_key.0, &thread_key.1)?;
+            // Now the user's own session: no longer a lean Codex worker (agents/codex_lean.rs).
+            db.execute(
+                &format!(
+                    "UPDATE sessions SET runtimeSettingsJson = json_remove(runtimeSettingsJson, '$.{}') WHERE projectId = ?1 AND sessionId = ?2",
+                    crate::agents::codex_lean::COORDINATOR_THREAD_KEY
+                ),
+                rusqlite::params![thread_key.0, thread_key.1],
+            )
+            .map_err(super::records::sql_error)?;
             Ok(CoordinatorEndpointOutput {
                 result: json!({
                     "unlinked": true,

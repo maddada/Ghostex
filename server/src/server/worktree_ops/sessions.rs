@@ -259,11 +259,13 @@ pub(crate) fn normalize_worktree_session_create_request(
     {
         agent_session_params.insert("launchSettings".to_string(), launch_settings.clone());
     }
-    // A thread's marked handovers (CDXC:MarkedHandovers in agents/launch_plan.rs), and a
-    // read-only thread (CDXC:Coordinators 2026-11-13 in coordinators/read_only.rs).
+    // A thread's marked handovers (CDXC:MarkedHandovers in agents/launch_plan.rs), a read-only
+    // thread (CDXC:Coordinators 2026-11-13 in coordinators/read_only.rs), and a coordinator's
+    // thread for Lean Codex workers (agents/codex_lean.rs).
     for key in [
         "markedHandovers",
         crate::coordinators::READ_ONLY_THREAD_PARAM,
+        crate::agents::codex_lean::COORDINATOR_THREAD_KEY,
     ] {
         if params.get(key).and_then(Value::as_bool) == Some(true) {
             agent_session_params.insert(key.to_string(), Value::Bool(true));

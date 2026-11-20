@@ -679,8 +679,11 @@ pub(crate) fn build_commit_message_generation_shell_command(
             CDXC:Git 2026-10-01 DECISION:
             Commit message generation runs Codex on gpt-6-luna with high reasoning effort, and Claude on Sonnet 5.5 (claude-sonnet-5-5) at medium effort.
             */
+            // Without the tools a commit message never needs (CDXC:AgentProviders 2026-11-20 in
+            // agents/codex_lean.rs).
+            let lean = crate::agents::lean_codex_flags();
             let command = format!(
-                "{command} exec --sandbox read-only --ephemeral --skip-git-repo-check -m gpt-6-luna -c 'model_reasoning_effort=\"high\"'"
+                "{command} exec --sandbox read-only --ephemeral --skip-git-repo-check -m gpt-6-luna -c 'model_reasoning_effort=\"high\"'{lean}"
             );
             (command, stdin)
         }

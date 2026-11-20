@@ -180,8 +180,11 @@ pub(crate) fn stdin_title_generation_command(agent: &str, command: &str) -> Opti
     Some(match agent {
         "codex" => {
             let command = one_shot_text_job_command(command, "codex");
+            // Without the tools a title never needs (CDXC:AgentProviders 2026-11-20 in
+            // agents/codex_lean.rs).
+            let lean = crate::agents::lean_codex_flags();
             format!(
-                "{command} exec --sandbox read-only --ephemeral --skip-git-repo-check -m gpt-6-luna -c 'model_reasoning_effort=\"low\"'"
+                "{command} exec --sandbox read-only --ephemeral --skip-git-repo-check -m gpt-6-luna -c 'model_reasoning_effort=\"low\"'{lean}"
             )
         }
         "claude" => {
