@@ -765,14 +765,12 @@ impl Element for CefElement {
             // CDXC:AppModal 2026-09-15 WHY: App-modal windows have their own AppKit corners. Applying the workspace's 18pt pane mask here rounds Settings a second time and exposes the old backing color at its edges after a live theme change, even with square CSS content.
             // Fullscreen and window-edge changes can change clipping even
             // when the browser's own cached frame is unchanged.
-            // With the work area frame on, the page clips to the card's corners instead
-            // (element/work_area_frame.rs), from bounds the card recorded earlier this frame.
-            if !super::work_area_frame::refresh_native_work_area_frame_clip(native_view, window) {
-                super::window_corner_pane::refresh_native_window_corner_clip(native_view);
-            }
+            // The page clips to the work area card's corners (element/work_area_frame.rs), from
+            // bounds the card recorded earlier this frame.
+            super::work_area_frame::refresh_native_work_area_frame_clip(native_view, window);
         }
-        // Windows and Linux: with the work area frame on, the page's native window takes the card's
-        // inner corners where it meets them (element/work_area_frame.rs); square everywhere else.
+        // Windows and Linux: the page's native window takes the work area card's inner corners
+        // where it meets them (element/work_area_frame.rs); square everywhere else.
         #[cfg(any(target_os = "windows", target_os = "linux"))]
         if self.surface_id != APP_MODAL_HOST_ID {
             super::work_area_frame::clip_native_view_to_work_area_frame(

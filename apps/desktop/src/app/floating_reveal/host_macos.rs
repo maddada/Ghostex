@@ -47,22 +47,22 @@ struct NativeWindowControls {
     radii: [f64; 4],
 }
 
-/// The floating panel's corner radii: top-left, top-right, bottom-right, bottom-left. With the
-/// work area frame on the full-height panel is a card inside the frame, rounded like the work area's
-/// card, concentric with the window's corner. Otherwise a corner on the window's own rounded corner
-/// takes the window's radius, so the panel never shows past the window's edge, and is square in
-/// full screen, where the screen's corner is; every other corner keeps the floating panels' radius.
+/// The floating panel's corner radii: top-left, top-right, bottom-right, bottom-left. The
+/// full-height panel is a card inside the work area frame, rounded like the work area's card,
+/// concentric with the window's corner. A panel under the header takes the window's radius on a
+/// corner that sits on the window's own rounded corner, so it never shows past the window's edge,
+/// and is square there in full screen, where the screen's corner is; every other corner keeps the
+/// floating panels' radius.
 ///
 /// CDXC:Sidebar 2026-11-07 WHY:
-/// The native host masks the panel with these four radii and GPUI draws its background square (window.rs): GPUI rounds all four corners alike and the mask can only cut more, so a corner smaller than the panel's 12pt (the card's 10.5pt, a square screen corner) could not be drawn otherwise. Supersedes the 2026-11-06 note that kept the window's 16.5pt corner with the frame on: the panel now sits inside the frame (CDXC:Sidebar 2026-11-07 WHY on `floating_reveal_full_height` in floating_reveal/model.rs).
+/// The native host masks the panel with these four radii and GPUI draws its background square (window.rs): GPUI rounds all four corners alike and the mask can only cut more, so a corner smaller than the panel's 12pt (the card's 10.5pt, a square screen corner) could not be drawn otherwise. Supersedes the 2026-11-06 note that kept the window's 16.5pt corner: the panel now sits inside the frame (CDXC:Sidebar 2026-11-07 WHY on `floating_reveal_full_height` in floating_reveal/model.rs).
 fn floating_panel_corner_radii(
     full_height: bool,
     at_window_left: bool,
-    framed: bool,
     fullscreen: bool,
 ) -> [f32; 4] {
     let panel = FLOATING_PANEL_CORNER_RADIUS;
-    if full_height && framed {
+    if full_height {
         return [crate::app::helpers::WORK_AREA_FRAME_RADIUS; 4];
     }
     let window_corner = if fullscreen {
@@ -70,10 +70,9 @@ fn floating_panel_corner_radii(
     } else {
         crate::app::element::MACOS_WINDOW_CORNER_RADIUS
     };
-    let top_left = if full_height { window_corner } else { panel };
     // The panel always runs down to the window's floor.
     let bottom_left = if at_window_left { window_corner } else { panel };
-    [top_left, panel, panel, bottom_left]
+    [panel, panel, panel, bottom_left]
 }
 
 impl GhostexGpuiApp {
@@ -91,7 +90,6 @@ impl GhostexGpuiApp {
         let radii = floating_panel_corner_radii(
             self.floating_reveal_full_height(content),
             self.floating_reveal_left_inset() <= 0.0,
-            crate::app::helpers::work_area_frame_active(),
             self.main_window_fullscreen,
         );
         NativeWindowControls {
@@ -258,33 +256,27 @@ mod tests {
         let window = crate::app::element::MACOS_WINDOW_CORNER_RADIUS;
         let panel = FLOATING_PANEL_CORNER_RADIUS;
         let card = crate::app::helpers::WORK_AREA_FRAME_RADIUS;
-        // (full height, at the window's left, frame on, full screen)
-        // The hidden sidebar at the window's corners.
-        assert_eq!(
-            floating_panel_corner_radii(true, true, false, false),
-            [window, panel, panel, window]
-        );
-        // In full screen the screen's corners are square.
-        assert_eq!(
-            floating_panel_corner_radii(true, true, false, true),
-            [0.0, panel, panel, 0.0]
-        );
-        // With the frame on it is a card inside the frame, windowed and in full screen alike.
-        for fullscreen in [false, true] {
-            assert_eq!(
-                floating_panel_corner_radii(true, false, true, fullscreen),
-                [card; 4]
-            );
+        // (full height, at the window's left, full screen)
+        // The hidden sidebar is a card inside the frame, windowed and in full screen alike.
+        for at_window_left in [false, true] {
+            for fullscreen in [false, true] {
+                assert_eq!(
+                    floating_panel_corner_radii(true, at_window_left, fullscreen),
+                    [card; 4]
+                );
+            }
         }
         // The sessions column alone, under the header at the window's left edge.
         assert_eq!(
-            floating_panel_corner_radii(false, true, false, false),
+            floating_panel_corner_radii(false, true, false),
             [panel, panel, panel, window]
         );
-        // Beside a docked sidebar it touches no window corner.
+        // In full screen the screen's corner is square.
         assert_eq!(
-            floating_panel_corner_radii(false, false, true, false),
-            [panel; 4]
+            floating_panel_corner_radii(false, true, true),
+            [panel, panel, panel, 0.0]
         );
+        // Beside a docked sidebar it touches no window corner.
+        assert_eq!(floating_panel_corner_radii(false, false, false), [panel; 4]);
     }
 }

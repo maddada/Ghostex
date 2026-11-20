@@ -319,7 +319,6 @@ How to use this file:
 
 #### Window & Layout
 
-- **Frame the work area** `workAreaFrame` (boolean, default true): Show the work area as a card inside the window, with a thin margin all around, a hairline border and a light shadow. Off keeps the work area edge to edge.
 - **Show the window buttons when the sidebar is collapsed** `showWindowButtonsWhenSidebarCollapsed` (boolean, default true): Keep the red, yellow and green window buttons in the window's top left while the sidebar is collapsed. Off hides them until you open the floating sidebar, which carries them in its top row. Full screen keeps its own title bar either way. Only on macOS.
 - **Close buttons on the right** `closeButtonsOnRight` (boolean, default false): Put the X that closes dialogs and pop-up messages at their top right. Off keeps it at their top left, where macOS puts a window's close button. Only on macOS.
 - **Show active pane outline** `showActivePaneOutline` (boolean, default false): Show an outline around the currently focused pane.

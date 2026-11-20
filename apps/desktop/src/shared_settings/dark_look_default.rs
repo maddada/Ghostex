@@ -12,7 +12,7 @@ use serde_json::Value;
 ///
 /// CDXC:Theming 2026-11-20 WHY:
 /// User (Q4290): long-time users keep their current look. Stored settings leave a key out until it is saved, so an existing user who never touched one of these settings would otherwise get the new value on update. Existing means the settings file is there at the first start of this version and setup is finished (the onboarding state says it completed, or gxserver has a project, the same test that decides whether setup opens again). A new install has no settings file at that start and gets the new defaults; a settings file left by a setup that never finished (onboarding in progress) counts as new too, so setup goes on in the new look. The marker file records that this has run, whatever it decided, so it never runs twice and a new install that saves settings later is never taken for an existing one. A file that cannot be read or saved is left as it is and no marker is written, so the next start tries again. This runs before anything reads the settings file.
-/// SEE-ALSO: `keep_old_dark_look_for_existing_settings` in packages/settings-catalog/src/lib.rs, work_area_frame_default.rs (the same pattern).
+/// SEE-ALSO: `keep_old_dark_look_for_existing_settings` in packages/settings-catalog/src/lib.rs, sidebar_rail_default.rs (the same pattern).
 pub fn keep_old_dark_look_once() {
     let paths = ghostex_storage_paths();
     let marker = paths.dark_look_default_marker_file();

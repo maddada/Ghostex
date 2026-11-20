@@ -48,7 +48,6 @@ pub(crate) mod sidebar_rail_default;
 pub(crate) mod snapshot;
 pub(crate) mod terminal_layout;
 pub(crate) mod types;
-pub(crate) mod work_area_frame_default;
 
 pub use defaults::*;
 pub use ghostty_config_file::*;

@@ -1334,8 +1334,8 @@ where they are while you open, change and close views.
   to the right of the sidebar. It is always 520px wide and takes your typing right
   away. This works on macOS, Windows and Linux. On a Mac with **Show the window
   buttons when the sidebar is collapsed** off (Settings > Window & Layout),
-  and in full screen, the floating sidebar runs the window's full height, and with
-  Frame the work area on it floats as a card inside the frame.
+  and in full screen, the floating sidebar runs the window's full height as a card
+  inside the work area's frame.
 - Panel animations: showing or hiding the sidebar, the side panel, the Agents Panel
   and the bottom or right command pane slides it open or closed; the side panel and a
   right-docked pane slide in from the window's right edge, and the command pane's
@@ -8317,7 +8317,7 @@ background image); **Text & Fonts** (`--tab textFonts`): Fonts, Terminal text (t
 font weight, bold text, line height and letter spacing) and Text; **Size & Zoom** (`--tab
 sizeZoom`): Size (Scale and More size options) and Panel sizes (the sidebar's width and the
 Commands pane's height on double-click); **Window & Layout** (`--tab windowLayout`): Window frame
-(Frame the work area, the window buttons, Close buttons on the right), Panes (the active pane
+(the window buttons, Close buttons on the right), Panes (the active pane
 outline) and Panels (Animations, Close side panel with its last tab, Commands pane side). Each
 setting is on one page, and these pages link nowhere else. A search for a row inside a More
 fold opens it.
@@ -8392,12 +8392,11 @@ work area colourfulness separately, and show the active pane outline and its
 colour.
 Picking a colour square never overwrites the custom values, so picking the + square again
 restores them (a theme preset does set them).
-Frame the work area (in the page's Advanced section; on by default for a new install, while a computer that already had settings keeps its choice) shows the work area as a card inside the
-window: a thin margin all around it, a hairline border and, without window glass, a light
-shadow. It stays on with the sidebar hidden and in full screen, web pages in the work area
-follow the card's rounded corners, and the sidebar is at least 196pt wide while it is on.
-Off keeps the work area edge to edge (`workAreaFrame`).
-Under it, Show the window buttons when the sidebar is collapsed (macOS, on by default) keeps the red, yellow and green window buttons in the window's top left while the sidebar is collapsed; off hides them until you open the floating sidebar, which then carries them in its top row (`showWindowButtonsWhenSidebarCollapsed`). Full screen keeps its own title bar either way.
+The work area is always drawn as a card inside the window: a thin margin all around it, a
+hairline border and, without window glass, a light shadow. It stays framed with the sidebar
+hidden and in full screen, web pages in the work area follow the card's rounded corners, and
+the sidebar is at least 196pt wide. There is no setting to turn the frame off.
+Show the window buttons when the sidebar is collapsed (macOS, on by default) keeps the red, yellow and green window buttons in the window's top left while the sidebar is collapsed; off hides them until you open the floating sidebar, which then carries them in its top row (`showWindowButtonsWhenSidebarCollapsed`). Full screen keeps its own title bar either way.
 Under them, Close buttons on the right (macOS, off by default) puts the X that closes a dialog or a pop-up message back at its top right. Off, it sits at the top left, where macOS puts a window's close button: the corner X of every dialog and of the dialogs inside Settings, the X in the header of the Markdown table, Mermaid diagram and page windows and of the picture viewer, and the X of the messages that pop up at the bottom of the window (`closeButtonsOnRight`). On Windows and Linux the X stays at the top right.
 The chosen theme colors the
 sidebar and window chrome, the sidebar's dropdown menus, and the chat view
@@ -8492,7 +8491,7 @@ Related settings: `sidebarTheme`, `darkThemePreset`, `lightThemePreset`,
 `customSidebarTitlebarBackgroundDarknessPercent`, `customSidebarTitlebarBackgroundTintColor`,
 `customSidebarTitlebarLightBackgroundLightnessPercent`, `customSidebarTitlebarLightBackgroundTintColor`,
 `windowGlass`, `windowGlassSidebarOpacityDark`, `windowGlassWorkAreaTintDark`,
-`windowGlassSidebarOpacityLight`, `windowGlassWorkAreaTintLight`, `themeSidebarContrast`, `themeWorkAreaContrast`, `showActivePaneOutline`, `workAreaFrame`, the `keepAwake*` rows,
+`windowGlassSidebarOpacityLight`, `windowGlassWorkAreaTintLight`, `themeSidebarContrast`, `themeWorkAreaContrast`, `showActivePaneOutline`, `showWindowButtonsWhenSidebarCollapsed`, the `keepAwake*` rows,
 `debuggingMode`.
 
 ### When your computer starts (start at login, resume after a restart)

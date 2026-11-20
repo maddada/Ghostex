@@ -100,7 +100,9 @@ pub(crate) fn view_strip_drop_line_color() -> Hsla {
     .into()
 }
 
+/// The Linux client frame's resize edges (render/root.rs).
 /// The Dividers theme role replaces it when set (helpers/theme_roles.rs).
+#[cfg(target_os = "linux")]
 pub(crate) fn titlebar_button_border_color() -> Hsla {
     let light = titlebar_uses_light_theme();
     theme_role_or(

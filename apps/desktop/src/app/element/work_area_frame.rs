@@ -1,5 +1,5 @@
-//! The elements that draw the work area frame (`app/helpers/work_area_frame.rs` holds its setting,
-//! sizes and colours): the card, which records where it is for the panes and web pages inside it,
+//! The elements that draw the work area frame (`app/helpers/work_area_frame.rs` holds its sizes
+//! and colours): the card, which records where it is for the panes and web pages inside it,
 //! and the gutter ring under glass.
 
 use std::cell::RefCell;
@@ -12,7 +12,7 @@ use gpui::{
 
 use crate::app::helpers::{
     WORK_AREA_FRAME_BORDER, WORK_AREA_FRAME_INNER_RADIUS, WORK_AREA_FRAME_MARGIN,
-    WORK_AREA_FRAME_RADIUS, sidebar_glass_tint, window_glass_active, work_area_frame_active,
+    WORK_AREA_FRAME_RADIUS, sidebar_glass_tint, window_glass_active,
 };
 
 thread_local! {
@@ -26,11 +26,8 @@ fn window_key(window: &Window) -> u64 {
     window.window_handle().window_id().as_u64()
 }
 
-/// The card's outer edge in `window` this frame, while the frame is on and the window draws one.
+/// The card's outer edge in `window` this frame, once the window has drawn one.
 pub(crate) fn work_area_frame_card_bounds(window: &Window) -> Option<Bounds<Pixels>> {
-    if !work_area_frame_active() {
-        return None;
-    }
     CARD_BOUNDS.with(|cards| cards.borrow().get(&window_key(window)).copied())
 }
 
@@ -47,7 +44,7 @@ pub(crate) fn work_area_frame_inner_bounds(window: &Window) -> Option<Bounds<Pix
 
 /// The corner radii a rectangle inside the card needs: the inner radius on each corner that sits on
 /// one of the card's inner corners (within a device pixel or two), none elsewhere.
-/// Which sides of `rect` lie on the inside of the card's border, with the work area frame on.
+/// Which sides of `rect` lie on the inside of the card's border.
 pub(crate) fn work_area_frame_touching_edges(
     rect: Bounds<Pixels>,
     window: &Window,
@@ -208,14 +205,14 @@ pub(crate) fn work_area_frame_glass_gutter() -> impl IntoElement {
     .size_full()
 }
 
-/// Clips a web page's native view to the card's inner corners in `window`, when the frame is on.
-/// False when there is no card, so the caller keeps the window-corner clip.
+/// Clips a web page's native view to the card's inner corners in `window`; nothing before the
+/// window has drawn its card.
 /// SEE-ALSO: native/macos/GpuiWindowCorners.h (`GhostexGpuiClipNativeViewToWorkAreaCard`).
 #[cfg(target_os = "macos")]
 pub(crate) fn refresh_native_work_area_frame_clip(
     native_view: *mut std::ffi::c_void,
     window: &Window,
-) -> bool {
+) {
     unsafe extern "C" {
         fn GhostexGpuiCEFRefreshNativeViewWorkAreaCardCorners(
             native_view: *mut std::ffi::c_void,
@@ -227,7 +224,7 @@ pub(crate) fn refresh_native_work_area_frame_clip(
         );
     }
     let Some(inner) = work_area_frame_inner_bounds(window) else {
-        return false;
+        return;
     };
     unsafe {
         GhostexGpuiCEFRefreshNativeViewWorkAreaCardCorners(
@@ -239,11 +236,10 @@ pub(crate) fn refresh_native_work_area_frame_clip(
             f64::from(WORK_AREA_FRAME_INNER_RADIUS),
         )
     }
-    true
 }
 
 /// Rounds a web page's native window on Windows and Linux to the card's inner corners in `window`
-/// where it meets them; square where it does not, with the frame off and in windows with no card.
+/// where it meets them; square where it does not and before the window has drawn its card.
 /// SEE-ALSO: cef/linux_x11.rs and cef/windows.rs (`set_native_view_corner_radii`).
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 pub(crate) fn clip_native_view_to_work_area_frame(
@@ -262,31 +258,8 @@ pub(crate) fn clip_native_view_to_work_area_frame(
     browser.set_corner_radii(radii, window.scale_factor());
 }
 
-#[cfg(target_os = "macos")]
-thread_local! {
-    /// Whether each workspace window's traffic lights were last placed for the frame, by window id.
-    static TRAFFIC_LIGHTS_FRAMED: RefCell<HashMap<u64, bool>> = RefCell::new(HashMap::new());
-}
-
-/// Places a workspace window's traffic lights for the work area frame whenever the frame is turned
-/// on or off, so open windows follow the setting at once. A window's first frame sets them too when
-/// the frame is on, in case the setting changed between the window opening and its first render;
-/// with the frame off it leaves the window option's position alone. GPUI keeps the position across
-/// resizes and full screen.
-#[cfg(target_os = "macos")]
-pub(crate) fn sync_work_area_frame_traffic_lights(window: &Window) {
-    let framed = work_area_frame_active();
-    let key = window_key(window);
-    let previous = TRAFFIC_LIGHTS_FRAMED.with(|lights| lights.borrow_mut().insert(key, framed));
-    if previous.map_or(framed, |previous| previous != framed) {
-        window.set_traffic_light_position(crate::app::helpers::workspace_traffic_light_position());
-    }
-}
-
 /// Forgets what the frame recorded for a window that closed.
 pub(crate) fn forget_work_area_frame_window(window_id: gpui::WindowId) {
     let key = window_id.as_u64();
     CARD_BOUNDS.with(|cards| cards.borrow_mut().remove(&key));
-    #[cfg(target_os = "macos")]
-    TRAFFIC_LIGHTS_FRAMED.with(|lights| lights.borrow_mut().remove(&key));
 }

@@ -1028,10 +1028,6 @@ void GhostexGpuiCEFSetNativeViewFrame(void *nativeView, double x, double y,
   }
 }
 
-void GhostexGpuiCEFRefreshNativeViewWindowCorners(void *nativeView) {
-  GhostexGpuiClipNativeViewWindowCorners((__bridge NSView *)nativeView);
-}
-
 void GhostexGpuiCEFRefreshNativeViewWorkAreaCardCorners(void *nativeView, double x, double y,
                                                         double width, double height,
                                                         double radius) {
