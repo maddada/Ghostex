@@ -88,8 +88,8 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
         let scale = appearance.scale;
-        let edge = super::navigation::SIDEBAR_TOP_EDGE_INSET;
-        let row_room = self.sidebar_width / scale - edge * 2.0;
+        let insets = self.native_sidebar_side_insets(scale);
+        let row_room = (self.sidebar_width - insets.left - insets.right) / scale;
         let machines = if with_machines && snapshot.machines.len() > 1 {
             snapshot.machines.len()
         } else {
@@ -106,7 +106,8 @@ impl GhostexGpuiApp {
                     .id("native-sidebar-machine-row")
                     .w_full()
                     .h(px(28.0 * scale))
-                    .px(px(edge * scale))
+                    .pl(px(insets.left))
+                    .pr(px(insets.right))
                     .gap(px(4.0 * scale))
                     .children(self.render_native_machine_icons(snapshot, appearance, folded, cx))
                     .into_any_element(),
@@ -199,10 +200,10 @@ impl GhostexGpuiApp {
             Vec::new()
         };
         // CDXC:Spaces 2026-10-11 DECISION: User: Create a space fits its content, and the Spaces row has no background behind it (a left-aligned row in a rounded track was tried and removed the same day). The workspace tile left the row for the sidebar's bottom bar (workspace_tile.rs).
-        // CDXC:Spaces 2026-11-11 DECISION: User (sidebar top page, Q2424 C): the Spaces stretch across their row: the tiles share its full width evenly between the same 8pt edges as New session, so both edges line up with the rows above. The Bots slot keeps its size. This supersedes the centred row of 2026-09-21 and 2026-10-11.
+        // CDXC:Spaces 2026-11-11 DECISION: User (sidebar top page, Q2424 C): the Spaces stretch across their row: the tiles share its full width evenly between the same 8pt edges as New session, so both edges line up with the rows above (10pt since 2026-11-20, `SIDEBAR_SIDE_INSET` in navigation.rs). The Bots slot keeps its size. This supersedes the centred row of 2026-09-21 and 2026-10-11.
         let radius = super::navigation::SIDEBAR_TOP_ROW_BUTTON_RADIUS;
         Some(
-            h_flex().id("native-sidebar-space-track").sidebar_drop_target("space-row", String::new(), None, cx).w_full().h(px(28.0 * scale)).px(px(edge * scale)).gap(px(4.0 * scale))
+            h_flex().id("native-sidebar-space-track").sidebar_drop_target("space-row", String::new(), None, cx).w_full().h(px(28.0 * scale)).pl(px(insets.left)).pr(px(insets.right)).gap(px(4.0 * scale))
                 .children(computers)
                 .when(machines > 0, |row| row.child(div().flex_shrink_0().w(px(1.0)).h(px(16.0 * scale)).bg(appearance.foreground.opacity(0.12))))
                 .children(star.map(|space| self.render_native_sidebar_space(space, &visible_ids, (pitch, leading, tile_min), appearance, cx)))
@@ -243,7 +244,7 @@ impl GhostexGpuiApp {
         let is_star = id == ghostex_gx_core::ACTIVE_SPACE_ID;
         let name = space.name.clone();
         let scale = appearance.scale;
-        let tooltip_span = super::tooltips::SidebarTooltipSpan::sidebar(self.sidebar_width, scale);
+        let tooltip_span = self.native_sidebar_tooltip_span(scale);
         let path = gpui_sidebar_command_icon_asset_path(Some(&space.icon));
         let display_color = crate::app::window::space_editor_modal::space_display_color(
             &space.color,

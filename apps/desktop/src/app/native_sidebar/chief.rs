@@ -282,10 +282,13 @@ impl GhostexGpuiApp {
             })
         });
         Some(
-            chief_block(scale)
-                .child(main)
-                .children(other_rows)
-                .into_any_element(),
+            {
+                let insets = self.native_sidebar_side_insets(scale);
+                chief_block(scale, insets.left, insets.right)
+            }
+            .child(main)
+            .children(other_rows)
+            .into_any_element(),
         )
     }
 

@@ -120,10 +120,12 @@ impl GhostexGpuiApp {
         let configure_id = notice.machine_id.clone();
         let collapse = json!({"type": "machineNotice", "machineId": notice.machine_id, "collapsedState": notice.state});
         let indent = px(20.0 * scale);
+        let insets = self.native_sidebar_side_insets(scale);
         v_flex()
             .id("native-sidebar-machine-notice")
             .flex_shrink_0()
-            .mx(px(8.0 * scale))
+            .ml(px(insets.left))
+            .mr(px(insets.right))
             .mt(px(6.0 * scale))
             .mb(px(6.0 * scale))
             .px(px(10.0 * scale))
@@ -258,6 +260,7 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         let scale = appearance.scale;
         let expand = json!({"type": "machineNotice", "machineId": notice.machine_id});
+        let insets = self.native_sidebar_side_insets(scale);
         let mark = if notice.busy {
             spinning_loader(
                 format!("native-machine-notice-busy-{}", notice.machine_id),
@@ -284,7 +287,9 @@ impl GhostexGpuiApp {
             .flex_shrink_0()
             .pt(px(6.0 * scale))
             .pb(px(4.0 * scale))
-            .px(px(10.0 * scale))
+            // Centred between the sidebar's visible edges.
+            .pl(px(insets.left))
+            .pr(px(insets.right))
             .justify_center()
             .child(
                 h_flex()

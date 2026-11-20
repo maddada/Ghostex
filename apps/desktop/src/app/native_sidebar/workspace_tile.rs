@@ -78,7 +78,7 @@ impl GhostexGpuiApp {
         let tooltips = self.native_sidebar.pointer_inside
             && self.native_sidebar.menu.is_none()
             && !cx.has_active_drag();
-        let tooltip_span = super::tooltips::SidebarTooltipSpan::sidebar(self.sidebar_width, scale);
+        let tooltip_span = self.native_sidebar_tooltip_span(scale);
         let tooltip_delay = appearance.tooltip_delay;
         let (switch_to, letter_tooltip) = match tile.switch_to {
             Some((workspace_id, name)) => {

@@ -285,6 +285,7 @@ impl GhostexGpuiApp {
         }
         let card = card?;
         let scale = appearance.scale;
+        let insets = self.native_sidebar_side_insets(scale);
         let (title, detail, label, icon, url) = match card {
             StarRequestCard::Star => (
                 "Ghostex is free and open source",
@@ -321,7 +322,8 @@ impl GhostexGpuiApp {
             v_flex()
                 .id("native-sidebar-star-request")
                 .flex_shrink_0()
-                .mx(px(8.0 * scale))
+                .ml(px(insets.left))
+                .mr(px(insets.right))
                 .mt(px(6.0 * scale))
                 .mb(px(6.0 * scale))
                 .px(px(10.0 * scale))

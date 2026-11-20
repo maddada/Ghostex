@@ -70,9 +70,7 @@ impl GhostexGpuiApp {
                 left: header.left().as_f32(),
                 right: header.right().as_f32(),
             })
-            .unwrap_or_else(|| {
-                super::tooltips::SidebarTooltipSpan::sidebar(self.sidebar_width, scale)
-            });
+            .unwrap_or_else(|| self.native_sidebar_tooltip_span(scale));
         let icon_image = group
             .project_context
             .as_ref()

@@ -34,8 +34,64 @@ pub(crate) const SIDEBAR_TOP_ROW_BUTTON_MIN_WIDTH: f32 = 19.0;
 pub(crate) const SIDEBAR_TOP_ROW_BUTTON_WIDTH: f32 = 30.0;
 pub(crate) const SIDEBAR_TOP_ROW_BUTTON_HEIGHT: f32 = 28.0;
 pub(crate) const SIDEBAR_TOP_ROW_BUTTON_RADIUS: f32 = 7.0;
-/// Where every row at the top of the sidebar ends (and, but for the top row, starts).
+/// Where the menu button sits before the sidebar has drawn it (titlebar/menu_panels.rs), down and
+/// in from the window's top left corner.
 pub(crate) const SIDEBAR_TOP_EDGE_INSET: f32 = 8.0;
+
+/// How far every element of the sidebar keeps from its visible left and right edges, before the
+/// zoom: the top row's last button, New session, the Spaces, project headers, the right end of
+/// session cards and section labels (which keep their indent under their project on the left), the
+/// Unified sidebar's rows, the cards under the list, the workspace switcher and the usage cards.
+///
+/// CDXC:Sidebar 2026-11-20 DECISION:
+/// User: "fix the gap from the right side to match the left side; even best to have 10px on either side, here and for the rest of the sidebar." Docked beside the work area card, everything sat about 8pt from the window's left edge but 14 to 16pt from the card, because the divider's 1pt and the frame's gutter (6pt in all) lie between the sidebar's own right edge and the card, which is the edge the user sees. Every row now takes both insets from `GhostexGpuiApp::native_sidebar_side_insets`: 10pt from the window's (or the floating panel's) left edge and 10pt from the card, the right one giving up that gutter. This supersedes the 8pt edges of the 2026-11-11 decision above and the usage strip's 2026-11-18 right-inset fix (usage.rs), which did the same for the strip alone.
+pub(crate) const SIDEBAR_SIDE_INSET: f32 = 10.0;
+
+/// The sidebar's side insets in window points, at the zoom: `left` from the sidebar's left edge,
+/// `right` from its own right edge, which is `right_gutter` short of the edge the user sees there.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct SidebarSideInsets {
+    pub(crate) left: f32,
+    pub(crate) right: f32,
+}
+
+pub(crate) fn sidebar_side_insets(scale: f32, right_gutter: f32) -> SidebarSideInsets {
+    SidebarSideInsets {
+        left: SIDEBAR_SIDE_INSET * scale,
+        right: (SIDEBAR_SIDE_INSET * scale - right_gutter).max(0.0),
+    }
+}
+
+impl GhostexGpuiApp {
+    /// What lies between the sidebar's own right edge and the edge the user sees there: docked
+    /// beside the work area card, the divider's 1pt and the frame's gutter (6pt in all, not
+    /// zoomed: the window's, not the sidebar's); nothing for the floating sidebar, a card of its
+    /// own, or with the frame off, where the divider is the edge.
+    pub(crate) fn native_sidebar_right_gutter(&self) -> f32 {
+        if work_area_frame_active() && !self.sidebar_collapsed {
+            WORK_AREA_FRAME_MARGIN
+        } else {
+            0.0
+        }
+    }
+
+    /// The side insets every sidebar row uses (`SIDEBAR_SIDE_INSET`).
+    pub(crate) fn native_sidebar_side_insets(&self, scale: f32) -> SidebarSideInsets {
+        sidebar_side_insets(scale, self.native_sidebar_right_gutter())
+    }
+
+    /// Where a tooltip under a row that fills the sidebar may spread: between the side insets, so
+    /// it is as wide as the row's box.
+    pub(super) fn native_sidebar_tooltip_span(
+        &self,
+        scale: f32,
+    ) -> super::tooltips::SidebarTooltipSpan {
+        super::tooltips::SidebarTooltipSpan::inside(
+            self.sidebar_width,
+            self.native_sidebar_side_insets(scale),
+        )
+    }
+}
 /// The room between the top row's buttons, and the tighter room once they have to narrow.
 const TOP_ROW_GAP: f32 = 4.0;
 const TOP_ROW_TIGHT_GAP: f32 = 2.0;
@@ -295,7 +351,7 @@ impl GhostexGpuiApp {
             let trailing = if floating_row {
                 floating_row_trailing_padding(scale)
             } else {
-                SIDEBAR_TOP_EDGE_INSET * scale
+                self.native_sidebar_side_insets(scale).right
             };
             let buttons = 3
                 + usize::from(bell_visible)

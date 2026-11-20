@@ -8,7 +8,6 @@ use gpui_component::{
     v_flex,
 };
 
-use super::session_list::SESSION_INSET_X;
 use crate::app::helpers::{
     titlebar_popup_menu_background, titlebar_popup_menu_border_color,
     titlebar_popup_menu_foreground, tooltip_background, window_glass_active_in,
@@ -24,12 +23,21 @@ pub(super) struct SidebarTooltipSpan {
 }
 
 impl SidebarTooltipSpan {
-    /// The span of a row that fills the sidebar at the standard row inset.
+    /// The span of a row that fills a sidebar `sidebar_width` wide: between the sidebar's side
+    /// insets (navigation.rs `SIDEBAR_SIDE_INSET`), with no frame gutter beside it. A row drawn in
+    /// the app's sidebar reads `GhostexGpuiApp::native_sidebar_tooltip_span`, which knows the gutter.
     pub(super) fn sidebar(sidebar_width: f32, scale: f32) -> Self {
-        let inset = SESSION_INSET_X * scale;
+        Self::inside(
+            sidebar_width,
+            super::navigation::sidebar_side_insets(scale, 0.0),
+        )
+    }
+
+    /// The span between these side insets of a sidebar `sidebar_width` wide.
+    pub(super) fn inside(sidebar_width: f32, insets: super::navigation::SidebarSideInsets) -> Self {
         Self {
-            left: inset,
-            right: (sidebar_width - inset).max(inset),
+            left: insets.left,
+            right: (sidebar_width - insets.right).max(insets.left),
         }
     }
 

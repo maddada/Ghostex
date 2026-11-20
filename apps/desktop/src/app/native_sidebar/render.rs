@@ -96,6 +96,11 @@ impl GhostexGpuiApp {
             self.render_native_unified_list(&shown, &snapshot.hud, &appearance, cx)
         });
         let classic = unified.is_none();
+        let list_insets = native_sidebar_list_insets(
+            self.native_sidebar_side_insets(appearance.scale),
+            classic,
+            appearance.scale,
+        );
         let extension_mode = extension_view.active.clone().filter(|_| classic);
         // The classic list's own rows, which an extension's mode replaces.
         let list_classic = classic && extension_mode.is_none();
@@ -301,9 +306,18 @@ impl GhostexGpuiApp {
                                             )
                                         })
                                     })
-                                    .w_full()
-                                    .pl(px(6.0 * appearance.scale))
-                                    .pr(px(2.0 * appearance.scale))
+                                    .pl(px(list_insets.left))
+                                    // Docked beside the work area card, the rows' right margins
+                                    // are more than the right inset, so the list reaches into the
+                                    // sidebar's clip by the difference (a negative margin: it is
+                                    // stretched, not `w_full`).
+                                    .map(|column| {
+                                        if list_insets.right >= 0.0 {
+                                            column.w_full().pr(px(list_insets.right))
+                                        } else {
+                                            column.mr(px(list_insets.right))
+                                        }
+                                    })
                                     .relative()
                                     .left(px(space_offset * appearance.scale))
                                     .opacity(space_opacity)
@@ -559,4 +573,23 @@ fn track_pointer_presence(
             set_outside(false, cx);
         }
     });
+}
+
+/// The list's own padding, in window points: the sidebar's side insets less how far its rows' boxes
+/// already sit in from the list's edges through their own margins. A project header (its block's
+/// 18pt less the 15pt it reaches back over its chevron) and the classic list's other top-level
+/// rows sit 3pt in on the left and 8pt in on the right (the block's 5pt and their own 3pt);
+/// the Unified sidebar's rows 3pt in on both sides. The right one goes below zero docked beside
+/// the work area card (`native_sidebar_right_gutter`).
+fn native_sidebar_list_insets(
+    insets: super::navigation::SidebarSideInsets,
+    classic: bool,
+    scale: f32,
+) -> super::navigation::SidebarSideInsets {
+    let row_left = 3.0 * scale;
+    let row_right = if classic { 8.0 } else { 3.0 } * scale;
+    super::navigation::SidebarSideInsets {
+        left: insets.left - row_left,
+        right: insets.right - row_right,
+    }
 }

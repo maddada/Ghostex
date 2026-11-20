@@ -69,15 +69,18 @@ pub(crate) fn chief_row_shown(enabled: bool, bots_mode: bool) -> bool {
     enabled && !bots_mode
 }
 
-/// The block the rows sit in: the list column's and a project block's left and right padding
-/// (render.rs: the column's `pl 6 / pr 2`, each project block's `pl 18 / mr 5`, its `mb 10`), so
-/// the header lines up with the project headers under it.
-pub(crate) fn chief_block(scale: f32) -> Div {
+/// The block the rows sit in, so their boxes stand where a project header's does (the sidebar's
+/// side insets, `native_sidebar_side_insets`) and the header lines up with the project headers
+/// under it: the left inset plus the `INSET` the header reaches back over its chevron, the right
+/// inset less the rows' own 3pt right margin, and a project block's `mb 10`.
+/// `left` and `right` are the sidebar's side insets in window points (the native modal demo, which
+/// draws this file without the sidebar, passes its own).
+pub(crate) fn chief_block(scale: f32, left: f32, right: f32) -> Div {
     v_flex()
         .w_full()
         .flex_shrink_0()
-        .pl(px(24.0 * scale))
-        .pr(px(7.0 * scale))
+        .pl(px(left + INSET * scale))
+        .pr(px((right - 3.0 * scale).max(0.0)))
         .pb(px(10.0 * scale))
 }
 
