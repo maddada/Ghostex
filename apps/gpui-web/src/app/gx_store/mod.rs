@@ -84,6 +84,7 @@ pub(crate) mod web_transport;
 mod work_links;
 mod work_mode;
 mod workspace_groups;
+mod workspace_return;
 mod workspaces;
 
 pub(crate) use cloud_boxes::{cloud_box_endpoint, cloud_box_request_target, cloud_box_send_target};
@@ -98,3 +99,4 @@ pub(crate) use rpc::{gx_rpc, gx_rpc_with_timeout};
 pub(crate) use rpc_types::GxRpcError;
 #[allow(unused_imports)]
 pub(crate) use sidebar_ui_storage::{read_preference_value, write_client_document_value};
+pub(crate) use workspace_return::WorkspacePlace;

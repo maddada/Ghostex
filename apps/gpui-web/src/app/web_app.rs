@@ -124,12 +124,16 @@ pub(crate) struct GhostexGpuiApp {
     /// CDXC:FocusRouting 2026-11-12 WHY:
     /// GPUI sends a key along the focused element's path, and with nothing focused that path holds only the window's outermost element, above the `Root` that binds Tab. The desktop parks the keyboard on a handle of its own (`root_action_focus_handle`); the page had none, so Tab from "nothing focused" (a fresh page, a click on empty space) did nothing (GitHub #557).
     pub(crate) root_action_focus_handle: gpui::FocusHandle,
+    /// Where the page was in each workspace it left (`gx_store/workspace_return.rs`), for the
+    /// page's life: the desktop keeps the same with its window's slot.
+    pub(crate) workspace_places: HashMap<String, crate::app::gx_store::WorkspacePlace>,
 }
 
 impl GhostexGpuiApp {
     pub(crate) fn new(cx: &mut Context<Self>) -> Self {
         Self {
             root_action_focus_handle: cx.focus_handle().tab_stop(false),
+            workspace_places: HashMap::new(),
             native_sidebar: NativeSidebarState::default(),
             gx_store: Default::default(),
             sidebar_width: 300.0,
@@ -350,8 +354,37 @@ impl GhostexGpuiApp {
     // Workspaces (`gx_store/workspaces.rs`): a page is one window with nothing to save it in, so
     // its workspace lasts for the page; it has no other windows and no Settings window.
     pub(crate) fn persist_window_workspace_id(&self) {}
+    /// The desktop's switch (`workspace_windows/window_workspace.rs`) for a page: remembers where
+    /// the page was in the workspace it leaves, then puts back the Space, session or project it had
+    /// in the one it enters (CDXC:Workspaces 2026-11-20 in gx_store/workspace_return.rs).
     pub(crate) fn switch_window_workspace(&mut self, workspace_id: String, cx: &mut Context<Self>) {
+        if let Some(outgoing) = self.gx_store_resolved_window_workspace_id() {
+            let place = self.gx_store_window_workspace_place();
+            self.workspace_places.insert(outgoing, place);
+        }
         self.gx_store_set_window_workspace(Some(workspace_id), cx);
+        let Some(incoming) = self.gx_store_resolved_window_workspace_id() else {
+            return;
+        };
+        let place = self
+            .workspace_places
+            .get(&incoming)
+            .cloned()
+            .unwrap_or_default();
+        self.gx_store_return_to_workspace_space(place.space_id.as_deref(), cx);
+        let recent: Vec<String> = place.sidebar_session_id.into_iter().collect();
+        // The page opens a session the way Quick Access's focusSession does (web_host/app_modal_commands.rs);
+        // it has no project view to land on without one, so a project or an empty workspace
+        // leaves the work area as it is.
+        if let Some(ghostex_gx_core::SpaceSwitchFocus::Session { sidebar_session_id }) =
+            self.gx_store_workspace_return_focus(&recent, place.group_id.as_deref())
+            && let Some(session) = self.gx_store.session_key_for_row(&sidebar_session_id)
+        {
+            // On the surface the page shows now, as a click on its row opens it.
+            let terminal = self.show_terminal;
+            self.web_open_session_in_work_area(session, terminal, cx);
+        }
+        cx.notify();
     }
     pub(crate) fn focus_window_showing_workspace(
         &self,

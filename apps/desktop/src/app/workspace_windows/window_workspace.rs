@@ -14,13 +14,14 @@
 use std::fs;
 use std::path::PathBuf;
 
-use ghostex_gx_core::{SpaceSwitchFocus, plan_workspace_switch_restore};
+use ghostex_gx_core::SpaceSwitchFocus;
 use gpui::App;
 use serde_json::{Map, Value, json};
 
 use super::open::{WorkspaceWindowStart, open_new_workspace_window_on};
 use super::registry::WORKSPACE_WINDOWS;
 use super::slots::workspace_window_state_path;
+use crate::app::gx_store::WorkspacePlace;
 use crate::app::helpers::*;
 use crate::*;
 
@@ -118,6 +119,40 @@ fn remember_workspace_session(slot: u32, workspace_id: &str, sidebar_session_id:
     write_window_workspace_state(slot, &state);
 }
 
+/// The Space and project the slot's window had in `workspace_id` when it last left it
+/// (`placeByWorkspace`), with its remembered sessions.
+fn remembered_workspace_place(slot: u32, workspace_id: &str) -> (Option<String>, Option<String>) {
+    let state = read_window_workspace_state(slot);
+    let place = state
+        .get("placeByWorkspace")
+        .and_then(|by_workspace| by_workspace.get(workspace_id));
+    let field = |key: &str| {
+        place
+            .and_then(|place| place.get(key))
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    };
+    (field("spaceId"), field("groupId"))
+}
+
+fn remember_workspace_place(slot: u32, workspace_id: &str, place: &WorkspacePlace) {
+    let mut state = read_window_workspace_state(slot);
+    let by_workspace = state.entry("placeByWorkspace").or_insert_with(|| json!({}));
+    if !by_workspace.is_object() {
+        *by_workspace = json!({});
+    }
+    let mut entry = Map::new();
+    if let Some(space_id) = &place.space_id {
+        entry.insert("spaceId".to_string(), json!(space_id));
+    }
+    if let Some(group_id) = &place.group_id {
+        entry.insert("groupId".to_string(), json!(group_id));
+    }
+    by_workspace[workspace_id] = Value::Object(entry);
+    write_window_workspace_state(slot, &state);
+}
+
 pub(super) fn discard_window_workspace(slot: u32) {
     let _ = fs::remove_file(window_workspace_path(slot));
 }
@@ -166,10 +201,11 @@ impl GhostexGpuiApp {
         write_window_workspace_state(slot, &state);
     }
 
-    /// The workspace tile's "switch to": remembers the session this window has open under the
-    /// workspace it leaves, shows the new one, opens the session the window last had open there
-    /// (else its first project with no session, else nothing), and puts to sleep the views that
-    /// projects outside it still keep.
+    /// The workspace tile's "switch to": remembers the Space, project and session this window has
+    /// open under the workspace it leaves, shows the new one, selects the Space it had there and
+    /// opens the session the window last had open there (else the project it had active there,
+    /// else its first project, with no session, else nothing), and puts to sleep the views that
+    /// projects outside it still keep (CDXC:Workspaces 2026-11-20 in gx_store/workspace_return.rs).
     ///
     /// CDXC:Workspaces 2026-10-09 DECISION:
     /// User: switching a window's workspace also switches what the window shows: select the
@@ -190,8 +226,8 @@ impl GhostexGpuiApp {
         self.land_on_window_workspace(&workspace_id, cx);
     }
 
-    /// The first half of a switch: remembers the session this window has open under the workspace
-    /// it leaves and shows `workspace_id`, without choosing what to show there. A focus routed here
+    /// The first half of a switch: remembers the Space, project and session this window has open
+    /// under the workspace it leaves and shows `workspace_id`, without choosing what to show there. A focus routed here
     /// from outside the workspace (session_routing.rs) chooses that itself.
     pub(super) fn enter_window_workspace(
         &mut self,
@@ -199,16 +235,12 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let slot = self.workspace_window_slot;
-        if let (Some(outgoing), Some(focused)) = (
-            self.gx_store_resolved_window_workspace_id(),
-            self.gx_store
-                .core
-                .focus()
-                .focused_session
-                .as_ref()
-                .map(ghostex_gx_core::SessionKey::to_sidebar_session_id),
-        ) {
-            remember_workspace_session(slot, &outgoing, &focused);
+        if let Some(outgoing) = self.gx_store_resolved_window_workspace_id() {
+            let place = self.gx_store_window_workspace_place();
+            if let Some(focused) = &place.sidebar_session_id {
+                remember_workspace_session(slot, &outgoing, focused);
+            }
+            remember_workspace_place(slot, &outgoing, &place);
         }
         self.gx_store_set_window_workspace(Some(workspace_id.to_string()), cx);
     }
@@ -221,13 +253,12 @@ impl GhostexGpuiApp {
         workspace_id: &str,
         cx: &mut gpui::Context<Self>,
     ) {
-        let recent = remembered_workspace_sessions(self.workspace_window_slot, workspace_id);
-        let view = self.gx_store.sidebar_list.view();
-        let plan = plan_workspace_switch_restore(view, &recent).or_else(|| {
-            view.groups.first().map(|group| SpaceSwitchFocus::Group {
-                group_id: group.core.group_id.clone(),
-            })
-        });
+        let slot = self.workspace_window_slot;
+        let recent = remembered_workspace_sessions(slot, workspace_id);
+        let (space_id, group_id) = remembered_workspace_place(slot, workspace_id);
+        // The Space first: the session is picked from the rows the list draws.
+        self.gx_store_return_to_workspace_space(space_id.as_deref(), cx);
+        let plan = self.gx_store_workspace_return_focus(&recent, group_id.as_deref());
         match plan {
             Some(SpaceSwitchFocus::Session { sidebar_session_id }) => {
                 self.dispatch_native_sidebar_command(
