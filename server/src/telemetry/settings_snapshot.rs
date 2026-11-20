@@ -23,6 +23,8 @@ that cannot name anyone:
 - Extensions: official Store ids with their version, and a count of the rest.
 - Boosts: on or off, and how many of the user's own Boosts and edited prompts
   there are; never their text.
+- Small counts (accounts, workspaces, Boosts, extensions) go as
+  `taxonomy::COUNT_BUCKETS` ranges, never the number.
 
 Every key below is checked again by `taxonomy::validate` through
 `property_spec`, so this table IS the whitelist: a key not listed here cannot
@@ -298,8 +300,8 @@ fn other_property_spec(key: &str) -> Option<PropertySpec> {
         "linux_desktop" => PropertySpec::Enum(taxonomy::LINUX_DESKTOPS),
         "linux_session" => PropertySpec::Enum(taxonomy::LINUX_SESSION_TYPES),
         "linux_wsl" | "boosts_on" => PropertySpec::Bool,
-        "remote_machine_count"
-        | "workspace_count"
+        "remote_machine_count" => PropertySpec::Number,
+        "workspace_count"
         | "custom_boost_count"
         | "edited_boost_count"
         | "custom_extensions_installed"
@@ -307,7 +309,7 @@ fn other_property_spec(key: &str) -> Option<PropertySpec> {
         | "codex_accounts"
         | "cursor_accounts"
         | "gemini_accounts"
-        | "copilot_accounts" => PropertySpec::Number,
+        | "copilot_accounts" => PropertySpec::Enum(taxonomy::COUNT_BUCKETS),
         "claude_plans" => PropertySpec::EnumList(taxonomy::CLAUDE_PLANS),
         "codex_plans" => PropertySpec::EnumList(taxonomy::CODEX_PLANS),
         "claude_top_plan" => PropertySpec::Enum(taxonomy::CLAUDE_PLANS),
@@ -492,6 +494,25 @@ pub fn linux_distro(id: &str) -> &'static str {
         .unwrap_or("other")
 }
 
+/*
+CDXC:Telemetry 2026-11-20 (privacy review of 591004b37):
+`VERSION_ID` is sent only for a distro in `LINUX_DISTROS` and only as digits and
+dots (`24.04`, `41`, `2024.1`), at most 16 characters. The general version clamp
+let through `AcmeCorp-Internal-2`, so a company's own build could name the
+company; an `other` distro sends no version at all.
+*/
+pub fn linux_distro_version(distro: &str, raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    let well_formed = !raw.is_empty()
+        && raw.len() <= 16
+        && raw.starts_with(|character: char| character.is_ascii_digit())
+        && raw
+            .chars()
+            .all(|character| character.is_ascii_digit() || character == '.');
+    (distro != "other" && taxonomy::LINUX_DISTROS.contains(&distro) && well_formed)
+        .then(|| raw.to_string())
+}
+
 /// `XDG_CURRENT_DESKTOP` (a `:`-separated list such as `ubuntu:GNOME`) as a
 /// `LINUX_DESKTOPS` member: the first entry that is one, else `other`.
 pub fn linux_desktop(raw: &str) -> Option<&'static str> {
@@ -552,9 +573,10 @@ pub fn read_linux_report() -> Option<LinuxReport> {
     let wsl = std::fs::read_to_string("/proc/sys/kernel/osrelease")
         .map(|text| text.to_ascii_lowercase().contains("microsoft"))
         .unwrap_or(false);
+    let distro = id.as_deref().map(linux_distro).unwrap_or("other");
     Some(LinuxReport {
-        distro: id.as_deref().map(linux_distro).unwrap_or("other"),
-        distro_version: version.and_then(|version| taxonomy::normalize_version_string(&version)),
+        distro,
+        distro_version: version.and_then(|version| linux_distro_version(distro, &version)),
         desktop,
         session,
         wsl,
@@ -624,16 +646,19 @@ pub fn snapshot_properties(
         PropertyValue::Number(facts.remote_machine_count as f64),
     ));
     if let Some(count) = facts.workspace_count {
-        properties.push(("workspace_count", PropertyValue::Number(count as f64)));
+        properties.push((
+            "workspace_count",
+            PropertyValue::Enum(taxonomy::count_bucket(count)),
+        ));
     }
     properties.push(("boosts_on", PropertyValue::Bool(facts.boosts.on)));
     properties.push((
         "custom_boost_count",
-        PropertyValue::Number(facts.boosts.custom as f64),
+        PropertyValue::Enum(taxonomy::count_bucket(facts.boosts.custom)),
     ));
     properties.push((
         "edited_boost_count",
-        PropertyValue::Number(facts.boosts.edited as f64),
+        PropertyValue::Enum(taxonomy::count_bucket(facts.boosts.edited)),
     ));
     if let Some(accounts) = &facts.accounts {
         for (provider, key) in [
@@ -644,7 +669,7 @@ pub fn snapshot_properties(
             ("copilot", "copilot_accounts"),
         ] {
             let count = accounts.counts.get(provider).copied().unwrap_or(0);
-            properties.push((key, PropertyValue::Number(count as f64)));
+            properties.push((key, PropertyValue::Enum(taxonomy::count_bucket(count))));
         }
         properties.push((
             "claude_plans",
@@ -664,16 +689,27 @@ pub fn snapshot_properties(
     properties.push((
         "store_extensions_installed",
         PropertyValue::ExtensionVersionList(
+            /*
+            CDXC:Telemetry 2026-11-20 (privacy review of 591004b37): an entry that would fail
+            the check (an id the Store does not list, a version such as `1.4.2+build5`) is left
+            out here, so one odd extension can never make the validator drop the whole day's
+            snapshot.
+            */
             facts
                 .store_extensions
                 .iter()
+                .filter(|(id, version)| {
+                    super::extensions::is_official_store_id(id)
+                        && taxonomy::normalize_version_string(version).is_some()
+                })
+                .take(super::extensions::MAX_STORE_EXTENSION_LIST_LENGTH)
                 .map(|(id, version)| (ExtensionRef::Store(id.clone()), version.clone()))
                 .collect(),
         ),
     ));
     properties.push((
         "custom_extensions_installed",
-        PropertyValue::Number(facts.custom_extensions_installed as f64),
+        PropertyValue::Enum(taxonomy::count_bucket(facts.custom_extensions_installed)),
     ));
     let person: Vec<(&'static str, PropertyValue)> = properties
         .iter()

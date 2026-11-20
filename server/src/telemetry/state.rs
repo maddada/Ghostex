@@ -18,6 +18,7 @@ use serde_json::{json, Value};
 pub const ANALYTICS_STATE_METADATA_KEY: &str = "analytics.state.v1";
 pub const LAST_HEARTBEAT_AT_KEY: &str = "lastHeartbeatAt";
 pub const BUILT_IN_EXTENSIONS_ON_KEY: &str = "builtInExtensionsOn";
+pub const BUILT_IN_EXTENSIONS_KNOWN_KEY: &str = "builtInExtensionsKnown";
 
 pub fn read_analytics_state(db: &Connection) -> Option<Value> {
     let text = db
@@ -48,29 +49,63 @@ pub fn write_last_heartbeat_at(db: &Connection, sent_at: &str) {
     );
 }
 
-/// The built-in extensions that were on at the last settings snapshot, so the next one can tell
-/// which were switched on or off since (CDXC:Telemetry 2026-11-20 in task.rs). `None` before the
-/// first snapshot.
-pub fn read_built_in_extensions_on(db: &Connection) -> Option<Vec<String>> {
+/// The built-in extensions known, and those on, at the last settings snapshot, so the next one
+/// can tell which the user switched on or off since (CDXC:Telemetry 2026-11-20 in task.rs).
+/// `None` before the first snapshot, after analytics were off, or from a state written before the
+/// known list was kept.
+pub fn read_built_in_extensions(db: &Connection) -> Option<(Vec<String>, Vec<String>)> {
     let value = read_analytics_state(db)?;
-    let list = value.get(BUILT_IN_EXTENSIONS_ON_KEY)?.as_array()?;
-    Some(
-        list.iter()
-            .filter_map(Value::as_str)
-            .map(str::to_string)
-            .collect(),
-    )
+    let list = |key: &str| -> Option<Vec<String>> {
+        Some(
+            value
+                .get(key)?
+                .as_array()?
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect(),
+        )
+    };
+    Some((
+        list(BUILT_IN_EXTENSIONS_KNOWN_KEY)?,
+        list(BUILT_IN_EXTENSIONS_ON_KEY)?,
+    ))
 }
 
-pub fn write_built_in_extensions_on(db: &Connection, ids: &[&'static str]) {
-    write_state_key(db, BUILT_IN_EXTENSIONS_ON_KEY, json!(ids));
+pub fn write_built_in_extensions(db: &Connection, known: &[&'static str], on: &[&'static str]) {
+    update_state(db, |state| {
+        state.insert(BUILT_IN_EXTENSIONS_KNOWN_KEY.to_string(), json!(known));
+        state.insert(BUILT_IN_EXTENSIONS_ON_KEY.to_string(), json!(on));
+    });
+}
+
+/// Forget both lists (analytics are off). Writes only when there is something to forget.
+pub fn clear_built_in_extensions(db: &Connection) {
+    let Some(state) = read_analytics_state(db) else {
+        return;
+    };
+    if state.get(BUILT_IN_EXTENSIONS_KNOWN_KEY).is_none()
+        && state.get(BUILT_IN_EXTENSIONS_ON_KEY).is_none()
+    {
+        return;
+    }
+    update_state(db, |state| {
+        state.remove(BUILT_IN_EXTENSIONS_KNOWN_KEY);
+        state.remove(BUILT_IN_EXTENSIONS_ON_KEY);
+    });
 }
 
 fn write_state_key(db: &Connection, key: &str, value: Value) {
+    update_state(db, |state| {
+        state.insert(key.to_string(), value);
+    });
+}
+
+fn update_state(db: &Connection, change: impl FnOnce(&mut serde_json::Map<String, Value>)) {
     let mut state = read_analytics_state(db)
         .and_then(|value| value.as_object().cloned())
         .unwrap_or_default();
-    state.insert(key.to_string(), value);
+    change(&mut state);
     let Ok(serialized) = serde_json::to_string(&Value::Object(state)) else {
         return;
     };

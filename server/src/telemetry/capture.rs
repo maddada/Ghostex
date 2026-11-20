@@ -170,13 +170,10 @@ pub fn boosts_used(
     }
     let mut properties = agent_properties(session_agent_report(session));
     properties.push(("source", PropertyValue::Enum(source)));
-    properties.push((
-        "boost_count",
-        PropertyValue::Number((built_in.len() + custom_count) as f64),
-    ));
+    // A range, not the number, and no raw total beside it that would give the number back.
     properties.push((
         "custom_boost_count",
-        PropertyValue::Number(custom_count as f64),
+        PropertyValue::Enum(taxonomy::count_bucket(custom_count)),
     ));
     properties.push(("boosts", PropertyValue::EnumList(built_in)));
     capture(taxonomy::EVENT_BOOSTS_USED, &properties);

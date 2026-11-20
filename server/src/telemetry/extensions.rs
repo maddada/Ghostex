@@ -202,6 +202,38 @@ pub fn resolve_store_extension(id: &str) -> ExtensionRef {
     }
 }
 
+/// Every built-in extension with an on/off switch that exists on this platform: the list the daily
+/// snapshot keeps beside the ones that are on, so a built-in a later release adds is never
+/// reported as switched on or off by the user (telemetry/task.rs).
+pub fn known_built_in_extensions() -> Vec<&'static str> {
+    built_in_extensions::enabled_ids_with(|key| {
+        built_in_extensions::feature_switched_by(key)
+            .and_then(built_in_extensions::switch_key)
+            .map(|(_, enables)| enables)
+    })
+}
+
+/// The built-in extensions switched on (`true`) or off (`false`) between two snapshots. Only ids
+/// in both snapshots' known lists count: one a later release added, or one a platform lacks, is
+/// not something the user switched.
+pub fn built_in_extension_changes(
+    previous_known: &[String],
+    previous_on: &[String],
+    known: &[&'static str],
+    on: &[&'static str],
+) -> Vec<(&'static str, bool)> {
+    known
+        .iter()
+        .copied()
+        .filter(|id| previous_known.iter().any(|known| known == id))
+        .filter_map(|id| {
+            let was_on = previous_on.iter().any(|previous| previous == id);
+            let is_on = on.contains(&id);
+            (was_on != is_on).then_some((id, is_on))
+        })
+        .collect()
+}
+
 /// The heartbeat's view of the installed extensions.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct EnabledExtensions {

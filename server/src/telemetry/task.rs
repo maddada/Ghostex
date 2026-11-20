@@ -132,6 +132,14 @@ where
     G: Fn() -> settings_snapshot::SnapshotFacts,
 {
     if !gate::is_enabled(paths) {
+        /*
+        CDXC:Telemetry 2026-11-20 (privacy review of 591004b37): forget the built-in extension
+        list while analytics are off, so switches made then are never reported once they are on
+        again; the first snapshot after only records the list.
+        */
+        if let Ok(db) = crate::storage::open_gxserver_database(paths) {
+            state::clear_built_in_extensions(&db);
+        }
         return;
     }
     /*
@@ -175,22 +183,18 @@ where
     */
     let settings = crate::shared_settings_file::read_shared_settings(paths);
     settings_snapshot::emit(settings.as_ref(), &collect_snapshot());
-    let previous = state::read_built_in_extensions_on(&db);
-    if let Some(previous) = previous {
-        for id in &snapshot.built_in_extensions_on {
-            if !previous.iter().any(|known| known == id) {
-                super::capture::extension_toggled(ExtensionRef::BuiltIn(id), "built_in", true);
-            }
-        }
-        for id in &previous {
-            if !snapshot.built_in_extensions_on.contains(&id.as_str()) {
-                if let Some(id) = ghostex_settings_catalog::built_in_extensions::switchable_id(id) {
-                    super::capture::extension_toggled(ExtensionRef::BuiltIn(id), "built_in", false);
-                }
-            }
+    let known = super::extensions::known_built_in_extensions();
+    if let Some((previous_known, previous_on)) = state::read_built_in_extensions(&db) {
+        for (id, enabled) in super::extensions::built_in_extension_changes(
+            &previous_known,
+            &previous_on,
+            &known,
+            &snapshot.built_in_extensions_on,
+        ) {
+            super::capture::extension_toggled(ExtensionRef::BuiltIn(id), "built_in", enabled);
         }
     }
-    state::write_built_in_extensions_on(&db, &snapshot.built_in_extensions_on);
+    state::write_built_in_extensions(&db, &known, &snapshot.built_in_extensions_on);
     state::write_last_heartbeat_at(
         &db,
         &chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
