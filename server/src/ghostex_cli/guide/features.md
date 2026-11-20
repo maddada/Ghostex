@@ -6599,7 +6599,14 @@ choice in a new chat and in New Thread shows once you've connected a provider
   session shows the last transcript without waking it, and sending a message
   wakes it. When every session on a box is archived it stops, and is deleted
   after 7 days unless it has unpushed work. Your boxes lists every box with
-  Stop and Delete (a box with unpushed work asks before Delete Anyway).
+  Stop and Delete (a box with unpushed work asks before Delete Anyway). A box
+  that fails while it starts Ghostex is stopped at its provider, so it doesn't
+  keep billing for running time: it shows failed with the reason (its disk is
+  kept, and a stopped Instabox box still counts toward the plan's box limit),
+  sending a message tries the start again, and Delete removes it. If Ghostex
+  can't stop it, the reason says so and to delete it. A box answers only your
+  own paired devices: it turns on its Easy Connect with exactly those devices
+  in one step, never open to anyone else.
 - **From your phone**: cloud sessions sit in their project on the phone too,
   with the same cloud badge, and open in chat without waking the box; sending
   a message wakes it. The box pill under a cloud chat's header shows its

@@ -513,6 +513,7 @@ async fn finish_boot(
     })
     .await
     else {
+        stop_after_failed_boot(state, &ops, &target).await;
         return;
     };
     // A `local` box's token is read from the box itself when a client attaches; the others keep
@@ -540,6 +541,46 @@ async fn finish_boot(
         }
     });
     session_steps(state, &ops, &target, &context).await;
+}
+
+/*
+CDXC:CloudBoxes 2026-11-21 FIX:
+GitHub #698: a box whose boot failed was marked failed here and left running at its provider,
+billing, with nothing on it a client could reach (all three of the reporter's tries left an
+Instabox machine running). A failed boot now stops the machine: its programs end (gxserver, and
+tailcat if it got that far), the disk is kept, the row stays `failed` with the boot's error, and a
+send boots it again from the start (`resume` takes a failed box); Delete frees it. When the stop
+itself fails, the error says so and points at Delete.
+*/
+/// Stops a box whose boot failed, so it doesn't keep running at its provider.
+async fn stop_after_failed_boot(state: &Arc<AppState>, ops: &Ops, target: &Target) {
+    let stop_ops = ops.clone();
+    let stop_target = target.clone();
+    let stopped = params::blocking(move || stop_ops.stop(&stop_target))
+        .await
+        .unwrap_or_else(|error| Err(error.message));
+    let provider = ops.provider();
+    let mut message = None;
+    let _ = registry::update(&state.paths, &target.box_id, |stored| {
+        let reason = stored.row.state_detail.clone().unwrap_or_default();
+        let next = match &stopped {
+            Ok(()) => {
+                stored.row.stopped_at = Some(super::time::now_iso());
+                format!(
+                    "{reason} The box was stopped so it doesn't keep running at {}. Send a message to try again, or delete it.",
+                    provider.label()
+                )
+            }
+            Err(error) => format!(
+                "{reason} Ghostex couldn't stop it at {} ({error}), so it may still be running: delete it in Settings › Cloud Boxes.",
+                provider.label()
+            ),
+        };
+        stored.row.state_detail = Some(next.trim().to_string());
+        message = stored.row.state_detail.clone();
+    });
+    registry::set_step(&target.box_id, Step::Boot, StepState::Failed, message);
+    push(state, &target.box_id).await;
 }
 
 /// Secrets, then prepare-session for a draft, then the card closes (clients attach themselves).
