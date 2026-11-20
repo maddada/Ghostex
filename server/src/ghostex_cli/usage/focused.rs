@@ -909,6 +909,27 @@ up to five PNG, JPEG or WebP screenshots of 5 MB each with --image. The issue is
         .to_string()
 }
 
+pub fn clear_command_usage() -> String {
+    r#"Usage:
+  ghostex clear-command <session> [--timeout <seconds>] [--no-wait] [--json]
+
+Starts a session's conversation over with its agent's own /clear (Claude Code and Codex), in the
+same session: its name, place in the sidebar and ref stay, and its old conversation stays on disk.
+A sleeping session is woken first and cleared once its agent is up (up to 120 seconds). Then it
+waits until the session is on its new conversation and prints its id (up to 30 seconds; --timeout
+sets both, --no-wait skips the second). It exits 1 when the conversation did not change in time.
+
+Refused, with nothing typed, while the session is working, waits on you (a permission prompt, a
+question, a Needs you to-do), has queued messages or unsent text in its input box, or runs an
+agent other than Claude Code or Codex.
+
+Who can clear: you, from Ghostex or from your own terminal outside Ghostex, any session; an agent,
+only a coordinator thread it leads (not itself, its coordinator or any other session).
+
+<session> is an alias, id, ref or title, as for rename-command."#
+        .to_string()
+}
+
 pub fn needs_you_usage() -> String {
     r#"Usage:
   ghostex needs-you add "<what to do>" [--detail <text>] [--command <command>] [--answer <label>]... [--session <alias|id|title>]

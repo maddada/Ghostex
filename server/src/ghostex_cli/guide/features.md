@@ -1552,6 +1552,15 @@ is saved in ZCode's own session store once its session row exists (after the
 first prompt), and ZCode's automatic naming will not replace it. Before that,
 the rename is saved only in Ghostex and ZCode's later automatic naming may
 replace it.
+`ghostex clear-command <session>` starts a Claude Code or Codex session's
+conversation over in the same session (it types the agent's own `/clear`), so
+the session keeps its name, place in the sidebar and ref, and it prints the new
+conversation id; the old conversation stays on disk. It is refused,
+with nothing typed, while the session works, waits on you (a permission prompt, a
+question, a Needs you to-do), has queued messages or unsent text in its input box.
+You can clear any session, from Ghostex or from your own terminal outside Ghostex;
+an agent can clear only a coordinator thread it leads, never itself or another
+session, and a message one agent sends another is never run as a command.
 Fork (a session's right-click menu, or More actions > Agent in its chat) opens the new
 session beside the original and switches to it. It starts as
 `Fork: <original name>` and saves that name through the agent's own rename

@@ -553,6 +553,7 @@ pub fn usage() -> String {
         format_help_command("rename-session <sessionId> <title> [--json]", "Rename a session"),
         format_help_command("rename-session --session-id <id> --title <title> [--json]", "Flag form used by Android SSH actions"),
         format_help_command("rename-command <selector> <title>", "Rename a session through its agent's own rename command, waking a sleeping session to deliver it"),
+        format_help_command("clear-command <selector> [--timeout <seconds>] [--no-wait] [--json]", "Start a Claude Code or Codex session's conversation over (its own /clear) in the same session, and print the new conversation id; refused while it works, waits on you or has queued messages"),
         format_help_command("session-note read --session-id <id> [--project-id id] [--json]", "Read the note attached to the session's agent conversation (needs Session notes on in Settings > Extensions)"),
         format_help_command("session-note save --session-id <id> [--project-id id] --note '<text>' [--json]", "Attach a note to the session's agent conversation; an empty note clears it"),
     ]

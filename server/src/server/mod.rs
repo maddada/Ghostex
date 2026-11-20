@@ -163,6 +163,7 @@ mod route_http;
 mod security_gates;
 mod security_http;
 mod session_auto_sleep_sweep;
+mod session_clear_http;
 mod session_links_sync;
 mod session_remove;
 mod session_self_heal_runtime;
