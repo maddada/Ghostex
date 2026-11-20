@@ -57,7 +57,12 @@ pub(crate) struct WorkflowAgent {
     pub run: WorkflowRun,
     pub label: Option<String>,
     pub launched_at: Option<i64>,
+    /// The run's journal holds this agent's result.
+    pub returned: bool,
 }
+
+/// The most of a run's journal read; the chat's workflow card reads it whole up to the same size.
+const MAX_JOURNAL_BYTES: u64 = 8 * 1024 * 1024;
 
 fn text(value: Option<&Value>) -> Option<&str> {
     value.and_then(Value::as_str).filter(|s| !s.is_empty())
@@ -166,19 +171,33 @@ impl WorkflowRuns {
         })
     }
 
+    /// True when a successful TaskStop named `task`, a workflow launch: Claude ends the run and
+    /// writes no task-notification for it.
+    pub(crate) fn stopped(&mut self, task: &str, at: i64) -> bool {
+        self.run_by_task.contains_key(task) && self.finish(task, at, "stopped")
+    }
+
     /// The agents of every run that is still going. A finished run cannot list anything:
     /// its agents are over and the footer row that kept them visible is gone.
-    pub(crate) fn running_agents(&self, subagents: &Path) -> io::Result<Vec<WorkflowAgent>> {
+    ///
+    /// CDXC:SessionStatus 2026-11-20 WHY:
+    /// GitHub #676: the Subagents panel kept "12 running, 2 done" for 9 hours and more, because a run counted as over only on Claude's terminal task-notification, and a run stopped with TaskStop (or ended any other way inside a live Claude) never gets one. Claude does write the finished run, `<session>/workflows/<runId>.json` (`status: "killed"` for a stopped one), at the moment the run ends, as the chat's workflow card already reads; a run whose file is newer than its latest launch is over. The journal's `result` row says an agent returned even when its own transcript does not read as finished. No quiet-files rule: an agent waiting on a permission prompt kept a live run silent for 16.5 minutes (measured 2026-11-20).
+    pub(crate) fn running_agents(&self, session_folder: &Path) -> io::Result<Vec<WorkflowAgent>> {
         let mut agents = Vec::new();
         for (run_id, run) in &self.runs {
-            if run.finished_at.is_some() {
+            if run.finished_at.is_some() || run_file_ended(session_folder, run_id, run)? {
                 continue;
             }
-            let files = match fs::read_dir(subagents.join("workflows").join(run_id)) {
+            let folder = session_folder
+                .join("subagents")
+                .join("workflows")
+                .join(run_id);
+            let files = match fs::read_dir(&folder) {
                 Ok(files) => files,
                 Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
                 Err(e) => return Err(e),
             };
+            let returned = returned_agents(&folder.join("journal.jsonl"))?;
             for entry in files {
                 let path = entry?.path();
                 let Some(id) = path
@@ -202,6 +221,7 @@ impl WorkflowRuns {
                     Err(e) => return Err(e),
                 };
                 agents.push(WorkflowAgent {
+                    returned: returned.iter().any(|known| known == id),
                     id: id.to_string(),
                     launched_at: first_record_time(&path)?,
                     path,
@@ -212,6 +232,44 @@ impl WorkflowRuns {
         }
         Ok(agents)
     }
+}
+
+/// The run file Claude writes when a run ends, written after the run's latest launch: a relaunch
+/// of the same run id leaves the earlier launch's file in place until it ends too.
+fn run_file_ended(session_folder: &Path, run_id: &str, run: &WorkflowRun) -> io::Result<bool> {
+    let path = session_folder
+        .join("workflows")
+        .join(format!("{run_id}.json"));
+    let modified = match fs::metadata(&path) {
+        Ok(metadata) => metadata.modified()?,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(e) => return Err(e),
+    };
+    let modified_ms = modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| since.as_millis() as i64);
+    Ok(modified_ms >= run.launched_at)
+}
+
+/// The agents the run's journal holds a `result` row for.
+fn returned_agents(journal: &Path) -> io::Result<Vec<String>> {
+    let file = match File::open(journal) {
+        Ok(file) => file,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(e),
+    };
+    let mut returned = Vec::new();
+    for line in BufReader::new(file.take(MAX_JOURNAL_BYTES)).split(b'\n') {
+        let Ok(entry) = serde_json::from_slice::<Value>(&line?) else {
+            continue;
+        };
+        if text(entry.get("type")) == Some("result") {
+            if let Some(id) = text(entry.get("agentId")).filter(|id| safe_id(id)) {
+                returned.push(id.to_string());
+            }
+        }
+    }
+    Ok(returned)
 }
 
 /// A workflow agent has no launch record in the parent; its transcript's first record is its start.

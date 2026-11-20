@@ -386,7 +386,13 @@ fn read_parent_record(parent: &mut Parent, record: &Value) {
                 .and_then(|id| parent.stop_requests.remove(id))
         });
         if let Some(request) = request {
-            if let Some(id) = stopped_child(parent, request.as_deref(), result) {
+            // A stopped workflow gets no task-notification either (GitHub #676).
+            let task = text(result.get("task_id")).or_else(|| request.clone());
+            let workflow = task.is_some_and(|task| parent.workflows.stopped(&task, at));
+            if let Some(id) = (!workflow)
+                .then(|| stopped_child(parent, request.as_deref(), result))
+                .flatten()
+            {
                 settle_stopped(parent, &id, at);
             }
         }
@@ -617,7 +623,7 @@ pub(crate) fn read_claude_fleet(
             }
         }
     }
-    for agent in parent.workflows.running_agents(&directory)? {
+    for agent in parent.workflows.running_agents(&root.with_extension(""))? {
         let child = parent.children.entry(agent.id).or_default();
         child.model = crate::session_chat_subagent::model::read(
             &agent.path,
@@ -630,6 +636,12 @@ pub(crate) fn read_claude_fleet(
             at: agent.launched_at.unwrap_or(agent.run.launched_at),
         };
         child.turn = latest_child_turn(&agent.path, SessionChatTranscriptAgent::Claude)?;
+        // The run took this agent's result: it is over whatever its own last record says.
+        if agent.returned {
+            if let Some(turn) = child.turn.as_mut() {
+                turn.working = false;
+            }
+        }
         // An agent the resumed run answered from its cache belongs to an earlier launch.
         child.resident = child
             .turn
