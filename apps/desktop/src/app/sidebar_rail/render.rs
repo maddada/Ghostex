@@ -179,6 +179,29 @@ impl GhostexGpuiApp {
             // with the sidebar hidden the work area card starts at its right edge, taking the
             // frame's gutter and the old hairline (`work_area_frame_left_gutter`). Supersedes the
             // hairline that set the rail apart as a column of its own.
+            //
+            // CDXC:Sidebar 2026-11-21 DECISION:
+            // User: "With the rail on AND the sidebar expanded (docked), draw a thin divider line
+            // on the rail's right edge so the rail is separated from the sidebar. It must start at
+            // the top of the rail's icon column (below the traffic lights / top bar row) and never
+            // overlap the traffic lights; it runs down to the bottom." So the docked sidebar gets
+            // the 1px line every other divider draws (`sidebar_divider_line_color`: the faint
+            // glass line under glass, the Dividers theme role when set), from under the top row to
+            // the rail's foot. With the sidebar hidden or floating the rail still has no line of
+            // its own (the decision above).
+            .relative()
+            .when(!self.sidebar_collapsed, |rail| {
+                rail.child(
+                    div()
+                        .id("ghostex-gpui-sidebar-rail-divider")
+                        .absolute()
+                        .top(px(top_inset))
+                        .bottom_0()
+                        .right_0()
+                        .w(px(1.0))
+                        .bg(sidebar_divider_line_color()),
+                )
+            })
             .child(crate::app::render::window_drag_region::window_drag_region(
                 div()
                     .id("ghostex-gpui-sidebar-rail-top")

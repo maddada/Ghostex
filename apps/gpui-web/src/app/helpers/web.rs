@@ -123,6 +123,16 @@ pub(crate) fn sidebar_chrome_fill(_glass: bool, angle: f32) -> gpui::Background 
     crate::app::helpers::sidebar_chrome_gradient_fill(angle)
 }
 
+/// The line between the rail and the docked sidebar: the desktop's colour with glass off
+/// (helpers/sidebar/env_and_bridge.rs), or the Dividers theme role when it is set.
+pub(crate) fn sidebar_divider_line_color() -> gpui::Hsla {
+    crate::app::helpers::theme_role_or(
+        "divider",
+        crate::app::helpers::chrome_uses_light_appearance(),
+        crate::app::helpers::chrome_color(0x252525, 0xd4d4d4).into(),
+    )
+}
+
 /// A page has no window glass, so an in-window surface keeps its colour (the desktop's
 /// `glass_lifted_surface` in window_glass.rs).
 pub(crate) fn glass_lifted_surface(fallback: gpui::Hsla) -> gpui::Hsla {
