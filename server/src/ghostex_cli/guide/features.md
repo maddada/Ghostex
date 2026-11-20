@@ -66,8 +66,10 @@ command terminal toggle. **Hide sidebar** sits at the top left of the
 sidebar, and moves to the start of the header while the sidebar is hidden. On a
 Mac, hiding the sidebar also hides the window's red, yellow and green buttons, so
 this button moves to the header's left edge; the sidebar that slides in when
-you hover the window's left edge shows the window buttons in its top-left corner.
-In full screen they sit at the left edge too, with no gap for the window buttons.
+you hover the window's left edge shows the window buttons in its top-left corner,
+with the same sidebar button right after them, so one click docks it. In full
+screen they sit at the left edge too, with no gap for the window buttons (the
+sliding sidebar's top row starts with the sidebar button there as well).
 The sidebar's top row also moves the window when you drag it. When an update is available, a download button
 appears just before the project name. On Linux the button opens the release
 notes with the command that updates Ghostex the way it was installed (for
@@ -735,19 +737,19 @@ Settings > Extensions.
 The rail is a narrow column of icons at the window's left edge, left of the
 sidebar. It stays when you hide the sidebar. By default it holds Search,
 Main Hub, Agents Hub, All Automations, Hermes, Claude and Grok Bot (each only
-while its feature is on), then ⋯. Its ⋯ menu lists everything else too:
-Notifications (pin it to have the bell, with its unread count, on the rail as
-well; 11.12.0 pinned it by default, so the next version takes it off the rail
-once, and a pin you make after that stays), Commands, Voice Call, Files, Changes, Browser,
-Project Board, Dev servers, Resources, Extensions, Connect a Phone and Settings.
-Point at a row and click its pin to put it on the rail; click the filled pin to
-take it off. Drag icons on the rail into your own order, or right-click one to
-move it up or down or unpin it. Clicking a row you have not pinned opens it at
-once. When that row opens a view or a page (Files, Changes, Browser, Project
-Board, Hermes, Claude, Grok Bot, the Hubs or Voice Call), its icon
-shows on the rail under a dashed line, in an outline, while it is open, then
-leaves when you go elsewhere; Search, Notifications, Commands, Settings,
-Connect a Phone, Dev servers, Resources and Extensions just open. Agents Hub and All Automations open across the
+while its feature is on), then ⋯. The rail is for agents and hubs: its ⋯ menu,
+which opens right beside ⋯, lists those and Commands, Voice Call, Connect a
+Phone and Settings too. The side panel views (Files, Changes, Browser, Project
+Board, Dev servers, Resources, Extensions) are not on the rail, not even while
+one is open, and Notifications is not either: the bell is in the sidebar's top
+bar. Views or a bell pinned by an earlier version come off the rail once.
+Point at a row and an outline pin shows at its right: click it to put the item
+on the rail; click the filled pin to take it off. Drag icons on the rail into
+your own order, or right-click one to move it up or down or unpin it. Clicking a
+row you have not pinned opens it at once. When that row opens a page (Hermes,
+Claude, Grok Bot, the Hubs or Voice Call), its icon shows on the rail under a
+dashed line, in an outline, while it is open, then leaves when you go
+elsewhere; Search, Commands, Settings and Connect a Phone just open. Agents Hub and All Automations open across the
 whole window like Claude and Grok Bot: the sidebar, the side panel and the
 Commands pane step aside, and clicking the lit icon again (or showing the
 sidebar, or opening a session) brings them back as they were. Agents Hub opened
@@ -762,7 +764,8 @@ rail's switch or right-click them for Hide account usage. With the rail on,
 Toggle sidebar stays at the top left of the sidebar's top bar (right after the
 window buttons on macOS) and the bell sits on that bar's right, as in Classic;
 while the sidebar is hidden the work area header shows Toggle sidebar with the
-bell beside it. Search leaves the sidebar's top row, Hermes leaves the Spaces
+bell beside it. The rail has no border of its own: with the sidebar hidden the
+work area starts right at the rail's edge. Search leaves the sidebar's top row, Hermes leaves the Spaces
 row, the workspace tile leaves the Spaces row and
 Claude and Grok Bot leave the work area header. Pick Rail or Classic (the
 sidebar without the rail) in Settings > Sidebar > Sidebar layout
