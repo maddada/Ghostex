@@ -157,12 +157,16 @@ impl GpuiNewThreadPickerWindow {
                     return;
                 }
                 let account_id = Some(account.id.clone());
+                // CDXC:AgentLauncher 2026-11-21 WHY: issue #699: the account row sent no run
+                // location, which the launcher reads as this computer, so a Cloud Box pick
+                // was dropped by Tab then Enter. It carries the picked place like the agent row.
+                let run_location = self.run_on.run_location().map(str::to_string);
                 let target = self.launch_target();
                 self.finish(
                     NewThreadPickerCommand::LaunchAgent {
                         agent_id,
                         account_id,
-                        run_location: None,
+                        run_location,
                         target,
                     },
                     window,
@@ -171,12 +175,14 @@ impl GpuiNewThreadPickerWindow {
             }
             PickerRow::CliLogin => {
                 if let Some(agent_id) = self.scope_agent().map(|agent| agent.agent_id.clone()) {
+                    // The CLI login keeps the picked place too (issue #699).
+                    let run_location = self.run_on.run_location().map(str::to_string);
                     let target = self.launch_target();
                     self.finish(
                         NewThreadPickerCommand::LaunchAgent {
                             agent_id,
                             account_id: None,
-                            run_location: None,
+                            run_location,
                             target,
                         },
                         window,
