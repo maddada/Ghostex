@@ -351,6 +351,34 @@ pub fn note_lead_send(db: &Connection, caller: &Principal, target: &SessionKey) 
     }
 }
 
+/// `note_lead_send` for a message route's body (its `projectId` and `sessionId`), from the
+/// routes that take a message without typing it now: `agents send --queue`
+/// (`/api/queueSessionChatPrompt`) and `--with-next` (held for the session's next message).
+///
+/// CDXC:LeadLinks 2026-11-20 FIX:
+/// Opus review of #678, finding 4: only a plain send marked the lead's turn owed, so a lead that
+/// queued work for a busy linked session never got its report. The turn is owed from the moment
+/// the queued or held message is submitted; `lead_turn_reply` then reports the reply that follows
+/// it once it is typed.
+pub fn note_lead_send_body(paths: &crate::paths::GxserverPaths, caller: &Principal, body: &Value) {
+    let read = |field: &str| {
+        body.pointer(&format!("/params/{field}"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    };
+    let (Some(project_id), Some(session_id)) = (read("projectId"), read("sessionId")) else {
+        return;
+    };
+    if calling_session(caller).is_none() {
+        return;
+    }
+    if let Ok(db) = crate::storage::open_gxserver_database(paths) {
+        note_lead_send(&db, caller, &(project_id, session_id));
+    }
+}
+
 fn session_key(object: &Map<String, Value>) -> SessionKey {
     let text = |key: &str| {
         object
