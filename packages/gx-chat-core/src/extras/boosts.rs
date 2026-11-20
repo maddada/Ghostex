@@ -36,6 +36,14 @@
 //! User, on the built menu: "Computer use" is "Computer & Browser use" (Cua Driver: desktop apps,
 //! and Chrome or another browser), its prompt pointing at the cua-driver skill; "Browser use" is
 //! "Embedded Browser use" (Ghostex's own browser), its prompt pointing at `ghostex browser --help`.
+//! CDXC:Boosts 2026-11-20 DECISION:
+//! The user answered the catalog review page (Q4305 to Q4311), for 11.12.0: every Boost stays
+//! ("steps should stay; it's distinct: multiple steps. Inbox it is for ANY ask"), except that Show
+//! screenshots folds into a new Fix and prove (its `screenshots` pills keep working, see
+//! [`RENAMED`]) and Second opinion's prompt also covers reviewing the diff. New: Ship it, Inbox it!
+//! and Schedule it (one Boost for "check back later" and "make it a routine"). Inbox it! means the
+//! agent does not answer in the chat: the ask and its result go together on one Needs you card
+//! (`ghostex needs-you add`, which works in every session), for any ask, a question too.
 //! SEE-ALSO: server/src/boosts.rs (the prompts, the user's Boosts, `/api/boosts`, the block under
 //! the message), apps/desktop/src/app/native_chat/boosts.rs (pill, menu, preview, callout, Try a
 //! Boost), apps/desktop/src/app/window/settings_modal/tabs/boosts.rs (Settings > Boosts),
@@ -69,8 +77,8 @@ pub struct Boost {
     /// One line on what the agent does, for the menu, the picker and the callout.
     pub description: &'static str,
     /// What the little preview beside the menu draws (`page`, `chart`, `compare`, `map`,
-    /// `triage`, `form`, `app`, `browser`, `shots`, `second`, `workers`, `worktree`, `docs`,
-    /// `steps`, `notify`).
+    /// `triage`, `form`, `app`, `browser`, `shots`, `second`, `workers`, `worktree`, `ship`,
+    /// `docs`, `steps`, `inbox`, `schedule`, `notify`).
     pub preview: &'static str,
     /// What the agent is told, unless the user edited it.
     pub prompt: &'static str,
@@ -87,7 +95,7 @@ pub const TABS: [(&str, &str); 4] = [
 ];
 
 /// Ghostex's Boosts, in the menu's order.
-pub const BOOSTS: [Boost; 15] = [
+pub const BOOSTS: [Boost; 18] = [
     Boost {
         id: "live-page",
         label: "Live page",
@@ -155,22 +163,22 @@ pub const BOOSTS: [Boost; 15] = [
         prompt: "Do this yourself in Ghostex's embedded browser. Run `ghostex browser --help` first and follow it: open pages with `ghostex browser open <url>` and drive them with the tools it describes, then show me what you did with a screenshot.",
     },
     Boost {
-        id: "screenshots",
-        label: "Show screenshots",
-        icon: "titlebar/photo.svg",
+        id: "fix-and-prove",
+        label: "Fix and prove",
+        icon: "titlebar/bug.svg",
         category: "do",
-        description: "Every change comes back with a screenshot of how it looks.",
+        description: "The problem is reproduced, fixed, then proven with the same screenshot or test.",
         preview: "shots",
-        prompt: "Show every visible change you make with a screenshot of how it looks now (and how it looked before, when you changed something that was there), linked in your reply as image file paths.",
+        prompt: "Prove it, before and after. First reproduce the problem and show it to me: a screenshot for anything on screen, else a log line or a failing test. Then fix the cause, not the symptom, and prove the fix the same way: the same screenshot or the same test, now passing. Take screenshots of the real app (the cua-driver skill drives desktop apps and Chrome; `ghostex browser --help` drives Ghostex's own browser) and link the before and after in your reply as image file paths.",
     },
     Boost {
         id: "second-opinion",
         label: "Second opinion",
         icon: "titlebar/users.svg",
         category: "do",
-        description: "Another agent, on another model, checks the answer before it reaches you.",
+        description: "Another agent, on another model, checks the answer or reviews the diff before it reaches you.",
         preview: "second",
-        prompt: "Before you answer, get a second opinion: start another agent on another model with `ghostex agents create` (see `ghostex agents --help`), have it check your work, and tell me what it found and what you changed because of it.",
+        prompt: "Before you answer, get a second opinion: start another agent on another model with `ghostex agents create` (see `ghostex agents --help`; Opus or Fable, or Codex when you are Claude). If you changed code, have it review your diff and list its findings by severity; check each finding yourself and fix the real ones. Tell me what it found and what you changed because of it.",
     },
     Boost {
         id: "triage",
@@ -200,6 +208,15 @@ pub const BOOSTS: [Boost; 15] = [
         prompt: "Do this work in a new git worktree of this project on its own branch, not in the current folder, so my checkout stays as it is; tell me the worktree's path and branch when you're done.",
     },
     Boost {
+        id: "ship-it",
+        label: "Ship it",
+        icon: "titlebar/git-pull-request.svg",
+        category: "work",
+        description: "The work is committed on a branch, pushed and opened as a pull request.",
+        preview: "ship",
+        prompt: "When the work is done, ship it: commit it on a new branch (never the default branch) with a message that says what changed and why, push the branch, open a pull request with `gh pr create`, link it to this session with `ghostex link add <url>`, and give me the pull request as a link. This Boost is my go-ahead to push and open the pull request; don't merge it.",
+    },
+    Boost {
         id: "docs",
         label: "Save to Docs",
         icon: "titlebar/file-text.svg",
@@ -216,6 +233,24 @@ pub const BOOSTS: [Boost; 15] = [
         description: "Anything only you can do goes on your Needs you list, with a Done button.",
         preview: "steps",
         prompt: "Put every step only I can do (a sudo command, a sign-in, a tap on my phone, a check by eye) on my Needs you list with `ghostex needs-you add`, so each one gets a Done button, and list them under Needs you in your reply.",
+    },
+    Boost {
+        id: "inbox-it",
+        label: "Inbox it!",
+        icon: "titlebar/inbox.svg",
+        category: "work",
+        description: "No reply in the chat: your ask and its answer land on your Needs you list.",
+        preview: "inbox",
+        prompt: "Don't answer in the chat: answer on my Needs you list. Do what this message asks (answer the question, look into it, or do the work), then file the ask and your result together as one card: `ghostex needs-you add \"<the ask, as a short title that names the thing>\" --detail \"<your answer or result, in Markdown>\"`. Keep the detail under 2,000 characters (it is cut there); put anything longer in a file or a Live page and link it in the detail. Add `--command \"<command>\"` when the next step is a command I run, and `--answer \"<choice>\"` (up to six) when I'm to pick; otherwise the card gets a Done button. Several separate asks get one card each. Your reply in the chat is one line naming the card's tag (\"On your Needs you list as Q61.\") and nothing else.",
+    },
+    Boost {
+        id: "schedule-it",
+        label: "Schedule it",
+        icon: "titlebar/clock.svg",
+        category: "work",
+        description: "It runs later, or on repeat, as an automation that reports back.",
+        preview: "schedule",
+        prompt: "Don't only do this now: schedule it, once later (\"check the deploy in 30 minutes\", \"tomorrow at 9\") or on repeat (\"every weekday at 9\"). Read `ghostex automations --help` first, then save it with `ghostex automation-save --path <this project> --definition-json '<json>'`: a prompt that does the job and reports what it found, a `timer` or `once` schedule for one time or `daily`, `weekly` or `cron` to repeat, enabled. If I named no time, pick a sensible one and say so. Read it back with `ghostex automation-state` and tell me its name, when it runs next, and that All Automations changes or stops it.",
     },
     Boost {
         id: "notify",
@@ -253,8 +288,17 @@ pub const CUSTOM_ICONS: [&str; 10] = [
     "titlebar/rocket.svg",
 ];
 
-/// Ghostex's Boost `id` names, if any.
+/// Boosts that left the menu for another, as `(old id, the Boost it is now)`: a pill with the old
+/// id (in a draft, a queued message, or sent by a phone with an older chat core) gets the new
+/// Boost's name and prompt.
+pub const RENAMED: [(&str, &str); 1] = [("screenshots", "fix-and-prove")];
+
+/// Ghostex's Boost `id` names (or named before it was renamed), if any.
 pub fn boost(id: &str) -> Option<&'static Boost> {
+    let id = RENAMED
+        .iter()
+        .find(|(old, _)| *old == id)
+        .map_or(id, |(_, new)| *new);
     BOOSTS.iter().find(|boost| boost.id == id)
 }
 
