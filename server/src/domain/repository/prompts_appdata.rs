@@ -181,7 +181,7 @@ impl<'a> DomainRepository<'a> {
                 r#"
                 SELECT promptId FROM stashed_prompts
                 WHERE content = ?1 AND COALESCE(projectId, '') = COALESCE(?2, '')
-                ORDER BY updatedAt DESC
+                ORDER BY updatedAt DESC, rowid DESC
                 LIMIT 1
                 "#,
                 params![content, project_id],
@@ -244,7 +244,7 @@ impl<'a> DomainRepository<'a> {
                         DELETE FROM stashed_prompts
                         WHERE promptId NOT IN (
                           SELECT promptId FROM stashed_prompts
-                          ORDER BY updatedAt DESC, promptId DESC
+                          ORDER BY updatedAt DESC, rowid DESC
                           LIMIT ?1
                         )
                         "#,
@@ -307,7 +307,7 @@ impl<'a> DomainRepository<'a> {
                        p.path, p.worktreeJson, s.agentSessionId
                 FROM stashed_prompts s
                 LEFT JOIN projects p ON p.projectId = s.projectId
-                ORDER BY s.updatedAt DESC, s.promptId DESC
+                ORDER BY s.updatedAt DESC, s.rowid DESC
                 "#,
             )
             .map_err(sql_error)?;

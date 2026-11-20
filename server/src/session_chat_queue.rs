@@ -164,9 +164,9 @@ pub struct SessionChatQueueSnapshot {
     /// frame or read result is built (`with_resource_index`): the list is large and the snapshot
     /// is read in many places that never send it.
     pub resource_index: std::sync::Arc<Vec<Value>>,
-    /// The index table's write counter when this was read, so the long poll's fingerprint moves
-    /// when any index changes.
-    pub resource_epoch: u64,
+    /// A digest of `resource_index` (set with it), so the long poll's fingerprint moves when this
+    /// session's index changes, and not when another session's does.
+    pub resource_digest: u64,
     pub pending_model_selection: Option<crate::session_chat_model_selection::PendingModelSelection>,
     /// A new coordinator's first message, waiting for Start (session_chat_first_message.rs).
     pub first_message: Option<crate::session_chat_first_message::FirstMessage>,
@@ -262,7 +262,7 @@ impl SessionChatQueueSnapshot {
         revision.push_str(&serde_json::to_string(&self.retired_page_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.starred_page_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.opened_page_ids).unwrap_or_default());
-        revision.push_str(&self.resource_epoch.to_string());
+        revision.push_str(&self.resource_digest.to_string());
         if let Some(queue_version) = self.queue_version {
             revision.push(':');
             revision.push_str(&queue_version.to_string());
@@ -927,8 +927,8 @@ impl SessionChatQueueSnapshot {
         project_id: &str,
         session_id: &str,
     ) -> Self {
-        self.resource_index =
-            crate::session_chat_resources::frame_index(db, project_id, session_id);
+        (self.resource_index, self.resource_digest) =
+            crate::session_chat_resources::frame_index_with_digest(db, project_id, session_id);
         self
     }
 }
@@ -1210,7 +1210,7 @@ fn read_snapshot(
                 db, project_id, session_id,
             ),
             resource_index: Default::default(),
-            resource_epoch: crate::session_chat_resources::epoch(),
+            resource_digest: 0,
             account_switch: crate::accounts::switch_progress::read(db, project_id, session_id),
             api_retry: read_api_retry(db, project_id, session_id),
             queue,

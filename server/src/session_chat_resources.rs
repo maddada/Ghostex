@@ -36,11 +36,13 @@ pub(crate) fn epoch() -> u64 {
     EPOCH.load(Ordering::Relaxed)
 }
 
+/// A composed index with the epoch it was read at and a digest of its content.
+type CachedIndex = (u64, Arc<Vec<Value>>, u64);
+
 /// Frames read the index for each snapshot; the composed index (a coordinator's own entries plus
 /// its threads' pages) is cached until the next write anywhere.
-fn cache() -> &'static Mutex<HashMap<(String, String), (u64, Arc<Vec<Value>>)>> {
-    static CACHE: OnceLock<Mutex<HashMap<(String, String), (u64, Arc<Vec<Value>>)>>> =
-        OnceLock::new();
+fn cache() -> &'static Mutex<HashMap<(String, String), CachedIndex>> {
+    static CACHE: OnceLock<Mutex<HashMap<(String, String), CachedIndex>>> = OnceLock::new();
     CACHE.get_or_init(Default::default)
 }
 
@@ -174,15 +176,27 @@ pub(crate) fn frame_index(
     project_id: &str,
     session_id: &str,
 ) -> Arc<Vec<Value>> {
+    frame_index_with_digest(db, project_id, session_id).0
+}
+
+/// [`frame_index`] and a digest of its content, which is what the long poll's fingerprint holds:
+/// the write counter above moves for a write to ANY session's index (another chat's, in the same
+/// process), so a fingerprint that held it was moved by sessions it does not show. The digest
+/// moves only when this session's own index (and, for a coordinator, its threads' pages) does.
+pub(crate) fn frame_index_with_digest(
+    db: &rusqlite::Connection,
+    project_id: &str,
+    session_id: &str,
+) -> (Arc<Vec<Value>>, u64) {
     let epoch = epoch();
     let key = (project_id.to_string(), session_id.to_string());
-    if let Some((at, index)) = cache()
+    if let Some((at, index, digest)) = cache()
         .lock()
         .ok()
         .and_then(|cache| cache.get(&key).cloned())
     {
         if at == epoch {
-            return index;
+            return (index, digest);
         }
     }
     let mut entries: Vec<Value> = read_entries(db, project_id, session_id)
@@ -190,11 +204,17 @@ pub(crate) fn frame_index(
         .filter_map(|entry| serde_json::to_value(entry).ok())
         .collect();
     entries.extend(thread_pages(db, project_id, session_id));
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for entry in &entries {
+        entry.to_string().hash(&mut hasher);
+    }
+    let digest = hasher.finish();
     let index = Arc::new(entries);
     if let Ok(mut cache) = cache().lock() {
-        cache.insert(key, (epoch, index.clone()));
+        cache.insert(key, (epoch, index.clone(), digest));
     }
-    index
+    (index, digest)
 }
 
 /// The pages the threads of coordinator `project_id`/`session_id` posted, each tagged with its
@@ -598,6 +618,55 @@ mod tests {
             vec![entry("a-page-2", "page", "other", 7)],
         );
         assert_eq!(frame_index(&db, "p", "coord").len(), 4);
+    }
+
+    /// The digest the long poll's fingerprint holds moves for this session's own index (and a
+    /// coordinator's threads' pages), and not for a write to another session's index: the write
+    /// counter moves for all of them, which woke every poller whenever any chat indexed.
+    #[test]
+    fn the_index_digest_moves_only_for_the_sessions_own_index() {
+        // Ids no other test uses: the composed index is cached process-wide by project and session.
+        let (_temp, db) = database();
+        crate::coordinators::link_thread(&db, "dgp", "dg-thread", "dgp", "dg-coord", "task a")
+            .unwrap();
+        let digest = |session: &str| frame_index_with_digest(&db, "dgp", session).1;
+        let (mine, coord) = (digest("dg-mine"), digest("dg-coord"));
+        let mut other = None;
+        merge_and_write(
+            &db,
+            "dgp",
+            "dg-stranger",
+            &mut other,
+            vec![entry("x-page", "page", "other", 1)],
+        );
+        assert_eq!(
+            digest("dg-mine"),
+            mine,
+            "another session's write is not mine"
+        );
+        assert_eq!(digest("dg-coord"), coord, "nor its coordinator's");
+        let mut own = None;
+        merge_and_write(
+            &db,
+            "dgp",
+            "dg-mine",
+            &mut own,
+            vec![entry("m-form", "form", "waiting", 2)],
+        );
+        assert_ne!(digest("dg-mine"), mine, "its own write moves it");
+        let mut thread = None;
+        merge_and_write(
+            &db,
+            "dgp",
+            "dg-thread",
+            &mut thread,
+            vec![entry("t-page", "page", "other", 3)],
+        );
+        assert_ne!(
+            digest("dg-coord"),
+            coord,
+            "a thread's page moves its coordinator's"
+        );
     }
 
     fn claude_line(kind: &str, uuid: &str, text: &str) -> String {
