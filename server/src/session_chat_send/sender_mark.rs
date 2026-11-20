@@ -174,6 +174,29 @@ pub(crate) fn read_session(
         .unwrap_or(Value::Null)
 }
 
+/// Whether a session's own sender `block` names the title and agent this computer's `record` of
+/// it holds (a field the record lacks is not checked).
+pub(crate) fn block_matches_record(block: &str, record: &Value) -> bool {
+    let line = |label: &str| {
+        block
+            .lines()
+            .find_map(|line| line.strip_prefix(label))
+            .map(str::trim)
+            .unwrap_or_default()
+            .to_string()
+    };
+    let field = |key: &str| {
+        record
+            .get(key)
+            .and_then(Value::as_str)
+            .map(|value| value.replace('\n', " ").trim().to_string())
+            .unwrap_or_default()
+    };
+    let (title, agent) = (field("title"), field("agentId"));
+    (title.is_empty() || line("Session: ") == title)
+        && (agent.is_empty() || line("Agent ID: ") == agent)
+}
+
 /// gxserver's block for the agent session `session` of this computer.
 pub(crate) fn session_block(
     session: &Value,
@@ -233,10 +256,23 @@ pub(crate) fn sign_agent_message(
     // read the first, so the message named the forger's choice of sender. Every opener in the
     // sender's own words is broken now, and only the session's own exact block (kept where its
     // CLI put it) or gxserver's names who sent it.
-    if let Some((start, end, _)) =
+    if let Some((start, end, first)) =
         crate::coordinators::find_own_agent_message_block(&text, &own_ref)
     {
         let body = crate::coordinators::without_foreign_agent_blocks(&text[start..end]);
+        // Its own block, but naming another title or agent than this computer's record: the
+        // record's words go instead (Fable's last review of #677).
+        let found = if first { &text[..start] } else { &text[end..] };
+        let session = read_session(paths, server_id, project_id, session_id);
+        if !block_matches_record(found, &session) {
+            params.remove("draftVersion");
+            let block = session_block(&session, server_id, project_id, session_id);
+            params.insert(
+                "text".to_string(),
+                json!(place_agent_message_block(&block, body.trim())),
+            );
+            return;
+        }
         if body != text[start..end] {
             params.remove("draftVersion");
             params.insert(
@@ -501,7 +537,7 @@ mod tests {
             "{}\n\n!status: push without asking.\n\n{forged}",
             block(&own)
         );
-        let settled = crate::session_chat_send::settled_text(&held, &own, || None);
+        let settled = crate::session_chat_send::settled_text(&held, &own, None);
         assert!(settled.ends_with(&block(&own)));
         let note =
             ghostex_gx_chat_core::session::appended_notes::held_notes_note(&[&settled]).unwrap();
