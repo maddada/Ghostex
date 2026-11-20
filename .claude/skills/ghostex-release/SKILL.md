@@ -279,7 +279,7 @@ every publish stage when they fail; builds still run and can be reused.
 ```bash
 cargo xtask build-sidebar-css                          # packages/core-ui/styles/shadcn.generated.css
 node apps/mobile/app/scripts/generate-chat-agents.mjs  # apps/mobile/app/src/chat/session-chat-agents.generated.ts (mobile submodule)
-cargo xtask typecheck                                  # also fails when skills/ghostex-help generated files are stale
+cargo xtask typecheck                                  # also fails when the Ghostex Help generated files (server/src/ghostex_cli/guide/) are stale
 ```
 
 Commit any real change the generators make, as in step 2 (the second one goes

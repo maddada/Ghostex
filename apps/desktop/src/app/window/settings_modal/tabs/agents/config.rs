@@ -334,7 +334,7 @@ impl AgentsTab {
                 GHOSTEX_NOTE,
                 RowSpec::new("Tell agents about Ghostex")
                     .description(
-                        "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Live pages, Ghostex forms and visuals in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.",
+                        "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Live pages, Ghostex forms and visuals in the chat, run other agents and coordinators, explain or change its own settings, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.",
                     )
                     .keyed(&values, GHOSTEX_NOTE),
                 values.bool(GHOSTEX_NOTE),

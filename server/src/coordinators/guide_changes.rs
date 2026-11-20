@@ -4,7 +4,7 @@
 //!
 //! CDXC:Coordinators 2026-11-11 WHY:
 //! Every playbook change (an update, an override added for every coordinator, the reply format setting) used to have each coordinator re-read the whole guide, about 7,000 tokens, though it still held the earlier version in its context. `--changes` prints only what differs. The line gxserver adds under a coordinator's next message keeps its old wording (run `ghostex coordinator guide`), because phones from 11.2.1 on strip only the note texts they know (packages/gx-chat-core/src/session/appended_notes.rs) and an unknown one shows the user's message twice; the pointer skill, the playbook and the `status` line tell a coordinator to answer that note with `--changes`. Paragraphs are the unit because the playbook's rules and the user's overrides are paragraphs (one override is one paragraph, ghostex_cli/coordinator/playbook.rs). When printing the changes would take more than half the guide's length (a rewrite shipped in an update, a long override removed), the full text costs little more to read than the diff, so the caller prints the guide instead.
-//! SEE-ALSO: server/src/coordinators/playbook.rs (`readCoordinatorGuide`, the stored texts), skills/ghostex-coordinator/SKILL.md and server/src/coordinators/playbook.md (where `--changes` is named), packages/gx-chat-core/src/session/appended_notes.rs (the note's fixed wire text).
+//! SEE-ALSO: server/src/coordinators/playbook.rs (`readCoordinatorGuide`, the stored texts), server/src/coordinators/playbook.md (where `--changes` is named), packages/gx-chat-core/src/session/appended_notes.rs (the note's fixed wire text).
 
 /// One paragraph of a guide and the heading of the section it sits in.
 #[derive(Debug, PartialEq, Eq)]
