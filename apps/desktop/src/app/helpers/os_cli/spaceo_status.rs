@@ -220,10 +220,7 @@ pub(crate) fn gpui_spaceo_json_object(stdout: &str) -> Option<serde_json::Value>
 }
 
 /// The SpaceO fields of the `ghostexCliStatus` payload (`SidebarGhostexCliStatusMessage`).
-pub(crate) fn gpui_spaceo_status_fields(
-    status: &GpuiSpaceoStatus,
-    skill_path: Option<&str>,
-) -> serde_json::Value {
+pub(crate) fn gpui_spaceo_status_fields(status: &GpuiSpaceoStatus) -> serde_json::Value {
     if !gpui_spaceo_supported() {
         return serde_json::json!({ "spaceoSupported": false });
     }
@@ -241,7 +238,5 @@ pub(crate) fn gpui_spaceo_status_fields(
         "spaceoScreenRecordingPermission": status.permissions.screen_recording.as_str(),
         "spaceoRestarting": gpui_spaceo_restarting(),
         "spaceoHealth": status.health,
-        "spaceoSkillInstalled": skill_path.is_some(),
-        "spaceoSkillPath": skill_path,
     })
 }

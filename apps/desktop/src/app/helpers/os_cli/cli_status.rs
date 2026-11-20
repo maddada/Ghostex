@@ -42,49 +42,24 @@ pub(crate) fn gpui_civil_from_days(days_since_epoch: i64) -> (i64, i64, i64) {
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct GpuiGhostexCliProbe {
-    pub(crate) cli_skill_path: Option<String>,
-    pub(crate) browser_skill_path: Option<String>,
-    pub(crate) computer_use_skill_path: Option<String>,
-    pub(crate) spaceo_skill_path: Option<String>,
-    pub(crate) embedded_browser_skill_path: Option<String>,
-    pub(crate) agents_orchestration_skill_path: Option<String>,
-    pub(crate) manage_beads_skill_path: Option<String>,
-    pub(crate) generate_title_skill_path: Option<String>,
     pub(crate) ghostex_path: Option<String>,
     pub(crate) ghostex_usable: bool,
     pub(crate) gx_blocked_by_existing_command: bool,
     pub(crate) gx_path: Option<String>,
     pub(crate) gx_usable: bool,
-    pub(crate) move_codex_session_skill_path: Option<String>,
-    pub(crate) help_skill_path: Option<String>,
     pub(crate) agent_guide_skill_path: Option<String>,
-    pub(crate) visuals_skill_path: Option<String>,
-    pub(crate) secrets_skill_path: Option<String>,
 }
 
 #[cfg(target_os = "windows")]
 pub(crate) fn gpui_ghostex_cli_probe() -> Result<GpuiGhostexCliProbe, String> {
     let status = crate::windows_terminal_backend::ghostex_cli_status()?;
     Ok(GpuiGhostexCliProbe {
-        cli_skill_path: status.cli_skill_path,
-        browser_skill_path: status.browser_skill_path,
-        computer_use_skill_path: status.computer_use_skill_path,
-        // SpaceO runs only on macOS, so Windows never offers its skill.
-        spaceo_skill_path: None,
-        embedded_browser_skill_path: status.embedded_browser_skill_path,
-        agents_orchestration_skill_path: status.agents_orchestration_skill_path,
-        manage_beads_skill_path: status.manage_beads_skill_path,
-        generate_title_skill_path: status.generate_title_skill_path,
         ghostex_usable: status.ghostex_path.is_some(),
         ghostex_path: status.ghostex_path,
         gx_blocked_by_existing_command: status.gx_blocked_by_existing_command,
         gx_path: status.gx_path,
         gx_usable: status.gx_usable,
-        move_codex_session_skill_path: status.move_codex_session_skill_path,
-        help_skill_path: status.help_skill_path,
         agent_guide_skill_path: status.agent_guide_skill_path,
-        visuals_skill_path: status.visuals_skill_path,
-        secrets_skill_path: status.secrets_skill_path,
     })
 }
 
@@ -106,24 +81,12 @@ pub(crate) fn gpui_ghostex_cli_probe() -> Result<GpuiGhostexCliProbe, String> {
         gpui_is_file(&path).then(|| gpui_path_string(&path))
     };
     Ok(GpuiGhostexCliProbe {
-        cli_skill_path: skill_path("ghostex-cli"),
-        browser_skill_path: skill_path("ghostex-browser-use"),
-        computer_use_skill_path: skill_path("ghostex-computer-use"),
-        spaceo_skill_path: skill_path("ghostex-spaceo"),
-        embedded_browser_skill_path: skill_path("ghostex-embedded-browser-use"),
-        agents_orchestration_skill_path: skill_path("ghostex-agents"),
-        manage_beads_skill_path: skill_path("ghostex-manage-beads"),
-        generate_title_skill_path: skill_path("ghostex-auto-rename-session"),
         ghostex_path: ghostex_path.as_ref().map(|path| gpui_path_string(path)),
         ghostex_usable,
         gx_blocked_by_existing_command: gx_path.is_some() && !gx_usable,
         gx_path: gx_path.as_ref().map(|path| gpui_path_string(path)),
         gx_usable,
-        move_codex_session_skill_path: skill_path("ghostex-move-codex-session"),
-        help_skill_path: skill_path("ghostex-help"),
         agent_guide_skill_path: skill_path("ghostex"),
-        visuals_skill_path: skill_path("ghostex-visuals"),
-        secrets_skill_path: skill_path("ghostex-secrets"),
     })
 }
 
@@ -221,23 +184,14 @@ pub(crate) fn gpui_ghostex_cli_status_message_with_cua_update_check(
     );
     let gx_usable = probe.gx_usable;
     let gx_blocked = probe.gx_blocked_by_existing_command;
-    let browser_skill_installed = probe.browser_skill_path.is_some();
-    let embedded_browser_skill_installed = probe.embedded_browser_skill_path.is_some();
-    let computer_use_skill_installed = probe.computer_use_skill_path.is_some();
-    let cli_skill_installed = probe.cli_skill_path.is_some();
-    let agents_orchestration_skill_installed = probe.agents_orchestration_skill_path.is_some();
-    let manage_beads_skill_installed = probe.manage_beads_skill_path.is_some();
-    let generate_title_skill_installed = probe.generate_title_skill_path.is_some();
-    let move_codex_session_skill_installed = probe.move_codex_session_skill_path.is_some();
-    let help_skill_installed = probe.help_skill_path.is_some();
     let agent_guide_skill_installed = probe.agent_guide_skill_path.is_some();
-    let visuals_skill_installed = probe.visuals_skill_path.is_some();
-    let secrets_skill_installed = probe.secrets_skill_path.is_some();
     let cua_driver_path = gpui_cua_driver_executable_path();
     let cua_app_installed = gpui_is_dir(Path::new("/Applications/CuaDriver.app"));
     let cua_driver_installed = cua_driver_path.is_some() || cua_app_installed;
     let cua_driver_skill_path = gpui_cua_driver_skill_path();
-    let desktop_control_installed = cua_driver_installed && computer_use_skill_installed;
+    // CDXC:AgentSkills 2026-11-20 DECISION: the Ghostex Computer Use and Browser Use skills are retired for Trycua's own `cua-driver` skill (Q4262), so "installed" for computer and browser use (onboarding's steps, Desktop Control) means that skill is linked for an agent.
+    let cua_driver_skill_installed = cua_driver_skill_path.is_some();
+    let desktop_control_installed = cua_driver_installed && cua_driver_skill_installed;
     // SpaceO's probes (version, latest release, daemon ping) run beside Trycua's instead of after them.
     let (spaceo_status, (cua_driver_update_status, cua_permission_status)) =
         std::thread::scope(|scope| {
@@ -297,54 +251,19 @@ pub(crate) fn gpui_ghostex_cli_status_message_with_cua_update_check(
             } else if gx_blocked {
                 parts.push("A gx command exists on PATH, but GPUI could not prove it belongs to Ghostex.".to_string());
             }
-            parts.push(if browser_skill_installed {
-                "Ghostex Browser Use skill is installed.".to_string()
+            parts.push(if agent_guide_skill_installed {
+                "The Ghostex skill is installed.".to_string()
             } else {
-                "Ghostex Browser Use skill is not installed.".to_string()
+                "The Ghostex skill is not installed.".to_string()
             });
-            parts.push(if computer_use_skill_installed {
-                "Ghostex Computer Use skill is installed.".to_string()
+            parts.push(if cua_driver_skill_installed {
+                "The cua-driver skill is installed.".to_string()
             } else {
-                "Ghostex Computer Use skill is not installed.".to_string()
-            });
-            parts.push(if embedded_browser_skill_installed {
-                "Ghostex Embedded Browser Use skill is installed.".to_string()
-            } else {
-                "Ghostex Embedded Browser Use skill is not installed.".to_string()
-            });
-            parts.push(if cli_skill_installed {
-                "Ghostex CLI skill is installed.".to_string()
-            } else {
-                "Ghostex CLI skill is not installed.".to_string()
-            });
-            parts.push(if agents_orchestration_skill_installed {
-                "Ghostex Agents skill is installed.".to_string()
-            } else {
-                "Ghostex Agents skill is not installed.".to_string()
-            });
-            parts.push(if manage_beads_skill_installed {
-                "Ghostex Manage Beads skill is installed.".to_string()
-            } else {
-                "Ghostex Manage Beads skill is not installed.".to_string()
-            });
-            parts.push(if generate_title_skill_installed {
-                "Ghostex Auto Rename Session skill is installed.".to_string()
-            } else {
-                "Ghostex Auto Rename Session skill is not installed.".to_string()
-            });
-            parts.push(if manage_beads_skill_installed {
-                "Ghostex Project Board Beads skill is installed.".to_string()
-            } else {
-                "Ghostex Project Board Beads skill is not installed.".to_string()
-            });
-            parts.push(if move_codex_session_skill_installed {
-                "Ghostex Move Codex Session skill is installed.".to_string()
-            } else {
-                "Ghostex Move Codex Session skill is not installed.".to_string()
+                "The cua-driver skill is not installed.".to_string()
             });
             /*
             CDXC:Extensions 2026-06-24-13:14:
-            Desktop Control readiness in Settings requires both Cua Driver and the Ghostex Computer Use skill. GPUI status refreshes must probe Cua Driver privacy grants read-only with `prompt:false`, parse the two boolean contract fields, and keep permission detail generic instead of forwarding raw command output.
+            Desktop Control readiness in Settings requires both Cua Driver and its cua-driver skill (the Ghostex Computer Use skill until 2026-11-20). GPUI status refreshes must probe Cua Driver privacy grants read-only with `prompt:false`, parse the two boolean contract fields, and keep permission detail generic instead of forwarding raw command output.
             */
             parts.push(if desktop_control_installed {
                 "Desktop Control is installed.".to_string()
@@ -363,14 +282,8 @@ pub(crate) fn gpui_ghostex_cli_status_message_with_cua_update_check(
         });
 
     let mut payload = serde_json::json!({
-        "cliSkillInstalled": cli_skill_installed,
-        "cliSkillPath": probe.cli_skill_path,
-        "browserSkillInstalled": browser_skill_installed,
-        "browserSkillPath": probe.browser_skill_path,
-        "computerUseSkillInstalled": computer_use_skill_installed,
-        "computerUseSkillPath": probe.computer_use_skill_path,
-        "embeddedBrowserSkillInstalled": embedded_browser_skill_installed,
-        "embeddedBrowserSkillPath": probe.embedded_browser_skill_path,
+        "browserSkillInstalled": cua_driver_skill_installed,
+        "computerUseSkillInstalled": cua_driver_skill_installed,
         "cuaAppInstalled": cua_app_installed,
         "cuaDriverAccessibilityPermissionGranted": cua_permission_status.accessibility_granted,
         "cuaDriverInstalled": cua_driver_installed,
@@ -391,13 +304,7 @@ pub(crate) fn gpui_ghostex_cli_status_message_with_cua_update_check(
         "cuaDriverUpdateAvailable": cua_driver_update_status.update_available,
         "cuaDriverVersion": cua_driver_update_status.current_version,
         "detail": detail,
-        "agentsOrchestrationSkillInstalled": agents_orchestration_skill_installed,
-        "agentsOrchestrationSkillPath": probe.agents_orchestration_skill_path,
-        "manageBeadsSkillInstalled": manage_beads_skill_installed,
-        "manageBeadsSkillPath": probe.manage_beads_skill_path,
         "generatedAt": gpui_status_generated_at(),
-        "generateTitleSkillInstalled": generate_title_skill_installed,
-        "generateTitleSkillPath": probe.generate_title_skill_path,
         "ghostexPath": probe.ghostex_path,
         "gxBlockedByExistingCommand": gx_blocked,
         "gxPath": probe.gx_path,
@@ -408,24 +315,13 @@ pub(crate) fn gpui_ghostex_cli_status_message_with_cua_update_check(
             .as_ref()
             .and_then(|problem| problem.fix.as_ref())
             .map(|fix| fix.command.clone()),
-        "moveCodexSessionSkillInstalled": move_codex_session_skill_installed,
-        "moveCodexSessionSkillPath": probe.move_codex_session_skill_path,
-        "helpSkillInstalled": help_skill_installed,
-        "helpSkillPath": probe.help_skill_path,
         "agentGuideSkillInstalled": agent_guide_skill_installed,
         "agentGuideSkillPath": probe.agent_guide_skill_path,
-        "visualsSkillInstalled": visuals_skill_installed,
-        "visualsSkillPath": probe.visuals_skill_path,
-        "secretsSkillInstalled": secrets_skill_installed,
-        "secretsSkillPath": probe.secrets_skill_path,
         "type": "ghostexCliStatus",
     });
     if let (Some(payload), serde_json::Value::Object(spaceo)) = (
         payload.as_object_mut(),
-        gpui_spaceo_status_fields(
-            &spaceo_status.unwrap_or_default(),
-            probe.spaceo_skill_path.as_deref(),
-        ),
+        gpui_spaceo_status_fields(&spaceo_status.unwrap_or_default()),
     ) {
         payload.extend(spaceo);
     }

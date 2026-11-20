@@ -92,17 +92,6 @@ pub(super) fn cli_status() -> super::WindowsWslGhostexCliStatus {
         gx_blocked_by_existing_command: gx_path.is_some() && !gx_usable,
         gx_path: gx_path.map(|path| path.to_string_lossy().into_owned()),
         gx_usable,
-        cli_skill_path: skill_path("ghostex-cli"),
-        browser_skill_path: skill_path("ghostex-browser-use"),
-        computer_use_skill_path: skill_path("ghostex-computer-use"),
-        embedded_browser_skill_path: skill_path("ghostex-embedded-browser-use"),
-        agents_orchestration_skill_path: skill_path("ghostex-agents"),
-        manage_beads_skill_path: skill_path("ghostex-manage-beads"),
-        generate_title_skill_path: skill_path("ghostex-auto-rename-session"),
-        move_codex_session_skill_path: skill_path("ghostex-move-codex-session"),
-        help_skill_path: skill_path("ghostex-help"),
         agent_guide_skill_path: skill_path("ghostex"),
-        visuals_skill_path: skill_path("ghostex-visuals"),
-        secrets_skill_path: skill_path("ghostex-secrets"),
     }
 }
