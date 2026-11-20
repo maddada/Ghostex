@@ -206,6 +206,28 @@ pub(crate) fn resume_all(state: &AppState) {
         "UPDATE session_chat_first_messages SET state = ?1 WHERE state = ?2",
         params![WAITING, LIFTED],
     );
+    // CDXC:AgentSkills 2026-11-20: a message not in the agent's box gets the current coordinator
+    // line now (the retired skill's line before, coordinators/role.rs
+    // `with_current_coordinator_line`); a typed one keeps it until Start, which must find the box
+    // holding exactly what was typed.
+    if let Ok(mut held) = db.prepare(
+        "SELECT projectId, sessionId, text FROM session_chat_first_messages WHERE state IN (?1, ?2)",
+    ) {
+        let rows: Vec<(String, String, String)> = held
+            .query_map(params![WAITING, LEFT], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })
+            .map(|rows| rows.filter_map(Result::ok).collect())
+            .unwrap_or_default();
+        for (project_id, session_id, text) in rows {
+            if let Some(current) = crate::coordinators::with_current_coordinator_line(&text) {
+                let _ = db.execute(
+                    "UPDATE session_chat_first_messages SET text = ?3, updatedAt = ?4 WHERE projectId = ?1 AND sessionId = ?2",
+                    params![project_id, session_id, current, now_iso()],
+                );
+            }
+        }
+    }
     let Ok(mut statement) =
         db.prepare("SELECT projectId, sessionId FROM session_chat_first_messages")
     else {
@@ -510,7 +532,10 @@ pub(crate) async fn start(
         }
     }
     take(state, project_id, session_id);
-    crate::server::queue_session_chat_prompt(state, project_id, session_id, &message.text, true)?;
+    // Typed before the update, the box held the retired skill's line; the agent gets the current one.
+    let text =
+        crate::coordinators::with_current_coordinator_line(&message.text).unwrap_or(message.text);
+    crate::server::queue_session_chat_prompt(state, project_id, session_id, &text, true)?;
     log(
         state,
         "coordinatorFirstMessageStarted",

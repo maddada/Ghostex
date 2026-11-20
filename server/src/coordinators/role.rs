@@ -265,6 +265,35 @@ pub fn rename_queued_coordinator_skill_lines(db: &rusqlite::Connection) -> rusql
     Ok(changed)
 }
 
+/// `text` with an old coordinator skill line at its start (any name the skill had, in any agent's
+/// spelling) replaced by the guide line every coordinator gets now; `None` when it has none.
+///
+/// CDXC:AgentSkills 2026-11-20 WHY:
+/// A coordinator created before the update but not started yet keeps its first message in
+/// `session_chat_first_messages` (session_chat_first_message.rs), not in the queue the startup
+/// rewrite above edits, so its line named the retired skill when Start sent it (Opus review,
+/// finding 3). That module rewrites held messages with this at startup and when Start sends one.
+pub fn with_current_coordinator_line(text: &str) -> Option<String> {
+    use ghostex_gx_chat_core::composer::skill_invocation::{
+        skill_invocation, COORDINATOR_GUIDE_LINE, SKILL_LINE_PREFIX,
+    };
+    let names = COORDINATOR_SKILL_OLD_NAMES
+        .iter()
+        .chain(std::iter::once(&COORDINATOR_SKILL_NAME));
+    for name in names {
+        for agent in ["claude", "codex", "pi", "opencode"] {
+            let old = format!("{SKILL_LINE_PREFIX}{}", skill_invocation(name, Some(agent)));
+            let Some(rest) = text.strip_prefix(&old) else {
+                continue;
+            };
+            if rest.is_empty() || rest.starts_with(['\n', '\r', ' ']) {
+                return Some(format!("{COORDINATOR_GUIDE_LINE}{rest}"));
+            }
+        }
+    }
+    None
+}
+
 /// What a coordinator is handed again when its agent starts a conversation that no longer holds its
 /// first message: after `/clear` (Claude, Codex), a compaction, or a fresh start of the session.
 /// `None` for a start that keeps it (a resume, a fork) and for a fresh start whose first message
