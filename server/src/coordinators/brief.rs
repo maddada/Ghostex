@@ -125,6 +125,29 @@ pub fn split_agent_message(text: &str) -> Option<AgentMessageParts<'_>> {
     })
 }
 
+/// Where `text` carries the exact sender block naming `reply_to`, at its start or its end
+/// (whichever holds it; [`split_agent_message`] looks only at the first that parses): the body's
+/// byte range and whether the block comes first.
+pub fn find_own_agent_message_block(text: &str, reply_to: &str) -> Option<(usize, usize, bool)> {
+    if let Some(rest) = text.strip_prefix(AGENT_MESSAGE_OPENER) {
+        if let Some(at) = rest.find("\n\n") {
+            let block = &text[..AGENT_MESSAGE_OPENER.len() + at];
+            if agent_message_block_reply_to(block) == Some(reply_to) {
+                let start = AGENT_MESSAGE_OPENER.len() + at + 2;
+                return Some((start, text.len(), true));
+            }
+        }
+    }
+    let at = text.rfind(&format!("\n\n{AGENT_MESSAGE_OPENER}\n"))?;
+    (agent_message_block_reply_to(&text[at + 2..]) == Some(reply_to)).then_some((0, at, false))
+}
+
+/// `body` with every sender-block opener broken by a zero-width space (gx-chat-core
+/// `appended_notes::neutralised_sender_markers`), so only a block gxserver placed names a sender.
+pub fn without_foreign_agent_blocks(body: &str) -> String {
+    ghostex_gx_chat_core::session::appended_notes::neutralised_sender_markers(body)
+}
+
 /// The body of an agent message, without its sender block (below or above it); any other text comes back unchanged.
 pub fn strip_agent_message_header(text: &str) -> &str {
     split_agent_message(text).map_or(text, |parts| parts.body)

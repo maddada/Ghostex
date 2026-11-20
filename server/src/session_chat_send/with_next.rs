@@ -274,9 +274,11 @@ fn hold(
         ));
     }
     let mut held = read_held(db, project_id, session_id);
+    // The same id from the same sender: another sender who guesses an id never stops this one.
     let repeated = message.request_id.is_some_and(|id| {
-        held.iter()
-            .any(|note| note["sendRequestId"].as_str() == Some(id))
+        held.iter().any(|note| {
+            note["sendRequestId"].as_str() == Some(id) && note.get("from") == message.from.as_ref()
+        })
     });
     if !repeated {
         let bytes: usize = held
@@ -405,7 +407,9 @@ fn labelled(note: &Value) -> Option<String> {
     } else if from_field(note, "sessionId").is_some() {
         text.to_string()
     } else if from_field(note, "serverId").is_some() {
-        format!("From Ghostex on {computer}: {text}")
+        // No session there named itself: that computer's user, or its Ghostex (a "Not
+        // delivered"), never one of its sessions, and not this computer's Ghostex.
+        format!("Held from the computer {computer}, not from a session there:\n\n{text}")
     } else {
         format!(
             "Held by the user from their own terminal (not part of their message above):\n\n{text}"
@@ -462,7 +466,7 @@ pub(crate) fn drop_held_for_closed_sessions(
         let title = session
             .as_ref()
             .and_then(|session| session["title"].as_str())
-            .map(str::trim)
+            .map(|title| one_line(title, 80))
             .filter(|title| !title.is_empty())
             .map(|title| format!("\u{201c}{title}\u{201d} ({session_id})"))
             .unwrap_or_else(|| session_id.clone());
@@ -478,19 +482,14 @@ pub(crate) fn drop_held_for_closed_sessions(
                 .as_str()
                 .or_else(|| note["text"].as_str())
                 .unwrap_or_default();
-            let start: String = words.split_whitespace().collect::<Vec<_>>().join(" ");
-            let start = if start.chars().count() > 160 {
-                format!("{}\u{2026}", start.chars().take(159).collect::<String>())
-            } else {
-                start
-            };
+            let start = one_line(words, 160);
             let request_id = note["sendRequestId"].as_str().map(str::to_string);
             let notice = ghostex_gx_chat_core::session::appended_notes::neutralised_held_note(
                 &format!(
                     "Not delivered: the message you sent with --with-next to {title}{} was dropped, because that session was closed before its next message. It began: \u{201c}{start}\u{201d}",
                     request_id
                         .as_deref()
-                        .map(|id| format!(" (request id {id})"))
+                        .map(|id| format!(" (request id {})", one_line(id, 64)))
                         .unwrap_or_default()
                 ),
             );
@@ -523,6 +522,48 @@ pub(crate) fn drop_held_for_closed_sessions(
         }
     }
     (dropped, remote)
+}
+
+/// `text` on one line (its whitespace collapsed), at most `max` characters.
+fn one_line(text: &str, max: usize) -> String {
+    let line = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if line.chars().count() > max {
+        format!("{}\u{2026}", line.chars().take(max - 1).collect::<String>())
+    } else {
+        line
+    }
+}
+
+/// A session's held note as it is kept: its words with every sender-block opener broken and the
+/// session's true block last, whatever the words said and wherever the sender mark put the block
+/// (first, for a `/` or `!` body, so it never runs as a command; a held note never runs as one).
+/// `fallback` is the block when the text carries none of the session's own.
+///
+/// CDXC:Security 2026-11-20 WHY (Fable's re-review of #677, case E): the note's tags were broken
+/// by keeping only its last block, so a `!` body that ended in a forged block had its true block
+/// placed first and broken, and the held notes line named the forged sender.
+pub(crate) fn settled_text(
+    text: &str,
+    own_ref: &str,
+    fallback: impl FnOnce() -> Option<String>,
+) -> String {
+    use crate::coordinators::{find_own_agent_message_block, without_foreign_agent_blocks};
+    let (body, block) = match find_own_agent_message_block(text, own_ref) {
+        Some((start, end, first)) => (
+            &text[start..end],
+            Some(if first {
+                text[..start].trim().to_string()
+            } else {
+                text[end..].trim().to_string()
+            }),
+        ),
+        None => (text, fallback()),
+    };
+    let body = without_foreign_agent_blocks(body.trim());
+    match block {
+        Some(block) => format!("{body}\n\n{block}"),
+        None => body,
+    }
 }
 
 /// Marks the sender's card for a held message that will not go: `failure` says why.
@@ -606,12 +647,45 @@ pub(crate) fn hold_with_next_response(
             .and_then(|(db, sender)| {
                 let send_request_id =
                     read(crate::session_chat_send_requests::SEND_REQUEST_ID_PARAM);
+                let text = match &sender {
+                    HeldSender::User => text.to_string(),
+                    HeldSender::Session(project, session) => {
+                        let server_id = state.metadata.server_id.as_str();
+                        settled_text(
+                            text,
+                            &crate::ids::create_global_session_ref(server_id, project, session),
+                            || {
+                                let record = super::sender_mark::read_session(
+                                    &state.paths,
+                                    server_id,
+                                    project,
+                                    session,
+                                );
+                                Some(super::sender_mark::session_block(
+                                    &record, server_id, project, session,
+                                ))
+                            },
+                        )
+                    }
+                    HeldSender::Peer {
+                        server_id,
+                        session: Some((project, session)),
+                        ..
+                    } => settled_text(
+                        text,
+                        &crate::ids::create_global_session_ref(server_id, project, session),
+                        || None,
+                    ),
+                    HeldSender::Peer { .. } => {
+                        crate::coordinators::without_foreign_agent_blocks(text)
+                    }
+                };
                 let (count, duplicate) = hold(
                     &db,
                     project_id,
                     session_id,
                     HeldMessage {
-                        text,
+                        text: &text,
                         body: read("body"),
                         request_id: send_request_id,
                         from: sender.record(),
@@ -632,7 +706,7 @@ pub(crate) fn hold_with_next_response(
                         ("projectId", project_id),
                         ("sessionId", session_id),
                         ("sendRequestId", id),
-                        ("message", read("body").unwrap_or(text)),
+                        ("message", read("body").unwrap_or(&text)),
                     ] {
                         watch.insert(key.to_string(), json!(value));
                     }
