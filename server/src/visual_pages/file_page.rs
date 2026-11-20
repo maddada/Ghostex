@@ -63,7 +63,7 @@ pub(crate) fn page_for_file(
         return Ok(None);
     }
     let prepare = || prepare_page(&source, file.parent().unwrap_or(Path::new("/")));
-    if let Some((id, record)) = published_from(gxserver_state_dir, &file) {
+    if let Some((id, record)) = published_from(gxserver_state_dir, &file, |_| true) {
         let published = record.get("sourceModifiedMs").and_then(Value::as_u64);
         if published != modified {
             let prepared = prepare()?;
@@ -115,7 +115,7 @@ pub(super) fn page_for_linked_file(
     let Ok(file) = fs::canonicalize(file) else {
         return Ok(None);
     };
-    Ok(published_from(gxserver_state_dir, &file)
+    Ok(published_from(gxserver_state_dir, &file, |_| true)
         .filter(|(_, record)| has_session(record))
         .map(|(id, record)| FilePage {
             id,
@@ -135,8 +135,32 @@ fn has_session(record: &Value) -> bool {
         .is_some_and(|session| !session.trim().is_empty())
 }
 
-/// The page published from `file`: the newest with a session, else the newest made here.
-fn published_from(gxserver_state_dir: &Path, file: &Path) -> Option<(String, Value)> {
+/// The page `ghostex show` published from `file` (the newest with a session, else the newest), as
+/// it was published; a page made by opening the file (`page_for_file`) does not count. linked.rs
+/// opens a link outside the linking page's folder only to such a page.
+pub(super) fn page_show_published(gxserver_state_dir: &Path, file: &Path) -> Option<FilePage> {
+    let file = fs::canonicalize(file).ok()?;
+    let (id, record) = published_from(gxserver_state_dir, &file, |record| {
+        record.get(OPENED_FROM_FILE_KEY) != Some(&Value::Bool(true))
+    })?;
+    Some(FilePage {
+        title: record
+            .get("title")
+            .and_then(Value::as_str)
+            .unwrap_or("Live page")
+            .to_string(),
+        answerable: has_session(&record),
+        id,
+    })
+}
+
+/// The page published from `file` among the records `keep` takes: the newest with a session, else
+/// the newest made here.
+fn published_from(
+    gxserver_state_dir: &Path,
+    file: &Path,
+    keep: impl Fn(&Value) -> bool,
+) -> Option<(String, Value)> {
     let file = file.to_string_lossy();
     let entries = fs::read_dir(visual_pages_dir(gxserver_state_dir)).ok()?;
     let mut best: Option<(bool, String, String, Value)> = None;
@@ -155,7 +179,7 @@ fn published_from(gxserver_state_dir: &Path, file: &Path) -> Option<(String, Val
                 source == file
                     || fs::canonicalize(source).is_ok_and(|source| source.to_string_lossy() == file)
             });
-        if !same_file {
+        if !same_file || !keep(&record) {
             continue;
         }
         let rank = (
