@@ -15,12 +15,16 @@ the project, every session that runs in it, its worktrees' git links, its board 
 Its sessions keep their history: Claude and Codex resume them in the new folder.
 
 It refuses, changing nothing, while a session in the project runs, while another program works
-inside the folder (--force-open-files moves it anyway), when the folder is a link, when the new
-path exists, is on another drive or in or out of a cloud-synced folder, and when the folder has
-worktrees beside it and would leave their parent folder. --dry-run lists what would change.
+inside the folder or has files there open (--force-open-files moves it anyway), while Ghostex's
+Files editor has unsaved changes there, when the folder is a link or holds Ghostex's own files or
+an agent's settings, when the new path exists, is on another drive or in or out of a cloud-synced
+folder, and when the folder has worktrees beside it and would leave their parent folder. One move
+runs at a time. --dry-run lists what would change.
 
 A move that stops part-way (Ghostex quit or the computer restarted) is finished at gxserver's
-next start; --resume finishes it now, --abandon forgets it.";
+next start; --resume finishes it now, --abandon forgets one that can't be finished.
+
+Agents: move a project's folder only when the user asked for that move, and --dry-run first.";
 
 pub fn run(args: &[String]) -> CliResult<()> {
     if args.iter().any(|arg| arg == "--help" || arg == "-h") {

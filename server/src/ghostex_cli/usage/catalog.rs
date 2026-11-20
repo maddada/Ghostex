@@ -363,7 +363,7 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "move-project-folder (--project-id id|--path path|--name name) <new folder path> [--dry-run] [--force-open-files] [--json]",
-            "Move a project's folder on disk (same drive) and point Ghostex at it: the project, its sessions (Claude and Codex resume in the new folder), worktrees, board and automations. Refuses, changing nothing, while one of its sessions runs or another program works inside the folder; --dry-run lists what would change; --resume or --abandon a move that stopped part-way. This computer only",
+            "Move a project's folder on disk (same drive) and point Ghostex at it: the project, its sessions (Claude and Codex resume in the new folder), worktrees, board and automations. Refuses, changing nothing, while one of its sessions runs, another program works inside the folder or has files there open, or Files has unsaved changes there; --dry-run lists what would change; --resume or --abandon a move that stopped part-way. This computer only; agents run it only when the user asked for the move",
         ),
         format_help_command(
             "group-project (--project-id id|--path path|--name name) --group title",

@@ -1035,12 +1035,16 @@ drive). Ghostex moves the folder and everything it keeps about it: the project,
 its sessions (Claude and Codex pick their conversations up in the new folder),
 its worktrees' git links, its board and its automations. It changes nothing and
 says why while one of the project's sessions runs, while another program works
-inside the folder, when the new path exists, is on another drive or is in or out
-of a cloud-synced folder, and when the project has worktrees beside it and the
-folder would leave their parent folder. `--dry-run` lists what would change. If
-Ghostex or the computer stops in the middle, the move is finished the next time
-Ghostex starts; `--resume` finishes it now and `--abandon` forgets it. It works
-on this computer only, from the command line.
+inside the folder or has files there open, while Ghostex's Files editor has
+unsaved changes in it, when the folder holds Ghostex's own files or an agent's
+settings, when the new path exists, is on another drive or is in or out of a
+cloud-synced folder, and when the project has worktrees beside it and the
+folder would leave their parent folder. Only one move runs at a time.
+`--dry-run` lists what would change. If Ghostex or the computer stops in the
+middle, the move is finished the next time Ghostex starts; `--resume` finishes
+it now and `--abandon` forgets a move that can't be finished. It works on this
+computer only, from the command line. Agents: move a project's folder only when
+the user asked for that move, and run `--dry-run` first.
 To remove a project for good (the folder on your computer stays), use Remove in
 Settings > Projects or, from the command line, `ghostex remove-project` with
 `--project-id`, `--path` or `--name`; a name two projects share fails and lists
