@@ -31,6 +31,8 @@ pub enum BrowserPageMetadataEvent {
     FindRequested,
     /// The Annotate hotkey, pressed while the page had the keyboard.
     AnnotateRequested,
+    /// The Settings hotkey, pressed while the page had the keyboard.
+    SettingsRequested,
     AddressChanged(String),
     CloseRequested,
     FaviconUrlChanged(Option<String>),

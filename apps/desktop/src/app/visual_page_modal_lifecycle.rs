@@ -390,6 +390,21 @@ impl GhostexGpuiApp {
                 self.close_native_app_modal_from_bridge(cx);
                 return;
             }
+            // Run as the hotkey runs in the main window, which this command does not carry.
+            VisualPageModalCommand::OpenSettings => {
+                let Some(main) = self.main_window_handle else {
+                    return;
+                };
+                let app = cx.weak_entity();
+                gpui::App::defer(cx, move |cx| {
+                    let _ = main.update(cx, |_, window, cx| {
+                        let _ = app.update(cx, |app, cx| {
+                            app.run_configured_ghostex_hotkey("openSettings", window, cx)
+                        });
+                    });
+                });
+                return;
+            }
             VisualPageModalCommand::OpenInBrowser { url } => {
                 self.close_native_app_modal_from_bridge(cx);
                 let _ = gpui_open_external_http_url(&url);

@@ -73,6 +73,9 @@ pub(crate) enum VisualPageModalCommand {
     /// many are answered (`source.rs`), or the page's own title arrived for a page opened without
     /// one.
     TabChanged,
+    /// The Settings hotkey pressed while the page had the keyboard: Settings opens over it, which
+    /// puts the page aside as any other app window does.
+    OpenSettings,
     /// Closes the window and opens the page in the reader's browser.
     OpenInBrowser { url: String },
     /// Downloads the page's exported file in the reader's browser and keeps the window open
@@ -357,6 +360,18 @@ impl GpuiVisualPageModalWindow {
                 let page_title = match event {
                     cef::BrowserPageMetadataEvent::CloseRequested => None,
                     cef::BrowserPageMetadataEvent::TitleChanged(title) => Some(title),
+                    cef::BrowserPageMetadataEvent::SettingsRequested => {
+                        let modal = modal.clone();
+                        let mut async_cx = async_cx.clone();
+                        foreground
+                            .spawn(async move {
+                                let _ = modal.update(&mut async_cx, |this, cx| {
+                                    (this.host)(VisualPageModalCommand::OpenSettings, cx)
+                                });
+                            })
+                            .detach();
+                        return;
+                    }
                     cef::BrowserPageMetadataEvent::ContextMenuRequested(menu) => {
                         let modal = modal.clone();
                         let mut async_cx = async_cx.clone();
@@ -871,6 +886,15 @@ impl Render for GpuiVisualPageModalWindow {
             .overflow_hidden()
             .bg(gpui::rgb(page_top))
             .on_key_down(cx.listener(Self::on_key_down))
+            // The Settings hotkey while the window's own band has the keyboard (the page's
+            // keys arrive as `SettingsRequested` instead).
+            .on_action(cx.listener(
+                |this, action: &crate::app::hotkeys::RunConfiguredGhostexHotkey, _, cx| {
+                    if action.action_id == "openSettings" {
+                        (this.host)(VisualPageModalCommand::OpenSettings, cx);
+                    }
+                },
+            ))
             // A press anywhere in the window's own band closes the page's right-click menu.
             .capture_any_mouse_down(cx.listener(|this, _: &gpui::MouseDownEvent, _, cx| {
                 this.dismiss_page_context_menu(cx);

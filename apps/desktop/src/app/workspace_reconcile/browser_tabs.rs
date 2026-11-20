@@ -165,6 +165,9 @@ impl GhostexGpuiApp {
                     self.run_browser_feedback_tool_from_toolbar(pane_id, window, cx);
                 }
             }
+            cef::BrowserPageMetadataEvent::SettingsRequested => {
+                self.run_configured_ghostex_hotkey("openSettings", window, cx);
+            }
             cef::BrowserPageMetadataEvent::FindRequested => {
                 if let Some(pane_id) = find_browser_leaf_id_for_tab(&self.browser_tabs.root, tab_id)
                     && self.browser_tabs.active_tab_id_for_pane(pane_id) == Some(tab_id)

@@ -123,6 +123,7 @@ impl GhostexGpuiApp {
             cef::BrowserPageMetadataEvent::HistoryRequested
             | cef::BrowserPageMetadataEvent::FindRequested
             | cef::BrowserPageMetadataEvent::AnnotateRequested
+            | cef::BrowserPageMetadataEvent::SettingsRequested
             | cef::BrowserPageMetadataEvent::ContextMenuRequested(_) => {}
             cef::BrowserPageMetadataEvent::AddressChanged(url) => {
                 let Some(parked_tabs) = self.parked_browser_tabs_by_project.get_mut(project_id)
