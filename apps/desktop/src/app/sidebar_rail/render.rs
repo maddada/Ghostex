@@ -1,6 +1,7 @@
 //! Drawing the rail: a 40pt column at the window's left, the room under the window buttons at its
 //! top, the pinned icons, an unpinned item while its view shows (under a dashed line), ⋯, and at
-//! its foot the workspace, the account usage toggle and Toggle sidebar.
+//! its foot the workspace and the account usage toggle (Toggle sidebar is the sidebar's top row's,
+//! as in Classic: CDXC:Sidebar 2026-11-20 in native_sidebar/navigation.rs).
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -172,7 +173,6 @@ impl GhostexGpuiApp {
             )
             .children(workspace)
             .children(usage)
-            .child(self.render_sidebar_rail_sidebar_toggle(&appearance, cx))
             .into_any_element()
     }
 
@@ -492,12 +492,15 @@ impl GhostexGpuiApp {
         } else {
             "Show account usage"
         };
-        div()
+        // Hovering peeks the unpinned strip at the sidebar's bottom
+        // (`set_sidebar_rail_usage_hovered`). A GPUI element holds one hover listener and the
+        // tooltip takes the button's, so the hover lives on this wrapper, as for the sidebar's
+        // usage handle (native_sidebar/usage.rs).
+        let button = div()
             .id("ghostex-gpui-sidebar-rail-usage")
             .role(gpui::Role::Button)
             .aria_label(tooltip)
             .aria_selected(on)
-            .mt(px(RAIL_GAP))
             .flex_shrink_0()
             .size(px(RAIL_BUTTON))
             .flex()
@@ -526,51 +529,15 @@ impl GhostexGpuiApp {
                     window,
                     cx,
                 )
-            })
-            .into_any_element()
-    }
-
-    /// Toggle sidebar, in the rail's bottom corner.
-    ///
-    /// CDXC:Sidebar 2026-11-20 DECISION:
-    /// User, after 11.12.0: "pls move the left sidebar collapse expand to the new rail when rail is enabled and keep the notification on the top left of the sidebar". With the rail on, Toggle sidebar is the rail's last button, at its foot, so it stays in one place whether the sidebar is shown or hidden (the rail stays when the sidebar hides). Asked what "keep the notification on the top left of the sidebar" meant, the user picked Q4318 B: the bell takes the corner the toggle left in the sidebar's top bar (CDXC:Sidebar 2026-11-20 in native_sidebar/navigation.rs). The sidebar's top row and the hidden sidebar's header (and Claude's copy of that row) draw no toggle then (native_sidebar/navigation.rs, render/workarea_header/breadcrumb.rs). Same action, hotkey and tooltip as the header's (`render_sidebar_collapse_button`). Classic is unchanged.
-    fn render_sidebar_rail_sidebar_toggle(
-        &self,
-        appearance: &SidebarAppearance,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let hover = appearance.hover;
-        let tooltip = titlebar_tooltip_label("Toggle sidebar", "toggleSidebarCollapsed");
+            });
         div()
-            .id("ghostex-gpui-sidebar-rail-sidebar-toggle")
-            .role(gpui::Role::Button)
-            .aria_label("Toggle sidebar")
+            .id("ghostex-gpui-sidebar-rail-usage-hover")
             .mt(px(RAIL_GAP))
             .flex_shrink_0()
-            .size(px(RAIL_BUTTON))
-            .flex()
-            .items_center()
-            .justify_center()
-            .rounded(px(RAIL_BUTTON_RADIUS))
-            .cursor_default()
-            .hover(move |button| button.bg(hover))
-            .child(titlebar_svg_icon(
-                crate::app::consts::TITLEBAR_ICON_LAYOUT_SIDEBAR,
-                RAIL_ICON,
-                appearance.chrome_icon,
-            ))
-            .on_click(cx.listener(|app, _, _, cx| {
-                cx.stop_propagation();
-                // With Claude on, showing the sidebar leaves Claude (app/claude_web/takeover.rs).
-                app.toggle_sidebar_from_user(cx);
+            .on_hover(cx.listener(|app, hovered: &bool, _, cx| {
+                app.set_sidebar_rail_usage_hovered(*hovered, cx);
             }))
-            .managed_tooltip_with_placement(ManagedTooltipPlacement::Right, move |window, cx| {
-                crate::app::native_sidebar::link_chips::sidebar_style_tooltip(
-                    tooltip.to_string(),
-                    window,
-                    cx,
-                )
-            })
+            .child(button)
             .into_any_element()
     }
 }

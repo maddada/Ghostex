@@ -150,6 +150,7 @@ impl GhostexGpuiApp {
         // may never see the pointer leave.
         let showing = !self.sidebar_usage_visible
             && (self.native_sidebar.usage_pin_hovered
+                || self.native_sidebar.usage_rail_hovered
                 || self.native_sidebar.usage_peek_hovered
                 || (frosted && self.native_sidebar.usage_frosted_hovered));
         if !(showing && frosted) {
@@ -164,7 +165,13 @@ impl GhostexGpuiApp {
         // for the click that pins the strip. Its hover box alone reaches down through the line's
         // top padding to the handle's own hitbox, so a pointer sliding from the handle up into a
         // card never crosses a strip of nothing that would have closed the peek halfway.
-        let (line_height, bridge) = self.native_sidebar_usage_handle_line();
+        // With the rail on there is no handle line (the rail's chart button is the switch), so the
+        // peek sits on the sidebar's bottom edge, exactly where the pinned strip sits.
+        let (line_height, bridge) = if self.sidebar_rail_shown() {
+            (0.0, 0.0)
+        } else {
+            self.native_sidebar_usage_handle_line()
+        };
         let bridge = bridge * scale;
         let bottom = line_height * scale - bridge;
         let body = if frosted {
@@ -427,8 +434,10 @@ impl GhostexGpuiApp {
         // The pinned strip, in the sidebar's own window, shows its Hide button while the pointer is
         // on it (`render_native_sidebar_usage_hide_button`).
         let pinned = route.is_none() && self.sidebar_usage_visible;
-        let hide_button =
-            pinned.then(|| self.render_native_sidebar_usage_hide_button(appearance, window, cx));
+        // CDXC:Sidebar 2026-11-20 DECISION:
+        // User (rail): "Remove the collapse chevron above the account cards when Rail is on". The rail's chart button pins and unpins the strip, and the right-click row "Hide account usage" stays.
+        let hide_button = (pinned && !self.sidebar_rail_shown())
+            .then(|| self.render_native_sidebar_usage_hide_button(appearance, window, cx));
         Some(
             div()
                 .id("native-sidebar-usage-strip")
@@ -786,8 +795,47 @@ impl GhostexGpuiApp {
         self.native_sidebar.usage_strip_hovered = false;
         self.native_sidebar.usage_hide_hovered = false;
         self.native_sidebar.usage_zone_hovered = false;
+        // The rail's button stays under the pointer, but a click that hides the strip hides it at
+        // once rather than leaving it peeking until the pointer goes.
+        self.native_sidebar.usage_rail_hovered = false;
+        self.native_sidebar.usage_rail_hover_generation += 1;
         self.persist_shell_layout_state();
         cx.notify();
+    }
+
+    /// The rail's usage button's hover (app/sidebar_rail/render.rs): on it, the unpinned strip
+    /// peeks at the sidebar's bottom; off it, the peek stays a moment longer, so the pointer can
+    /// cross to the cards, whose own hover then keeps it up.
+    ///
+    /// CDXC:Sidebar 2026-11-20 DECISION:
+    /// User (rail): hovering the rail's usage (bar chart) icon shows the account cards at the bottom of the sidebar while the pointer is on it, even when they aren't pinned; they hide again when the hover ends, after a short grace so moving onto the cards keeps them; clicking still pins and unpins as before. The peek is the handle's own (frosted under glass), drawn where the pinned strip sits.
+    pub(crate) fn set_sidebar_rail_usage_hovered(
+        &mut self,
+        hovered: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        const GRACE: std::time::Duration = std::time::Duration::from_millis(300);
+        self.native_sidebar.usage_rail_hover_generation += 1;
+        if hovered {
+            if !self.native_sidebar.usage_rail_hovered {
+                self.native_sidebar.usage_rail_hovered = true;
+                cx.notify();
+            }
+            return;
+        }
+        let generation = self.native_sidebar.usage_rail_hover_generation;
+        cx.spawn(async move |app, cx| {
+            cx.background_executor().timer(GRACE).await;
+            let _ = app.update(cx, |app, cx| {
+                if app.native_sidebar.usage_rail_hover_generation == generation
+                    && app.native_sidebar.usage_rail_hovered
+                {
+                    app.native_sidebar.usage_rail_hovered = false;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
     }
 }
 

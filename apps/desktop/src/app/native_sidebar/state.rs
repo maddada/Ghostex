@@ -112,6 +112,12 @@ pub(crate) struct NativeSidebarState {
     pub(crate) usage_peek_hovered: bool,
     /// The pointer is on the peeking strip's frosted window (under window glass it draws there).
     pub(crate) usage_frosted_hovered: bool,
+    /// The rail's usage button is hovered, or was until a moment ago (app/sidebar_rail/render.rs):
+    /// the unpinned strip peeks meanwhile.
+    pub(crate) usage_rail_hovered: bool,
+    /// Counts the rail button's hovers, so a grace timer started when one ended does nothing once
+    /// the pointer is back.
+    pub(crate) usage_rail_hover_generation: u64,
     /// The pointer is on the pinned usage strip, which shows its Hide button (usage.rs).
     pub(crate) usage_strip_hovered: bool,
     /// The pointer is on the pinned strip's Hide button.
