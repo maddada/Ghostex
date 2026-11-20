@@ -70,6 +70,12 @@ mod sweep;
 mod team_file;
 mod trash;
 
+/// The GBot playbook, which `ghostex gbots guide` prints.
+///
+/// CDXC:AgentSkills 2026-11-20 DECISION:
+/// User (Q4262 "B", on the skills-vs-CLI page): Ghostex's own skills are retired for CLI help, keeping one tiny `ghostex` skill that points at the CLI. The GBot playbook was the `ghostex-gbots` skill's body; it now lives here, built into the CLI with the verbs it names, so a GBot always reads the playbook of the Ghostex it runs on. Every GBot chat's first message tells it to run `ghostex gbots guide` (session.rs `first_message`).
+pub(crate) const GBOT_PLAYBOOK_MD: &str = include_str!("playbook.md");
+
 pub(crate) use api::{is_api_chat_session, serve_bot_api, BOT_API_ROUTE_PREFIX};
 pub(crate) use apps_access::{project_reads_apps_only, read_only_refusal};
 pub(crate) use assign::{

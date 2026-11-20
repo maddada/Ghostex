@@ -25,6 +25,7 @@ USAGE
   ghostex gbots chats <bot> [--json]             Its open chats and who opened them
   ghostex gbots new-chat <bot> [--task <text>]   Open another chat with it
   ghostex gbots close-chat <chat>                Close a chat (S…:P…:G… or its session id)
+  ghostex gbots guide                            The playbook every GBot chat runs by
   ghostex gbots brief [--bot <bot>]              What loads into a GBot (its instructions,
                                                  shared preferences, memory and team); a GBot
                                                  runs it in its own chats with no --bot
@@ -130,6 +131,11 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
     let parsed = parse_args(args);
     let flags = parsed.flags.clone();
     let rest = &parsed.rest;
+    // The playbook a GBot chat runs by (gbots/playbook.md): printed from this build, on or off.
+    if rest.first().map(String::as_str) == Some("guide") {
+        print!("{}", crate::gbots::GBOT_PLAYBOOK_MD);
+        return Ok(());
+    }
     if flags.contains("help") || flags.contains("h") || rest.is_empty() {
         // CDXC:GBots 2026-11-09 DECISION: User: "pls fully hide gbots if disabled in experimental under extensions". While GBots are off here the help is one line, that they are off and where to turn them on; with --computer the other computer's own switch decides, so the whole help shows.
         let paths = crate::paths::get_gxserver_paths(None);

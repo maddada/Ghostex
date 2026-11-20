@@ -342,12 +342,22 @@ pub fn install_computer_use_skill_command(args: &[String]) -> CliResult<()> {
     )
 }
 
+/// How to drive Mac apps on SpaceO's hidden displays (spaceo_guide.md), which `ghostex spaceo guide` prints.
+///
+/// CDXC:AgentSkills 2026-11-20 DECISION:
+/// User (Q4262 "B"): Ghostex's own skills are retired for CLI help; the `ghostex-spaceo` skill's text lives here now.
+const SPACEO_GUIDE_MD: &str = include_str!("spaceo_guide.md");
+
 pub fn spaceo_command(args: &[String]) -> CliResult<()> {
     let rest = args.get(1..).unwrap_or_default();
     let help = rest.iter().any(|arg| arg == "-h" || arg == "--help");
     match args.first().map(String::as_str) {
         Some("status") if !help => return super::spaceo_heal::status_command(rest),
         Some("repair") if !help => return super::spaceo_heal::repair_command(rest),
+        Some("guide") if !help => {
+            print!("{SPACEO_GUIDE_MD}");
+            return Ok(());
+        }
         _ => {}
     }
     skill_surface_command(

@@ -16,12 +16,22 @@ const MAX_MINUTES: f64 = 60.0;
 const WAIT_MS: u64 = 20_000;
 const WAIT_HTTP_TIMEOUT_MS: &str = "40000";
 
+/// How to ask for and use a secret (secret_guide.md), which `ghostex secret guide` prints.
+///
+/// CDXC:AgentSkills 2026-11-20 DECISION:
+/// User (Q4262 "B"): Ghostex's own skills are retired for CLI help; the `ghostex-secrets` skill's text (asking, using the file, a sudo password, 1Password) lives here now. Agents learn the verb itself from the launch note (agents/ghostex_note.rs `SECRETS_NOTE`) and a thread's brief.
+const SECRET_GUIDE_MD: &str = include_str!("secret_guide.md");
+
 pub fn secret_command(args: &[String]) -> CliResult<()> {
     let subcommand = args.first().map(String::as_str).unwrap_or("help");
     let rest = args.get(1..).unwrap_or_default();
     match subcommand {
         "help" | "-h" | "--help" => {
             println!("{}", usage::secret_usage());
+            Ok(())
+        }
+        "guide" => {
+            print!("{SECRET_GUIDE_MD}");
             Ok(())
         }
         "request" | "ask" => request_command(rest),

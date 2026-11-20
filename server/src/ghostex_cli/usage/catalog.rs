@@ -258,6 +258,10 @@ pub fn usage() -> String {
             "Create and start a configured agent session (ghostex projects lists the project ids); --group-id puts it in one of the project's session groups; an agent turned off in Settings > Agents is refused unless --allow-hidden is passed (ghostex agents types lists the visible ones); --model/--effort (Claude, Codex, Antigravity CLI, Copilot, Grok Build, Hermes Agent; Pi and OMP take provider/model and a thinking level; Cursor CLI takes --model only) apply to this session only; Empryo takes provider/model and starts on it without changing Empryo's default; --first-input-draft stages text in its input without sending; --run-on local|docker|hetzner|vercel|daytona|e2b|digitalocean|docker:<host> runs Claude, Codex, OpenCode or Pi in an agentbox box; --account starts a Claude or Codex session on that saved account (one that needs signing in is refused)",
         ),
         format_help_command(
+            "board guide",
+            "How to work a Project Board bead with bd: link this session first, swimlanes, review beads",
+        ),
+        format_help_command(
             "board start-work <bead-id> [--agent id [--allow-hidden]] [--model m] [--effort e] [--project-path path|--project-id id] [--json]",
             "Dispatch a Project Board bead: reuse its usable linked session or create the worker",
         ),
@@ -268,6 +272,10 @@ pub fn usage() -> String {
         format_help_command(
             "notify --title text [--body text] [--session-id id]",
             "Post a notification to the Ghostex bell for a session; defaults to the calling session",
+        ),
+        format_help_command(
+            "secret guide",
+            "How to ask the user for a secret and use it without printing it (a sudo password, 1Password)",
         ),
         format_help_command(
             "secret request --label text --reason text [--placeholder text] [--timeout-minutes N]",
@@ -488,6 +496,10 @@ pub fn usage() -> String {
             "Print what an agent running in Ghostex can do: Live pages, Ghostex forms and visuals in the chat, the browser, other agents, secrets, Ghostex skills",
         ),
         format_help_command(
+            "help guide",
+            "Print how Ghostex Help answers questions about Ghostex and changes settings, the theme and hotkeys for the user",
+        ),
+        format_help_command(
             "help ask \"<question>\" [--new] [--timeout-seconds N] [--json]",
             "Ask a Ghostex Help session (the default prompt agent with the ghostex-help skill) and print its answer once it finishes",
         ),
@@ -693,6 +705,10 @@ pub fn usage() -> String {
             "Show Ghostex SpaceO skill setup for driving Mac apps on SpaceO's virtual displays (macOS only)",
         ),
         format_help_command(
+            "spaceo guide",
+            "How to drive a Mac app or a Chromium page on SpaceO's hidden display, out of the user's way (macOS only)",
+        ),
+        format_help_command(
             "spaceo status [--json]",
             "Say whether SpaceO can give agents screens, or why it is stuck (read-only)",
         ),
@@ -707,6 +723,10 @@ pub fn usage() -> String {
         format_help_command(
             "agents --help",
             "Communicate and coordinate with other agents",
+        ),
+        format_help_command(
+            "agents guide",
+            "How to work with other agents: habits, Copy Details, other computers, stuck sessions, reading a thread, renaming",
         ),
         format_help_command(
             "agents switch-account <session-ref> --account <number|email> [--force] [--json]",

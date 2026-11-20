@@ -325,6 +325,10 @@ Connection details:
   It scans the CEF DevTools ports only for an older Ghostex whose gxserver lacks that route.
   Pass --port, or set GHOSTEX_CEF_REMOTE_DEBUGGING_PORT, to use a DevTools port the app was started with.
 
+Outside Ghostex's browser:
+  For pages in Chrome, Chromium, Edge or an Electron app, or for desktop apps, read the cua-driver skill
+  (Trycua's Cua Driver, which Ghostex installs with Computer Use) and follow it.
+
 Legacy aliases:
   browser-devtools-mcp and browser-mcp still run the MCP server.
   install-browser-skill still installs the skill, but new docs should use browser install-skill.
