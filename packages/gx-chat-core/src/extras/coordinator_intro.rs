@@ -38,7 +38,7 @@ const EXAMPLE_HINT: &str = "Click an example to put it in the chat box.";
 const DONT_SHOW_AGAIN: &str = "Don't show again";
 /// Two lines, each its own line in the desktop and phone panels, so neither wraps one long line.
 const DONT_SHOW_AGAIN_NOTE: &str =
-    "Removes this pill from every coordinator.\nHelp › How to use coordinators keeps the tips.";
+    "Removes this pill from every coordinator.\nAsk Ghostex AI in the sidebar's menu has them.";
 
 /// One tip: its icon (a titlebar icon's file name, which the phone maps to its own glyph), what to
 /// do, why, and a line to type.

@@ -11970,7 +11970,7 @@
     {
       "key": "help",
       "title": "Ghostex Help",
-      "subtitle": "An entry under Help in the sidebar's menu, with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.",
+      "subtitle": "The Ask Ghostex AI row in the sidebar's menu, with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",

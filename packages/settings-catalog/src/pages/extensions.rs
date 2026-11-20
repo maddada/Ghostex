@@ -52,7 +52,7 @@ pub(crate) fn official(platform: Platform) -> Section {
         row("changes", "Changes", "Review what changed, comment on lines for your agent, revert a hunk, and commit, all beside your sessions."),
         row("terminal", "Terminal", "A command terminal beside your sessions, with its own tabs and splits, that works like the Commands pane but lives in the view panel."),
         row("notifications", "Notifications", "A bell in the sidebar's top row that lists what your agents finished or need from you."),
-        row("help", "Ghostex Help", "An entry under Help in the sidebar's menu, with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you."),
+        row("help", "Ghostex Help", "The Ask Ghostex AI row in the sidebar's menu, with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you."),
         row("devServers", "Dev servers", "A panel listing development servers running on this computer, opened from Tools in the sidebar's menu."),
         row("resources", "Resources", "A panel listing what Ghostex is running right now, with the CPU and memory each part is using, opened from Tools in the sidebar's menu."),
         row("gitActions", "Git actions", "A work area header button for commit, branch, and worktree helpers on the active project."),
