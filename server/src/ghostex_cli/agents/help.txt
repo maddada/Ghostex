@@ -16,6 +16,8 @@ USAGE
   ghostex agents send --main-coordinator (--project-id <id> | --path <folder>)
                      [--computer <name>] [--if-none create | session] [--title <name>]
                      (<text> | --body-file <path|->) [--interrupt | --queue | --with-next]
+  ghostex agents held [<session-ref>]
+  ghostex agents unhold <session-ref> (<request-id>... | --all)
   ghostex agents close <session-ref>
   ghostex agents switch-account <session-ref> --account <number|email>
                                [--force] [--json]
@@ -164,10 +166,20 @@ DELIVERY
                 marked Not delivered and a note is queued back to you.
   --with-next   For a note that needs nothing from the recipient now (an
                 FYI, a status line for a lead session): Ghostex holds it and
-                types it right after the next message the recipient gets
-                (its user's, another session's report, a queued one), so it
-                never starts a turn by itself. A sleeping session is not
-                woken. Works for any session.
+                gives it to the recipient with the next message it gets (its
+                user's, another session's report, a queued one), so it never
+                starts a turn by itself. Claude Code gets the held notes
+                inside that message, so they cost no turn of their own; other
+                agents get each right after it, in the same turn. A sleeping
+                session is not woken; a closed one is refused. Works for any
+                session.
+                  ghostex agents held <session-ref>   what it holds now
+                  ghostex agents held                 what you hold for others
+                  ghostex agents unhold <session-ref> <request-id>   withdraw
+                                                      one (--all: all yours)
+                If the recipient is closed while a note is held, the note is
+                dropped and you are told it was not delivered: your chat card
+                says so, and a note goes in with your own next message.
 
   Enter submits. send already submits; do not append another Enter.
   Escape interrupts. To interrupt without sending a message, use:
@@ -184,7 +196,8 @@ DELIVERY
                 as soon as its input box appears.
     queued      Sent with --queue.
     held        Sent with --with-next: it goes in with the recipient's next
-                message.
+                message. A repeated --request-id is held once (duplicate:
+                true).
   A message the agent did not take (Claude Code or Codex left it in its
   input box, a blocking dialog) fails with the reason instead. A paste the
   terminal is slow to show is watched longer and then submitted; one that

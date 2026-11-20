@@ -75,6 +75,13 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<SessionKey> {
         return Vec::new();
     };
     let mut republish = expire_unwatched_sends(&db);
+    // What `--with-next` held for a session that was closed is dropped, and each sender told
+    // (session_chat_send/with_next.rs).
+    for sender in crate::session_chat_send::settle_held_for_closed_sessions(&db) {
+        if !republish.contains(&sender) {
+            republish.push(sender);
+        }
+    }
     let sends = waiting_sends(&db);
     let Ok(mut memory) = memory.lock() else {
         return republish;
@@ -134,6 +141,12 @@ fn verdict(
     else {
         return Some((DELIVERY_FAILED, Some(SESSION_REMOVED.to_string())));
     };
+    // Held by `--with-next` for the recipient's next message: on its way, however long the
+    // recipient sits idle (a closed recipient's are settled by `settle_held_for_closed_sessions`).
+    if crate::session_chat_send::is_held_with_next(db, &send.recipient, &send.send_request_id) {
+        memory.idle_since.remove(&key);
+        return None;
+    }
     let mut path = memory.transcript_paths.remove(&send.recipient);
     let recorded = coordinators::transcript_records_message(
         &session,
