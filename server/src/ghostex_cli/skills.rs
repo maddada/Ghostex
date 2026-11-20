@@ -15,9 +15,7 @@ shared path, keeping the bundled skill package source local so installed app
 builds install the skill version that matches their CLI commands.
 */
 
-const GHOSTEX_BROWSER_SKILL_NAME: &str = "ghostex-browser-use";
 const GHOSTEX_EMBEDDED_BROWSER_SKILL_NAME: &str = "ghostex-embedded-browser-use";
-const GHOSTEX_COMPUTER_USE_SKILL_NAME: &str = "ghostex-computer-use";
 const GHOSTEX_SPACEO_SKILL_NAME: &str = "ghostex-spaceo";
 const GHOSTEX_CLI_SKILL_NAME: &str = "ghostex-cli";
 const GHOSTEX_MANAGE_BEADS_SKILL_NAME: &str = "ghostex-manage-beads";
@@ -265,6 +263,30 @@ fn retired_skill_install(_args: &[String], name: &str, instead: &str) -> CliResu
     )))
 }
 
+/// `computer-use install-skill` and `browser-use install-skill`: Trycua's `cua-driver` skill, which
+/// replaced the retired Ghostex wrappers (managed_tools/desktop_control.rs `install_trycua_skill`).
+fn install_cua_driver_skill(args: &[String]) -> CliResult<()> {
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| crate::paths::get_gxserver_paths(None).home_dir);
+    let result = crate::managed_tools::desktop_control::install_trycua_skill(&home);
+    if parse_args(args).flags.truthy("json") {
+        let value = match &result {
+            Ok(message) => {
+                serde_json::json!({ "ok": true, "skill": "cua-driver", "message": message })
+            }
+            Err(error) => serde_json::json!({ "ok": false, "skill": "cua-driver", "error": error }),
+        };
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&value).unwrap_or_default()
+        );
+        return result.map(|_| ()).map_err(CliError::Other);
+    }
+    println!("{}", result.map_err(CliError::Other)?);
+    Ok(())
+}
+
 /// Shared shape of the skill-surface commands (help/install-skill dispatch).
 fn skill_surface_command(
     args: &[String],
@@ -313,11 +335,7 @@ pub fn browser_use_command(args: &[String]) -> CliResult<()> {
 }
 
 pub fn install_browser_use_skill_command(args: &[String]) -> CliResult<()> {
-    /*
-    Browser Use is the Cua Driver page-content workflow. Keep it distinct from
-    `ghostex browser`, which owns Ghostex's embedded CEF pane MCP server.
-    */
-    retired_skill_install(args, GHOSTEX_BROWSER_SKILL_NAME, "the `cua-driver` skill")
+    install_cua_driver_skill(args)
 }
 
 pub fn computer_use_command(args: &[String]) -> CliResult<()> {
@@ -330,17 +348,7 @@ pub fn computer_use_command(args: &[String]) -> CliResult<()> {
 }
 
 pub fn install_computer_use_skill_command(args: &[String]) -> CliResult<()> {
-    /*
-    Desktop Control setup must install an agent-facing `$ghostex-computer-use`
-    skill in addition to Cua Driver so users can request computer use through a
-    Ghostex-named wrapper instead of remembering the lower-level `$cua-driver`
-    skill name.
-    */
-    retired_skill_install(
-        args,
-        GHOSTEX_COMPUTER_USE_SKILL_NAME,
-        "the `cua-driver` skill",
-    )
+    install_cua_driver_skill(args)
 }
 
 /// How to drive Mac apps on SpaceO's hidden displays (spaceo_guide.md), which `ghostex spaceo guide` prints.

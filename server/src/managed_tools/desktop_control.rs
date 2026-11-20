@@ -382,6 +382,41 @@ pub(crate) fn run_operation(
     Ok(())
 }
 
+/// Installs (or, when its pack is already fetched, updates) Trycua's `cua-driver` skill for every
+/// agent, as the desktop's Install skill button does, and says what happened.
+///
+/// CDXC:AgentSkills 2026-11-20 DECISION:
+/// User (Q4262, "for browser and computer use let's just refer to the /cua-driver skill"): the Ghostex Computer Use and Browser Use wrapper skills are retired, so `ghostex computer-use install-skill` and `ghostex browser-use install-skill` install this skill instead of refusing; the Computer use and Browser use Boosts send agents there when the skill is missing (Opus review, finding 2).
+pub(crate) fn install_trycua_skill(home: &Path) -> Result<String, String> {
+    let Some(executable) = trycua_executable(home) else {
+        return Err("Cua Driver isn't installed: install Fast Computer & Browser Use in Settings > Integrations first, which adds the cua-driver skill.".to_string());
+    };
+    let refresh = home
+        .join(".cua-driver/skills/cua-driver/SKILL.md")
+        .is_file();
+    let verb = if refresh { "update" } else { "install" };
+    let output = crate::platform::process::background_command(&executable)
+        .args(["skills", verb])
+        .output()
+        .map_err(|error| format!("cua-driver skills {verb} could not start: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "cua-driver skills {verb} failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    if !trycua_skill_linked(home) {
+        return Err(format!(
+            "cua-driver skills {verb} finished, but no agent skills folder links the cua-driver skill yet."
+        ));
+    }
+    Ok(if refresh {
+        "The cua-driver skill is updated to match the installed driver.".to_string()
+    } else {
+        "The cua-driver skill is installed for every detected agent.".to_string()
+    })
+}
+
 /// Agent skills folders `cua-driver skills install` links (`cua-driver skills status` lists them),
 /// relative to home. Keep in step with `GPUI_CUA_DRIVER_SKILL_LINK_DIRS` in
 /// apps/desktop/src/app/helpers/os_cli/cua_driver_skill.rs.
