@@ -192,7 +192,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     ]),
     J::Obj(&[
         ("appWide", J::Bool(true)),
-        ("description", J::Str("An entry under Help in the sidebar's menu, with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.")),
+        ("description", J::Str("The Ask Ghostex AI row in the sidebar's menu, with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.")),
         ("category", J::Str("menus-and-panels")),
         ("id", J::Str("help")),
         ("placement", J::Str("titlebar-button")),

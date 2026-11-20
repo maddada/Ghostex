@@ -5,7 +5,7 @@
       "first": 1,
       "icon": "bug",
       "title": "Found a bug? Tell us",
-      "body": "Open the sidebar's menu > Help > Send Bug / Feedback and turn on Collect more data with an agent."
+      "body": "Open the sidebar's menu > Send Bug / Feedback and turn on Collect more data with an agent."
     },
     {
       "id": "drag-session-to-split",
