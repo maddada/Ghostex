@@ -472,8 +472,13 @@ impl GhostexGpuiApp {
     /// What `closeAppModal(...)` does. Moved out of the bridge's `close` arm so the sidebar's own
     /// Rename and Note, which close the open dialog before they open theirs, run the SAME close
     /// rather than a second copy of it (gx_store/sidebar_modals.rs).
+    ///
+    /// CDXC:SessionChat 2026-11-20 WHY:
+    /// A shown Ghostex page is put aside here, not closed (the 2026-11-11 decision in app/visual_page_hidden.rs). Every sidebar navigation row (Search, Commands, Settings and the rest, gx-core `close_then_open`) closes the open dialog before it opens its own, and this close removed the page window: Quick Access opened from the sidebar's Search over a page threw the page away, with no pill to bring it back and its picks lost.
     pub(crate) fn close_app_modal_from_bridge(&mut self, cx: &mut gpui::Context<Self>) {
-        if self.app_modal_window.is_none() && self.close_native_app_modal_from_bridge(cx) {
+        if self.app_modal_window.is_none()
+            && (self.hide_visual_page_modal(cx) || self.close_native_app_modal_from_bridge(cx))
+        {
             return;
         }
         let closing_modal_id = self.app_modal_window.and_then(|handle| {
