@@ -8510,10 +8510,10 @@ What is collected, all of it anonymous:
   and its strengths, the sidebar kind and its main options, Boosts on or off and
   Lean Codex workers. Numbers such as tints, zoom and sidebar width are sent as
   ranges, and a background picture or video only as "set or not".
-- Accounts: how many Claude, Codex, Cursor, Gemini and Copilot accounts you have,
 - The sidebar layout: Rail or Classic (also in the daily setup), when you switch
   it and whether from Settings or Meet the rail, and in Meet the rail which
   layouts you tried and which you kept; never your pinned icons or their order.
+- Accounts: how many Claude, Codex, Cursor, Gemini and Copilot accounts you have,
   and the plan Claude and Codex report for them (such as Pro, Max, Team or Plus).
 
 Never sent: prompts or messages, file paths, project, session or workspace names,
