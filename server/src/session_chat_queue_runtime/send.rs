@@ -777,6 +777,9 @@ async fn send_session_chat_message_locked(
         )
     };
     // Each Boost pill's prompt goes under the message (CDXC:Boosts 2026-11-20 in boosts.rs).
+    // Which Boosts it carried is kept for the anonymous `boosts.used` event sent after a
+    // successful send (CDXC:Telemetry 2026-11-20 in telemetry/capture.rs).
+    let (boosts_built_in, boosts_custom) = crate::boosts::used_in(text);
     let expanded = crate::boosts::with_boosts(&state.paths, &expanded);
     // Ghostex's notes and the held `--with-next` messages for Claude Code, in the block every chat
     // leaves out of the user's row (`takes_held_notes_inside`; CDXC:SessionChat 2026-11-20 in
@@ -1613,16 +1616,20 @@ async fn send_session_chat_message_locked(
     are all that leave; the prompt text is not in scope for the emitter and
     cannot be.
     */
-    crate::telemetry::prompt_sent(
+    let prompt_source = match source {
+        SessionChatMessageSource::Composer => "chat",
+        SessionChatMessageSource::AutomaticQueue
+        | SessionChatMessageSource::AutomaticRecovery
+        | SessionChatMessageSource::AccountSwitch(_)
+        | SessionChatMessageSource::ManualQueue => "queue",
+        SessionChatMessageSource::GhostexNote => "ghostexNote",
+    };
+    crate::telemetry::prompt_sent(&target.session, prompt_source);
+    crate::telemetry::boosts_used(
         &target.session,
-        match source {
-            SessionChatMessageSource::Composer => "chat",
-            SessionChatMessageSource::AutomaticQueue
-            | SessionChatMessageSource::AutomaticRecovery
-            | SessionChatMessageSource::AccountSwitch(_)
-            | SessionChatMessageSource::ManualQueue => "queue",
-            SessionChatMessageSource::GhostexNote => "ghostexNote",
-        },
+        prompt_source,
+        boosts_built_in,
+        boosts_custom,
     );
     /*
     An option command changes what the statusline reports: read it back. It is

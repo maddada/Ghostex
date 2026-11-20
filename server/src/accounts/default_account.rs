@@ -272,6 +272,7 @@ mod tests {
             usage_updated_at: Some("2026-11-18T00:16:00Z".into()),
             usage_error: None,
             usage_stale: false,
+            plan: None,
         };
         let saved = SavedAccount {
             id: account_id(&found),

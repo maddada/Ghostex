@@ -245,6 +245,7 @@ mod tests {
             usage_updated_at: None,
             usage_error: None,
             usage_stale: false,
+            plan: None,
         }
     }
 

@@ -371,6 +371,10 @@ fn discover_row(home: &Path, provider: Provider, row: &Value) -> Option<Discover
         usage_updated_at: None,
         usage_error: None,
         usage_stale: false,
+        plan: match provider {
+            Provider::Claude => crate::telemetry::settings_snapshot::claude_plan(&row["plan"]),
+            Provider::Codex => crate::telemetry::settings_snapshot::codex_plan(&row["plan"]),
+        },
     };
     if provider == Provider::Claude {
         account.identity = format!("{}:{}", email.to_lowercase(), text(row, "organizationUuid"));

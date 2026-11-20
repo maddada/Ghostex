@@ -17,6 +17,7 @@ use serde_json::{json, Value};
 
 pub const ANALYTICS_STATE_METADATA_KEY: &str = "analytics.state.v1";
 pub const LAST_HEARTBEAT_AT_KEY: &str = "lastHeartbeatAt";
+pub const BUILT_IN_EXTENSIONS_ON_KEY: &str = "builtInExtensionsOn";
 
 pub fn read_analytics_state(db: &Connection) -> Option<Value> {
     let text = db
@@ -40,13 +41,36 @@ pub fn read_last_heartbeat_at(db: &Connection) -> Option<chrono::DateTime<chrono
 }
 
 pub fn write_last_heartbeat_at(db: &Connection, sent_at: &str) {
+    write_state_key(
+        db,
+        LAST_HEARTBEAT_AT_KEY,
+        Value::String(sent_at.to_string()),
+    );
+}
+
+/// The built-in extensions that were on at the last settings snapshot, so the next one can tell
+/// which were switched on or off since (CDXC:Telemetry 2026-11-20 in task.rs). `None` before the
+/// first snapshot.
+pub fn read_built_in_extensions_on(db: &Connection) -> Option<Vec<String>> {
+    let value = read_analytics_state(db)?;
+    let list = value.get(BUILT_IN_EXTENSIONS_ON_KEY)?.as_array()?;
+    Some(
+        list.iter()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect(),
+    )
+}
+
+pub fn write_built_in_extensions_on(db: &Connection, ids: &[&'static str]) {
+    write_state_key(db, BUILT_IN_EXTENSIONS_ON_KEY, json!(ids));
+}
+
+fn write_state_key(db: &Connection, key: &str, value: Value) {
     let mut state = read_analytics_state(db)
         .and_then(|value| value.as_object().cloned())
         .unwrap_or_default();
-    state.insert(
-        LAST_HEARTBEAT_AT_KEY.to_string(),
-        Value::String(sent_at.to_string()),
-    );
+    state.insert(key.to_string(), value);
     let Ok(serialized) = serde_json::to_string(&Value::Object(state)) else {
         return;
     };

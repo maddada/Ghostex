@@ -185,6 +185,23 @@ pub fn resolve_extension(id: &str) -> ExtensionRef {
     ExtensionRef::Custom
 }
 
+/// An installed (Store or local) extension as analytics may name it: its official Store id, or
+/// `custom`. Reads the Store catalog cache first, so an extension installed a moment ago from the
+/// Store is already known. Built-in ids are never installed, so they are not looked up here.
+pub fn resolve_store_extension(id: &str) -> ExtensionRef {
+    let id = id.trim();
+    if !is_official_store_id(id) {
+        if let Some(telemetry) = super::queue::handle() {
+            load_official_store_ids(&telemetry.paths().extensions_dir);
+        }
+    }
+    if is_official_store_id(id) {
+        ExtensionRef::Store(id.to_string())
+    } else {
+        ExtensionRef::Custom
+    }
+}
+
 /// The heartbeat's view of the installed extensions.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct EnabledExtensions {

@@ -101,26 +101,104 @@ pub fn client_connected(client: &'static str, platform: ClientPlatform) {
     );
 }
 
-pub fn extension_installed(source: &'static str) {
+/*
+CDXC:Telemetry 2026-11-20:
+User: "add PostHog tracking for Boosts used in a message and for extensions (I
+want to know usage of those two)". Installs and uninstalls now say WHICH
+extension: an official Store id (with the version installed) or `custom` for a
+local or unlisted one, resolved through `extensions::resolve_extension`, so a
+user's own extension name stops here. The id comes from the registry's answer,
+not from the request, so it is the extension that was really installed.
+*/
+pub fn extension_installed(source: &'static str, id: Option<&str>, version: Option<&str>) {
+    let mut properties = vec![("source", PropertyValue::Enum(source))];
+    if let Some(id) = id {
+        let extension = super::extensions::resolve_store_extension(id);
+        if let (ExtensionRef::Store(_), Some(version)) = (&extension, version) {
+            if let Some(version) = taxonomy::normalize_version_string(version) {
+                properties.push(("extension_version", PropertyValue::Version(version)));
+            }
+        }
+        properties.push(("extension", PropertyValue::Extension(extension)));
+    }
+    capture(taxonomy::EVENT_EXTENSION_INSTALLED, &properties);
+}
+
+pub fn extension_uninstalled(id: Option<&str>) {
+    let mut properties = Vec::new();
+    if let Some(id) = id {
+        properties.push((
+            "extension",
+            PropertyValue::Extension(super::extensions::resolve_store_extension(id)),
+        ));
+    }
+    capture(taxonomy::EVENT_EXTENSION_UNINSTALLED, &properties);
+}
+
+/// An extension was switched on or off: an installed one through Settings > Extensions (`kind`
+/// `installed`), or a built-in one, noticed by the daily snapshot (`kind` `built_in`).
+pub fn extension_toggled(extension: ExtensionRef, kind: &'static str, enabled: bool) {
     capture(
-        taxonomy::EVENT_EXTENSION_INSTALLED,
-        &[("source", PropertyValue::Enum(source))],
+        if enabled {
+            taxonomy::EVENT_EXTENSION_ENABLED
+        } else {
+            taxonomy::EVENT_EXTENSION_DISABLED
+        },
+        &[
+            ("extension", PropertyValue::Extension(extension)),
+            ("kind", PropertyValue::Enum(kind)),
+        ],
     );
 }
 
-pub fn extension_uninstalled() {
-    capture(taxonomy::EVENT_EXTENSION_UNINSTALLED, &[]);
+/*
+CDXC:Telemetry 2026-11-20:
+A message went to an agent with Boosts on it. Ghostex's own Boosts are named by
+their id (gx-chat-core `extras::boosts::BOOSTS`, re-checked by the taxonomy);
+the user's own Boosts are only counted, so their label and prompt never leave.
+Sent beside `prompt.sent`, on the same success path, with the same agent and
+source.
+*/
+pub fn boosts_used(
+    session: &Value,
+    source: &'static str,
+    built_in: Vec<&'static str>,
+    custom_count: usize,
+) {
+    if built_in.is_empty() && custom_count == 0 {
+        return;
+    }
+    let mut properties = agent_properties(session_agent_report(session));
+    properties.push(("source", PropertyValue::Enum(source)));
+    properties.push((
+        "boost_count",
+        PropertyValue::Number((built_in.len() + custom_count) as f64),
+    ));
+    properties.push((
+        "custom_boost_count",
+        PropertyValue::Number(custom_count as f64),
+    ));
+    properties.push(("boosts", PropertyValue::EnumList(built_in)));
+    capture(taxonomy::EVENT_BOOSTS_USED, &properties);
 }
 
 /// The desktop startup ping, forwarded from `/api/recordClientEvent`.
-pub fn app_launched(app_version: String) {
-    capture(
-        taxonomy::EVENT_APP_LAUNCHED,
-        &[
-            ("client", PropertyValue::Enum("desktop")),
-            ("app_version", PropertyValue::Version(app_version)),
-        ],
-    );
+pub fn app_launched(
+    app_version: String,
+    linux_desktop: Option<&'static str>,
+    linux_session: Option<&'static str>,
+) {
+    let mut properties = vec![
+        ("client", PropertyValue::Enum("desktop")),
+        ("app_version", PropertyValue::Version(app_version)),
+    ];
+    if let Some(desktop) = linux_desktop {
+        properties.push(("linux_desktop", PropertyValue::Enum(desktop)));
+    }
+    if let Some(session) = linux_session {
+        properties.push(("linux_session", PropertyValue::Enum(session)));
+    }
+    capture(taxonomy::EVENT_APP_LAUNCHED, &properties);
 }
 
 /// The properties of one `surface.opened`, built in one place so the loopback

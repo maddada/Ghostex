@@ -8409,6 +8409,32 @@ email or account id, and never prompts, file paths, project names or email
 addresses. A server Ghostex installed on a remote computer over SSH never sends
 any. Settings has no switch for analytics.
 
+What is collected, all of it anonymous:
+
+- That the app started (its version, and on Linux the desktop environment and
+  session type, such as GNOME on Wayland), which views you open, that a session
+  started or a message was sent and with which agent, and that a phone or the
+  web app connected.
+- Boosts: when a message goes out with Boosts, which of Ghostex's Boosts it had
+  and how many of your own; never your own Boosts' names or prompts.
+- Extensions: installs, uninstalls and switching an extension on or off, named
+  only when it is a built-in extension or one from the Ghostex Store (with its
+  version); your own extensions are counted, never named.
+- Once a day, what your setup looks like: your computer's operating system and
+  major version (on Linux the distribution and its version, the desktop
+  environment and whether it runs in WSL), counts (projects, sessions,
+  workspaces, other computers, your own Boosts, extensions), which agents you
+  use, and notable settings such as Appearance, the colour presets, Transparency
+  and its strengths, the sidebar kind and its main options, Boosts on or off and
+  Lean Codex workers. Numbers such as tints, zoom and sidebar width are sent as
+  ranges, and a background picture or video only as "set or not".
+- Accounts: how many Claude, Codex, Cursor, Gemini and Copilot accounts you have,
+  and the plan Claude and Codex report for them (such as Pro, Max, Team or Plus).
+
+Never sent: prompts or messages, file paths, project, session or workspace names,
+email addresses, account names or ids, your computer's name, theme colours, the
+picture or video you chose, or anything you typed into a setting.
+
 To turn them off, start Ghostex with a launch option, the way many developer tools
 do:
 

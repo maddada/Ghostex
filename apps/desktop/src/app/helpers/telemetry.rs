@@ -151,14 +151,29 @@ pub(crate) fn record_gpui_app_launched_telemetry(background: &gpui::BackgroundEx
     if SENT.swap(true, Ordering::SeqCst) {
         return;
     }
-    record_gpui_client_event(
-        "app.launched",
-        serde_json::json!({
-            "client": "desktop",
-            "app_version": GPUI_APP_MARKETING_VERSION,
-        }),
-        background,
-    );
+    let mut properties = serde_json::json!({
+        "client": "desktop",
+        "app_version": GPUI_APP_MARKETING_VERSION,
+    });
+    /*
+    CDXC:Telemetry 2026-11-20:
+    On Linux, the desktop environment (or compositor) and session type this app runs in, as the
+    environment names them. gxserver maps both onto closed tables and drops anything else
+    (server/src/telemetry/settings_snapshot.rs), and a gxserver started by systemd may not have
+    these variables itself, which is why the app sends them.
+    */
+    if cfg!(target_os = "linux") {
+        let env = |name: &str| std::env::var(name).ok().filter(|value| !value.trim().is_empty());
+        if let Some(desktop) = env("XDG_CURRENT_DESKTOP").or_else(|| env("XDG_SESSION_DESKTOP")) {
+            properties["linux_desktop"] = serde_json::Value::String(desktop);
+        }
+        let session = env("XDG_SESSION_TYPE")
+            .or_else(|| env("WAYLAND_DISPLAY").map(|_| "wayland".to_string()));
+        if let Some(session) = session {
+            properties["linux_session"] = serde_json::Value::String(session);
+        }
+    }
+    record_gpui_client_event("app.launched", properties, background);
 }
 
 /// `surface.opened`, throttled to at most one ping per surface (and per

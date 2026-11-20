@@ -213,6 +213,9 @@ pub(crate) struct DiscoveredAccount {
     pub usage_error: Option<String>,
     /// `usage` is the last reading that refreshed successfully, not a current one; `usage_updated_at` is when that reading was taken.
     pub usage_stale: bool,
+    /// The plan the provider reports for this login, as anonymous analytics names it (`max_20x`,
+    /// `team`, `plus`, ...; telemetry/settings_snapshot.rs). Only the daily snapshot reads it.
+    pub plan: Option<&'static str>,
 }
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
