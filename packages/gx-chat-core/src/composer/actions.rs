@@ -45,8 +45,13 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         ActionKind::ComposerScroll | ActionKind::ComposerExpand => scroll(state, action, context),
         ActionKind::CompleteComposerCommand => complete_command(state),
         ActionKind::ComposerSelection => {
-            selection_changed(state, text_param(action), caret_param(action));
-            Vec::new()
+            if selection_changed(state, text_param(action), caret_param(action)) {
+                crate::extras::boosts::read_for_picker(state)
+                    .into_iter()
+                    .collect()
+            } else {
+                Vec::new()
+            }
         }
         ActionKind::SuggestionKey
         | ActionKind::SuggestionPick
@@ -421,8 +426,10 @@ fn complete_command(state: &ChatState) -> Vec<Effect> {
     }
 }
 
-/// `NativeComposerSuggestions.update`: which dismissals survive the new draft and caret.
-pub fn selection_changed(state: &mut ChatState, text: &str, caret: usize) {
+/// `NativeComposerSuggestions.update`: which dismissals survive the new draft and caret. True when
+/// a `*` Boost token starts here (it was not one before, or it is a new one), the moment the `*`
+/// picker opens.
+pub fn selection_changed(state: &mut ChatState, text: &str, caret: usize) -> bool {
     let composer = &mut state.composer;
     let previous = crate::composer::trigger::detect_composer_trigger(
         &composer.suggestions.text,
@@ -471,6 +478,11 @@ pub fn selection_changed(state: &mut ChatState, text: &str, caret: usize) {
     {
         composer.suggestions.dismissed.boost = false;
     }
+    let is_boost = |trigger: &crate::composer::trigger::ComposerTrigger| {
+        trigger.kind == crate::composer::trigger::TriggerKind::Boost
+    };
+    let boost_started = next.as_ref().is_some_and(is_boost)
+        && (!previous.as_ref().is_some_and(is_boost) || next_start != previous_start);
     if crate::composer::slash_commands::slash_query(text).is_none() {
         composer.suggestions.dismissed.slash = false;
     }
@@ -485,6 +497,7 @@ pub fn selection_changed(state: &mut ChatState, text: &str, caret: usize) {
     composer.suggestions.caret = caret;
     composer.text = text.to_string();
     composer.caret = caret;
+    boost_started
 }
 
 fn suggestion_command(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
