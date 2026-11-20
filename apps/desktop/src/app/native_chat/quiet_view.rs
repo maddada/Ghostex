@@ -298,6 +298,50 @@ impl NativeChatView {
         lines
     }
 
+    /// Draws again the rows of every quiet line whose extent changed with this snapshot.
+    ///
+    /// CDXC:SessionChat 2026-11-20 DECISION:
+    /// User, of an opened "Reports" group: the rail down its left was two pieces with a gap between, and the lower piece did not close the group when clicked. Each row of an opened line draws its own piece of the rail, and a row that is not the line's last carries it on through the gap below (`quiet_row_bottom`, `rail`'s `bottom`). Whether a row is the last one is in the snapshot's `quietView`, not in the row's own item, so when a report or a turn joined a line that was drawn open, the core's splice only held the new rows; the row that used to end the line was not in it, and the list kept it as drawn (the desktop's list holds rows whose item did not change, as `remeasure_on_look_change` and `rowDetails` also have to answer for), so its piece of the rail stopped at its last card with the row gap under it. The web build lays every row out each frame, so it never showed this. The rows of a line whose first row, end, tail or work item lines changed are measured and drawn again, the same way a change of the chat look is.
+    pub(super) fn remeasure_changed_quiet_rows(&self, before: &Value) {
+        let shapes =
+            |snapshot: &Value| -> Vec<(String, usize, usize, Option<usize>, Option<usize>, usize)> {
+                serde_json::from_value::<Vec<QuietStretch>>(
+                    snapshot["quietView"]["stretches"].clone(),
+                )
+                .unwrap_or_default()
+                .into_iter()
+                .map(|line| {
+                    (
+                        line.key,
+                        line.start,
+                        line.end,
+                        line.tail.map(|tail| tail.row),
+                        line.after,
+                        line.cards.len(),
+                    )
+                })
+                .collect()
+            };
+        let (old, new) = (shapes(before), shapes(&self.snapshot));
+        let count = self.list.item_count();
+        let mut rows: Option<std::ops::Range<usize>> = None;
+        for shape in old
+            .iter()
+            .filter(|shape| !new.contains(shape))
+            .chain(new.iter().filter(|shape| !old.contains(shape)))
+        {
+            let end = shape.2.max(shape.4.map_or(0, |after| after + 1));
+            let span = shape.1.min(count)..end.min(count);
+            rows = match rows {
+                Some(rows) => Some(rows.start.min(span.start)..rows.end.max(span.end)),
+                None => Some(span),
+            };
+        }
+        if let Some(rows) = rows.filter(|rows| !rows.is_empty()) {
+            self.list.remeasure_items(rows);
+        }
+    }
+
     /// Whether a work item line under a reply moved into a quiet line.
     pub(super) fn quiet_holds_card(&self, card: &Value) -> bool {
         card["key"]
