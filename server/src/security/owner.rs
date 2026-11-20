@@ -91,10 +91,13 @@ CDXC:Security 2026-11-20 FIX:
 The user's Mac, renamed to "Macbook 16", was still named "Mohamads-MacBook-Pro-2" in M7-Desktop's "approve it in Ghostex on …", the name its key was enrolled under weeks before: a key's label was written once, at enrollment. The app now sends the computer's name each time its key opens a session, and the label follows it once the signature checks out (only the key's holder can rename it; it is a display name and grants nothing). A phone's label is left alone.
 */
 /// The label an app sent with its owner session (`OpenOwnerSessionParams::label`), cleaned for
-/// showing: one line, no control characters, at most 80 characters. `None` when nothing is left.
+/// showing: one line, no control, format or direction characters (a right-to-left override could
+/// make one name read as another; Fable 5.2's review, finding 3), at most 80 characters. `None`
+/// when nothing is left.
 pub fn current_key_label(label: &str) -> Option<String> {
     let cleaned: String = label
         .chars()
+        .filter(|c| !is_format_char(*c))
         .map(|c| if c.is_control() { ' ' } else { c })
         .collect::<String>()
         .split_whitespace()
@@ -103,6 +106,34 @@ pub fn current_key_label(label: &str) -> Option<String> {
     let cleaned: String = cleaned.chars().take(80).collect();
     let cleaned = cleaned.trim().to_string();
     (!cleaned.is_empty()).then_some(cleaned)
+}
+
+/// Unicode's invisible format characters (general category Cf): soft hyphen, the bidirectional
+/// marks, embeddings, overrides and isolates, zero-width characters, the byte order mark.
+fn is_format_char(c: char) -> bool {
+    matches!(
+        c,
+        '\u{00AD}'
+            | '\u{0600}'..='\u{0605}'
+            | '\u{061C}'
+            | '\u{06DD}'
+            | '\u{070F}'
+            | '\u{180E}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{206F}'
+            | '\u{FEFF}'
+            | '\u{FFF9}'..='\u{FFFB}'
+            | '\u{E0001}'
+            | '\u{E0020}'..='\u{E007F}'
+    )
+}
+
+/// A key's label changed as it opened a session: its old and new label, for the security log.
+pub struct KeyRenamed {
+    pub old: String,
+    pub new: String,
 }
 
 impl SecurityState {
@@ -153,7 +184,7 @@ impl SecurityState {
         signature_b64: &str,
         label: Option<&str>,
         now_ms: u64,
-    ) -> Result<OpenOwnerSessionResult, OwnerError> {
+    ) -> Result<(OpenOwnerSessionResult, Option<KeyRenamed>), OwnerError> {
         if !self.owner_challenges.take(challenge, now_ms) {
             return Err(OwnerError::BadChallenge);
         }
@@ -167,11 +198,17 @@ impl SecurityState {
         let payload = owner_session_signing_payload(&self.server_id, challenge, key_id)
             .map_err(|_| OwnerError::BadChallenge)?;
         verify_approval_signature(&key, &payload, signature_b64).map_err(OwnerError::Key)?;
+        let mut renamed = None;
         if let Some(label) = label.and_then(current_key_label) {
             if label != key.label && !matches!(key.platform.as_str(), "ios" | "android") {
-                let mut renamed = key.clone();
-                renamed.label = label;
-                let _ = self.owner_keys.insert(renamed);
+                let mut new_key = key.clone();
+                new_key.label = label.clone();
+                if self.owner_keys.insert(new_key).is_ok() {
+                    renamed = Some(KeyRenamed {
+                        old: key.label.clone(),
+                        new: label,
+                    });
+                }
             }
         }
         // Door sessions only (CDXC:Security 2026-11-17 above; review M2 in security/policy.rs).
@@ -184,11 +221,14 @@ impl SecurityState {
                 device_id: key.device_id.clone(),
             },
         });
-        Ok(OpenOwnerSessionResult {
-            token,
-            device_id: key.device_id,
-            expires_at_ms: Some(until),
-        })
+        Ok((
+            OpenOwnerSessionResult {
+                token,
+                device_id: key.device_id,
+                expires_at_ms: Some(until),
+            },
+            renamed,
+        ))
     }
 
     /// `/api/approveWithOwnerKey` (CDXC:Security 2026-11-17 in packages/gx-protocol/src/approval.rs):
