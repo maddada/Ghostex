@@ -18,6 +18,7 @@ pub mod helpers;
 mod home_secret_folders;
 pub mod identity;
 pub mod launch_plan;
+pub mod lead_links;
 mod marked_handovers;
 mod mode_picker_off;
 pub(crate) mod opencode_session_id;

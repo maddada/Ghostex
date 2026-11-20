@@ -1384,4 +1384,8 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         id: "0083_chat_message_numbers",
         sql: include_str!("migrations/0083_chat_message_numbers.sql"),
     },
+    Migration {
+        id: "0084_lead_links",
+        sql: include_str!("migrations/0084_lead_links.sql"),
+    },
 ];

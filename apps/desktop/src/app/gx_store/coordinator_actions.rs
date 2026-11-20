@@ -182,6 +182,29 @@ impl GhostexGpuiApp {
                 })
                 .detach();
             }
+            // Lead links (server/src/agents/lead_links): Unlink from Lead on a linked session, Stop
+            // leading on its lead. Both rows redraw from gxserver's presentation deltas.
+            Some(action @ ("unlinkLead" | "stopLeading")) => {
+                let params = if action == "unlinkLead" {
+                    json!({ "op": "unlink", "projectId": session.project_id, "sessionId": session.session_id })
+                } else {
+                    json!({ "op": "stopLeading", "leadProjectId": session.project_id, "leadSessionId": session.session_id })
+                };
+                cx.spawn(async move |this, cx| {
+                    let answer = gx_rpc(remote, "/api/leadLinks", params).await;
+                    let _ = this.update(cx, |this, cx| {
+                        if let Err(error) = answer {
+                            this.dispatch_gpui_app_modal_toast(
+                                "warning",
+                                "Not unlinked",
+                                &error.message,
+                                cx,
+                            );
+                        }
+                    });
+                })
+                .detach();
+            }
             _ => {}
         }
         true

@@ -614,6 +614,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/coordinatorWork"
         // Right-click > Make main coordinator on a remote computer's coordinator: ids only.
         | "/api/setMainCoordinator"
+        // Lead links (agents/lead_links): link, unlink, Stop leading and list; ids and an op only.
+        | "/api/leadLinks"
         // CDXC:Coordinators 2026-10-19 WHY: an orchestrator reads its playbook from the machine that runs it, so a client looking at a remote machine reads and edits that machine's. They carry a project id, a session id and bounded text.
         | "/api/readCoordinatorPlaybook"
         | "/api/setCoordinatorPlaybook"

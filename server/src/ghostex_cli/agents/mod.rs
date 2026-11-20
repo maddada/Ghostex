@@ -2,6 +2,7 @@ mod arguments;
 mod command;
 pub(super) mod delivery;
 pub(super) mod identity;
+mod leads;
 mod lifecycle;
 mod main_coordinator;
 pub(super) mod outbound;

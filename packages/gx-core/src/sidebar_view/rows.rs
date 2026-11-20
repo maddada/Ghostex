@@ -427,8 +427,27 @@ pub(crate) fn session_row(
                 project_id: project_id.to_string(),
                 session_id: session_id.to_string(),
             }),
-            _ => None,
+            // A lead link nests the session under its lead the same way (CDXC:LeadLinks
+            // 2026-11-20 in server/src/agents/lead_links/mod.rs).
+            _ => match (
+                session.lead_project_id.as_deref(),
+                session.lead_session_id.as_deref(),
+            ) {
+                (Some(project_id), Some(session_id)) => Some(SessionKey {
+                    machine: key.machine.clone(),
+                    project_id: project_id.to_string(),
+                    session_id: session_id.to_string(),
+                }),
+                _ => None,
+            },
         },
+        is_lead: session.is_lead,
+        lead_link_count: session
+            .lead_link_count
+            .map_or(0, |count| u16::try_from(count).unwrap_or(u16::MAX)),
+        lead_linked: session.coordinator_session_id.is_none()
+            && session.lead_project_id.is_some()
+            && session.lead_session_id.is_some(),
         thread_state: session.coordinator_thread_state.clone(),
         coordinator_remote_threads: session
             .coordinator_remote_threads

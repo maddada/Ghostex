@@ -602,6 +602,32 @@ pub(super) async fn route_sessions_http(
                 },
             )
         }
+        // Lead links (agents/lead_links): a session may only make itself a lead, so the caller
+        // goes in.
+        crate::agents::lead_links::LEAD_LINKS_ENDPOINT => {
+            let caller = caller.clone();
+            handle_domain_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+                |repository, db, params, _| {
+                    let output = crate::agents::lead_links::handle_lead_links_endpoint(
+                        &caller,
+                        db,
+                        repository,
+                        state.metadata.server_id.as_str(),
+                        params,
+                    )?;
+                    for (project_id, session_id) in &output.changed_sessions {
+                        schedule_presentation_session_delta(
+                            &state, db, repository, project_id, session_id,
+                        )?;
+                    }
+                    Ok(output.result)
+                },
+            )
+        }
         "/api/readCoordinator"
         | "/api/readCoordinatorThreads"
         | "/api/listCoordinators"

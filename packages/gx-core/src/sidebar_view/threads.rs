@@ -197,7 +197,7 @@ pub(crate) fn nest_threads(
     let coordinators: HashMap<&SessionKey, usize> = sessions
         .iter()
         .enumerate()
-        .filter(|(_, session)| session.row.is_coordinator)
+        .filter(|(_, session)| session.row.is_coordinator || session.row.is_lead)
         .filter_map(|(index, session)| session.row.key.as_ref().map(|key| (key, index)))
         .collect();
     if coordinators.is_empty() {
@@ -270,7 +270,15 @@ pub(crate) fn nest_threads(
     // Each row's place in the tree (`lay_out_tree`), then its section and folds: a thread takes
     // its coordinator's section, and is folded when a coordinator above it is folded or it waits
     // behind its coordinator's "N older threads" row.
-    let hidden = |parent: usize, child: usize| !shows_older[parent] && is_older[child];
+    // A lead (lead links) has no "N older threads" row or fold of its own, so all its linked
+    // sessions stay listed.
+    let lead_parent: Vec<bool> = sessions
+        .iter()
+        .map(|session| session.row.is_lead && !session.row.is_coordinator)
+        .collect();
+    let hidden = |parent: usize, child: usize| {
+        !lead_parent[parent] && !shows_older[parent] && is_older[child]
+    };
     let threads_of = |index: usize| {
         let list = children.get(&index).cloned().unwrap_or_default();
         let drawn = list.iter().filter(|child| !hidden(index, **child)).count();
@@ -359,10 +367,13 @@ pub(crate) fn nest_threads(
                 .map_or(0, |list| u16::try_from(list.len()).unwrap_or(u16::MAX)),
             collapsed: is_collapsed[index],
             folded: folded_of[index],
-            older_threads: children.get(&index).map_or(0, |list| {
-                u16::try_from(list.iter().filter(|child| is_older[**child]).count())
-                    .unwrap_or(u16::MAX)
-            }),
+            older_threads: children
+                .get(&index)
+                .filter(|_| !lead_parent[index])
+                .map_or(0, |list| {
+                    u16::try_from(list.iter().filter(|child| is_older[**child]).count())
+                        .unwrap_or(u16::MAX)
+                }),
             older_threads_shown: shows_older[index],
             older_hidden: older_hidden_of[index],
             contains_active_session: holds_active == Some(index),

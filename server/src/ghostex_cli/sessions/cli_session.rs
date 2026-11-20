@@ -236,6 +236,11 @@ pub(super) fn to_cli_session(
         "coordinatorThreadState",
         &[p("coordinatorThreadState")],
     );
+    // Lead links (server/src/agents/lead_links): mobile_summary.rs forwards them too.
+    insert_js(&mut map, "leadProjectId", &[p("leadProjectId")]);
+    insert_js(&mut map, "leadSessionId", &[p("leadSessionId")]);
+    insert_js(&mut map, "isLead", &[p("isLead")]);
+    insert_js(&mut map, "leadLinkCount", &[p("leadLinkCount")]);
     // CDXC:Sidebar 2026-11-09 SEE-ALSO: the threads a coordinator here runs on other computers
     // (server/src/coordinators/remote_threads.rs), so the phone's Unified list nests them under it
     // too (gx-core unified_sidebar/tree.rs); absent when it has none, which is also what an older

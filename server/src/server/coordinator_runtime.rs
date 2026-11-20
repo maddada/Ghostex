@@ -297,7 +297,7 @@ fn text(value: &Value, key: &str) -> String {
 
 /// Launcher display names by agent id ("Claude" for a custom Claude launcher), as the sidebar and
 /// `ghostex agents types` show them.
-fn agent_names(repository: &DomainRepository<'_>) -> HashMap<String, String> {
+pub(super) fn agent_names(repository: &DomainRepository<'_>) -> HashMap<String, String> {
     let projects = repository.list_projects().unwrap_or_default();
     crate::sidebar_hud::sidebar_agent_buttons_from_projects(&projects)
         .as_array()
@@ -319,10 +319,21 @@ fn sender_for(
     thread: &ThreadRecord,
     names: &HashMap<String, String>,
 ) -> MessageSender {
+    session_sender(state, project, session, &thread.key(), names)
+}
+
+/// The sender block of a report about `key`'s session (a thread, or a lead's linked session).
+pub(super) fn session_sender(
+    state: &AppState,
+    project: Option<&Value>,
+    session: &Value,
+    key: &SessionKey,
+    names: &HashMap<String, String>,
+) -> MessageSender {
     let presentation = project.map(|project| {
         crate::presentation::project_presentation_session(
             project,
-            &crate::presentation::default_group_id(&thread.project_id),
+            &crate::presentation::default_group_id(&key.0),
             session,
             &crate::presentation::now_iso(),
         )
@@ -347,7 +358,7 @@ fn sender_for(
                 }
             }),
         title,
-        session_id: thread.session_id.clone(),
+        session_id: key.1.clone(),
         agent_id: text(session, "agentId"),
         agent_session_id: session
             .pointer("/runtimeSettings/agentSessionId")
@@ -356,8 +367,8 @@ fn sender_for(
             .to_string(),
         global_ref: crate::ids::create_global_session_ref(
             state.metadata.server_id.as_str(),
-            &thread.project_id,
-            &thread.session_id,
+            &key.0,
+            &key.1,
         ),
     }
 }
@@ -384,7 +395,7 @@ fn closed_sender(state: &AppState, thread: &ThreadRecord) -> MessageSender {
 
 /// The key and words of what a waiting thread waits on, as its "waiting for an answer" report
 /// names it.
-fn waiting_report_prompt(session: &Value) -> (String, String) {
+pub(super) fn waiting_report_prompt(session: &Value) -> (String, String) {
     match coordinators::waiting_prompt(session) {
         Some(prompt) => (prompt.key, prompt.summary),
         None => (
