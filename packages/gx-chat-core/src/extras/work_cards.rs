@@ -770,9 +770,9 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         row["showInChat"] = show_in_chat(&turns, changed_at, &key);
         needs.push((now_ms - at > DAY_MS, at, row));
     }
-    // Then every blocked line of work no holding ask already stands for (a stuck thread, or the
-    // coordinator's word), and what the newest turn finished: a finished row leaves after the next
-    // turn, or with its x.
+    // Then every blocked line of work no holding ask already stands for (none from a server since
+    // 2026-11-20, which derives Blocked only from a holding ask; an older server's stuck thread),
+    // and what the newest turn finished: a finished row leaves after the next turn, or with its x.
     for item in items
         .iter()
         .filter(|item| text(item, "status") == "blocked")

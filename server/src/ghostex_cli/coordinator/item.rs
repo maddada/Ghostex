@@ -545,6 +545,11 @@ fn print_item(item: &Value, full: bool) {
     if !recheck.is_empty() {
         println!("      recheck: {recheck}");
     }
+    // Only the coordinator sees this: the user reads In progress and nothing to do.
+    let quiet = agents::text(item, "quiet");
+    if !quiet.is_empty() {
+        println!("      thread quiet (heal it, the user is not told to act): {quiet}");
+    }
     if item["kind"] == "item" {
         for thread in item["threads"].as_array().into_iter().flatten() {
             let state = agents::text(thread, "state");

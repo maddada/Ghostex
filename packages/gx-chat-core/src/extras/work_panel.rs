@@ -158,26 +158,23 @@ fn item_row(item: &Value, group: &str, status: &str, now_ms: i64) -> Value {
             row["answered"] = json!("Done");
         }
     }
-    // A thread on it waiting on the user, or not moving: the board's chips that open it.
+    // A thread on it waiting on the user: the board's chip that opens it. A thread that is only
+    // quiet gets none: healing it is the coordinator's job, not the user's (2026-11-20).
     if let Some(thread) = item["threads"]
         .as_array()
         .into_iter()
         .flatten()
-        .find(|thread| thread["state"] == "waiting" || thread["stuck"] == true)
+        .find(|thread| thread["state"] == "waiting")
     {
         for key in ["projectId", "sessionId", "serverId"] {
             row[key] = thread.get(key).cloned().unwrap_or(json!(""));
         }
-        if thread["stuck"] == true {
-            row["stuck"] = json!(true);
+        row["waiting"] = json!(if thread["needsApproval"] == true {
+            "approval"
         } else {
-            row["waiting"] = json!(if thread["needsApproval"] == true {
-                "approval"
-            } else {
-                "question"
-            });
-            row["needsApproval"] = json!(thread["needsApproval"] == true);
-        }
+            "question"
+        });
+        row["needsApproval"] = json!(thread["needsApproval"] == true);
     }
     // No links of its own: its first thread's.
     if row.get("links").is_none() {
@@ -357,7 +354,7 @@ pub fn work_board_at(work: &Value, now_ms: i64) -> Value {
                 .as_array()
                 .into_iter()
                 .flatten()
-                .any(|thread| thread["state"] == "waiting" || thread["stuck"] == true);
+                .any(|thread| thread["state"] == "waiting");
         if !only_asking {
             push(group, item_row(item, group, status, now_ms));
         }

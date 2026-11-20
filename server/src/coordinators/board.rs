@@ -49,8 +49,10 @@ use crate::domain::DomainStateError;
 /// waiting on something outside (a sign-up, a release, another thread, a vendor, someone else's CI)
 /// is On hold, after Blocked and before In progress, in a calm colour and with no pill of its own. A
 /// finished thread's failing checks or requested changes are To do (work for the coordinator, not
-/// the user), and a thread still not moving after Ghostex's nudge is Blocked. Cards already under
-/// Blocked stay there.
+/// the user). A thread still not moving after Ghostex's nudge was Blocked here until 2026-11-20,
+/// when the user, of W756 red in a long silent build, said it is the coordinator's to heal, not
+/// theirs: it stays In progress with its red "Not moving" chip. Cards already under Blocked stay
+/// there.
 ///
 /// CDXC:Coordinators 2026-11-07 DECISION:
 /// User, with a screenshot of the board's side list showing "Moving 3": "rename to in progress
@@ -288,12 +290,8 @@ pub(crate) fn thread_row(
         }
     };
     // A thread still not moving after Ghostex's nudge (or whose terminal Ghostex could not
-    // restart) waits on the user to heal it: Blocked, the 2026-11-06 meaning on `BOARD_GROUPS`.
-    let group = if row["stuck"] == true && group == "moving" {
-        "blocked"
-    } else {
-        group
-    };
+    // restart) stays In progress with its red "Not moving" chip (`stuck` below): healing it is the
+    // coordinator's job, not the user's (CDXC:Coordinators 2026-11-20 in work.rs `derive`).
     if let Some(note) = pin
         .map(|pin| pin.note.trim())
         .filter(|note| !note.is_empty())
@@ -1124,8 +1122,8 @@ mod tests {
     }
 
     /// A finished thread's open PR places it: failing checks are To do (work for the coordinator,
-    /// not Blocked), running checks move it, green checks put it with the user; a stuck thread is
-    /// Blocked; an item goes On hold.
+    /// not Blocked), running checks move it, green checks put it with the user; a stuck thread stays
+    /// In progress; an item goes On hold.
     #[test]
     fn a_threads_pr_places_it() {
         let with_pr = |id: &str, checks: &str| {
@@ -1153,7 +1151,8 @@ mod tests {
         let mut stuck = thread("Gstuck", "working", 0);
         stuck["stuck"] = json!(true);
         let board = board_value(&[stuck], &[], None, now());
-        assert_eq!(refs(&board, "blocked"), vec!["Gstuck"]);
+        assert_eq!(refs(&board, "moving"), vec!["Gstuck"]);
+        assert!(refs(&board, "blocked").is_empty());
         assert_eq!(parse_status("on-hold"), Some(("waiting", "")));
         assert_eq!(parse_status("on hold"), Some(("waiting", "")));
         let ids: Vec<&str> = board["groups"]
