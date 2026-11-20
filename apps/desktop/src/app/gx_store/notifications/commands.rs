@@ -129,9 +129,10 @@ impl GhostexGpuiApp {
                 .detach();
             }
             NotificationFeedCommand::DeferAndJumpNext => self.gx_store_defer_notification(cx),
-            NotificationFeedCommand::MarkAllRead
-            | NotificationFeedCommand::MarkFinishedSeen
-            | NotificationFeedCommand::ClearAll => {
+            NotificationFeedCommand::MarkFinishedSeen => {
+                self.gx_store_mark_finished_notifications_seen(tab, cx)
+            }
+            NotificationFeedCommand::MarkAllRead | NotificationFeedCommand::ClearAll => {
                 let Some(action) = command.update_action() else {
                     return;
                 };
@@ -153,6 +154,65 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
+        }
+    }
+
+    /// The bell opened or closed: every online computer reads its "finished" rows. A computer on an
+    /// older gxserver refuses `markFinishedSeen`, so its unread finished rows (as the bell holds
+    /// them) are marked read one by one instead, which is what the badge needs to drop there too;
+    /// that older path also clears those sessions' own marks, as a mark-read always did.
+    fn gx_store_mark_finished_notifications_seen(
+        &mut self,
+        tab: NotificationFeedTab,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        for machine in self.gx_store_notification_machines_on(tab) {
+            let Some(route) = self.gx_store_notification_feed_route(&machine) else {
+                continue;
+            };
+            cx.spawn(async move |this, cx| {
+                if let Some(message) = update_notification_feed(
+                    route.clone(),
+                    json!({ "action": "markFinishedSeen" }),
+                )
+                .await
+                {
+                    let _ = this.update(cx, |this, cx| {
+                        this.gx_store_store_notification_feed(machine, message, cx);
+                    });
+                    return;
+                }
+                let finished: Vec<String> = this
+                    .update(cx, |this, _| {
+                        this.notification_feed_state
+                            .items
+                            .iter()
+                            .filter(|item| {
+                                item.machine == machine
+                                    && item.kind == crate::notification_feed::GpuiNotificationFeedKind::Finished
+                                    && !item.read
+                                    && !item.awaiting_approval
+                            })
+                            .map(|item| item.id.clone())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let mut last = None;
+                for id in finished {
+                    let marked = update_notification_feed(
+                        route.clone(),
+                        json!({ "action": "markRead", "notificationId": id }),
+                    )
+                    .await;
+                    last = marked.or(last);
+                }
+                if let Some(message) = last {
+                    let _ = this.update(cx, |this, cx| {
+                        this.gx_store_store_notification_feed(machine, message, cx);
+                    });
+                }
+            })
+            .detach();
         }
     }
 

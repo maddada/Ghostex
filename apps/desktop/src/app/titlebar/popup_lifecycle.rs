@@ -199,14 +199,20 @@ impl GhostexGpuiApp {
             CDXC:Notifications 2026-11-20 DECISION:
             User: "make the notifications thingy lose the dot shown there if it's just a completion dot when I click to see the content there (marks as read)". Opening the bell reads every computer's "finished" rows so the badge drops to what still needs the user (a question, an approval, a failure, a message not sent). It does not touch the sessions: their blue "finished, not seen" dots clear when the session is opened, as before.
             */
-            self.request_notification_feed_command(
-                "markFinishedSeen",
-                None,
-                ghostex_gx_core::NotificationFeedTab::All,
-                cx,
-            );
+            self.mark_finished_notifications_seen(cx);
         }
         cx.notify();
+    }
+
+    /// Reads every computer's "finished" rows, when the bell's panel opens and again when it closes
+    /// (rows that arrived while it was open). See `gx_store_mark_finished_notifications_seen`.
+    fn mark_finished_notifications_seen(&mut self, cx: &mut gpui::Context<Self>) {
+        self.request_notification_feed_command(
+            "markFinishedSeen",
+            None,
+            ghostex_gx_core::NotificationFeedTab::All,
+            cx,
+        );
     }
 
     /// Shows the held popover `kind` once it has fitted itself: its glass and fade, on the next
@@ -310,6 +316,13 @@ impl GhostexGpuiApp {
             self.restore_account_usage_keyboard_focus();
         }
 
+        if self
+            .titlebar_popup_menu
+            .as_ref()
+            .is_some_and(|state| state.kind == GpuiTitlebarPopupKind::Notifications)
+        {
+            self.mark_finished_notifications_seen(cx);
+        }
         self.context_menu = None;
         self.titlebar_popup_menu = None;
         if let Some(popup_window) = self.titlebar_popup_window.take() {
@@ -341,6 +354,9 @@ impl GhostexGpuiApp {
         if should_clear {
             if matches!(kind, GpuiTitlebarPopupKind::AccountUsage(_)) {
                 self.restore_account_usage_keyboard_focus();
+            }
+            if kind == GpuiTitlebarPopupKind::Notifications {
+                self.mark_finished_notifications_seen(cx);
             }
             self.context_menu = None;
             self.titlebar_popup_menu = None;
