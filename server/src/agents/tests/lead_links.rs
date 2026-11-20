@@ -66,3 +66,20 @@ fn a_session_cannot_take_a_session_linked_to_another_lead_and_a_move_starts_afre
         owed
     );
 }
+
+#[test]
+fn owed_is_honoured_only_for_a_session_just_created_with_no_reply() {
+    use crate::agents::lead_links::honours_owed;
+    let now = chrono::DateTime::parse_from_rfc3339("2026-11-20T08:00:30.000Z")
+        .unwrap()
+        .timestamp_millis();
+    let fresh = serde_json::json!({ "createdAt": "2026-11-20T08:00:00.000Z" });
+    let old = serde_json::json!({ "createdAt": "2026-11-20T07:00:00.000Z" });
+    // `agents create --lead --task`: created moments ago, nothing said yet.
+    assert!(honours_owed(&fresh, now, false));
+    // An existing session (or one that already replied) can't be made to owe the lead its user's
+    // next turn.
+    assert!(!honours_owed(&old, now, false));
+    assert!(!honours_owed(&fresh, now, true));
+    assert!(!honours_owed(&serde_json::json!({}), now, false));
+}
