@@ -277,7 +277,8 @@ fn ack_queue_is_fresh(
     ack_queue: &[Value],
     ack_queue_version: Option<u64>,
 ) -> bool {
-    if let (Some(current_qv), Some(ack_qv)) = (state.session.server_queue_version, ack_queue_version)
+    if let (Some(current_qv), Some(ack_qv)) =
+        (state.session.server_queue_version, ack_queue_version)
     {
         if ack_qv < current_qv {
             return false;
@@ -318,14 +319,10 @@ fn ack_queue_is_fresh(
         return false;
     }
     let ack_prompt_ms = ack_prompt.and_then(|prompt| {
-        crate::session::startup_sends::parse_iso_ms(
-            prompt.get("updatedAt").and_then(Value::as_str),
-        )
+        crate::session::startup_sends::parse_iso_ms(prompt.get("updatedAt").and_then(Value::as_str))
     });
     let current_prompt_ms = current_prompt.and_then(|prompt| {
-        crate::session::startup_sends::parse_iso_ms(
-            prompt.get("updatedAt").and_then(Value::as_str),
-        )
+        crate::session::startup_sends::parse_iso_ms(prompt.get("updatedAt").and_then(Value::as_str))
     });
     if let (Some(current_ms), Some(ack_ms)) = (current_prompt_ms, ack_prompt_ms) {
         if current_ms > ack_ms {
@@ -845,6 +842,7 @@ pub(crate) fn project_copies(
         if let Some(answer) = elsewhere {
             value.insert("state".to_string(), json!("answered"));
             value.insert("canSend".to_string(), json!(false));
+            value.remove("queuedStatus");
             let index = answer.and_then(|answer| {
                 form.questions
                     .first()?
@@ -861,9 +859,18 @@ pub(crate) fn project_copies(
         let (Some(mirrored), Some(owner_form)) = (mirrored, owner_form) else {
             continue;
         };
-        for key in ["state", "canSend", "changing", "sendError", "reconnecting"] {
+        for key in [
+            "state",
+            "canSend",
+            "changing",
+            "sendError",
+            "reconnecting",
+            "queuedStatus",
+        ] {
             if let Some(field) = mirrored.get(key) {
                 value.insert(key.to_string(), field.clone());
+            } else if key == "queuedStatus" {
+                value.remove(key);
             }
         }
         // The owner copy's pick, found among this copy's answers by its value.
@@ -943,12 +950,8 @@ pub fn rpc_settled(
     let taken = matches!(outcome, RpcOutcome::Ok { result } if result.get("takenBack") == Some(&Value::Bool(true)));
     if !taken {
         // The agent read the old answers meanwhile: the new pick goes as a correction.
-        let mut effects = crate::questions::forms::dispatch_answers(
-            state,
-            context,
-            &form,
-            take_back.correction,
-        );
+        let mut effects =
+            crate::questions::forms::dispatch_answers(state, context, &form, take_back.correction);
         let deferred = std::mem::take(&mut state.questions.inline_answers.deferred_edits);
         effects.extend(run_or_defer_edits(state, context, deferred));
         return Some(effects);
@@ -1285,8 +1288,8 @@ fn settle_queue_update(
                 }
                 return Vec::new();
             }
-            let base_text = server_queued_prompt_text_by_id(state, &update.prompt_id).map(
-                |server_text| {
+            let base_text =
+                server_queued_prompt_text_by_id(state, &update.prompt_id).map(|server_text| {
                     if ack_applied
                         || ack_has_queue
                         || update.server_saw_change
@@ -1296,8 +1299,7 @@ fn settle_queue_update(
                     } else {
                         update.sent_text.clone()
                     }
-                },
-            );
+                });
             let effects = dispatch_or_fallback_queued_edits(
                 state,
                 context,
@@ -1338,7 +1340,9 @@ fn settle_queue_update(
                     }
                 }
             }
-            let restore_text = live_server_text.clone().unwrap_or(update.authoritative_text);
+            let restore_text = live_server_text
+                .clone()
+                .unwrap_or(update.authoritative_text);
             patch_queued_prompt_text(
                 state,
                 &update.prompt_id,

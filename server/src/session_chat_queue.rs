@@ -43,6 +43,9 @@ pub const SESSION_CHAT_QUEUE_STATE_QUEUED: &str = "queued";
 pub const SESSION_CHAT_QUEUE_STATE_SENDING: &str = "sending";
 pub const SESSION_CHAT_QUEUE_STATE_FAILED: &str = "failed";
 
+pub(crate) const MODEL_CHANGE_FAILED_WAIT_REASON: &str =
+    "Waiting: the model change before this message failed. Pick a model again to send it.";
+
 /// Reason stamped on a row that was mid-delivery when the daemon went down.
 /// Never silently re-sent: the agent may already have received it.
 pub const SESSION_CHAT_QUEUE_RESTART_REASON: &str =
@@ -63,8 +66,8 @@ pub struct SessionChatQueuedPrompt {
     /// Set only when `state == "failed"`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_message: Option<String>,
-    /// Why a waiting row has not gone out yet, in the user's words; only on a row that has waited
-    /// about a minute (`set_queue_wait_reason`).
+    /// Why a waiting row has not gone out yet: a failed model change, or the scheduler's
+    /// reason for a head row that has waited about a minute.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wait_reason: Option<String>,
     pub created_at: String,
@@ -502,7 +505,12 @@ pub fn handle_session_chat_queue_endpoint(
             }
             let snapshot = read_snapshot(&transaction, &project_id, &session_id)?;
             let mut value = snapshot_value(&snapshot);
-            insert_prompt(&mut value, &prompt);
+            let enriched = snapshot
+                .queue
+                .iter()
+                .find(|row| row.id == prompt.id)
+                .unwrap_or(&prompt);
+            insert_prompt(&mut value, enriched);
             transaction.commit().map_err(sql_error)?;
             (value, true)
         }
@@ -1053,7 +1061,20 @@ pub fn recover_session_chat_queue_after_restart(
             .map_err(sql_error)?;
         }
         // Model selection is idempotent: the driver reads the current footer before changing anything.
+        let mut selection_sessions = db
+            .prepare("SELECT projectId, sessionId FROM session_chat_model_selections WHERE state = 'applying'")
+            .map_err(sql_error)?;
+        let affected_selections = selection_sessions
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(sql_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(sql_error)?;
         db.execute("UPDATE session_chat_model_selections SET state = 'queued', retryAt = 0 WHERE state = 'applying'", []).map_err(sql_error)?;
+        for (project_id, session_id) in affected_selections {
+            bump_queue_version(db, &project_id, &session_id)?;
+        }
         Ok(())
     })?;
     crate::session_chat_queue_attachments::sweep(paths, &db);
@@ -1132,6 +1153,11 @@ fn read_snapshot(
     session_id: &str,
 ) -> Result<SessionChatQueueSnapshot, DomainStateError> {
     with_read_tx(db, |db| {
+        let pending_model_selection =
+            crate::session_chat_model_selection::read_pending(db, project_id, session_id);
+        let model_change_failed = pending_model_selection
+            .as_ref()
+            .is_some_and(|selection| selection.state == "failed");
         let queue_version: i64 = db
             .query_row(
                 r#"
@@ -1159,12 +1185,21 @@ fn read_snapshot(
         let queue = statement
             .query_map(params![project_id, session_id], |row| {
                 let id: String = row.get(0)?;
+                let state: String = row.get(2)?;
                 let version: i64 = row.get(8)?;
+                // A failed pick holds every queued row. In particular, a form answer behind
+                // another message cannot inherit the head row's scheduler annotation.
+                let wait_reason = if model_change_failed && state == SESSION_CHAT_QUEUE_STATE_QUEUED
+                {
+                    Some(MODEL_CHANGE_FAILED_WAIT_REASON.to_string())
+                } else {
+                    queue_wait_reason(&id)
+                };
                 Ok(SessionChatQueuedPrompt {
-                    wait_reason: queue_wait_reason(&id),
+                    wait_reason,
                     id,
                     text: row.get(1)?,
-                    state: row.get(2)?,
+                    state,
                     error_message: row.get(3)?,
                     created_at: row.get(4)?,
                     updated_at: row.get(5)?,
@@ -1216,9 +1251,7 @@ fn read_snapshot(
             queue,
             queue_version: u64::try_from(queue_version).ok(),
             draft,
-            pending_model_selection: crate::session_chat_model_selection::read_pending(
-                db, project_id, session_id,
-            ),
+            pending_model_selection,
             first_message: crate::session_chat_first_message::read(db, project_id, session_id),
         })
     })

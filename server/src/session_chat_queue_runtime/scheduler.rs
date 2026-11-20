@@ -1424,7 +1424,8 @@ impl SessionChatQueueRuntime {
         if !reason.is_input_box() {
             gate.input_box_hold = None;
         }
-        let words = HeadWait::observe(&mut gate.head_wait, prompt_id, reason, now);
+        let words = HeadWait::observe(&mut gate.head_wait, prompt_id, reason, now)
+            .filter(|_| *reason != WaitReason::ModelChangeFailed);
         let stuck = gate.head_wait.as_mut().and_then(|wait| {
             let minutes = wait.stuck_minutes(reason, now)?;
             Some((minutes, !std::mem::replace(&mut wait.stuck_reported, true)))

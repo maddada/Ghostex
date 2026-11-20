@@ -208,10 +208,15 @@ pub(crate) fn discard_for_agent_switch(db: &Connection, project: &str, session: 
     if let Some(pending) = read_pending(db, project, session) {
         forget_busy_run(&pending.id);
     }
-    let _ = db.execute(
-        "DELETE FROM session_chat_model_selections WHERE projectId = ?1 AND sessionId = ?2",
-        params![project, session],
-    );
+    if db
+        .execute(
+            "DELETE FROM session_chat_model_selections WHERE projectId = ?1 AND sessionId = ?2",
+            params![project, session],
+        )
+        .is_ok_and(|count| count > 0)
+    {
+        let _ = crate::session_chat_queue::bump_queue_version(db, project, session);
+    }
 }
 
 /// The agents that run only their own vendor's models, with the name chat uses for them.
@@ -383,6 +388,7 @@ fn enqueue_selection(
         "INSERT INTO session_chat_model_selections (projectId, sessionId, selectionId, model, effort, state, retryAt, options, scope) VALUES (?1, ?2, ?3, ?4, ?5, 'queued', 0, ?6, ?7) ON CONFLICT(projectId, sessionId) DO UPDATE SET selectionId = excluded.selectionId, model = excluded.model, effort = excluded.effort, options = excluded.options, scope = excluded.scope, state = 'queued', errorMessage = NULL, retryAt = 0",
         params![project, session_id, id, model, effort, serde_json::to_string(&options).map_err(storage_error)?, scope],
     ).map_err(storage_error)?;
+    crate::session_chat_queue::bump_queue_version(&transaction, project, session_id)?;
     transaction.commit().map_err(storage_error)?;
     if let Some(previous) = previous.as_ref() {
         forget_busy_run(&previous.id);
@@ -732,10 +738,30 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
     Arc::new(move |project, session, pending| {
         let state = state.clone();
         Box::pin(async move {
-            let claimed = open_gxserver_database(&state.paths).ok().and_then(|db| db.execute(
-                "UPDATE session_chat_model_selections SET state = 'applying', errorMessage = NULL WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3",
-                params![project, session, pending.id],
-            ).ok()).is_some_and(|count| count > 0);
+            let claimed = open_gxserver_database(&state.paths)
+                .ok()
+                .and_then(|db| {
+                    let tx = rusqlite::Transaction::new_unchecked(
+                        &db,
+                        rusqlite::TransactionBehavior::Immediate,
+                    )
+                    .ok()?;
+                    let count = tx
+                        .execute(
+                            "UPDATE session_chat_model_selections SET state = 'applying', errorMessage = NULL WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3",
+                            params![project, session, pending.id],
+                        )
+                        .ok()?;
+                    if count > 0
+                        && crate::session_chat_queue::bump_queue_version(&tx, &project, &session)
+                            .is_err()
+                    {
+                        return None;
+                    }
+                    tx.commit().ok()?;
+                    Some(count)
+                })
+                .is_some_and(|count| count > 0);
             if !claimed {
                 return;
             }
@@ -766,10 +792,28 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                     match next_model_form(&pending.id, &pending.model) {
                         Some(next) => {
                             if let Ok(db) = open_gxserver_database(&state.paths) {
-                                let _ = db.execute(
-                                    "UPDATE session_chat_model_selections SET model = ?4, state = 'queued', errorMessage = ?5, retryAt = 0 WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3",
-                                    params![project, session, pending.id, next, error.message],
-                                );
+                                if let Ok(tx) = rusqlite::Transaction::new_unchecked(
+                                    &db,
+                                    rusqlite::TransactionBehavior::Immediate,
+                                ) {
+                                    let bumped = if tx
+                                        .execute(
+                                            "UPDATE session_chat_model_selections SET model = ?4, state = 'queued', errorMessage = ?5, retryAt = 0 WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3",
+                                            params![project, session, pending.id, next, error.message],
+                                        )
+                                        .is_ok_and(|count| count > 0)
+                                    {
+                                        crate::session_chat_queue::bump_queue_version(
+                                            &tx, &project, &session,
+                                        )
+                                        .is_ok()
+                                    } else {
+                                        true
+                                    };
+                                    if bumped {
+                                        let _ = tx.commit();
+                                    }
+                                }
                             }
                             SELECTION_REQUESTED.notify_one();
                             crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
@@ -853,27 +897,44 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
             }
             let refused_mode = result.as_ref().err().is_some_and(mode_was_refused);
             if let Ok(db) = open_gxserver_database(&state.paths) {
-                match &result {
-                    Err(_) if refused_mode => {
-                        let _ = db.execute(
+                if let Ok(tx) = rusqlite::Transaction::new_unchecked(
+                    &db,
+                    rusqlite::TransactionBehavior::Immediate,
+                ) {
+                    let updated = match &result {
+                        Err(_) if refused_mode => tx.execute(
                             "DELETE FROM session_chat_model_selections WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3",
                             params![project, session, pending.id],
-                        );
-                    }
-                    Ok(_) => {
-                        let _ = db.execute("DELETE FROM session_chat_model_selections WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3", params![project, session, pending.id]);
-                    }
-                    // CDXC:SessionChat 2026-09-18 WHY:
-                    // A selection the terminal can never accept stops here instead of retrying:
-                    // one model the CLI does not list for an account retyped `/model` into the
-                    // user's pane 181 times. The row stays to carry its reason to the chat, and
-                    // `failed` keeps it out of delivery, wake-keeping and the desired model.
-                    Err(error) if final_failure => {
-                        let _ = db.execute("UPDATE session_chat_model_selections SET state = 'failed', errorMessage = ?4, retryAt = 0 WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3", params![project, session, pending.id, error.message]);
-                    }
-                    Err(error) => {
-                        let delay = busy_wait.unwrap_or(RETRY_MS);
-                        let _ = db.execute("UPDATE session_chat_model_selections SET state = 'queued', errorMessage = ?4, retryAt = ?5 WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3", params![project, session, pending.id, error.message, chrono::Utc::now().timestamp_millis() + delay]);
+                        ),
+                        Ok(_) => tx.execute(
+                            "DELETE FROM session_chat_model_selections WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3",
+                            params![project, session, pending.id],
+                        ),
+                        // CDXC:SessionChat 2026-09-18 WHY:
+                        // A selection the terminal can never accept stops here instead of retrying:
+                        // one model the CLI does not list for an account retyped `/model` into the
+                        // user's pane 181 times. The row stays to carry its reason to the chat, and
+                        // `failed` keeps it out of delivery, wake-keeping and the desired model.
+                        Err(error) if final_failure => tx.execute(
+                            "UPDATE session_chat_model_selections SET state = 'failed', errorMessage = ?4, retryAt = 0 WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3",
+                            params![project, session, pending.id, error.message],
+                        ),
+                        Err(error) => {
+                            let delay = busy_wait.unwrap_or(RETRY_MS);
+                            tx.execute(
+                                "UPDATE session_chat_model_selections SET state = 'queued', errorMessage = ?4, retryAt = ?5 WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3",
+                                params![project, session, pending.id, error.message, chrono::Utc::now().timestamp_millis() + delay],
+                            )
+                        }
+                    };
+                    let bumped = if updated.is_ok_and(|count| count > 0) {
+                        crate::session_chat_queue::bump_queue_version(&tx, &project, &session)
+                            .is_ok()
+                    } else {
+                        true
+                    };
+                    if bumped {
+                        let _ = tx.commit();
                     }
                 }
             }

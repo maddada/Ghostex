@@ -85,9 +85,7 @@ impl WaitReason {
             Self::Asleep => "Waiting for the session to wake up.",
             Self::Closed => "Waiting for the session to be opened again.",
             Self::ModelChange => "Waiting for the model change before it to apply.",
-            Self::ModelChangeFailed => {
-                "Waiting: the model change before this message failed. Pick a model again to send it."
-            }
+            Self::ModelChangeFailed => crate::session_chat_queue::MODEL_CHANGE_FAILED_WAIT_REASON,
             Self::AccountRecovery => "Waiting for the agent's account to be ready again.",
             Self::MissingLogin => "Waiting for the agent's account to be signed in.",
             Self::StartFailed => "Waiting: the agent couldn't start. Start it again to send this.",

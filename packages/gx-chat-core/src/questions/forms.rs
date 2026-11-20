@@ -80,19 +80,48 @@ pub(crate) fn answered_by_index(state: &ChatState, id: &str) -> bool {
 
 /// Whether the session's queue holds active answers for the form.
 pub(crate) fn queued_in_queue(state: &ChatState, id: &str) -> bool {
-    state.session.queue_prompts.as_ref().is_some_and(|queue| {
-        queue.iter().any(|prompt| {
-            prompt.get("state").and_then(Value::as_str) != Some("failed")
-                && prompt
-                    .get("text")
-                    .and_then(Value::as_str)
-                    .is_some_and(|text| {
-                        crate::transcript::page_answers::answers_page_ids(text)
-                            .iter()
-                            .any(|page_id| page_id == id)
-                    })
+    queued_answer(state, id).is_some()
+}
+
+/// The active queue row carrying this form's answers: the row recorded by this client when it
+/// queued the send, or the newest non-failed matching row after a reload.
+pub(crate) fn queued_answer<'a>(state: &'a ChatState, id: &str) -> Option<&'a Value> {
+    let queue = state.session.queue_prompts.as_ref()?;
+    let matches_form = |prompt: &&Value| {
+        prompt.get("state").and_then(Value::as_str) != Some("failed")
+            && prompt
+                .get("text")
+                .and_then(Value::as_str)
+                .is_some_and(|text| {
+                    crate::transcript::page_answers::answers_page_ids(text)
+                        .iter()
+                        .any(|page_id| page_id == id)
+                })
+    };
+    if let Some(queued_id) = state
+        .questions
+        .forms
+        .get(id)
+        .and_then(|entry| entry.queued_prompt_id.as_deref())
+    {
+        if let Some(row) = queue.iter().find(|prompt| {
+            prompt.get("id").and_then(Value::as_str) == Some(queued_id) && matches_form(prompt)
+        }) {
+            return Some(row);
+        }
+    }
+    queue
+        .iter()
+        .enumerate()
+        .filter(|(_, prompt)| matches_form(prompt))
+        .max_by_key(|(index, prompt)| {
+            let created = crate::session::startup_sends::parse_iso_ms(
+                prompt.get("createdAt").and_then(Value::as_str),
+            )
+            .unwrap_or(i64::MIN);
+            (created, *index)
         })
-    })
+        .map(|(_, prompt)| prompt)
 }
 
 /// Whether the form's answers are still on their way: this client is sending them or they wait in
@@ -150,6 +179,7 @@ pub fn reopen_after_removed_answers(state: &mut ChatState, queued_prompt_id: &st
             entry.sent_waiting_for_idle = false;
             entry.confirmation_boundary = None;
             entry.confirmed = false;
+            entry.queued_prompt_id = None;
             changed = true;
         }
     }
@@ -1250,6 +1280,14 @@ fn project_each(state: &ChatState) -> BTreeMap<String, Value> {
                 }
                 object.insert("state".to_string(), json!(phase));
                 object.insert("canSend".to_string(), json!(phase == "open"));
+                if phase == "queued" {
+                    let status = queued_answer(state, &form.id)
+                        .and_then(|row| row.get("waitReason"))
+                        .and_then(Value::as_str)
+                        .filter(|reason| !reason.is_empty())
+                        .unwrap_or("Queued: it goes to the agent after this turn ends.");
+                    object.insert("queuedStatus".to_string(), json!(status));
+                }
                 // CDXC:SessionChat 2026-10-12 DECISION: User: "i see the answer twice fam" (the answered form showed the picks and "Sent to the agent" while the answer message below repeated them); picked option c of docs/2026-10-12/handover-colors-and-answers/index.html: once the transcript carries a form's answers it collapses to one line (a check, the title, "Answered", a chevron) that opens the full read-only form and closes it again, collapsed by default and after a reload; the "You answered" card below stays as the record.
                 object.insert(
                     "collapsed".to_string(),
