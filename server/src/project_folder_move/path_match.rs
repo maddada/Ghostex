@@ -113,3 +113,94 @@ impl MovedRoot {
         self.rebase(text)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::MovedRoot;
+    use serde_json::json;
+
+    fn root(old: &str, new: &str, ignore_case: bool) -> MovedRoot {
+        MovedRoot {
+            old_spellings: vec![old.to_string()],
+            new_path: new.to_string(),
+            ignore_case,
+        }
+    }
+
+    #[test]
+    fn a_sibling_whose_name_starts_the_same_is_not_inside() {
+        let moved = root("/a/App", "/a/Kiwi", false);
+        assert!(moved.contains("/a/App"));
+        assert!(moved.contains("/a/App/src"));
+        assert!(!moved.contains("/a/App-feat"));
+        assert!(!moved.contains("/a/Apple/src"));
+        assert!(!moved.contains("/a"));
+        assert!(
+            !moved.contains("a/App/src"),
+            "a relative path is never inside"
+        );
+        assert!(!moved.contains(""));
+        assert_eq!(moved.rebase("/a/App").as_deref(), Some("/a/Kiwi"));
+        assert_eq!(
+            moved.rebase("/a/App/src/main.rs").as_deref(),
+            Some("/a/Kiwi/src/main.rs")
+        );
+        assert_eq!(moved.rebase("/a/App-feat"), None);
+    }
+
+    #[test]
+    fn letter_case_counts_only_on_a_volume_that_keeps_it() {
+        let keeps_case = root("/a/App", "/a/Kiwi", false);
+        assert!(!keeps_case.contains("/a/app/src"));
+        let ignores_case = root("/a/App", "/a/Kiwi", true);
+        assert_eq!(
+            ignores_case.rebase("/A/app/src").as_deref(),
+            Some("/a/Kiwi/src")
+        );
+    }
+
+    #[test]
+    fn a_windows_path_matches_either_separator_and_any_case() {
+        let moved = root(r"C:\dev\App", r"C:\dev\Kiwi", false);
+        assert_eq!(
+            moved.rebase(r"c:\DEV\app\src\main.rs").as_deref(),
+            Some(r"C:\dev\Kiwi\src\main.rs")
+        );
+        assert_eq!(
+            moved.rebase("C:/dev/App/src").as_deref(),
+            Some(r"C:\dev\Kiwi\src")
+        );
+        assert!(!moved.contains(r"C:\dev\App-feat"));
+        assert!(!moved.contains(r"D:\dev\App"));
+    }
+
+    #[test]
+    fn json_changes_whole_path_strings_only() {
+        let moved = root("/a/App", "/a/Kiwi", false);
+        let stored = json!({
+            "cwd": "/a/App/tools",
+            "note": "see /a/App/tools",
+            "list": ["/a/App", "/b/Other"],
+            "count": 1,
+        });
+        assert_eq!(
+            moved.rebase_json(&stored),
+            Some(json!({
+                "cwd": "/a/Kiwi/tools",
+                "note": "see /a/App/tools",
+                "list": ["/a/Kiwi", "/b/Other"],
+                "count": 1,
+            }))
+        );
+        assert_eq!(moved.rebase_json(&json!({ "cwd": "/b/Other" })), None);
+        assert_eq!(
+            moved.rebase_column("/a/App/x").as_deref(),
+            Some("/a/Kiwi/x")
+        );
+        assert_eq!(
+            moved.rebase_column(r#"["/a/App"]"#).as_deref(),
+            Some(r#"["/a/Kiwi"]"#)
+        );
+        assert_eq!(moved.rebase_column("plain text"), None);
+    }
+}

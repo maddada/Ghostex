@@ -116,6 +116,38 @@ pub(crate) fn write_journal(root_dir: &Path, journal: &Journal) -> std::io::Resu
     write_durably(&journal_file(root_dir, &journal.project_id), &text)
 }
 
+/// The move's first journal write: refused when a journal for the project is already there, so
+/// a second move can never overwrite (and later delete) the journal of one still running.
+pub(crate) fn create_journal(root_dir: &Path, journal: &Journal) -> std::io::Result<()> {
+    let file = journal_file(root_dir, &journal.project_id);
+    let folder = file
+        .parent()
+        .ok_or_else(|| std::io::Error::other("no parent folder"))?;
+    std::fs::create_dir_all(folder)?;
+    let text = serde_json::to_vec_pretty(journal).map_err(std::io::Error::other)?;
+    let written = (|| {
+        let mut handle = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&file)?;
+        handle.write_all(&text)?;
+        handle.sync_all()
+    })();
+    match written {
+        Ok(()) => {
+            sync_folder(folder);
+            Ok(())
+        }
+        Err(error) => {
+            // A half-written journal of ours goes; another move's file is never touched.
+            if error.kind() != std::io::ErrorKind::AlreadyExists {
+                let _ = std::fs::remove_file(&file);
+            }
+            Err(error)
+        }
+    }
+}
+
 pub(crate) fn remove_journal(root_dir: &Path, project_id: &str) {
     let file = journal_file(root_dir, project_id);
     let _ = std::fs::remove_file(&file);

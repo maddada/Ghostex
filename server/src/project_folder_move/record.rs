@@ -86,6 +86,27 @@ impl Rewrite {
     }
 }
 
+/// A session's moved-folder marker keeps the folder it moved from, so a second run of the
+/// rewrite (recovery after a crash) leaves it alone. `None` when nothing else changed.
+fn keep_moved_folder_marker(column: &str, before: &str, moved: String) -> Option<String> {
+    if column != "runtimeSettingsJson" {
+        return Some(moved);
+    }
+    let (Ok(before), Ok(mut after)) = (
+        serde_json::from_str::<Value>(before),
+        serde_json::from_str::<Value>(&moved),
+    ) else {
+        return Some(moved);
+    };
+    if let (Some(marker), Some(map)) = (
+        before.get(MOVED_FOLDER_SESSION_RUNTIME_KEY),
+        after.as_object_mut(),
+    ) {
+        map.insert(MOVED_FOLDER_SESSION_RUNTIME_KEY.to_string(), marker.clone());
+    }
+    (after != before).then(|| after.to_string())
+}
+
 /// Rewrites (or with `apply` false only counts) every stored path under the old folder.
 pub(crate) fn rewrite_database(
     db: &Connection,
@@ -128,7 +149,10 @@ pub(crate) fn rewrite_database(
                 for (index, column) in columns.iter().enumerate() {
                     let value: Option<String> = row.get(index + 1).ok().flatten();
                     let Some(value) = value else { continue };
-                    if let Some(moved) = root.rebase_column(&value) {
+                    let moved = root
+                        .rebase_column(&value)
+                        .and_then(|moved| keep_moved_folder_marker(column, &value, moved));
+                    if let Some(moved) = moved {
                         if *column == "cwd" {
                             old_cwd = Some(value.clone());
                         }
@@ -270,4 +294,129 @@ pub(crate) fn record(
     Ok(
         json!({ "rows": rewrite.summary(), "sessionsMoved": rewrite.moved_sessions.len(), "files": files }),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture() -> Connection {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            r#"CREATE TABLE projects (projectId TEXT, path TEXT, worktreeJson TEXT);
+            CREATE TABLE sessions (projectId TEXT, sessionId TEXT, cwd TEXT,
+                runtimeSettingsJson TEXT, launchSettingsJson TEXT);
+            INSERT INTO projects VALUES
+                ('p1', '/a/App', NULL),
+                ('p2', '/a/App-feat', '{"parentProjectPath":"/a/App"}'),
+                ('p3', '/b/Other', NULL);
+            INSERT INTO sessions VALUES
+                ('p1', 's1', '/a/App/sub', '{"agentSessionId":"x"}', NULL),
+                ('p3', 's2', '/b/Other', NULL, NULL),
+                ('p2', 's3', '/a/App-feat', NULL, '{"cwd":"/a/App/tools"}');"#,
+        )
+        .unwrap();
+        db
+    }
+
+    fn root() -> MovedRoot {
+        MovedRoot {
+            old_spellings: vec!["/a/App".to_string()],
+            new_path: "/a/Kiwi".to_string(),
+            ignore_case: false,
+        }
+    }
+
+    fn text(db: &Connection, sql: &str) -> Option<String> {
+        db.query_row(sql, [], |row| row.get(0)).unwrap()
+    }
+
+    #[test]
+    fn a_count_changes_nothing() {
+        let db = fixture();
+        let counted = rewrite_database(&db, &root(), false).unwrap();
+        assert_eq!(counted.summary(), json!({ "projects": 2, "sessions": 2 }));
+        assert_eq!(
+            counted.moved_sessions,
+            vec![("p1".to_string(), "s1".to_string())]
+        );
+        assert_eq!(
+            text(&db, "SELECT path FROM projects WHERE projectId = 'p1'").as_deref(),
+            Some("/a/App")
+        );
+    }
+
+    #[test]
+    fn the_rewrite_moves_every_path_under_the_folder_and_marks_its_sessions() {
+        let db = fixture();
+        rewrite_database(&db, &root(), true).unwrap();
+        assert_eq!(
+            text(&db, "SELECT path FROM projects WHERE projectId = 'p1'").as_deref(),
+            Some("/a/Kiwi")
+        );
+        // A sibling that only starts with the same name stays; a path inside its JSON moves.
+        assert_eq!(
+            text(&db, "SELECT path FROM projects WHERE projectId = 'p2'").as_deref(),
+            Some("/a/App-feat")
+        );
+        assert_eq!(
+            text(
+                &db,
+                "SELECT worktreeJson FROM projects WHERE projectId = 'p2'"
+            )
+            .as_deref(),
+            Some(r#"{"parentProjectPath":"/a/Kiwi"}"#)
+        );
+        assert_eq!(
+            text(&db, "SELECT path FROM projects WHERE projectId = 'p3'").as_deref(),
+            Some("/b/Other")
+        );
+        assert_eq!(
+            text(&db, "SELECT cwd FROM sessions WHERE sessionId = 's1'").as_deref(),
+            Some("/a/Kiwi/sub")
+        );
+        let runtime: Value = serde_json::from_str(
+            &text(
+                &db,
+                "SELECT runtimeSettingsJson FROM sessions WHERE sessionId = 's1'",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(runtime["agentSessionId"], "x");
+        assert_eq!(
+            runtime[MOVED_FOLDER_SESSION_RUNTIME_KEY]["from"],
+            "/a/App/sub"
+        );
+        // Only a session whose own folder moved gets the marker.
+        assert_eq!(
+            text(
+                &db,
+                "SELECT runtimeSettingsJson FROM sessions WHERE sessionId = 's3'"
+            ),
+            None
+        );
+        assert_eq!(
+            text(
+                &db,
+                "SELECT launchSettingsJson FROM sessions WHERE sessionId = 's3'"
+            )
+            .as_deref(),
+            Some(r#"{"cwd":"/a/Kiwi/tools"}"#)
+        );
+        // Safe to run again: nothing is under the old folder any more.
+        let again = rewrite_database(&db, &root(), true).unwrap();
+        assert_eq!(again.summary(), json!({}));
+    }
+
+    #[test]
+    fn a_table_or_column_an_older_database_lacks_is_skipped() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch("CREATE TABLE projects (projectId TEXT, path TEXT);")
+            .unwrap();
+        db.execute("INSERT INTO projects VALUES ('p1', '/a/App')", [])
+            .unwrap();
+        let rewrite = rewrite_database(&db, &root(), true).unwrap();
+        assert_eq!(rewrite.summary(), json!({ "projects": 1 }));
+    }
 }

@@ -78,6 +78,7 @@ pub(crate) fn plan(
     project_id: &str,
     new_path_raw: &str,
     force_open_files: bool,
+    dry_run: bool,
 ) -> Result<Checked, DomainStateError> {
     let mut warnings = Vec::new();
     let project = repository.get_project(project_id)?.ok_or_else(|| {
@@ -197,6 +198,11 @@ pub(crate) fn plan(
             ));
         }
     }
+    if let Some(held) = holds_ghostex_or_agent_state(paths, &home, &root) {
+        return Err(refuse(format!(
+            "{old_path} holds {held}, which must stay where it is while Ghostex runs. Move the project's folder with Ghostex quit, or leave it where it is."
+        )));
+    }
     if !fs_ops::same_volume(&old, &new_parent) {
         return Err(refuse("The new folder is on another drive. Ghostex only moves a folder within one drive; copy it yourself and add the copy as a project instead."));
     }
@@ -282,18 +288,64 @@ pub(crate) fn plan(
         )));
     }
 
-    // Processes outside Ghostex with their working folder inside (risk 8).
-    if !force_open_files {
-        let inside = fs_ops::processes_inside(&|path| root.contains(path));
-        if !inside.is_empty() {
-            let shown: Vec<_> = inside.iter().take(6).cloned().collect();
-            let more = inside.len().saturating_sub(shown.len());
-            return Err(refuse(format!(
-                "These programs are working inside the folder: {}{}. Close them (or cd out of it), then try again; --force-open-files moves it anyway.",
-                shown.join(", "),
-                if more > 0 { format!(" and {more} more") } else { String::new() }
-            )));
+    // Processes outside Ghostex with their working folder inside (risk 8), or with files open
+    // inside it (Opus review, finding 6): an editor saving into the old path afterwards would
+    // recreate it beside the moved folder.
+    let open = fs_ops::processes_using(
+        &|path| root.contains(path),
+        std::time::Duration::from_secs(15),
+    );
+    let list = |names: &[String]| {
+        let shown: Vec<_> = names.iter().take(6).cloned().collect();
+        let more = names.len().saturating_sub(shown.len());
+        format!(
+            "{}{}",
+            shown.join(", "),
+            if more > 0 {
+                format!(" and {more} more")
+            } else {
+                String::new()
+            }
+        )
+    };
+    match open {
+        Ok(open) => {
+            if !open.cwd.is_empty() && !force_open_files {
+                return Err(refuse(format!(
+                    "These programs are working inside the folder: {}. Close them (or cd out of it), then try again; --force-open-files moves it anyway.",
+                    list(&open.cwd)
+                )));
+            }
+            if !open.files.is_empty() && !force_open_files {
+                let message = format!(
+                    "These programs have files in the folder open: {}. Close the files (or the programs), then try again; --force-open-files moves it anyway.",
+                    list(&open.files)
+                );
+                if !dry_run {
+                    return Err(refuse(message));
+                }
+                warnings.push(message);
+            }
         }
+        Err(()) => warnings.push("Ghostex couldn't finish checking which programs have files open in the folder (lsof took too long). Close editors using it before the move.".to_string()),
+    }
+    // Ghostex's own Files editor: unsaved changes would be saved into the old path.
+    let editor = ghostex_editor_files(&project_ids);
+    if !editor.unsaved.is_empty() {
+        let message = format!(
+            "Ghostex's Files editor has unsaved changes in {}. Save or discard them first.",
+            list(&editor.unsaved)
+        );
+        if !dry_run {
+            return Err(refuse(message));
+        }
+        warnings.push(message);
+    }
+    if !editor.open.is_empty() {
+        warnings.push(format!(
+            "Ghostex's Files editor has {} file(s) of this project open; reopen them from the Files list after the move if one shows as missing.",
+            editor.open.len()
+        ));
     }
 
     // Cloud-synced folders (risk 9).
@@ -424,7 +476,11 @@ pub(crate) fn running_sessions(
 ) -> Result<Vec<String>, DomainStateError> {
     let mut found = Vec::new();
     for session in repository.list_sessions(None)? {
-        if session.get("lifecycleState").and_then(Value::as_str) != Some("running") {
+        // `unknown` (right after a gxserver restart, before its probe) may well be running.
+        if !matches!(
+            session.get("lifecycleState").and_then(Value::as_str),
+            Some("running" | "unknown")
+        ) {
             continue;
         }
         let session_project = text(&session, "projectId").unwrap_or_default();
@@ -445,4 +501,167 @@ pub(crate) fn running_sessions(
         ));
     }
     Ok(found)
+}
+
+/// What of Ghostex itself or an agent's own state lives inside the folder, if anything: gxserver's
+/// state and settings folders, the running gxserver program, `~/.claude` (and every Claude
+/// profile's projects folder) and `~/.codex` (or `CODEX_HOME`).
+///
+/// CDXC:Projects 2026-11-20 WHY: a move only refused moves into Ghostex's folders, so the folder holding gxserver's database, the dev build that is running, or an agent's conversations could still be renamed away under them (Opus review, finding 7).
+fn holds_ghostex_or_agent_state(
+    paths: &GxserverPaths,
+    home: &Path,
+    root: &MovedRoot,
+) -> Option<String> {
+    let mut places: Vec<(PathBuf, &str)> = vec![
+        (paths.app_state_dir.clone(), "Ghostex's state"),
+        (paths.app_config_dir.clone(), "Ghostex's settings"),
+        (paths.app_data_dir.clone(), "Ghostex's data"),
+        (paths.root_dir.clone(), "gxserver's state"),
+        (home.join(".claude"), "Claude's settings and conversations"),
+        (home.join(".codex"), "Codex's settings and conversations"),
+    ];
+    if let Ok(program) = std::env::current_exe() {
+        places.push((program, "the gxserver program that is running"));
+    }
+    for (variable, what) in [
+        ("CODEX_HOME", "Codex's settings and conversations"),
+        ("CLAUDE_CONFIG_DIR", "Claude's settings and conversations"),
+    ] {
+        if let Some(value) = std::env::var_os(variable).filter(|value| !value.is_empty()) {
+            places.push((PathBuf::from(value), what));
+        }
+    }
+    for projects in crate::agent_transcripts::claude_project_roots() {
+        places.push((projects, "Claude's conversations"));
+    }
+    places.into_iter().find_map(|(place, what)| {
+        let mut spellings = vec![place.to_string_lossy().to_string()];
+        if let Ok(resolved) = std::fs::canonicalize(&place) {
+            spellings.push(resolved.to_string_lossy().to_string());
+        }
+        spellings
+            .iter()
+            .any(|spelling| root.contains(spelling))
+            .then(|| format!("{what} ({})", place.display()))
+    })
+}
+
+/// Files Ghostex's Files editor holds for the projects: those with unsaved changes, and those
+/// open. Read from the desktop's client storage (apps/desktop/src/app/native_docs/storage.rs,
+/// `docsDrafts` and `docsOpenFiles`); nothing when it can't be read.
+#[derive(Default)]
+pub(crate) struct EditorFiles {
+    pub(crate) unsaved: Vec<String>,
+    pub(crate) open: Vec<String>,
+}
+
+pub(crate) fn ghostex_editor_files(project_ids: &[String]) -> EditorFiles {
+    let file = ghostex_paths::GhostexPaths::resolve()
+        .state_dir
+        .join("client-storage.sqlite3");
+    editor_files_in(&file, project_ids)
+}
+
+fn editor_files_in(file: &Path, project_ids: &[String]) -> EditorFiles {
+    let mut found = EditorFiles::default();
+    if !file.is_file() {
+        return found;
+    }
+    let Ok(db) = rusqlite::Connection::open_with_flags(
+        file,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    ) else {
+        return found;
+    };
+    let _ = db.busy_timeout(std::time::Duration::from_secs(2));
+    let raw = |store: &str, key: String| -> Option<Value> {
+        let row: String = db
+            .query_row(
+                "SELECT value FROM records WHERE store = ?1 AND key = ?2",
+                [store, key.as_str()],
+                |row| row.get(0),
+            )
+            .ok()?;
+        let row: Value = serde_json::from_str(&row).ok()?;
+        serde_json::from_str(row.get("raw")?.as_str()?).ok()
+    };
+    for project_id in project_ids {
+        if let Some(Value::Object(drafts)) =
+            raw("docsDrafts", format!("ghostex.manage.drafts.{project_id}"))
+        {
+            for (path, draft) in drafts {
+                let text = draft.get("draft").and_then(Value::as_str).unwrap_or("");
+                let saved = draft
+                    .get("savedContent")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                if !text.is_empty() && text != saved && !found.unsaved.contains(&path) {
+                    found.unsaved.push(path);
+                }
+            }
+        }
+        if let Some(Value::Array(open)) = raw(
+            "docsOpenFiles",
+            format!("ghostex.manage.openFiles.{project_id}"),
+        ) {
+            for path in open.iter().filter_map(Value::as_str) {
+                if !path.starts_with(".ghostex-review") && !found.open.iter().any(|p| p == path) {
+                    found.open.push(path.to_string());
+                }
+            }
+        }
+    }
+    found
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_files_editor_s_unsaved_changes_and_open_files_are_read() {
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("client-storage.sqlite3");
+        let db = rusqlite::Connection::open(&file).unwrap();
+        db.execute_batch(
+            "CREATE TABLE records (key TEXT PRIMARY KEY, store TEXT NOT NULL, value TEXT NOT NULL);",
+        )
+        .unwrap();
+        let put = |store: &str, key: &str, raw: Value| {
+            let row = serde_json::json!({ "key": key, "store": store, "raw": raw.to_string() });
+            db.execute(
+                "INSERT INTO records VALUES (?1, ?2, ?3)",
+                [key, store, &row.to_string()],
+            )
+            .unwrap();
+        };
+        put(
+            "docsDrafts",
+            "ghostex.manage.drafts.p1",
+            serde_json::json!({
+                "src/a.rs": { "draft": "edited", "savedContent": "saved" },
+                "src/b.rs": { "draft": "same", "savedContent": "same" },
+                "src/c.rs": { "draft": "", "savedContent": "text" },
+            }),
+        );
+        put(
+            "docsOpenFiles",
+            "ghostex.manage.openFiles.p1",
+            serde_json::json!(["src/a.rs", "README.md", ".ghostex-review/x"]),
+        );
+        put(
+            "docsDrafts",
+            "ghostex.manage.drafts.other",
+            serde_json::json!({ "x.rs": { "draft": "edited", "savedContent": "saved" } }),
+        );
+        let found = editor_files_in(&file, &["p1".to_string()]);
+        assert_eq!(found.unsaved, vec!["src/a.rs".to_string()]);
+        assert_eq!(
+            found.open,
+            vec!["src/a.rs".to_string(), "README.md".to_string()]
+        );
+        let none = editor_files_in(&temp.path().join("missing.sqlite3"), &["p1".to_string()]);
+        assert!(none.unsaved.is_empty() && none.open.is_empty());
+    }
 }

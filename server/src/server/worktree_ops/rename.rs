@@ -85,6 +85,13 @@ pub(crate) async fn handle_rename_worktree_project_http(
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
+    // Not while `ghostex move-project-folder` moves the worktree's project (it is one of the
+    // projects a move touches) or a folder around it.
+    if let Some(project_id) = params.get("projectId").and_then(Value::as_str) {
+        if let Err(error) = crate::project_folder_move::refuse_if_moving(project_id, None) {
+            return domain_error_response(endpoint_path, request_id, error);
+        }
+    }
     let result = match prepare_rename_worktree_project_plan(state, &params) {
         Ok(plan) => rename_worktree_project_from_plan(state, plan).await,
         Err(error) => Err(error),

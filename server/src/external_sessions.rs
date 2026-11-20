@@ -148,9 +148,14 @@ pub(crate) fn discover(
         // Bot sync owns creating that project; an ordinary project made here would stop the folder from ever becoming a bot.
         let is_hermes = conversation.agent == hermes::HERMES_AGENT;
         // A conversation from a folder Ghostex moved belongs to the project at its new place
-        // (`ghostex move-project-folder` keeps the former paths, project_folder_move/registry.rs).
-        let cwd = crate::project_folder_move::current_for_former(&former_root, &conversation.cwd)
-            .unwrap_or_else(|| conversation.cwd.clone());
+        // (`ghostex move-project-folder` keeps the former paths, project_folder_move/registry.rs),
+        // unless a project or a folder is at that path again: then it is that one's.
+        let cwd = if projects.contains_key(&project_key(&conversation.cwd)) {
+            conversation.cwd.clone()
+        } else {
+            crate::project_folder_move::current_for_former(&former_root, &conversation.cwd)
+                .unwrap_or_else(|| conversation.cwd.clone())
+        };
         let project_key = if is_hermes {
             project_key(&conversation.agent_home.to_string_lossy())
         } else {
@@ -159,13 +164,9 @@ pub(crate) fn discover(
         if is_hermes && !projects.contains_key(&project_key) {
             continue;
         }
-        // Not while its folder moves, and never a new project for a folder that is not there:
-        // the conversation is looked at again on a later pass (risk 6 of
-        // docs/2026-11-19/project-move-folder/PLAN.md).
-        if !is_hermes
-            && (crate::project_folder_move::path_is_moving(&conversation.cwd)
-                || (!projects.contains_key(&project_key) && !Path::new(&cwd).is_dir()))
-        {
+        // Not while its folder moves: the conversation is looked at again on a later pass (risk 6
+        // of docs/2026-11-19/project-move-folder/PLAN.md).
+        if !is_hermes && crate::project_folder_move::path_is_moving(&conversation.cwd) {
             continue;
         }
         let inserted = transaction.execute("INSERT OR IGNORE INTO external_session_receipts (agent, conversationId) VALUES (?1, ?2)", (&conversation.agent, &conversation.id)).map_err(error)?;

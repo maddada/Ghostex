@@ -48,6 +48,8 @@ pub(crate) fn move_project_folder(
     request: &MoveRequest,
 ) -> Result<(Value, Vec<String>), DomainStateError> {
     let root_dir = &paths.root_dir;
+    // One move at a time, from before the checks to the end (Opus review, finding 2).
+    let _one_move = registry::lock_moves()?;
     if let Some(stuck) = journal::read_journal(root_dir, &request.project_id) {
         return Err(conflict(format!(
             "A move of this project from {} to {} is unfinished (it stopped at \"{}\"). Run ghostex move-project-folder --project-id {} --resume to finish it, or --abandon.",
@@ -64,6 +66,7 @@ pub(crate) fn move_project_folder(
         &request.project_id,
         &request.new_path,
         request.force_open_files,
+        request.dry_run,
     )?;
     let mut journal = checked.journal;
     if request.dry_run {
@@ -92,7 +95,7 @@ pub(crate) fn move_project_folder(
 
     // Nothing starts in these projects or the folder from here on (risk 12), then the running
     // check again, since a start could have slipped in after the first one.
-    registry::begin_moving(journal.project_ids.clone(), journal.root());
+    registry::begin_moving(journal.project_ids.clone(), journal.root())?;
     let projects = repository.list_projects_without_session_history()?;
     let running = checks::running_sessions(
         &repository,
@@ -108,11 +111,15 @@ pub(crate) fn move_project_folder(
             running.join("; ")
         )));
     }
-    if let Err(error) = journal::write_journal(root_dir, &journal) {
+    if let Err(error) = journal::create_journal(root_dir, &journal) {
         registry::end_moving(&journal.project_id);
-        return Err(conflict(format!(
-            "Could not write the move's journal: {error}. Nothing was changed."
-        )));
+        return Err(conflict(
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                "Another move of this project is recorded as unfinished. Run --resume or --abandon first. Nothing was changed.".to_string()
+            } else {
+                format!("Could not write the move's journal: {error}. Nothing was changed.")
+            },
+        ));
     }
     journal::pause_for_test(Phase::Planned);
 
@@ -254,6 +261,7 @@ fn next_step(mut journal: Journal) -> Next {
 
 /// CDXC:Projects 2026-11-19 WHY: runs at gxserver's start before it serves anything (server/foreground.rs), so a move a crash interrupted is finished or forgotten before any session of the project can start (risk 2). A move that can't be decided from the disk keeps its projects refused until `--resume` or `--abandon`.
 pub(crate) fn recover_on_startup(paths: &GxserverPaths, server_id: &str) {
+    let _one_move = registry::lock_moves();
     for journal in journal::read_all_journals(&paths.root_dir) {
         let project_id = journal.project_id.clone();
         let phase = journal.phase.name();
@@ -263,11 +271,11 @@ pub(crate) fn recover_on_startup(paths: &GxserverPaths, server_id: &str) {
                 eprintln!("[gxserver] folder move of {project_id}: the folder never moved; forgot the move.");
             }
             Next::Stuck(why) => {
-                registry::begin_moving(journal.project_ids.clone(), journal.root());
+                registry::keep_moving(journal.project_ids.clone(), journal.root());
                 eprintln!("[gxserver] folder move of {project_id} stopped at {phase} and can't be finished on its own ({why}). Its sessions can't start until ghostex move-project-folder --project-id {project_id} --resume or --abandon.");
             }
             Next::Finish(journal) => {
-                registry::begin_moving(journal.project_ids.clone(), journal.root());
+                registry::keep_moving(journal.project_ids.clone(), journal.root());
                 let outcome = crate::storage::open_gxserver_database_with_busy_timeout(
                     paths,
                     std::time::Duration::from_secs(10),
@@ -290,11 +298,19 @@ pub(crate) fn resume(
     db: &Connection,
     project_id: &str,
 ) -> Result<(Value, Vec<String>), DomainStateError> {
+    let _one_move = registry::lock_moves()?;
     let journal = journal::read_journal(&paths.root_dir, project_id)
         .ok_or_else(|| DomainStateError::not_found("This project has no unfinished move."))?;
     match next_step(journal) {
         Next::Finish(journal) => {
-            registry::begin_moving(journal.project_ids.clone(), journal.root());
+            // Its own entry (left by the startup recovery or a failed record) is replaced; one
+            // that overlaps another unfinished move is refused and the block kept.
+            registry::end_moving(project_id);
+            if let Err(error) = registry::begin_moving(journal.project_ids.clone(), journal.root())
+            {
+                registry::keep_moving(journal.project_ids.clone(), journal.root());
+                return Err(error);
+            }
             finish(paths, db, journal, None)
         }
         Next::Forget => {
@@ -309,9 +325,18 @@ pub(crate) fn resume(
 }
 
 /// `--abandon`: forget an unfinished move, leaving the folder and the records as they are.
+///
+/// CDXC:Projects 2026-11-20 WHY: refused while the folder's place shows `--resume` would finish the move (the folder is at the new path, or the database already names it): forgetting it then would leave the folder moved and Ghostex pointing at the old path, or git unrepaired, with no journal left to fix it from (Opus review, finding 7).
 pub(crate) fn abandon(paths: &GxserverPaths, project_id: &str) -> Result<Value, DomainStateError> {
+    let _one_move = registry::lock_moves()?;
     let journal = journal::read_journal(&paths.root_dir, project_id)
         .ok_or_else(|| DomainStateError::not_found("This project has no unfinished move."))?;
+    if let Next::Finish(_) = next_step(journal.clone()) {
+        return Err(conflict(format!(
+            "This move can still be finished: the folder is at {}. Run ghostex move-project-folder --project-id {project_id} --resume instead.",
+            journal.new_path
+        )));
+    }
     journal::remove_journal(&paths.root_dir, project_id);
     registry::end_moving(project_id);
     Ok(json!({
@@ -319,4 +344,107 @@ pub(crate) fn abandon(paths: &GxserverPaths, project_id: &str) -> Result<Value, 
         "abandoned": true,
         "notes": [format!("Forgot the move from {} to {}, which stopped at {}. Ghostex still names the folder its records had; check the project's folder and sessions.", journal.old_path, journal.new_path, journal.phase.name())],
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn journal(dir: &std::path::Path, project_id: &str, phase: Phase) -> Journal {
+        let old = dir.join("Old").to_string_lossy().to_string();
+        Journal {
+            version: 1,
+            project_id: project_id.to_string(),
+            old_path: old.clone(),
+            new_path: dir.join("New").to_string_lossy().to_string(),
+            old_spellings: vec![old],
+            ignore_case: false,
+            case_only: false,
+            project_ids: vec![project_id.to_string()],
+            checkouts: Vec::new(),
+            worktrees: Vec::new(),
+            claude_old_keys: Vec::new(),
+            trusted_by: Vec::new(),
+            phase,
+            started_at: String::new(),
+            notes: Vec::new(),
+        }
+    }
+
+    /// What `next_step` decides with the folder at the old place, the new one, both or neither.
+    fn decide(phase: Phase, old: bool, new: bool) -> &'static str {
+        let dir = tempfile::tempdir().unwrap();
+        if old {
+            std::fs::create_dir(dir.path().join("Old")).unwrap();
+        }
+        if new {
+            std::fs::create_dir(dir.path().join("New")).unwrap();
+        }
+        match next_step(journal(dir.path(), "p", phase)) {
+            Next::Finish(journal) if journal.phase == Phase::Moved => "finish from moved",
+            Next::Finish(_) => "finish",
+            Next::Forget => "forget",
+            Next::Stuck(_) => "stuck",
+        }
+    }
+
+    #[test]
+    fn each_phase_is_finished_forgotten_or_left_by_where_the_folder_is() {
+        // Planned: the rename may or may not have happened.
+        assert_eq!(decide(Phase::Planned, true, false), "forget");
+        assert_eq!(decide(Phase::Planned, false, true), "finish from moved");
+        assert_eq!(decide(Phase::Planned, true, true), "stuck");
+        assert_eq!(decide(Phase::Planned, false, false), "stuck");
+        // Moved: the database still names the old folder.
+        assert_eq!(decide(Phase::Moved, false, true), "finish from moved");
+        assert_eq!(decide(Phase::Moved, true, false), "forget");
+        assert_eq!(decide(Phase::Moved, true, true), "stuck");
+        assert_eq!(decide(Phase::Moved, false, false), "stuck");
+        // Recorded and repaired: the database names the new folder; always finished.
+        for phase in [Phase::Recorded, Phase::Repaired] {
+            assert_eq!(decide(phase, false, true), "finish");
+            assert_eq!(decide(phase, true, true), "finish");
+        }
+    }
+
+    #[test]
+    fn abandon_is_refused_while_resume_would_finish_the_move() {
+        let _serial = registry::test_serial();
+        let home = tempfile::tempdir().unwrap();
+        let paths = crate::paths::get_gxserver_paths(Some(home.path().to_path_buf()));
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("New")).unwrap();
+        let project_id = "abandon-test-project";
+        journal::create_journal(
+            &paths.root_dir,
+            &journal(dir.path(), project_id, Phase::Moved),
+        )
+        .unwrap();
+        let refused = abandon(&paths, project_id).unwrap_err();
+        assert!(refused.message.contains("--resume"), "{}", refused.message);
+        assert!(journal::read_journal(&paths.root_dir, project_id).is_some());
+        // Both folders there: it can't be finished, so it may be forgotten.
+        std::fs::create_dir(dir.path().join("Old")).unwrap();
+        let abandoned = abandon(&paths, project_id).unwrap();
+        assert_eq!(abandoned["abandoned"], true);
+        assert!(journal::read_journal(&paths.root_dir, project_id).is_none());
+    }
+
+    #[test]
+    fn a_second_journal_for_the_project_is_refused() {
+        let home = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let first = journal(dir.path(), "journal-test-project", Phase::Planned);
+        journal::create_journal(home.path(), &first).unwrap();
+        let mut second = first.clone();
+        second.new_path = dir.path().join("Other").to_string_lossy().to_string();
+        let error = journal::create_journal(home.path(), &second).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!(
+            journal::read_journal(home.path(), "journal-test-project")
+                .unwrap()
+                .new_path,
+            first.new_path
+        );
+    }
 }

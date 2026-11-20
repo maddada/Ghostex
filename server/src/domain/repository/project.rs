@@ -408,6 +408,17 @@ impl<'a> DomainRepository<'a> {
     ) -> DomainResult<RelocatedProject> {
         let project_id = read_unvalidated_project_lookup_id(params);
         let old_project = self.get_project_without_session_history(&project_id)?;
+        // Not while `ghostex move-project-folder` moves this project, its folder or the folder
+        // it would be pointed at.
+        for path in [
+            old_project
+                .as_ref()
+                .and_then(|project| project.get("path"))
+                .and_then(Value::as_str),
+            params.get("path").and_then(Value::as_str),
+        ] {
+            crate::project_folder_move::refuse_if_moving(&project_id, path)?;
+        }
         if !allow_present_folder {
             if let Some(project) = old_project.as_ref() {
                 if crate::domain::project_path_state(project)

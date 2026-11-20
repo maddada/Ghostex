@@ -17,15 +17,25 @@ pub(crate) fn rename_no_replace(from: &Path, to: &Path, case_only: bool) -> std:
 #[cfg(target_os = "macos")]
 fn rename_exclusive(from: &Path, to: &Path) -> std::io::Result<()> {
     use std::os::unix::ffi::OsStrExt as _;
-    let from = std::ffi::CString::new(from.as_os_str().as_bytes())?;
-    let to = std::ffi::CString::new(to.as_os_str().as_bytes())?;
+    let from_c = std::ffi::CString::new(from.as_os_str().as_bytes())?;
+    let to_c = std::ffi::CString::new(to.as_os_str().as_bytes())?;
     // SAFETY: both are valid NUL-terminated paths for the duration of the call.
-    let result = unsafe { libc::renamex_np(from.as_ptr(), to.as_ptr(), libc::RENAME_EXCL) };
+    let result = unsafe { libc::renamex_np(from_c.as_ptr(), to_c.as_ptr(), libc::RENAME_EXCL) };
     if result == 0 {
-        Ok(())
-    } else {
-        Err(std::io::Error::last_os_error())
+        return Ok(());
     }
+    let error = std::io::Error::last_os_error();
+    // CDXC:Projects 2026-11-20 WHY: exFAT, SMB and other volumes without RENAME_EXCL answer ENOTSUP or EINVAL; like Linux, check, then the plain rename (Opus review, finding 7). The window between the two is the move lock's and the checks' to keep closed.
+    if matches!(
+        error.raw_os_error(),
+        Some(libc::ENOTSUP) | Some(libc::EINVAL)
+    ) {
+        if std::fs::symlink_metadata(to).is_ok() {
+            return Err(std::io::Error::from(std::io::ErrorKind::AlreadyExists));
+        }
+        return std::fs::rename(from, to);
+    }
+    Err(error)
 }
 
 #[cfg(target_os = "linux")]
@@ -154,28 +164,70 @@ pub(crate) fn is_link(path: &Path) -> bool {
     false
 }
 
-/// Processes other than gxserver whose working folder is inside the folder (risk 8), as
-/// `name (pid N)`. macOS reads `lsof`, Linux `/proc/*/cwd`; Windows has no cheap way and needs
-/// none, because the rename itself fails there while a process is inside.
-pub(crate) fn processes_inside(contains: &dyn Fn(&str) -> bool) -> Vec<String> {
+/// The other processes using the folder: those whose working folder is inside it (risk 8), and
+/// those with a file (or their own program) open inside it (Opus review, finding 6), each as
+/// `name (pid N)` and listed once.
+#[derive(Default, Debug)]
+pub(crate) struct OpenInFolder {
+    pub(crate) cwd: Vec<String>,
+    pub(crate) files: Vec<String>,
+}
+
+/// macOS indexers and backup daemons that open files for a moment; they don't keep the folder.
+const PASSING_READERS: &[&str] = &[
+    "mds",
+    "mds_stores",
+    "mdworker",
+    "mdworker_shared",
+    "fseventsd",
+    "revisiond",
+    "backupd",
+];
+
+impl OpenInFolder {
+    fn add(&mut self, cwd: bool, command: &str, pid: u32) {
+        let name = format!("{command} (pid {pid})");
+        if cwd {
+            self.files.retain(|known| known != &name);
+            if !self.cwd.contains(&name) {
+                self.cwd.push(name);
+            }
+        } else if !self.cwd.contains(&name)
+            && !self.files.contains(&name)
+            && !PASSING_READERS.contains(&command)
+        {
+            self.files.push(name);
+        }
+    }
+}
+
+/// Every process other than gxserver using a path `contains` accepts: macOS reads one `lsof` of
+/// every open file (not `+D`, which walks the whole folder), Linux `/proc/*/{cwd,exe,fd}`. `Err`
+/// when that ran past `limit`. Windows has no cheap way and needs none: the rename itself fails
+/// there while a process holds anything inside.
+pub(crate) fn processes_using(
+    contains: &dyn Fn(&str) -> bool,
+    limit: std::time::Duration,
+) -> Result<OpenInFolder, ()> {
     let own = std::process::id();
-    let mut found = Vec::new();
+    let mut found = OpenInFolder::default();
     #[cfg(target_os = "macos")]
     {
-        let Ok(output) = std::process::Command::new("/usr/sbin/lsof")
-            .args(["-nP", "-a", "-d", "cwd", "-Fpcn"])
-            .output()
+        let Some(text) = output_within(
+            std::process::Command::new("/usr/sbin/lsof").args(["-nP", "-w", "-Fpcfn"]),
+            limit,
+        )?
         else {
-            return found;
+            return Ok(found);
         };
-        let text = String::from_utf8_lossy(&output.stdout);
-        let (mut pid, mut command) = (0u32, String::new());
+        let (mut pid, mut command, mut fd) = (0u32, String::new(), String::new());
         for line in text.lines() {
             match line.split_at_checked(1) {
                 Some(("p", rest)) => pid = rest.parse().unwrap_or(0),
                 Some(("c", rest)) => command = rest.to_string(),
+                Some(("f", rest)) => fd = rest.to_string(),
                 Some(("n", rest)) if pid != own && contains(rest) => {
-                    found.push(format!("{command} (pid {pid})"))
+                    found.add(fd == "cwd", &command, pid)
                 }
                 _ => {}
             }
@@ -183,30 +235,86 @@ pub(crate) fn processes_inside(contains: &dyn Fn(&str) -> bool) -> Vec<String> {
     }
     #[cfg(target_os = "linux")]
     {
+        let started = std::time::Instant::now();
         let Ok(entries) = std::fs::read_dir("/proc") else {
-            return found;
+            return Ok(found);
         };
         for entry in entries.flatten() {
+            if started.elapsed() > limit {
+                return Err(());
+            }
             let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else {
                 continue;
             };
             if pid == own {
                 continue;
             }
-            let Ok(cwd) = std::fs::read_link(entry.path().join("cwd")) else {
-                continue;
-            };
-            if contains(&cwd.to_string_lossy()) {
-                let command = std::fs::read_to_string(entry.path().join("comm"))
+            let command = || {
+                std::fs::read_to_string(entry.path().join("comm"))
                     .map(|name| name.trim().to_string())
-                    .unwrap_or_else(|_| "process".to_string());
-                found.push(format!("{command} (pid {pid})"));
+                    .unwrap_or_else(|_| "process".to_string())
+            };
+            let inside = |link: std::path::PathBuf| {
+                std::fs::read_link(link).is_ok_and(|target| contains(&target.to_string_lossy()))
+            };
+            if inside(entry.path().join("cwd")) {
+                found.add(true, &command(), pid);
+                continue;
+            }
+            let mut links = vec![entry.path().join("exe")];
+            if let Ok(fds) = std::fs::read_dir(entry.path().join("fd")) {
+                links.extend(fds.flatten().map(|fd| fd.path()));
+            }
+            if links.into_iter().any(inside) {
+                found.add(false, &command(), pid);
             }
         }
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    let _ = (own, contains);
-    found
+    let _ = (own, contains, limit);
+    Ok(found)
+}
+
+/// Runs `command` and returns its standard output, `Ok(None)` when it could not start, or `Err`
+/// after killing it when it ran past `limit`.
+#[cfg(target_os = "macos")]
+fn output_within(
+    command: &mut std::process::Command,
+    limit: std::time::Duration,
+) -> Result<Option<String>, ()> {
+    use std::io::Read as _;
+    let Ok(mut child) = command
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    else {
+        return Ok(None);
+    };
+    let mut stdout = child.stdout.take();
+    // Read on a thread so a full pipe never stops the program while it is being waited for.
+    let reader = std::thread::spawn(move || {
+        let mut text = String::new();
+        if let Some(stdout) = stdout.as_mut() {
+            let _ = stdout.read_to_string(&mut text);
+        }
+        text
+    });
+    let started = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if started.elapsed() > limit => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = reader.join();
+                return Err(());
+            }
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(50)),
+            Err(_) => break,
+        }
+    }
+    Ok(reader.join().ok())
 }
 
 /// The cloud-sync folder `path` is in, if any (risk 9): iCloud Drive and File Provider folders
@@ -382,4 +490,81 @@ pub(crate) fn is_system_folder(path: &Path, home: &Path) -> bool {
         || unix_roots
             .iter()
             .any(|root| trimmed == *root || trimmed.starts_with(&format!("{root}/")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_rename_never_replaces_an_existing_folder() {
+        let temp = tempfile::tempdir().unwrap();
+        let from = temp.path().join("App");
+        let to = temp.path().join("Kiwi");
+        std::fs::create_dir(&from).unwrap();
+        std::fs::create_dir(&to).unwrap();
+        std::fs::write(to.join("keep.txt"), "kept").unwrap();
+        let error = rename_no_replace(&from, &to, false).unwrap_err();
+        assert!(
+            error.kind() == std::io::ErrorKind::AlreadyExists
+                || error.raw_os_error() == Some(libc_eexist()),
+            "{error}"
+        );
+        assert!(from.is_dir());
+        assert_eq!(
+            std::fs::read_to_string(to.join("keep.txt")).unwrap(),
+            "kept"
+        );
+        std::fs::remove_dir_all(&to).unwrap();
+        rename_no_replace(&from, &to, false).unwrap();
+        assert!(!from.exists() && to.is_dir());
+    }
+
+    fn libc_eexist() -> i32 {
+        #[cfg(unix)]
+        return libc::EEXIST;
+        #[allow(unreachable_code)]
+        80
+    }
+
+    /// Opus review, finding 6: a program with a file open in the folder is found, not only one
+    /// whose working folder is inside.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn programs_using_the_folder_are_found_by_working_folder_and_by_open_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let folder = std::fs::canonicalize(temp.path()).unwrap().join("App");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(folder.join("notes.txt"), "x").unwrap();
+        let mut inside = std::process::Command::new("sleep")
+            .arg("60")
+            .current_dir(&folder)
+            .spawn()
+            .unwrap();
+        let mut holding = std::process::Command::new("tail")
+            .args(["-f", folder.join("notes.txt").to_str().unwrap()])
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let prefix = folder.to_string_lossy().to_string();
+        let found = processes_using(
+            &|path| path == prefix || path.starts_with(&format!("{prefix}/")),
+            std::time::Duration::from_secs(30),
+        );
+        let _ = inside.kill();
+        let _ = holding.kill();
+        let _ = (inside.wait(), holding.wait());
+        let found = found.unwrap();
+        assert!(
+            found.cwd.contains(&format!("sleep (pid {})", inside.id())),
+            "{found:?}"
+        );
+        assert!(
+            found
+                .files
+                .contains(&format!("tail (pid {})", holding.id())),
+            "{found:?}"
+        );
+    }
 }

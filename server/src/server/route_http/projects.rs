@@ -279,6 +279,7 @@ pub(super) async fn route_projects_http(
             |repository, db, params, _| {
                 // The CLI's `remove-project` passes --project-id, --path or --name, like `group-project`.
                 let project_id = resolve_sidebar_collection_project_id(repository, params)?;
+                crate::project_folder_move::refuse_if_moving(&project_id, None)?;
                 // Its worktrees follow it to another workspace, so it goes like a move
                 // (`place_projects_after`).
                 let project =
