@@ -1053,15 +1053,19 @@ Each workspace has its own projects, Spaces,
 Linear API key, Claude account and Browser sign-ins (cookies), and a window
 shows one workspace at a time. Every install starts with one workspace,
 Personal, holding all your projects and Spaces. Once you have two or more, the
-workspace switcher sits at the bottom left of the sidebar, on a line of its own
-above the account usage meters: a small dot in the workspace's colour, its name
-and a small arrow. Click the name to switch this window to your other workspace
-in one click (with more than two, it goes back to the one this window showed
-last; hover it to see where it goes and its hotkey). Ctrl+Option+1 to 9 (Alt+Shift+1 to 9
+workspace tile is the first tile of the Spaces row (after your computers, if you
+have several): the workspace's icon in white on a disc of its colour. Workspace
+icons are their own set (home, briefcase, building, people, coffee, camera and
+more), never a Space icon; pick each workspace's icon and colour in Settings >
+Workspaces (Personal starts as a house, a Work workspace as a briefcase). Click
+the tile to switch this window to your other workspace in one click (with more
+than two, it goes back to the one this window showed last; hover it to see where
+it goes and its hotkey). With Spaces turned off the tile still shows, in a row
+of its own. Ctrl+Option+1 to 9 (Alt+Shift+1 to 9
 on Windows and Linux) go to the first to ninth workspace of the menu (Go to
 Workspace in Settings > Hotkeys). If another window already shows that workspace, that
-window comes forward instead. Click the arrow for the workspace menu: pick any
-workspace (each row shows its colour and hotkey), open Workspace settings, or make a New workspace. In the menu, a
+window comes forward instead. Right-click the tile for the workspace menu: pick any
+workspace (each row shows its icon and hotkey), open Workspace settings, or make a New workspace. In the menu, a
 workspace that no window shows yet has a new-window button at the right end of
 its row, which opens it in a new window. With a single workspace nothing is
 shown; make another in Settings > Workspaces. Switching reopens the session this window
@@ -1087,8 +1091,9 @@ the project and choose Move to workspace: it shows there, and the machine's tab
 shows in every workspace that holds one of its projects. This placement is this
 computer's own; on the remote machine the project keeps its workspace there. On the
 phone, when a computer has two or more workspaces, the one its Sessions list shows is
-named after the Ghostex title (a coloured dot, the name and an arrow): tap it to
-choose which of that computer's workspaces the list shows. The phone remembers the choice, a session opened from a
+the first tile of the Space row, with the same icon on its colour: tap it to
+switch to the other workspace, or touch and hold it to choose which of that
+computer's workspaces the list shows. The phone remembers the choice, a session opened from a
 notification, the session search or Search Prompts switches the list to that
 session's workspace, and a project added from the phone joins the workspace it
 shows. Settings >

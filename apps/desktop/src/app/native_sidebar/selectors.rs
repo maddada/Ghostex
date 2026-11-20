@@ -95,12 +95,26 @@ impl GhostexGpuiApp {
         } else {
             0
         };
+        // The workspace tile leads the Spaces, after the computers (workspace_tile.rs).
+        let workspace_tile = self.render_native_sidebar_workspace_tile(appearance, cx);
+        let has_workspace_tile = workspace_tile.is_some();
+        let workspace_room = if has_workspace_tile {
+            super::workspace_tile::WORKSPACE_TILE_ROOM
+        } else {
+            0.0
+        };
         if !snapshot.spaces_enabled {
-            if machines == 0 {
+            if machines == 0 && !has_workspace_tile {
                 return None;
             }
-            // The computers alone: they fold only when even their tiles do not fit.
-            let folded = machines as f32 * 32.0 - 4.0 > row_room;
+            // The computers and the workspace tile alone: the computers fold only when even their
+            // tiles do not fit.
+            let folded = machines as f32 * 32.0 - 4.0 > row_room - workspace_room;
+            let computers = if machines > 0 {
+                self.render_native_machine_icons(snapshot, appearance, folded, cx)
+            } else {
+                Vec::new()
+            };
             return Some(
                 h_flex()
                     .id("native-sidebar-machine-row")
@@ -109,7 +123,17 @@ impl GhostexGpuiApp {
                     .pl(px(insets.left))
                     .pr(px(insets.right))
                     .gap(px(4.0 * scale))
-                    .children(self.render_native_machine_icons(snapshot, appearance, folded, cx))
+                    .children(computers)
+                    .when(machines > 0 && has_workspace_tile, |row| {
+                        row.child(
+                            div()
+                                .flex_shrink_0()
+                                .w(px(1.0))
+                                .h(px(16.0 * scale))
+                                .bg(appearance.foreground.opacity(0.12)),
+                        )
+                    })
+                    .children(workspace_tile)
                     .into_any_element(),
             );
         }
@@ -156,8 +180,9 @@ impl GhostexGpuiApp {
         } else {
             (user_spaces.len() + 1) as f32 * pitch_min - 4.0
         } + if star.is_some() { pitch_min } else { 0.0 };
-        let folded = machines > 0 && row_room - bots_room - computers_room(machines) < spaces_need;
-        let leading = computers_room(if folded { 1 } else { machines });
+        let folded = machines > 0
+            && row_room - bots_room - computers_room(machines) - workspace_room < spaces_need;
+        let leading = computers_room(if folded { 1 } else { machines }) + workspace_room;
         let capacity =
             ((row_room + 4.0 - bots_room - leading - if star.is_some() { pitch_min } else { 0.0 })
                 / pitch_min)
@@ -199,13 +224,15 @@ impl GhostexGpuiApp {
         } else {
             Vec::new()
         };
-        // CDXC:Spaces 2026-10-11 DECISION: User: Create a space fits its content, and the Spaces row has no background behind it (a left-aligned row in a rounded track was tried and removed the same day). The workspace tile left the row for the sidebar's bottom bar (workspace_tile.rs).
+        // CDXC:Spaces 2026-10-11 DECISION: User: Create a space fits its content, and the Spaces row has no background behind it (a left-aligned row in a rounded track was tried and removed the same day). The workspace tile left the row for the sidebar's bottom bar (workspace_tile.rs); it came back as the row's first tile on 2026-11-20 (Q4296 F).
         // CDXC:Spaces 2026-11-11 DECISION: User (sidebar top page, Q2424 C): the Spaces stretch across their row: the tiles share its full width evenly between the same 8pt edges as New session, so both edges line up with the rows above (10pt since 2026-11-20, `SIDEBAR_SIDE_INSET` in navigation.rs). The Bots slot keeps its size. This supersedes the centred row of 2026-09-21 and 2026-10-11.
         let radius = super::navigation::SIDEBAR_TOP_ROW_BUTTON_RADIUS;
         Some(
             h_flex().id("native-sidebar-space-track").sidebar_drop_target("space-row", String::new(), None, cx).w_full().h(px(28.0 * scale)).pl(px(insets.left)).pr(px(insets.right)).gap(px(4.0 * scale))
                 .children(computers)
                 .when(machines > 0, |row| row.child(div().flex_shrink_0().w(px(1.0)).h(px(16.0 * scale)).bg(appearance.foreground.opacity(0.12))))
+                .children(workspace_tile)
+                .when(has_workspace_tile, |row| row.child(div().flex_shrink_0().w(px(1.0)).h(px(16.0 * scale)).bg(appearance.foreground.opacity(0.12))))
                 .children(star.map(|space| self.render_native_sidebar_space(space, &visible_ids, (pitch, leading, tile_min), appearance, cx)))
                 // Words give way first: on a narrow row Create space keeps its plus and loses its label.
                 .when(user_spaces.is_empty(), |row| row.child(h_flex().id("native-sidebar-create-space").role(gpui::Role::Button).aria_label("Create space").flex_shrink(1.0).min_w(px(28.0 * scale)).overflow_hidden().h(px(28.0 * scale)).px(px(10.0 * scale)).gap(px(6.0 * scale)).rounded(px(radius * scale)).border_1().border_color(appearance.muted.opacity(0.25)).text_size(px(12.0 * scale))

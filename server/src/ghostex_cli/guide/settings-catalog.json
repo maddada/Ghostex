@@ -13507,7 +13507,7 @@
     {
       "key": "workspaceName",
       "title": "Workspace name",
-      "subtitle": "The name shown on the workspace switcher at the bottom left of the sidebar.",
+      "subtitle": "The workspace's name in its menu and on the workspace tile's tooltip.",
       "tab": "workspaces",
       "tabTitle": "Workspaces",
       "section": "workspaces",
@@ -13518,7 +13518,18 @@
     {
       "key": "workspaceColor",
       "title": "Workspace color",
-      "subtitle": "The color of the workspace's dot in the switcher and its menu.",
+      "subtitle": "The color of the disc behind the workspace's icon, on its tile and in its menu.",
+      "tab": "workspaces",
+      "tabTitle": "Workspaces",
+      "section": "workspaces",
+      "sectionTitle": "Workspaces",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "workspaceIcon",
+      "title": "Workspace icon",
+      "subtitle": "The icon on the workspace tile, the first tile of the Spaces row, and in the workspace menu.",
       "tab": "workspaces",
       "tabTitle": "Workspaces",
       "section": "workspaces",

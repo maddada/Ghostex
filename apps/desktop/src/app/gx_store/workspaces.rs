@@ -20,6 +20,8 @@ const MAX_RECENT_WINDOW_WORKSPACES: usize = 8;
 pub(crate) struct WorkspaceTile {
     pub(crate) name: String,
     pub(crate) color: String,
+    /// Its icon id (`SidebarWorkspace::icon_id`), drawn on a disc of `color`.
+    pub(crate) icon: String,
     /// The workspace a click on the name switches to; `None` with a single workspace.
     pub(crate) switch_to: Option<(String, String)>,
     /// The Go to Workspace hotkey of `switch_to`, as the settings bind it now.
@@ -228,6 +230,7 @@ impl GhostexGpuiApp {
         Some(WorkspaceTile {
             name: workspace.name.clone(),
             color: workspace.color.clone(),
+            icon: workspace.icon_id().to_string(),
             switch_to,
             switch_hotkey,
         })

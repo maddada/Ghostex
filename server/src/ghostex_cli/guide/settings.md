@@ -811,8 +811,9 @@ How to use this file:
 
 ### Workspaces
 
-- **Workspace name** `workspaceName` (Settings UI row without a settings key; use `ghostex settings open`): The name shown on the workspace switcher at the bottom left of the sidebar.
-- **Workspace color** `workspaceColor` (Settings UI row without a settings key; use `ghostex settings open`): The color of the workspace's dot in the switcher and its menu.
+- **Workspace name** `workspaceName` (Settings UI row without a settings key; use `ghostex settings open`): The workspace's name in its menu and on the workspace tile's tooltip.
+- **Workspace color** `workspaceColor` (Settings UI row without a settings key; use `ghostex settings open`): The color of the disc behind the workspace's icon, on its tile and in its menu.
+- **Workspace icon** `workspaceIcon` (Settings UI row without a settings key; use `ghostex settings open`): The icon on the workspace tile, the first tile of the Spaces row, and in the workspace menu.
 - **Work or Personal** `workspaceKind` (Settings UI row without a settings key; use `ghostex settings open`): A Work workspace can share a team backend with your team (requests from Slack, the team's Linear key); a Personal one is just yours.
 - **Primary tracker** `workspaceTracker` (Settings UI row without a settings key; use `ghostex settings open`): Linear tickets & projects, or GitHub issues & projects: what Create ticket, the Issues view, Link to and Slack use. Shows the command that lets Ghostex read GitHub Projects when it can't yet.
 - **Linear API key** `workspaceLinearApiKey` (Settings UI row without a settings key; use `ghostex settings open`): The Linear key this workspace's projects use, unless a project sets its own.

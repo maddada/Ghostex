@@ -1,4 +1,5 @@
-//! The workspace tile's menu (left of the Spaces row) and a project's "Move to workspace" submenu.
+//! The workspace tile's menu (the first tile of the Spaces row) and a project's "Move to workspace"
+//! submenu.
 //!
 //! CDXC:Workspaces 2026-10-09 DECISION:
 //! User (mockups 01 and 07): the workspace tile's menu lists the workspaces (the current one
@@ -13,6 +14,11 @@
 //! User picked "A. The name, quietly" (Q4254): the menu's workspace rows show the workspace's
 //! colour as a small dot instead of the person and briefcase icons, and each row names its Go to
 //! Workspace hotkey (⌃⌥1, ⌃⌥2…); the new-window button stays.
+//!
+//! CDXC:Workspaces 2026-11-20 DECISION:
+//! User picked "F. The first tile of the Spaces row" (Q4296), with an icon per workspace: every
+//! workspace row here (the tile's menu and each "Move to workspace" list) shows the workspace's
+//! icon on a disc in its colour (`badge`), the same mark as the tile. Supersedes the dot above.
 
 use ghostex_gx_protocol::{SidebarWorkspace, SidebarWorkspacesState};
 use serde_json::json;
@@ -31,8 +37,9 @@ pub fn workspace_menu(
     for (index, workspace) in state.ordered().enumerate() {
         let mut row = MenuItem {
             label: Some(workspace.name.clone()),
+            icon: Some(workspace.icon_id().to_string()),
             color: Some(workspace.color.clone()),
-            dot: true,
+            badge: true,
             command: Some(MenuCommand::host(json!({
                 "type": "selectWorkspace",
                 "workspaceId": workspace.workspace_id,
@@ -112,18 +119,15 @@ pub(crate) fn move_to_workspace_menu(
         .map(|workspace| {
             let mut row = MenuItem::row(
                 &workspace.name,
-                if workspace.is_work() {
-                    "briefcase"
-                } else {
-                    "user"
-                },
+                workspace.icon_id(),
                 MenuCommand::command(json!({
                     "type": "moveProjectToWorkspace",
                     "projectId": project_id,
                     "workspaceId": workspace.workspace_id,
                 })),
             );
-            row.icon_color = Some(workspace.color.clone());
+            row.color = Some(workspace.color.clone());
+            row.badge = true;
             row
         })
         .collect();
@@ -152,11 +156,7 @@ pub(crate) fn move_remote_project_to_workspace_menu(
         .map(|workspace| {
             let mut row = MenuItem::row(
                 &workspace.name,
-                if workspace.is_work() {
-                    "briefcase"
-                } else {
-                    "user"
-                },
+                workspace.icon_id(),
                 MenuCommand::host(json!({
                     "type": "moveRemoteProjectToWorkspace",
                     "machineId": machine_id,
@@ -164,7 +164,8 @@ pub(crate) fn move_remote_project_to_workspace_menu(
                     "workspaceId": workspace.workspace_id,
                 })),
             );
-            row.icon_color = Some(workspace.color.clone());
+            row.color = Some(workspace.color.clone());
+            row.badge = true;
             row
         })
         .collect();
@@ -181,18 +182,15 @@ pub fn machine_workspace_menu(state: &SidebarWorkspacesState, machine_id: &str) 
         .map(|workspace| {
             let mut row = MenuItem::row(
                 &workspace.name,
-                if workspace.is_work() {
-                    "briefcase"
-                } else {
-                    "user"
-                },
+                workspace.icon_id(),
                 MenuCommand::host(json!({
                     "type": "moveMachineToWorkspace",
                     "machineId": machine_id,
                     "workspaceId": workspace.workspace_id,
                 })),
             );
-            row.icon_color = Some(workspace.color.clone());
+            row.color = Some(workspace.color.clone());
+            row.badge = true;
             row
         })
         .collect();
