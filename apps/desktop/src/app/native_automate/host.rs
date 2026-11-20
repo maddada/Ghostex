@@ -139,9 +139,16 @@ impl GhostexGpuiApp {
             }
         };
         // Same bridge context the CEF page's automation requests ran with (workspace_events.rs).
-        let mut context = project_board_bridge_runtime_context_from_snapshot(
-            self.latest_sidebar_project_snapshot.as_ref(),
-        );
+        // The All Automations overview has none: it is this computer's own All Automations
+        // project, whose requests name each automation's project, so the rail's takeover never
+        // borrows a remote project that happens to be active.
+        let mut context = if scope.all_projects {
+            None
+        } else {
+            project_board_bridge_runtime_context_from_snapshot(
+                self.latest_sidebar_project_snapshot.as_ref(),
+            )
+        };
         if let Some(context) = context.as_mut()
             && let Some(remote_machine_id) = context.remote_machine_id.as_deref()
         {
