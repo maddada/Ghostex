@@ -102,9 +102,12 @@ pub const BOOSTS: [Boost; 15] = [
         label: "Chart it",
         icon: "titlebar/chart-bar.svg",
         category: "show",
-        description: "Numbers come back as charts, stat tiles and tables, not paragraphs.",
+        description: "Numbers come back as a Live page with charts and tables.",
         preview: "chart",
-        prompt: "Show the numbers in your answer as Ghostex visuals: charts, stat tiles and tables in a ```visual block, each with one plain sentence on what it shows. If you haven't in this conversation, run `ghostex visual guide visuals` first, and check the block with `ghostex visual check` before you reply.",
+        // CDXC:Boosts 2026-11-20 DECISION: User: Chart it asks for "a Live page with charts (built
+        // with ghostex show / the visual guide's chart section), NOT charts drawn inline in the chat
+        // message".
+        prompt: "Show the numbers in your answer on a Live page: charts, stat tiles and tables on one self-contained HTML page you publish with `ghostex show`, each chart with one plain sentence on what it shows, then paste the block it prints into your reply. Don't draw the charts in a ```visual block in the chat. If you haven't in this conversation, run `ghostex visual guide pages` first and follow it (charts take its --chart-1 to --chart-6 colours).",
     },
     Boost {
         id: "compare",
