@@ -135,6 +135,20 @@ fn changes_for_this_computer(
         .collect()
 }
 
+/// One short line of a failed theme call for its notice: the first sentence of the answer's first
+/// line. gxserver's answer can list one line per refused setting, which is for agents, not a notice.
+fn short_reason(message: &str) -> String {
+    let line = message
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or("Ghostex didn\u{2019}t answer.");
+    match line.find(". ") {
+        Some(end) => line[..=end].to_string(),
+        None => line.to_string(),
+    }
+}
+
 /// The example theme whose colours are the ones set now: every theme colour it sets still has
 /// the value it gave, with how many it sets and whether Your messages is one.
 fn applied_theme<'a>(
@@ -354,8 +368,11 @@ impl ThemeTab {
                                 page.prompt_gallery.applied = Some((id, change.to_string()));
                             }
                         }
-                        Err(message) => store
-                            .update(cx, |store, cx| store.toast("warning", failed, &message, cx)),
+                        Err(message) => {
+                            let reason = short_reason(&message);
+                            store
+                                .update(cx, |store, cx| store.toast("warning", failed, &reason, cx))
+                        }
                     }
                     cx.notify();
                 });
