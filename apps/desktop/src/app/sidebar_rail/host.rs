@@ -1,7 +1,7 @@
-//! What each rail icon shows and does in the desktop app. The web build has its own `host`
-//! (apps/gpui-web/src/app/sidebar_rail_web.rs) for the items a page can open.
+//! What each rail icon shows and does in the desktop app. The web build has its own
+//! (apps/gpui-web/src/app/web_host/sidebar_rail.rs) for the items a page can open.
 
-use gpui::{Bounds, Window, point, px, size};
+use gpui::Window;
 use serde_json::json;
 
 use super::model::{RailBadge, RailItemState};
@@ -149,16 +149,8 @@ impl GhostexGpuiApp {
                 .dispatch_native_sidebar_ui(sidebar_action(ghostex_gx_core::COMMANDS_ACTION), cx),
             "connectPhone" => self.dispatch_native_sidebar_ui(sidebar_action("remoteSetup"), cx),
             "settings" => self.dispatch_native_sidebar_ui(sidebar_action("settings"), cx),
-            "notifications" => {
-                // The feed opens beside the rail's bell, as from a context menu.
-                if let Some(bell) = self.sidebar_rail.item_bounds("notifications").get() {
-                    self.titlebar_notification_bell_bounds.set(Some(Bounds {
-                        origin: point(bell.right() + px(4.0), bell.top()),
-                        size: size(px(0.0), px(0.0)),
-                    }));
-                }
-                self.toggle_gpui_titlebar_notifications_popup(window, cx);
-            }
+            // The feed hangs beside the rail's bell, or ⋯ when the bell is not pinned (render.rs).
+            "notifications" => self.toggle_gpui_titlebar_notifications_popup(window, cx),
             "mainHub" => self.handle_native_sidebar_action(
                 &NativeSidebarAction {
                     command: json!({ "type": "chief", "op": "open" }),

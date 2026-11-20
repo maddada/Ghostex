@@ -741,8 +741,11 @@ Project Board, Dev servers, Resources, Extensions, Connect a Phone and Settings.
 Point at a row and click its pin to put it on the rail; click the filled pin to
 take it off. Drag icons on the rail into your own order, or right-click one to
 move it up or down or unpin it. Clicking a row you have not pinned opens it at
-once, and its icon shows on the rail under a dashed line, in an outline, while
-it is open, then leaves when you go elsewhere. Agents Hub and All Automations open across the
+once. When that row opens a view or a page (Files, Changes, Browser, Project
+Board, Notifications, Hermes, Claude, Grok Bot, the Hubs or Voice Call), its icon
+shows on the rail under a dashed line, in an outline, while it is open, then
+leaves when you go elsewhere; Search, Commands, Settings, Connect a Phone, Dev
+servers, Resources and Extensions just open. Agents Hub and All Automations open across the
 whole window like Claude and Grok Bot: the sidebar, the side panel and the
 Commands pane step aside, and clicking the lit icon again (or showing the
 sidebar, or opening a session) brings them back as they were. Agents Hub opened
@@ -758,7 +761,7 @@ sidebar without the rail) in Settings > Sidebar > Sidebar layout
 Ghostex before the rail, you keep Classic and see Meet the rail once, where you
 can try both and keep one. The pinned icons are saved per computer
 (`sidebarRailPins`). The web app shows the rail with the items a browser can
-open, without pins of its own.
+open; pinning, dragging and moving icons are on the computer only.
 
 ### Project and Unified sidebars
 
