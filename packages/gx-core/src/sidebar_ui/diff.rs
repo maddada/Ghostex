@@ -27,7 +27,6 @@ pub struct SidebarCollapseDiff {
     collapsed_groups: SetDiff,
     collapsed_collections: SetDiff,
     expanded_hover_actions: SetDiff,
-    collapsed_coordinators: SetDiff,
     expanded_coordinator_older_threads: SetDiff,
     hidden_project_machines: SetDiff,
     section_collapse: BTreeMap<String, Option<SectionCollapse>>,
@@ -86,10 +85,6 @@ impl SidebarCollapseDiff {
                 &base.expanded_hover_actions,
                 &next.expanded_hover_actions,
             ),
-            collapsed_coordinators: SetDiff::between(
-                &base.collapsed_coordinators,
-                &next.collapsed_coordinators,
-            ),
             expanded_coordinator_older_threads: SetDiff::between(
                 &base.expanded_coordinator_older_threads,
                 &next.expanded_coordinator_older_threads,
@@ -116,7 +111,6 @@ impl SidebarCollapseDiff {
         self.collapsed_groups.is_empty()
             && self.collapsed_collections.is_empty()
             && self.expanded_hover_actions.is_empty()
-            && self.collapsed_coordinators.is_empty()
             && self.expanded_coordinator_older_threads.is_empty()
             && self.hidden_project_machines.is_empty()
             && self.section_collapse.is_empty()
@@ -155,11 +149,6 @@ impl SidebarCollapseDiff {
             &mut object,
             "expandedSessionCardHoverActionsById",
             &self.expanded_hover_actions,
-        );
-        apply_set(
-            &mut object,
-            "collapsedCoordinatorsById",
-            &self.collapsed_coordinators,
         );
         apply_set(
             &mut object,

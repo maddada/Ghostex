@@ -214,8 +214,15 @@ pub struct SidebarCollapseState {
     /// Keyed by `<section key>:<collection id>`.
     pub collapsed_collections: BTreeSet<String>,
     pub expanded_hover_actions: BTreeSet<String>,
-    /// Coordinators whose threads are folded away, by the coordinator's sidebar row id.
-    pub collapsed_coordinators: BTreeSet<String>,
+    /// Coordinators whose threads the user unfolded during this run, by the coordinator's sidebar
+    /// row id. Every other coordinator is folded.
+    ///
+    /// CDXC:Coordinators 2026-11-20 DECISION:
+    /// User: "when I connect or whenever we open the app, the coordinators need to be collapsed,
+    /// not expanded." A coordinator starts folded on launch and when a computer's sessions first
+    /// appear, so this is the set of the ones the user opened since, and it is never stored. It
+    /// replaces the stored `collapsedCoordinatorsById` set (left in old envelopes, unread).
+    pub expanded_coordinators: BTreeSet<String>,
     /// Coordinators whose older threads (idle for two hours) the user listed, by sidebar row id.
     pub expanded_coordinator_older_threads: BTreeSet<String>,
     /// The computers whose sessions a merged project hides, keyed by [`project_machine_key`]

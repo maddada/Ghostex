@@ -34,7 +34,10 @@ pub struct UnifiedSavedState {
     /// The repositories new sessions last started in, newest first: the project list's Recent.
     pub recent_repos: Vec<String>,
     /// Coordinators whose threads are shown, by `unified_coordinator_key`; every coordinator
-    /// starts folded (CDXC:Sidebar 2026-11-09 in tree.rs).
+    /// starts folded (CDXC:Sidebar 2026-11-09 in tree.rs), on every launch too: this is what the
+    /// user unfolded during this run and is never saved (CDXC:Coordinators 2026-11-20, user:
+    /// "whenever we open the app, the coordinators need to be collapsed, not expanded").
+    #[serde(skip)]
     pub unfolded_coordinators: BTreeSet<String>,
     /// Coordinators whose older threads are listed.
     pub older_shown_coordinators: BTreeSet<String>,

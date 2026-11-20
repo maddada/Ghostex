@@ -190,7 +190,7 @@ fn main() -> ExitCode {
     // IS owned since M5 piece 7c, so the duplicate the stored payload carries is normalized away
     // exactly as `normalizeStoredRecentSessionIdsBySpace` drops it on the way in.
     let written = collapse_into_storage(&read, Some(STORED_COLLAPSE));
-    const EXPECTED: &str = r#"{"state":{"collapsedCoordinatorsById":{},"collapsedGroupsById":{"project:alpha":true},"collapsedProjectCollectionsByKey":{"local:c1":true},"collapsedProjectSessionSectionsById":{"alpha":{"pinned":true,"sessions":false}},"expandedCoordinatorOlderThreadsById":{},"expandedProjectSessionListsById":{"alpha":true},"expandedSessionCardHoverActionsById":{"beta":true},"isReferenceChatsCollapsed":true,"recentSessionIdsBySpace":{"local":{"s1":["combined-session:alpha:one","combined-session:alpha:two"]}},"selectedSpaceIdBySectionKey":{"local":"s1"}},"version":3}"#;
+    const EXPECTED: &str = r#"{"state":{"collapsedGroupsById":{"project:alpha":true},"collapsedProjectCollectionsByKey":{"local:c1":true},"collapsedProjectSessionSectionsById":{"alpha":{"pinned":true,"sessions":false}},"expandedCoordinatorOlderThreadsById":{},"expandedProjectSessionListsById":{"alpha":true},"expandedSessionCardHoverActionsById":{"beta":true},"isReferenceChatsCollapsed":true,"recentSessionIdsBySpace":{"local":{"s1":["combined-session:alpha:one","combined-session:alpha:two"]}},"selectedSpaceIdBySectionKey":{"local":"s1"}},"version":3}"#;
     check(
         "write keeps the unowned field, the memory and the version",
         written == EXPECTED,
@@ -212,7 +212,7 @@ fn main() -> ExitCode {
     check(
         "a first write spells out the unowned defaults",
         collapse_into_storage(&Default::default(), None)
-            == r#"{"state":{"collapsedCoordinatorsById":{},"collapsedGroupsById":{},"collapsedProjectCollectionsByKey":{},"collapsedProjectSessionSectionsById":{},"expandedCoordinatorOlderThreadsById":{},"expandedSessionCardHoverActionsById":{},"isReferenceChatsCollapsed":false,"recentSessionIdsBySpace":{},"selectedSpaceIdBySectionKey":{}},"version":3}"#,
+            == r#"{"state":{"collapsedGroupsById":{},"collapsedProjectCollectionsByKey":{},"collapsedProjectSessionSectionsById":{},"expandedCoordinatorOlderThreadsById":{},"expandedSessionCardHoverActionsById":{},"isReferenceChatsCollapsed":false,"recentSessionIdsBySpace":{},"selectedSpaceIdBySectionKey":{}},"version":3}"#,
         collapse_into_storage(&Default::default(), None),
     );
 
@@ -293,7 +293,7 @@ fn main() -> ExitCode {
         let storage_id = format!("p{}", step % groups.len());
         let intent = match step % 11 {
             0 => SidebarUiIntent::ToggleGroupCollapsed { group_id },
-            1 => SidebarUiIntent::ToggleCoordinatorCollapsed {
+            1 => SidebarUiIntent::ToggleCoordinatorOlderThreads {
                 sidebar_session_id: format!("combined-session:{storage_id}:one"),
             },
             2 => SidebarUiIntent::ToggleHoverActions { storage_id },
