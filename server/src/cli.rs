@@ -926,7 +926,9 @@ Usage:
   gxserver agent-skills refresh [--json]
 
   install downloads each skill from GitHub main when it can and falls back to the
-  local package source; --offline skips the download. refresh replaces every
+  local package source; --offline skips the download. --agent names the agents
+  to link it into; without it, only agents whose folder already exists (such as
+  ~/.claude or ~/.kiro) get a link, and no agent folder is made. refresh replaces every
   installed bundled skill whose files differ from GitHub main (gxserver also does
   this shortly after it starts).
 "

@@ -7781,7 +7781,9 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   only say the skill is retired. The skill is installed once, in
   `~/.agents/skills`; agents that do not read that folder (Claude Code, Kiro,
   Droid, Hermes and others) get a link to it in their own skills folder, so
-  every agent uses the same copy. No agent picks the Ghostex skill up on its
+  every agent uses the same copy. Only agents you have get the link (their
+  folder, such as `~/.kiro`, already exists); Ghostex never makes a folder for
+  an agent you don't use. No agent picks the Ghostex skill up on its
   own: it works only when you type `/ghostex`. An extension's skill that
   agents may pick up by themselves, such as Thread brief, is kept at
   `user-invocable-only` under `skillOverrides` in Claude's settings and turned
