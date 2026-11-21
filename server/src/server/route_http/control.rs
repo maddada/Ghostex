@@ -64,6 +64,21 @@ pub(super) async fn route_control_http(
             crate::chief::handle_chief_http(&state, &caller, endpoint.path, request_id, &body_json)
                 .await
         }
+        crate::cloud_boxes::box_link::BOX_LINK_ENDPOINT => {
+            match crate::domain::read_domain_rpc_params(&body_json) {
+                Err(error) => domain_error_response(endpoint.path, request_id, error),
+                Ok(params) => {
+                    match crate::cloud_boxes::box_link::answer(state.paths.clone(), params).await {
+                        Ok(result) => routed_json(
+                            Some(endpoint.path),
+                            StatusCode::OK,
+                            rpc_success(request_id, result),
+                        ),
+                        Err(error) => domain_error_response(endpoint.path, request_id, error),
+                    }
+                }
+            }
+        }
         "/api/startFeedbackAgent" => {
             handle_start_feedback_agent_http(&state, endpoint.path, request_id, &body_json).await
         }

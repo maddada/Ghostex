@@ -161,6 +161,7 @@ pub(super) fn reconcile(state: &AppState, ops: &Ops) -> Result<f64, String> {
         .iter()
         .any(|stored| stored.row.state == CloudBoxState::Deleted);
     for stored in changed {
+        super::box_link::drop_link_unless_running(&stored.row.box_id, &stored.row.state);
         if store::save_box(&state.paths, &stored).is_ok() {
             events::broadcast_box(state, &registry::with_overlay_applied(stored.row));
         }

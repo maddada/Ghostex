@@ -6,6 +6,7 @@
 
 pub(crate) mod agent_logins;
 mod boot_steps;
+pub(crate) mod box_link;
 pub(crate) mod box_mode;
 mod connect;
 mod create;
