@@ -16,6 +16,17 @@ export const IOS_APP_STORE_URL = 'https://apps.apple.com/app/id6771707394';
 */
 export const AUR_PACKAGE_URL = 'https://aur.archlinux.org/packages/ghostex-bin';
 
+/*
+ CDXC:Release 2026-11-21 DECISION (Q4368):
+ User picked "build reputation" for the SmartScreen warning on the signed Windows installer: "A & B please".
+ The Windows part of the download block leads with the PowerShell install, which is not a browser download and so
+ raises no SmartScreen prompt, then the installers, then one short line on getting past the warning a new
+ certificate gets until it builds reputation. It stays on its existing line so the block keeps to three lines.
+*/
+export const WINDOWS_POWERSHELL_INSTALL = 'irm https://ghostex.dev/install.ps1 | iex';
+export const WINDOWS_PUBLISHER = 'Open Source Developer Mohamad Yahia Youssef';
+export const WINDOWS_SMARTSCREEN_NOTE = `(if Windows says it protected your PC, click More info, then Run anyway; the publisher is ${WINDOWS_PUBLISHER})`;
+
 export function renderIosAvailabilityNotes() {
   return `**iOS:** [App Store](${IOS_APP_STORE_URL})`;
 }
@@ -47,6 +58,8 @@ export function customerDownloadEntries(version, assetNames) {
     {
       line: 1,
       title: 'Windows',
+      lead: `PowerShell \`${WINDOWS_POWERSHELL_INSTALL}\``,
+      note: WINDOWS_SMARTSCREEN_NOTE,
       downloads: [
         asset('x64 installer', `ghostex-${version}-windows-x64.exe`),
         asset('ARM64 installer', `ghostex-${version}-windows-arm64.exe`),
@@ -117,9 +130,13 @@ export function renderCustomerDownloadNotes(version, assetNames) {
   /** @type {Map<number, string[]>} */
   const lines = new Map();
   for (const group of groups) {
-    const links = group.downloads.map((download) => `[${download.label}](${download.url})`).join(' · ');
+    const links = [
+      ...('lead' in group && group.lead ? [group.lead] : []),
+      ...group.downloads.map((download) => `[${download.label}](${download.url})`),
+    ].join(' · ');
+    const note = 'note' in group && group.note ? ` ${group.note}` : '';
     const parts = lines.get(group.line) ?? [];
-    parts.push(`**${group.title}:** ${links}`);
+    parts.push(`**${group.title}:** ${links}${note}`);
     if (group.title === 'Android') parts.push(renderIosAvailabilityNotes());
     lines.set(group.line, parts);
   }

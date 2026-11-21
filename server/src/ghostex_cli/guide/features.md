@@ -93,7 +93,10 @@ your PC, downloads it from GitHub, checks it against the SHA-256 digest GitHub
 publishes, refuses to run it if they differ, and runs it. It isn't a browser
 download, so Windows shows no SmartScreen prompt, and it changes no security
 settings. From 11.3.0 the installer and the app are signed; Windows names the
-publisher "Open Source Developer Mohamad Yahia Youssef". The portable zip is no longer published. A portable copy you already unpacked keeps
+publisher "Open Source Developer Mohamad Yahia Youssef". The certificate is
+new, so an installer downloaded in a browser can still get "Windows protected
+your PC" until it builds a reputation: click More info, then Run anyway. WinGet
+has it too: `winget install --id maddada.Ghostex --exact`. The portable zip is no longer published. A portable copy you already unpacked keeps
 updating in place, keeps all its data in a `GhostexData` folder next to itself and
 runs beside an installed Ghostex without sharing its sessions, settings or
 projects. It uses the agent hooks the installed Ghostex set up (its Settings lists
