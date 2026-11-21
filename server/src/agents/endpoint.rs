@@ -149,9 +149,11 @@ pub fn dispatch_agent_endpoint(
         /*
         CDXC:AgentProviders 2026-09-03:
         Prompted-session account switching. Only a row rewrite: the client's
-        Full Reload cycles the provider afterwards, so no zmx context is needed.
+        Full Reload cycles the provider afterwards. A session with no
+        conversation yet switches in place instead (`inPlace`), which needs the
+        zmx context the draft switch uses.
         */
-        "/api/switchSessionAgent" => switch_session_agent(repository, db, params)?,
+        "/api/switchSessionAgent" => switch_session_agent(repository, db, params, zmx_context)?,
         "/api/requestSessionRename" => {
             let lifecycle = read_lifecycle(params)?;
             let result = request_session_rename(repository, &lifecycle, params, home_dir)?;

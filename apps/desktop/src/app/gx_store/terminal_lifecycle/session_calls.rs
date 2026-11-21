@@ -5,19 +5,21 @@ use serde_json::json;
 use crate::app::gx_store::{GxRpcError, gx_rpc};
 use crate::app::model::GpuiRemoteGxserverRequestTarget;
 
-/// `/api/switchSessionAgent` on the local daemon.
+/// `/api/switchSessionAgent` on the local daemon. Answers whether gxserver already switched the
+/// agent inside the session's pane (`inPlace`, a session with no conversation yet), when the caller
+/// must not Full Reload it.
 pub(crate) async fn switch_session_agent(
     project_id: String,
     session_id: String,
     agent_id: String,
-) -> Result<(), GxRpcError> {
+) -> Result<bool, GxRpcError> {
     gx_rpc(
         None,
         "/api/switchSessionAgent",
         json!({ "agentId": agent_id, "projectId": project_id, "sessionId": session_id }),
     )
     .await
-    .map(|_| ())
+    .map(|result| result.get("inPlace").and_then(serde_json::Value::as_bool) == Some(true))
 }
 
 /// `/api/toggleCloseAfterDone` on the machine that owns the session: flips it, or sets it when

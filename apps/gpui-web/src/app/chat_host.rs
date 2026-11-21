@@ -698,7 +698,9 @@ impl GhostexGpuiApp {
                 )
                 .await;
             let _ = this.update(cx, |this, cx| match result {
-                Ok(()) => this.web_run_sidebar_command(
+                // A session with no conversation yet switched inside its pane already.
+                Ok(true) => {}
+                Ok(false) => this.web_run_sidebar_command(
                     json!({
                         "type": "command",
                         "message": { "type": "fullReloadSession", "sessionId": row },

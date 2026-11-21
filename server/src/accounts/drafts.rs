@@ -99,20 +99,33 @@ pub(crate) fn prepare_live_switch(
     Ok(Some(command))
 }
 
+/// The account switch inside the live pane of a session with no conversation yet: a draft, a
+/// coordinator before Start, an agent that recorded no prompt (agents/no_conversation.rs). It holds
+/// the same switch guard as the agent switch, so a coordinator's waiting first message is typed
+/// into the new CLI's box only once the switch is done.
 pub(crate) fn switch_in_live_provider(
     repository: &DomainRepository<'_>,
     session: &Value,
     command: &str,
 ) -> Result<(), DomainStateError> {
-    let updated = agents::arm_draft_launch_activity_suppression(repository, session)?;
     let project_id = session["projectId"].as_str().unwrap_or_default();
     let session_id = session["sessionId"].as_str().unwrap_or_default();
+    let guard = agents::DraftAgentSwitch::begin(project_id, session_id)?;
+    crate::session_chat_first_message::retype_after_agent_switch(
+        repository.db,
+        project_id,
+        session_id,
+    );
+    let updated = agents::arm_launch_activity_suppression(repository, session)?;
     crate::session_chat_send::cancel_session_chat_sends(project_id, session_id);
-    crate::session_chat_send::enqueue_session_write_sequence(
+    let completion = crate::session_chat_send::enqueue_session_write_sequence_with_completion(
         &updated,
         project_id,
         session_id,
         "draft-account-switch",
         agents::build_draft_agent_switch_steps(command),
-    )
+        None,
+    )?;
+    guard.finish_after(completion);
+    Ok(())
 }

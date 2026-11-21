@@ -50,9 +50,16 @@ pub struct WherePillState {
 }
 
 /// The pill applies to this chat: a started chat over a running session, not a draft.
+///
+/// A coordinator before Start also gets the agent list a draft gets (`availableAgents`, so it
+/// switches agent in place: CDXC:Drafts 2026-11-21 in server/src/agents/no_conversation.rs), but it
+/// has no worktree tray to say where it runs, so it keeps its pill.
 fn applies(state: &ChatState) -> bool {
     state.core.controller_started
-        && state.session.available_agents.is_none()
+        && (state.session.available_agents.is_none()
+            || crate::extras::coordinator_threads::is_coordinator(
+                state.session.coordinator_threads.as_deref(),
+            ))
         && !state.extras.where_pill.unsupported
 }
 
