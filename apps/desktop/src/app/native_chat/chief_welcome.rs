@@ -140,6 +140,18 @@ fn ghost(size: f32, still: bool) -> AnyElement {
 }
 
 impl NativeChatView {
+    /// A step, chip or prompt: its text in the chat box, on a new line after anything already
+    /// typed there, never replacing it.
+    fn fill_from_chief_welcome(&mut self, fill: &str, cx: &mut Context<Self>) {
+        let typed = self.draft.trim_end();
+        let next = if typed.is_empty() {
+            fill.to_string()
+        } else {
+            format!("{typed}\n{fill}")
+        };
+        self.replace_draft(&next, false, false, cx);
+    }
+
     /// The card, centred in the empty transcript.
     pub(super) fn render_chief_welcome(
         &mut self,
@@ -216,9 +228,9 @@ impl NativeChatView {
                                 .child(needs),
                         )
                     })
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.replace_draft(&fill, false, false, cx)
-                    })),
+                    .on_click(
+                        cx.listener(move |this, _, _, cx| this.fill_from_chief_welcome(&fill, cx)),
+                    ),
             );
         }
         if new_user {
@@ -320,7 +332,7 @@ impl NativeChatView {
                     this.child(icon("chevron-right", 13.0 * s, p.foreground.opacity(0.35)))
                 })
                 .on_click(
-                    cx.listener(move |this, _, _, cx| this.replace_draft(&fill, false, false, cx)),
+                    cx.listener(move |this, _, _, cx| this.fill_from_chief_welcome(&fill, cx)),
                 )
         });
         div()
@@ -480,9 +492,7 @@ impl NativeChatView {
             .hover(|style| style.bg(p.foreground.opacity(0.07)))
             .child(icon(&chip.icon, 13.0 * s, p.foreground.opacity(0.65)))
             .child(chip.label.clone())
-            .on_click(
-                cx.listener(move |this, _, _, cx| this.replace_draft(&fill, false, false, cx)),
-            )
+            .on_click(cx.listener(move |this, _, _, cx| this.fill_from_chief_welcome(&fill, cx)))
             .into_any_element()
     }
 
@@ -516,9 +526,7 @@ impl NativeChatView {
             .hover(|style| style.bg(p.foreground.opacity(0.07)))
             .child(icon(&prompt.icon, 15.0 * s, p.foreground.opacity(0.7)))
             .child(div().min_w_0().truncate().child(prompt.label.clone()))
-            .on_click(
-                cx.listener(move |this, _, _, cx| this.replace_draft(&fill, false, false, cx)),
-            )
+            .on_click(cx.listener(move |this, _, _, cx| this.fill_from_chief_welcome(&fill, cx)))
             .into_any_element()
     }
 }
