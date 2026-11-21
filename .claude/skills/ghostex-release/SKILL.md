@@ -585,6 +585,41 @@ while any other exit `0` means only that a job changed state.
     secret, so there is no local key to push with by hand.
   - "AUR_SSH_PRIVATE_KEY is not configured" in the gate step: the secret was
     never added or was removed; tell the user.
+- **WinGet (`maddada.Ghostex`)**: automatic, and not ours. A community bot
+  (SpecterShell/Dumplings, PR author `spectopo`) opens the
+  `New version: maddada.Ghostex version X.Y.Z` PR on microsoft/winget-pkgs
+  within about half an hour of the release, and Microsoft merges it a few hours
+  later (11.13.0: PR #485720, opened 08:12 UTC, merged 11:00 UTC). After the
+  release, check it:
+  `gh pr list --repo microsoft/winget-pkgs --search "maddada.Ghostex in:title" --state all --limit 3`,
+  and read the PR's `maddada.Ghostex.installer.yaml`: the `arm64` entry must
+  point at `ghostex-X.Y.Z-windows-arm64.exe`. Until the bot's script is fixed
+  (its arm64 block matched `x64`; found 2026-11-21, 11.13.0's fix is
+  winget-pkgs PR #485950), it points at the x64 installer: say so in the report.
+  If no PR appears within a few hours, open it ourselves from Windows (or
+  anywhere with `wingetcreate`) with a GitHub token that has `public_repo`:
+  `wingetcreate update maddada.Ghostex --version X.Y.Z --urls "https://github.com/maddada/Ghostex/releases/download/vX.Y.Z/ghostex-X.Y.Z-windows-x64.exe|x64" "https://github.com/maddada/Ghostex/releases/download/vX.Y.Z/ghostex-X.Y.Z-windows-arm64.exe|arm64" --release-notes-url https://github.com/maddada/Ghostex/releases/tag/vX.Y.Z --submit --token <token>`.
+  Never run that while the bot's PR is open: winget-pkgs closes duplicates.
+  A CI job could run the same command (or the `vedantmgoyal9/winget-releaser`
+  action, which needs a fork of winget-pkgs on the token's account and a
+  classic token with `public_repo`), but with the bot already submitting every
+  release it would race it and open duplicates, so we keep the check and the
+  manual fallback instead.
+- **SmartScreen reputation (not automatic; every release, once the release is
+  live)**: the Windows installers are signed (Certum OV, issued 2026-11-09), but
+  a certificate this new has no SmartScreen reputation yet, so a browser
+  download says "Windows protected your PC" until enough people run it. Submit
+  both installers, `ghostex-X.Y.Z-windows-x64.exe` and
+  `ghostex-X.Y.Z-windows-arm64.exe`, to Microsoft's file submission portal,
+  https://www.microsoft.com/en-us/wdsi/filesubmission, signed in with the
+  user's Microsoft account, as a **Software developer**, product **Microsoft
+  Defender SmartScreen**, saying the file is a clean, signed installer of our
+  own app (publisher "Open Source Developer Mohamad Yahia Youssef") wrongly
+  warned about. This needs the user's sign-in in a browser: a coordinator hands
+  it to the user's Grok Bot, it is not a CI step. Put the submission IDs the
+  portal returns in the report. The release notes, README and Help already tell
+  people to use the PowerShell install (no SmartScreen prompt) or click More
+  info, then Run anyway.
 - **Component tags** (code-server, CEF) go to the components repo with
   `GHOSTEX_COMPONENTS_GITHUB_TOKEN`. They are automatic.
 - **Signed agent skills (not automatic; every release, once the release is live)**:
