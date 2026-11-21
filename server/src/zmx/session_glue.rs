@@ -274,6 +274,13 @@ fn get_agent_launch_startup_text_for_session(session: &Value) -> Option<String> 
         // An agent mise installed: the plan may predate the launch that runs it through mise
         // (agent_cli/launch_path.rs), which Try again on a failed start must pick up.
         let current = crate::agent_cli::launch_path::with_reachable_program(&current);
+        // A session `agents create --lead` started is marked a lean Codex worker by its link,
+        // after its plan was made and before its first start (agents/codex_lean.rs).
+        let current = crate::agents::with_lean_codex_worker(
+            Some(agent.as_str()),
+            session.get("runtimeSettings").and_then(Value::as_object),
+            &current,
+        );
         if current != command {
             return Some(crate::agents::as_atuin_ignored_shell_input(&current));
         }

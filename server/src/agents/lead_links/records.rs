@@ -154,6 +154,20 @@ pub fn write_lead_link(
     Ok(())
 }
 
+/// A session `agents create --lead` started for its lead is a lean Codex worker
+/// (`agents::codex_lean::LEAD_WORKER_KEY`), written once its link holds.
+pub fn mark_lead_worker(db: &Connection, linked: &SessionKey) -> Result<(), DomainStateError> {
+    db.execute(
+        &format!(
+            "UPDATE sessions SET runtimeSettingsJson = json_set(CASE WHEN json_valid(runtimeSettingsJson) THEN runtimeSettingsJson ELSE '{{}}' END, '$.{}', json('true')) WHERE projectId = ?1 AND sessionId = ?2",
+            crate::agents::codex_lean::LEAD_WORKER_KEY
+        ),
+        params![linked.0, linked.1],
+    )
+    .map_err(sql_error)?;
+    Ok(())
+}
+
 /// An unlinked session is the user's own again: it loses the Lean Codex workers marker
 /// (`agents::codex_lean::LEAD_WORKER_KEY`) and starts with all of Codex's features next time.
 fn forget_lead_worker(db: &Connection, project_id: &str, session_id: &str) {

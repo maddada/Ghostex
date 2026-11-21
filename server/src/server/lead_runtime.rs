@@ -427,13 +427,24 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
             &lead_key.1,
         );
         // The lead's turn as the transcript shows it, read only where a report could go out.
+        let own_linked_refs = crate::agents::lead_links::links_of_lead(&db, &key.0, &key.1)
+            .unwrap_or_default()
+            .iter()
+            .map(|own| {
+                crate::ids::create_global_session_ref(
+                    state.metadata.server_id.as_str(),
+                    &own.project_id,
+                    &own.session_id,
+                )
+            })
+            .collect::<Vec<_>>();
         let lead_turn_now = |memory: &mut WatchMemory| {
             let rows = lead_turn_rows(
                 memory.transcripts.entry(key.clone()).or_default(),
                 &session,
                 owed_ms,
             );
-            lead_turn(&rows, &lead_ref, owed_ms)
+            lead_turn(&rows, &lead_ref, &own_linked_refs, owed_ms)
         };
         let report = match hook_state {
             ThreadState::Working => {

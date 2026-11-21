@@ -22,5 +22,6 @@ USAGE
   unlink --all ends every link to you (from your own terminal, to the lead
   --lead names); unlinking a sub-lead keeps its own links. Links go at most
   two levels deep (a lead, its sub-leads, their sessions; never a loop), and
-  each lead hears only the turns it started. All sessions must be on this
+  a lead hears only the turns it started in its own linked sessions (a message
+  to a sub-lead's session is not reported to anyone). All sessions must be on this
   computer; a coordinator or a coordinator's thread can't be linked or lead.

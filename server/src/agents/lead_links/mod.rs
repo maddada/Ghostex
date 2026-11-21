@@ -315,6 +315,45 @@ fn links_in_tree(db: &Connection, lead: &SessionKey) -> Result<Vec<LeadLink>, Do
     Ok(rows)
 }
 
+/// Why a session not created yet couldn't be linked under `lead` (`agents create --lead` asks
+/// first, so a refused link creates nothing): the lead's own rules and the depth.
+fn new_link_refusal(
+    db: &Connection,
+    lead: &SessionKey,
+) -> Result<Option<&'static str>, DomainStateError> {
+    if is_coordinator_or_thread(db, lead) {
+        return Ok(Some(
+            "A coordinator or a coordinator's thread can't be a lead: a coordinator has threads (ghostex coordinator start-thread).",
+        ));
+    }
+    Ok((leads_above(db, lead)?.len() + 1 > MAX_LINK_DEPTH).then_some(
+        "The lead is already two levels down (it reports to a sub-lead), so it can't lead; links go at most two levels deep: a lead, its sub-leads, and their sessions.",
+    ))
+}
+
+/// Every link, each top lead's tree together (`links_in_tree`), so a list shows each row under its
+/// own lead (Opus review of #701, finding 4); links no tree reaches (a hand-made loop) come last.
+fn all_links_in_trees(db: &Connection) -> Result<Vec<LeadLink>, DomainStateError> {
+    let all = list_lead_links(db)?;
+    let mut tops: Vec<SessionKey> = Vec::new();
+    for link in &all {
+        let lead = link.lead_key();
+        if read_lead_link(db, &lead.0, &lead.1)?.is_none() && !tops.contains(&lead) {
+            tops.push(lead);
+        }
+    }
+    let mut rows = Vec::new();
+    for top in &tops {
+        rows.extend(links_in_tree(db, top)?);
+    }
+    for link in all {
+        if !rows.iter().any(|row: &LeadLink| row.key() == link.key()) {
+            rows.push(link);
+        }
+    }
+    Ok(rows)
+}
+
 /// One transcript row as `lead_turn_reply` reads it: a message someone typed (`user`) or the
 /// agent's words, with its time (ms) when the transcript has one.
 #[derive(Clone, Debug)]
@@ -339,7 +378,7 @@ const LEAD_MESSAGE_SLACK_MS: i64 = 30_000;
 /// so a retry gives the same reply and a turn the user starts afterwards is never sent.
 #[cfg(test)]
 pub(crate) fn lead_turn_reply(rows: &[TurnRow], lead_ref: &str, owed_ms: i64) -> Option<String> {
-    lead_turn(rows, lead_ref, owed_ms)?.reply
+    lead_turn(rows, lead_ref, &[], owed_ms)?.reply
 }
 
 /// Where the lead's turn stands in a linked session's transcript: found from the lead's newest
@@ -360,9 +399,28 @@ pub(crate) struct LeadTurn {
 /// while a turn was owed, so a turn left owed passed the user's own later turns (and the waiting
 /// prompt's summary) to the lead. They are sent only while the lead's turn is open: its message is
 /// in the transcript and the user has typed nothing since (`user_after`).
-pub(crate) fn lead_turn(rows: &[TurnRow], lead_ref: &str, owed_ms: i64) -> Option<LeadTurn> {
+///
+/// CDXC:LeadLinks 2026-11-21 FIX:
+/// Opus review of #701, finding 1: Ghostex types a worker's report into its busy sub-lead mid-turn,
+/// and that report counted as "the user typed", so the main lead got the sub-lead's words from
+/// before it (or nothing, leaving the turn owed for good). A report from one of the session's own
+/// linked sessions (`own_linked_refs`, by its sender block) belongs to the turn it lands in.
+pub(crate) fn lead_turn(
+    rows: &[TurnRow],
+    lead_ref: &str,
+    own_linked_refs: &[String],
+    owed_ms: i64,
+) -> Option<LeadTurn> {
     let from_lead = |row: &TurnRow| {
         row.user && crate::coordinators::find_own_agent_message_block(&row.text, lead_ref).is_some()
+    };
+    // A report from one of this session's own linked sessions (it is a sub-lead) is typed into it
+    // mid-turn; it belongs to the turn it lands in, never the user's.
+    let from_own_linked = |row: &TurnRow| {
+        row.user
+            && own_linked_refs.iter().any(|linked| {
+                crate::coordinators::find_own_agent_message_block(&row.text, linked).is_some()
+            })
     };
     let start = rows.iter().rposition(|row| {
         from_lead(row)
@@ -373,13 +431,15 @@ pub(crate) fn lead_turn(rows: &[TurnRow], lead_ref: &str, owed_ms: i64) -> Optio
     let after = &rows[start + 1..];
     let reply = after
         .iter()
-        .take_while(|row| !row.user || from_lead(row))
+        .take_while(|row| !row.user || from_lead(row) || from_own_linked(row))
         .filter(|row| !row.user && !row.text.trim().is_empty())
         .last()
         .map(|row| row.text.clone());
     Some(LeadTurn {
         reply,
-        user_after: after.iter().any(|row| row.user && !from_lead(row)),
+        user_after: after
+            .iter()
+            .any(|row| row.user && !from_lead(row) && !from_own_linked(row)),
     })
 }
 
@@ -464,6 +524,24 @@ pub fn handle_lead_links_endpoint(
                         )
                     });
             let previous = link_checked(db, caller_session.is_some(), &linked, &lead, owed)?;
+            // `agents create --lead` made this session for the lead: it is a lean Codex worker
+            // from its first start when that setting is on (agents/codex_lean.rs). Set here, once
+            // the link holds, so a refused link leaves no marker behind (Opus review of #701,
+            // finding 2); only a session just created that has not replied yet qualifies.
+            let worker = params.get("startedForLead").and_then(Value::as_bool) == Some(true)
+                && repository
+                    .get_session(&linked.0, &linked.1)?
+                    .is_some_and(|session| {
+                        honours_owed(
+                            &session,
+                            chrono::Utc::now().timestamp_millis(),
+                            crate::notification_feed::body::last_assistant_message(&session)
+                                .is_some(),
+                        )
+                    });
+            if worker {
+                mark_lead_worker(db, &linked)?;
+            }
             let mut changed = vec![linked.clone(), lead.clone()];
             if let Some(previous) = previous.filter(|previous| *previous != lead) {
                 changed.push(previous);
@@ -477,6 +555,34 @@ pub fn handle_lead_links_endpoint(
                     "owed": owed,
                 }),
                 changed_sessions: changed,
+            })
+        }
+        // The link rules for a session about to be created under `lead`, so `agents create
+        // --lead` refuses before it creates anything (Opus review of #701, finding 2).
+        "check" => {
+            let lead = ids(params, "leadProjectId", "leadSessionId")?;
+            if matches!(who, LinkCaller::Peer { .. } | LinkCaller::Refused) {
+                return Err(DomainStateError::bad_request(NOT_ALLOWED));
+            }
+            if caller_session
+                .as_ref()
+                .is_some_and(|caller| caller != &lead)
+            {
+                return Err(DomainStateError::bad_request(
+                    "A session can only link sessions to itself (--lead self). Only the user can link a session to another lead.",
+                ));
+            }
+            if repository.get_session(&lead.0, &lead.1)?.is_none() {
+                return Err(DomainStateError::not_found(
+                    "The lead was not found on this computer.",
+                ));
+            }
+            if let Some(refusal) = new_link_refusal(db, &lead)? {
+                return Err(DomainStateError::bad_request(refusal));
+            }
+            Ok(LeadLinksOutput {
+                result: json!({ "allowed": true, "leadTitle": session_title(repository, &lead) }),
+                changed_sessions: Vec::new(),
             })
         }
         "unlink" => {
@@ -533,7 +639,7 @@ pub fn handle_lead_links_endpoint(
             };
             let links = match &asking {
                 Some(lead) => links_in_tree(db, lead)?,
-                None => list_lead_links(db)?,
+                None => all_links_in_trees(db)?,
             };
             let entry = |key: &SessionKey| json!({ "globalRef": global_ref(key), "title": session_title(repository, key) });
             // Each row's leads from the top one down to its own (#701: `agents links` shows the
@@ -569,7 +675,7 @@ pub fn handle_lead_links_endpoint(
             })
         }
         other => Err(DomainStateError::bad_request(format!(
-            "Unknown lead link op \"{other}\": use link, unlink, stopLeading or list."
+            "Unknown lead link op \"{other}\": use link, check, unlink, stopLeading or list."
         ))),
     }
 }
