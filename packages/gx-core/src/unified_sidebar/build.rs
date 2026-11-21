@@ -39,6 +39,9 @@ pub struct UnifiedSettings {
     /// `unifiedSessionOrder`: how the list, Moving and Parked shelves order their cards
     /// ([`unified_session_cmp`]).
     pub session_order: crate::sidebar_view::UnifiedSessionOrder,
+    /// Show Hidden: the Space filter offers hidden Spaces too (CDXC:Spaces 2026-11-21 in
+    /// sidebar_view/spaces.rs `Space::shown`).
+    pub show_hidden: bool,
 }
 
 /// What the header's filter keeps. An empty set keeps everything of its kind; the kinds narrow
@@ -648,7 +651,11 @@ pub fn build_unified_sidebar_folded(
             .map(|_| active_project_groups(machine.view, now_ms));
         if let Some(spaces) = machine.spaces.as_ref().filter(|_| scoped.is_none()) {
             let remote = (!machine.machine.is_local()).then(|| machine.label.clone());
-            for space in spaces.ordered() {
+            for space in spaces
+                .ordered()
+                .into_iter()
+                .filter(|space| space.shown(settings.show_hidden))
+            {
                 options.spaces.push(UnifiedFilterOption {
                     key: space_filter_key(&machine.machine, &space.space_id),
                     label: space.name.clone(),

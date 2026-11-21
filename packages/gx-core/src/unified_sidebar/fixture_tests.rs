@@ -371,6 +371,7 @@ fn expected_of(case: &Value) -> Value {
         session_order: crate::sidebar_view::UnifiedSessionOrder::from_setting(
             case["settings"]["sessionOrder"].as_str(),
         ),
+        show_hidden: false,
     };
     let set =
         |key: &str| -> BTreeSet<String> { strings(&case["filter"][key]).into_iter().collect() };
