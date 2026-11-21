@@ -31,7 +31,7 @@ pub(crate) fn start_session_stall_runtime(state: Arc<AppState>) {
     });
 }
 
-fn tick(state: &AppState, watches: &Mutex<HashMap<SessionKey, StallWatch>>) {
+pub(super) fn tick(state: &AppState, watches: &Mutex<HashMap<SessionKey, StallWatch>>) {
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return;
     };

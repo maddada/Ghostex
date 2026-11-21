@@ -14,10 +14,18 @@ use crate::session_chat_interactive::{
 /// User: "Please for permissions let's show a new red dot so user knows stuff is stuck and waiting on him to approve ... This sub thread for outdated dependeincies audit was stuck on this for a long time and i didn't know!!". A running session waits for approval while it holds the approval card a PermissionRequest hook stored (Claude, Codex, ZCode, Mastra, Droid, Kimi, Devin and the other hook agents) and its agent is not working, the same rule that puts a coordinator thread in `waiting`; a working title means the user already approved and the tool runs. An approval that exists only on the screen (a permission prompt that holds the agent's input: Copilot, Antigravity, Grok, Empryo, Cursor, and an OMP approval its hooks never announce) counts for every running session, also while its hooks say working: a coordinator's thread from the supervisor's screen reading, any session from the screen marker (`screen_shows_approval`). The flag is `awaitingApproval` on the presentation session: its row draws the red dot ahead of every other status, and its orchestrator's crew badge turns red.
 /// SEE-ALSO: server/src/coordinators/state.rs (`classify_thread_session`, `screen_waits_on_approval`), server/src/session_chat_options/detector.rs (sets the screen marker), server/src/session_chat_compacting.rs (`refresh_screen_approval_marker_from_screen`), packages/gx-core/src/sidebar_view/view.rs (`CoordinatorBadgeTone::Approval`), apps/desktop/src/app/native_sidebar/status.rs (`APPROVAL_COLOR`).
 pub fn session_awaits_approval(session: &Value, generated_at: &str) -> bool {
+    session_awaits_reported_approval(session, generated_at)
+        || (effective_lifecycle_state(session) == "running" && screen_shows_approval(session))
+}
+
+/// CDXC:SessionStatus 2026-11-21 WHY:
+/// The rule before the screen marker: a stored hook approval card, or a coordinator thread's screen wait. The Notifications list reads this one, not `session_awaits_approval`: its overlay turns the session's newest row into an unread "Waiting for your approval" row while an approval waits, so a screen-only approval would have relabelled an older, already read row (a finished turn) as an unread approval with no row of its own. A screen-only approval gives the red dot and the sorting; the bell shows what the agent's hooks reported, as before.
+/// SEE-ALSO: server/src/notification_feed/store.rs (`approval_waits`), server/src/notification_feed/producer.rs.
+pub fn session_awaits_reported_approval(session: &Value, generated_at: &str) -> bool {
     if effective_lifecycle_state(session) != "running" {
         return false;
     }
-    if crate::coordinators::screen_waits_on_approval(session) || screen_shows_approval(session) {
+    if crate::coordinators::screen_waits_on_approval(session) {
         return true;
     }
     presentation_activity(session, generated_at) != "working" && stored_approval_card(session)

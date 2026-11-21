@@ -431,14 +431,15 @@ pub(crate) fn clear_notification_feed(db: &Connection) -> DomainResult<usize> {
     Ok(removed)
 }
 
-/// The same live decision as the sidebar's red dot, including approvals that only the
-/// coordinator's screen detector has seen.
+/// The approval the agent reported (a hook's card) or a coordinator's screen detector saw; a
+/// screen-only approval of any other session leaves the bell as it was (CDXC:SessionStatus
+/// 2026-11-21 on `session_awaits_reported_approval`).
 fn approval_waits(db: &Connection, project_id: &str, session_id: &str) -> DomainResult<bool> {
     let repository = DomainRepository::new(db, "");
     Ok(repository
         .get_session(project_id, session_id)?
         .is_some_and(|session| {
-            crate::session_approval::session_awaits_approval(&session, &now_iso())
+            crate::session_approval::session_awaits_reported_approval(&session, &now_iso())
         }))
 }
 

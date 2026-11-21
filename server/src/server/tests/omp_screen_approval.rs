@@ -246,10 +246,10 @@ fn a_session_without_an_approval_on_screen_does_not_wait() {
     assert_eq!(fixture.awaiting_approval(), None);
 }
 
-/// An approval answered in a terminal nothing else reads: the stall tick's read takes the red dot
-/// away, also when the detector had already seen the screen clear while the stored mark lost a race.
+/// The refresh helper alone: a mark the detector had already seen clear (its cache agrees with the
+/// screen) while the stored mark lost a race is still removed.
 #[test]
-fn the_tick_clears_an_approval_the_screen_no_longer_shows() {
+fn the_refresh_clears_a_mark_the_detector_already_saw_clear() {
     let fixture = Fixture::new();
     let _daemon = ScreenDaemon::serve(&fixture.zmx_name, &answered_screen());
     fixture.read_screen();
@@ -266,4 +266,136 @@ fn the_tick_clears_an_approval_the_screen_no_longer_shows() {
         &fixture.stored(),
     );
     assert_eq!(fixture.awaiting_approval(), None);
+}
+
+/// Marks `fixture`'s session as showing an approval without any reading in memory, as a gxserver
+/// restart leaves it: the mark is stored, the screen cache is empty.
+fn stored_mark_only(fixture: &Fixture) {
+    let db = open_gxserver_database(&fixture.state.paths).expect("db");
+    db.execute(
+        r#"UPDATE sessions SET runtimeSettingsJson = json_set(runtimeSettingsJson, '$.sessionChatScreenApprovalDetectedAt', '2026-11-21T11:30:00.000Z')
+        WHERE projectId = ?1 AND sessionId = ?2"#,
+        rusqlite::params![fixture.project_id(), fixture.session_id],
+    )
+    .expect("a stored mark");
+}
+
+/// The approval was answered in a terminal nobody follows: no chat, no follower, only the
+/// sidebar-wide sweep that runs every few seconds. Its read of the screen takes the red dot away.
+#[test]
+fn the_periodic_sweep_clears_an_answered_approval_nobody_watches() {
+    let fixture = Fixture::new();
+    let _daemon = ScreenDaemon::serve(&fixture.zmx_name, &answered_screen());
+    stored_mark_only(&fixture);
+    assert!(fixture
+        .state
+        .session_chat_followers
+        .lock()
+        .expect("followers")
+        .is_empty());
+    assert_eq!(fixture.awaiting_approval(), Some(json!(true)));
+    crate::server::session_stall_runtime::tick(&fixture.state, &Mutex::new(HashMap::new()));
+    assert_eq!(fixture.awaiting_approval(), None);
+    // A sweep over an approval still on the screen keeps it.
+    let waiting = Fixture::new();
+    let _shown = ScreenDaemon::serve(&waiting.zmx_name, APPROVAL_SCREEN);
+    stored_mark_only(&waiting);
+    crate::server::session_stall_runtime::tick(&waiting.state, &Mutex::new(HashMap::new()));
+    assert_eq!(waiting.awaiting_approval(), Some(json!(true)));
+}
+
+/// Everything that drops a session's screen reading (agent switch, account restart or sign-in,
+/// self-heal restart, removal) drops the mark with it.
+#[test]
+fn dropping_the_screen_reading_clears_the_mark() {
+    let fixture = Fixture::new();
+    let _daemon = ScreenDaemon::serve(&fixture.zmx_name, APPROVAL_SCREEN);
+    fixture.read_screen();
+    assert_eq!(fixture.awaiting_approval(), Some(json!(true)));
+    crate::session_chat_options::forget_session_chat_options(
+        &fixture.state,
+        fixture.project_id(),
+        &fixture.session_id,
+    );
+    assert_eq!(fixture.awaiting_approval(), None);
+    assert!(fixture.stored()["runtimeSettings"]
+        .get("sessionChatScreenApprovalDetectedAt")
+        .is_none());
+}
+
+fn screen_notice(
+    fixture: &Fixture,
+) -> Option<crate::session_chat_notice::SessionChatTerminalNotice> {
+    crate::session_chat_options::cached_session_chat_terminal_notice(
+        &fixture.state,
+        fixture.project_id(),
+        &fixture.session_id,
+    )
+}
+
+/// OMP draws two eval `commit` requests alike. Once a whole read saw the first one gone, the
+/// second is its own request with its own identity (`detectedAt`, the key a closed card is
+/// remembered by), so a card closed for the first does not hide it. A read that failed proves
+/// nothing, so the same box after it is still the first request.
+#[test]
+fn a_same_looking_approval_after_a_clear_screen_is_a_new_request() {
+    let fixture = Fixture::new();
+    let daemon = ScreenDaemon::serve(&fixture.zmx_name, APPROVAL_SCREEN);
+    fixture.read_screen();
+    let first = screen_notice(&fixture).expect("the first commit approval");
+    drop(daemon);
+    fixture.read_screen();
+    let daemon = ScreenDaemon::serve(&fixture.zmx_name, APPROVAL_SCREEN);
+    fixture.read_screen();
+    let again = screen_notice(&fixture).expect("the first approval after a failed read");
+    assert_eq!(again.detected_at, first.detected_at);
+
+    daemon.show(&answered_screen());
+    fixture.read_screen();
+    assert!(
+        screen_notice(&fixture).is_none(),
+        "a whole read saw it gone"
+    );
+    // Detection stamps are milliseconds; the second request comes later.
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    daemon.show(APPROVAL_SCREEN);
+    fixture.read_screen();
+    let second = screen_notice(&fixture).expect("the second commit approval");
+    assert_eq!(
+        (second.kind.as_str(), second.title.as_str()),
+        ("permissionPrompt", "Allow this?")
+    );
+    assert_ne!(second.detected_at, first.detected_at);
+}
+
+/// The bell keeps its meaning: a screen-only approval gives the red dot, but does not turn the
+/// session's newest row (a finished turn already read) into an unread approval.
+#[test]
+fn a_screen_only_approval_does_not_relabel_a_read_row() {
+    use crate::notification_feed::store::*;
+
+    let fixture = Fixture::new();
+    let _daemon = ScreenDaemon::serve(&fixture.zmx_name, APPROVAL_SCREEN);
+    let db = open_gxserver_database(&fixture.state.paths).expect("db");
+    let finished = insert_notification_feed_row(
+        &db,
+        NewNotificationFeedRow {
+            project_id: fixture.project_id().to_owned(),
+            session_id: fixture.session_id.clone(),
+            kind: NOTIFICATION_FEED_KIND_FINISHED,
+            title: "OMP".into(),
+            subtitle: "Approvals".into(),
+            body: "Finished the previous turn".into(),
+            agent_name: Some("omp".into()),
+            attention_event_id: None,
+        },
+    )
+    .expect("prior completion");
+    mark_notification_read(&db, finished["id"].as_str().expect("id")).expect("mark it read");
+    let before = crate::notification_feed::read_notification_feed_endpoint(&db).expect("before");
+    assert_eq!(before["unreadCount"], json!(0));
+    fixture.read_screen();
+    assert_eq!(fixture.awaiting_approval(), Some(json!(true)));
+    let after = crate::notification_feed::read_notification_feed_endpoint(&db).expect("after");
+    assert_eq!(after, before, "the bell is as it was");
 }

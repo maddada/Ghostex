@@ -322,9 +322,23 @@ impl SessionChatOptionDetector {
                     );
                     None
                 }
-                None => cached_notice
-                    .map(|notice| (notice, std::time::Instant::now()))
-                    .or(recently_retired_notice),
+                // CDXC:SessionStatus 2026-11-21 WHY: a permission prompt that a whole capture no
+                // longer shows was answered; the next one with the same visible words is a new
+                // request (OMP draws two eval `commit` calls alike), and inheriting the old
+                // `detectedAt` kept it hidden behind the card closed for the first. A capture
+                // that failed keeps it as before. The reappear grace still covers every other
+                // notice, whose banners a repaint can drop for one read.
+                None => {
+                    let kept = |notice: &crate::session_chat_notice::SessionChatTerminalNotice| {
+                        !(detected.captured
+                            && notice.kind
+                                == crate::session_chat_notice::SESSION_CHAT_NOTICE_PERMISSION_PROMPT)
+                    };
+                    cached_notice
+                        .filter(|notice| kept(notice))
+                        .map(|notice| (notice, std::time::Instant::now()))
+                        .or(recently_retired_notice.filter(|(notice, _)| kept(notice)))
+                }
             };
             /*
             CDXC:AgentScreenDetection 2026-08-22: same instance-not-sample
