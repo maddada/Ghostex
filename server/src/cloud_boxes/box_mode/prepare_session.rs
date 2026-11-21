@@ -58,16 +58,57 @@ fn ensure_checkout(request: &BoxPrepareSessionRequest) -> Result<PathBuf, String
             std::fs::create_dir_all(parent)
                 .map_err(|error| format!("Can't make {}: {error}", parent.display()))?;
         }
+        let signed_in = is_github(url) && github_login_for_git(Path::new("/"));
         git(
             checkout.parent().unwrap_or(Path::new("/")),
             &["clone", url, &checkout.to_string_lossy()],
-        )?;
+        )
+        .map_err(|error| needs_github_login(url, signed_in, error))?;
     } else if !is_repository(&checkout) {
         return Err(format!("{} is not a git checkout.", checkout.display()));
     } else if has_origin(&checkout) {
         git(&checkout, &["fetch", "--prune", "origin"])?;
     }
     Ok(checkout)
+}
+
+fn is_github(url: &str) -> bool {
+    url.contains("github.com")
+}
+
+/// Whether the box is signed in to GitHub (`gh`, saved in the project's snapshot, Q1019); when it
+/// is, git is set to use that login, so a private repository clones.
+fn github_login_for_git(dir: &Path) -> bool {
+    let gh = |args: &[&str]| {
+        std::process::Command::new("gh")
+            .args(args)
+            .current_dir(dir)
+            .stdin(std::process::Stdio::null())
+            .output()
+            .is_ok_and(|output| output.status.success())
+    };
+    gh(&["auth", "status"]) && gh(&["auth", "setup-git"])
+}
+
+/// CDXC:CloudBoxes 2026-11-21 WHY: a box with no GitHub login can't clone a private repository,
+/// and the chat showed git's own words ("could not read Username for 'https://github.com':
+/// terminal prompts disabled"). Said plainly, with how to give the box a login.
+fn needs_github_login(url: &str, signed_in: bool, error: String) -> String {
+    let refused = [
+        "could not read Username",
+        "Authentication failed",
+        "Repository not found",
+        "Permission denied (publickey)",
+        "403",
+    ]
+    .iter()
+    .any(|sign| error.contains(sign));
+    if !is_github(url) || signed_in || !refused {
+        return error;
+    }
+    format!(
+        "This box isn't signed in to GitHub, so it can't clone {url}: a private repository needs a GitHub login on the box, saved in the project's snapshot."
+    )
 }
 
 /// `origin/<base>` when the remote has it, else the local `<base>`.
