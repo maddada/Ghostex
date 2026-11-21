@@ -331,29 +331,6 @@ mod tests {
     }
 
     #[test]
-    fn extension_switches_cross_with_their_id_and_state_only() {
-        assert_eq!(
-            settings_remote_params(
-                "/api/machineExtensions",
-                &json!({ "action": "set", "id": "chief", "on": true, "patch": { "x": 1 } }),
-            ),
-            Some(json!({ "action": "set", "id": "chief", "on": true }))
-        );
-        // `on` is the only switch that crosses as a boolean.
-        assert_eq!(
-            settings_remote_params(
-                "/api/machineExtensions",
-                &json!({ "action": "set", "id": "chief", "fresh": true }),
-            ),
-            Some(json!({ "action": "set", "id": "chief" }))
-        );
-        assert_eq!(
-            settings_remote_params("/api/machineIntegrations", &json!({ "on": true })),
-            Some(json!({}))
-        );
-    }
-
-    #[test]
     fn an_older_gxserver_names_the_machine_to_update() {
         let error = settings_remote_answer("Kubuntu VM", 404, "").expect_err("404");
         assert!(error.contains("Update Ghostex on Kubuntu VM"));

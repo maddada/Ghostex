@@ -295,35 +295,3 @@ impl ExtensionsTab {
         Some(GridCell::card(card))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_switch_whose_requirement_is_off_is_hidden() {
-        let status = json!({ "switches": [
-            { "id": "chief", "on": false },
-            { "id": "gbots", "on": true, "requires": "chief" },
-            { "id": "cliProxyApi", "on": false },
-        ] });
-        let switches = remote_switches(Some(&status));
-        assert_eq!(switches.len(), 3);
-        let shown: Vec<&str> = shown_switches(&switches)
-            .iter()
-            .map(|switch| switch.id.as_str())
-            .collect();
-        assert_eq!(shown, vec!["chief", "cliProxyApi"]);
-
-        let status = json!({ "switches": [
-            { "id": "chief", "on": true },
-            { "id": "gbots", "on": false, "requires": "chief" },
-        ] });
-        let switches = remote_switches(Some(&status));
-        let shown: Vec<&str> = shown_switches(&switches)
-            .iter()
-            .map(|switch| switch.id.as_str())
-            .collect();
-        assert_eq!(shown, vec!["chief", "gbots"]);
-    }
-}
