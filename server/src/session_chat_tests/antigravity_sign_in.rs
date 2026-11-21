@@ -220,6 +220,51 @@ fn claudes_scrolled_draft_that_spells_its_login_menu_is_not_a_sign_in() {
     );
 }
 
+/// A running task in Antigravity's active-items list under its ready input box shows its command,
+/// here one that filters a log for the menu's words: the list is the task's text, not the sign-in
+/// menu (the 24 x 200 layout `antigravity_input_region` reads).
+#[test]
+fn a_running_task_that_spells_the_menu_under_the_input_box_is_not_a_sign_in() {
+    let rule = "─".repeat(200);
+    let screen = |task: &str| format!("{rule}\n> \n{rule}\n{task}\n{rule}\n? for shortcuts");
+    let active_item = screen(
+        "● [09:47:11] tail -f ./debug.log | grep --line-buffered -F 'Select login method: Google OAuth' running",
+    );
+    assert_eq!(
+        crate::session_chat_composer::detect_session_chat_composer_ready(
+            Some("antigravity"),
+            &active_item
+        )
+        .state,
+        SessionChatComposerState::Ready,
+        "the fixture draws a ready input box above the active-items list"
+    );
+    assert!(
+        classify_session_chat_terminal_notice(Some("antigravity"), &active_item)
+            .is_none_or(|notice| notice.kind != SESSION_CHAT_NOTICE_LOGIN_EXPIRED)
+    );
+    assert_eq!(
+        session_composer_verdict(Some("antigravity"), &active_item).state,
+        SessionChatComposerState::Ready
+    );
+    assert_eq!(
+        guarded_write_refusal(
+            Some("antigravity"),
+            &InputGuard::InputBox,
+            Some(&active_item)
+        ),
+        Ok(())
+    );
+    // The same words in a block under the box that is not the active-items list are not taken
+    // for the task's text.
+    let other_block = screen("tail -f ./debug.log | grep -F 'Select login method: Google OAuth'");
+    assert_eq!(
+        classify_session_chat_terminal_notice(Some("antigravity"), &other_block)
+            .map(|notice| notice.kind),
+        Some(SESSION_CHAT_NOTICE_LOGIN_EXPIRED.to_string())
+    );
+}
+
 #[test]
 fn antigravitys_folder_trust_prompt_stays_the_trust_card() {
     let notice =

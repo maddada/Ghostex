@@ -615,7 +615,8 @@ pub fn classify_session_chat_terminal_notice(
         }
     }
     // The agents whose dialogs replace their input box: a dialog phrase on a row above or inside
-    // that agent's ready input box is text on the screen (`phrase_in_or_above_input_box`).
+    // that agent's ready input box, or in the active-items list it draws under that box, is text
+    // on the screen (`phrase_in_or_above_input_box_or_its_active_items`).
     let dialog_composer = match agent {
         SessionChatOptionAgent::Claude => Some("claude"),
         SessionChatOptionAgent::Antigravity => Some("antigravity"),
@@ -670,7 +671,7 @@ pub fn classify_session_chat_terminal_notice(
             if rule.blocks_input
                 && matches!(signature.scope, NoticeScope::Dialog)
                 && dialog_composer.is_some_and(|composer| {
-                    screen.phrase_in_or_above_input_box(composer, signature)
+                    screen.phrase_in_or_above_input_box_or_its_active_items(composer, signature)
                 })
             {
                 return false;

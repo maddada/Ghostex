@@ -75,9 +75,20 @@ fn is_claude_scrolled_top_rule(line: &str) -> bool {
 /// CDXC:AgentScreenDetection 2026-10-11 WHY:
 /// While any background task runs, Antigravity CLI (measured on 1.3.3) draws its active-items list between rules under the input box, one `● [09:47:11] ping -n 900 127.0.0.1 running` row per task. The last rule pair then framed the task rows, so the input box read as missing: every chat send was refused ("The antigravity input box is not on screen yet"), and a model change, and every message held behind it or behind a waking session, waited forever while the terminal took input normally (a 2026-10-11 customer report, reproduced with a dev-server task). The input box is the sandwich above that list; any other block under it still reads as no input box.
 pub(super) fn antigravity_input_region(lines: &[String]) -> Option<Range<usize>> {
-    if let Some(region) = rule_input_region(lines, &['>']) {
-        return Some(region);
-    }
+    rule_input_region(lines, &['>'])
+        .or_else(|| antigravity_input_box_and_active_items(lines).map(|(input_box, _)| input_box))
+}
+
+/// The rows of Antigravity's active-items list, when it is drawn under its input box
+/// (`antigravity_input_region`).
+pub(super) fn antigravity_active_items_rows(lines: &[String]) -> Option<Range<usize>> {
+    antigravity_input_box_and_active_items(lines).map(|(_, active_items)| active_items)
+}
+
+/// Antigravity's input box and the active-items list framed by the last rule pair under it.
+fn antigravity_input_box_and_active_items(
+    lines: &[String],
+) -> Option<(Range<usize>, Range<usize>)> {
     let foot = lines.iter().rposition(|line| is_horizontal_rule(line))?;
     let head = lines[..foot]
         .iter()
@@ -89,7 +100,7 @@ pub(super) fn antigravity_input_region(lines: &[String]) -> Option<Range<usize>>
     if rows.peek().is_none() || !rows.all(|line| is_antigravity_active_item(line)) {
         return None;
     }
-    rule_input_region(&lines[..=head], &['>'])
+    Some((rule_input_region(&lines[..=head], &['>'])?, head + 1..foot))
 }
 
 /// The plain ANSI-stripped screen lines (via `strip_ansi_sgr`, preserving `ESC[nC]` cursor-forward

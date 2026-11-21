@@ -435,6 +435,19 @@ pub(crate) fn session_chat_input_box_rows(
     }
 }
 
+/// The rows of `lines` (prepared as for `session_chat_input_box_rows`) that hold the list an agent
+/// draws under its own input box for its running tasks: Antigravity's active-items list, read by
+/// the region reader that finds its input box above that list.
+pub(crate) fn session_chat_active_items_rows(
+    agent_id: &str,
+    lines: &[String],
+) -> Option<std::ops::Range<usize>> {
+    match agent_id {
+        "antigravity" => input::antigravity_active_items_rows(lines),
+        _ => None,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Line preparation
 // ---------------------------------------------------------------------------
