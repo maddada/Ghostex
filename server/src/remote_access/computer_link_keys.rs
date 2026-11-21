@@ -359,7 +359,9 @@ fn post_signed(
     }
 }
 
-/// `/api/easyConnectLinkKey` for the desktop app: `{ keyPath }` (a file) or `{ keyPath: null }`.
+/// `/api/easyConnectLinkKey` for the desktop app and `ghostex cloud attach`: `{ keyPath }` (a
+/// file) or `{ keyPath: null }`. An address that is one of this computer's own Cloud Boxes gets
+/// this computer's key for its boxes (CDXC:CloudBoxes 2026-11-21 in cloud_boxes/home_keys.rs).
 pub fn easy_connect_link_key_answer(paths: &GxserverPaths, params: &Value) -> Result<Value> {
     let address = params
         .get("address")
@@ -373,6 +375,7 @@ pub fn easy_connect_link_key_answer(paths: &GxserverPaths, params: &Value) -> Re
         .get("gxserverPort")
         .and_then(Value::as_u64)
         .and_then(|port| u16::try_from(port).ok());
-    let path = computer_link_key(paths, address, purpose, port_hint);
+    let path = crate::cloud_boxes::home_keys::own_box_key(paths, address, purpose)
+        .or_else(|| computer_link_key(paths, address, purpose, port_hint));
     Ok(json!({ "keyPath": path.map(|path| path.display().to_string()) }))
 }
