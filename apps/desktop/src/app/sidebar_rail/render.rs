@@ -624,7 +624,10 @@ impl GhostexGpuiApp {
     /// The account usage tiles' switch: one click shows or hides them at the sidebar's foot.
     ///
     /// CDXC:Sidebar 2026-11-20 DECISION:
-    /// User (rail page): "account usage pinning at the bottom of the sidebar can be a toggle there in that bar at the bottom of it instead of the hidden button we have now". With the rail on, the chart at the rail's foot shows and hides the tiles in one click and is filled while they show; the sidebar's hidden handle and its hover peek are not drawn (native_sidebar/usage.rs). Classic keeps the handle.
+    /// User (rail page): "account usage pinning at the bottom of the sidebar can be a toggle there in that bar at the bottom of it instead of the hidden button we have now". With the rail on, the chart at the rail's foot shows and hides the tiles in one click; the sidebar's hidden handle and its hover peek are not drawn (native_sidebar/usage.rs). Classic keeps the handle.
+    ///
+    /// CDXC:Sidebar 2026-11-21 DECISION:
+    /// User: "make this button for the usages not have a background when it is enabled or disabled. No need for that. Just make it a toggle. Should stay the same look, basically, if it is enabled, if it is pinned or not pinned." The chart looks the same whether the tiles show or not: no fill and the rail's usual icon ink, with the rail's hover fill under the pointer. This supersedes "filled while they show" above; the tooltip still says Show or Hide, and the button still reports its state to screen readers.
     fn render_sidebar_rail_usage_toggle(
         &self,
         appearance: &SidebarAppearance,
@@ -632,7 +635,6 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         let on = self.sidebar_usage_visible;
         let hover = appearance.hover;
-        let selected = appearance.selected;
         let tooltip = if on {
             "Hide account usage"
         } else {
@@ -654,16 +656,11 @@ impl GhostexGpuiApp {
             .justify_center()
             .rounded(px(RAIL_BUTTON_RADIUS))
             .cursor_default()
-            .when(on, move |button| button.bg(selected))
-            .hover(move |button| button.bg(if on { selected } else { hover }))
+            .hover(move |button| button.bg(hover))
             .child(titlebar_svg_icon(
                 "titlebar/chart-bar.svg",
                 RAIL_ICON,
-                if on {
-                    appearance.foreground
-                } else {
-                    appearance.chrome_icon
-                },
+                appearance.chrome_icon,
             ))
             .on_click(cx.listener(|app, _, _, cx| {
                 cx.stop_propagation();
