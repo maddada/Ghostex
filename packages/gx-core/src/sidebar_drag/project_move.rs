@@ -627,6 +627,7 @@ fn follow_to_space(
             .get(&inputs.ui.section_key())
             .map(String::as_str),
         inputs.settings.active_projects,
+        inputs.ui.show_hidden,
     );
     // Active projects lists the project wherever it moves, so the view stays (CDXC:Spaces
     // 2026-11-12 in sidebar_view/active_projects.rs).

@@ -165,6 +165,7 @@ impl GhostexGpuiApp {
             || self.gx_store_run_sidebar_order_write(&command, cx)
             || self.gx_store_run_project_move(&command, cx)
             || self.gx_store_run_collection_menu_edit(&command, cx)
+            || self.gx_store_run_sidebar_space_hide(&command, cx)
             || self.gx_store_run_sidebar_batch(&command, cx)
             || self.gx_store_run_sidebar_bulk(&command, cx)
             || self.gx_store_run_sidebar_create(&command, cx)

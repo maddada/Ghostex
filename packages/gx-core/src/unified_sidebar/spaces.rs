@@ -85,6 +85,7 @@ pub fn unified_space_scope(
             .get(&list_inputs.ui.section_key())
             .map(String::as_str),
         list_inputs.settings.active_projects,
+        list_inputs.ui.show_hidden,
     );
     let space_id = selection.space_id().to_string();
     let label = if selection.is_active_projects() {

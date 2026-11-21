@@ -370,6 +370,8 @@ impl GhostexGpuiApp {
             .border_1()
             .border_color(appearance.foreground.opacity(0.08))
             .cursor_pointer()
+            // A hidden Space, drawn while Show Hidden is on (gx-core `SpaceView::hidden`).
+            .when(space.hidden, |row| row.opacity(0.4))
             .when(self.native_sidebar.is_dragging("space", &id), |row| {
                 row.opacity(0.3)
             })
@@ -474,6 +476,14 @@ impl GhostexGpuiApp {
             items.push(json!({"label": "Edit Space", "icon": "pencil", "command": {"type": "editSpace", "spaceId": space_id}}));
         }
         items.push(json!({"label": "New Space", "icon": "plus", "command": {"type": "editSpace"}}));
+        // Hide Space, or Unhide Space on a hidden one Show Hidden draws (gx_store/space_hide.rs).
+        if let Some(hidden) = self.gx_store_space_hidden(space_id) {
+            items.push(json!({
+                "label": if hidden { "Unhide Space" } else { "Hide Space" },
+                "icon": if hidden { "eye" } else { "eye-off" },
+                "command": {"type": "setSpaceHidden", "spaceId": space_id, "hidden": !hidden},
+            }));
+        }
         items.push(json!({"separator": true}));
         items.push(json!({"label": "Sleep", "heading": true}));
         let plans = self.gx_store_space_sleep_plans(space_id);

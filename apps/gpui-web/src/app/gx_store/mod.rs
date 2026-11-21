@@ -76,6 +76,7 @@ mod sidebar_snapshot;
 mod sidebar_snooze;
 mod sidebar_state_actions;
 mod sidebar_ui_storage;
+mod space_hide;
 pub(crate) mod terminal_lifecycle;
 pub(crate) mod unified_new_session;
 pub(crate) mod unified_sidebar;

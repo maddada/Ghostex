@@ -496,6 +496,7 @@ fn space_of_group(core: &Core, inputs: &SidebarInputs, group: &GroupView) -> Opt
             .get(&section_key)
             .map(String::as_str),
         inputs.settings.active_projects,
+        inputs.ui.show_hidden,
     );
     let project = group.space_project.as_ref();
     Some(space_for_group(

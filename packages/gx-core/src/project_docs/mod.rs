@@ -25,7 +25,9 @@ pub use collection_menu::{
 pub use collections::{
     CollectionsDocument, COLLECTIONS_SYNC_DELAY_MS, COLLECTIONS_SYNC_RETRY_DELAY_MS,
 };
-pub use space_editor::{plan_space_editor_result, SpaceEditorMode, SpaceEditorResult};
+pub use space_editor::{
+    plan_space_editor_result, plan_space_hidden, SpaceEditorMode, SpaceEditorResult,
+};
 pub use space_edits::{
     apply_space_row_reorder, keep_spaces_across_collection_edit, move_members_to_space,
     reorder_spaces, toggle_space_member, SpaceMemberKind,

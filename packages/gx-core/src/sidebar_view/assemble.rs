@@ -166,6 +166,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
                 .get(&section_key)
                 .map(String::as_str),
             input.settings.active_projects,
+            input.ui.show_hidden,
         )
     });
     // Active projects (active_projects.rs): the projects whose rows keep them active now, by
@@ -274,14 +275,18 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
 
     let mut spaces: Vec<SpaceView> = Vec::new();
     if let Some(selection) = &selection {
+        // A hidden Space is off the row until Show hidden is on, then drawn dimmed
+        // (CDXC:Spaces 2026-11-21 in spaces.rs `Space::shown`).
         let mut rows: Vec<SpaceView> = spaces_state
             .ordered()
             .into_iter()
+            .filter(|space| space.shown(input.ui.show_hidden))
             .map(|space| SpaceView {
                 id: space.space_id.clone(),
                 name: space.name.clone(),
                 icon: space.icon.clone(),
                 color: space.color.clone(),
+                hidden: space.hidden,
                 ..SpaceView::default()
             })
             .collect();

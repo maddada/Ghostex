@@ -74,6 +74,9 @@ impl SpacesDocument {
             if let Some(workspace_id) = &space.workspace_id {
                 wire["workspaceId"] = json!(workspace_id);
             }
+            // Always written, `false` too: gxserver keeps a stored `true` for a write that leaves
+            // the field out (an older client's), so Unhide has to say so.
+            wire["hidden"] = json!(space.hidden);
             spaces.insert(space_id.clone(), wire);
         }
         json!({ "order": self.state.order, "spaces": Value::Object(spaces) })

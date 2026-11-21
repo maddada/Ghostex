@@ -98,6 +98,7 @@ pub fn plan_new_project_placement(
                 .get(&section.section_key)
                 .map(String::as_str),
             inputs.settings.active_projects,
+            inputs.ui.show_hidden,
         )),
         _ => None,
     };
@@ -239,6 +240,7 @@ pub fn plan_added_project_space_membership(
             .get(&section.section_key)
             .map(String::as_str),
         inputs.settings.active_projects,
+        inputs.ui.show_hidden,
     );
     // `section.selection?.kind === 'space'`: the built-in Other view claims no member, so adding
     // one to it is not a thing the document can express.

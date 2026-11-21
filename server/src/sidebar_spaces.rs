@@ -91,12 +91,15 @@ pub fn update_sidebar_spaces(
     Ok(normalized)
 }
 
-/// A Space written without a `workspaceId` keeps the one it had.
+/// A Space written without a `workspaceId` keeps the one it had, and one written without `hidden`
+/// stays hidden if it was.
 ///
 /// CDXC:Workspaces 2026-10-09 WHY:
 /// Clients that predate workspaces rewrite the whole Space document without the field; without
 /// this carry every Space would fall back to the default workspace on their next edit. A Space
-/// that never had one belongs to the default workspace.
+/// that never had one belongs to the default workspace. The same holds for Hide Space
+/// (CDXC:Spaces 2026-11-21 in gx-core sidebar_view/spaces.rs): a phone or desktop older than it
+/// leaves `hidden` out, so the field is carried too, and newer clients always write it.
 fn carry_space_workspace_ids(state: &Value, previous: &Value) -> Value {
     let mut carried = state.clone();
     let Some(spaces) = carried.get_mut("spaces").and_then(Value::as_object_mut) else {
@@ -106,15 +109,16 @@ fn carry_space_workspace_ids(state: &Value, previous: &Value) -> Value {
         let Some(space) = space.as_object_mut() else {
             continue;
         };
-        if space.contains_key("workspaceId") {
-            continue;
-        }
-        if let Some(workspace_id) = previous
+        let before = previous
             .get("spaces")
-            .and_then(|spaces| spaces.get(space_id.trim()))
-            .and_then(|space| space.get("workspaceId"))
-        {
-            space.insert("workspaceId".to_string(), workspace_id.clone());
+            .and_then(|spaces| spaces.get(space_id.trim()));
+        for field in ["workspaceId", "hidden"] {
+            if space.contains_key(field) {
+                continue;
+            }
+            if let Some(value) = before.and_then(|before| before.get(field)) {
+                space.insert(field.to_string(), value.clone());
+            }
         }
     }
     carried
@@ -444,6 +448,10 @@ pub fn normalize_sidebar_spaces_state(state: &Value, collections_state: &Value) 
                 .filter(|id| id != crate::workspaces::DEFAULT_WORKSPACE_ID)
         {
             space["workspaceId"] = Value::String(workspace_id);
+        }
+        // Stored only when set, like `workspaceId`, so a document nobody hid from is unchanged.
+        if space_state.get("hidden").and_then(Value::as_bool) == Some(true) {
+            space["hidden"] = Value::Bool(true);
         }
         spaces.insert(space_id.clone(), space);
         order.push(space_id);

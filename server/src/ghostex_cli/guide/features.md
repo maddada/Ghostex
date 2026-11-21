@@ -1253,8 +1253,12 @@ computer start in that folder too. A sessions group (Move to New
 Group) only sorts sessions inside a project and never makes a folder; use New
 project folder when the work needs its own folder, and Organise > Project Group >
 New Group to group projects together.
-Right-click a Space icon for its menu: Manage (Edit Space, New Space) and
-Sleep. Sleep Inactive sleeps only the Space's sessions that are awake but
+Right-click a Space icon for its menu: Manage (Edit Space, New Space, Hide
+Space) and Sleep. Hide Space takes a Space off the Spaces row (its projects stay
+in it and don't move to Other) on every computer and phone; turn on Show Hidden
+in the sidebar menu's Sort & Filter to see hidden Spaces, dimmed, and choose
+Unhide Space on one to bring it back. Each workspace has its own Spaces: a Space
+made in a workspace shows only there. Sleep Inactive sleeps only the Space's sessions that are awake but
 neither working nor waiting on you; unanswered question cards, approvals and
 background shells keep a session awake. Sessions stay where they are, asleep,
 and wake when you open them; the row is greyed out when it has nothing to sleep.

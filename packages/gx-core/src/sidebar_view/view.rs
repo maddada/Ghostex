@@ -1054,6 +1054,8 @@ pub struct SpaceView {
     pub approval_count: usize,
     /// Rows with the red failed dot, not waiting for approval ([`TileStatus::Failed`]).
     pub failed_count: usize,
+    /// A hidden Space, in the row only while Show hidden is on, and drawn dimmed there.
+    pub hidden: bool,
 }
 
 /// A collection (a colored folder of projects).
