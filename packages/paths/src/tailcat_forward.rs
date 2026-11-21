@@ -267,6 +267,11 @@ impl TailcatForward {
         self.local_port
     }
 
+    /// How many connections the link carries right now.
+    pub fn open_connections(&self) -> usize {
+        self.shared.live_connections()
+    }
+
     /// Starts a fresh tailcat client when no connection rides on the current one, and says whether
     /// it did. A client that sat unused may have lost the far side without anything to show it
     /// (CDXC:RemotePairing 2026-11-10 at the top of this file), and a fresh one costs nobody a
