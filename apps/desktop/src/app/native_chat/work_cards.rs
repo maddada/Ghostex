@@ -683,13 +683,13 @@ impl NativeChatView {
             for row in rows.iter().take(if all { rows.len() } else { limit }) {
                 list = list.child(self.dock_row(row, p, cx));
             }
-            // Mark all seen (gx-chat-core `dock_with`), in the more line's quiet words, at its
+            // Mark all read (gx-chat-core `dock_with`), in the more line's quiet words, at its
             // right.
             let mark_all_seen = dock["markAllSeen"]["command"].is_object().then(|| {
                 let command = dock["markAllSeen"]["command"].clone();
                 let label = dock["markAllSeen"]["label"]
                     .as_str()
-                    .unwrap_or("Mark all seen")
+                    .unwrap_or("Mark all read")
                     .to_string();
                 div()
                     .id("work-dock-mark-all-seen")

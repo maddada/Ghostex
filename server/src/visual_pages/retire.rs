@@ -1,6 +1,6 @@
 //! `ghostex page retire`: an agent takes back pages it published and replaced, so they stop
 //! waiting on the reader. Each page is removed from the open questions of every chat that shows
-//! it the way the reader's own Dismiss or Mark all seen removes it (`questionRemove`,
+//! it the way the reader's own Dismiss or Mark all read removes it (`questionRemove`,
 //! server/src/session_chat_open_questions.rs `set_removed`): it leaves the dock, the ? pill, the
 //! sidebar's dot, the board's Needs you and notifications on every client, and its questions stop
 //! waiting. The page still opens; its record notes `retiredAt`.

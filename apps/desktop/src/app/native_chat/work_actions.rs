@@ -32,6 +32,33 @@ pub(super) const DETAILS_ICON: &str = "titlebar/file-text.svg";
 pub(super) const CONTEXT_ICON: &str = "titlebar/focus-2.svg";
 /// A Needs you row's Mark as read: an open envelope (`dock_mark_read_icon`).
 pub(super) const MARK_READ_ICON: &str = "titlebar/mail-opened.svg";
+/// Whether a dock row carries a question the reader must answer, so it has no Mark as read: an ask
+/// with answers, a one-click question, a form or a page with open questions, an approval with
+/// buttons, a to-do that offers its own choices. A page that only waits to be seen (its dismiss
+/// reads "Mark as read"), a to-do with only Done, a blocked line of work and a notice with no
+/// answers ask nothing. The phone has the same rule (workItemParts.tsx `rowAsksQuestion`).
+///
+/// CDXC:Coordinators 2026-11-21 DECISION:
+/// User, of a Live page row with a question: "dont show mark as read on this one because it's a
+/// question and i need to answer it so it's not a page that just has a 'mark as seen' at the end".
+pub(super) fn row_asks_question(row: &Value) -> bool {
+    let key = text(row, "key");
+    let buttons = row["buttons"].as_array().map_or(&[][..], Vec::as_slice);
+    if key.starts_with("work-ask:") {
+        return true;
+    }
+    if key.starts_with("dock-questions:") {
+        return text(row, "dismissLabel") != "Mark as read";
+    }
+    // A to-do with no choices of its own has only Done.
+    let only_done =
+        buttons.is_empty() || (buttons.len() == 1 && text(&buttons[0], "label") == "Done");
+    if key.starts_with("needs-you:") {
+        return !only_done;
+    }
+    !buttons.is_empty()
+}
+
 /// Its dropdown grows to its longest answer up to this (unscaled), and the window's edge.
 const ANSWERS_MENU_MAX: f32 = 560.0;
 
@@ -392,8 +419,9 @@ impl NativeChatView {
     /// `dismiss`, the command its ⋯ and right-click menus' Dismiss / Mark as read run (a page's
     /// `cancelQuestion`, an ask's cancel, a to-do's `coordinatorBoardAnswer` cancel, a terminal
     /// notice's `dismissNotice`), so the agent is told exactly what it is told today: nothing at
-    /// the time, the dismissal with its next message. `None` for a row with no dismiss and for a
-    /// finished row, whose hover check in the age's place already is its Mark as read.
+    /// the time, the dismissal with its next message. `None` for a row with no dismiss, for a
+    /// finished row, whose hover check in the age's place already is its Mark as read, and for a
+    /// row that asks a question (`row_asks_question`).
     ///
     /// CDXC:Coordinators 2026-11-21 DECISION:
     /// User, of two Needs you rows (a page and an ask) with Details and Reply: "all these dont
@@ -407,7 +435,7 @@ impl NativeChatView {
         cx: &Context<Self>,
     ) -> Option<AnyElement> {
         let dismiss = row["dismiss"].clone();
-        if !dismiss.is_object() || row["kind"] == "finished" {
+        if !dismiss.is_object() || row["kind"] == "finished" || row_asks_question(row) {
             return None;
         }
         Some(
@@ -907,5 +935,45 @@ impl NativeChatView {
             );
         }
         any.then(|| row.into_any_element())
+    }
+}
+
+#[cfg(test)]
+mod mark_read_tests {
+    use super::row_asks_question;
+    use serde_json::json;
+
+    #[test]
+    fn only_rows_that_ask_nothing_keep_mark_as_read() {
+        let button = |label: &str| json!({ "label": label });
+        // A page that only waits to be seen, a to-do with only Done, a blocked line, a notice.
+        assert!(!row_asks_question(
+            &json!({ "key": "dock-questions:p1", "dismissLabel": "Mark as read", "buttons": [] })
+        ));
+        assert!(!row_asks_question(
+            &json!({ "key": "needs-you:T1", "buttons": [button("Done")] })
+        ));
+        assert!(!row_asks_question(
+            &json!({ "key": "work-dock:W1", "buttons": [] })
+        ));
+        assert!(!row_asks_question(
+            &json!({ "key": "approval:n", "buttons": [] })
+        ));
+        // A page or form with open questions, a one-click question, an ask, a to-do's choices, an approval.
+        assert!(row_asks_question(
+            &json!({ "key": "dock-questions:p2", "dismissLabel": "Dismiss", "buttons": [] })
+        ));
+        assert!(row_asks_question(
+            &json!({ "key": "dock-questions:f1", "dismissLabel": "Dismiss", "buttons": [button("A"), button("B")] })
+        ));
+        assert!(row_asks_question(
+            &json!({ "key": "work-ask:W1:Q1", "buttons": [button("Done")] })
+        ));
+        assert!(row_asks_question(
+            &json!({ "key": "needs-you:T2", "buttons": [button("Yes"), button("No")] })
+        ));
+        assert!(row_asks_question(
+            &json!({ "key": "approval:x", "buttons": [button("Yes")] })
+        ));
     }
 }

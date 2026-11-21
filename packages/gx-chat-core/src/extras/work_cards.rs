@@ -850,7 +850,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         .as_ref()
         .is_some_and(|keys| rows.iter().all(|row| keys.contains(text(row, "key"))))
         && !rows.iter().any(|row| text(row, "kind") == "approval");
-    // Mark all seen, once two or more pages wait only to be looked at (one has its own ⋯ Dismiss):
+    // Mark all read, once two or more pages wait only to be looked at (one has its own ⋯ Dismiss):
     // every such page in the dock, the rows past the limit too (`questions::later::mark_seen`).
     let unseen: Vec<&str> = rows
         .iter()
@@ -859,7 +859,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         .filter(|id| !id.is_empty())
         .collect();
     let mark_all_seen = if unseen.len() >= 2 {
-        json!({ "label": "Mark all seen", "command": { "type": "markPagesSeen", "ids": unseen } })
+        json!({ "label": "Mark all read", "command": { "type": "markPagesSeen", "ids": unseen } })
     } else {
         Value::Null
     };
@@ -1307,7 +1307,7 @@ fn question_rows_of(
                 if !form {
                     row["pageId"] = json!(asker.id);
                     row["count"] = json!(page_count(state, &asker));
-                    // The dock's Mark all seen clears these (`dock_with`).
+                    // The dock's Mark all read clears these (`dock_with`).
                     row["seenOnly"] = json!(asker.seen_only);
                     // Opened, it keeps its row but no longer counts as unseen: the dock's header
                     // and the Work panel leave it out of Needs you (`questions::later::seen_on_open`).

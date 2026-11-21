@@ -1377,7 +1377,7 @@ pub(crate) fn refresh(
     removed.extend(retired);
     let (open, newly) = leave_out_removed(open, newly, &removed);
     // An opened page that waits only to be seen is still listed by every client, but not counted.
-    // One whose page no longer waits (answered, its own Mark as seen, withdrawn) is forgotten.
+    // One whose page no longer waits (answered, its own Mark as read, withdrawn) is forgotten.
     let opened = opened_ids(&session);
     let still_opened = opened_still_open(&opened, &open);
     if !is_thread && still_opened.len() != opened.len() {

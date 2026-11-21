@@ -2525,12 +2525,12 @@ from all three, and the picture viewer and the remembered scroll position below 
 A page that links to other pages the agent wrote beside it (a cover page and its decks) opens
 each one in place when you click it, also for an agent on another computer. A
 page with no questions (a report or a mockup to look at) waits for you too: it
-ends with a "Reply about this page" box and a Mark as seen button, and until you
+ends with a "Reply about this page" box and a Mark as read button, and until you
 press it the page sits in the list above the chat box of things that need you
 ("Page, not seen yet") and counts in its "need you". Pressing it tells the agent
 you saw the page, with your reply if you wrote one, and the page's card then
 says Seen. Pages an agent showed before this came in don't wait. When two or
-more pages wait only to be seen, Mark all seen at the bottom of that list clears
+more pages wait only to be seen, Mark all read at the bottom of that list clears
 them all at once (their cards say Seen, and nothing is sent to the agent). When
 an agent shows a newer version of the same file, the older cards say Replaced
 and stop counting in every chat that shows them: the newest card is the page.
