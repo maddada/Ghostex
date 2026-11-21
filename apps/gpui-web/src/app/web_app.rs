@@ -242,6 +242,16 @@ impl GhostexGpuiApp {
     ) {
     }
 
+    /// The desktop's dropdown from a given anchor (the sidebar menu's Notifications row,
+    /// native_sidebar/actions.rs); the page has no dropdown to hang.
+    pub(crate) fn toggle_gpui_titlebar_notifications_popup_at(
+        &mut self,
+        _anchor: Option<gpui::Bounds<gpui::Pixels>>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+    }
+
     /// The desktop routes Focus Chat Box, the copy keys and Toggle Summary Mode to the focused session's chat pane; the page binds none of them.
     pub(crate) fn run_focused_chat_hotkey(
         &mut self,
