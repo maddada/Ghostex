@@ -39,7 +39,7 @@ pub fn run(args: &[String]) -> Res<i32> {
     ]))?;
     let built = crate_dir.join("target/wasm32-unknown-unknown/release/gx_chat_wasm.wasm");
     let optimized = crate_dir.join("target/gx_chat_wasm.opt.wasm");
-    // wasm-opt validates against the MVP unless told otherwise; these are the features rustc 1.99
+    // wasm-opt validates against the MVP unless told otherwise; these are the features rustc 1.100
     // turns on by default for wasm32-unknown-unknown. Android System WebView 124 and iOS 16.4's
     // WebKit (the app's floor) run all of them.
     check(

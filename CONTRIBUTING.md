@@ -18,9 +18,9 @@ Its README covers the toolchain it needs (`wasm-bindgen-cli`, Zig 0.17) and the 
 ### Building from source
 
 `cargo xtask start` builds and launches the desktop app. On macOS, `cargo xtask build` only packages it.
-The desktop crate (`apps/desktop/`) and the gxserver crate (`server/`) both pin Rust 1.99.1 in
-their `rust-toolchain.toml` files. Besides Bun, Rust, CMake, Ninja, and Zig 0.17, local
-Rust builds require **kache** (the Rust build cache; v2.0.0 or newer):
+The desktop crate (`apps/desktop/`), the gxserver crate (`server/`) and every other Rust project in
+the repository pin Rust 1.100.0 in their `rust-toolchain.toml` files. Besides Bun, Rust, CMake,
+Ninja, and Zig 0.17, local Rust builds require **kache** (the Rust build cache; v2.0.0 or newer):
 
 ```sh
 brew install kunobi-ninja/kunobi/kache   # Linux: cargo binstall kache, or the APT/AUR packages
