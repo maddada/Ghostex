@@ -3,11 +3,12 @@ for sessions to report to you; read `ghostex agents guide leads` first.
 
 USAGE
   ghostex agents create <agent-id> --lead <session-ref|self> [--model <m>] [--effort <e>]
-                       [--task <text>] …
-  ghostex agents link <session-ref> --lead <session-ref|self>
+                       [--role <line>] [--task <text>] ...
+  ghostex agents link <session-ref> --lead <session-ref|self> [--role <line>]
   ghostex agents links [--all] [--json]
   ghostex agents unlink <session-ref>
   ghostex agents unlink --all [--lead <session-ref>]
+  ghostex agents role set "<line>" [--session <ref>] | show | clear  (see agents role --help)
 
   A linked session's final message reaches its lead at the end of each turn
   the lead started with a message (ghostex agents send, or --queue; a

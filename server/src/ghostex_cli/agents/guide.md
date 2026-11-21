@@ -125,7 +125,9 @@ step 7 below). Do not poll or sleep to watch it; end your turn and wait.
 3. **Hand over a self-contained task.** A new agent starts with none of your
    context. State the goal, the files it owns, what it must not touch, how to
    prove the work is done, and what to report back. Put anything long in a
-   file and point the agent at it; keep the message itself short.
+   file and point the agent at it; keep the message itself short. If the session
+   needs a short standing hand-in rule that survives `/clear` or compaction,
+   pass `--role "<line>"` on `agents create` (or `agents role set "<line>"`).
 4. **Record the global reference** from the create result and use it for every
    later send, read, wait, and close. Titles and short ids can be ambiguous.
 5. **Send with the default delivery, every time.** It reaches a busy agent at

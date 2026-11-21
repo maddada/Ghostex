@@ -7,7 +7,7 @@ USAGE
   ghostex agents types [--json]
   ghostex agents create <agent-id> [--title <name>] [--project-id <id> | --path <folder>]
                        [--task <text> | --body-file <path|->] [--model <m>] [--effort <e>]
-                       [--allow-hidden] [--standalone] [--computer <name>]
+                       [--role <line>] [--allow-hidden] [--standalone] [--computer <name>]
   ghostex agents list [--all] [--json]
   ghostex agents send <session-ref> <text> [--interrupt | --queue | --with-next]
                      [--request-id <id>] [--as-user]
@@ -24,6 +24,9 @@ USAGE
   ghostex agents reload <session-ref> [--json]
   ghostex agents wait-reply <session-ref> [--contains <text>] [--timeout <seconds>]
                           [--after <message-id> | now] [--json]
+  ghostex agents role set "<line>" [--session <ref>] [--json]
+  ghostex agents role show [--session <ref>] [--json]
+  ghostex agents role clear [--session <ref>] [--json]
   ghostex agents link | unlink | links  Only when the user asks for sessions to report to you:
                                        ghostex agents link --help
 
@@ -57,6 +60,12 @@ CHOOSE AND CREATE
   created by a coordinator, which keeps its --title (only a user's rename
   changes it). Copy globalRef from the result for follow-ups. Created does
   not mean the task has completed.
+
+  --role sets a short standing role line (up to 600 characters) that Ghostex
+  hands back to the session after /clear or compaction (SessionStart hook on
+  Claude Code and Codex; next delivered message after compaction on other
+  agents). Manage it later with `ghostex agents role set|show|clear` (see
+  `ghostex agents role --help`).
 
   Run by a coordinator, create also makes the new session one of its
   threads (it nests under the coordinator and its turn-end reports go there).

@@ -31,6 +31,7 @@ pub mod resume_plan;
 mod session_command;
 pub mod session_state_ingest;
 pub mod settings;
+pub mod standing_role;
 pub mod switch_account;
 pub mod terminal_title;
 #[cfg(test)]

@@ -99,17 +99,35 @@ pub(super) fn link_new_session(
 }
 
 pub(super) fn link(args: &Arguments) -> CliResult<Value> {
+    let standing_role = args
+        .role
+        .as_deref()
+        .map(super::role::validate_role)
+        .transpose()?;
     let linked = resolve(&args.positional[0], &args.flags)?;
     let lead = resolve(args.lead.as_deref().unwrap_or("self"), &args.flags)?;
     let result = link_to(&linked, &lead, false, false, &args.flags)?;
-    Ok(json!({
+    let mut answer = json!({
         "ok": true,
         "status": "linked",
         "session": identity::summary(&linked),
         "lead": result["leadGlobalRef"],
         "leadTitle": result["leadTitle"],
         "note": "Its final message reaches the lead after each turn the lead starts with a message (ghostex agents send).",
-    }))
+    });
+    if let Some(role) = standing_role.as_deref() {
+        match super::role::set_session_role(&linked, role, &local_flags(&args.flags)) {
+            Ok(saved) => answer["role"] = saved["role"].clone(),
+            Err(error) => {
+                answer["roleError"] = json!(format!(
+                    "Linked {}, but setting its standing role failed: {}.",
+                    text(&linked, "globalRef"),
+                    error.to_string().trim_end_matches('.')
+                ));
+            }
+        }
+    }
+    Ok(answer)
 }
 
 pub(super) fn unlink(args: &Arguments) -> CliResult<Value> {

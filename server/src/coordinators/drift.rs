@@ -159,6 +159,13 @@ fn newest_compaction(messages: &[SessionChatMessage]) -> Option<String> {
         .map(|message| message.id.clone())
 }
 
+/// The newest "Context compacted" row's id read from `session`'s transcript tail; `None` when the
+/// transcript cannot be read or contains no compaction marker in the tail window.
+pub(crate) fn newest_compaction_for_session(session: &Value) -> Option<String> {
+    let messages = transcript_tail(session)?;
+    newest_compaction(&messages)
+}
+
 /// `markdown` without its fenced code blocks.
 fn without_code(markdown: &str) -> String {
     let mut out = Vec::new();
@@ -426,11 +433,8 @@ pub fn coordinator_drift_delivery(
     let mut changed = first_look;
     let messages = transcript_tail(session).unwrap_or_default();
 
-    // Claude and Codex coordinators get their role back from their SessionStart hook.
-    let hook_hands_role_back = matches!(
-        crate::session_chat_follower::session_chat_agent_for_session(session).as_deref(),
-        Some("claude" | "codex")
-    );
+    // Claude and Codex get their role back from their SessionStart hook.
+    let hook_hands_role_back = crate::agents::standing_role::hook_hands_role_back(session);
     if let Some(compaction) = newest_compaction(&messages) {
         if record.compaction.as_deref() != Some(compaction.as_str()) {
             if !first_look && !hook_hands_role_back {

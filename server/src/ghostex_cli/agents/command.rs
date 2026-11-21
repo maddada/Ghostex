@@ -1,4 +1,4 @@
-use super::{arguments, delivery, identity, leads, lifecycle, main_coordinator, wait_reply};
+use super::{arguments, delivery, identity, leads, lifecycle, main_coordinator, role, wait_reply};
 use crate::ghostex_cli::{output::print_json, rpc::CliResult, sessions};
 use serde_json::json;
 
@@ -30,6 +30,8 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
     if args.help {
         if matches!(args.command.as_str(), "link" | "unlink" | "links") {
             print!("{}", include_str!("help_link.txt"));
+        } else if args.command == "role" {
+            print!("{}", include_str!("help_role.txt"));
         } else {
             print!("{}", include_str!("help.txt"));
         }
@@ -133,6 +135,14 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                 print_json(&result);
             } else {
                 leads::print_links(&result, args.all);
+            }
+        }
+        "role" => {
+            let result = role::run(&args)?;
+            if args.json {
+                print_json(&result);
+            } else {
+                role::print_text(&args.positional[0], &result);
             }
         }
         "switch-account" => {

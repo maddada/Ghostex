@@ -575,21 +575,33 @@ fn coordinator_session_start_context(
     );
     let is_session_start = read_text(params, "eventName")
         .is_some_and(|event| event.eq_ignore_ascii_case("SessionStart"));
-    // A Claude or Codex coordinator whose new conversation lost its first message gets its role
-    // again (coordinators/role.rs `coordinator_role_again`, GitHub #570).
+    // A Claude or Codex session whose new conversation lost its earlier context gets its
+    // coordinator role (coordinators/role.rs `coordinator_role_again`, GitHub #570) and/or its
+    // per-session standing role line (agents/standing_role.rs, GitHub #678) back on SessionStart.
     if matches!(agent.as_str(), "claude" | "codex") && is_session_start {
         let key = (lifecycle.project_id.clone(), lifecycle.session_id.clone());
         let skill_coordinator = crate::coordinators::coordinator_role_is_skill(session)
             && crate::coordinators::read_coordinator(repository.connection(), &key.0, &key.1)?
                 .is_some();
-        if !skill_coordinator {
-            return Ok(None);
-        }
         let source = read_text(params, "hookSource").unwrap_or_default();
-        return Ok(crate::coordinators::coordinator_role_again(
+        let coordinator_context = if skill_coordinator {
+            crate::coordinators::coordinator_role_again(
+                repository.connection(),
+                &key,
+                &agent,
+                &source,
+            )
+        } else {
+            None
+        };
+        let standing_role = crate::agents::standing_role::read_standing_role(
             repository.connection(),
-            &key,
-            &agent,
+            &key.0,
+            &key.1,
+        );
+        return Ok(crate::agents::standing_role::session_start_context(
+            coordinator_context.as_deref(),
+            standing_role.as_ref().map(|record| record.role.as_str()),
             &source,
         ));
     }
@@ -597,7 +609,8 @@ fn coordinator_session_start_context(
         || (agent == "kiro"
             && read_text(params, "eventName")
                 .is_some_and(|event| event.eq_ignore_ascii_case("agentSpawn")));
-    let resumed = read_text(params, "hookSource").is_some_and(|source| source == "resume");
+    let source = read_text(params, "hookSource").unwrap_or_default();
+    let resumed = source == "resume";
     if !(SESSION_START_NOTE_AGENTS.contains(&agent.as_str()) && is_session_start) || resumed {
         return Ok(None);
     }
@@ -623,9 +636,18 @@ fn coordinator_session_start_context(
         coordinator && !crate::coordinators::coordinator_role_is_skill(session);
     // Extension lines are for ordinary sessions only, as on a launch flag (marked_handovers.rs).
     let note = super::note_text_with(&paths, marked, !coordinator && !thread);
+    let standing_role = crate::agents::standing_role::read_standing_role(
+        repository.connection(),
+        &lifecycle.project_id,
+        &lifecycle.session_id,
+    )
+    .map(|record| {
+        crate::agents::standing_role::session_start_note_for_other_agent(&record.role, &source)
+    });
     let parts = [
         legacy_coordinator.then_some(crate::coordinators::GUIDE_POINTER_COORDINATOR_INSTRUCTIONS),
         note.as_deref(),
+        standing_role.as_deref(),
     ];
     let context = parts.into_iter().flatten().collect::<Vec<_>>().join("\n\n");
     Ok((!context.is_empty()).then_some(context))

@@ -162,6 +162,9 @@ pub(super) async fn paste_already_recorded(session: &Value, text: &str, since_ms
 struct CoordinatorNotes {
     playbook: Option<(String, String)>,
     drift: Option<crate::coordinators::DriftDelivery>,
+    /// Post-compaction standing role reminder for any session on an agent whose hooks cannot
+    /// inject SessionStart context (agents/standing_role.rs).
+    standing_role: Option<crate::agents::standing_role::StandingRoleDelivery>,
     /// The questions still waiting on the user, by title (`open_questions_note`).
     open_questions: Option<String>,
     /// The questions the user dismissed since the agent's last note, as the note names them, and
@@ -171,8 +174,9 @@ struct CoordinatorNotes {
 
 impl CoordinatorNotes {
     /// Whether a note asks the agent to do something: the playbook or compaction note ("run
-    /// `ghostex coordinator guide`") or a drift "Reminder:". The open questions list and the
-    /// dismissed questions only inform, so they never wake an idle agent (`send_ghostex_notes`).
+    /// `ghostex coordinator guide`"), a standing-role post-compaction note, or a drift "Reminder:".
+    /// The open questions list and the dismissed questions only inform, so they never wake an idle
+    /// agent (`send_ghostex_notes`).
     ///
     /// CDXC:Coordinators 2026-11-18 DECISION:
     /// User picked "A + C" (Q3887) after "i dont like that we tell the agent to respond with ok in
@@ -181,11 +185,11 @@ impl CoordinatorNotes {
     /// inform are held while the agent is idle and go with its next message, the user's or a
     /// thread's report, in the same separate system message; notes that ask for action go at once.
     fn asks_action(&self) -> bool {
-        self.playbook.is_some() || self.drift.is_some()
+        self.playbook.is_some() || self.drift.is_some() || self.standing_role.is_some()
     }
 
-    /// Every note, in the order they go: the playbook note, the drift reminder, the open
-    /// questions, the dismissed questions.
+    /// Every note, in the order they go: the playbook note, the drift reminder, the standing role
+    /// compaction note, the open questions, the dismissed questions.
     fn all(&self) -> Vec<&str> {
         self.playbook
             .iter()
@@ -195,6 +199,7 @@ impl CoordinatorNotes {
                     .iter()
                     .flat_map(|drift| drift.notes.iter().map(String::as_str)),
             )
+            .chain(self.standing_role.as_ref().map(|role| role.note.as_str()))
             .chain(self.open_questions.as_deref())
             .chain(self.dismissed.as_ref().map(|(_, note)| note.as_str()))
             .collect()
@@ -203,7 +208,8 @@ impl CoordinatorNotes {
 
 /// The notes that go under this message to an orchestrator (CDXC:Coordinators 2026-11-05 in
 /// coordinators/playbook.rs, CDXC:Coordinators 2026-11-13 in coordinators/drift.rs), and to any
-/// session the questions the user dismissed since its last note (session_chat_dismissed.rs).
+/// session its post-compaction standing role note (agents/standing_role.rs) and the questions the
+/// user dismissed since its last note (session_chat_dismissed.rs).
 /// Only messages someone sent (the chat box, thread reports, `ghostex agents send`, queued rows)
 /// carry them, never a slash or shell command, whose text the agent runs instead of reading.
 fn coordinator_playbook_note(
@@ -243,13 +249,32 @@ fn coordinator_playbook_note(
     let drift = session.as_ref().and_then(|session| {
         crate::coordinators::coordinator_drift_delivery(&db, &state.paths, &key, session)
     });
+    let coordinator_compaction_noted = drift.as_ref().is_some_and(|drift| {
+        drift
+            .notes
+            .iter()
+            .any(|note| note == ghostex_gx_chat_core::session::appended_notes::CONTEXT_COMPACTED_NOTE)
+    });
+    let standing_role = session.as_ref().and_then(|session| {
+        crate::agents::standing_role::standing_role_compaction_delivery(
+            &db,
+            &key,
+            session,
+            coordinator_compaction_noted,
+        )
+    });
     let open_questions = session
         .as_ref()
         .and_then(|session| open_questions_note(state, &db, &key, session, text));
-    (playbook.is_some() || drift.is_some() || open_questions.is_some() || dismissed.is_some())
+    (playbook.is_some()
+        || drift.is_some()
+        || standing_role.is_some()
+        || open_questions.is_some()
+        || dismissed.is_some())
         .then_some(CoordinatorNotes {
             playbook,
             drift,
+            standing_role,
             open_questions,
             dismissed,
         })
@@ -409,6 +434,13 @@ fn record_coordinator_playbook_note(
         }
         if let Some(drift) = &notes.drift {
             crate::coordinators::record_coordinator_drift(&db, &key, drift);
+        }
+        if let Some(standing_role) = &notes.standing_role {
+            crate::agents::standing_role::record_standing_role_compaction(
+                &db,
+                &key,
+                &standing_role.compaction,
+            );
         }
         if let Some(note) = &notes.open_questions {
             write_open_questions_sent(&db, &key, Some(note));

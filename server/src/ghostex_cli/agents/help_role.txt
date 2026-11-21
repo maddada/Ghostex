@@ -1,0 +1,25 @@
+Per-session standing role line: a short rule handed back after /clear or
+compaction so ordinary leads and linked workers keep their hand-in rules.
+
+USAGE
+  ghostex agents role set "<line>" [--session <session-ref>] [--json]
+  ghostex agents role show [--session <session-ref>] [--json]
+  ghostex agents role clear [--session <session-ref>] [--json]
+
+  You can also set a standing role at creation or link time:
+    ghostex agents create <agent-id> --role "<line>" ...
+    ghostex agents link <session-ref> --lead <session-ref|self> --role "<line>"
+
+DETAILS
+  - Without --session, targets the calling Ghostex session (resolved from
+    GHOSTEX_GLOBAL_SESSION_REF / GHOSTEX_SESSION_ID). Pass --session <ref> to
+    inspect or update another session (including on another computer via its
+    global ref or --computer <name>).
+  - Trimmed to one line, at most 600 characters; blank lines are rejected
+    (use clear to remove a standing role).
+  - Claude Code and Codex receive the line via their SessionStart hook on
+    clear, compact and startup (not on resume or fork).
+  - Agents whose hooks cannot inject SessionStart context on compaction
+    (such as Antigravity and OpenCode) receive it once with the next delivered
+    message after compaction.
+  - Survives gxserver restarts and Previous Sessions restore.

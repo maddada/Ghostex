@@ -6,6 +6,7 @@ mod leads;
 mod lifecycle;
 mod main_coordinator;
 pub(super) mod outbound;
+mod role;
 mod visibility;
 mod wait_reply;
 

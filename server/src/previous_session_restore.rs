@@ -129,6 +129,11 @@ pub fn restore_previous_session(
         (project_id, session_id),
         (&restored_project, &restored_id),
     );
+    crate::agents::standing_role::carry_standing_role(
+        db,
+        (project_id, session_id),
+        (&restored_project, &restored_id),
+    );
     // A failure here leaves an extra history row and changes nothing else.
     let _ = call(
         "/api/removeSession",

@@ -4166,7 +4166,14 @@ Use `ghostex agents --help` to create, message, and close other agent sessions.
 `ghostex agents whoami --json` identifies the caller; `agents types` lists
 configured agent IDs; `agents create <agent-id> --task "<task>"` starts one in
 the caller's project (`--project-id` selects another; `--model` and `--effort`
-pick its model and effort as `create-agent` does). An agent turned off in
+pick its model and effort as `create-agent` does; `--role "<line>"` registers a
+short standing role line, up to 600 characters, handed back after `/clear` or
+compaction). `agents role set "<line>" [--session <ref>]`, `agents role show
+[--session <ref>]`, and `agents role clear [--session <ref>]` (also `--role` on
+`agents link`) manage a session's standing role line directly: Claude Code and
+Codex receive it via their `SessionStart` hook on `clear`, `compact`, and
+`startup`, and other agents receive it once with the next delivered message
+after compaction. An agent turned off in
 Settings > Agents is not listed, and `agents create`, `create-agent`,
 `run-agent`, `coordinator create`/`start-thread --agent` and `board start-work
 --agent` refuse it, naming the agents to use instead, unless `--allow-hidden` is

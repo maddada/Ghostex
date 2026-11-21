@@ -55,6 +55,10 @@ pub(super) struct Arguments {
     /// `--lead <session-ref|self>`: create and link make the session report to that lead
     /// (agents/lead_links in gxserver).
     pub lead: Option<String>,
+    /// `--role <line>`: standing role line set by create or link (agents/standing_role).
+    pub role: Option<String>,
+    /// `--session <session-ref>`: target session for `agents role set|show|clear`.
+    pub session: Option<String>,
     /// `create --model <model>` and `--effort <level>`: the new session's model and effort, as
     /// `ghostex create-agent` takes them (GitHub #700: a linked session on a chosen model in one
     /// step).
@@ -91,6 +95,8 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
         if_none: None,
         as_user: false,
         lead: None,
+        role: None,
+        session: None,
         model: None,
         effort: None,
         contains: None,
@@ -139,8 +145,8 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                 };
             }
             "--body-file" | "--server" | "--computer" | "--task" | "--title" | "--project-id"
-            | "--path" | "--request-id" | "--account" | "--lead" | "--contains" | "--timeout"
-            | "--after" | "--model" | "--effort" => {
+            | "--path" | "--request-id" | "--account" | "--lead" | "--role" | "--session"
+            | "--contains" | "--timeout" | "--after" | "--model" | "--effort" => {
                 let value = args
                     .next()
                     .filter(|value| !value.starts_with("--") && !value.is_empty())
@@ -154,6 +160,8 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                     "--request-id" => Some(&mut parsed.request_id),
                     "--account" => Some(&mut parsed.account),
                     "--lead" => Some(&mut parsed.lead),
+                    "--role" => Some(&mut parsed.role),
+                    "--session" => Some(&mut parsed.session),
                     "--contains" => Some(&mut parsed.contains),
                     "--timeout" => Some(&mut parsed.timeout),
                     "--after" => Some(&mut parsed.after),
@@ -218,6 +226,16 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
     if parsed.lead.is_some() && parsed.flags.contains("computer") {
         return Err(CliError::Other(
             "Lead links work on this computer only: --lead can't go with --computer.".into(),
+        ));
+    }
+    if parsed.role.is_some() && !matches!(parsed.command.as_str(), "create" | "link") {
+        return Err(CliError::Other(
+            "--role is only available for create and link. Use `ghostex agents role set \"<line>\"` to set a standing role directly.".into(),
+        ));
+    }
+    if parsed.session.is_some() && parsed.command != "role" {
+        return Err(CliError::Other(
+            "--session is only available for role.".into(),
         ));
     }
     if (parsed.contains.is_some() || parsed.timeout.is_some() || parsed.after.is_some())
@@ -397,6 +415,23 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                 return Err(CliError::Other(format!(
                     "Usage: {usage}. See ghostex agents link --help."
                 )));
+            }
+        }
+        "role" => {
+            if parsed.all || parsed.body_file.is_some() || parsed.delivery != Delivery::Normal {
+                return Err(CliError::Other(
+                    "role does not accept --all, --body-file or a delivery flag. See ghostex agents role --help.".into(),
+                ));
+            }
+            let valid = match parsed.positional.first().map(String::as_str) {
+                Some("set") => parsed.positional.len() == 2,
+                Some("show" | "clear") => parsed.positional.len() == 1,
+                _ => false,
+            };
+            if !valid {
+                return Err(CliError::Other(
+                    "Usage: ghostex agents role set \"<line>\" [--session <ref>] | show [--session <ref>] | clear [--session <ref>]. See ghostex agents role --help.".into(),
+                ));
             }
         }
         "wait-reply" => {

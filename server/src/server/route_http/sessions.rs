@@ -617,6 +617,25 @@ pub(super) async fn route_sessions_http(
                 },
             )
         }
+        // Per-session standing role line (agents/standing_role): set, show, clear.
+        crate::agents::standing_role::SESSION_STANDING_ROLE_ENDPOINT => {
+            let caller = caller.clone();
+            handle_domain_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+                |repository, db, params, _| {
+                    crate::agents::standing_role::handle_standing_role_endpoint(
+                        &caller,
+                        db,
+                        repository,
+                        state.metadata.server_id.as_str(),
+                        params,
+                    )
+                },
+            )
+        }
         // Lead links (agents/lead_links): a session may only make itself a lead, so the caller
         // goes in.
         crate::agents::lead_links::LEAD_LINKS_ENDPOINT => {

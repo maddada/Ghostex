@@ -43,13 +43,33 @@ coordinator start-thread`). All the sessions are on this computer.
 
 ```bash
 ghostex agents create <agent-id> --lead self --task "..."   # start one linked to you
-ghostex agents create <agent-id> --lead self --model <m> --effort <e> --task "..."
-ghostex agents link <session-ref> --lead self               # link one that already runs
+ghostex agents create <agent-id> --lead self --model <m> --effort <e> --role "<line>" --task "..."
+ghostex agents link <session-ref> --lead self [--role "<line>"]  # link one that already runs
 ghostex agents links                                        # the sessions linked to you, and
                                                             # your sub-leads' (with the chain)
 ghostex agents unlink <session-ref>                         # end one link
 ghostex agents unlink --all                                 # end every link to you
+ghostex agents role set "<line>" [--session <ref>]          # register a standing role line
+ghostex agents role show [--session <ref>]                  # show the standing role line
+ghostex agents role clear [--session <ref>]                 # remove the standing role line
 ```
+
+## Standing role lines (surviving `/clear` and compaction)
+
+Any session (a lead, a sub-lead, or a linked worker) can keep a short standing
+role line (up to 600 characters) so hand-in rules survive `/clear` and context
+compaction:
+
+- Set it on yourself with `ghostex agents role set "<line>"`, on another
+  session with `--session <ref>`, or at creation/link time with
+  `--role "<line>"` on `agents create` and `agents link`.
+- Claude Code and Codex receive the line via their `SessionStart` hook after
+  `/clear`, compaction, and fresh startup (never on resume or fork).
+- Agents whose hooks cannot inject `SessionStart` context on compaction (such
+  as Antigravity and OpenCode) receive it once with the next delivered message
+  after compaction.
+- Inspect or remove it with `ghostex agents role show` and
+  `ghostex agents role clear` (`--json` supported).
 
 A sub-lead links its own sessions the same way, with `--lead self` in its own
 session. `agents links` run by a sub-lead also says whom it reports to.

@@ -33,6 +33,11 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
     if body.as_ref().is_some_and(|body| body.trim().is_empty()) {
         return Err(CliError::Other("Task must not be empty.".into()));
     }
+    let standing_role = args
+        .role
+        .as_deref()
+        .map(super::role::validate_role)
+        .transpose()?;
     let caller = if args.project_id.is_none() || body.is_some() {
         Some(identity::caller()?)
     } else {
@@ -108,6 +113,16 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
             },
         )
     });
+    // `--role`: set before the provider starts so the agent's initial SessionStart hook sees it.
+    let role_set = standing_role.as_deref().map(|role| {
+        super::role::set_session_role(session, role, &flags).map_err(|error| {
+            let error = error.to_string();
+            format!(
+                "Created {reference}, but setting its standing role failed: {}. Do not create another session.",
+                error.trim_end_matches('.')
+            )
+        })
+    });
     // Retain the created identity if startup fails so a retry does not create a duplicate.
     let provider = call_gxserver_rpc("/api/startSessionProvider", &json!({
         "globalRef": reference, "projectId": session["projectId"], "sessionId": session["sessionId"],
@@ -117,6 +132,12 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
         .filter(|value| value.is_object())
         .unwrap_or(session);
     let mut result = json!({"ok": true, "status": "created", "globalRef": reference, "session": identity::summary(live_session)});
+    if let Some(role_set) = role_set {
+        match role_set {
+            Ok(saved) => result["role"] = saved["role"].clone(),
+            Err(error) => result["roleError"] = json!(error),
+        }
+    }
     // CDXC:Coordinators 2026-09-30 WHY: a coordinator that starts a worker the `$ghostex-agents` way still gets it as a tracked thread; for any other caller the link is a no-op.
     // CDXC:Coordinators 2026-10-15 DECISION: User: "a new thread ... that i just chat to about this ... maybe could be a thread not actually under you but separate in the sidebar, better." `--standalone` skips the link, so the session is a plain sidebar row that reports to nobody.
     if let Some(lead_link) = lead_link {
