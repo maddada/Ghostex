@@ -97,6 +97,7 @@ impl GpuiPreferredAgentInterface {
 pub(crate) struct GpuiSidebarCreateProjectAgentMessage {
     pub(crate) account_id: Option<String>,
     pub(crate) agent_id: String,
+    pub(crate) allow_missing_cli: bool,
     pub(crate) preferred_interface: GpuiPreferredAgentInterface,
     pub(crate) project_id: String,
     pub(crate) request_id: Option<String>,

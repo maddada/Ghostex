@@ -29,6 +29,7 @@ pub(crate) fn gpui_create_local_project_workspace_agent(
     project_id: &str,
     agent_id: &str,
     account_id: Option<&str>,
+    allow_missing_cli: bool,
 ) -> Result<
     (
         GpuiLocalWorkspaceSessionKey,
@@ -36,7 +37,12 @@ pub(crate) fn gpui_create_local_project_workspace_agent(
     ),
     String,
 > {
-    let key = gpui_create_local_project_workspace_agent_record(project_id, agent_id, account_id)?;
+    let key = gpui_create_local_project_workspace_agent_record(
+        project_id,
+        agent_id,
+        account_id,
+        allow_missing_cli,
+    )?;
     match gpui_prepare_local_workspace_attach_terminal_plan(
         &key,
         GpuiLocalWorkspaceAttachIntent::Attach,
@@ -54,30 +60,35 @@ pub(crate) fn gpui_create_local_project_workspace_agent_record(
     project_id: &str,
     agent_id: &str,
     account_id: Option<&str>,
+    allow_missing_cli: bool,
 ) -> Result<GpuiLocalWorkspaceSessionKey, String> {
     if !gpui_remote_sidebar_project_id_allowed(project_id)
         || !gpui_remote_sidebar_agent_id_allowed(agent_id)
     {
         return Err("The selected project agent is unavailable.".to_string());
     }
+    let mut create_params = ghostex_gx_core::replacing_empty_sessions(serde_json::json!({
+        "agentId": agent_id,
+        "runtimeSettings": account_id.map(|id| serde_json::json!({"accountId": id})).unwrap_or_else(|| serde_json::json!({})),
+        /*
+        CDXC:Drafts 2026-08-28:
+        The Windows project-header agent launch is the same promptless
+        sidebar create as the macOS/Linux CEF path, so it creates a draft
+        row too. The attach step below starts the provider, so the agent CLI
+        is warm while the user types; gxserver clears `draftStatus` when the
+        first prompt reaches the agent.
+        */
+        "draft": true,
+        "projectId": project_id,
+        "requireLaunchCommand": true,
+        "surface": "workspace",
+    }));
+    if allow_missing_cli {
+        create_params["allowMissingCli"] = serde_json::json!(true);
+    }
     let result = gpui_gxserver_rpc_result(
         "/api/createAgentSession",
-        &ghostex_gx_core::replacing_empty_sessions(serde_json::json!({
-            "agentId": agent_id,
-            "runtimeSettings": account_id.map(|id| serde_json::json!({"accountId": id})).unwrap_or_else(|| serde_json::json!({})),
-            /*
-            CDXC:Drafts 2026-08-28:
-            The Windows project-header agent launch is the same promptless
-            sidebar create as the macOS/Linux CEF path, so it creates a draft
-            row too. The attach step below starts the provider, so the agent CLI
-            is warm while the user types; gxserver clears `draftStatus` when the
-            first prompt reaches the agent.
-            */
-            "draft": true,
-            "projectId": project_id,
-            "requireLaunchCommand": true,
-            "surface": "workspace",
-        })),
+        &create_params,
         Duration::from_secs(15),
     )?;
     let session = result

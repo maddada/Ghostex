@@ -60,6 +60,9 @@ pub(crate) struct NoticeModalItem {
     /// The notice's own button (Open Accounts, Undo, Install with Homebrew); Approve on an
     /// approval.
     pub(crate) action_label: Option<String>,
+    /// An optional second action button placed beside the primary one (such as "Start anyway" on
+    /// an agent-not-installed notice); the corner X and Escape still close without acting.
+    pub(crate) secondary_action_label: Option<String>,
     /// The raw error behind Copy details.
     pub(crate) copy_text: Option<String>,
     /// A small line under the rest: what Approve does next (the system prompt).
@@ -87,6 +90,8 @@ pub(crate) struct NoticeModalPairing {
 pub(crate) enum NoticeModalCommand {
     /// The notice's own button, or Approve.
     Act { id: String },
+    /// The notice's secondary action button (such as "Start anyway").
+    SecondaryAct { id: String },
     /// Deny on an approval.
     Deny { id: String },
     /// Close, Escape or the corner X: an approval stays waiting, anything else is done.
@@ -417,23 +422,42 @@ impl GpuiNoticeModalWindow {
         // Copy details joins the row: a full half-width button beside a lone Close, an icon
         // button ahead of Close and the notice's own button (`copy_details_button`).
         let mut buttons: Vec<AnyElement> = self
-            .copy_details_button(item, item.action_label.is_some(), cx)
+            .copy_details_button(
+                item,
+                item.action_label.is_some() || item.secondary_action_label.is_some(),
+                cx,
+            )
             .into_iter()
             .collect();
-        buttons.push(modal_action_button(
-            &p,
-            "notice-modal-close",
-            "Close",
-            None,
-            if item.action_label.is_some() {
-                ModalButtonTone::Neutral
-            } else {
-                ModalButtonTone::Primary
-            },
-            false,
-            |this: &mut Self, _, cx| this.close_current(cx),
-            cx,
-        ));
+        if let Some(secondary) = item.secondary_action_label.clone() {
+            buttons.push(modal_action_button(
+                &p,
+                "notice-modal-secondary-action",
+                secondary,
+                None,
+                ModalButtonTone::Neutral,
+                false,
+                |this: &mut Self, _, cx| {
+                    this.send(|id| NoticeModalCommand::SecondaryAct { id }, cx)
+                },
+                cx,
+            ));
+        } else {
+            buttons.push(modal_action_button(
+                &p,
+                "notice-modal-close",
+                "Close",
+                None,
+                if item.action_label.is_some() {
+                    ModalButtonTone::Neutral
+                } else {
+                    ModalButtonTone::Primary
+                },
+                false,
+                |this: &mut Self, _, cx| this.close_current(cx),
+                cx,
+            ));
+        }
         if let Some(label) = item.action_label.clone() {
             buttons.push(modal_action_button(
                 &p,

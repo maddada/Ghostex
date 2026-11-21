@@ -674,9 +674,24 @@ impl GhostexGpuiApp {
             */
             let account_id = message.account_id;
             let agent_id = message.agent_id;
+            let allow_missing_cli = message.allow_missing_cli;
             let preferred_interface = message.preferred_interface;
             let project_id = message.project_id;
             let request_id = message.request_id;
+            let retry_payload = (!allow_missing_cli).then(|| {
+                let mut retry = serde_json::json!({
+                    "agentId": agent_id,
+                    "allowMissingCli": true,
+                    "preferredInterface": preferred_interface.as_str(),
+                    "projectId": project_id,
+                    "type": "ghostex.gpui.sidebar.createProjectAgent",
+                    "version": 1,
+                });
+                if let Some(account_id) = account_id.as_deref() {
+                    retry["accountId"] = serde_json::json!(account_id);
+                }
+                retry.to_string()
+            });
             let background = cx.background_executor().clone();
             cx.spawn(async move |this, cx| {
                 let result = background
@@ -685,6 +700,7 @@ impl GhostexGpuiApp {
                             project_id.as_str(),
                             agent_id.as_str(),
                             account_id.as_deref(),
+                            allow_missing_cli,
                         )
                     })
                     .await;
@@ -725,7 +741,10 @@ impl GhostexGpuiApp {
                         }
                     }
                     Err(message) => {
-                        this.show_agent_launch_failure(message.as_str(), cx);
+                        let start_anyway = retry_payload.map(|payload| {
+                            crate::app::window::RetryAgentLaunch::WindowsProjectAgent { payload }
+                        });
+                        this.show_agent_launch_failure(message.as_str(), start_anyway, cx);
                         if let Some(request_id) = request_id.as_deref() {
                             this.dispatch_gpui_first_launch_create_project_session_result(
                                 request_id,

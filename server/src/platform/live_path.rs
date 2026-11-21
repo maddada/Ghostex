@@ -1,9 +1,24 @@
 //! Where a program started right now would look for commands.
 
 use std::{
+    collections::HashMap,
     ffi::OsString,
     path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
+    time::{Duration, Instant},
 };
+
+static LIVE_PATH_RECENT: OnceLock<Mutex<HashMap<String, (Instant, Option<PathBuf>)>>> =
+    OnceLock::new();
+
+/// Drops the 5-second lookup cache so a fresh CLI check re-reads the live registry and process PATH.
+pub(crate) fn clear_cache() {
+    if let Some(recent) = LIVE_PATH_RECENT.get() {
+        if let Ok(mut recent) = recent.lock() {
+            recent.clear();
+        }
+    }
+}
 
 /// CDXC:PlatformSupport 2026-09-28 WHY:
 /// gxserver outlives the app and keeps the PATH it started with. On Windows an agent CLI installed while it ran (the official installers append to the user `Path`) stayed "not found" in hook status, the Agents page and the account helpers until the app and background service were restarted. Read the registry's Machine then User `Path` first, which is what a program launched from Explorer or a new terminal gets, then the entries only this process had. This needs no PowerShell start per lookup.
@@ -46,13 +61,7 @@ pub(crate) fn value() -> OsString {
 /// CDXC:PlatformSupport 2026-11-04 WHY:
 /// A lookup reads the registry PATH and checks every folder in it for each PATHEXT spelling, and gxserver repeats the same few lookups (`git`, `claude`, `node`) for every session on every sessions read: 11% of its CPU samples on Windows (measured 2026-11-04). An answer without `extra` folders is kept for five seconds, so a CLI installed while gxserver runs is still found within seconds.
 pub(crate) fn find(name: &str, extra: &[PathBuf]) -> Option<PathBuf> {
-    use std::{
-        collections::HashMap,
-        sync::{Mutex, OnceLock},
-        time::{Duration, Instant},
-    };
     const KEPT_FOR: Duration = Duration::from_secs(5);
-    static RECENT: OnceLock<Mutex<HashMap<String, (Instant, Option<PathBuf>)>>> = OnceLock::new();
     let search = || {
         directories()
             .into_iter()
@@ -64,7 +73,7 @@ pub(crate) fn find(name: &str, extra: &[PathBuf]) -> Option<PathBuf> {
     if cfg!(test) || !extra.is_empty() {
         return search();
     }
-    let recent = RECENT.get_or_init(Default::default);
+    let recent = LIVE_PATH_RECENT.get_or_init(Default::default);
     if let Some((at, found)) = recent
         .lock()
         .ok()

@@ -409,6 +409,7 @@ export type GxserverUpdateProjectParams = Partial<GxserverCreateProjectParams> &
 
 export interface GxserverCreateSessionParams {
   agentId?: string;
+  allowMissingCli?: boolean;
   attentionRules?: Record<string, unknown>;
   commandId?: string;
   completionRules?: Record<string, unknown>;

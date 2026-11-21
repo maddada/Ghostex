@@ -13,8 +13,6 @@ use crate::domain::DomainStateError;
 use crate::platform::shell::command_shell;
 
 use super::config::GXSERVER_AGENT_HOOK_COLOR_DISABLING_ENVIRONMENT_KEYS;
-#[cfg(all(not(windows), not(target_os = "macos")))]
-use super::plugin_sources::shell_quote;
 use super::probe_cache::{
     cached_resolve_command_path, login_shell_path_entries, refresh_resolved_command_path,
 };
@@ -237,6 +235,7 @@ pub(crate) fn login_shell_path_patient(home_dir: &Path) -> Vec<String> {
 
 pub(crate) fn refresh_cli_environment(home_dir: &Path) {
     super::probe_cache::invalidate_login_shell_path(home_dir);
+    crate::platform::live_path::clear_cache();
 }
 
 pub(crate) fn command_exists_uncached(command: &str, home_dir: &Path) -> bool {
@@ -249,8 +248,10 @@ pub(super) fn resolve_command_path(command: &str, _home_dir: &Path) -> Option<St
 }
 
 /// CDXC:AgentHooks 2026-11-04 WHY:
-/// macOS looked each CLI up with `zsh -lc "command -v <cli>"`: a login shell per lookup, which ran the user's `.zprofile` (`brew shellenv`, `path_helper`) every time, four processes and about 24 ms of CPU, 14 times in five minutes on a working Mac (measured 2026-11-04, issues-1027/macos-perf). The login shell's PATH is already part of the normalized PATH (`login_shell_path_entries`, probed once per process), so the lookup is the same `command -v` search done in-process: the first executable `<dir>/<cli>` on that PATH, or the path itself when it names one. Linux keeps the shell probe.
-#[cfg(target_os = "macos")]
+/// macOS looked each CLI up with `zsh -lc "command -v <cli>"`: a login shell per lookup, which ran the user's `.zprofile` (`brew shellenv`, `path_helper`) every time, four processes and about 24 ms of CPU, 14 times in five minutes on a working Mac (measured 2026-11-04, issues-1027/macos-perf). The login shell's PATH is already part of the normalized PATH (`login_shell_path_entries`, probed once per process), so the lookup is the same `command -v` search done in-process: the first executable `<dir>/<cli>` on that PATH, or the path itself when it names one.
+/// CDXC:AgentHooks 2026-11-21 FIX:
+/// Linux now uses the same in-process lookup too: running `bash -lc "command -v ..."` on Debian sourced `/etc/profile`, which replaces PATH and dropped nvm, npm-global, bun and pnpm folders that `normalize_gxserver_process_path` added.
+#[cfg(not(windows))]
 pub(super) fn resolve_command_path(command: &str, home_dir: &Path) -> Option<String> {
     let path_value =
         normalize_gxserver_process_path(std::env::var("PATH").ok().as_deref(), home_dir);
@@ -258,7 +259,7 @@ pub(super) fn resolve_command_path(command: &str, home_dir: &Path) -> Option<Str
 }
 
 /// `command -v <command>` for an executable, against `path_value`.
-#[cfg(target_os = "macos")]
+#[cfg(not(windows))]
 pub(super) fn resolve_command_on_path(command: &str, path_value: &str) -> Option<String> {
     let command = command.trim();
     if command.is_empty() {
@@ -279,29 +280,6 @@ pub(super) fn resolve_command_on_path(command: &str, path_value: &str) -> Option
         .collect::<Vec<_>>();
     crate::platform::live_path::find_in(command, &directories)
         .map(|path| path.to_string_lossy().into_owned())
-}
-
-#[cfg(all(not(windows), not(target_os = "macos")))]
-pub(super) fn resolve_command_path(command: &str, home_dir: &Path) -> Option<String> {
-    /*
-    CDXC:AgentHooks 2026-06-23-07:52:
-    Hook status must discover the same agent CLIs on macOS and Ubuntu before reporting cliMissing. Merge login-shell PATH entries, GUI/default tool directories, and user PATH, then run the final command-v probe in the platform shell so startup files cannot overwrite the normalized PATH and Linux does not require zsh.
-    */
-    let path_value =
-        normalize_gxserver_process_path(std::env::var("PATH").ok().as_deref(), home_dir);
-    let shell = command_shell();
-    let mut command_process = Command::new(&shell.executable);
-    command_process.args(shell.script_args(&format!("command -v {}", shell_quote(command))));
-    apply_hook_command_environment(&mut command_process, home_dir);
-    command_process.env("PATH", path_value);
-    let stdout = run_command_stdout_with_timeout(command_process, Duration::from_millis(2_000))?;
-    stdout
-        .trim()
-        .split('\n')
-        .next()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
 }
 
 /// Stdout of a one-line CLI script run the way `resolve_command_path` finds CLIs, so a probe reaches the same binary a session would launch.
@@ -346,6 +324,9 @@ pub(crate) fn normalize_gxserver_process_path(
     // `node_tool_dirs`): a Pi only the shell's startup put on PATH read as not installed, so its
     // chat never opened.
     entries.extend(ghostex_paths::tool_path::node_tool_dirs(home_dir));
+    // Volta, nodenv, Nix/NixOS and standard tool folders so a standalone gxserver (not started by
+    // the desktop app) finds the same tools as the desktop's PATH.
+    entries.extend(ghostex_paths::tool_path::fallback_tool_dirs(home_dir));
     entries.extend([
         "/opt/homebrew/bin".to_string(),
         "/opt/homebrew/sbin".to_string(),
@@ -613,7 +594,7 @@ pub(crate) fn io_error(error: std::io::Error) -> DomainStateError {
     }
 }
 
-#[cfg(all(test, target_os = "macos"))]
+#[cfg(all(test, not(windows)))]
 mod command_lookup_tests {
     use super::resolve_command_on_path;
     use std::os::unix::fs::PermissionsExt;

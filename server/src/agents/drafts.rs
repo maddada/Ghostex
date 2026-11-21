@@ -511,13 +511,6 @@ pub(crate) fn switch_draft_agent(
     let session = require_session(repository, &lifecycle)?;
 
     let switch_guard = DraftAgentSwitch::begin(&lifecycle.project_id, &lifecycle.session_id)?;
-    // A coordinator's unsent first message leaves with the old agent's input box; the watch types
-    // it into the new one once the switch is done (session_chat_first_message.rs).
-    crate::session_chat_first_message::retype_after_agent_switch(
-        db,
-        &lifecycle.project_id,
-        &lifecycle.session_id,
-    );
 
     /*
     Everything the OLD agent owns has to go before the new plan is built, or
@@ -589,7 +582,7 @@ pub(crate) fn switch_draft_agent(
     );
     // CDXC:SessionChat 2026-09-22 DECISION:
     // User: picking another agent's model in the chat picker "switches the CLI and also sets the right effort and model on the CLI that we switched to". A draft rebuilt without them started the new CLI on its own saved default, so the pick rides the rebuilt launch line the way `createAgentSession` carries `agentModel` and `agentEffort`.
-    for key in ["agentModel", "agentEffort"] {
+    for key in ["agentModel", "agentEffort", super::ALLOW_MISSING_CLI_PARAM] {
         if let Some(value) = params.get(key).filter(|value| !value.is_null()) {
             create_params.insert(key.to_string(), value.clone());
         }
@@ -683,6 +676,15 @@ pub(crate) fn switch_draft_agent(
         update.insert("title".to_string(), json!(title));
     }
     let updated = repository.update_session(&update)?;
+    // A coordinator's unsent first message leaves with the old agent's input box; the watch types
+    // it into the new one once the switch is done (session_chat_first_message.rs). Runs only after
+    // `create_agent_session_params_for_project` (including its installed-CLI check) and the row
+    // update have succeeded, so a refusal never double-types into the old agent's box.
+    crate::session_chat_first_message::retype_after_agent_switch(
+        db,
+        &lifecycle.project_id,
+        &lifecycle.session_id,
+    );
     crate::session_chat_model_selection::discard_for_agent_switch(
         db,
         &lifecycle.project_id,

@@ -127,9 +127,18 @@ pub(crate) fn create_agent_session_params_for_project(
         }
         None => None,
     };
+    let allow_missing_cli = params
+        .get(super::ALLOW_MISSING_CLI_PARAM)
+        .and_then(Value::as_bool)
+        == Some(true);
     // A local agent whose CLI isn't installed is refused before any session exists
-    // (CDXC:AgentLauncher 2026-11-21 in cli_missing.rs); a box runs its own CLIs.
-    if agentbox_provider.is_none() {
+    // (CDXC:AgentLauncher 2026-11-21 in cli_missing.rs); boxes, custom agents (`custom-...`), and
+    // explicit "Start anyway" overrides (`allowMissingCli: true`) are not refused here.
+    if agentbox_provider.is_none()
+        && !allow_missing_cli
+        && !agent_id.starts_with("custom-")
+        && super::should_check_launch_cli()
+    {
         let family =
             resume_agent_family_id(Some(agent_id.clone()), &agent_config, &launch_settings);
         if let Some(family) = family.as_deref() {

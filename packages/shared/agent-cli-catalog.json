@@ -41,7 +41,7 @@
     "miseTool": "claude",
     "installDirs": {
       "windows": ["~/.local/bin"],
-      "unix": ["~/.local/bin"]
+      "unix": ["~/.local/bin", "~/.claude/local"]
     },
     "latestVersion": {
       "url": "https://downloads.claude.ai/claude-code-releases/latest"

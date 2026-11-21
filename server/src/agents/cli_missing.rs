@@ -19,12 +19,36 @@ use std::path::Path;
 
 use serde_json::Value;
 
-use crate::agent_hooks::probing::{agent_cli_presence, CliPresence};
+#[cfg(not(windows))]
+use crate::agent_hooks::probing::login_shell_path_patient;
+use crate::agent_hooks::probing::{agent_cli_presence, refresh_cli_environment, CliPresence};
 use crate::domain::DomainStateError;
 
 /// The error code a launch refused for a missing CLI carries; clients show their Install / pick
 /// another agent notice on it.
 pub(crate) const AGENT_NOT_INSTALLED_CODE: &str = "agentNotInstalled";
+
+/// Optional create/switch param set when the user chooses "Start anyway" on the missing-CLI notice.
+pub(crate) const ALLOW_MISSING_CLI_PARAM: &str = "allowMissingCli";
+
+#[cfg(test)]
+thread_local! {
+    static TEST_CHECK_LAUNCH_CLI: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether `create_agent_session_params_for_project` enforces the host computer's CLI presence
+/// check. Under `cargo test`, existing unit tests build launch plans without Claude or Codex
+/// installed on the runner; tests exercising the check call `launch_cli_missing` directly.
+pub(crate) fn should_check_launch_cli() -> bool {
+    #[cfg(test)]
+    {
+        TEST_CHECK_LAUNCH_CLI.with(|enabled| enabled.get())
+    }
+    #[cfg(not(test))]
+    {
+        true
+    }
+}
 
 /// The CLI `command` starts with, without quotes or a Windows `.cmd`/`.exe` suffix. `None` for an
 /// environment prefix (`FOO=1 claude`) or an empty command.
@@ -43,44 +67,89 @@ fn command_program(command: &str) -> Option<&str> {
     Some(first)
 }
 
-/// Whether a launch of agent family `family` running `command` (the agent's own command when
-/// `None`) would find no CLI on this computer.
-pub(crate) fn launch_cli_missing(family: &str, command: Option<&str>, home_dir: &Path) -> bool {
-    let Some(definition) = crate::agent_cli::catalog::CATALOG
+/// The built-in CLI binary `family` running `command` would invoke, or `None` for a custom
+/// command (wrapper, alias, explicit path, env prefix) that Ghostex never refuses.
+fn builtin_launch_binary(family: &str, command: Option<&str>) -> Option<&'static str> {
+    let definition = crate::agent_cli::catalog::CATALOG
         .iter()
-        .find(|definition| definition.agent_id == family)
-    else {
-        return false;
-    };
+        .find(|definition| definition.agent_id == family)?;
     let command = command
         .map(str::trim)
         .filter(|command| !command.is_empty())
         .or_else(|| super::default_agent_command(family));
-    let Some(program) = command.and_then(command_program) else {
-        return false;
-    };
-    if program != definition.binary {
-        return false;
-    }
-    agent_cli_presence(family, &definition.binary, home_dir, false) == CliPresence::Missing
+    let program = command.and_then(command_program)?;
+    (program == definition.binary).then_some(definition.binary.as_str())
 }
 
-/// [`launch_cli_missing`] for a launcher row of `/api/readSidebarHud` (`icon`, `agentId`,
-/// `command`): its family is the built-in agent its icon names.
-pub(crate) fn launcher_row_cli_missing(row: &Value, home_dir: &Path) -> bool {
+/// Cached missing-CLI check for UI list filtering (model picker tabs, draft agent menu, Chief
+/// status). Never spawns a fresh login-shell probe on every poll.
+pub(crate) fn launch_cli_missing_cached(
+    family: &str,
+    command: Option<&str>,
+    home_dir: &Path,
+) -> bool {
+    let Some(binary) = builtin_launch_binary(family, command) else {
+        return false;
+    };
+    agent_cli_presence(family, binary, home_dir, false) == CliPresence::Missing
+}
+
+/// Whether a launch of agent family `family` running `command` (the agent's own command when
+/// `None`) would find no CLI on this computer.
+///
+/// Before refusing (or moving an unstarted Ghostex AI chat off its agent), a cached `Missing`
+/// re-checks fresh: invalidates the cached login-shell PATH, runs the patient login-shell probe
+/// (off Windows, an empty probe refuses nothing; on Windows the login-shell probe returns nothing
+/// by design so Windows re-checks the live registry + process PATH), and only returns `true` on a
+/// fresh `Missing`.
+pub(crate) fn launch_cli_missing(family: &str, command: Option<&str>, home_dir: &Path) -> bool {
+    let Some(binary) = builtin_launch_binary(family, command) else {
+        return false;
+    };
+    if agent_cli_presence(family, binary, home_dir, false) != CliPresence::Missing {
+        return false;
+    }
+    refresh_cli_environment(home_dir);
+    #[cfg(not(windows))]
+    if login_shell_path_patient(home_dir).is_empty() {
+        return false;
+    }
+    agent_cli_presence(family, binary, home_dir, true) == CliPresence::Missing
+}
+
+fn launcher_row_target<'a>(row: &'a Value) -> Option<(&'static str, Option<&'a str>)> {
     let text = |key: &str| {
         row.get(key)
             .and_then(Value::as_str)
             .map(str::trim)
             .filter(|text| !text.is_empty())
     };
-    let Some(family) = text("icon")
+    // Custom agents (`custom-...`) are never hidden or refused by the built-in CLI check.
+    if text("agentId").is_some_and(|id| id.starts_with("custom-")) {
+        return None;
+    }
+    let family = text("icon")
         .and_then(super::default_agent_icon_to_id)
-        .or_else(|| text("agentId").and_then(super::default_agent_icon_to_id))
-    else {
+        .or_else(|| text("agentId").and_then(super::default_agent_icon_to_id))?;
+    Some((family, text("command")))
+}
+
+/// Cached [`launch_cli_missing_cached`] for a launcher row of `/api/readSidebarHud` (`icon`,
+/// `agentId`, `command`): its family is the built-in agent its icon names.
+pub(crate) fn launcher_row_cli_missing(row: &Value, home_dir: &Path) -> bool {
+    let Some((family, command)) = launcher_row_target(row) else {
         return false;
     };
-    launch_cli_missing(family, text("command"), home_dir)
+    launch_cli_missing_cached(family, command, home_dir)
+}
+
+/// Fresh [`launch_cli_missing`] for a launcher row, used before acting on a missing CLI (such as
+/// moving an unstarted Ghostex AI chat off its agent).
+pub(crate) fn launcher_row_cli_missing_fresh(row: &Value, home_dir: &Path) -> bool {
+    let Some((family, command)) = launcher_row_target(row) else {
+        return false;
+    };
+    launch_cli_missing(family, command, home_dir)
 }
 
 /// The home folder agent CLIs are looked for under: the one hook status reads (an isolated

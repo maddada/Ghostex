@@ -227,7 +227,7 @@ impl GhostexGpuiApp {
             GpuiAppToastAction::OpenViewSettings => {
                 self.open_gpui_settings_extensions_page(None, cx);
             }
-            GpuiAppToastAction::OpenAgentSettings => {
+            GpuiAppToastAction::OpenAgentSettings { .. } => {
                 self.open_gpui_settings_tab("agents", None, cx);
             }
             GpuiAppToastAction::OpenUpdateDownloadPage => {

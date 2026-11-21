@@ -160,6 +160,19 @@ pub(crate) struct GpuiAppToast {
     pub(crate) epoch: u64,
 }
 
+/// What "Start anyway" on an agent-not-installed notice re-runs with `allowMissingCli: true`
+/// (`gx_store/create/agent.rs`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum RetryAgentLaunch {
+    LocalRpc {
+        project_id: String,
+        params: serde_json::Value,
+        preferred_interface: String,
+    },
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    WindowsProjectAgent { payload: String },
+}
+
 /// What a notice's button opens. The host runs it (`run_gpui_app_toast_action`) and the notice
 /// closes.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -169,8 +182,11 @@ pub(crate) enum GpuiAppToastAction {
     /// Settings > Extensions, where views are turned on.
     OpenViewSettings,
     /// Settings > Agents, where an agent that isn't installed is installed or another one picked
-    /// (gx_store/create/agent.rs `show_agent_not_installed_notice`).
-    OpenAgentSettings,
+    /// (gx_store/create/agent.rs `show_agent_not_installed_notice`). Optional `start_anyway` adds
+    /// a "Start anyway" button that retries the launch with `allowMissingCli: true`.
+    OpenAgentSettings {
+        start_anyway: Option<Box<RetryAgentLaunch>>,
+    },
     /// The release page of the update a failed AppImage update was installing (Linux).
     #[cfg_attr(not(all(target_os = "linux", not(ghostex_web))), allow(dead_code))]
     OpenUpdateDownloadPage,
@@ -228,7 +244,7 @@ impl GpuiAppToastAction {
         match self {
             Self::OpenAccounts { .. } => "Open Accounts",
             Self::OpenViewSettings => "Open Settings",
-            Self::OpenAgentSettings => "Install or pick another agent",
+            Self::OpenAgentSettings { .. } => "Install or pick another agent",
             Self::OpenUpdateDownloadPage => "Open download page",
             Self::UndoSyncedChange { .. } | Self::UndoChiefDisable => "Undo",
             Self::ResetInterfaceScale => "Set to 100%",
@@ -238,6 +254,15 @@ impl GpuiAppToastAction {
             Self::NativeProjectPathAction { label, .. }
             | Self::RunInNewTerminal { label, .. }
             | Self::AskToManage { label, .. } => label,
+        }
+    }
+
+    pub(crate) fn secondary_label(&self) -> Option<&str> {
+        match self {
+            Self::OpenAgentSettings {
+                start_anyway: Some(_),
+            } => Some("Start anyway"),
+            _ => None,
         }
     }
 }

@@ -130,7 +130,7 @@ fn move_off_missing_agent(
         .iter()
         .find(|row| row.get("agentId").and_then(Value::as_str) == Some(record.agent_id.as_str()))
         .is_some_and(|row| {
-            crate::agents::launcher_row_cli_missing(row, state.paths.agent_config_home_dir())
+            crate::agents::launcher_row_cli_missing_fresh(row, state.paths.agent_config_home_dir())
         });
     if !on_missing_agent {
         return Ok(record);
