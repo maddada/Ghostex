@@ -726,7 +726,7 @@ pub(super) fn tile_frame(t: &RemoteTokens) -> gpui::Div {
 }
 
 /// The 32px icon tile of a machine tile.
-fn tile_icon(t: &RemoteTokens, path: &'static str) -> AnyElement {
+pub(super) fn tile_icon(t: &RemoteTokens, path: &'static str) -> AnyElement {
     tile_frame(t)
         .child(settings_icon(
             path,

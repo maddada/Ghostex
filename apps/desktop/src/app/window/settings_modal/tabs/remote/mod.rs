@@ -1317,8 +1317,12 @@ impl RemoteTab {
                 _ => fold.title().into(),
             };
             // This computer's row leads with its icon, as a saved computer's tile does.
-            let leading = matches!(fold, RemoteFold::ThisComputer)
-                .then(|| current_machine::this_computer_icon_tile(self, t, cx));
+            // Tailscale and Advanced lead with the same 32px tile, so the three rows' text lines up.
+            let leading = Some(match fold {
+                RemoteFold::ThisComputer => current_machine::this_computer_icon_tile(self, t, cx),
+                RemoteFold::Tailscale => machines::tile_icon(t, style::ICON_TAILSCALE),
+                RemoteFold::Advanced => machines::tile_icon(t, style::ICON_ADJUSTMENTS),
+            });
             let header = style::fold_row(
                 t,
                 fold.anchor(),

@@ -36,6 +36,8 @@ pub(super) const ICON_LOADER: &str = "modals/settings/loader-2.svg";
 pub(super) const ICON_POWER: &str = "modals/settings/power.svg";
 pub(super) const ICON_QRCODE: &str = "modals/settings/qrcode.svg";
 pub(super) const ICON_REFRESH: &str = "modals/settings/refresh.svg";
+pub(super) const ICON_ADJUSTMENTS: &str = "modals/settings/adjustments-horizontal.svg";
+pub(super) const ICON_TAILSCALE: &str = "modals/settings/tailscale.svg";
 pub(super) const ICON_SHIELD: &str = "modals/settings/shield.svg";
 
 /// The `--app-*` tokens of the Remote rules, resolved for the Settings palette.
