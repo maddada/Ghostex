@@ -139,6 +139,34 @@ fn antigravitys_input_box_is_not_taken_for_its_sign_in_menu() {
     );
 }
 
+/// A signed-in user's draft that spells the menu's words sits inside the input box itself, so no
+/// ready box is drawn below the matched row; the box around that row still proves it is a draft.
+#[test]
+fn a_draft_in_the_input_box_that_spells_the_menu_is_not_a_sign_in() {
+    let draft = "Can you explain Select login method: Google OAuth?";
+    let agy = agy_input_box("").replace("\n> \n", &format!("\n> {draft}\n"));
+    let rule = "─".repeat(55);
+    let claude = format!("{rule}\n❯ {draft}\n{rule}\n  Sonnet 5.5 | medium | $0.00");
+    for (agent, screen) in [("antigravity", agy), ("claude", claude)] {
+        assert_eq!(
+            crate::session_chat_composer::detect_session_chat_composer_ready(Some(agent), &screen)
+                .state,
+            SessionChatComposerState::Ready,
+            "{agent}: the fixture draws a ready input box"
+        );
+        assert!(
+            classify_session_chat_terminal_notice(Some(agent), &screen)
+                .is_none_or(|notice| notice.kind != SESSION_CHAT_NOTICE_LOGIN_EXPIRED),
+            "{agent}"
+        );
+        assert_eq!(
+            guarded_write_refusal(Some(agent), &InputGuard::InputBox, Some(&screen)),
+            Ok(()),
+            "{agent}"
+        );
+    }
+}
+
 #[test]
 fn antigravitys_folder_trust_prompt_stays_the_trust_card() {
     let notice =
