@@ -609,12 +609,43 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
     dock_with(state, context, &turns_for_work(state))
 }
 
+/// The dock's overflow line for the rows past its limit, described by what they are: "3 more
+/// done", "1 more needs you", "2 more need you \u{b7} 1 more done".
+///
+/// CDXC:Coordinators 2026-11-21 DECISION:
+/// User, of a dock showing four Done rows then "3 more need you" that opened to three more Done
+/// rows: "says 3 more needs me but they're all done not needs you wtf?". The line counts each kind
+/// among the hidden rows and never says "need you" of a row that does not (`needs` is false for
+/// finished work). The phone's copy is `dockMoreLabel` in WorkCards.tsx.
+pub fn dock_more_label(hidden_rows: &[Value]) -> String {
+    let needs = hidden_rows.iter().filter(|row| row["needs"] == true).count();
+    let blocked = hidden_rows
+        .iter()
+        .filter(|row| row["needs"] != true && text(row, "kind") == "blocked")
+        .count();
+    let done = hidden_rows.len() - needs - blocked;
+    let mut parts: Vec<String> = Vec::new();
+    if needs > 0 {
+        parts.push(format!(
+            "{needs} more {}",
+            if needs == 1 { "needs you" } else { "need you" }
+        ));
+    }
+    if blocked > 0 {
+        parts.push(format!("{blocked} more blocked"));
+    }
+    if done > 0 {
+        parts.push(format!("{done} more done"));
+    }
+    parts.join(" \u{b7} ")
+}
+
 /// [`dock`], over turns the caller already read (`turns_for_work`).
 pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Value {
     let now_ms = context.now_millis();
     // (sinks, at, row): a row that needs him is newest first, but one older than a day sinks below
     // the newer ones, so long-lived tasks do not squat in the first rows (they stay reachable under
-    // "N more need you" and in the Work panel).
+    // the "N more" line and in the Work panel).
     let mut needs: Vec<(bool, i64, Value)> = question_rows(state, context, now_ms)
         .into_iter()
         .map(|(at, row)| (now_ms - at > DAY_MS, at, row))
@@ -863,7 +894,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
     } else {
         Value::Null
     };
-    // At most four rows show (three on the phone); the rest are "N more need you", which opens the
+    // At most four rows show (three on the phone); the rest are the "N more" line (`dock_more_label`), which opens the
     // Work panel at Needs you. The counts are the Work pill's (`coordinator_board::pill`).
     json!({
         "rows": rows,
