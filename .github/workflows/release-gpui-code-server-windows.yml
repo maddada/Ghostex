@@ -172,11 +172,18 @@ jobs:
             --version '${{ steps.code_server_identity.outputs.component_version }}' \
             --platform "windows-native-${{ inputs.arch }}"
       # The toolchain step also restores the pinned VS Code sources, so it runs
-      # before setup-node: the npm cache key below hashes both lock files.
+      # before setup-node: the pnpm cache key below hashes the VS Code lock files.
       - name: Prepare native editor build tools
         if: ${{ steps.probe.outputs.action == 'build' }}
         shell: pwsh
         run: tooling/release-gpui/prepare-windows-editor-tools.ps1 -Arch '${{ inputs.arch }}'
+      # code-server 4.146.0 and VS Code 1.146.0 build with pnpm only (packageManager in
+      # .dependencies/code-server/package.json; the Ghostex root names bun). pnpm comes
+      # first so setup-node can cache its store.
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        if: ${{ steps.probe.outputs.action == 'build' }}
+        with:
+          package_json_file: .dependencies/code-server/package.json
       # The editor build needs native Windows Node at the version pinned by
       # code-server, for the requested architecture; the script refuses any
       # other Node.
@@ -186,10 +193,13 @@ jobs:
         with:
           node-version-file: .dependencies/code-server/.node-version
           architecture: ${{ inputs.arch }}
-          cache: npm
+          cache: pnpm
           cache-dependency-path: |
-            .dependencies/code-server/package-lock.json
-            .dependencies/code-server/lib/vscode/package-lock.json
+            .dependencies/code-server/pnpm-lock.yaml
+            .dependencies/code-server/lib/vscode/pnpm-lock.yaml
+            .dependencies/code-server/lib/vscode/build/pnpm-lock.yaml
+            .dependencies/code-server/lib/vscode/remote/pnpm-lock.yaml
+            .dependencies/code-server/lib/vscode/extensions/pnpm-lock.yaml
       - name: Build and package the native Windows editor component
         if: ${{ steps.probe.outputs.action == 'build' }}
         shell: pwsh

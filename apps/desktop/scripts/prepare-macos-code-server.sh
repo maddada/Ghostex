@@ -257,29 +257,79 @@ code_server_vscode_ripgrep_bin() {
 code_server_vscode_payload_digest() {
 	local vscode_target="$1"
 	local node_identity="$2"
-	local npm_version="$3"
+	local pnpm_version="$3"
 	local package_version="$4"
 	local commit="$5"
+	local vscode_pnpm_install_inputs
+	set_vscode_pnpm_install_inputs
 	fingerprint_inputs \
-		--value "code-server-vscode-payload-v1" \
+		--value "code-server-vscode-payload-v2" \
 		--value "arch=$GHOSTEX_MACOS_ARCH" \
 		--value "target=$vscode_target" \
 		--value "node=$node_identity" \
-		--value "npm=$npm_version" \
+		--value "pnpm=$pnpm_version" \
 		--value "version=$package_version" \
 		--value "commit=$commit" \
 		--path "$CODE_SERVER_ROOT/ci/build/build-vscode.sh" \
 		--path "$CODE_SERVER_ROOT/patches" \
 		--path "$CODE_SERVER_ROOT/package.json" \
-		--path "$CODE_SERVER_ROOT/package-lock.json" \
+		--path "$CODE_SERVER_ROOT/pnpm-lock.yaml" \
+		--path "$CODE_SERVER_ROOT/pnpm-workspace.yaml" \
 		--path "$CODE_SERVER_ROOT/.node-version" \
 		--path "$CODE_SERVER_ROOT/lib/vscode/package.json" \
-		--path "$CODE_SERVER_ROOT/lib/vscode/package-lock.json" \
 		--path "$CODE_SERVER_ROOT/lib/vscode/product.json" \
 		--path "$CODE_SERVER_ROOT/lib/vscode/build/gulpfile.reh.ts" \
 		--path "$CODE_SERVER_ROOT/lib/vscode/build/lib/copilot.ts" \
 		--path "$CODE_SERVER_ROOT/lib/vscode/remote/package.json" \
-		--path "$CODE_SERVER_ROOT/lib/vscode/remote/package-lock.json"
+		"${vscode_pnpm_install_inputs[@]}"
+}
+
+# Sets vscode_pnpm_install_inputs to fingerprint_inputs arguments for every pnpm install root of VS Code 1.146 (the root install runs build/, remote/ and extensions/ from its postinstall).
+set_vscode_pnpm_install_inputs() {
+	local install_root
+	vscode_pnpm_install_inputs=()
+	for install_root in "" build/ remote/ extensions/; do
+		vscode_pnpm_install_inputs+=(
+			--path "$CODE_SERVER_ROOT/lib/vscode/${install_root}pnpm-lock.yaml"
+			--path "$CODE_SERVER_ROOT/lib/vscode/${install_root}pnpm-workspace.yaml"
+		)
+	done
+}
+
+# CDXC:CodeEditor 2026-11-21 WHY: VS Code 1.146 dropped build/npm/installStateHash.ts with its move to pnpm, so whether lib/vscode's dependencies match the checkout is a build-cache stamp over every install root's lockfile and workspace settings, the Node identity and the pnpm version. A changed stamp, or a missing compiled native module, reinstalls from the lockfiles.
+code_server_vscode_deps_digest() {
+	local node_identity="$1"
+	local pnpm_version="$2"
+	local vscode_pnpm_install_inputs
+	set_vscode_pnpm_install_inputs
+	fingerprint_inputs \
+		--value "code-server-vscode-deps-v1" \
+		--value "node=$node_identity" \
+		--value "pnpm=$pnpm_version" \
+		--path "$CODE_SERVER_ROOT/lib/vscode/package.json" \
+		--path "$CODE_SERVER_ROOT/lib/vscode/.pnpmfile.mjs" \
+		"${vscode_pnpm_install_inputs[@]}"
+}
+
+# CDXC:CodeEditor 2026-11-21 WHY: a checkout built before code-server 4.146.0 has npm's node_modules trees. pnpm's hoisted install writes its own layout over them but leaves npm's nested copies in place, and the Copilot extension build then bundled a stale nested @opentelemetry/resources and failed. npm writes a hidden .package-lock.json into every node_modules it manages and pnpm never does, so those trees are removed before installing. Prints them, without descending into node_modules or the build outputs beside lib/vscode.
+code_server_npm_node_modules() {
+	local search_root="$1"
+	find "$search_root" \( -path "$CODE_SERVER_ROOT/lib/vscode-*" -o -path "$CODE_SERVER_ROOT/release*" \) -prune -o \
+		-type d -name node_modules -prune -exec test -f '{}/.package-lock.json' \; -print 2>/dev/null
+}
+
+remove_code_server_npm_node_modules() {
+	local search_root="$1"
+	local npm_tree
+	while IFS= read -r npm_tree; do
+		[[ -n "$npm_tree" ]] || continue
+		echo "Removing npm-installed $npm_tree before the pnpm install"
+		rm -rf "$npm_tree"
+	done < <(code_server_npm_node_modules "$search_root")
+}
+
+code_server_pnpm_version() {
+	(cd "$CODE_SERVER_ROOT" && env PATH="$CODE_SERVER_NODE_DIR:$PATH" "$CODE_SERVER_PNPM_BIN" --version 2>/dev/null) || true
 }
 
 # CDXC:CodeServerCleanTree 2026-11-05 WHY:
@@ -303,12 +353,14 @@ code_server_node_payload_digest() {
 		--path "$CODE_SERVER_ROOT/src/node" \
 		--path "$CODE_SERVER_ROOT/typings" \
 		--path "$CODE_SERVER_ROOT/package.json" \
-		--path "$CODE_SERVER_ROOT/package-lock.json" \
+		--path "$CODE_SERVER_ROOT/pnpm-lock.yaml" \
+		--path "$CODE_SERVER_ROOT/pnpm-workspace.yaml" \
 		--path "$CODE_SERVER_ROOT/.node-version" \
 		--path "$CODE_SERVER_ROOT/tsconfig.json"
 }
 
-# CDXC:CodeEditor 2026-09-27 WHY: VS Code's remote (server) dependencies include native modules (@vscode/spdlog, @vscode/native-watchdog, @parcel/watcher, @vscode/fs-copyfile) that only exist after their npm install scripts compile them. A user-level `ignore-scripts=true` in ~/.npmrc wins over VS Code's `remote/.npmrc`, which does not set it, so local builds shipped without them: the editor's file watcher crashed and extension-host logging was off. The VS Code install turns scripts on for itself, and this compiled module is the proof an install (or a staged payload) is complete.
+# CDXC:CodeEditor 2026-09-27 WHY: VS Code's remote (server) dependencies include native modules (@vscode/spdlog, @vscode/native-watchdog, @parcel/watcher, @vscode/fs-copyfile) that only exist after their install scripts compile them. A user-level `ignore-scripts=true` in ~/.npmrc once won over VS Code's `remote/.npmrc`, so local builds shipped without them: the editor's file watcher crashed and extension-host logging was off. The VS Code install turns scripts on for itself, and this compiled module is the proof an install (or a staged payload) is complete.
+# CDXC:CodeEditor 2026-11-21: with pnpm (VS Code 1.146) only the packages in each workspace's allowBuilds run build scripts, and pnpm reads ignore-scripts from pnpm_config_* and its own config, not ~/.npmrc; the install still sets pnpm_config_ignore_scripts=false so no user setting can skip them.
 code_server_native_module_marker() {
 	printf '%s\n' "node_modules/@vscode/spdlog/build/Release/spdlog.node"
 }
@@ -316,21 +368,38 @@ code_server_native_module_marker() {
 ensure_code_server_payload() {
 	local vscode_target="$1"
 	local vscode_release_root="$CODE_SERVER_ROOT/lib/vscode-reh-web-$vscode_target"
-	local vscode_ripgrep_bin payload_digest payload_cache_key node_identity npm_version package_version commit node_payload_digest
+	local vscode_ripgrep_bin payload_digest payload_cache_key node_identity pnpm_version package_version commit node_payload_digest vscode_deps_digest code_server_deps_digest
 	if [[ ! -f "$CODE_SERVER_ROOT/package.json" ]]; then
 		echo "code-server source is missing: $CODE_SERVER_ROOT" >&2
 		echo "Initialize the code-server submodule before building Ghostex." >&2
 		exit 1
 	fi
-	if [[ ! -d "$CODE_SERVER_ROOT/node_modules" ]]; then
-		echo "code-server node_modules are missing. Run: npm --prefix \"$CODE_SERVER_ROOT\" install" >&2
-		exit 1
+	node_identity="$("$CODE_SERVER_NODE_BIN" -p 'process.version + ":" + process.versions.modules')"
+	pnpm_version="$(code_server_pnpm_version)"
+	# CDXC:CodeEditor 2026-11-21 WHY: code-server's own dependencies used to be a one-time manual `npm install`, and only their presence was checked, so a checkout carried across the 4.146.0 move to pnpm would build and stage npm's node_modules from the old lockfile. Like VS Code's, they now follow a stamp over the lockfile, the Node identity and the pnpm version. SKIP_SUBMODULE_DEPS keeps code-server's postinstall away from lib/vscode, which is installed below with its own stamp.
+	code_server_deps_digest="$(fingerprint_inputs \
+		--value "code-server-deps-v1" \
+		--value "node=$node_identity" \
+		--value "pnpm=$pnpm_version" \
+		--path "$CODE_SERVER_ROOT/package.json" \
+		--path "$CODE_SERVER_ROOT/pnpm-lock.yaml" \
+		--path "$CODE_SERVER_ROOT/pnpm-workspace.yaml")"
+	if ! cache_matches "code-server-deps" "$code_server_deps_digest" "$CODE_SERVER_ROOT/node_modules/.modules.yaml" ||
+		[[ -f "$CODE_SERVER_ROOT/node_modules/.package-lock.json" ]]; then
+		echo "Installing code-server dependencies from the current lockfile..."
+		(
+			cd "$CODE_SERVER_ROOT"
+			remove_code_server_npm_node_modules "$CODE_SERVER_ROOT/node_modules"
+			remove_code_server_npm_node_modules "$CODE_SERVER_ROOT/test"
+			env PATH="$CODE_SERVER_NODE_DIR:$PATH" SKIP_SUBMODULE_DEPS=1 pnpm_config_frozen_lockfile=true pnpm_config_confirm_modules_purge=false "$CODE_SERVER_PNPM_BIN" install --frozen-lockfile
+		)
+		write_cache_stamp "code-server-deps" "$code_server_deps_digest"
 	fi
 	node_payload_digest="$(code_server_node_payload_digest)"
 	if ! cache_matches "code-server-node-payload" "$node_payload_digest" "$CODE_SERVER_ROOT/out/node/entry.js"; then
 		(
 			cd "$CODE_SERVER_ROOT"
-			env PATH="$CODE_SERVER_NODE_DIR:$PATH" "$CODE_SERVER_NPM_BIN" run build
+			env PATH="$CODE_SERVER_NODE_DIR:$PATH" "$CODE_SERVER_PNPM_BIN" run build
 		)
 		write_cache_stamp "code-server-node-payload" "$node_payload_digest"
 	fi
@@ -339,11 +408,10 @@ ensure_code_server_payload() {
 		exit 1
 	fi
 	vscode_ripgrep_bin="$(code_server_vscode_ripgrep_bin "$vscode_release_root")"
-	node_identity="$("$CODE_SERVER_NODE_BIN" -p 'process.version + ":" + process.versions.modules')"
-	npm_version="$("$CODE_SERVER_NPM_BIN" --version 2>/dev/null || true)"
 	package_version="$(code_server_release_version)"
 	commit="$(git -C "$CODE_SERVER_ROOT" rev-parse HEAD 2>/dev/null || printf 'development')"
-	payload_digest="$(code_server_vscode_payload_digest "$vscode_target" "$node_identity" "$npm_version" "$package_version" "$commit")"
+	payload_digest="$(code_server_vscode_payload_digest "$vscode_target" "$node_identity" "$pnpm_version" "$package_version" "$commit")"
+	vscode_deps_digest="$(code_server_vscode_deps_digest "$node_identity" "$pnpm_version")"
 	payload_cache_key="code-server-vscode-payload-$GHOSTEX_MACOS_ARCH"
 	# CDXC:CodeEditor 2026-06-09-17:06: Embedded VS Code search depends on @vscode/ripgrep/bin/rg. Rebuild the generated REH web payload when code-server packaging inputs change, server-main.js is missing, or ripgrep is missing/wrong-arch so `cargo xtask start` and release builds cannot reuse a stale payload that opens but fails search.
 	if ! cache_matches "$payload_cache_key" "$payload_digest" "$vscode_release_root/out/server-main.js" "$vscode_ripgrep_bin" "$vscode_release_root/$(code_server_native_module_marker)" ||
@@ -352,11 +420,14 @@ ensure_code_server_payload() {
 			cd "$CODE_SERVER_ROOT/lib/vscode"
 			# CDXC:CodeEditor 2026-09-14 WHY:
 			# A submodule update can leave node_modules from the previous VS Code revision, failing gulp on newly required packages.
-			# VS Code's install state covers its root, build, remote, and extension dependencies as well as the Node version.
-			if ! "$CODE_SERVER_NODE_BIN" --input-type=module -e 'import { isUpToDate } from "./build/npm/installStateHash.ts"; process.exit(isUpToDate() ? 0 : 1)' ||
-				[[ ! -f "remote/$(code_server_native_module_marker)" ]]; then
+			# The deps stamp covers VS Code's root, build, remote, and extension install roots as well as the Node and pnpm versions.
+			if ! cache_matches "code-server-vscode-deps" "$vscode_deps_digest" "remote/$(code_server_native_module_marker)" ||
+				[[ -n "$(code_server_npm_node_modules "$CODE_SERVER_ROOT/lib/vscode")" ]]; then
 				echo "Installing VS Code dependencies from the current lockfiles..."
-				env PATH="$CODE_SERVER_NODE_DIR:$PATH" npm_config_ignore_scripts=false "$CODE_SERVER_NPM_BIN" ci --no-audit --no-fund
+				remove_code_server_npm_node_modules "$CODE_SERVER_ROOT/lib/vscode"
+				# confirm_modules_purge=false: a checkout from before VS Code 1.146 has npm's node_modules, which pnpm would otherwise refuse to replace without a TTY.
+				env PATH="$CODE_SERVER_NODE_DIR:$PATH" pnpm_config_ignore_scripts=false pnpm_config_frozen_lockfile=true pnpm_config_confirm_modules_purge=false "$CODE_SERVER_PNPM_BIN" install --frozen-lockfile
+				write_cache_stamp "code-server-vscode-deps" "$vscode_deps_digest"
 			fi
 		)
 		(
@@ -367,7 +438,7 @@ ensure_code_server_payload() {
 				ARCH="$(code_server_ci_arch)" \
 				VSCODE_TARGET="$vscode_target" \
 				VERSION="$(code_server_release_version)" \
-				"$CODE_SERVER_NPM_BIN" run build:vscode || build_status=$?
+				"$CODE_SERVER_PNPM_BIN" run build:vscode || build_status=$?
 			restore_copilot_package_json
 			exit "${build_status:-0}"
 		)
@@ -389,21 +460,21 @@ ensure_code_server_payload() {
 
 package_code_server_if_needed() {
 	local target_dir="$WEB_DIR/code-server"
-	local vscode_target package_digest node_identity npm_version vscode_release_root commit package_version expected_node_pty_prebuild
+	local vscode_target package_digest node_identity pnpm_version vscode_release_root commit package_version expected_node_pty_prebuild
 	vscode_target="$(code_server_vscode_target)"
 	ensure_code_server_payload "$vscode_target"
 	vscode_release_root="$CODE_SERVER_ROOT/lib/vscode-reh-web-$vscode_target"
 	expected_node_pty_prebuild="$target_dir/lib/vscode/node_modules/node-pty/prebuilds/$(node_pty_prebuild_platform_dir)/pty.node"
 	node_identity="$("$CODE_SERVER_NODE_BIN" -p 'process.version + ":" + process.versions.modules')"
-	npm_version="$("$CODE_SERVER_NPM_BIN" --version 2>/dev/null || true)"
+	pnpm_version="$(code_server_pnpm_version)"
 	package_version="$(code_server_release_version)"
 	commit="$(git -C "$CODE_SERVER_ROOT" rev-parse HEAD 2>/dev/null || printf 'development')"
 	package_digest="$(fingerprint_inputs \
-		--value "code-server-package-v3" \
+		--value "code-server-package-v4" \
 		--value "arch=$GHOSTEX_MACOS_ARCH" \
 		--value "target=$vscode_target" \
 		--value "node=$node_identity" \
-		--value "npm=$npm_version" \
+		--value "pnpm=$pnpm_version" \
 		--value "commit=$commit" \
 		--value "entry=$(path_identity "$CODE_SERVER_ROOT/out/node/entry.js")" \
 		--value "vscode=$(path_identity "$vscode_release_root/out/server-main.js")" \
@@ -411,7 +482,8 @@ package_code_server_if_needed() {
 		--path "$CODE_SERVER_ROOT/ci/build/build-vscode.sh" \
 		--path "$CODE_SERVER_ROOT/patches" \
 		--path "$CODE_SERVER_ROOT/package.json" \
-		--path "$CODE_SERVER_ROOT/package-lock.json" \
+		--path "$CODE_SERVER_ROOT/pnpm-lock.yaml" \
+		--path "$CODE_SERVER_ROOT/pnpm-workspace.yaml" \
 		--path "$CODE_SERVER_ROOT/.node-version" \
 		--path "$CODE_SERVER_ROOT/src/browser")"
 	# CDXC:CodeEditor 2026-06-08-12:17: The app bundle must contain a self-contained code-server runtime at Web/code-server and the single shared Node executable at Web/code-server/lib/node. Missing code-server resources are build failures instead of installed-user Node prompts.
@@ -439,8 +511,9 @@ package_code_server_if_needed() {
 			cp "$CODE_SERVER_ROOT/src/browser/$browser_asset" "$target_dir/src/browser/$browser_asset"
 		fi
 	done
-	"$CODE_SERVER_NODE_BIN" -e "const fs=require('fs'); const src=JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); delete src.scripts; delete src.jest; delete src.devDependencies; src.version=process.argv[3]; src.commit=process.argv[4]; fs.writeFileSync(process.argv[2], JSON.stringify(src, null, 2) + '\n');" "$CODE_SERVER_ROOT/package.json" "$target_dir/package.json" "$package_version" "$commit"
-	cp "$CODE_SERVER_ROOT/package-lock.json" "$target_dir/package-lock.json"
+	cp "$CODE_SERVER_ROOT/package.json" "$target_dir/package.json"
+	cp "$CODE_SERVER_ROOT/pnpm-lock.yaml" "$target_dir/pnpm-lock.yaml"
+	cp "$CODE_SERVER_ROOT/pnpm-workspace.yaml" "$target_dir/pnpm-workspace.yaml"
 	if [[ -f "$CODE_SERVER_ROOT/.node-version" ]]; then
 		cp "$CODE_SERVER_ROOT/.node-version" "$target_dir/.node-version"
 	fi
@@ -456,10 +529,12 @@ package_code_server_if_needed() {
 		--exclude '.cache/' \
 		--exclude '.bin/' \
 		"$CODE_SERVER_ROOT/node_modules/" "$target_dir/node_modules/"
+	# CDXC:CodeEditor 2026-11-21 WHY: code-server's own release recipe (ci/build/build-release.sh, 4.146.0) prunes with pnpm against the unmodified package.json and lockfile and strips package.json only afterwards: pnpm misbehaves when devDependencies are already gone. --ignore-scripts keeps the already-built native modules (argon2's prebuilds) as they are.
 	(
 		cd "$target_dir"
-		env PATH="$CODE_SERVER_NODE_DIR:$PATH" "$CODE_SERVER_NPM_BIN" prune --omit=dev --ignore-scripts --no-audit --no-fund
+		env PATH="$CODE_SERVER_NODE_DIR:$PATH" "$CODE_SERVER_PNPM_BIN" prune --prod --ignore-scripts
 	)
+	"$CODE_SERVER_NODE_BIN" -e "const fs=require('fs'); const src=JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); delete src.scripts; delete src.jest; delete src.devDependencies; src.version=process.argv[2]; src.commit=process.argv[3]; fs.writeFileSync(process.argv[1], JSON.stringify(src, null, 2) + '\n');" "$target_dir/package.json" "$package_version" "$commit"
 	mkdir -p "$target_dir/lib"
 	rsync -a --delete --exclude '/node' "$vscode_release_root/" "$target_dir/lib/vscode/"
 	normalize_node_pty_prebuilds "$target_dir"

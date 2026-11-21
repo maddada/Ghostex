@@ -153,12 +153,25 @@ jobs:
       - name: Install build tools
         if: ${{ steps.probe.outputs.action == 'build' }}
         run: tooling/release-gpui/retry.sh 3 5 -- brew install rsync
+      # code-server 4.146.0 and VS Code 1.146.0 build with pnpm only (packageManager in
+      # .dependencies/code-server/package.json; the Ghostex root names bun). pnpm comes first so
+      # setup-node can cache its store. prepare-macos-runtime.sh runs its own pnpm through the
+      # bundled Node's corepack, pinned to the same packageManager version.
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        if: ${{ steps.probe.outputs.action == 'build' }}
+        with:
+          package_json_file: .dependencies/code-server/package.json
       - uses: actions/setup-node@v7
         if: ${{ steps.probe.outputs.action == 'build' }}
         with:
           node-version-file: .dependencies/code-server/.node-version
-          cache: npm
-          cache-dependency-path: .dependencies/code-server/package-lock.json
+          cache: pnpm
+          cache-dependency-path: |
+            .dependencies/code-server/pnpm-lock.yaml
+            .dependencies/code-server/lib/vscode/pnpm-lock.yaml
+            .dependencies/code-server/lib/vscode/build/pnpm-lock.yaml
+            .dependencies/code-server/lib/vscode/remote/pnpm-lock.yaml
+            .dependencies/code-server/lib/vscode/extensions/pnpm-lock.yaml
       - name: Seed pinned VS Code ripgrep cache
         if: ${{ steps.probe.outputs.action == 'build' }}
         env:
@@ -179,7 +192,9 @@ jobs:
         if: ${{ steps.probe.outputs.action == 'build' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: tooling/release-gpui/retry.sh 3 5 -- npm --prefix .dependencies/code-server ci
+        # Only code-server's own dependencies: prepare-macos-runtime.sh installs VS Code's from its
+        # lockfiles with the bundled Node it builds with.
+        run: SKIP_SUBMODULE_DEPS=1 tooling/release-gpui/retry.sh 3 5 -- pnpm --dir .dependencies/code-server install --frozen-lockfile
       - name: Build and package the macOS code-server component
         if: ${{ steps.probe.outputs.action == 'build' }}
         env:

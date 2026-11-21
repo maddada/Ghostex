@@ -12,7 +12,8 @@ export const CODE_SERVER_NODE_PAYLOAD_INPUTS = [
   'src/node',
   'typings',
   'package.json',
-  'package-lock.json',
+  'pnpm-lock.yaml',
+  'pnpm-workspace.yaml',
   '.node-version',
   'tsconfig.json',
 ];
