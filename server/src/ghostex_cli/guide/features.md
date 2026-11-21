@@ -6148,6 +6148,15 @@ agents, a connection from either side is enough.
   attached to an iPhone or iPad, Cmd+V pastes too. Pasting several lines into
   a program that hasn't turned on safe paste first asks "Paste potentially
   unsafe text?", as the desktop does.
+  On iPhone and iPad, touching the terminal never brings up the keyboard: not
+  a scroll, a tap, a press or the tap that makes a pane active. Tap the keyboard
+  button in the bar below the terminal (or the bar's empty space), the Command
+  pad's keyboard button, or the round keyboard button where there is no bar or
+  pad; with **Hide keyboard on startup** off, the keyboard also comes up once
+  when a terminal opens. With a hardware keyboard attached, tapping the terminal
+  lets you type into it. On Android, **Settings > Advanced > Soft keyboard**
+  decides whether a tap on the terminal brings up the keyboard. Older versions
+  of the iPhone app still bring it up on a tap.
   To browse a project's files on the phone, long-press the project and choose
   **Files**, or choose Files from a session's ⋯ menu. It is a read-only browser of
   the whole project: tap folders to open them, search by name across the project,
@@ -6179,13 +6188,16 @@ agents, a connection from either side is enough.
   the pad; let go to snap it to
   the nearer side edge at that height. The phone remembers its place, separately
   for laptop mode. The buttons around the keys open **Keys**, **Agent hotkeys**,
-  the **Text editor**, or show and hide the keyboard. Keys and Agent hotkeys take
+  the **Text editor**, or show and hide the keyboard. While the pad is open,
+  only its keyboard button shows and hides the keyboard: touching the terminal
+  or the bar below it leaves the keyboard as it is. Keys and Agent hotkeys take
   the keyboard's place; tap their button again to go back. Agent hotkeys is
   dimmed when the session's agent has none; a tap on it then shows "This
   session's agent has no agent hotkeys" beside the pad button for a few seconds
   and opens nothing. If the pad and
   keyboard cannot fit together, opening the pad lowers the keyboard and closing
-  it brings the keyboard back; bringing the keyboard up closes the pad instead.
+  it brings the keyboard back; bringing the keyboard up with the pad's keyboard
+  button or the Text editor closes the pad instead.
   A layer that leaves no room for the pad has a **Close** button to return to it.
   In **Settings > Keyboard**, Command pad turns the pad button on or off,
   **Pad keys** changes the nine keys, **Extra keys layout** changes the Keys
@@ -6234,6 +6246,8 @@ agents, a connection from either side is enough.
   that menu opens New pane there: a pick replaces its session, and closing it
   keeps the session. Tap a pane to make it active, drag its title onto the other pane
   to swap them, or drag the divider with the keyboard down to resize them.
+  Tapping the other pane while the keyboard is up lowers the keyboard; with the
+  Command pad open the keyboard stays as it was.
   Upright they stack; across and in laptop mode they stand side by side, with
   layouts remembered for each arrangement. A session can show Chat in its pane,
   but only one pane shows Chat at a time; a chat in a pane has a compact chat
