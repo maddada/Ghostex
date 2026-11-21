@@ -211,7 +211,7 @@ impl GhostexGpuiApp {
             .flex_shrink_0()
             .items_center()
             .pb(px(8.0))
-            .bg(sidebar_chrome_fill(appearance.glass, 180.0))
+            .bg(sidebar_rail_fill(appearance.glass))
             // Which half has the pointer, for the hidden sidebar's reveal
             // (`sidebar_rail_reveal_hover`); a press starts its wait again.
             .on_mouse_move(
@@ -255,6 +255,20 @@ impl GhostexGpuiApp {
             // the rail's top slot. Supersedes the start "below the traffic lights / top bar row"
             // above; hidden or floating, there is still no line.
             .relative()
+            // Above the rail the body row's top gutter shows the sidebar's tint (the work area
+            // frame's glass ring); the sidebar's colour at the rail's extra cover laid over it
+            // makes the same tint as the rail's, so the rail's column runs to the window's top.
+            .when(appearance.glass && RAIL_DIVIDER_TOP < 0.0, |rail| {
+                rail.child(
+                    div()
+                        .absolute()
+                        .top(px(RAIL_DIVIDER_TOP))
+                        .left_0()
+                        .right_0()
+                        .h(px(-RAIL_DIVIDER_TOP))
+                        .bg(rail_glass_gutter_tint(sidebar_glass_tint())),
+                )
+            })
             .when(!self.sidebar_collapsed, |rail| {
                 rail.child(
                     div()

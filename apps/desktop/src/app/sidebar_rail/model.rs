@@ -34,6 +34,40 @@ pub(crate) const RAIL_INTRO_MODAL_INITIAL_HEIGHT: f32 = 0.0;
 pub(crate) const RAIL_GAP: f32 = 8.0;
 pub(crate) const RAIL_BUTTON_RADIUS: f32 = 9.0;
 
+/// How much of what the sidebar's tint lets through the rail's tint covers as well, under glass.
+const RAIL_GLASS_EXTRA_COVER: f32 = 0.5;
+
+/// The rail's tint under glass: the sidebar's colour (`sidebar_glass_tint`, which already follows
+/// Sidebar tint, the art themes and Live) covering half of what the sidebar lets through, so 88%
+/// becomes 94%, 93% becomes 96.5% and 70% becomes 85%.
+pub(crate) fn rail_glass_tint(sidebar: Hsla) -> Hsla {
+    Hsla {
+        a: sidebar.a + (1.0 - sidebar.a) * RAIL_GLASS_EXTRA_COVER,
+        ..sidebar
+    }
+}
+
+/// What to lay over the sidebar's tint for the rail's: its colour at the extra cover. Over a tint of
+/// alpha `a` it makes `a + (1 - a) * cover`, which is `rail_glass_tint`.
+pub(crate) fn rail_glass_gutter_tint(sidebar: Hsla) -> Hsla {
+    Hsla {
+        a: RAIL_GLASS_EXTRA_COVER,
+        ..sidebar
+    }
+}
+
+/// The rail's fill: a little more solid than the sidebar's under glass, the sidebar's own with it off.
+///
+/// CDXC:Sidebar 2026-11-21 DECISION:
+/// User: the rail "is not taking the same bg config as the sidebar itself". It was the same tint; what showed through at the screen's edge (the Dock's or Stage Manager's icons) made it read differently. The user chose to make the rail slightly more solid than the sidebar so that is muted: under glass, art themes and Live, the rail's tint covers half of what the sidebar's leaves showing, never past opaque, in the sidebar's colour so the two read as one surface. A flat +12 points was weighed and left out: at the default 88% it would make the rail fully opaque. Themes without glass keep the sidebar's own gradient.
+pub(crate) fn sidebar_rail_fill(glass: bool) -> gpui::Background {
+    if glass {
+        rail_glass_tint(crate::app::helpers::sidebar_glass_tint()).into()
+    } else {
+        crate::app::helpers::sidebar_chrome_fill(false, 180.0)
+    }
+}
+
 /// Whether this computer's settings choose the rail.
 pub(crate) fn sidebar_rail_on() -> bool {
     let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
