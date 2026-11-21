@@ -5,7 +5,7 @@
     {
       "key": "experiencePreset",
       "title": "Experience",
-      "subtitle": "How many buttons and details Ghostex shows. Chill: a simple chat box and a calm chat. Regular: pick the model, the mode and the effort as you chat. Advanced: for people who use terminals more. Each area below follows it; change one and it says Custom.",
+      "subtitle": "How many buttons and details Ghostex shows. Chill: a simple chat box and a calm chat. Regular: pick the model, the mode and the effort as you chat. Advanced: for people who use terminals more. Pick one to try it in the preview first; nothing changes until Apply. Each area below follows it; change one and it says Custom.",
       "tab": "experience",
       "tabTitle": "Experience",
       "section": "experience",
@@ -34,7 +34,7 @@
     {
       "key": "experienceChatBox",
       "title": "Chat box",
-      "subtitle": "Chill: the field, the model, the effort, •••, attach, the mic and Send. Regular adds the mode and Maximize; the terminal is in •••. Advanced adds the terminal button and the context ring.",
+      "subtitle": "Chill: the field, the model, the effort, •••, attach, the mic and Send. Regular adds the mode and Maximize chat box; the terminal is in •••. Advanced adds the terminal button and the context ring.",
       "tab": "experience",
       "tabTitle": "Experience",
       "section": "experience",
@@ -395,8 +395,8 @@
     },
     {
       "key": "chatComposerMaximize",
-      "title": "Maximize button in the chat box",
-      "subtitle": "Show the button that makes the chat box fill the chat.",
+      "title": "Maximize chat box button",
+      "subtitle": "Show the Maximize chat box button, which makes the chat box fill the chat.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "chat",

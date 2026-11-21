@@ -217,7 +217,7 @@ impl NativeChatView {
         let label = match action {
             "moreActions" => "More actions",
             "maximizeComposer" if self.maximized_window.is_some() => "Exit maximize",
-            "maximizeComposer" => "Maximize",
+            "maximizeComposer" => "Maximize chat box",
             "sessionNote" => "Note",
             "filesLinks" => "Files & Links",
             "attachPath" => "Attach a file or folder",

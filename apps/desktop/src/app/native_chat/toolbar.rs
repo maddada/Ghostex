@@ -19,7 +19,7 @@ pub(super) const COMPOSER_CONTROLS: [(&str, &str, &str, &str); 4] = [
     (
         "maximize",
         "maximizeComposer",
-        "Maximize",
+        "Maximize chat box",
         "titlebar/maximize.svg",
     ),
     (

@@ -3228,13 +3228,13 @@ with their number sits in the pill strip along the chat box's top edge, after
 Resources, Workers and the other pills (before the Links pill); click or tap it
 to open the stashed prompts (Saved Prompts on the computer, Saved prompts on the
 phone). Alt+S (Option+S on macOS) is the Stash Prompt shortcut in a chat too.
-The Maximize button's tooltip shows the Maximize Chat Box shortcut (Option+Ctrl+M
+The Maximize chat box button's tooltip shows the Maximize Chat Box shortcut (Option+Ctrl+M
 on macOS, Ctrl+Alt+Shift+M on Windows and Linux), which maximizes the chat box of
 the chat you are in, or restores it. The Prompt Editor shortcut (Ctrl+G on macOS,
 Ctrl+Shift+G on Windows and Linux) does the same while you are in a chat: it
 maximizes the chat box with your text in it, and pressing it again restores it.
 As space gets tighter, toolbar buttons move into More actions one at a time:
-Note, Attach, Maximize, then Terminal View. The microphone never moves:
+Note, Attach, Maximize chat box, then Terminal View. The microphone never moves:
 it always stays right next to Send.
 If the context ring still does not fit beside the model, it moves into More
 actions > More as Session Details (or Context window in a chat without the
@@ -8340,18 +8340,27 @@ on the phone, each device on its own. Chill is a simple chat box (the field,
 the model, the effort, •••, attach, the mic and Send) and a calm chat: in Quiet
 View the turn that is running stays one line that counts its time ("Working ·
 1m 12s") and each line names only its reports. Regular adds the mode picker
-(and Maximize on the computer); the terminal is a Terminal View row in the •••
-menu. Advanced is for people who use terminals more: the terminal button and
-the context ring in the chat box, and last-active times in the sessions list.
-The sessions list uses the Sidebar's presets (Chill is Minimal, Regular is
-Recommended, Advanced is Detailed). The page has one row for the whole app and
-one per area (Chat box, Chat, Sessions list); picking a preset writes its
-settings, every switch stays in Settings, and a row whose settings were changed
-by hand says Custom. While the terminal button is off the chat box, the •••
-button turns red when the terminal has a problem, and pointing at it says why.
-With the mode picker off, new Claude sessions on that computer start in Auto,
-or in Bypass permissions while Skip permissions is on. A new phone asks once
-after pairing, with Regular picked. Settings keys: `chatComposerModePicker`,
+(and Maximize chat box on the computer); the terminal is a Terminal View row in
+the ••• menu. Advanced is for people who use terminals more: the terminal
+button and the context ring in the chat box, and last-active times in the
+sessions list. The sessions list uses the Sidebar's presets (Chill is Minimal,
+Regular is Recommended, Advanced is Detailed).
+On the computer the page opens with a small preview of Ghostex (the sessions
+list, a chat and its chat box). Click Chill, Regular or Advanced for the whole
+app, or a level for one area (Chat box, Chat, Sessions list), and the preview
+shows what changes: parts that come in light up, parts that go away are
+outlined and fold out. Nothing is saved until you press Apply; Cancel puts your
+settings back. Each area says in plain words what its level shows, with a chip
+for every part (struck through when it is off), and pointing at an area lights
+it in the preview. Custom on an area opens the exact switches its levels set,
+right there; flipping one is tried on the preview too, and an area whose
+switches match no level says Custom. Every switch also stays on its own
+Settings page.
+While the terminal button is off the chat box, the ••• button turns red when
+the terminal has a problem, and pointing at it says why. With the mode picker
+off, new Claude sessions on that computer start in Auto, or in Bypass
+permissions while Skip permissions is on. A new phone asks once after pairing,
+with Regular picked. Settings keys: `chatComposerModePicker`,
 `chatComposerTerminalButton`, `chatComposerContextRing`, `chatComposerMaximize`,
 `chatQuietViewCalm`, plus the Quiet View and Card details keys; open the page
 with `ghostex settings open --tab experience`.

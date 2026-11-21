@@ -46,6 +46,8 @@ pub(crate) struct GeneralTab {
     marked_preview: Option<gpui::FocusHandle>,
     /// The playbook overrides and their editor.
     orchestrator_playbook: super::orchestrator_playbook::OrchestratorPlaybookState,
+    /// What the Experience page is trying before Apply.
+    experience: experience::ExperienceDraft,
 }
 
 impl GeneralTab {
@@ -68,6 +70,7 @@ impl GeneralTab {
             marked_preview: (chat && preview_state.as_deref() == Some("marked-preview"))
                 .then(|| cx.focus_handle()),
             orchestrator_playbook: Default::default(),
+            experience: Default::default(),
         };
         if tab == SettingsTabId::Terminal
             && settings_catalog().flag(module::SEARCH_CATALOG, "IS_WINDOWS_HOST")
