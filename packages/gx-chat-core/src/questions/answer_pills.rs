@@ -18,7 +18,11 @@
 //! pill shows a tooltip saying what it's about (the question's title). Never show tags like W7 Q12
 //! to the user; what reaches the agent can still carry the tags."
 
+use serde_json::Value;
+
 use crate::composer::reference_pills::{composer_references, ReferenceKind};
+use crate::effect::Effect;
+use crate::state::{ChatContext, ChatState};
 
 /// A pill whose words answer the questions it names.
 pub const ANSWERING: &str = "answering:";
@@ -137,18 +141,268 @@ pub fn answered_tags(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// What hovering the pill says: the question's title.
-pub fn tooltip(label: &str) -> String {
-    format!("Your answer to: {}", label.trim())
+/// What hovering the pill says: the question's title, then what it names ("W843 · Q4360"), then
+/// how its questions stand when `states` (the document's `questionStates`) knows them.
+///
+/// CDXC:Coordinators 2026-11-21 DECISION:
+/// User, of a sent message's answering pill that did nothing on hover or click: make it behave like
+/// the other pills. Its hover shows the question's full title, its item and tag ("W843 · Q4360")
+/// and whether it is answered or still open; a click opens the question where it lives ([`open`]).
+/// The tags appear only in this hover, never in the pill's own label.
+pub fn tooltip(label: &str, href: &str, states: &Value) -> String {
+    let Some(pill) = parse_href(href) else {
+        return format!("Your answer to: {}", label.trim());
+    };
+    let mut lines = vec![format!(
+        "{}: {}",
+        if pill.settles {
+            "Your answer to"
+        } else {
+            "About"
+        },
+        label.trim()
+    )];
+    let named: Vec<String> = pill
+        .tags
+        .iter()
+        .map(|tag| tag.to_ascii_uppercase())
+        .collect();
+    lines.push(named.join(" · "));
+    let questions = pill.questions();
+    let known: Vec<(&String, &str)> = questions
+        .iter()
+        .filter_map(|tag| Some((tag, states.get(tag.as_str())?.as_str()?)))
+        .collect();
+    match known.as_slice() {
+        [] => {}
+        [(_, state)] if questions.len() == 1 => lines.push(state_words(state).to_string()),
+        known => lines.push(
+            known
+                .iter()
+                .map(|(tag, state)| format!("{tag} {}", state_words(state).to_lowercase()))
+                .collect::<Vec<_>>()
+                .join(" · "),
+        ),
+    }
+    lines.join("\n")
+}
+
+/// A question state's words in the hover.
+fn state_words(state: &str) -> &str {
+    match state {
+        "open" => "Open, waiting for your answer",
+        "answered" => "Answered",
+        "withdrawn" => "Withdrawn",
+        "skipped" => "Skipped",
+        other => other,
+    }
+}
+
+/// How each question this chat asked stands, by tag uppercased (`Q12`): `open`, `answered`,
+/// `withdrawn` or `skipped`. A work item's ask says it for its tag, over a form or page asking the
+/// same tag. The pills' hover reads it ([`tooltip`]).
+pub fn question_states(state: &ChatState) -> Value {
+    let mut states = serde_json::Map::new();
+    let askers = &*state.transcript_view.askers;
+    for tag in askers.iter().flat_map(|asker| asker.tags.iter()) {
+        let tag = tag.to_ascii_uppercase();
+        if states.contains_key(&tag) {
+            continue;
+        }
+        if let Some(found) = crate::transcript::open_questions::tag_state(askers, &tag) {
+            states.insert(tag, found.as_str().into());
+        }
+    }
+    let asks = crate::extras::work_source::work_of(state)
+        .and_then(|work| work.get("items"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .flat_map(|item| item["asks"].as_array().into_iter().flatten());
+    for ask in asks {
+        let Some(tag) = ask["tag"].as_str().filter(|tag| !tag.is_empty()) else {
+            continue;
+        };
+        let how = if ask["open"] == true {
+            "open"
+        } else if ask["withdrawn"] == true {
+            "withdrawn"
+        } else {
+            "answered"
+        };
+        states.insert(tag.to_ascii_uppercase(), how.into());
+    }
+    Value::Object(states)
+}
+
+/// A sent pill was clicked: the question opens where it lives. A work item's ask opens on the Work
+/// panel with its row picked; a form's or page's question scrolls to its card in the chat (or opens
+/// its page), as a Q-tag link does (`open_questions::jump_to_tag`); a pill naming only a work item
+/// opens that item on the Work panel. One this chat no longer has says so in a toast, without tags.
+pub fn open(state: &mut ChatState, context: &ChatContext, href: &str) -> Vec<Effect> {
+    let Some(pill) = parse_href(href) else {
+        return Vec::new();
+    };
+    use crate::extras::coordinator_board::{focus_row, work_panel_group};
+    let questions = pill.questions();
+    for tag in &questions {
+        if let Some(key) = crate::extras::work_cards::ask_key_of_tag(state, tag) {
+            // A settled ask leaves the panel's Needs you rows: its item's row opens instead.
+            if work_panel_group(state, &key).is_none() {
+                if let Some(item) = item_key_of_ask(state, tag) {
+                    if work_panel_group(state, &item).is_some() {
+                        return focus_row(state, &item);
+                    }
+                }
+            }
+            return focus_row(state, &key);
+        }
+        let asked =
+            crate::transcript::open_questions::tag_target(&state.transcript_view.askers, tag)
+                .is_some()
+                || crate::questions::open_questions::newest_one_click_ask(state, tag).is_some();
+        if asked {
+            return crate::questions::open_questions::jump_to_tag(state, context, tag);
+        }
+    }
+    if questions.is_empty() {
+        let item = pill
+            .item()
+            .and_then(|number| work_item_key(state, |item| item["ref"] == format!("W{number}")));
+        if let Some(key) = item {
+            return focus_row(state, &key);
+        }
+    }
+    vec![Effect::Toast {
+        level: "info".to_string(),
+        message: "That question isn't in this chat any more.".to_string(),
+    }]
+}
+
+/// The Work panel row key of the work item holding the ask `tag`.
+fn item_key_of_ask(state: &ChatState, tag: &str) -> Option<String> {
+    work_item_key(state, |item| {
+        item["asks"].as_array().is_some_and(|asks| {
+            asks.iter().any(|ask| {
+                ask["tag"]
+                    .as_str()
+                    .is_some_and(|known| known.eq_ignore_ascii_case(tag))
+            })
+        })
+    })
+}
+
+/// The Work panel row key of the first work item `pick` takes.
+fn work_item_key(state: &ChatState, pick: impl Fn(&Value) -> bool) -> Option<String> {
+    crate::extras::work_source::work_of(state)?
+        .get("items")?
+        .as_array()?
+        .iter()
+        .find(|item| pick(item))
+        .and_then(|item| item["key"].as_str())
+        .filter(|key| !key.is_empty())
+        .map(str::to_string)
 }
 
 /// The chat box after a Reply in chat box: `draft` with the pill and the typed `reply` (its
 /// pictures numbered after the ones already there) appended at its end, as Add to Chat appends.
 /// `None` when there are no tags to name.
-pub fn in_chat_box(draft: &str, name: &str, tags: &str, settles: bool, reply: &str) -> Option<String> {
+pub fn in_chat_box(
+    draft: &str,
+    name: &str,
+    tags: &str,
+    settles: bool,
+    reply: &str,
+) -> Option<String> {
     let added = format!("{}{}", pill(name, tags, settles)?, reply.trim());
     let added = crate::composer::references::renumber_image_references(draft, &added);
     Some(crate::composer::transcript_menu::append_draft_text(
         draft, &added,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn state_with_work(open: bool) -> ChatState {
+        let mut state = ChatState::default();
+        *state.session.coordinator_threads = Some(
+            json!({"threads": [], "total": 0, "work": {"items": [{
+                "key": "work:843",
+                "ref": "W843",
+                "title": "Fix the claude alias",
+                "status": "working",
+                "asks": [{"tag": "Q4360", "open": open, "text": "Plain claude works again"}],
+            }]}})
+            .into(),
+        );
+        state
+    }
+
+    fn focused(state: &ChatState) -> Option<&str> {
+        state
+            .extras
+            .panels
+            .board_focus
+            .as_ref()
+            .map(|(key, _)| key.as_str())
+    }
+
+    #[test]
+    fn hover_names_the_title_the_tags_and_the_state() {
+        let states = json!({"Q4360": "answered"});
+        assert_eq!(
+            tooltip("Plain claude works again", "answering:W843.Q4360", &states),
+            "Your answer to: Plain claude works again\nW843 · Q4360\nAnswered"
+        );
+        assert_eq!(
+            tooltip("Release form", "regarding:Q12.Q13", &json!({"Q12": "open"})),
+            "About: Release form\nQ12 · Q13\nQ12 open, waiting for your answer"
+        );
+        // A state nobody knows leaves the state line out.
+        assert_eq!(
+            tooltip("Pick one", "answering:Q7", &Value::Null),
+            "Your answer to: Pick one\nQ7"
+        );
+    }
+
+    #[test]
+    fn work_asks_say_how_they_stand() {
+        assert_eq!(
+            question_states(&state_with_work(true)),
+            json!({"Q4360": "open"})
+        );
+        assert_eq!(
+            question_states(&state_with_work(false)),
+            json!({"Q4360": "answered"})
+        );
+    }
+
+    #[test]
+    fn a_click_opens_the_ask_on_the_work_panel() {
+        let mut state = state_with_work(true);
+        let effects = open(&mut state, &ChatContext::default(), "answering:W843.Q4360");
+        assert!(effects.is_empty(), "{effects:?}");
+        assert_eq!(focused(&state), Some("work-ask:W843:Q4360"));
+    }
+
+    #[test]
+    fn a_click_on_a_settled_ask_opens_its_item() {
+        let mut state = state_with_work(false);
+        let effects = open(&mut state, &ChatContext::default(), "answering:W843.Q4360");
+        assert!(effects.is_empty(), "{effects:?}");
+        assert_eq!(focused(&state), Some("work:843"));
+    }
+
+    #[test]
+    fn a_click_on_a_question_this_chat_lost_says_so() {
+        let mut state = ChatState::default();
+        let effects = open(&mut state, &ChatContext::default(), "answering:Q99");
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::Toast { message, .. }] if message == "That question isn't in this chat any more."
+        ));
+    }
 }

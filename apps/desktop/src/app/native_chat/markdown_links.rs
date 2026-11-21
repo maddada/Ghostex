@@ -132,10 +132,12 @@ pub(super) fn secondary_click(
 /// SEE-ALSO: `transcript` in `packages/gx-chat-core/visual/reference-visual.json`, and `link` in `apps/mobile/app/src/chat/native/transcript/theme.ts`, which the phone chat must keep equal.
 ///
 /// `board` is the chat's `coordinatorBoard` document value (`null` on a chat without a board),
-/// which names the cards a board mention points at (`board_mention_link`).
+/// which names the cards a board mention points at (`board_mention_link`); `question_states` is its
+/// `questionStates`, which an answering pill's hover says its question's state from.
 pub(super) fn presentations(
     references: &Value,
     board: &Value,
+    question_states: &Value,
     appearance: &ChatAppearance,
 ) -> HashMap<(String, String), InlineLink> {
     let palette = if appearance.light {
@@ -178,6 +180,18 @@ pub(super) fn presentations(
                 ));
             }
             let color = hex_color(palette.get(kind)?)?;
+            // An answering pill's hover: the question's title, its tags and how it stands
+            // (gx-chat-core `answer_pills::tooltip`).
+            let title: gpui::SharedString = if kind == "answer" {
+                ghostex_gx_chat_core::questions::answer_pills::tooltip(
+                    reference["sourceLabel"].as_str()?,
+                    reference["href"].as_str()?,
+                    question_states,
+                )
+                .into()
+            } else {
+                reference["title"].as_str()?.to_owned().into()
+            };
             Some((
                 (
                     reference["href"].as_str()?.to_owned(),
@@ -185,7 +199,7 @@ pub(super) fn presentations(
                 ),
                 InlineLink {
                     label: reference["label"].as_str()?.to_owned().into(),
-                    title: reference["title"].as_str()?.to_owned().into(),
+                    title,
                     icon: format!("chat-references/{kind}.svg").into(),
                     icon_size: px(14.0 * appearance.scale * VISUAL.icon_em),
                     gap: px(if kind == "url" {

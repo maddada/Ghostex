@@ -314,9 +314,10 @@ fn handle_action(state: &mut ChatState, action: &UserAction, context: &ChatConte
             if let Some(item) = crate::extras::coordinator_board::board_item(&href) {
                 return crate::extras::coordinator_board::show_item(state, item);
             }
-            // What a Reply in chat box answered: a label, never a place to open.
+            // What a Reply in chat box answered: the question opens where it lives
+            // (`answer_pills::open`).
             if crate::questions::answer_pills::parse_href(&href).is_some() {
-                return Vec::new();
+                return crate::questions::answer_pills::open(state, context, &href);
             }
             // One of the user's earlier messages (`message_numbers.rs`): scrolls to it when it is
             // in the loaded part of this chat.

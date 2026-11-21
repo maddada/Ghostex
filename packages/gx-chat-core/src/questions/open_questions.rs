@@ -1146,7 +1146,7 @@ pub fn jump_to_tag(state: &mut ChatState, context: &ChatContext, tag: &str) -> V
 
 /// The newest reply asking `tag` as a one-click question, with that question's form id, when it is
 /// newer than the reply of the tag's latest asker.
-fn newest_one_click_ask(state: &ChatState, tag: &str) -> Option<(String, String)> {
+pub(crate) fn newest_one_click_ask(state: &ChatState, tag: &str) -> Option<(String, String)> {
     use crate::transcript::inline_answers::{inline_questions, ANSWER_SCHEME};
     let asker = tag_target(&state.transcript_view.askers, tag);
     for message in state.messages.composed.iter().rev() {
