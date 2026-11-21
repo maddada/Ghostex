@@ -176,6 +176,7 @@ fn update_space(
             member_project_ids: space.member_project_ids.clone(),
             space_id: space.space_id.clone(),
             workspace_id: space.workspace_id.clone(),
+            hidden: space.hidden,
         },
     );
     Some(SpacesDocument {
@@ -185,6 +186,22 @@ fn update_space(
         }
         .sanitized(),
     })
+}
+
+/// Hide Space and Unhide Space (CDXC:Spaces 2026-11-21 in sidebar_view/spaces.rs `Space::shown`):
+/// the document with the Space's `hidden` set, or `None` when the Space is gone or already so.
+pub fn plan_space_hidden(
+    document: &SpacesDocument,
+    space_id: &str,
+    hidden: bool,
+) -> Option<SpacesDocument> {
+    let space = document.state.spaces.get(space_id)?;
+    if space.hidden == hidden {
+        return None;
+    }
+    let mut next = document.clone();
+    next.state.spaces.get_mut(space_id)?.hidden = hidden;
+    Some(next)
 }
 
 /// `createSidebarSpace`: a new Space goes LAST, and its id carries its position and a base-36
@@ -220,6 +237,7 @@ fn create_space(
                     member_project_ids: &space.member_project_ids,
                     name: &space.name,
                     workspace_id: space.workspace_id.as_deref(),
+                    hidden: space.hidden,
                 },
             )
         })
@@ -234,6 +252,7 @@ fn create_space(
             member_project_ids: EMPTY_MEMBERS,
             name,
             workspace_id: result.workspace_id.as_deref(),
+            hidden: false,
         },
     ));
     let state = SpacesState::sanitize(&order, raw);

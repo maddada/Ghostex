@@ -685,6 +685,11 @@ fn to_mobile_sidebar_spaces(spaces_state: Option<&Value>) -> Option<Value> {
                     row["workspaceId"] = json!(workspace_id);
                 }
             }
+            // Hide Space (CDXC:Spaces 2026-11-21 in gx-core sidebar_view/spaces.rs); a phone older
+            // than it ignores the field and keeps showing the Space.
+            if space.get("hidden").and_then(Value::as_bool) == Some(true) {
+                row["hidden"] = json!(true);
+            }
             spaces.insert(space_id.clone(), row);
         }
     }

@@ -43,9 +43,21 @@ pub struct Space {
     pub member_project_ids: Vec<String>,
     /// The workspace the Space belongs to; `None` = the default workspace.
     pub workspace_id: Option<String>,
+    /// Left out of the Spaces row (and never picked as the selection) until Show hidden is on.
+    pub hidden: bool,
 }
 
 /// One machine's Spaces after client normalization.
+impl Space {
+    /// Whether the Space is in the Spaces row.
+    ///
+    /// CDXC:Spaces 2026-11-21 DECISION:
+    /// User: "hide a space. Right-click (and the Spaces tile menu) offers Hide Space; hidden spaces disappear from the Spaces row, and show again (dimmed, with an Unhide action) when the sidebar's existing Show hidden option is on ... A hidden space that is selected switches to another space. Per workspace, synced like the other space settings." Hiding takes the Space off the row only: its projects stay its members, so they do not move to Other, and Active projects still lists them.
+    pub fn shown(&self, show_hidden: bool) -> bool {
+        show_hidden || !self.hidden
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct SpacesState {
     pub order: Vec<String>,
@@ -61,6 +73,7 @@ pub(crate) struct RawSpace<'a> {
     pub(crate) member_project_ids: &'a [String],
     pub(crate) name: &'a str,
     pub(crate) workspace_id: Option<&'a str>,
+    pub(crate) hidden: bool,
 }
 
 impl SpacesState {
@@ -82,6 +95,7 @@ impl SpacesState {
                             member_project_ids: &space.member_project_ids,
                             name: &space.name,
                             workspace_id: space.workspace_id.as_deref(),
+                            hidden: space.hidden,
                         },
                     )
                 })
@@ -110,6 +124,7 @@ impl SpacesState {
                             member_project_ids: &space.member_project_ids,
                             name: &space.name,
                             workspace_id: space.workspace_id.as_deref(),
+                            hidden: space.hidden,
                         },
                     )
                 })
@@ -175,6 +190,7 @@ impl SpacesState {
                 workspace_id: candidate
                     .workspace_id
                     .and_then(|id| bounded_text(id, MAX_ID_CHARS)),
+                hidden: candidate.hidden,
             };
             sanitized.spaces.insert(space_id.clone(), space);
             sanitized.order.push(space_id);
@@ -256,11 +272,14 @@ impl SpaceSelection {
 
 /// `resolveSelectedSidebarSpace`: the stored Space when it still exists, else the section's first
 /// Space, else Other. Active projects resolves only while `active_projects` (its switch) is on;
-/// off, a stored pick of it falls back like a deleted Space.
+/// off, a stored pick of it falls back like a deleted Space. A hidden Space resolves only while
+/// `show_hidden` is on; off, a stored pick of it falls back the same way (CDXC:Spaces 2026-11-21
+/// in `Space::shown`).
 pub(crate) fn resolve_selected_space(
     state: &SpacesState,
     selected_space_id: Option<&str>,
     active_projects: bool,
+    show_hidden: bool,
 ) -> SpaceSelection {
     if selected_space_id == Some(OTHER_SPACE_ID) {
         return SpaceSelection::Other;
@@ -268,14 +287,16 @@ pub(crate) fn resolve_selected_space(
     if active_projects && selected_space_id == Some(super::active_projects::ACTIVE_SPACE_ID) {
         return SpaceSelection::Active;
     }
-    if let Some(space_id) = selected_space_id.filter(|id| state.spaces.contains_key(*id)) {
+    let shown = |space_id: &str| {
+        state
+            .spaces
+            .get(space_id)
+            .is_some_and(|space| space.shown(show_hidden))
+    };
+    if let Some(space_id) = selected_space_id.filter(|id| shown(id)) {
         return SpaceSelection::Space(space_id.to_string());
     }
-    match state
-        .order
-        .iter()
-        .find(|space_id| state.spaces.contains_key(*space_id))
-    {
+    match state.order.iter().find(|space_id| shown(space_id)) {
         Some(space_id) => SpaceSelection::Space(space_id.clone()),
         None => SpaceSelection::Other,
     }

@@ -150,6 +150,7 @@ mod sidebar_ui_commands;
 mod sidebar_ui_paths;
 mod sidebar_ui_storage;
 mod space_editor;
+mod space_hide;
 mod space_sleep;
 mod space_switch;
 pub(crate) mod terminal_lifecycle;

@@ -144,6 +144,15 @@ fn values(local: LocalSpaces<'_>) -> BTreeMap<String, Value> {
                 out.insert(key("space", field, &space_id), json!(text));
             }
         }
+        // Hide Space (CDXC:Spaces 2026-11-21 in sidebar_view/spaces.rs `Space::shown`), `false`
+        // too so an Unhide reaches the other computers. An older computer ignores the key.
+        out.insert(
+            key("space", "hidden", &space_id),
+            json!(space
+                .get("hidden")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)),
+        );
         for group in strings(space.get("memberCollectionIds")) {
             group_space.entry(group).or_insert_with(|| space_id.clone());
         }
@@ -395,6 +404,18 @@ pub fn apply_spaces_entries(
         if let Some(workspace) = local_text(local.spaces, "spaces", space, "workspaceId") {
             entry["workspaceId"] = json!(workspace);
         }
+        let hidden = value_of("space", "hidden", space)
+            .and_then(Value::as_bool)
+            .or_else(|| {
+                local
+                    .spaces
+                    .get("spaces")
+                    .and_then(|spaces| spaces.get(space.as_str()))
+                    .and_then(|local| local.get("hidden"))
+                    .and_then(Value::as_bool)
+            })
+            .unwrap_or(false);
+        entry["hidden"] = json!(hidden);
         space_map.insert(space.clone(), entry);
         space_order.push(json!(space));
     }

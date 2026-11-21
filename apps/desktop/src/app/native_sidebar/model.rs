@@ -230,6 +230,9 @@ pub(crate) struct NativeSidebarSpace {
     /// Rows with the red failed dot, not waiting for approval (gx-core `TileStatus::Failed`).
     #[serde(default)]
     pub(crate) failed_count: usize,
+    /// A hidden Space, in the row only while Show Hidden is on, and drawn dimmed there.
+    #[serde(default)]
+    pub(crate) hidden: bool,
 }
 
 impl NativeSidebarSpace {

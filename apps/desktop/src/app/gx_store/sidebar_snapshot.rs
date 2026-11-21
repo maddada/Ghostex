@@ -408,6 +408,7 @@ pub(super) fn snapshot_from_view(
                     question_count: space.question_count,
                     approval_count: space.approval_count,
                     failed_count: space.failed_count,
+                    hidden: space.hidden,
                 },
             )
             .collect(),

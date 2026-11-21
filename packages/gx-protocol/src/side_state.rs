@@ -86,6 +86,11 @@ pub struct SidebarSpace {
     /// daemon). gxserver keeps a stored id when a client writes the Space without one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace_id: Option<String>,
+    /// Hidden from the Spaces row until Show hidden is on; absent = shown (and on an older daemon,
+    /// which drops the field). gxserver keeps a stored `true` when a client writes the Space
+    /// without the field.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hidden: bool,
 }
 
 /// Spaces: saved sidebar filters. An empty Space is valid and kept.
