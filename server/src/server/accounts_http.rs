@@ -15,9 +15,12 @@ pub(crate) async fn handle_accounts_http(
         Ok(p) => p,
         Err(e) => return domain_error_response(endpoint_path, request_id, e),
     };
-    if params.get("operation").and_then(Value::as_str) == Some("redeemReset")
-        && !caller.is_owner_device()
-    {
+    // The token file from a Ghostex session pane is an agent that dropped its session token
+    // (`env -u GHOSTEX_SESSION_TOKEN …`, Fable's re-check), as autopilot_http.rs `is_user` reads it.
+    let user = caller.is_owner_device()
+        && !(matches!(caller, crate::security::Principal::LocalAgent)
+            && crate::audit::token_file_names_session());
+    if params.get("operation").and_then(Value::as_str) == Some("redeemReset") && !user {
         crate::audit::record(
             crate::audit::Action::new("accounts.redeemReset", "Use a limit reset").target(
                 params
@@ -26,7 +29,7 @@ pub(crate) async fn handle_accounts_http(
                     .unwrap_or_default()
                     .to_string(),
             ),
-            crate::audit::Actor::from(caller),
+            crate::audit::Actor::current(),
             crate::audit::Outcome::Refused(REDEEM_ONLY_YOU.to_string()),
             None,
         );
