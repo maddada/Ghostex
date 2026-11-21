@@ -4800,6 +4800,16 @@ itself ("what's stuck?", "how do I pair my phone?").
   until you press Start or send a message; until then you can switch its agent
   or model in place. A model or effort you pick in its chat is kept for its next
   chats on that agent.
+- **Its welcome card**: while its chat is empty, Ask Ghostex AI shows a little
+  ghost with a clipboard instead of the usual welcome. New to Ghostex, you get
+  **First steps** (add your first project, sign in to Claude or Codex, start
+  your first agent, put Ghostex on your phone), each ticked off by itself once
+  it is done, a white **Ask me anything about Ghostex** button and a few
+  questions to start with. Once you have a project and have started an agent it
+  says **Hi again!** with how many agents are running and how many need you, and
+  offers questions about your work and about Ghostex. Tapping any of them only
+  puts it in the chat box; nothing is sent until you send it. The ghost holds
+  still when your computer or phone asks for reduced motion.
 - **Getting started**: on its first start Ghostex AI greets you and offers
   first steps as a form: add your projects, theme Ghostex, configure it, connect
   your phone or another computer, set up Boosts and Autopilot, or a short tour.

@@ -85,6 +85,21 @@ impl NativeChatView {
             .pt(px(24.0 * s))
             .px(px(24.0 * s));
 
+        // Ask Ghostex AI's own card in place of the mark, the headline and the tips
+        // (chief_welcome.rs).
+        if let Some(card) = state
+            .get("chiefWelcome")
+            .filter(|card| card.is_object())
+            .and_then(|card| {
+                serde_json::from_value::<ghostex_gx_chat_core::extras::chief_welcome::ChiefWelcome>(
+                    card.clone(),
+                )
+                .ok()
+            })
+        {
+            return self.render_chief_welcome(&card, p, cx);
+        }
+
         if let Some(welcome) = state["newSessionWelcome"].as_object() {
             // The width the headline may take: the pane less the region's padding.
             let room = (self.bounds.get().size.width.as_f32() - 48.0 * s).max(0.0);

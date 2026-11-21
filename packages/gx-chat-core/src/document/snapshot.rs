@@ -426,6 +426,10 @@ pub struct Document {
     pub simple_override: Option<bool>,
     pub empty_state: EmptyState,
     pub new_session_welcome: Option<NewSessionWelcome>,
+    /// Ask Ghostex AI's welcome card in place of the welcome's headline, tips and Try a Boost
+    /// (`extras::chief_welcome`); `null` in every other chat.
+    #[serde(default)]
+    pub chief_welcome: Option<crate::extras::chief_welcome::ChiefWelcome>,
     /// `blank`, `indicator` or `retry` while the transcript loads; `null` otherwise.
     pub loading_stage: Option<String>,
     /// What the loading hold says, with its Try now button; `null` while it stays blank.

@@ -13,6 +13,7 @@ pub mod autopilot;
 pub mod background_tasks;
 pub mod boosts;
 pub mod chat_pills;
+pub mod chief_welcome;
 pub mod collab;
 pub mod coordinator_board;
 pub mod coordinator_intro;
