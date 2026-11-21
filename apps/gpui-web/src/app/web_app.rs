@@ -70,7 +70,6 @@ pub(crate) struct GhostexGpuiApp {
         ),
     >,
     pub(crate) notification_feed_state: crate::notification_feed::GpuiNotificationFeedState,
-    pub(crate) titlebar_notification_bell_bounds: Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
     /// Toasts and the page's other stand-ins for the desktop's app-level services (`web_host/`).
     pub(crate) web_host: crate::app::web_host::WebHostState,
     /// Toasts with a button, waiting in the centred notice modal (the desktop's notice_modal_host.rs).
@@ -167,7 +166,6 @@ impl GhostexGpuiApp {
             show_terminal: false,
             linked_session_opened: false,
             notification_feed_state: Default::default(),
-            titlebar_notification_bell_bounds: Rc::new(std::cell::Cell::new(None)),
             web_host: Default::default(),
             app_notices: Default::default(),
             native_app_modal: None,
@@ -234,16 +232,8 @@ impl GhostexGpuiApp {
         div()
     }
 
-    /// The bell is never shown here (`titlebar_notification_bell_visible`), so neither is its dropdown.
-    pub(crate) fn toggle_gpui_titlebar_notifications_popup(
-        &mut self,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
-    ) {
-    }
-
-    /// The desktop's dropdown from a given anchor (the sidebar menu's Notifications row,
-    /// native_sidebar/actions.rs); the page has no dropdown to hang.
+    /// The bell is never shown here (`titlebar_notification_bell_visible`), so neither is its
+    /// dropdown, from the sidebar menu's Notifications row (native_sidebar/actions.rs) or anywhere.
     pub(crate) fn toggle_gpui_titlebar_notifications_popup_at(
         &mut self,
         _anchor: Option<gpui::Bounds<gpui::Pixels>>,
