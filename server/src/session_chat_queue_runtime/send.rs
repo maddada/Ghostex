@@ -501,6 +501,8 @@ pub(crate) async fn send_session_chat_message_with_draft(
     .await;
     if sent.is_ok() {
         settle_work_replies(state, project_id, session_id, text, image_paths, source);
+        // Ask Ghostex AI's welcome card stops offering a prompt once it was sent.
+        crate::chief::remember_asked(&state.paths, project_id, session_id, text);
         if inside {
             // They went in with the message: recorded as sent, like a note delivered on its own.
             record_coordinator_playbook_note(state, project_id, session_id, notes.as_ref());

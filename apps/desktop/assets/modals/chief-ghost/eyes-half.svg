@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+  <!-- Ask Ghostex AI's ghost (chief-ghost.svg, the approved welcome card drawing), split into layers so the app can wave and blink it: the eyes, half closed in a blink. -->
+  <ellipse cx="50" cy="58" rx="4.3" ry="3" fill="#2b2b33"/>
+  <ellipse cx="70" cy="58" rx="4.3" ry="3" fill="#2b2b33"/>
+</svg>

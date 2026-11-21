@@ -185,12 +185,9 @@ pub fn document_with_board(
         NewSessionWelcome {
             // CDXC:Coordinators 2026-09-30 WHY: a new coordinator's first screen says what it is for; the generic "What should we build with Claude?" hides that this agent hands the work to threads.
             title: if coordinator_threads::is_chief(state.session.coordinator_threads.as_deref()) {
-                // CDXC:Chief 2026-11-21 DECISION: User: Chief of Staff gets its own empty-chat line instead of "What should this coordinator work on?" ("Press Start and Chief of Staff will help you set up Ghostex."), on the desktop, web and phone alike.
-                if crate::composer::first_message::waiting(state) {
-                    "Press Start and Ghostex AI will help you set up Ghostex.".to_string()
-                } else {
-                    "Ask Ghostex AI about Ghostex or any of your agents.".to_string()
-                }
+                // Ask Ghostex AI draws its own card (chief_welcome.rs); this title is only what an
+                // older renderer without that card shows, and `show_title` hides it there.
+                "Ask Ghostex AI about Ghostex or any of your agents.".to_string()
             } else if coordinator_threads::is_coordinator(
                 state.session.coordinator_threads.as_deref(),
             ) {
@@ -200,11 +197,21 @@ pub fn document_with_board(
             },
             icon: welcome_agent_icon(state.session.agent.as_deref(), None),
             // The welcome drops its headline once a notice or question card takes the space below
-            // it; both cards are family c's, so the flag reads their published state.
-            show_title: !bottom_card_visible(into),
+            // it; both cards are family c's, so the flag reads their published state. Ask Ghostex
+            // AI's card replaces the headline, the tips and Try a Boost, which follow this flag.
+            show_title: !bottom_card_visible(into)
+                && !coordinator_threads::is_chief(state.session.coordinator_threads.as_deref()),
             agent_name,
         }
     });
+    // Ask Ghostex AI's welcome card (chief_welcome.rs), while its chat shows the welcome.
+    into.chief_welcome = show_welcome
+        .then(|| state.session.coordinator_threads.as_deref())
+        .flatten()
+        .filter(|threads| coordinator_threads::is_chief(Some(threads)))
+        .map(|threads| {
+            crate::extras::chief_welcome::build(threads.get("chiefWelcome").unwrap_or(&Value::Null))
+        });
     into.loading_stage =
         (view_kind == "loading" && !show_welcome).then(|| extras.loading_stage.clone());
     // CDXC:SessionChat 2026-10-08 in `session/constants.rs`: while Ghostex's service is not

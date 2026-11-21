@@ -204,6 +204,12 @@ pub fn insert_coordinator_threads(
         );
         if chief {
             value["chief"] = Value::Bool(true);
+            // What its welcome card shows (chief/welcome.rs).
+            if let Some(welcome) =
+                crate::chief::welcome_state(&crate::paths::get_gxserver_paths(None))
+            {
+                value["chiefWelcome"] = welcome;
+            }
         }
         frame.insert("coordinatorThreads".to_string(), value);
     }

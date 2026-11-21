@@ -197,7 +197,7 @@ fn has_saved_account(state: &AppState, agent_id: &str) -> bool {
 
 /// What the CLI's own status command says, `None` when it cannot say (not installed, no status
 /// command, too slow, or output it cannot read).
-fn read_signed_in(home: &Path, agent_id: &str) -> Option<bool> {
+pub(crate) fn read_signed_in(home: &Path, agent_id: &str) -> Option<bool> {
     let commands = commands(agent_id)?;
     let executable = crate::accounts::helpers::probe_executable(home, commands.executable)?;
     let mut command = crate::platform::process::background_command(executable);

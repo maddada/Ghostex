@@ -142,6 +142,10 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         .then_some(crate::session::cloud_box::ASLEEP_PLACEHOLDER))
     .or(crate::composer::first_message::waiting(state)
         .then_some(crate::composer::first_message::PLACEHOLDER))
+    .or(
+        crate::extras::coordinator_threads::is_chief(state.session.coordinator_threads.as_deref())
+            .then_some(crate::extras::chief_welcome::PLACEHOLDER),
+    )
     .unwrap_or(
         if state
             .session

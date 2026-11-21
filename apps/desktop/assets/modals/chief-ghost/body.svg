@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+  <!-- Ask Ghostex AI's ghost (chief-ghost.svg, the approved welcome card drawing), split into layers so the app can wave and blink it: the body, cheeks, mouth, clipboard and holding hand. -->
+  <path d="M32 58 C32 36 44 22 60 22 C76 22 88 36 88 58 L88 96 Q81 106 74 96 Q67 106 60 96 Q53 106 46 96 Q39 106 32 96 Z" fill="#fff" stroke="#2b2b33" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M40 46 Q43 35 52 31" fill="none" stroke="#e7e9f4" stroke-width="3.2" stroke-linecap="round"/>
+  <ellipse cx="42.5" cy="67.5" rx="5" ry="3" fill="#ff9fb2" fill-opacity=".85"/>
+  <ellipse cx="77.5" cy="67.5" rx="5" ry="3" fill="#ff9fb2" fill-opacity=".85"/>
+  <path d="M56 65.5 Q60 70.5 64 65.5" fill="none" stroke="#2b2b33" stroke-width="2.6" stroke-linecap="round"/>
+  <g transform="rotate(10 98 78)">
+    <rect x="88" y="62" width="20" height="26" rx="3.5" fill="#fff" stroke="#2b2b33" stroke-width="2.6"/>
+    <rect x="93.5" y="59" width="9" height="5.5" rx="2" fill="#2b2b33"/>
+    <path d="M92.5 71h11M92.5 76h11M92.5 81h7" stroke="#b9bccb" stroke-width="2" stroke-linecap="round"/>
+  </g>
+  <ellipse cx="90" cy="80" rx="6" ry="8.5" transform="rotate(20 90 80)" fill="#fff" stroke="#2b2b33" stroke-width="3"/>
+</svg>

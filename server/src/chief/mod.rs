@@ -29,6 +29,7 @@ mod presentation;
 mod record;
 mod session;
 mod sweep;
+mod welcome;
 
 pub(crate) use endpoint::{handle_chief_http, CHIEF_ENDPOINT};
 pub(crate) use feature::{
@@ -45,6 +46,7 @@ pub(crate) use presentation::{
 pub(crate) use record::{chief_key, read_record};
 pub(crate) use session::{chief_agent_rows, start_provider};
 pub(crate) use sweep::start_chief_sweep;
+pub(crate) use welcome::{remember_asked, welcome_state};
 
 /// The playbook Chief follows, printed by `ghostex chief guide` (and `/api/chief` `guide`) through
 /// [`chief_playbook`].

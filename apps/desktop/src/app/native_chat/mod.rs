@@ -72,6 +72,7 @@ mod menu_toggle;
 mod minimap;
 mod nested_scroll;
 pub(crate) mod new_chat_tips;
+mod chief_welcome;
 mod new_session_welcome;
 mod note;
 mod notice;
