@@ -16,12 +16,16 @@
 //! on one client), dialing with the `server` box key, and each attach asks for its loopback port
 //! (`/api/cloudBoxLink`, this computer's own clients only) every time it starts. A box then has at
 //! most two clients from this computer, each on a key of its own: the desktop's (`app`) and this
-//! one. A link goes when its box is stopped, deleted or found not running.
+//! one. A link goes when its box is stopped, deleted or found not running, and after carrying
+//! nothing for [`IDLE_DROP`] (review of dbd0e96c4, finding 8: a link left up kept a loopback port
+//! open to the box's gxserver for any local process, which still needed the box's token for
+//! anything but its health and pairing handshake).
 //! SEE-ALSO: server/src/ghostex_cli/cloud_attach.rs, server/src/cloud_boxes/home_keys.rs.
 
 use std::collections::HashMap;
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use ghostex_gx_protocol::cloud_box::{CloudBoxState, CloudProviderId};
 use ghostex_paths::tailcat_forward::{
@@ -37,14 +41,50 @@ use crate::remote_access::computer_link_keys::LINK_KEY_PURPOSE_SERVER;
 /// `{ boxId }` → `{ port }`: the loopback port of this computer's link to its box.
 pub const BOX_LINK_ENDPOINT: &str = "/api/cloudBoxLink";
 
+/// A link that carried no connection for this long is closed; the next attach opens it again.
+const IDLE_DROP: Duration = Duration::from_secs(3 * 60);
+/// How often the links are looked at.
+const IDLE_CHECK_EVERY: Duration = Duration::from_secs(30);
+
 struct Link {
     address: String,
     forward: TailcatForward,
+    /// Since when the link carries no connection (and nobody asked for it); `None` while it does.
+    idle_since: Option<Instant>,
 }
 
 fn links() -> &'static Mutex<HashMap<String, Link>> {
     static LINKS: OnceLock<Mutex<HashMap<String, Link>>> = OnceLock::new();
     LINKS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Closes the links that carried nothing for [`IDLE_DROP`]. Started with the first link.
+fn watch_idle_links() {
+    static STARTED: OnceLock<()> = OnceLock::new();
+    STARTED.get_or_init(|| {
+        std::thread::spawn(|| loop {
+            std::thread::sleep(IDLE_CHECK_EVERY);
+            close_idle_links(Instant::now());
+        });
+    });
+}
+
+fn close_idle_links(now: Instant) {
+    let mut links = links()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    links.retain(|_, link| {
+        if link.forward.open_connections() > 0 {
+            link.idle_since = None;
+            return true;
+        }
+        let since = *link.idle_since.get_or_insert(now);
+        if now.duration_since(since) < IDLE_DROP {
+            return true;
+        }
+        link.forward.stop();
+        false
+    });
 }
 
 fn log_link_event(box_id: String) -> impl Fn(ForwardEvent) + Send + Sync {
@@ -91,9 +131,10 @@ pub(crate) fn link_port(paths: &GxserverPaths, box_id: &str) -> Result<u16, Doma
     let mut links = links()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if let Some(link) = links.get(box_id).filter(|link| link.address == address) {
+    if let Some(link) = links.get_mut(box_id).filter(|link| link.address == address) {
         // An unused client may have lost the box without showing it; a fresh one costs nobody.
         link.forward.refresh_idle_client();
+        link.idle_since = None;
         return Ok(link.forward.local_port());
     }
     if let Some(old) = links.remove(box_id) {
@@ -122,7 +163,15 @@ pub(crate) fn link_port(paths: &GxserverPaths, box_id: &str) -> Result<u16, Doma
     )
     .map_err(|error| params::internal(format!("Couldn't start the box's link: {error}")))?;
     let port = forward.local_port();
-    links.insert(box_id.to_string(), Link { address, forward });
+    links.insert(
+        box_id.to_string(),
+        Link {
+            address,
+            forward,
+            idle_since: None,
+        },
+    );
+    watch_idle_links();
     Ok(port)
 }
 
