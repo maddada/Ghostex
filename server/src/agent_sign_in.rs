@@ -2,7 +2,7 @@
 //! setup's Agents panel (`/api/agentSignIn`).
 //!
 //! CDXC:Onboarding 2026-11-11 DECISION:
-//! User, on the first-run page (step 15, the agent is missing or signed out), picked "Check install and sign-in during setup": the Agents panel checks that the chosen agent is installed and signed in, says so, and offers the sign-in when it is not, so the first message does not end on a "Sign in to Claude" card. This reads the CLI's own status command (`claude auth status --json`, `codex login status`, `cursor-agent status`) and runs its own login command (`claude auth login`, `codex login`, `cursor-agent login`), which opens the browser; Ghostex never handles the credential. Agents without a status command answer `signedIn: null` (unknown) and the panel says nothing about them.
+//! User, on the first-run page (step 15, the agent is missing or signed out), picked "Check install and sign-in during setup": the Agents panel checks that the chosen agent is installed and signed in, says so, and offers the sign-in when it is not, so the first message does not end on a "Sign in to Claude" card. This reads the CLI's own status command (`claude auth status --json`, `codex login status`, `cursor-agent status`, `agy models`) and runs its own login command (`claude auth login`, `codex login`, `cursor-agent login`, a plain `agy`), which opens the browser; Ghostex never handles the credential. Agents without a status command answer `signedIn: null` (unknown) and the panel says nothing about them.
 //! WHY: the status read is its own call, not a field of `/api/readAgentHookStatus`: that read runs before every agent launch and takes milliseconds, while a CLI status command can take seconds.
 //! SEE-ALSO: apps/desktop/src/app/window/onboarding/agents.rs (the panel), accounts/default_login.rs (the same `claude auth status` read for cswap's default login), accounts/setup.rs (Settings > Accounts' sign-in of a saved account, which this does not touch).
 
@@ -32,6 +32,12 @@ struct SignInCommands {
     executable: &'static str,
     status: &'static [&'static str],
     login: &'static [&'static str],
+    /// A menu the login shows first, answered with Enter on its first choice when this text
+    /// appears (Antigravity's "Select login method", whose first choice is Google OAuth).
+    confirm_menu: Option<&'static str>,
+    /// The login goes on into the agent itself once signed in instead of exiting, so it is stopped
+    /// as soon as the status read says signed in.
+    stays_open: bool,
 }
 
 fn commands(agent_id: &str) -> Option<SignInCommands> {
@@ -40,16 +46,30 @@ fn commands(agent_id: &str) -> Option<SignInCommands> {
             executable: "claude",
             status: &["auth", "status", "--json"],
             login: &["auth", "login"],
+            confirm_menu: None,
+            stays_open: false,
         },
         "codex" => SignInCommands {
             executable: "codex",
             status: &["login", "status"],
             login: &["login"],
+            confirm_menu: None,
+            stays_open: false,
         },
         "cursor" => SignInCommands {
             executable: "cursor-agent",
             status: &["status"],
             login: &["login"],
+            confirm_menu: None,
+            stays_open: false,
+        },
+        // CDXC:Onboarding 2026-11-21 DECISION: User: Antigravity is "one of the fully supported options in the onboarding". `agy` has no status or login command: `agy models` lists the models only when signed in ("Please sign in to view available models" otherwise, exit 1; agy 1.5.13), and a plain `agy` signs in: it asks for a login method (Enter picks Google OAuth), opens the browser on accounts.google.com, and then goes on into the agent.
+        "antigravity" => SignInCommands {
+            executable: "agy",
+            status: &["models"],
+            login: &[],
+            confirm_menu: Some("Select login method"),
+            stays_open: true,
         },
         _ => return None,
     })
@@ -121,6 +141,19 @@ fn status(state: &AppState, home: &Path, agent_id: &str) -> Value {
     } else {
         read_signed_in(home, agent_id)
     };
+    if signed_in == Some(true)
+        && running.is_some()
+        && commands(agent_id).is_some_and(|commands| commands.stays_open)
+    {
+        stop(agent_id);
+        return json!({
+            "agentId": agent_id,
+            "signedIn": true,
+            "signingIn": false,
+            "signInUrl": null,
+            "signInFailed": false,
+        });
+    }
     let failed = {
         let mut sign_ins = SIGN_INS.lock().unwrap_or_else(|e| e.into_inner());
         // A finished sign-in is reported once, then forgotten.
@@ -188,6 +221,13 @@ fn parse_status(agent_id: &str, success: bool, text: &str) -> Option<bool> {
             let start = text.find('{')?;
             let status: Value = serde_json::from_str(text[start..].trim()).ok()?;
             status.get("loggedIn").and_then(Value::as_bool)
+        }
+        "antigravity" => {
+            if text.to_ascii_lowercase().contains("sign in") {
+                Some(false)
+            } else {
+                success.then_some(true)
+            }
         }
         // `codex login status` prints "Logged in using …" and exits 0, or "Not logged in" and 1.
         "codex" | "cursor" => {
@@ -286,6 +326,7 @@ fn start(home: &Path, agent_id: &str) -> Result<(), DomainStateError> {
     );
     let id = agent_id.to_string();
     let reader_id = id.clone();
+    let mut confirm_menu = commands.confirm_menu;
     std::thread::spawn(move || {
         let mut terminal = LoginTerminal::new();
         let mut bytes = [0; 4096];
@@ -297,6 +338,10 @@ fn start(home: &Path, agent_id: &str) -> Result<(), DomainStateError> {
             let replies = terminal.process(&bytes[..n]);
             if !replies.is_empty() {
                 let _ = std::io::Write::write_all(&mut writer, &replies);
+            }
+            if confirm_menu.is_some_and(|menu| terminal.text().contains(menu)) {
+                confirm_menu = None;
+                let _ = std::io::Write::write_all(&mut writer, b"\r");
             }
             if let Some(url) = sign_in_url(&terminal.text()) {
                 if let Some(sign_in) = SIGN_INS
@@ -343,6 +388,14 @@ fn sign_in_url(output: &str) -> Option<String> {
         let candidate = word[start..].trim_end_matches(['\'', '"', '>', ')', '.']);
         let url = url::Url::parse(candidate).ok()?;
         let host = url.host_str()?;
+        // Google's sign-in page (Antigravity) is long enough to wrap in the terminal: only a
+        // whole one, which ends with its `state`, is offered.
+        if host == "accounts.google.com" {
+            return url
+                .query_pairs()
+                .any(|(key, _)| key == "state")
+                .then(|| candidate.to_string());
+        }
         [
             "claude.com",
             "claude.ai",

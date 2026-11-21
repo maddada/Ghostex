@@ -10,9 +10,11 @@ pub(crate) const INSTALL_GUIDE_URL: &str =
 
 /// CDXC:Onboarding 2026-09-28 DECISION:
 /// User: "We need to implement installing claude/codex/cursor/grok through the setup flow if not installed, and from the agents page in settings." These four always have a row on the Agents panel; a missing one shows an Install button that runs the same gxserver CLI job Settings > Agents uses, with each agent's official installer (PowerShell on Windows). Every other catalog agent installs from the Install guide popup.
-pub(crate) const PRIMARY_AGENTS: [(&str, &str); 4] = [
+/// CDXC:Onboarding 2026-11-21 DECISION: User: Antigravity is "one of the fully supported options in the onboarding": a row of its own beside Claude and Codex, with its install, its sign-in check (server/src/agent_sign_in.rs) and the default pick, which Chief of Staff then runs on (Gemini Neon at High, server/src/chief/model.rs).
+pub(crate) const PRIMARY_AGENTS: [(&str, &str); 5] = [
     ("claude", "Claude Code"),
     ("codex", "Codex CLI"),
+    ("antigravity", "Antigravity CLI"),
     ("cursor", "Cursor Agent"),
     ("grok", "Grok Build"),
 ];
@@ -99,6 +101,7 @@ fn display_name_override(agent_id: &str) -> Option<&'static str> {
     match agent_id {
         "claude" => Some("Claude Code"),
         "codex" => Some("Codex CLI"),
+        "antigravity" => Some("Antigravity CLI"),
         _ => None,
     }
 }
@@ -108,6 +111,7 @@ fn account_label(agent_id: &str) -> Option<&'static str> {
         "claude" => Some("uses your Claude account"),
         "codex" => Some("uses your ChatGPT account"),
         "cursor" => Some("uses your Cursor account"),
+        "antigravity" => Some("uses your Google account"),
         _ => None,
     }
 }

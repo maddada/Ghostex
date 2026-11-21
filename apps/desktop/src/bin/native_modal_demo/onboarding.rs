@@ -3,7 +3,8 @@
 //! `welcome-coordinators`, `welcome-mobile`, `agents`, `agents-scanning`, `agents-already-connected`,
 //! `agents-none-installed`, `agents-install-available`, `agents-install-partial`,
 //! `agents-installing`, `agents-install-failed`, `agents-integration`, `agents-guide`,
-//! `agents-signed-out` (the chosen agent is not signed in), `agents-signing-in` (presses Sign in
+//! `agents-antigravity` (Antigravity installed and the default), `agents-signed-out` (the chosen
+//! agent is not signed in), `agents-signing-in` (presses Sign in
 //! after 1.5s; the browser sign-in finishes 4s later),
 //! `workspace`, `workspace-no-browser-skill`, `workspace-agents`, `workspace-docs`,
 //! `workspace-code`, `workspace-kanban`, `workspace-automate`, the Workspace panel's Fast Computer &
@@ -268,7 +269,19 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         bool,
     ) = {
         let three: &[&str] = &["claude", "codex", "cursor"];
+        // Antigravity installed and picked as the default (Chief of Staff runs on it).
+        let with_antigravity: &[&str] = &["claude", "codex", "antigravity"];
         match state {
+            "agents-antigravity" => (
+                InitialPanel::Panel(2),
+                with_antigravity,
+                false,
+                "none",
+                "off",
+                true,
+                false,
+                false,
+            ),
             "agents" | "agents-guide" | "agents-integration" | "agents-signed-out"
             | "agents-signing-in" => (
                 InitialPanel::Panel(2),
@@ -444,7 +457,14 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         }
     };
     let mut settings = serde_json::Map::new();
-    settings.insert("defaultPromptAgentId".into(), json!("claude"));
+    settings.insert(
+        "defaultPromptAgentId".into(),
+        json!(if state == "agents-antigravity" {
+            "antigravity"
+        } else {
+            "claude"
+        }),
+    );
     settings.insert("codeViewTabHidden".into(), json!(true));
     settings.insert("kanbanViewTabHidden".into(), json!(true));
     settings.insert("automateViewTabHidden".into(), json!(true));
@@ -624,7 +644,11 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                         "agentId": agent_id,
                         "signedIn": state.signed_in,
                         "signingIn": state.signing_in,
-                        "signInUrl": "https://claude.ai/oauth/authorize?code=true",
+                        "signInUrl": if agent_id == "antigravity" {
+                            "https://accounts.google.com/o/oauth2/auth?state=demo"
+                        } else {
+                            "https://claude.ai/oauth/authorize?code=true"
+                        },
                         "signInFailed": false,
                     })
                 };
