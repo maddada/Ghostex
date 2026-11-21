@@ -557,14 +557,46 @@ pub(crate) fn codex_homes() -> Vec<PathBuf> {
     candidates.push(ghostex_paths::agent_homes::codex_default_home(&home));
 
     let mut seen: HashSet<PathBuf> = HashSet::new();
+    let mut seen_sessions: HashSet<PathBuf> = HashSet::new();
     let mut homes: Vec<PathBuf> = Vec::new();
     for candidate in candidates {
         let normalized = fs::canonicalize(&candidate).unwrap_or(candidate);
         if seen.insert(normalized.clone()) {
+            seen_sessions.insert(canonical_sessions(&normalized));
+            homes.push(normalized);
+        }
+    }
+    // CDXC:Drafts 2026-11-21 WHY: a Codex session started on a codex-swap account writes its
+    // rollouts in that account's home (`<xswap root>/accounts/<number>-<suffix>`), so the lookups
+    // here (a conversation's transcript, whether a coordinator before Start has had a prompt:
+    // agents/no_conversation.rs) did not find them. The account homes are read from codex-swap's
+    // folder, not `xswap list` (no process on a hot path), and one whose `sessions` folder is one
+    // already listed (codex-swap links it to the main Codex home) is left out, so no folder is
+    // scanned twice.
+    let accounts_dir = crate::accounts::launch::xswap_root(&home).join("accounts");
+    let mut accounts = fs::read_dir(accounts_dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|entry| entry.path())
+                .filter(|path| path.is_dir())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    accounts.sort();
+    for account in accounts {
+        let normalized = fs::canonicalize(&account).unwrap_or(account);
+        if seen.insert(normalized.clone()) && seen_sessions.insert(canonical_sessions(&normalized))
+        {
             homes.push(normalized);
         }
     }
     homes
+}
+
+fn canonical_sessions(codex_home: &Path) -> PathBuf {
+    let sessions = codex_home.join("sessions");
+    fs::canonicalize(&sessions).unwrap_or(sessions)
 }
 
 fn find_uuid(value: &str) -> Option<String> {
