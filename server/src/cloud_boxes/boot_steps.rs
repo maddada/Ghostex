@@ -13,6 +13,7 @@ use ghostex_gx_protocol::cloud_box::{
 use serde_json::Value;
 
 use super::ops::{Ops, Target};
+use crate::paths::GxserverPaths;
 use crate::server::AppState;
 
 /// The idle minutes setting (Q1011).
@@ -30,22 +31,30 @@ pub(super) fn idle_stop_minutes(state: &AppState) -> u64 {
 /// Tailcat client keys allowed to reach a box (Q1021 private only): every paired device's key, and
 /// this computer's own keys for its boxes (CDXC:CloudBoxes 2026-11-21 in home_keys.rs).
 pub(super) fn allowed_device_keys(state: &AppState) -> Vec<String> {
-    let mut keys: Vec<String> = crate::storage::open_gxserver_database(&state.paths)
-        .ok()
-        .map(|db| {
-            crate::remote_access::RemotePairingRepository::new(&db)
-                .list_devices()
-                .unwrap_or_default()
-        })
+    let mut keys: Vec<String> = paired_device_keys(&state.paths)
         .unwrap_or_default()
         .into_iter()
-        .filter_map(|device| device.tailcat_client_key)
         .chain(super::home_keys::public_keys(&state.paths))
         .filter(|key| !key.trim().is_empty())
         .collect();
     keys.sort();
     keys.dedup();
     keys
+}
+
+/// Every paired device's tailcat client key; `None` when the paired devices can't be read.
+pub(super) fn paired_device_keys(paths: &GxserverPaths) -> Option<Vec<String>> {
+    let db = crate::storage::open_gxserver_database(paths).ok()?;
+    let devices = crate::remote_access::RemotePairingRepository::new(&db)
+        .list_devices()
+        .ok()?;
+    Some(
+        devices
+            .into_iter()
+            .filter_map(|device| device.tailcat_client_key)
+            .filter(|key| !key.trim().is_empty())
+            .collect(),
+    )
 }
 
 /// The boot ticket of a box.

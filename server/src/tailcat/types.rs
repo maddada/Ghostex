@@ -161,6 +161,10 @@ pub enum TailcatStateUpdate {
     /// the box's boot ticket names, in one write. Refused on a computer that isn't a box
     /// (`apply_tailcat_state_update`, CDXC:CloudBoxes 2026-11-21).
     EnableForBoxDevices {},
+    /// A Cloud Box only (`ghostex box forget-devices`): takes the saved devices its boot ticket no
+    /// longer names off, never adding one. Refused on a computer that isn't a box
+    /// (CDXC:CloudBoxes 2026-11-21 in cloud_boxes/device_removal.rs).
+    PruneToBoxTicket {},
 }
 
 impl TailcatStateUpdate {
@@ -171,6 +175,7 @@ impl TailcatStateUpdate {
             Self::SetAllowedClientKeys { .. } => "setAllowedClientKeys",
             Self::SetRelay { .. } => "setRelay",
             Self::EnableForBoxDevices {} => "enableForBoxDevices",
+            Self::PruneToBoxTicket {} => "pruneToBoxTicket",
         }
     }
 }

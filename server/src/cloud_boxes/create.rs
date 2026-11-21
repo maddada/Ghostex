@@ -531,9 +531,19 @@ async fn finish_boot(
     let box_id = target.box_id.clone();
     let boot_ops = ops.clone();
     let boot_target = target.clone();
+    let boot_paths = state.paths.clone();
     let Some(result) = step(state, &box_id, Step::Boot, move || {
         boot_steps::install_package(&boot_ops, &boot_target)
             .and_then(|()| boot_steps::boot(&boot_ops, &boot_target, &ticket))
+            // A device unpaired while the box was starting goes now (device_removal.rs).
+            .inspect(|_| {
+                super::device_removal::catch_up_after_boot(
+                    &boot_paths,
+                    &boot_ops,
+                    &boot_target,
+                    &ticket,
+                )
+            })
             // Inside the step, so the box still counts as starting while it is stopped: a send
             // can't wake it under the stop, and the row is written once, with the whole reason.
             .map_err(|error| {

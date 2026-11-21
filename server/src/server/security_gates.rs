@@ -386,6 +386,8 @@ fn easy_connect_action(state: &AppState, params: &Map<String, Value>) -> Option<
                 .detail(format!("Devices: {}", keys.join(", "))),
             )
         }
+        // Only takes devices off a box, which never asks (as removing a device here never does).
+        TailcatStateUpdate::PruneToBoxTicket {} => None,
         TailcatStateUpdate::SetPorts { ports } => {
             let open: HashSet<u16> = current
                 .as_ref()

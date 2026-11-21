@@ -120,6 +120,16 @@ pub fn apply_tailcat_state_update(
                 state.allowed_client_keys = normalize_tailcat_client_keys(keys);
                 state.enabled = true;
             }
+            // Removal only, like the start's pruning below: a ticket can't add anyone here.
+            TailcatStateUpdate::PruneToBoxTicket {} => {
+                let named = crate::cloud_boxes::box_mode::boot::devices_ticket_names()
+                    .ok_or_else(|| {
+                        anyhow::Error::new(TailcatRefusal(
+                            "This computer isn't a Cloud Box.".to_string(),
+                        ))
+                    })?;
+                state.allowed_client_keys.retain(|key| named.contains(key));
+            }
         }
         Ok(())
     })

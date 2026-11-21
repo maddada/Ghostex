@@ -42,8 +42,11 @@ pub mod box_verbs {
     /// Started by `boot` (one per box, never run by home): the idle countdown behind
     /// [`super::BoxIdleStatus`], and the self-stop where the ticket asks for it.
     pub const IDLE_WATCH: &str = "idle-watch";
+    /// `--keys <key,key>`: take those devices off the box, out of its boot ticket and off its Easy
+    /// Connect, never adding one. Home runs it on its running boxes when a device is unpaired.
+    pub const FORGET_DEVICES: &str = "forget-devices";
 
-    pub const ALL: [&str; 9] = [
+    pub const ALL: [&str; 10] = [
         BOOT,
         PREPARE_SESSION,
         PREPARE_SNAPSHOT,
@@ -53,6 +56,7 @@ pub mod box_verbs {
         WRITE_BACK,
         RELAY,
         IDLE_WATCH,
+        FORGET_DEVICES,
     ];
 }
 

@@ -209,8 +209,28 @@ pub(crate) fn remove_paired_device_using(
     if let Some(link_key) = link_key.as_deref() {
         remove_tailcat_client_key(paths, db, tailcat_runtime, link_key, owner)?;
     }
+    // Its keys leave this computer's running Cloud Boxes too, now (CDXC:CloudBoxes 2026-11-21 in
+    // cloud_boxes/device_removal.rs), unless a device still paired holds them. When the devices
+    // can't be read, nothing is sent: the boxes drop it at their next start, as before.
+    let gone: Option<Vec<String>> = repository.list_devices().ok().map(|devices| {
+        let still_held: Vec<String> = devices
+            .into_iter()
+            .filter_map(|other| other.tailcat_client_key)
+            .collect();
+        device
+            .tailcat_client_key
+            .iter()
+            .chain(link_key.iter())
+            .chain(purpose_keys.iter().map(|(_, key)| key))
+            .filter(|key| !still_held.contains(key))
+            .cloned()
+            .collect()
+    });
     for (_, purpose_key) in purpose_keys {
         remove_tailcat_client_key(paths, db, tailcat_runtime, &purpose_key, owner)?;
+    }
+    if let Some(gone) = gone {
+        crate::cloud_boxes::device_removal::take_off_running_boxes(paths, gone);
     }
     Ok(Some(device))
 }
