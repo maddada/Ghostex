@@ -35,6 +35,14 @@ impl Render for RailDragPreview {
     }
 }
 
+/// Where the divider beside the docked sidebar starts, from the rail's top: the window's top edge.
+/// The desktop's body row starts the rail one work area frame gutter down
+/// (`WORK_AREA_FRAME_MARGIN` in helpers/work_area_frame.rs); the web page's rail starts at the top.
+#[cfg(not(ghostex_web))]
+const RAIL_DIVIDER_TOP: f32 = -crate::app::helpers::WORK_AREA_FRAME_MARGIN;
+#[cfg(ghostex_web)]
+const RAIL_DIVIDER_TOP: f32 = 0.0;
+
 /// How one button is drawn.
 #[derive(Clone, Copy)]
 struct RailButtonLook {
@@ -207,13 +215,22 @@ impl GhostexGpuiApp {
             // glass line under glass, the Dividers theme role when set), from under the top row to
             // the rail's foot. With the sidebar hidden or floating the rail still has no line of
             // its own (the decision above).
+            //
+            // CDXC:Sidebar 2026-11-21 DECISION:
+            // User (rail, after the traffic lights moved over the sidebar): the divider between
+            // the rail and the docked sidebar reaches the very top of the window. The lights sit
+            // at the sidebar's top left now (`window_lights_rail_shift`), so the line no longer
+            // stops under the top row: it starts at the window's top edge, above the rail's own
+            // top, across the body row's top gutter (`RAIL_DIVIDER_TOP`), beside Toggle sidebar in
+            // the rail's top slot. Supersedes the start "below the traffic lights / top bar row"
+            // above; hidden or floating, there is still no line.
             .relative()
             .when(!self.sidebar_collapsed, |rail| {
                 rail.child(
                     div()
                         .id("ghostex-gpui-sidebar-rail-divider")
                         .absolute()
-                        .top(px(top_inset))
+                        .top(px(RAIL_DIVIDER_TOP))
                         .bottom_0()
                         .right_0()
                         .w(px(1.0))
@@ -221,7 +238,8 @@ impl GhostexGpuiApp {
                 )
             })
             // The top slot, the sidebar's top row's height: Toggle sidebar on that row's line, in
-            // a drag band (`render_sidebar_rail_sidebar_toggle`). The divider starts under it.
+            // a drag band (`render_sidebar_rail_sidebar_toggle`). The divider runs past it to the
+            // window's top.
             .child(crate::app::render::window_drag_region::window_drag_region(
                 v_flex()
                     .id("ghostex-gpui-sidebar-rail-top")
