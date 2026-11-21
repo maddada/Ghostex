@@ -92,6 +92,19 @@ pub(super) fn write_page(
     session_ref: Option<&str>,
     source: Option<&Path>,
 ) -> std::io::Result<String> {
+    write_page_marked(gxserver_state_dir, title, html, session_ref, source, &[])
+}
+
+/// [`write_page`] with `marks` on the record from its first write, so no reader ever sees the page
+/// without them (a page made for a cover's link is never taken for one `ghostex show` published).
+pub(super) fn write_page_marked(
+    gxserver_state_dir: &Path,
+    title: &str,
+    html: &str,
+    session_ref: Option<&str>,
+    source: Option<&Path>,
+    marks: &[(&str, serde_json::Value)],
+) -> std::io::Result<String> {
     let dir = visual_pages_dir(gxserver_state_dir);
     fs::create_dir_all(&dir)?;
     let id = new_page_id();
@@ -107,6 +120,9 @@ pub(super) fn write_page(
     if let Some(source) = source {
         record["sourcePath"] = json!(source.to_string_lossy());
         record["sourceModifiedMs"] = json!(source_modified_ms(source));
+    }
+    for (key, value) in marks {
+        record[*key] = value.clone();
     }
     fs::write(dir.join(format!("{id}.html")), html)?;
     fs::write(
@@ -411,27 +427,6 @@ pub(super) fn earlier_pages_from(
             })
         })
         .collect()
-}
-
-/// Marks a page made for a cover's link (`file_page.rs` `page_for_cover_link`) with the cover's
-/// id, and, when it asks nothing, as waiting to be marked as read (`awaitsSeen`, publish.rs).
-pub(super) fn mark_linked_from(
-    gxserver_state_dir: &Path,
-    id: &str,
-    cover_id: &str,
-    awaits_seen: bool,
-) {
-    let _guard = RECORD_WRITE_LOCK
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let Some(mut record) = read_record(gxserver_state_dir, id) else {
-        return;
-    };
-    record[super::file_page::LINKED_FROM_KEY] = json!(cover_id);
-    if awaits_seen {
-        record["awaitsSeen"] = json!(true);
-    }
-    let _ = write_record(gxserver_state_dir, id, &record);
 }
 
 /// Marks a page made by opening its file, which no session published (`file_page.rs`).
