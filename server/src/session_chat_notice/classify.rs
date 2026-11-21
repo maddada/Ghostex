@@ -614,6 +614,13 @@ pub fn classify_session_chat_terminal_notice(
             return Some(notice);
         }
     }
+    // The agents whose dialogs replace their input box: a dialog phrase with that agent's ready
+    // input box below it is text on the screen (`has_composer_after`).
+    let dialog_composer = match agent {
+        SessionChatOptionAgent::Claude => Some("claude"),
+        SessionChatOptionAgent::Antigravity => Some("antigravity"),
+        _ => None,
+    };
     let mut advisory_notice = None;
     for rule in notice_rules(agent) {
         if let Some(signature) = rule.signatures.iter().find(|signature| {
@@ -660,11 +667,11 @@ pub fn classify_session_chat_terminal_notice(
             {
                 return false;
             }
-            if agent == SessionChatOptionAgent::Claude
-                && rule.blocks_input
+            if rule.blocks_input
                 && matches!(signature.scope, NoticeScope::Dialog)
-                && signature_needle(signature)
-                    .is_some_and(|needle| screen.has_claude_composer_after(needle))
+                && dialog_composer
+                    .zip(signature_needle(signature))
+                    .is_some_and(|(composer, needle)| screen.has_composer_after(composer, needle))
             {
                 return false;
             }

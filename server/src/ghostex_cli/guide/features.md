@@ -2433,7 +2433,9 @@ shows a quota card with the reset countdown and **Wait for reset**, **Switch mod
 and countdown until you dismiss it or pick **Wait for reset** (which dismisses
 the red dot and automatically continues the session once right after reset); a
 coordinator hitting quota also sends one Grok Bot alert when Grok Bot is
-connected. Commands: `ghostex send-session-chat-message`,
+connected. When Antigravity isn't signed in, its chat shows Finish signing in:
+sign in through Terminal view, then send your message. Commands:
+`ghostex send-session-chat-message`,
 `ghostex answer-session-chat-prompt`,
 `ghostex select-session-chat-model <session> --mode default|accept-edits|auto|plan --defer`.
 Sending a message to a sleeping session wakes it. While the agent is still

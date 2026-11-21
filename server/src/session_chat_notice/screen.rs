@@ -119,12 +119,13 @@ impl NoticeScreen {
 
     /// CDXC:AgentScreenDetection 2026-09-24 WHY:
     /// Claude's dialogs replace its input box, so a ready composer painted below the newest line carrying a dialog phrase proves that line is transcript text: an agent reply quoting "Do you trust the files in this folder?" refused every send with a hidden folder-trust notice.
-    pub(super) fn has_claude_composer_after(&self, needle: &str) -> bool {
+    /// Antigravity's sign-in menu replaces its input box the same way, so a reply quoting that menu is held to the same proof.
+    pub(super) fn has_composer_after(&self, agent_id: &str, needle: &str) -> bool {
         let Some(index) = self.folded.iter().rposition(|line| line.contains(needle)) else {
             return false;
         };
         crate::session_chat_composer::detect_session_chat_composer_ready(
-            Some("claude"),
+            Some(agent_id),
             &self.display[index + 1..].join("\n"),
         )
         .state
