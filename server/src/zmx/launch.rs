@@ -108,7 +108,7 @@ pub(crate) fn run_zmx_start_command(
         && current_zmx_supports_foreground(zmx_executable_path);
     job.prepare(
         &script,
-        macos_zmx_bundle_identifier(Path::new(zmx_executable_path)),
+        macos_zmx_bundle_identifier(Path::new(zmx_executable_path)).as_deref(),
         foreground,
     )?;
 
@@ -531,12 +531,34 @@ mod macos_launchd_domain_tests {
         }
     }
 
+    /// `<folder>/<bundle>/Contents/MacOS/<executable>` with an Info.plist naming `main` as the
+    /// bundle's program.
+    fn fake_bundle(folder: &Path, bundle: &str, executable: &str, main: &str, id: &str) -> PathBuf {
+        let program = folder.join(bundle).join("Contents/MacOS").join(executable);
+        fs::create_dir_all(program.parent().unwrap()).unwrap();
+        fs::write(&program, "").unwrap();
+        fs::write(
+            folder.join(bundle).join("Contents/Info.plist"),
+            format!(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\"><dict>\
+                 <key>CFBundleExecutable</key><string>{main}</string>\
+                 <key>CFBundleIdentifier</key><string>{id}</string></dict></plist>\n"
+            ),
+        )
+        .unwrap();
+        program
+    }
+
     #[test]
     fn only_a_zmx_inside_its_bundle_names_the_bundle() {
         let folder = tempfile::tempdir().unwrap();
-        let bundled = folder.path().join("GhostexSessions.app/Contents/MacOS/zmx");
-        fs::create_dir_all(bundled.parent().unwrap()).unwrap();
-        fs::write(&bundled, "").unwrap();
+        fake_bundle(
+            folder.path(),
+            "GhostexSessions.app",
+            "zmx",
+            "zmx",
+            "com.madda.ghostex.zmx",
+        );
         fs::create_dir_all(folder.path().join("bin")).unwrap();
         let link = folder.path().join("bin/zmx");
         std::os::unix::fs::symlink("../GhostexSessions.app/Contents/MacOS/zmx", &link).unwrap();
@@ -544,10 +566,31 @@ mod macos_launchd_domain_tests {
         fs::create_dir_all(loose.parent().unwrap()).unwrap();
         fs::write(&loose, "").unwrap();
         assert_eq!(
-            macos_zmx_bundle_identifier(&link),
+            macos_zmx_bundle_identifier(&link).as_deref(),
             Some("com.madda.ghostex.zmx")
         );
         assert_eq!(macos_zmx_bundle_identifier(&loose), None);
+        // A test server's bundle names its own identifier (CDXC:HelperNames 2026-11-21).
+        let test = fake_bundle(
+            folder.path(),
+            "GhostexSessionsTest.app",
+            "zmx",
+            "zmx",
+            "com.madda.ghostex.zmx.test",
+        );
+        assert_eq!(
+            macos_zmx_bundle_identifier(&test).as_deref(),
+            Some("com.madda.ghostex.zmx.test")
+        );
+        // A zmx that is a second program of another bundle is not that bundle to macOS.
+        let helper = fake_bundle(
+            folder.path(),
+            "Other.app",
+            "zmx",
+            "Other",
+            "com.example.other",
+        );
+        assert_eq!(macos_zmx_bundle_identifier(&helper), None);
         assert_eq!(
             macos_zmx_bundle_identifier(&folder.path().join("missing")),
             None
@@ -645,11 +688,44 @@ fn macos_zmx_launchd_session_key(session_name: &str) -> String {
 /// The bundle identifier of the app bundle zmx runs from, `None` for a loose zmx (a source build).
 ///
 /// CDXC:RemotePairing 2026-11-04 WHY: a session's launchd job runs `/bin/zsh`, not zmx (CDXC:Zmx 2026-08-07 above), and macOS asks for privacy access on behalf of a job's responsible code. TN3179 says a launchd agent that is not installed with SMAppService names its app with `AssociatedBundleIdentifiers`, so each session job names GhostexSessions.app, the bundle zmx runs as since it moved into one (package-macos-gxserver-bundles.sh), and the session's grants follow that bundle rather than each zmx build.
+///
+/// CDXC:HelperNames 2026-11-21 WHY: a test server (`cargo xtask test-server`) ran a loose source
+/// zmx, so macOS named "zmx" in its prompts (an App Management block the user could not place) and
+/// any grant it got was a stray row. Its zmx now runs as GhostexSessionsTest.app,
+/// `com.madda.ghostex.zmx.test`, apart from the real Ghostex Sessions' approvals
+/// (tooling/xtask/src/test_server.rs). The identifier is therefore read from the Info.plist of the
+/// bundle zmx is the main executable of, whatever the bundle is called, instead of being fixed.
 #[cfg(target_os = "macos")]
-fn macos_zmx_bundle_identifier(zmx_executable: &Path) -> Option<&'static str> {
+fn macos_zmx_bundle_identifier(zmx_executable: &Path) -> Option<String> {
     let zmx = fs::canonicalize(zmx_executable).ok()?;
-    zmx.ends_with("GhostexSessions.app/Contents/MacOS/zmx")
-        .then_some("com.madda.ghostex.zmx")
+    let contents = zmx
+        .parent()
+        .filter(|folder| folder.file_name() == Some("MacOS".as_ref()))?
+        .parent()
+        .filter(|folder| folder.file_name() == Some("Contents".as_ref()))?;
+    contents
+        .parent()
+        .filter(|bundle| bundle.extension() == Some("app".as_ref()))?;
+    // `plutil` reads XML and binary plists alike; one call for both keys.
+    let output = crate::platform::process::background_command("/usr/bin/plutil")
+        .args(["-convert", "json", "-o", "-"])
+        .arg(contents.join("Info.plist"))
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let info: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
+    // Only the bundle's own program: a second program in Contents/MacOS is a loose tool to macOS.
+    if info["CFBundleExecutable"].as_str()? != zmx.file_name()?.to_str()? {
+        return None;
+    }
+    info["CFBundleIdentifier"]
+        .as_str()
+        .filter(|identifier| !identifier.is_empty())
+        .map(str::to_string)
 }
 
 #[cfg(target_os = "macos")]
