@@ -23,9 +23,17 @@ const SCOPES: &str =
 /// The callback port the client was registered with.
 const PORT: u16 = 51121;
 const CALLBACK: &str = "/oauth-callback";
+/// CDXC:AgentProviders 2026-11-22 WHY:
+/// Antigravity CLI (`agy`) sends its requests to `daily-cloudcode-pa.googleapis.com`, while
+/// `cloudcode-pa.googleapis.com` still answers HTTP 200 for the same Google login with an idle
+/// quota pool (`remainingFraction: 1` and synthetic rolling `now + 5h` / `now + 7d` reset times).
+/// Trying `cloudcode-pa` first returned 0% used immediately and never reached `daily-cloudcode-pa`,
+/// even while the account had hit 100% quota in `agy`. Query `daily-cloudcode-pa` first, and if
+/// its windows all read 0% used, also check `cloudcode-pa` so prod-only users still see their
+/// usage.
 const CLOUD_CODE: [&str; 2] = [
-    "https://cloudcode-pa.googleapis.com",
     "https://daily-cloudcode-pa.googleapis.com",
+    "https://cloudcode-pa.googleapis.com",
 ];
 /// Google marks other callers as an unsupported client and leaves the plan out.
 const CLIENT_AGENT: &str = if cfg!(target_arch = "aarch64") {
@@ -267,23 +275,33 @@ pub(crate) fn read(account: &UsageAccount) -> Result<(Reading, Option<Credential
         .map(|project| json!({"project": project}))
         .unwrap_or_else(|| json!({}));
     let mut last = None;
+    let mut idle: Option<Reading> = None;
     for base in CLOUD_CODE {
-        let reply = cloud_code(base, "retrieveUserQuotaSummary", &token, &body)?;
+        let reply = match cloud_code(base, "retrieveUserQuotaSummary", &token, &body) {
+            Ok(reply) => reply,
+            Err(_) if idle.is_some() => break,
+            Err(failure) => return Err(failure),
+        };
         if reply.ok() {
             let reading = map(&reply.body, plan.clone());
-            if reading
+            let has_main = reading
                 .usage
                 .iter()
                 .filter(|window| window.model.is_none())
                 .count()
-                == 2
-            {
+                == 2;
+            let has_usage = reading.usage.iter().any(|window| window.used_percent > 0.0);
+            if has_main && has_usage {
                 return Ok((reading, renewed.then_some(credential)));
             }
-            last = Some(Ok(reading));
+            if has_main && idle.is_none() {
+                idle = Some(reading);
+            } else if last.is_none() || matches!(last, Some(Err(_))) {
+                last = Some(Ok(reading));
+            }
             continue;
         }
-        if reply.status == 401 {
+        if reply.status == 401 && idle.is_none() {
             return Err(Failure::SignInExpired);
         }
         if last.is_none() {
@@ -295,6 +313,9 @@ pub(crate) fn read(account: &UsageAccount) -> Result<(Reading, Option<Credential
                 reply.unavailable(NAME)
             }));
         }
+    }
+    if let Some(reading) = idle {
+        return Ok((reading, renewed.then_some(credential)));
     }
     match last {
         Some(Ok(reading)) if !reading.usage.is_empty() => {
@@ -361,8 +382,16 @@ fn map(body: &Value, plan: Option<String>) -> Reading {
             let Some((short, seconds)) = bucket_window(bucket) else {
                 continue;
             };
-            let Some(left) = http::number(&bucket["remainingFraction"]) else {
-                continue;
+            let left = match http::number(&bucket["remainingFraction"]) {
+                Some(left) => left,
+                // Proto3 JSON can omit a 0.0 float; a bucket that still carries a reset time (and
+                // no remainingAmount) has 0 remaining (100% used).
+                None if bucket["resetTime"].as_str().is_some()
+                    && bucket.get("remainingAmount").is_none() =>
+                {
+                    0.0
+                }
+                None => continue,
             };
             let bucket_id = bucket["bucketId"].as_str().unwrap_or(short);
             let window = UsageWindow {

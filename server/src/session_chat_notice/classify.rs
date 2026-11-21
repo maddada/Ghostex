@@ -42,7 +42,10 @@ fn notice_from_rule(
     )
     .with_input_blocking(rule.blocks_input)
     .with_detail(match evidence.as_deref().and_then(limit_reset) {
-        Some(reset) if rule.detail == CLAUDE_USAGE_LIMIT_DETAIL => {
+        Some(reset)
+            if rule.detail == CLAUDE_USAGE_LIMIT_DETAIL
+                || rule.detail == ANTIGRAVITY_USAGE_LIMIT_DETAIL =>
+        {
             rule.detail
                 .replacen("usage limit.", &format!("usage limit ({reset})."), 1)
         }
@@ -63,15 +66,25 @@ fn notice_from_rule(
     )
 }
 
-/// "resets 4pm" from Claude's "You've hit your limit · resets 4pm (Europe/Berlin)", without the time zone.
+/// "resets 4pm" from Claude's "You've hit your limit · resets 4pm (Europe/Berlin)", or
+/// "resets in 3h16m25s" from Antigravity's "… Resets in 3h16m25s.", without the time zone.
 fn limit_reset(line: &str) -> Option<String> {
-    let reset = &line[line.find("resets ")?..];
+    let lower = line.to_ascii_lowercase();
+    let start = lower.find("resets ")?;
+    let reset = &line[start..];
     let reset = match reset.find(" (") {
         Some(at) => &reset[..at],
         None => reset,
     };
     let reset = reset.trim().trim_end_matches(['.', ',']);
-    (reset.len() > "resets ".len()).then(|| reset.to_string())
+    if reset.len() <= "resets ".len() {
+        return None;
+    }
+    let mut normalized = reset.to_string();
+    if normalized.starts_with('R') {
+        normalized.replace_range(0..1, "r");
+    }
+    Some(normalized)
 }
 
 /*

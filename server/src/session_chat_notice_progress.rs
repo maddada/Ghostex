@@ -220,7 +220,9 @@ fn scan_transcript(text: &str, detail: Option<&str>) -> TranscriptScan {
         if record["isSidechain"] == true {
             continue;
         }
-        let Some(timestamp) = crate::session_chat::parse_timestamp(record.get("timestamp")) else {
+        let Some(timestamp) = crate::session_chat::parse_timestamp(
+            record.get("timestamp").or_else(|| record.get("createdAt")),
+        ) else {
             continue;
         };
         let payload = &record["payload"];
@@ -273,7 +275,8 @@ fn scan_transcript(text: &str, detail: Option<&str>) -> TranscriptScan {
             && record["message"]["model"]
                 .as_str()
                 .is_some_and(|model| model != "<synthetic>");
-        if codex_response || claude_response {
+        let antigravity_response = record["part"] == "assistant";
+        if codex_response || claude_response || antigravity_response {
             response_at = Some(timestamp);
         }
     }

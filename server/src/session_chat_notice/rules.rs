@@ -49,6 +49,10 @@ const RESTART_ZCODE: NoticeActionSpec = NoticeActionSpec {
 /// puts it in the sentence (`with_reset_time`).
 pub(super) const CLAUDE_USAGE_LIMIT_DETAIL: &str = "Claude Code hit its usage limit. Switch account or change model to keep going; queued messages wait until then.";
 
+/// The detail of Antigravity's quota-reached card. When the matched line names the reset ("Resets in 3h16m25s"),
+/// classify.rs puts it in the sentence.
+pub(super) const ANTIGRAVITY_USAGE_LIMIT_DETAIL: &str = "Antigravity hit its usage limit. Switch models or wait for it to reset; queued messages wait until then.";
+
 pub(super) struct NoticeRule {
     pub(super) kind: &'static str,
     pub(super) severity: SessionChatTerminalNoticeSeverity,
@@ -948,17 +952,72 @@ const ZCODE_RULES: &[NoticeRule] = &[NoticeRule {
     quote_evidence: true,
 }];
 
+// --- antigravity ------------------------------------------------------------
+
+/// CDXC:AgentScreenDetection 2026-11-22 WHY:
+/// Antigravity CLI (`agy`) prints quota errors (`⚠ Individual quota reached. Please upgrade your
+/// subscription to increase your limits. Resets in ...`) only on its terminal screen and in its
+/// CLI log, never in `transcript_full.jsonl`. With no rules here, a session hitting 429s showed no
+/// notice in chat and its queued messages and nudges kept firing against the quota wall.
+const ANTIGRAVITY_RULES: &[NoticeRule] = &[NoticeRule {
+    kind: SESSION_CHAT_NOTICE_USAGE_LIMIT,
+    severity: SessionChatTerminalNoticeSeverity::Warning,
+    title: "Usage limit reached",
+    detail: ANTIGRAVITY_USAGE_LIMIT_DETAIL,
+    blocks_input: false,
+    signatures: &[
+        NoticeSignature {
+            scope: NoticeScope::Banner,
+            parts: &[
+                NoticePart::Text("Individual quota reached"),
+                NoticePart::Gap(120),
+                NoticePart::Text("Resets in"),
+            ],
+            corroborators: &[],
+        },
+        NoticeSignature {
+            scope: NoticeScope::Banner,
+            parts: &[
+                NoticePart::Text("Individual quota reached"),
+                NoticePart::Gap(120),
+                NoticePart::Text("upgrade your subscription"),
+            ],
+            corroborators: &[],
+        },
+        NoticeSignature {
+            scope: NoticeScope::Banner,
+            parts: &[
+                NoticePart::Text("Model quota reached"),
+                NoticePart::Gap(120),
+                NoticePart::Text("Resets in"),
+            ],
+            corroborators: &[],
+        },
+        NoticeSignature {
+            scope: NoticeScope::Banner,
+            parts: &[
+                NoticePart::Text("Quota exhausted"),
+                NoticePart::Gap(120),
+                NoticePart::Text("Resets in"),
+            ],
+            corroborators: &[],
+        },
+    ],
+    actions: &[OPEN_TERMINAL],
+    quote_evidence: true,
+}];
+
 pub(super) fn notice_rules(agent: SessionChatOptionAgent) -> &'static [NoticeRule] {
     match agent {
         SessionChatOptionAgent::Claude => CLAUDE_RULES,
         SessionChatOptionAgent::Codex => CODEX_RULES,
         SessionChatOptionAgent::Cursor => CURSOR_RULES,
         SessionChatOptionAgent::Zcode => ZCODE_RULES,
+        SessionChatOptionAgent::Antigravity => ANTIGRAVITY_RULES,
         // Grok, Hermes, Omp, Pi and Empryo have no phrase-catalog rules here. Hermes
         // and Pi have source-derived focused-component detectors after this
         // catalog; the other agents rely on measured composer readiness.
-        SessionChatOptionAgent::Antigravity
-        | SessionChatOptionAgent::Copilot
+        SessionChatOptionAgent::Copilot
         | SessionChatOptionAgent::Dsh
         | SessionChatOptionAgent::Empryo
         | SessionChatOptionAgent::Grok
@@ -970,7 +1029,13 @@ pub(super) fn notice_rules(agent: SessionChatOptionAgent) -> &'static [NoticeRul
 
 /// Every catalog, for the kind-level queries below. Adding an agent's rules
 /// here is the only step needed to teach the predicate about it.
-const ALL_NOTICE_RULES: &[&[NoticeRule]] = &[CODEX_RULES, CLAUDE_RULES, CURSOR_RULES, ZCODE_RULES];
+const ALL_NOTICE_RULES: &[&[NoticeRule]] = &[
+    CODEX_RULES,
+    CLAUDE_RULES,
+    CURSOR_RULES,
+    ZCODE_RULES,
+    ANTIGRAVITY_RULES,
+];
 
 /*
 CDXC:SessionChat 2026-08-21:
