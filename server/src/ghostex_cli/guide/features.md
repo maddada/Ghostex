@@ -6654,7 +6654,7 @@ choice in a new chat and in New Thread shows once you've connected a provider
   box lists them: the Default (★) is what new boxes start from, Update saves a
   running box of the project as the new Default (the old one stays as Previous
   for 7 days), Make Default and Delete. The same section picks the provider
-  and size, and **Send to the box**: tick the project's `.env` files and name
+  and size (an Instabox box has one fixed size, 4 CPU · 8 GB), and **Send to the box**: tick the project's `.env` files and name
   variables; their values are read from this computer whenever a box starts
   and never saved in a snapshot.
 - **Agent logins for boxes**: Settings > Cloud Boxes. Allow on Cloud Boxes for

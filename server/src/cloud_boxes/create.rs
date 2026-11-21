@@ -261,6 +261,13 @@ pub(super) async fn create(
     } else {
         None
     };
+    if let Some(refusal) = request
+        .size
+        .as_deref()
+        .and_then(|id| ghostex_gx_cloud::prices::refused_size(&provider, id))
+    {
+        return Err(DomainStateError::bad_request(refusal));
+    }
     let size = ghostex_gx_cloud::prices::size_or_default(
         &provider,
         request
