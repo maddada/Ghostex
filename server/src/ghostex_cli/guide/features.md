@@ -2085,12 +2085,16 @@ Open settings to fix it or pick another engine. In
 the chat box, a small pill right above the microphone shows what Dictate is
 doing: ✕ to cancel, the recording time and a live waveform of your voice while
 you talk (so you can see the microphone hears you; after 3 seconds of silence it
-says "Can't hear you"), and ✓ to finish, then Transcribing. Esc cancels too. A cancelled recording is still
-kept: rest the pointer on the microphone (or right-click it) and choose
-Transcribe previous to type the newest recording that has no text yet into the
-chat box. On the terminal bar, press the microphone again while it transcribes
-to cancel, and right-click it for Transcribe previous. Every recording is listed
-in Settings > Dictation > Past recordings. On the phone (Android or iPhone), Dictate is the microphone right next to Send in
+says "Can't hear you"), and ✓ to finish, then Transcribing. Esc cancels too. A cancelled recording is never
+lost: right after a cancel the pill says "Dictation cancelled" with Restore, which
+types that recording where it was going, and later you can rest the pointer on the
+microphone (or right-click it) and choose Transcribe previous to type the newest
+recording that has no text yet into the chat box. A Live page's text boxes do the
+same: after Esc cancels, the box says "Dictation cancelled" with Restore. A recording running when its chat or page closes, or
+when Ghostex quits or crashes, is kept too and shows in Past recordings. On the
+terminal bar, press the microphone again while it transcribes to cancel, and
+right-click it for Transcribe previous. Every recording is listed in Settings >
+Dictation > Past recordings. On the phone (Android or iPhone), Dictate is the microphone right next to Send in
 the chat box, which stays there even when other buttons move into More actions; it
 uses the engine (and key) of the computer the chat lives on, keeps the recording on the phone
 until that computer has it, shows the recording time with a live waveform, then

@@ -72,12 +72,23 @@ impl GhostexGpuiApp {
                 (dictate.recording(), dictate.transcribing())
             };
             if recording {
-                dictate.update(cx, |dictate, cx| dictate.stop(cx));
+                // While the microphone is still opening too: it stops as soon as it records.
+                dictate.update(cx, |dictate, cx| dictate.stop_recording(cx));
                 cx.notify();
                 return;
             }
             if transcribing && dictation.session_id == session_id {
                 dictate.update(cx, |dictate, cx| dictate.cancel(cx));
+                // CDXC:Dictate 2026-11-21 on `DictatePhase::Cancelled`: say the recording is kept
+                // and where to get it back (this bar draws no pill for Restore).
+                let toast = serde_json::json!({
+                    "type": "toast",
+                    "level": "info",
+                    "title": "Dictation cancelled",
+                    "description": "Your recording is kept. Right-click the microphone to transcribe it, or find it in Settings > Dictation > Past recordings.",
+                    "durationMs": 12_000,
+                });
+                self.receive_gpui_app_toast_bridge_message(&toast, cx);
                 cx.notify();
                 return;
             }
@@ -150,7 +161,8 @@ impl GhostexGpuiApp {
                 DictatePhase::Idle
                 | DictatePhase::Failed { .. }
                 | DictatePhase::Unavailable { .. }
-                | DictatePhase::Notice { .. } => TerminalDictationState::Idle,
+                | DictatePhase::Notice { .. }
+                | DictatePhase::Cancelled { .. } => TerminalDictationState::Idle,
             };
             if let Some(dictation) = this.terminal_dictation.as_mut()
                 && dictation.dictate == dictate

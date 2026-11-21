@@ -213,12 +213,16 @@ pub(super) fn unavailable_title(code: &str) -> &'static str {
 
 /// Whether gxserver last said Dictate's engine can't transcribe (the microphone shows greyed).
 /// The first call asks gxserver, so the microphone is greyed soon after a chat first draws it; a
-/// hover or a press asks again.
+/// hover or a press asks again. It also hands gxserver the recordings an earlier run left on this
+/// computer (a crash or quit while recording), so they show in Past recordings from the start.
 pub(super) fn dictation_unready(cx: &App) -> bool {
     static ASKED: std::sync::Once = std::sync::Once::new();
     ASKED.call_once(|| {
         cx.background_executor()
-            .spawn(async { crate::app::voice_agent::refresh_engine() })
+            .spawn(async {
+                crate::app::voice_agent::refresh_engine();
+                crate::app::voice_agent::hand_over_unsent();
+            })
             .detach();
     });
     crate::app::voice_agent::dictate_engine().is_some_and(|engine| engine["ready"] == false)
@@ -585,6 +589,7 @@ impl NativeChatView {
                 | DictatePhase::Failed { .. }
                 | DictatePhase::Unavailable { .. }
                 | DictatePhase::Notice { .. }
+                | DictatePhase::Cancelled { .. }
         );
         if !hovered || !idle {
             if let Some(control) = self.dictation.as_mut() {
@@ -688,6 +693,52 @@ impl NativeChatView {
         );
         let floating = match &phase {
             DictatePhase::Idle => return None,
+            // CDXC:Dictate 2026-11-21 on `DictatePhase::Cancelled` (voice_agent/dictation.rs): a
+            // cancel says the recording is kept and offers Restore, which types it where this run
+            // was aimed (`target` and `anchor` stay as they were).
+            DictatePhase::Cancelled { .. } => div()
+                .h(px(PILL_HEIGHT * s))
+                .flex()
+                .items_center()
+                .gap(px(4.0 * s))
+                .pl(px(9.0 * s))
+                .pr(px(5.5 * s))
+                .rounded_full()
+                .whitespace_nowrap()
+                .child(
+                    div()
+                        .mr(px(2.0 * s))
+                        .text_color(p.muted)
+                        .child("Dictation cancelled"),
+                )
+                .child(
+                    div()
+                        .id("dictation-restore")
+                        .role(gpui::Role::Button)
+                        .aria_label("Restore")
+                        .chat_cursor_pointer()
+                        .flex_shrink_0()
+                        .px(px(6.0 * s))
+                        .rounded(px(5.0 * s))
+                        .text_color(p.foreground)
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .hover(|style| style.bg(p.foreground.opacity(0.08)))
+                        .tooltip(|window, cx| {
+                            gpui_component::tooltip::Tooltip::new(
+                                "Transcribe the cancelled recording",
+                            )
+                            .build(window, cx)
+                        })
+                        .child("Restore")
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            if let Some(control) = this.dictation.as_ref() {
+                                let dictate = control.dictate.clone();
+                                dictate.update(cx, |dictate, cx| dictate.restore(cx));
+                            }
+                            cx.notify();
+                        })),
+                )
+                .child(close(true, cx)),
             DictatePhase::Failed { failure, .. } => {
                 let width = card_width();
                 div().w(width).child(self.render_dictation_failure(
