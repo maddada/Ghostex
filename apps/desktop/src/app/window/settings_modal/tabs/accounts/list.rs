@@ -180,17 +180,44 @@ impl AccountsTab {
     ) -> AnyElement {
         let id = account.id();
         let selected = *pane == Pane::Account(id.clone());
-        let mark = div()
+        // CDXC:AgentProviders 2026-11-21 DECISION:
+        // User: "change how we indicate that an account has issues ... add a small dot top right of the
+        // account's icon (like the one we have on top right of space icon now)". An account that needs
+        // signing in wears the Space tile's 4pt dot in its mark's top-right corner (the sidebar's
+        // `corner_dot`), in the amber of the 7pt dot that sat beside its name until now; the mark's
+        // tooltip says why.
+        let needs_sign_in = account.needs_sign_in();
+        let faded = div()
             .size(px(24.0))
             .flex()
             .items_center()
             .justify_center()
-            .when(account.needs_sign_in(), |this| this.opacity(0.6))
+            .when(needs_sign_in, |this| this.opacity(0.6))
             .when(account.user_disabled(), |this| this.opacity(0.35))
             .child(if account.usage_only() {
                 account_logo(p, &account.provider(), 16.0)
             } else {
                 account_mark(p, &account.provider(), &account_badge(account), 1.15)
+            });
+        let row_fill = if selected {
+            p.raised.blend(p.foreground_alpha(0.08))
+        } else {
+            p.raised
+        };
+        let mark = div()
+            .id(SharedString::from(format!("account-{id}-mark")))
+            .relative()
+            .size(px(24.0))
+            .flex_shrink_0()
+            .child(faded)
+            .when(needs_sign_in, |this| {
+                this.child(crate::app::native_sidebar::status::corner_dot(
+                    hsla(modal_rgba(0xfbbf24, 0.95)),
+                    1.0,
+                    hsla(row_fill),
+                    None,
+                ))
+                .tooltip(tooltip_text("Needs sign-in"))
             })
             .into_any_element();
         let signing_in = self
@@ -267,17 +294,6 @@ impl AccountsTab {
                     .text_ellipsis()
                     .child(account_text(&account.name(), hide)),
             )
-            .when(account.needs_sign_in(), |this| {
-                this.child(
-                    div()
-                        .id(SharedString::from(format!("account-{id}-needs-sign-in")))
-                        .flex_shrink_0()
-                        .size(px(7.0))
-                        .rounded_full()
-                        .bg(hsla(modal_rgba(0xfbbf24, 0.95)))
-                        .tooltip(tooltip_text("Needs sign-in")),
-                )
-            })
             .into_any_element();
         let select_id = id.clone();
         list_item_with_title(
