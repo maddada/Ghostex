@@ -197,6 +197,7 @@ pub(crate) fn switch_session_agent(
     repository: &DomainRepository<'_>,
     db: &Connection,
     params: &Map<String, Value>,
+    zmx_context: Option<&crate::zmx::ZmxServerContext>,
 ) -> Result<AgentEndpointOutput, AgentEndpointError> {
     let lifecycle = read_lifecycle(params)?;
     let project = require_project(repository, &lifecycle.project_id)?;
@@ -213,13 +214,22 @@ pub(crate) fn switch_session_agent(
             result: json!({ "agentId": agent_id, "session": session }),
         });
     }
-    if session_is_draft(&session) {
-        return Err(DomainStateError {
-            code: "invalidState",
-            message: "This session hasn't been prompted yet. Use Switch Agent CLI in the chat composer instead."
-                .to_string(),
+    // CDXC:Drafts 2026-11-21 WHY: a session with no conversation has nothing to resume, so the
+    // Full Reload this switch relies on would start its new account on an empty conversation id.
+    // It takes the in-place switch every other agent change of such a session takes
+    // (agents/no_conversation.rs), and says so (`inPlace`), so the client skips its Full Reload;
+    // a client from before this still reloads, which wakes the switched agent fresh.
+    if session_has_no_conversation(db, &session) {
+        let context = zmx_context.ok_or_else(|| {
+            AgentEndpointError::DependencyUnavailable(
+                "Cannot switch the account without gxserver zmx context.".to_string(),
+            )
+        })?;
+        let mut output = switch_draft_agent(repository, db, params, context)?;
+        if let Value::Object(result) = &mut output.result {
+            result.insert("inPlace".to_string(), Value::Bool(true));
         }
-        .into());
+        return Ok(output);
     }
     let target = switchable_session_agents(&project, &session)
         .into_iter()

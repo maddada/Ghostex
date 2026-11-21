@@ -137,7 +137,9 @@ impl GhostexGpuiApp {
         cx.spawn(async move |this, cx| {
             let result = switch_session_agent(project_id, raw_session_id, agent_id).await;
             let _ = this.update(cx, |this, cx| match result {
-                Ok(()) => {
+                // A session with no conversation yet switched inside its pane already.
+                Ok(true) => {}
+                Ok(false) => {
                     this.gx_store_run_sidebar_reload(
                         &command(json!({ "type": "fullReloadSession", "sessionId": session_id })),
                         cx,

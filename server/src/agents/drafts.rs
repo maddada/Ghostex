@@ -169,7 +169,7 @@ pub(crate) fn arm_draft_launch_activity_suppression(
 
 /// The launch window of [`arm_draft_launch_activity_suppression`] for any session, which an agent
 /// switch in a live pane needs whether or not the session is a draft (a coordinator before Start).
-fn arm_launch_activity_suppression(
+pub(crate) fn arm_launch_activity_suppression(
     repository: &DomainRepository<'_>,
     session: &Value,
 ) -> Result<Value, DomainStateError> {

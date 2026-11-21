@@ -3585,7 +3585,10 @@ when signing in again fixes it.
 Switching a running Claude or Codex session to another account, from More
 actions > Switch Account, a terminal notice, or automatically when its account hits a usage limit,
 exits the CLI inside its own terminal and resumes the same conversation there,
-so the terminal tab and the chat stay open. Switching dismisses open CLI dialogs
+so the terminal tab and the chat stay open. A session with no conversation yet (a
+new thread, or a coordinator before you click Start) has nothing to resume: it just
+starts on the new account in the same terminal, keeping what you typed and a
+coordinator's waiting first message. Switching dismisses open CLI dialogs
 and interrupts the current work until the agent exits, then resumes your saved
 conversation on the selected account. For a Claude background session,
 switching stops that conversation and its remaining jobs before resuming its

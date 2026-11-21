@@ -1014,7 +1014,17 @@ pub(crate) fn select(
     for key in ["agentLaunchPlan", "agentResumePlan", "agentCommand"] {
         launch_settings.remove(key);
     }
-    if super::drafts::needs_fresh_launch(session) {
+    // CDXC:Drafts 2026-11-21 WHY: a session with no conversation yet (a draft, a coordinator
+    // before Start, an agent that recorded no prompt; agents/no_conversation.rs) has nothing to
+    // resume: it gets a fresh launch, without the conversation id its CLI published at start, and
+    // switches inside its live pane like an agent change, never through the resume restart.
+    let no_conversation = crate::agents::session_has_no_conversation(repository.db, session);
+    if no_conversation && !crate::agents::session_is_draft(session) {
+        for key in ["agentSessionId", "agentSessionPath"] {
+            runtime.remove(key);
+        }
+    }
+    if no_conversation || super::drafts::needs_fresh_launch(session) {
         super::drafts::rebuild_launch(
             repository,
             project,
@@ -1023,15 +1033,15 @@ pub(crate) fn select(
             &mut launch_settings,
         )?;
     }
-    let is_draft = crate::agents::session_is_draft(session);
-    let reuse_command = if is_draft {
+    let reuse_command = if no_conversation {
         super::drafts::prepare_live_switch(repository, session, &mut launch_settings)?
     } else {
         None
     };
     // A running conversation whose daemon is alive restarts in place (see accounts/restart.rs). The plan is resolved from the row as it will be saved, so a session that cannot be resumed is refused before anything changes.
     let restart =
-        if was_running && !is_draft && super::restart::provider_is_live(repository, session) {
+        if was_running && !no_conversation && super::restart::provider_is_live(repository, session)
+        {
             let mut planned = session.clone();
             planned["runtimeSettings"] = Value::Object(runtime.clone());
             planned["launchSettings"] = Value::Object(launch_settings.clone());
@@ -1039,7 +1049,7 @@ pub(crate) fn select(
         } else {
             None
         };
-    if was_running && !is_draft && restart.is_none() {
+    if was_running && !no_conversation && restart.is_none() {
         cycle(state, repository, session, "/api/sleepSession")?;
     }
     let restarting_in_place = restart.is_some();

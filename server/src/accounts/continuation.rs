@@ -36,7 +36,10 @@ pub(crate) fn start(
     let session = repo
         .get_session(&project, &id)?
         .ok_or_else(|| DomainStateError::not_found("Session not found."))?;
-    if source == SwitchSource::Manual || crate::agents::session_is_draft(&session) {
+    // Nothing to continue in a session with no conversation yet (agents/no_conversation.rs).
+    if source == SwitchSource::Manual
+        || crate::agents::session_has_no_conversation(repo.db, &session)
+    {
         let mut runtime = session["runtimeSettings"]
             .as_object()
             .cloned()
