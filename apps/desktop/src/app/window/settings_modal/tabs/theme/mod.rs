@@ -9,17 +9,17 @@
 mod art;
 mod chat_colours;
 mod chat_preview;
-mod colours;
+pub(crate) mod colours;
 mod controls;
 mod font;
-mod gallery;
+pub(crate) mod gallery;
 mod interface_scale;
 mod panels;
 pub(crate) mod presets;
-mod prompt_gallery;
+pub(crate) mod prompt_gallery;
 pub(crate) mod role_defaults;
-mod roles;
-mod swatches;
+pub(crate) mod roles;
+pub(crate) mod swatches;
 mod terminal_background;
 mod terminal_text;
 pub(super) mod transparency;
@@ -945,8 +945,40 @@ impl ThemeTab {
         settings_section(&p, "Panes", None, None, rows).map(IntoElement::into_any_element)
     }
 
-    /// Themes: Appearance's three preview cards, then one row of the agent-made looks and the
-    /// presets (presets.rs), the applied look's line and Describe a look (prompt_gallery.rs).
+    /// The Theme editor launcher row at the top of Themes: closes Settings and opens the compact
+    /// floating theme editor over the app so the user can see changes live (Q4386).
+    fn theme_editor_row(&self, p: &SettingsPalette, cx: &mut Context<Self>) -> AnyElement {
+        let open_button = super::super::fields::settings_sized_button(
+            p,
+            "theme-open-floating-editor",
+            "Open",
+            None,
+            None,
+            super::super::fields::SizedButtonVariant::Primary,
+            super::super::fields::SizedButtonSize::Sm,
+            false,
+            None,
+            |page: &mut Self, _window, cx| {
+                let store = page.store.clone();
+                store.update(cx, |store, cx| store.open_theme_editor(cx));
+            },
+            cx,
+        );
+        setting_row(
+            p,
+            "themeFloatingEditor",
+            RowSpec::new("Theme editor")
+                .description("Change the look in a small window while you see the app.")
+                .icon(ICON_COLOURFULNESS),
+            None,
+            open_button,
+            cx,
+        )
+    }
+
+    /// Themes: Theme editor launcher, Appearance's three preview cards, then one row of the
+    /// agent-made looks and the presets (presets.rs), the applied look's line and Describe a look
+    /// (prompt_gallery.rs).
     fn themes_section(
         &mut self,
         t: &ThemeCx,
@@ -954,6 +986,9 @@ impl ThemeTab {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let mut rows: Vec<AnyElement> = Vec::new();
+        if !t.searching {
+            rows.push(self.theme_editor_row(&t.p, cx));
+        }
         if t.visible("sidebarTheme") {
             rows.push(self.appearance_row(t, window, cx));
         }

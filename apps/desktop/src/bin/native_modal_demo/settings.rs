@@ -371,6 +371,8 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 eprintln!("close");
                 cx.quit();
             }
+            SettingsModalCommand::OpenThemeEditor => eprintln!("open theme editor"),
+            SettingsModalCommand::OpenThemeSettings => eprintln!("open theme settings"),
             SettingsModalCommand::OpenAccounts => eprintln!("open accounts"),
             SettingsModalCommand::SaveOpenForms(stored) => eprintln!("open forms: {stored:?}"),
         }
@@ -507,6 +509,216 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     for payload in EARLY_PAYLOADS.with(|early| std::mem::take(&mut *early.borrow_mut())) {
         deliver(&slot, payload, cx);
     }
+}
+
+/// Standalone preview of the compact draggable floating Theme Editor (`GHOSTEX_NATIVE_MODAL_DEMO=theme-editor`),
+/// rendered at its real 320x640 size floating over a 1650x962 app-window backdrop so offscreen
+/// screenshots show its frosted glass surface and live layout in both dark glass and light mode.
+pub(super) fn open_theme_editor(demo: &super::DemoEnv, cx: &mut App) {
+    use gpui::{
+        AppContext as _, Context, Entity, IntoElement, ParentElement as _, Render, Styled as _,
+        Window, div, px,
+    };
+
+    struct FloatingThemeEditorStage {
+        editor: Entity<GpuiThemeEditorWindow>,
+        light: bool,
+    }
+
+    impl Render for FloatingThemeEditorStage {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            let (bg_a, bg_b, sb_bg, wa_bg, line, fg, muted, card_bg) = if self.light {
+                (
+                    gpui::rgb(0xdbe3ee),
+                    gpui::rgb(0xeae3ef),
+                    gpui::Rgba { r: 0.92, g: 0.93, b: 0.95, a: 0.90 },
+                    gpui::Rgba { r: 0.96, g: 0.97, b: 0.98, a: 0.88 },
+                    gpui::Rgba { r: 0.0, g: 0.0, b: 0.0, a: 0.10 },
+                    gpui::rgb(0x1f232b),
+                    gpui::rgb(0x5b6275),
+                    gpui::Rgba { r: 1.0, g: 1.0, b: 1.0, a: 0.72 },
+                )
+            } else {
+                (
+                    gpui::rgb(0x1b2b34),
+                    gpui::rgb(0x282034),
+                    gpui::Rgba { r: 0.08, g: 0.10, b: 0.12, a: 0.78 },
+                    gpui::Rgba { r: 0.10, g: 0.12, b: 0.14, a: 0.74 },
+                    gpui::Rgba { r: 1.0, g: 1.0, b: 1.0, a: 0.08 },
+                    gpui::rgb(0xe8ebf2),
+                    gpui::rgb(0x98a0b2),
+                    gpui::Rgba { r: 0.16, g: 0.19, b: 0.22, a: 0.72 },
+                )
+            };
+            div()
+                .relative()
+                .size_full()
+                .overflow_hidden()
+                .bg(gpui::linear_gradient(
+                    135.0,
+                    gpui::linear_color_stop(bg_a, 0.0),
+                    gpui::linear_color_stop(bg_b, 1.0),
+                ))
+                // Simulated main Ghostex window behind the floating editor
+                .child(
+                    div()
+                        .size_full()
+                        .flex()
+                        .child(
+                            div()
+                                .w(px(300.0))
+                                .h_full()
+                                .bg(sb_bg)
+                                .border_r_1()
+                                .border_color(line)
+                                .p(px(18.0))
+                                .flex()
+                                .flex_col()
+                                .gap(px(10.0))
+                                .child(
+                                    div()
+                                        .text_size(px(13.0))
+                                        .text_color(fg)
+                                        .child("Ghostex"),
+                                )
+                                .child(
+                                    div()
+                                        .px(px(10.0))
+                                        .py(px(8.0))
+                                        .rounded(px(8.0))
+                                        .bg(card_bg)
+                                        .border_1()
+                                        .border_color(line)
+                                        .text_size(px(12.5))
+                                        .text_color(fg)
+                                        .child("Build floating theme editor"),
+                                )
+                                .child(
+                                    div()
+                                        .px(px(10.0))
+                                        .py(px(6.0))
+                                        .text_size(px(12.5))
+                                        .text_color(muted)
+                                        .child("Subtle dark tints"),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .h_full()
+                                .bg(wa_bg)
+                                .p(px(40.0))
+                                .flex()
+                                .flex_col()
+                                .justify_end()
+                                .gap(px(14.0))
+                                .child(
+                                    div()
+                                        .w(px(680.0))
+                                        .p(px(16.0))
+                                        .rounded(px(12.0))
+                                        .bg(card_bg)
+                                        .border_1()
+                                        .border_color(line)
+                                        .text_size(px(13.5))
+                                        .text_color(fg)
+                                        .child("The main Ghostex window updates live while you drag and adjust the floating Theme Editor."),
+                                )
+                                .child(
+                                    div()
+                                        .w(px(680.0))
+                                        .h(px(96.0))
+                                        .p(px(16.0))
+                                        .rounded(px(14.0))
+                                        .bg(card_bg)
+                                        .border_1()
+                                        .border_color(line)
+                                        .text_size(px(13.0))
+                                        .text_color(muted)
+                                        .child("Ask an agent to build something..."),
+                                ),
+                        ),
+                )
+                // Compact floating Theme Editor window positioned at top-right
+                .child(
+                    div()
+                        .absolute()
+                        .top(px(56.0))
+                        .right(px(36.0))
+                        .w(px(THEME_EDITOR_WIDTH))
+                        .h(px(THEME_EDITOR_HEIGHT))
+                        .rounded(px(12.0))
+                        .overflow_hidden()
+                        .border_1()
+                        .border_color(line)
+                        .shadow(vec![gpui::BoxShadow {
+                            color: gpui::Rgba {
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 0.42,
+                            }
+                            .into(),
+                            offset: gpui::point(px(0.0), px(18.0)),
+                            blur_radius: px(46.0),
+                            spread_radius: px(0.0),
+                            inset: false,
+                        }])
+                        .child(self.editor.clone()),
+                )
+        }
+    }
+
+    let state = demo.state.clone();
+    let mut initial = story_settings(&state);
+    if demo.palette.light {
+        initial.insert("sidebarTheme".into(), json!("plain-light"));
+    } else {
+        initial.insert("sidebarTheme".into(), json!("dark-2"));
+        initial.entry("windowArt".to_string()).or_insert_with(|| json!("moonwater"));
+        initial.entry("windowGlass".to_string()).or_insert_with(|| json!("frosted"));
+    }
+    let palette = if super::env("GHOSTEX_NATIVE_MODAL_DEMO_GLASS") == "1" {
+        let base = if demo.palette.light {
+            gpui::Rgba { r: 0.96, g: 0.97, b: 0.98, a: 0.86 }
+        } else {
+            gpui::Rgba { r: 0.13, g: 0.15, b: 0.18, a: 0.84 }
+        };
+        demo.palette.frosted_dialog(base)
+    } else {
+        demo.palette
+    };
+    let request = SettingsOpenRequest::from_open_message(
+        "settings",
+        &json!({ "initialTab": "theme" }),
+    );
+    let config = SettingsModalConfig {
+        palette,
+        request,
+        sidebar_state: sidebar_state(&initial),
+        open_forms: Value::Null,
+    };
+    let host: SettingsModalHost = Rc::new(|command, cx| match command {
+        SettingsModalCommand::Close => cx.quit(),
+        SettingsModalCommand::OpenThemeSettings => eprintln!("open theme settings"),
+        _ => {}
+    });
+    let width = super::env("GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS_WIDTH")
+        .parse::<f32>()
+        .unwrap_or(1650.0);
+    let height = super::env("GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS_HEIGHT")
+        .parse::<f32>()
+        .unwrap_or(962.0);
+    let light = demo.palette.light;
+    let _ = super::open_modal_window(
+        width,
+        height,
+        move |window, cx| {
+            let editor = cx.new(|cx| GpuiThemeEditorWindow::new(config, host, window, cx));
+            cx.new(|_| FloatingThemeEditorStage { editor, light })
+        },
+        cx,
+    );
 }
 
 thread_local! {

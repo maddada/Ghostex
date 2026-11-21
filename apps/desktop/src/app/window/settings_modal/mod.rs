@@ -20,8 +20,10 @@ pub(crate) mod search;
 pub(crate) mod shell;
 pub(crate) mod store;
 pub(crate) mod tabs;
+pub(crate) mod theme_editor;
 
 pub(crate) use model::{SettingsModalCommand, SettingsOpenRequest};
 pub(crate) use shell::{
     GpuiSettingsModalWindow, SETTINGS_MODAL_HEIGHT, SETTINGS_MODAL_WIDTH, SettingsModalConfig,
 };
+pub(crate) use theme_editor::{GpuiThemeEditorWindow, THEME_EDITOR_HEIGHT, THEME_EDITOR_WIDTH};

@@ -29,7 +29,7 @@ fn linear(x: f64, y: f64, angle: f64) -> f64 {
 }
 
 /// The flat colour of one square at one step.
-pub(super) fn swatch_colour(paint: &SwatchPaint) -> Rgb {
+pub(crate) fn swatch_colour(paint: &SwatchPaint) -> Rgb {
     let Rgb(top) = paint.top;
     let Rgb(base) = paint.base;
     let Rgb(accent) = paint.accent;

@@ -568,6 +568,10 @@ pub(crate) enum SettingsModalCommand {
     SaveOpenForms(Option<String>),
     /// The modal removed its own window.
     Close,
+    /// Closes Settings and opens the compact floating Theme Editor window (Q4386).
+    OpenThemeEditor,
+    /// Closes the floating Theme Editor and opens Settings > Themes (Q4386).
+    OpenThemeSettings,
     /// A sign-in the Accounts page started finished after the page closed: show Settings at
     /// Accounts (`tabs/accounts/sign_in_watch.rs`).
     OpenAccounts,

@@ -8155,8 +8155,12 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   in the menu. Settings at the end of the menu reaches that page too. There is
   no ⋯ button above the chat.
 - Welcome to Ghostex is the onboarding that opens the first time Ghostex
-  runs. Its five panels cover: Welcome, with three things Ghostex does (agents
-  that work together, coordinators, desktop and mobile); the agents found on
+  runs. Its six panels cover: Welcome, with three things Ghostex does (agents
+  that work together, coordinators, desktop and mobile); Make it yours, where
+  you pick a theme, background (Art, Live, Glass or Solid), accent and subtle
+  window colour (or an uncapped custom colour) with a live preview of Ghostex
+  beside it, plus All options to open the compact Theme editor right after
+  setup; the agents found on
   this computer, with Install buttons for Claude Code, Codex, Antigravity CLI,
   Cursor Agent and Grok Build (an Add to PATH button when an installed CLI is not on PATH; a
   command that is only a launcher installing the agent the first time it runs,
@@ -8528,7 +8532,7 @@ Commands: `ghostex theme list`, `ghostex theme apply <theme> [--background ...]`
 
 Settings has an **Interface** group in its sidebar, right under Experience, with four pages
 (`ghostex settings open --tab interface` lists their settings):
-**Themes** (`--tab theme`): Themes (Appearance, Default, the art themes, the agent-made looks and presets, Background, Backgrounds, Describe a look), Colours,
+**Themes** (`--tab theme`): Theme editor (Open closes Settings and opens a compact draggable floating window over the app so you see every change live), Themes (Appearance, Default, the art themes, the agent-made looks and presets, Background, Backgrounds, Describe a look), Colours,
 Glass (with Art behind the window), Chat colours (with Chat theme), Fine-tune colours and Terminal colours (Terminal theme,
 the palettes, Terminal background and its colour, Terminal background opacity, and the
 background image); **Text & Fonts** (`--tab textFonts`): Fonts, Terminal text (the terminal's

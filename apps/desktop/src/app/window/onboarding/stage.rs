@@ -8,11 +8,11 @@ use std::time::{Duration, Instant};
 
 pub(crate) const STAGE_WIDTH: f32 = 1672.0;
 pub(crate) const STAGE_HEIGHT: f32 = 941.0;
-pub(crate) const PANEL_COUNT: usize = 5;
+pub(crate) const PANEL_COUNT: usize = 6;
 /// x of the hairline between the copy column and the preview column, per panel (`gr` in the prototype).
-pub(crate) const PANEL_DIVIDER_X: [f32; PANEL_COUNT] = [759.0, 796.0, 727.0, 756.0, STAGE_WIDTH];
+pub(crate) const PANEL_DIVIDER_X: [f32; PANEL_COUNT] = [759.0, 836.0, 796.0, 727.0, 756.0, STAGE_WIDTH];
 /// x of the Ghostex lockup and the footer, per panel (`h5` in the prototype).
-pub(crate) const PANEL_LOCKUP_X: [f32; PANEL_COUNT] = [46.0, 48.0, 60.0, 46.0, 44.0];
+pub(crate) const PANEL_LOCKUP_X: [f32; PANEL_COUNT] = [46.0, 46.0, 48.0, 60.0, 46.0, 44.0];
 pub(crate) const VEIL_LEFT: f32 = 727.0;
 /// Footer row: the Back button and the panel's forward action share this top edge and height.
 pub(crate) const FOOT_TOP: f32 = 848.0;

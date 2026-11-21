@@ -300,7 +300,7 @@ impl GpuiOnboardingWindow {
         } else {
             return false;
         };
-        if self.panel != 5 {
+        if self.panel != 6 {
             return false;
         }
         let delta = if right { 1.0 } else { -1.0 };
@@ -471,7 +471,7 @@ impl GpuiOnboardingWindow {
         // "Remove it" for "Advanced settings later" (it finished setup and opened Settings at once,
         // the opposite of what it said): Open Ghostex is the one way out of setup here.
         out.push(
-            foot_actions(s, 5)
+            foot_actions(s, 6)
                 .child(self.control(
                     s,
                     cta(

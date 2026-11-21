@@ -238,13 +238,21 @@ pub(crate) struct OnboardingSettings {
     pub(crate) sidebar_theme: String,
     pub(crate) dark_theme_preset: String,
     pub(crate) light_theme_preset: String,
+    pub(crate) custom_dark_tint: String,
+    pub(crate) custom_light_tint: String,
     pub(crate) sidebar_contrast: f64,
     pub(crate) work_area_contrast: f64,
+    pub(crate) window_art: String,
+    pub(crate) window_art_light: String,
     pub(crate) window_glass: String,
+    pub(crate) window_glass_source: String,
+    pub(crate) window_glass_live_dark: String,
+    pub(crate) window_glass_live_light: String,
     pub(crate) glass_sidebar_dark: f64,
     pub(crate) glass_work_area_dark: f64,
     pub(crate) glass_sidebar_light: f64,
     pub(crate) glass_work_area_light: f64,
+    pub(crate) theme_roles: Value,
 }
 
 pub(crate) const DARK_PRESETS: [(&str, &str); 16] = [
@@ -408,8 +416,30 @@ impl OnboardingSettings {
             sidebar_theme,
             dark_theme_preset: preset("darkThemePreset", &DARK_PRESETS),
             light_theme_preset: preset("lightThemePreset", &LIGHT_PRESETS),
+            custom_dark_tint: text("customSidebarTitlebarBackgroundTintColor")
+                .map(str::to_string)
+                .unwrap_or_else(|| {
+                    ghostex_settings_catalog::default_value(
+                        "customSidebarTitlebarBackgroundTintColor",
+                    )
+                    .and_then(J::as_str)
+                    .unwrap_or("#1b212a")
+                    .to_string()
+                }),
+            custom_light_tint: text("customSidebarTitlebarLightBackgroundTintColor")
+                .map(str::to_string)
+                .unwrap_or_else(|| {
+                    ghostex_settings_catalog::default_value(
+                        "customSidebarTitlebarLightBackgroundTintColor",
+                    )
+                    .and_then(J::as_str)
+                    .unwrap_or("#e8eaef")
+                    .to_string()
+                }),
             sidebar_contrast: theme_contrast_points(object, "themeSidebarContrast"),
             work_area_contrast: theme_contrast_points(object, "themeWorkAreaContrast"),
+            window_art: text("windowArt").unwrap_or("none").to_string(),
+            window_art_light: text("windowArtLight").unwrap_or("none").to_string(),
             window_glass: match text("windowGlass").or_else(|| {
                 ghostex_settings_catalog::availability::default_value_on(
                     ghostex_settings_catalog::Platform::current(),
@@ -420,6 +450,13 @@ impl OnboardingSettings {
                 Some(value @ ("frosted" | "opaque")) => value.to_string(),
                 _ => "auto".to_string(),
             },
+            window_glass_source: text("windowGlassSource").unwrap_or("live").to_string(),
+            window_glass_live_dark: text("windowGlassLiveStyleDark")
+                .unwrap_or("ink")
+                .to_string(),
+            window_glass_live_light: text("windowGlassLiveStyleLight")
+                .unwrap_or("drift")
+                .to_string(),
             glass_sidebar_dark,
             glass_work_area_dark: work_area(
                 "windowGlassWorkAreaTintDark",
@@ -432,6 +469,11 @@ impl OnboardingSettings {
                 "windowGlassMainOpacityLight",
                 glass_sidebar_light,
             ),
+            theme_roles: object.get("themeRoles").cloned().unwrap_or_else(|| {
+                ghostex_settings_catalog::default_value("themeRoles")
+                    .map(|value| ghostex_settings_catalog::json::ToJson::to_json(value).to_value())
+                    .unwrap_or(Value::Null)
+            }),
         }
     }
 
@@ -479,14 +521,35 @@ impl OnboardingSettings {
         if let Some(value) = text("lightThemePreset") {
             self.light_theme_preset = value;
         }
+        if let Some(value) = text("customSidebarTitlebarBackgroundTintColor") {
+            self.custom_dark_tint = value;
+        }
+        if let Some(value) = text("customSidebarTitlebarLightBackgroundTintColor") {
+            self.custom_light_tint = value;
+        }
         if let Some(value) = number("themeSidebarContrast") {
             self.sidebar_contrast = value;
         }
         if let Some(value) = number("themeWorkAreaContrast") {
             self.work_area_contrast = value;
         }
+        if let Some(value) = text("windowArt") {
+            self.window_art = value;
+        }
+        if let Some(value) = text("windowArtLight") {
+            self.window_art_light = value;
+        }
         if let Some(value) = text("windowGlass") {
             self.window_glass = value;
+        }
+        if let Some(value) = text("windowGlassSource") {
+            self.window_glass_source = value;
+        }
+        if let Some(value) = text("windowGlassLiveStyleDark") {
+            self.window_glass_live_dark = value;
+        }
+        if let Some(value) = text("windowGlassLiveStyleLight") {
+            self.window_glass_live_light = value;
         }
         if let Some(value) = number("windowGlassSidebarOpacityDark") {
             self.glass_sidebar_dark = value;
@@ -499,6 +562,9 @@ impl OnboardingSettings {
         }
         if let Some(value) = number("windowGlassWorkAreaTintLight") {
             self.glass_work_area_light = value;
+        }
+        if let Some(value) = patch.get("themeRoles") {
+            self.theme_roles = value.clone();
         }
     }
 
@@ -526,6 +592,8 @@ pub(crate) struct FlowState {
     pub(crate) phone_queued: bool,
     /// "Add another computer after setup": Settings > Remote opens on its Add a computer dialog.
     pub(crate) computer_queued: bool,
+    /// "All options" on the Make it yours step: open the floating Theme Editor after setup.
+    pub(crate) theme_editor_queued: bool,
 }
 
 impl Default for FlowState {
@@ -534,6 +602,7 @@ impl Default for FlowState {
             hooks_requested: false,
             phone_queued: false,
             computer_queued: false,
+            theme_editor_queued: false,
         }
     }
 }

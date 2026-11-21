@@ -17,11 +17,11 @@ use serde_json::{Map, Value, json};
 
 const TITLEBAR_MODULE: &str = module::TITLEBAR_COLOR;
 
-pub(super) const MIN_DARKNESS: f64 = MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT;
-pub(super) const MAX_DARKNESS: f64 = 100.0;
+pub(crate) const MIN_DARKNESS: f64 = MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT;
+pub(crate) const MAX_DARKNESS: f64 = 100.0;
 const DARKNESS_SCALE_REFERENCE: f64 = 95.0;
-pub(super) const MIN_LIGHTNESS: f64 = 60.0;
-pub(super) const MAX_LIGHTNESS: f64 = 100.0;
+pub(crate) const MIN_LIGHTNESS: f64 = 60.0;
+pub(crate) const MAX_LIGHTNESS: f64 = 100.0;
 const LIGHTNESS_SCALE_REFERENCE: f64 = 95.0;
 const DEFAULT_TINT: &str = "#808080";
 const DEFAULT_DARK_BACKGROUND: &str = "#0b0b0b";
@@ -37,7 +37,7 @@ const CONTRAST_MAX_POINTS: f64 = 4.0;
 ///
 /// CDXC:Theming 2026-10-10 DECISION:
 /// User asked to make the Colourfulness sliders more granular and picked 33 positions: half-point steps from Subtle (+4) to Vivid (-12), with the five names still sitting exactly at their points and the label beside the slider showing the nearest name. This supersedes the five steps of 2026-09-25 (User: "You can switch it between more colorful and less colorful"); Colourfulness still sets the sidebar and work area contrast together, and More colour options can set the two areas apart.
-pub(super) const COLOURFULNESS: [(&str, f64); 6] = [
+pub(crate) const COLOURFULNESS: [(&str, f64); 6] = [
     ("Subtle", 4.0),
     ("Soft", 0.0),
     ("Balanced", -4.0),
@@ -49,16 +49,16 @@ pub(super) const COLOURFULNESS: [(&str, f64); 6] = [
 /// The contrast points between two neighbouring Colourfulness positions.
 const COLOURFULNESS_STEP_POINTS: f64 = 0.5;
 /// The last Colourfulness position: 0 is Subtle (+4), 32 is Vivid (-12), 56 is Full (-24).
-pub(super) const COLOURFULNESS_LAST_POSITION: usize = 56;
+pub(crate) const COLOURFULNESS_LAST_POSITION: usize = 56;
 
 /// The contrast points one Colourfulness position sets.
-pub(super) fn colourfulness_points(position: usize) -> f64 {
+pub(crate) fn colourfulness_points(position: usize) -> f64 {
     CONTRAST_MAX_POINTS
         - position.min(COLOURFULNESS_LAST_POSITION) as f64 * COLOURFULNESS_STEP_POINTS
 }
 
 /// The name of the named point nearest to `points` (Subtle, Soft, Balanced, Rich, Vivid or Full).
-pub(super) fn colourfulness_name(points: f64) -> &'static str {
+pub(crate) fn colourfulness_name(points: f64) -> &'static str {
     let mut best = 0;
     for (index, (_, value)) in COLOURFULNESS.iter().enumerate() {
         if (value - points).abs() < (COLOURFULNESS[best].1 - points).abs() {
@@ -69,10 +69,10 @@ pub(super) fn colourfulness_name(points: f64) -> &'static str {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-pub(super) struct Rgb(pub(super) [f64; 3]);
+pub(crate) struct Rgb(pub(crate) [f64; 3]);
 
 impl Rgb {
-    pub(super) fn gpui(self) -> gpui::Rgba {
+    pub(crate) fn gpui(self) -> gpui::Rgba {
         gpui::Rgba {
             r: (channel(self.0[0]) / 255.0) as f32,
             g: (channel(self.0[1]) / 255.0) as f32,
@@ -160,7 +160,7 @@ fn calibration(name: &str, fallback: &str) -> Rgb {
 }
 
 /// `clampSidebarTitlebarBackgroundDarknessPercent`.
-pub(super) fn clamp_darkness(value: f64) -> f64 {
+pub(crate) fn clamp_darkness(value: f64) -> f64 {
     if !value.is_finite() {
         return 96.0;
     }
@@ -173,7 +173,7 @@ pub(super) fn clamp_darkness(value: f64) -> f64 {
 const CUSTOM_LIGHT_THEME_DEPTH_SHIFT: f64 = -1.0;
 
 /// `clampSidebarTitlebarLightBackgroundLightnessPercent`.
-pub(super) fn clamp_lightness(value: f64) -> f64 {
+pub(crate) fn clamp_lightness(value: f64) -> f64 {
     if !value.is_finite() {
         return 96.0;
     }
@@ -190,7 +190,7 @@ fn clamp_contrast(value: f64) -> f64 {
 }
 
 /// `getSidebarTitlebarBackgroundForDarkness`.
-pub(super) fn dark_chrome(darkness: f64, tint: &str) -> Rgb {
+pub(crate) fn dark_chrome(darkness: f64, tint: &str) -> Rgb {
     let darkness = clamp_darkness(darkness);
     let tint = normalize_hex(tint, DEFAULT_TINT);
     let base =
@@ -224,7 +224,7 @@ pub(super) fn dark_chrome(darkness: f64, tint: &str) -> Rgb {
 }
 
 /// `dark_chrome` faded `fade` of the way toward the tint itself (`sidebar_titlebar_background_toward_full`).
-pub(super) fn dark_chrome_full(darkness: f64, tint: &str, fade: f64) -> Rgb {
+pub(crate) fn dark_chrome_full(darkness: f64, tint: &str, fade: f64) -> Rgb {
     let vivid = dark_chrome(darkness, tint);
     if fade <= 0.0 {
         return vivid;
@@ -234,7 +234,7 @@ pub(super) fn dark_chrome_full(darkness: f64, tint: &str, fade: f64) -> Rgb {
 }
 
 /// Built-in colour squares' dark chrome, capped by the subtle tint rule (`max_chroma`, `SUBTLE_DARK_MAX_LIGHTNESS`).
-pub(super) fn dark_chrome_full_subtle(
+pub(crate) fn dark_chrome_full_subtle(
     darkness: f64,
     tint: &str,
     fade: f64,
@@ -254,7 +254,7 @@ pub(super) fn dark_chrome_full_subtle(
 
 /// `light_chrome` faded `fade` of the way toward the tint itself
 /// (`sidebar_titlebar_light_background_toward_full`).
-pub(super) fn light_chrome_full(lightness: f64, tint: &str, fade: f64) -> Rgb {
+pub(crate) fn light_chrome_full(lightness: f64, tint: &str, fade: f64) -> Rgb {
     let vivid = light_chrome(lightness, tint);
     if fade <= 0.0 {
         return vivid;
@@ -264,7 +264,7 @@ pub(super) fn light_chrome_full(lightness: f64, tint: &str, fade: f64) -> Rgb {
 }
 
 /// Built-in colour squares' light chrome, capped by the subtle chroma rule (`max_chroma`).
-pub(super) fn light_chrome_full_subtle(
+pub(crate) fn light_chrome_full_subtle(
     lightness: f64,
     tint: &str,
     fade: f64,
@@ -276,7 +276,7 @@ pub(super) fn light_chrome_full_subtle(
 }
 
 /// `getSidebarTitlebarLightBackgroundForLightness`.
-pub(super) fn light_chrome(lightness: f64, tint: &str) -> Rgb {
+pub(crate) fn light_chrome(lightness: f64, tint: &str) -> Rgb {
     let lightness = clamp_lightness(lightness);
     if lightness == MAX_LIGHTNESS {
         return Rgb([255.0; 3]);
@@ -305,7 +305,7 @@ pub(super) fn light_chrome(lightness: f64, tint: &str) -> Rgb {
 
 /// `accentColorForTint`: the tint's hue at a fixed lightness (0.75 dark, 0.38 light), saturation
 /// held in 0.55-0.9; a neutral tint paints `#86d3f8` (dark) or `#262626` (light).
-pub(super) fn accent_for_tint(tint: &str, light: bool) -> Rgb {
+pub(crate) fn accent_for_tint(tint: &str, light: bool) -> Rgb {
     let color = parse_hex(&normalize_hex(tint, DEFAULT_TINT));
     if is_neutral(color) {
         return parse_hex(if light { "#262626" } else { "#86d3f8" });
@@ -353,7 +353,7 @@ fn luminance(color: Rgb) -> f64 {
 }
 
 /// `getSidebarTitlebarForegroundForBackground`.
-pub(super) fn foreground_for(background: Rgb) -> Rgb {
+pub(crate) fn foreground_for(background: Rgb) -> Rgb {
     if luminance(background) > 0.54 {
         parse_hex("#262626")
     } else {
@@ -370,7 +370,7 @@ fn chat_background_for_chrome(chrome: Rgb) -> Rgb {
 }
 
 /// One preset's controls (`DARK_THEME_PRESET_CONTROLS[preset]` / `LIGHT_THEME_PRESET_CONTROLS`).
-pub(super) fn preset_controls(dark: bool, preset: &str) -> Option<(f64, String)> {
+pub(crate) fn preset_controls(dark: bool, preset: &str) -> Option<(f64, String)> {
     let table = if dark {
         "DARK_THEME_PRESET_CONTROLS"
     } else {
@@ -391,7 +391,7 @@ pub(super) fn preset_controls(dark: bool, preset: &str) -> Option<(f64, String)>
 }
 
 /// The theme colours offered in each appearance, in order, as `(value, label)`, without Custom.
-pub(super) fn preset_options(dark: bool) -> Vec<(String, String)> {
+pub(crate) fn preset_options(dark: bool) -> Vec<(String, String)> {
     let name = if dark {
         "DARK_THEME_PRESET_OPTIONS"
     } else {
@@ -406,7 +406,7 @@ pub(super) fn preset_options(dark: bool) -> Vec<(String, String)> {
 }
 
 /// `themePresetLabel`.
-pub(super) fn preset_label(dark: bool, preset: &str) -> String {
+pub(crate) fn preset_label(dark: bool, preset: &str) -> String {
     let name = if dark {
         "DARK_THEME_PRESET_OPTIONS"
     } else {
@@ -446,12 +446,12 @@ fn mix(from: Rgb, to: Rgb, amount: f64) -> Rgb {
 }
 
 /// The gradient stops of one colour square (`swatchStyle`): top, base, accent, glow and rim alpha.
-pub(super) struct SwatchPaint {
-    pub(super) top: Rgb,
-    pub(super) base: Rgb,
-    pub(super) accent: Rgb,
-    pub(super) glow: f64,
-    pub(super) rim: f64,
+pub(crate) struct SwatchPaint {
+    pub(crate) top: Rgb,
+    pub(crate) base: Rgb,
+    pub(crate) accent: Rgb,
+    pub(crate) glow: f64,
+    pub(crate) rim: f64,
 }
 
 /// `NEUTRAL_SWATCH_ACCENT`: themes without a hue take a grey sheen.
@@ -482,7 +482,7 @@ fn neutral_accent(preset: &str, dark: bool) -> Option<Rgb> {
 /// User: make the colour squares "smaller and simpler" and keep today's ring. Supersedes the 2026-09-25 gradient squares: each square is 20px and one flat colour, the average of this paint without its sheen (swatches.rs), so it keeps the hue the gradient gave it and still follows Colourfulness.
 ///
 /// `position` is a Colourfulness position; `step` runs 0 (Subtle) to 4 (Vivid) through the in-between positions, so the five named points paint exactly as the five steps did, and stays 4 past Vivid, where only the chrome fades toward Full.
-pub(super) fn swatch_paint(dark: bool, preset: &str, position: usize) -> SwatchPaint {
+pub(crate) fn swatch_paint(dark: bool, preset: &str, position: usize) -> SwatchPaint {
     let points = colourfulness_points(position);
     let step = ((CONTRAST_MAX_POINTS - points) / 4.0).min(4.0);
     let tint = preset_controls(dark, preset)
@@ -521,7 +521,7 @@ pub(super) fn swatch_paint(dark: bool, preset: &str, position: usize) -> SwatchP
 }
 
 /// `readThemeContrastPoints`: a saved contrast, or the retired five-step `themeContrast`.
-pub(super) fn contrast_points(values: &SettingsValues, key: &str) -> f64 {
+pub(crate) fn contrast_points(values: &SettingsValues, key: &str) -> f64 {
     if let Some(points) = values
         .map()
         .get(key)
@@ -593,7 +593,7 @@ fn chrome_controls(values: &SettingsValues, dark: bool) -> (f64, String) {
 /// The preview used to keep the appearance it had when the page opened, so after a preset (or a
 /// click on an Appearance card) switched to light, it went on showing the dark colours. It now
 /// follows the saved Appearance on every render.
-pub(super) fn preview_scheme_dark(sidebar_theme: &str, system_dark: bool) -> bool {
+pub(crate) fn preview_scheme_dark(sidebar_theme: &str, system_dark: bool) -> bool {
     match sidebar_theme {
         "system" => system_dark,
         theme => theme.starts_with("dark"),
@@ -602,7 +602,7 @@ pub(super) fn preview_scheme_dark(sidebar_theme: &str, system_dark: bool) -> boo
 
 /// `ColourfulnessPreview`: the sidebar chrome and the work area colour of one appearance, and the
 /// foreground its divider is drawn with.
-pub(super) fn preview_colours(values: &SettingsValues, dark: bool) -> (Rgb, Rgb, Rgb) {
+pub(crate) fn preview_colours(values: &SettingsValues, dark: bool) -> (Rgb, Rgb, Rgb) {
     let is_custom = if dark {
         ghostex_settings_catalog::theme_colours::dark_preset_is_custom(values.map())
     } else {
@@ -673,14 +673,14 @@ pub(super) fn preview_colours(values: &SettingsValues, dark: bool) -> (Rgb, Rgb,
 }
 
 /// `colourfulnessStepForPoints`: the Colourfulness position that sets exactly `points`, if any.
-pub(super) fn colourfulness_step_for_points(points: f64) -> Option<usize> {
+pub(crate) fn colourfulness_step_for_points(points: f64) -> Option<usize> {
     let position = (CONTRAST_MAX_POINTS - points) / COLOURFULNESS_STEP_POINTS;
     (position.fract() == 0.0 && (0.0..=COLOURFULNESS_LAST_POSITION as f64).contains(&position))
         .then_some(position as usize)
 }
 
 /// `colourfulnessDisplayStep`: the Colourfulness position nearest to `points`.
-pub(super) fn colourfulness_display_step(points: f64) -> usize {
+pub(crate) fn colourfulness_display_step(points: f64) -> usize {
     if !points.is_finite() {
         return colourfulness_display_step(0.0);
     }
@@ -690,7 +690,7 @@ pub(super) fn colourfulness_display_step(points: f64) -> usize {
 }
 
 /// `colourfulnessStepIndex`: the one position both areas share, or `None` once they are apart.
-pub(super) fn colourfulness_step_index(values: &SettingsValues) -> Option<usize> {
+pub(crate) fn colourfulness_step_index(values: &SettingsValues) -> Option<usize> {
     let sidebar = values.f64("themeSidebarContrast");
     if sidebar != values.f64("themeWorkAreaContrast") {
         return None;
@@ -699,7 +699,7 @@ pub(super) fn colourfulness_step_index(values: &SettingsValues) -> Option<usize>
 }
 
 /// A whole number is written as a JSON integer, the way `JSON.stringify` writes it.
-pub(super) fn js_number(value: f64) -> Value {
+pub(crate) fn js_number(value: f64) -> Value {
     if value.fract() == 0.0 && value.abs() < 1e15 {
         json!(value as i64)
     } else {
@@ -708,7 +708,7 @@ pub(super) fn js_number(value: f64) -> Value {
 }
 
 /// `colourfulnessPatch(step)`: both contrasts, and the Custom colours' contrast moved in step.
-pub(super) fn colourfulness_patch(position: usize) -> Map<String, Value> {
+pub(crate) fn colourfulness_patch(position: usize) -> Map<String, Value> {
     let points = colourfulness_points(position);
     let catalog = settings_catalog();
     let dark_default = catalog.number(
@@ -742,7 +742,7 @@ pub(super) fn colourfulness_patch(position: usize) -> Map<String, Value> {
 /// `themeSidebarContrast`, so with a custom colour it left the sidebar where it was and shifted
 /// the work area (which follows the difference between the two contrasts) instead. The work area
 /// slider still writes no depth: its contrast alone moves the work area.
-pub(super) fn area_colourfulness_patch(key: &str, position: usize) -> Map<String, Value> {
+pub(crate) fn area_colourfulness_patch(key: &str, position: usize) -> Map<String, Value> {
     if key == "themeSidebarContrast" {
         let mut patch = colourfulness_patch(position);
         patch.remove("themeWorkAreaContrast");
@@ -755,9 +755,9 @@ pub(super) fn area_colourfulness_patch(key: &str, position: usize) -> Map<String
 
 /// `TRANSPARENCY_STRENGTH_*` and the anchor the strength-to-tint curve is drawn from: strength 20 is
 /// 88/93, which is also the shipped default (88 dark and 93 light for both areas in the settings catalog).
-pub(super) const STRENGTH_MIN: f64 = 0.0;
-pub(super) const STRENGTH_MAX: f64 = 100.0;
-pub(super) const STRENGTH_STEP: f64 = 5.0;
+pub(crate) const STRENGTH_MIN: f64 = 0.0;
+pub(crate) const STRENGTH_MAX: f64 = 100.0;
+pub(crate) const STRENGTH_STEP: f64 = 5.0;
 const STRENGTH_DEFAULT: f64 = 20.0;
 const SIDEBAR_AT_DEFAULT_DARK: f64 = 88.0;
 const SIDEBAR_AT_DEFAULT_LIGHT: f64 = 93.0;
@@ -771,7 +771,7 @@ fn strength_sidebar_tint(strength: f64, at_default: f64) -> f64 {
 
 /// How much more solid the work area is than the sidebar (work area tint minus sidebar tint) in
 /// dark and in light mode: 0 unless the tints were set apart by hand.
-pub(super) fn strength_gaps(values: &SettingsValues) -> (f64, f64) {
+pub(crate) fn strength_gaps(values: &SettingsValues) -> (f64, f64) {
     (
         values.f64("windowGlassWorkAreaTintDark") - values.f64("windowGlassSidebarOpacityDark"),
         values.f64("windowGlassWorkAreaTintLight") - values.f64("windowGlassSidebarOpacityLight"),
@@ -783,7 +783,7 @@ pub(super) fn strength_gaps(values: &SettingsValues) -> (f64, f64) {
 ///
 /// CDXC:Theming 2026-10-23 DECISION:
 /// User: "add transparency strength selection" to the setup and the Theme page, then "make it a slider with more options" and "Full range"; then "pls make the sidebar and main area default to having the same strength for the transparency by default" and "but look if the user makes one darker than other and we just adjust the strength then we need to keep the difference between the 2 ok?". Strength is one 0-100 slider in steps of 5 (0 fully solid, 100 fully clear) that sets the sidebar's tint from its curve and gives the work area the same tint plus the difference the user set between them by hand under More transparency options, in dark and light mode separately; out of the box there is no difference, so both match. Each tint is clamped to 0-100, so near the ends the difference narrows as far as it has to (and stays narrowed). This supersedes the 2026-09-27 rule that kept the work area up to 7 points more see-through than the sidebar ("it needs to make the sidebar darker than main", "make it 7 point difference").
-pub(super) fn strength_patch(strength: f64, gaps: (f64, f64)) -> Map<String, Value> {
+pub(crate) fn strength_patch(strength: f64, gaps: (f64, f64)) -> Map<String, Value> {
     let value = strength.clamp(STRENGTH_MIN, STRENGTH_MAX);
     let tints = |at_default: f64, gap: f64| {
         let sidebar = strength_sidebar_tint(value, at_default).round();
@@ -808,7 +808,7 @@ pub(super) fn strength_patch(strength: f64, gaps: (f64, f64)) -> Map<String, Val
 /// `transparencyStrengthFromSettings`: the exact strength the tints came from (or `None` once a
 /// sidebar tint was tuned off the curve by hand; a hand-set work-area gap still counts as exact) and
 /// where the slider sits.
-pub(super) fn strength_from_settings(values: &SettingsValues) -> (Option<f64>, f64) {
+pub(crate) fn strength_from_settings(values: &SettingsValues) -> (Option<f64>, f64) {
     let sidebar = values.f64("windowGlassSidebarOpacityDark");
     let raw = if sidebar >= SIDEBAR_AT_DEFAULT_DARK {
         ((100.0 - sidebar) * STRENGTH_DEFAULT) / (100.0 - SIDEBAR_AT_DEFAULT_DARK)
@@ -832,7 +832,7 @@ pub(super) fn strength_from_settings(values: &SettingsValues) -> (Option<f64>, f
 
 /// `LIGHT_PRESET_FOR_DARK` / `DARK_PRESET_FOR_LIGHT`: the matching colour in the other appearance
 /// (Black and White swap; every other colour keeps its id).
-pub(super) fn paired_preset(from_dark: bool, preset: &str) -> Option<String> {
+pub(crate) fn paired_preset(from_dark: bool, preset: &str) -> Option<String> {
     Some(match (from_dark, preset) {
         (_, "custom") => return None,
         (true, "black") => "white".to_string(),
@@ -842,7 +842,7 @@ pub(super) fn paired_preset(from_dark: bool, preset: &str) -> Option<String> {
 }
 
 /// `#rrggbb` of a colour (for the swatch cache key).
-pub(super) fn hex_of(color: Rgb) -> String {
+pub(crate) fn hex_of(color: Rgb) -> String {
     color.hex()
 }
 

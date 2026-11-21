@@ -402,6 +402,8 @@ impl GhostexGpuiApp {
                                 GpuiAppModalKind::AddProject.open_message(),
                                 cx,
                             );
+                        } else if after.open_theme_editor {
+                            self.open_gpui_theme_editor_modal(&serde_json::Value::Null, cx);
                         }
                     }
                 }

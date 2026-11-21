@@ -273,8 +273,18 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         // Antigravity installed and picked as the default (Chief of Staff runs on it).
         let with_antigravity: &[&str] = &["claude", "codex", "antigravity"];
         match state {
-            "agents-default-missing" => (
+            "look" | "make-it-yours" => (
                 InitialPanel::Panel(2),
+                three,
+                false,
+                "none",
+                "off",
+                true,
+                false,
+                false,
+            ),
+            "agents-default-missing" => (
+                InitialPanel::Panel(3),
                 &["claude", "cursor"],
                 false,
                 "none",
@@ -284,7 +294,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
             ),
             "agents-antigravity" => (
-                InitialPanel::Panel(2),
+                InitialPanel::Panel(3),
                 with_antigravity,
                 false,
                 "none",
@@ -295,7 +305,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             ),
             "agents" | "agents-guide" | "agents-integration" | "agents-signed-out"
             | "agents-signing-in" => (
-                InitialPanel::Panel(2),
+                InitialPanel::Panel(3),
                 three,
                 false,
                 "none",
@@ -305,7 +315,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
             ),
             "agents-scanning" => (
-                InitialPanel::Panel(2),
+                InitialPanel::Panel(3),
                 three,
                 false,
                 "none",
@@ -315,7 +325,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 true,
             ),
             "agents-already-connected" => (
-                InitialPanel::Panel(2),
+                InitialPanel::Panel(3),
                 three,
                 true,
                 "none",
@@ -325,7 +335,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
             ),
             "agents-none-installed" => (
-                InitialPanel::Panel(2),
+                InitialPanel::Panel(3),
                 &[],
                 false,
                 "none",
@@ -335,7 +345,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
             ),
             "agents-install-available" => (
-                InitialPanel::Panel(2),
+                InitialPanel::Panel(3),
                 &[],
                 false,
                 "ready",
@@ -345,7 +355,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
             ),
             "agents-install-partial" => (
-                InitialPanel::Panel(2),
+                InitialPanel::Panel(3),
                 &["codex"],
                 false,
                 "ready",
@@ -355,7 +365,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
             ),
             "agents-installing" => (
-                InitialPanel::Panel(2),
+                InitialPanel::Panel(3),
                 &[],
                 false,
                 "installing",
@@ -365,7 +375,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
             ),
             "agents-install-failed" => (
-                InitialPanel::Panel(2),
+                InitialPanel::Panel(3),
                 &[],
                 false,
                 "failed",
@@ -375,7 +385,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
             ),
             "computer-use-installing" => (
-                InitialPanel::Panel(3),
+                InitialPanel::Panel(4),
                 three,
                 false,
                 "none",
@@ -385,7 +395,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
             ),
             "computer-use-permissions" => (
-                InitialPanel::Panel(3),
+                InitialPanel::Panel(4),
                 three,
                 false,
                 "none",
@@ -395,7 +405,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
             ),
             "computer-use-on" => (
-                InitialPanel::Panel(3),
+                InitialPanel::Panel(4),
                 three,
                 false,
                 "none",
@@ -406,26 +416,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             ),
             "workspace" | "workspace-agents" | "workspace-docs" | "workspace-code"
             | "workspace-kanban" | "workspace-automate" | "computer-use" => (
-                InitialPanel::Panel(3),
-                three,
-                false,
-                "none",
-                "off",
-                true,
-                false,
-                false,
-            ),
-            "workspace-no-browser-skill" => (
-                InitialPanel::Panel(3),
-                three,
-                false,
-                "none",
-                "off",
-                false,
-                false,
-                false,
-            ),
-            "mobile" | "mobile-no-notify-send" | "mobile-after-setup" => (
                 InitialPanel::Panel(4),
                 three,
                 false,
@@ -435,7 +425,17 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
                 false,
             ),
-            "get-started" | "get-started-light" | "get-started-terminal-glass" => (
+            "workspace-no-browser-skill" => (
+                InitialPanel::Panel(4),
+                three,
+                false,
+                "none",
+                "off",
+                false,
+                false,
+                false,
+            ),
+            "mobile" | "mobile-no-notify-send" | "mobile-after-setup" => (
                 InitialPanel::Panel(5),
                 three,
                 false,
@@ -445,8 +445,18 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
                 false,
             ),
+            "get-started" | "get-started-light" | "get-started-terminal-glass" => (
+                InitialPanel::Panel(6),
+                three,
+                false,
+                "none",
+                "off",
+                true,
+                false,
+                false,
+            ),
             "get-started-with-projects" => (
-                InitialPanel::Panel(5),
+                InitialPanel::Panel(6),
                 three,
                 false,
                 "none",

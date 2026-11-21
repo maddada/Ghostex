@@ -21,7 +21,7 @@ pub(crate) fn set_role_default_resolver(resolver: RoleDefaultResolver) {
 /// What role `id` paints in one appearance while it is not set in `saved` (the `themeRoles` on the
 /// page), as a role value: an opacity of the ink when it is a wash of white (dark) or black
 /// (light), so the slider keeps it see-through, else a colour with its opacity.
-pub(super) fn role_default(saved: &Value, id: &str, light: bool) -> Option<RoleValue> {
+pub(crate) fn role_default(saved: &Value, id: &str, light: bool) -> Option<RoleValue> {
     // A role that follows another takes that one's value while it is set on this page.
     let follows = match id {
         "link" => Some("accent"),

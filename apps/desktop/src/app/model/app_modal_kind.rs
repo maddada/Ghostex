@@ -10,6 +10,8 @@ pub(crate) enum GpuiAppModalKind {
     AddProject,
     AgentHooksRequired,
     Settings,
+    /// Compact draggable floating theme editor opened from Settings > Themes (Q4386).
+    ThemeEditor,
     Hotkeys,
     MissingProjectFolder,
     CommandPalette,
@@ -95,6 +97,7 @@ impl GpuiAppModalKind {
             "agentHooksRequired" => Some(Self::AgentHooksRequired),
             "securityUpgrade" => Some(Self::SecurityUpgrade),
             "settings" => Some(Self::Settings),
+            "themeEditor" => Some(Self::ThemeEditor),
             "hotkeys" => Some(Self::Hotkeys),
             "missingProjectFolder" => Some(Self::MissingProjectFolder),
             "commandPalette" => Some(Self::CommandPalette),
@@ -153,6 +156,7 @@ impl GpuiAppModalKind {
             Self::AgentHooksRequired => "agentHooksRequired",
             Self::SecurityUpgrade => "securityUpgrade",
             Self::Settings => "settings",
+            Self::ThemeEditor => "themeEditor",
             Self::Hotkeys => "hotkeys",
             Self::MissingProjectFolder => "missingProjectFolder",
             Self::CommandPalette => "commandPalette",
@@ -209,6 +213,7 @@ impl GpuiAppModalKind {
             Self::AgentHooksRequired => "Ghostex Install Required Hooks",
             Self::SecurityUpgrade => "Ghostex Pair Your Devices Again",
             Self::Settings => "Ghostex Settings",
+            Self::ThemeEditor => "Ghostex Theme Editor",
             Self::Hotkeys => "Ghostex Hotkeys",
             Self::MissingProjectFolder => "Ghostex Project Folder Missing",
             Self::CommandPalette
@@ -489,6 +494,8 @@ impl GpuiAppModalKind {
             Self::MermaidDiagram => size(px(1248.0), px(912.0)),
             Self::MarkdownTable => size(px(1248.0), px(912.0)),
             Self::VisualPage => size(px(1120.0), px(820.0)),
+            // `THEME_EDITOR_WIDTH` / `THEME_EDITOR_HEIGHT` in window/settings_modal/theme_editor.rs.
+            Self::ThemeEditor => size(px(320.0), px(640.0)),
         }
     }
 
@@ -537,6 +544,7 @@ impl GpuiAppModalKind {
         matches!(
             self,
             Self::Settings
+                | Self::ThemeEditor
                 | Self::Hotkeys
                 | Self::ConfigureAgents
                 | Self::ConfigureActions
@@ -568,6 +576,7 @@ impl GpuiAppModalKind {
             }),
             Self::BrowserHistory
             | Self::Settings
+            | Self::ThemeEditor
             | Self::Hotkeys
             | Self::FindPrompts
             | Self::ConfigureAgents

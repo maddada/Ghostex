@@ -38,7 +38,7 @@ fn poster_bytes(style: &str, light: bool) -> Option<&'static [u8]> {
 }
 
 /// The poster image of `style`, decoded by GPUI when first drawn.
-pub(super) fn poster(style: &str, light: bool) -> Option<Arc<Image>> {
+pub(crate) fn poster(style: &str, light: bool) -> Option<Arc<Image>> {
     poster_bytes(style, light)
         .map(|bytes| Arc::new(Image::from_bytes(ImageFormat::Webp, bytes.to_vec())))
 }

@@ -11,8 +11,9 @@ use crate::app::window::settings_modal::catalog::settings_catalog;
 use crate::app::window::settings_modal::model::SettingsTabId;
 use crate::app::window::settings_modal::restore::OPEN_FORMS_STORAGE_KEY;
 use crate::app::window::settings_modal::{
-    GpuiSettingsModalWindow, SETTINGS_MODAL_HEIGHT, SETTINGS_MODAL_WIDTH, SettingsModalCommand,
-    SettingsModalConfig, SettingsOpenRequest,
+    GpuiSettingsModalWindow, GpuiThemeEditorWindow, SETTINGS_MODAL_HEIGHT, SETTINGS_MODAL_WIDTH,
+    SettingsModalCommand, SettingsModalConfig, SettingsOpenRequest, THEME_EDITOR_HEIGHT,
+    THEME_EDITOR_WIDTH,
 };
 use crate::*;
 
@@ -162,6 +163,44 @@ impl GhostexGpuiApp {
                 let page = settings.store().read(cx).active_tab().id();
                 crate::app::settings_open_timing::follow_first_frames(window, Some(page));
             },
+        );
+    }
+
+    /// Opens the compact draggable floating Theme Editor window (Q4386), replacing Settings or any
+    /// other open app modal so the user sees the main window update live.
+    pub(crate) fn open_gpui_theme_editor_modal(
+        &mut self,
+        open_message: &serde_json::Value,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let kind = GpuiAppModalKind::ThemeEditor;
+        crate::app::window::settings_modal::tabs::theme::role_defaults::set_role_default_resolver(
+            crate::app::helpers::theme_role_defaults::theme_role_default_rgba,
+        );
+        let sidebar_state = open_message
+            .get("latestSidebarStateMessage")
+            .filter(|message| message.is_object())
+            .cloned()
+            .unwrap_or_else(|| self.gpui_app_modal_sidebar_state_message_for_open(kind, cx));
+        let mut request = SettingsOpenRequest::from_open_message("settings", open_message);
+        request.initial_tab = Some(SettingsTabId::Theme);
+        request.gxserver_rpc_available = read_gpui_gxserver_auth_token().is_ok();
+        let config = SettingsModalConfig {
+            palette: self.gpui_native_panel_palette(),
+            request,
+            sidebar_state,
+            open_forms: serde_json::Value::Null,
+        };
+        let bridge = self.app_modal_host_bridge_event_handler(cx);
+        let host = self.native_app_modal_host(cx, move |app, command, cx| {
+            app.handle_gpui_settings_modal_command(kind, command, &bridge, cx);
+        });
+        self.open_native_app_modal(
+            kind,
+            THEME_EDITOR_WIDTH,
+            THEME_EDITOR_HEIGHT,
+            move |window, cx| cx.new(|cx| GpuiThemeEditorWindow::new(config, host, window, cx)),
+            cx,
         );
     }
 
@@ -315,6 +354,20 @@ impl GhostexGpuiApp {
                 self.release_native_app_modal_window(kind, cx);
                 self.open_add_project_queued_after_settings(cx);
             }
+            SettingsModalCommand::OpenThemeEditor => {
+                self.open_gpui_theme_editor_modal(&serde_json::Value::Null, cx);
+            }
+            SettingsModalCommand::OpenThemeSettings => {
+                self.open_gpui_settings_modal(
+                    GpuiAppModalKind::Settings,
+                    &serde_json::json!({
+                        "modal": "settings",
+                        "initialTab": "theme",
+                        "type": "open",
+                    }),
+                    cx,
+                );
+            }
             SettingsModalCommand::OpenAccounts => {
                 // Settings still open on another page switches to Accounts in place.
                 let switched = self.update_native_app_modal::<GpuiSettingsModalWindow, _>(
@@ -383,13 +436,24 @@ impl GhostexGpuiApp {
             .filter(|kind| kind.is_settings_modal_entry())
     }
 
-    /// A fresh `sidebarState` hydrate (after a save anywhere) for the open native Settings modal.
-    /// Returns false when it is not open.
+    /// A fresh `sidebarState` hydrate (after a save anywhere) for the open native Settings modal
+    /// or floating Theme Editor. Returns false when neither is open.
     pub(crate) fn refresh_native_settings_modal_sidebar_state(
         &mut self,
         message: serde_json::Value,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
+        if self.native_app_modal_kind() == Some(GpuiAppModalKind::ThemeEditor) {
+            return self
+                .update_native_app_modal(
+                    GpuiAppModalKind::ThemeEditor,
+                    cx,
+                    move |modal: &mut GpuiThemeEditorWindow, _window, cx| {
+                        modal.receive_sidebar_state(message, cx);
+                    },
+                )
+                .is_some();
+        }
         let Some(kind) = self.native_settings_modal_kind() else {
             return false;
         };
@@ -407,6 +471,18 @@ impl GhostexGpuiApp {
     /// The open Settings window resolved its palette once, at open, so choosing a theme preset or an appearance inside it left the window in the old colours until it was reopened.
     /// Every settings change now hands the open window the current panel palette, and its frame the current modal palette, on the same refresh that hands it the new settings.
     pub(crate) fn refresh_native_settings_modal_palette(&mut self, cx: &mut gpui::Context<Self>) {
+        if self.native_app_modal_kind() == Some(GpuiAppModalKind::ThemeEditor) {
+            let palette = self.gpui_native_panel_palette();
+            self.update_native_app_modal(
+                GpuiAppModalKind::ThemeEditor,
+                cx,
+                move |modal: &mut GpuiThemeEditorWindow, _window, cx| {
+                    modal.receive_palette(&palette, cx);
+                },
+            );
+            self.refresh_native_app_modal_frame_palette(GpuiAppModalKind::ThemeEditor, cx);
+            return;
+        }
         let Some(kind) = self.native_settings_modal_kind() else {
             return;
         };
@@ -422,12 +498,24 @@ impl GhostexGpuiApp {
     }
 
     /// A transient payload (`agentHookStatus`, `ghostexCliStatus`, `settingsActionStatus`, ...)
-    /// or a modal message for the open native Settings modal. Returns false when it is not open.
+    /// or a modal message for the open native Settings modal or floating Theme Editor.
     pub(crate) fn receive_native_settings_modal_payload(
         &mut self,
         payload: &serde_json::Value,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
+        if self.native_app_modal_kind() == Some(GpuiAppModalKind::ThemeEditor) {
+            let payload = payload.clone();
+            return self
+                .update_native_app_modal(
+                    GpuiAppModalKind::ThemeEditor,
+                    cx,
+                    move |modal: &mut GpuiThemeEditorWindow, _window, cx| {
+                        modal.receive_host_payload(payload, cx);
+                    },
+                )
+                .is_some();
+        }
         let Some(kind) = self.native_settings_modal_kind() else {
             return false;
         };

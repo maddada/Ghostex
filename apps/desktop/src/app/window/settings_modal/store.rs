@@ -565,6 +565,16 @@ impl SettingsStore {
         );
     }
 
+    /// Closes Settings and opens the compact floating Theme Editor window (Q4386).
+    pub(crate) fn open_theme_editor(&mut self, cx: &mut Context<Self>) {
+        (self.host)(SettingsModalCommand::OpenThemeEditor, cx);
+    }
+
+    /// Closes the floating Theme Editor and opens Settings > Themes (Q4386).
+    pub(crate) fn open_theme_settings(&mut self, cx: &mut Context<Self>) {
+        (self.host)(SettingsModalCommand::OpenThemeSettings, cx);
+    }
+
     // ---- what the app pushes -----------------------------------------------------------------
 
     /// A new `sidebarState` hydrate (after a save anywhere): the settings the modal shows follow

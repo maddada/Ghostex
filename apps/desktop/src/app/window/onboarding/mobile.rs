@@ -210,7 +210,7 @@ impl GpuiOnboardingWindow {
                 .into_any_element(),
         );
         out.push(
-            foot_actions(s, 4)
+            foot_actions(s, 5)
                 .child(self.control(
                     s,
                     cta(s, "mobile-next", "Next", true, true, false, CtaSize::Foot),
@@ -218,7 +218,7 @@ impl GpuiOnboardingWindow {
                     interact::Ring::new(10.0, 1.0),
                     interact::Keys::EnterSpace,
                     cx,
-                    |this, _, cx| this.go(5, cx),
+                    |this, _, cx| this.go(6, cx),
                 ))
                 .into_any_element(),
         );

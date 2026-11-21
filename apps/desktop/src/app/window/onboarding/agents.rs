@@ -81,7 +81,7 @@ type Phase = &'static str;
 
 impl GpuiOnboardingWindow {
     fn agents_mounted(&self) -> bool {
-        self.panel == 2
+        self.panel == 3
     }
 
     fn add_extra(&mut self, id: String, text: String, tone: ExtraTone) {
@@ -311,7 +311,7 @@ impl GpuiOnboardingWindow {
             (true, None) => self.agents_panel.connected_since = Some(now),
             (true, Some(since)) if now.saturating_duration_since(since) >= CONNECTED_HOLD => {
                 self.agents_panel.connected_since = None;
-                self.go(3, cx);
+                self.go(4, cx);
             }
             (false, Some(_)) => self.agents_panel.connected_since = None,
             _ => {}
@@ -344,7 +344,7 @@ impl GpuiOnboardingWindow {
             .map(|agent| agent.agent_id.clone())
             .collect();
         if self.agents_connected() || installed.is_empty() {
-            self.go(3, cx);
+            self.go(4, cx);
             return;
         }
         self.set_right_tab(RightTab::Scan);
@@ -677,7 +677,7 @@ impl GpuiOnboardingWindow {
         };
         out.extend(self.render_sign_in_line(s, now, cx));
         out.push(
-            foot_actions(s, 2)
+            foot_actions(s, 3)
                 .child({
                     let next = cta(
                         s,

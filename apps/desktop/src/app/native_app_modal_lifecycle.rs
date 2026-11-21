@@ -124,6 +124,14 @@ impl GhostexGpuiApp {
                     ));
             let opening = frame::opening_frame(main, window_size, &frame::Screens::now(main, cx));
             gpui::Bounds::new(opening.origin - shift, opening.size)
+        } else if kind == GpuiAppModalKind::ThemeEditor {
+            // Compact floating Theme Editor opens near the right edge of the main window so the
+            // user can see the sidebar and work area update live while dragging it anywhere.
+            let origin = gpui::point(
+                self.main_window_bounds.right() - window_size.width - px(16.0),
+                self.main_window_bounds.top() + px(48.0),
+            );
+            self.gpui_native_modal_frame_on_screen(gpui::Bounds::new(origin, window_size), cx)
         } else {
             self.gpui_native_modal_frame_on_screen(
                 gpui::Bounds::centered_at(self.main_window_bounds.center(), window_size),
@@ -322,6 +330,9 @@ impl GhostexGpuiApp {
             | GpuiAppModalKind::ConfigureActions
             | GpuiAppModalKind::OpenTargets => {
                 self.open_gpui_settings_modal(kind, open_message, cx);
+            }
+            GpuiAppModalKind::ThemeEditor => {
+                self.open_gpui_theme_editor_modal(open_message, cx);
             }
             GpuiAppModalKind::Feedback => {
                 self.open_gpui_feedback_modal(false, cx);

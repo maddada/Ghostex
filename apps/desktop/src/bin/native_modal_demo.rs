@@ -866,6 +866,7 @@ fn main() {
                 "delayed-send" => delayed_send_demo::open(&demo, cx),
                 "space-editor" => space_editor_demo::open(&demo, cx),
                 "settings" => settings_demo::open(&demo, cx),
+                "theme-editor" => settings_demo::open_theme_editor(&demo, cx),
                 "create-worktree" => create_worktree_demo::open(&demo, cx),
                 "remote-gxserver-install" => remote_gxserver_install_demo::open(&demo, cx),
                 "delete-worktree" => delete_worktree_demo::open(&demo, cx),

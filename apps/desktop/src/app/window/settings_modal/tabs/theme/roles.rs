@@ -83,7 +83,7 @@ pub(super) fn more_roles_set(saved: &Value) -> usize {
 }
 
 /// Role `id` of one appearance as saved, when it reads as a role value.
-fn saved_role(saved: &Value, light: bool, id: &str) -> Option<RoleValue> {
+pub(crate) fn saved_role(saved: &Value, light: bool, id: &str) -> Option<RoleValue> {
     saved
         .get(appearance_key(light))?
         .get(id)?
@@ -92,7 +92,7 @@ fn saved_role(saved: &Value, light: bool, id: &str) -> Option<RoleValue> {
 }
 
 /// `themeRoles` with `role` of one appearance set to `value`, or taken off for `None`.
-fn with_role(current: &Value, light: bool, role: &str, value: Option<String>) -> Value {
+pub(crate) fn with_role(current: &Value, light: bool, role: &str, value: Option<String>) -> Value {
     let mut roles = current.as_object().cloned().unwrap_or_default();
     let appearance = roles
         .entry(appearance_key(light))
@@ -157,7 +157,7 @@ fn field_key(kind: &str, role: &str, light: bool) -> &'static str {
 }
 
 /// A role's opacity, 0 to 1.
-fn alpha_of(value: RoleValue) -> f32 {
+pub(crate) fn alpha_of(value: RoleValue) -> f32 {
     match value {
         RoleValue::Ink(alpha) | RoleValue::Colour { alpha, .. } | RoleValue::Base { alpha, .. } => {
             alpha
@@ -166,7 +166,7 @@ fn alpha_of(value: RoleValue) -> f32 {
 }
 
 /// `#rrggbb` of what a role paints in one appearance over `base_rgb`.
-fn hex_of(value: RoleValue, light: bool, base_rgb: u32) -> String {
+pub(crate) fn hex_of(value: RoleValue, light: bool, base_rgb: u32) -> String {
     let [r, g, b, _] = value.rgba_on_base(light, base_rgb);
     let byte = |channel: f32| (channel * 255.0).round() as u8;
     format!("#{:02x}{:02x}{:02x}", byte(r), byte(g), byte(b))

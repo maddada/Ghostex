@@ -17,6 +17,7 @@ mod install_guide;
 mod interact;
 mod intro_video;
 mod intro_web_view;
+mod look;
 mod mobile;
 pub(crate) mod model;
 mod primitives;
@@ -93,13 +94,15 @@ pub(crate) enum FinishTarget {
     Settings(Option<&'static str>),
 }
 
-/// What the devices page's two switches queued for after setup.
+/// What the devices and look pages queued for after setup.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct AfterSetup {
     /// "Pair my phone after setup": the Connect a Device window.
     pub(crate) pair_phone: bool,
     /// "Add another computer after setup": Settings > Remote on its Add a computer dialog.
     pub(crate) add_computer: bool,
+    /// "All options" on Make it yours: open the floating Theme Editor right after setup.
+    pub(crate) open_theme_editor: bool,
 }
 
 /// Commands the onboarding sends to the app. Each maps to the bridge message the React page posted.
@@ -249,6 +252,7 @@ pub(crate) struct GpuiOnboardingWindow {
     cli_rows: CliRows,
     next_request_id: u64,
     welcome: WelcomeState,
+    look: look::LookState,
     agents_panel: AgentsPanelState,
     workspace: WorkspaceState,
     mobile: MobileState,
@@ -329,6 +333,7 @@ impl GpuiOnboardingWindow {
             cli_rows: CliRows::default(),
             next_request_id: 1,
             welcome: WelcomeState::new(now),
+            look: look::LookState::default(),
             agents_panel: AgentsPanelState::new(now),
             workspace: WorkspaceState::new(now),
             mobile: MobileState::new(now),
@@ -395,7 +400,7 @@ impl GpuiOnboardingWindow {
     fn go(&mut self, next: usize, cx: &mut Context<Self>) {
         let next = next.clamp(1, PANEL_COUNT);
         let changed = next != self.panel;
-        if changed && self.panel == 2 {
+        if changed && self.panel == 3 {
             self.save_shown_default_agent(cx);
         }
         self.panel = next;
@@ -413,9 +418,10 @@ impl GpuiOnboardingWindow {
         self.cli_rows.clear();
         match self.panel {
             1 => self.welcome = WelcomeState::new(now),
-            2 => self.mount_agents_panel(now, cx),
-            3 => self.workspace = WorkspaceState::new(now),
-            4 => self.mobile = MobileState::new(now),
+            2 => {}
+            3 => self.mount_agents_panel(now, cx),
+            4 => self.workspace = WorkspaceState::new(now),
+            5 => self.mobile = MobileState::new(now),
             _ => self.get_started.reset(&self.settings, self.system_light),
         }
     }
@@ -476,6 +482,7 @@ impl GpuiOnboardingWindow {
         let after = AfterSetup {
             pair_phone: self.flow.phone_queued,
             add_computer: self.flow.computer_queued,
+            open_theme_editor: self.flow.theme_editor_queued,
         };
         self.send(OnboardingCommand::Finish(target, after), cx);
     }
@@ -548,7 +555,7 @@ impl GpuiOnboardingWindow {
     }
 
     fn close_popup(&mut self, cx: &mut Context<Self>) {
-        if self.panel == 2 && self.agents_panel.guide_open {
+        if self.panel == 3 && self.agents_panel.guide_open {
             self.agents_panel.guide_open = false;
             self.cli_rows.clear_lazy();
         }
@@ -728,7 +735,7 @@ impl GpuiOnboardingWindow {
         }
         self.tick_cli_rows(now, cx);
         self.tick_intro_video(cx);
-        if self.panel == 2 {
+        if self.panel == 3 {
             self.tick_agents(now, cx);
             self.tick_sign_in(now, cx);
         }
@@ -1218,9 +1225,10 @@ impl GpuiOnboardingWindow {
         } else {
             match self.panel {
                 1 => self.render_welcome(s, now, cx),
-                2 => self.render_agents(s, now, window, cx),
-                3 => self.render_workspace(s, now, cx),
-                4 => self.render_mobile(s, now, cx),
+                2 => self.render_look(s, cx),
+                3 => self.render_agents(s, now, window, cx),
+                4 => self.render_workspace(s, now, cx),
+                5 => self.render_mobile(s, now, cx),
                 _ => self.render_get_started(s, now, cx),
             }
         };

@@ -43,30 +43,30 @@ const THEME_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// One theme of the row (`theme_gallery` in packages/settings-catalog/src/data/themes.rs).
 #[derive(Clone, Debug)]
-pub(super) struct GalleryTheme {
-    pub(super) id: String,
-    pub(super) name: String,
-    pub(super) prompt: String,
+pub(crate) struct GalleryTheme {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) prompt: String,
     /// The word under its tile, when it is not the name's first word.
-    pub(super) label: Option<String>,
+    pub(crate) label: Option<String>,
     /// `default`, `art`, `look` or `preset`.
-    pub(super) kind: String,
+    pub(crate) kind: String,
     /// An art theme: its own artwork is its first background.
-    pub(super) art: bool,
-    pub(super) dark: bool,
-    pub(super) changes: Map<String, Value>,
+    pub(crate) art: bool,
+    pub(crate) dark: bool,
+    pub(crate) changes: Map<String, Value>,
     /// A preset's other appearance, added when it follows (presets.rs).
-    pub(super) partner_changes: Map<String, Value>,
+    pub(crate) partner_changes: Map<String, Value>,
     /// The backgrounds it offers (art, live, transparent, solid) and the one it starts with.
-    pub(super) backgrounds: Vec<String>,
-    pub(super) default_background: Option<String>,
-    pub(super) background_changes: Map<String, Value>,
-    pub(super) partner_background_changes: Map<String, Value>,
+    pub(crate) backgrounds: Vec<String>,
+    pub(crate) default_background: Option<String>,
+    pub(crate) background_changes: Map<String, Value>,
+    pub(crate) partner_background_changes: Map<String, Value>,
 }
 
 impl GalleryTheme {
     /// What `background` changes, with the partner's when `partner` follows.
-    pub(super) fn background_patch(&self, background: &str, partner: bool) -> Map<String, Value> {
+    pub(crate) fn background_patch(&self, background: &str, partner: bool) -> Map<String, Value> {
         let mut changes = Map::new();
         let mut add = |from: &Map<String, Value>| {
             if let Some(from) = from.get(background).and_then(Value::as_object) {
@@ -83,7 +83,7 @@ impl GalleryTheme {
 
 /// The row's themes in the catalog's order: Default, the art themes, the agent-made looks, the
 /// presets.
-pub(super) fn gallery_themes() -> Vec<GalleryTheme> {
+pub(crate) fn gallery_themes() -> Vec<GalleryTheme> {
     let text = |entry: &Value, key: &str| {
         entry
             .get(key)
@@ -167,7 +167,7 @@ macro_rules! bundled_table {
 ///
 /// CDXC:Theming 2026-11-21 DECISION:
 /// User: "i want all the themes to have a screenshot preview please". Every tile of the row shows the app itself in that theme, rendered from the web build, in place of the drawn preview cards the presets had and the pictures the agent-made looks had.
-fn preview_bytes(id: &str) -> Option<&'static [u8]> {
+pub(crate) fn preview_bytes(id: &str) -> Option<&'static [u8]> {
     let table = bundled_table!("theme-previews";
         "default", "moonwater", "glasshouse", "red-earth", "deep-current", "night-garden",
         "nocturne-canyon", "firefly-forest", "ember-forge", "synthwave-84", "polar-night",
@@ -180,7 +180,7 @@ fn preview_bytes(id: &str) -> Option<&'static [u8]> {
 
 /// The small thumbnail of artwork `id` (`ARTWORKS`), for the Backgrounds gallery; the artwork
 /// itself downloads when it is shown (helpers/window_art.rs).
-fn artwork_thumbnail_bytes(id: &str) -> Option<&'static [u8]> {
+pub(crate) fn artwork_thumbnail_bytes(id: &str) -> Option<&'static [u8]> {
     let table = bundled_table!("theme-art";
         "moonwater", "glasshouse", "red-earth", "deep-current", "night-garden", "nocturne-canyon",
         "inkstone", "firefly-forest", "ember-forge", "synthwave-84", "polar-night", "orchid-dusk",
@@ -222,7 +222,7 @@ fn short_reason(message: &str) -> String {
 /// the one most of whose other settings still hold wins (Default and Inkstone share colours). The
 /// presets are left to `theme_preset_matches` (presets.rs), which also knows presets applied before
 /// they set colours.
-fn applied_theme<'a>(
+pub(crate) fn applied_theme<'a>(
     themes: &'a [GalleryTheme],
     values: &SettingsValues,
 ) -> Option<(&'a GalleryTheme, usize, bool)> {

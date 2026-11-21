@@ -399,7 +399,7 @@ impl GpuiOnboardingWindow {
                 .into_any_element(),
         );
         out.push(
-            foot_actions(s, 3)
+            foot_actions(s, 4)
                 .child(self.control(
                     s,
                     cta(
@@ -417,7 +417,7 @@ impl GpuiOnboardingWindow {
                     cx,
                     |this, _, cx| {
                         this.keep_experience(cx);
-                        this.go(4, cx)
+                        this.go(5, cx)
                     },
                 ))
                 .into_any_element(),
