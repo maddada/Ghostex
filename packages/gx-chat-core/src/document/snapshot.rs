@@ -351,6 +351,11 @@ pub struct Document {
     /// How each ask settled in the last hour went, by dock row key
     /// (`extras::work_cards::settled_asks`): `"answered"` or `"withdrawn"`. Family f.
     pub work_asks_settled: Tri<Value>,
+    /// How each question this chat asked stands, by tag uppercased: `open`, `answered`,
+    /// `withdrawn` or `skipped` (`questions::answer_pills::question_states`), which the hover of
+    /// a sent message's answering pill reads. Family f.
+    #[serde(default, skip_serializing_if = "Tri::is_absent")]
+    pub question_states: Tri<SharedValue>,
     /// The background tasks the agent left running (`extras::background_tasks`), which the
     /// Background pill's menu lists, or `null`. Family f.
     pub background_tasks_panel: Tri<Value>,

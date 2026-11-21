@@ -1603,11 +1603,9 @@ pub fn blocked_pill(board: &Value) -> Option<ChatPill> {
     })
 }
 
-/// The Work panel opens at the row `key` (an item's `work:12`, an ask's `work-ask:W3:Q12`): its
-/// group unfolds and shows every row, and the renderers open the panel and ring the row, the chat
-/// staying where it is (`open_questions::show`).
-pub fn focus_row(state: &mut ChatState, key: &str) -> Vec<crate::effect::Effect> {
-    let group = crate::extras::work_source::work_of(state)
+/// The Work panel group holding the row `key`, when the panel has it.
+pub fn work_panel_group(state: &ChatState, key: &str) -> Option<String> {
+    crate::extras::work_source::work_of(state)
         .map(crate::extras::work_panel::work_board)
         .and_then(|board| {
             board["groups"].as_array()?.iter().find_map(|group| {
@@ -1617,8 +1615,14 @@ pub fn focus_row(state: &mut ChatState, key: &str) -> Vec<crate::effect::Effect>
                     .any(|row| row["key"] == key)
                     .then(|| text(group, "id").to_string())
             })
-        });
-    let Some(group) = group else {
+        })
+}
+
+/// The Work panel opens at the row `key` (an item's `work:12`, an ask's `work-ask:W3:Q12`): its
+/// group unfolds and shows every row, and the renderers open the panel and ring the row, the chat
+/// staying where it is (`open_questions::show`).
+pub fn focus_row(state: &mut ChatState, key: &str) -> Vec<crate::effect::Effect> {
+    let Some(group) = work_panel_group(state, key) else {
         return vec![crate::effect::Effect::Toast {
             level: "info".to_string(),
             message: "That isn't on this chat's Work panel any more.".to_string(),

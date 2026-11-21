@@ -31,6 +31,7 @@ pub struct AssembleCache {
         crate::questions::forms::CardTags,
         crate::document::SharedValue,
     )>,
+    question_states: Option<crate::document::SharedValue>,
     model_menu: Option<crate::menus::picker::document::KeptModelMenu>,
     quiet: Option<crate::transcript::quiet_view::KeptQuiet>,
 }
@@ -71,6 +72,7 @@ pub fn assemble_with(
     document.work_asks_settled =
         ghostex_gx_protocol::Tri::Value(crate::extras::work_cards::settled_asks(state, context));
     document.work_ask_tags = ghostex_gx_protocol::Tri::Value(work_ask_tags(state, cache));
+    document.question_states = ghostex_gx_protocol::Tri::Value(question_states(state, cache));
     composer::document(state, context, &mut document);
     menus::document_with(state, context, &mut document, &mut cache.model_menu);
     // The offline computer and the held messages are dock rows, once both are known.
@@ -107,6 +109,19 @@ fn work_ask_tags(state: &ChatState, cache: &mut AssembleCache) -> crate::documen
     let tags = crate::questions::forms::CardTags::of(state);
     let value = crate::document::SharedValue::from(serde_json::json!(tags.tags()));
     cache.work_ask_tags = Some((tags, value.clone()));
+    value
+}
+
+/// The document's `questionStates`, the same shared value while no question moved.
+fn question_states(state: &ChatState, cache: &mut AssembleCache) -> crate::document::SharedValue {
+    let states = crate::questions::answer_pills::question_states(state);
+    if let Some(kept) = cache.question_states.as_ref() {
+        if **kept == states {
+            return kept.clone();
+        }
+    }
+    let value = crate::document::SharedValue::from(states);
+    cache.question_states = Some(value.clone());
     value
 }
 

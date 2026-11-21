@@ -765,8 +765,12 @@ impl NativeChatView {
     ) -> TextView {
         let chat = cx.weak_entity();
         let menu_chat = chat.clone();
-        let references =
-            super::markdown_links::presentations(references, &self.snapshot["coordinatorBoard"], p);
+        let references = super::markdown_links::presentations(
+            references,
+            &self.snapshot["coordinatorBoard"],
+            &self.snapshot["questionStates"],
+            p,
+        );
         let command_appearance = p.clone();
         view.link_presentation(move |href, label| {
                 references
