@@ -132,7 +132,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             if args.json {
                 print_json(&result);
             } else {
-                leads::print_links(&result);
+                leads::print_links(&result, args.all);
             }
         }
         "switch-account" => {

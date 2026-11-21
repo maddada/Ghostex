@@ -185,6 +185,17 @@ struct WatchMemory {
     send_ids: HashMap<(SessionKey, String), String>,
     /// Each owed link's transcript tail, read again only when the file changed.
     transcripts: HashMap<SessionKey, TurnCache>,
+    /// The reply each owed link's turn had when it first passed the finish check, with the
+    /// `owedSince` (ms) it was read for: every later try sends that same reply.
+    ///
+    /// CDXC:LeadLinks 2026-11-21 FIX:
+    /// Opus re-review of #701: the reply was read again on every try, and a sub-lead counts its
+    /// own linked sessions' reports as part of its turn (`lead_turn`), so when the report waited
+    /// (its lead closed, a failed send retried) and a worker's report started a later turn of the
+    /// sub-lead's own, the main lead got that later turn's last words instead. The reply found when
+    /// the turn first looked finished (after `FINISH_STABILITY_MS`, also while the lead is closed)
+    /// is kept until it is delivered.
+    finished_replies: HashMap<SessionKey, (i64, String)>,
 }
 
 enum LeadReport {
@@ -279,6 +290,7 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
     memory.idle_since.retain(|key, _| keys.contains(key));
     memory.closed_since.retain(|key, _| keys.contains(key));
     memory.transcripts.retain(|key, _| keys.contains(key));
+    memory.finished_replies.retain(|key, _| keys.contains(key));
     // CDXC:LeadLinks 2026-11-20 FIX: Opus review of #678, finding 9: the send ids of reports and
     // the retry clocks of leads that went away were kept for good.
     let leads = links.iter().map(LeadLink::lead_key).collect::<HashSet<_>>();
@@ -346,10 +358,9 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
             }
             continue;
         }
-        // A closed lead has nobody to report to; its reports wait until it is resumed.
-        if !lead.as_ref().is_some_and(running_or_sleeping) {
-            continue;
-        }
+        // A closed lead has nobody to report to; its reports wait until it is resumed. The turn is
+        // still watched, so its reply is kept as it was when it finished (`finished_replies`).
+        let lead_open = lead.as_ref().is_some_and(running_or_sleeping);
         if memory.in_flight.contains(&key)
             || memory.retry_at.get(&lead_key).is_some_and(|at| now < *at)
         {
@@ -365,6 +376,7 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
         let Some(owed_ms) = link.owed_since.as_deref().and_then(iso_ms) else {
             memory.idle_since.remove(&key);
             memory.closed_since.remove(&key);
+            memory.finished_replies.remove(&key);
             if gone {
                 let _ = remove_lead_link(&db, &key.0, &key.1);
                 let _ = schedule_presentation_session_delta(
@@ -384,7 +396,7 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
         if lifecycle == "stopped" {
             memory.idle_since.remove(&key);
             let since = *memory.closed_since.entry(key.clone()).or_insert(now);
-            if now - since >= CLOSED_GRACE_MS {
+            if lead_open && now - since >= CLOSED_GRACE_MS {
                 let sender = match &session {
                     Some(session) => {
                         sender_of(state, &repository, &mut projects, &mut names, session, &key)
@@ -454,6 +466,7 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
                 }
                 crate::coordinators::session_quiet(&key.0, &key.1)
                     .filter(|quiet| quiet.stalled)
+                    .filter(|_| lead_open)
                     .filter(|quiet| link.reported_quiet_since != Some(quiet.quiet_since))
                     // Only while it works on the lead's turn, not on the user's own.
                     .filter(|_| lead_turn_now(&mut memory).is_some_and(|turn| !turn.user_after))
@@ -466,7 +479,8 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
                 memory.idle_since.remove(&key);
                 let (prompt_key, summary) = waiting_report_prompt(&session);
                 // Only a question of the lead's turn, never one of the user's own.
-                (link.reported_prompt_key.as_deref() != Some(prompt_key.as_str())
+                (lead_open
+                    && link.reported_prompt_key.as_deref() != Some(prompt_key.as_str())
                     && lead_turn_now(&mut memory).is_some_and(|turn| !turn.user_after))
                 .then_some(LeadReport::Waiting {
                     key: prompt_key,
@@ -483,18 +497,29 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Delivery> {
                     // is never the one sent.
                     // Nothing moved since the lead's message: no reply to read yet (Opus review of
                     // #678, finding 9). A row with no activity stamp is read anyway.
-                    let moved = super::coordinator_remote_runtime::activity_marker_ms(&session)
-                        .is_none_or(|at| at + ACTIVITY_SLACK_MS >= owed_ms);
-                    moved
-                        .then(|| lead_turn_now(&mut memory))
-                        .flatten()
-                        .and_then(|turn| turn.reply)
-                        .map(|message| LeadReport::Finished { message })
+                    let kept = memory
+                        .finished_replies
+                        .get(&key)
+                        .filter(|(owed, _)| *owed == owed_ms)
+                        .map(|(_, reply)| reply.clone());
+                    let reply = kept.or_else(|| {
+                        let moved = super::coordinator_remote_runtime::activity_marker_ms(&session)
+                            .is_none_or(|at| at + ACTIVITY_SLACK_MS >= owed_ms);
+                        let reply = moved
+                            .then(|| lead_turn_now(&mut memory))
+                            .flatten()
+                            .and_then(|turn| turn.reply)?;
+                        memory
+                            .finished_replies
+                            .insert(key.clone(), (owed_ms, reply.clone()));
+                        Some(reply)
+                    });
+                    reply.map(|message| LeadReport::Finished { message })
                 }
             }
             _ => None,
         };
-        if let Some(report) = report {
+        if let Some(report) = report.filter(|_| lead_open) {
             let sender = sender_of(
                 state,
                 &repository,
@@ -561,6 +586,11 @@ fn report_text(report: &LeadReport, linked_ref: &str) -> String {
 async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<WatchMemory>>, delivery: Delivery) {
     let key = delivery.link.key();
     let lead_key = delivery.link.lead_key();
+    // A finished (or closed, or ended) turn settles what is owed, and with it the kept reply.
+    let ends_turn = matches!(
+        delivery.report,
+        LeadReport::Finished { .. } | LeadReport::Closed | LeadReport::Ended
+    );
     let body = report_text(&delivery.report, &delivery.sender.global_ref);
     let message = agent_message(&delivery.sender, &body);
     let ledger_key = (key.clone(), message.clone());
@@ -624,6 +654,9 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<WatchMemory>>, delivery
                 memory.send_ids.remove(&ledger_key);
                 memory.retry_at.remove(&lead_key);
                 memory.idle_since.remove(&key);
+                if ends_turn {
+                    memory.finished_replies.remove(&key);
+                }
             }
             Err(_) => {
                 memory

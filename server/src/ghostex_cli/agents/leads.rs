@@ -188,7 +188,7 @@ fn reports_to_text(chain: &[Value]) -> Option<String> {
     })
 }
 
-pub(super) fn print_links(result: &Value) {
+pub(super) fn print_links(result: &Value, all: bool) {
     // CDXC:LeadLinks 2026-11-21 WHY: with two levels (#701) a lead's list holds its sub-leads'
     // sessions too. Each row is printed under its own lead, and a lead that is not a row of the
     // list (the top lead, or the sub-lead whose list it is) gets a row of its own above its
@@ -200,7 +200,14 @@ pub(super) fn print_links(result: &Value) {
     }
     let rows = result["links"].as_array().cloned().unwrap_or_default();
     if rows.is_empty() {
-        println!("No sessions are linked to a lead.");
+        println!(
+            "{}",
+            if all {
+                "No sessions are linked to a lead."
+            } else {
+                "No sessions are linked to you."
+            }
+        );
         return;
     }
     println!("REFERENCE\tTITLE\tLEADS (TOP FIRST)\tREPORT OWED");
