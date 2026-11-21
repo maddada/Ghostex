@@ -69,6 +69,18 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
     if let Some(title) = &args.title {
         payload["title"] = json!(title);
     }
+    // gxserver checks them against the agent as it does for `create-agent --model/--effort`.
+    if let Some(model) = &args.model {
+        payload["agentModel"] = json!(model);
+    }
+    if let Some(effort) = &args.effort {
+        payload["agentEffort"] = json!(effort);
+    }
+    // A session started for a lead is a lean Codex worker when that setting is on
+    // (agents/codex_lean.rs `LEAD_WORKER_KEY`); an older gxserver ignores the param.
+    if args.lead.is_some() {
+        payload[crate::agents::codex_lean::LEAD_WORKER_KEY] = json!(true);
+    }
     let created = call_gxserver_rpc("/api/createAgentSession", &payload, &flags)?;
     let session = created.get("session").ok_or_else(|| {
         CliError::Other(
@@ -102,6 +114,8 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
                 result["leadTitle"] = linked["leadTitle"].clone();
             }
             Err(error) => {
+                let error = error.to_string();
+                let error = error.trim_end_matches('.');
                 result["leadLinkError"] = json!(format!(
                     "Created {reference}, but linking it to the lead failed: {error}. Link it with ghostex agents link {reference} --lead {lead}; do not create another session."
                 ));

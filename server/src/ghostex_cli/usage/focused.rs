@@ -916,8 +916,13 @@ pub fn clear_command_usage() -> String {
 Starts a session's conversation over with its agent's own /clear (Claude Code and Codex), in the
 same session: its name, place in the sidebar and ref stay, and its old conversation stays on disk.
 A sleeping session is woken first and cleared once its agent is up (up to 120 seconds). Then it
-waits until the session is on its new conversation and prints its id (up to 30 seconds; --timeout
-sets both, --no-wait skips the second). It exits 1 when the conversation did not change in time.
+waits until the session is on its new conversation and prints its id (up to 30 seconds, 10 for
+Codex or a session it woke; --timeout sets both, --no-wait skips the second).
+
+Exit codes: 0 cleared (or sent with --no-wait); 2 sent, not confirmed yet: Codex, and a session
+that had to wake, show their new conversation only once they get their next message, so the clear
+went in but its new id isn't known yet (JSON "status": "sentNotConfirmed"); 1 not cleared: a
+refusal, or a running Claude Code session whose conversation did not change in time.
 
 Refused, with nothing typed, while the session is working, waits on you (a permission prompt, a
 question, a Needs you to-do), has queued messages or unsent text in its input box, or runs an

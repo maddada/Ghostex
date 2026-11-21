@@ -55,6 +55,11 @@ pub(super) struct Arguments {
     /// `--lead <session-ref|self>`: create and link make the session report to that lead
     /// (agents/lead_links in gxserver).
     pub lead: Option<String>,
+    /// `create --model <model>` and `--effort <level>`: the new session's model and effort, as
+    /// `ghostex create-agent` takes them (GitHub #700: a linked session on a chosen model in one
+    /// step).
+    pub model: Option<String>,
+    pub effort: Option<String>,
     /// `wait-reply --contains <text>`: wait for a reply holding this text (any case).
     pub contains: Option<String>,
     /// `wait-reply --timeout <seconds>`.
@@ -86,6 +91,8 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
         if_none: None,
         as_user: false,
         lead: None,
+        model: None,
+        effort: None,
         contains: None,
         timeout: None,
         after: None,
@@ -133,7 +140,7 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
             }
             "--body-file" | "--server" | "--computer" | "--task" | "--title" | "--project-id"
             | "--path" | "--request-id" | "--account" | "--lead" | "--contains" | "--timeout"
-            | "--after" => {
+            | "--after" | "--model" | "--effort" => {
                 let value = args
                     .next()
                     .filter(|value| !value.starts_with("--") && !value.is_empty())
@@ -150,6 +157,8 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                     "--contains" => Some(&mut parsed.contains),
                     "--timeout" => Some(&mut parsed.timeout),
                     "--after" => Some(&mut parsed.after),
+                    "--model" => Some(&mut parsed.model),
+                    "--effort" => Some(&mut parsed.effort),
                     _ => None,
                 };
                 if let Some(slot) = slot {
@@ -258,6 +267,11 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
         return Err(CliError::Other(
             "--task, --title, --project-id, --path, --allow-hidden, and --standalone are only available for create."
                 .into(),
+        ));
+    }
+    if (parsed.model.is_some() || parsed.effort.is_some()) && parsed.command != "create" {
+        return Err(CliError::Other(
+            "--model and --effort are only available for create.".into(),
         ));
     }
     match parsed.command.as_str() {

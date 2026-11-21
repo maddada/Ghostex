@@ -1659,7 +1659,10 @@ replace it.
 `ghostex clear-command <session>` starts a Claude Code or Codex session's
 conversation over in the same session (it types the agent's own `/clear`), so
 the session keeps its name, place in the sidebar and ref, and it prints the new
-conversation id; the old conversation stays on disk. It is refused,
+conversation id; the old conversation stays on disk. Codex, and a session it had
+to wake first, show their new conversation only once they get their next
+message, so for those it answers "sent, not confirmed yet" with exit code 2
+instead of waiting in vain (exit 1 still means it was not cleared). It is refused,
 with nothing typed, while the session works, waits on you (a permission prompt, a
 question, a Needs you to-do), has queued messages or unsent text in its input box.
 You and any agent on this computer can clear any session (an agent not its own),
@@ -4090,7 +4093,8 @@ folders left inside skills folders are moved to the same backup folder. The same
 Use `ghostex agents --help` to create, message, and close other agent sessions.
 `ghostex agents whoami --json` identifies the caller; `agents types` lists
 configured agent IDs; `agents create <agent-id> --task "<task>"` starts one in
-the caller's project (`--project-id` selects another). An agent turned off in
+the caller's project (`--project-id` selects another; `--model` and `--effort`
+pick its model and effort as `create-agent` does). An agent turned off in
 Settings > Agents is not listed, and `agents create`, `create-agent`,
 `run-agent`, `coordinator create`/`start-thread --agent` and `board start-work
 --agent` refuse it, naming the agents to use instead, unless `--allow-hidden` is
@@ -4700,9 +4704,10 @@ version of the Projects features in Cursor and Claude Code.
   restarted thread keeps them, an unlinked one loses them at its next start. A thread on
   another computer (`start-thread --computer`) does not get them yet.
 - **Lean Codex workers** (Settings > Agents, off by default): Codex threads a
-  coordinator starts run without Codex's own computer use, browser use, image generation,
-  apps, plugins and skill search, so each request is about 12% smaller and they start
-  faster. Sessions you start yourself, and a thread you unlink, keep all of them. It applies
+  coordinator starts, and Codex sessions another session starts to report to it, run
+  without Codex's own computer use, browser use, image generation, apps, plugins and skill
+  search, so each request is about 12% smaller and they start faster. Sessions you start
+  yourself, and a thread or session you unlink, keep all of them. It applies
   to threads started or resumed after you change it, and Ghostex passes only the features
   your installed Codex knows. Ghostex's own background Codex calls (session titles, Catch me
   up, commit messages) always run this way. Setting: `leanCodexWorkers`.

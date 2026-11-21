@@ -162,18 +162,18 @@ pub(crate) fn create_agent_session_params_for_project(
     } else {
         None
     };
-    // `coordinator start-thread` marks its thread, for Lean Codex workers (codex_lean.rs); only
-    // that param sets the marker, so a copy of a thread is the user's own session.
-    let coordinator_thread = params
-        .get(super::codex_lean::COORDINATOR_THREAD_KEY)
-        .and_then(Value::as_bool)
-        == Some(true);
-    runtime_settings.remove(super::codex_lean::COORDINATOR_THREAD_KEY);
-    if coordinator_thread {
-        runtime_settings.insert(
-            super::codex_lean::COORDINATOR_THREAD_KEY.to_string(),
-            json!(true),
-        );
+    // `coordinator start-thread` marks its thread, and `agents create --lead` the session it starts
+    // for a lead, for Lean Codex workers (codex_lean.rs); only those params set the markers, so a
+    // copy of either is the user's own session.
+    for key in [
+        super::codex_lean::COORDINATOR_THREAD_KEY,
+        super::codex_lean::LEAD_WORKER_KEY,
+    ] {
+        let marked = params.get(key).and_then(Value::as_bool) == Some(true);
+        runtime_settings.remove(key);
+        if marked {
+            runtime_settings.insert(key.to_string(), json!(true));
+        }
     }
     let configured_command = if agentbox_provider.is_none() {
         apply_thread_marked_handovers(

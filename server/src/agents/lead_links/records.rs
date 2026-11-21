@@ -154,6 +154,18 @@ pub fn write_lead_link(
     Ok(())
 }
 
+/// An unlinked session is the user's own again: it loses the Lean Codex workers marker
+/// (`agents::codex_lean::LEAD_WORKER_KEY`) and starts with all of Codex's features next time.
+fn forget_lead_worker(db: &Connection, project_id: &str, session_id: &str) {
+    let _ = db.execute(
+        &format!(
+            "UPDATE sessions SET runtimeSettingsJson = json_remove(runtimeSettingsJson, '$.{}') WHERE projectId = ?1 AND sessionId = ?2 AND json_valid(runtimeSettingsJson)",
+            crate::agents::codex_lean::LEAD_WORKER_KEY
+        ),
+        params![project_id, session_id],
+    );
+}
+
 /// Removes one link. Returns the lead it had, if any.
 pub fn remove_lead_link(
     db: &Connection,
@@ -167,6 +179,7 @@ pub fn remove_lead_link(
             params![project_id, session_id],
         )
         .map_err(sql_error)?;
+        forget_lead_worker(db, project_id, session_id);
     }
     Ok(link.map(|link| link.lead_key()))
 }
@@ -186,6 +199,9 @@ pub fn remove_links_of_lead(
         params![lead_project_id, lead_session_id],
     )
     .map_err(sql_error)?;
+    for (project_id, session_id) in &linked {
+        forget_lead_worker(db, project_id, session_id);
+    }
     Ok(linked)
 }
 
