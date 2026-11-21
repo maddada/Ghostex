@@ -1,0 +1,24 @@
+  │  ├─ ☐ Independent review of rebase and fixes
+  │  ├─ ☐ Report to owner; next: test app + device test
+  │  ├─ ☐ Terminal keyboard build (TermKeyboard) + its review
+  │  ├─ ☐ Rebase rest (Rebase1121b) + rebase review
+  │  └─ ☐ Apply review evidence dirs; check manifests
+  └─────
+
+ Subagents · 4 running                                                                                                                                                                               ⌥A
+  ├─ ⟳ PillFlicker ⟦bounded-builder⟧: Investigate pill strip flicker per brief, fix with tests
+  ├─ ⟳ AgySignIn ⟦bounded-builder⟧: Investigate Antigravity sign-in cause and report §4 findings
+  └─ ⟳ Rebase1121b ⟦bounded-builder⟧: Continue rebase research brief covering seven branches
+  … 1 more — expand
+
+  ⎋ Committing review evidence
+
+╭─ Allow tool: commit ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                                                                                                                      │
+│ ❯ Approve                                                                                                                                                                                            │
+│   Deny                                                                                                                                                                                               │
+├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ ↑/↓ choose · ⏎ select · ⌃⏎/⌃Q approve · ⎋ deny · ⌃O details · type to deny and steer                                                                                                                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭── ⬢ Opus 5.5 👁 · ◒ high   📁 …exfeatures   ⏱ 7d 43% (2d 11h) · ✦ 2 (1 usable) exp 19d 11h   💾 98.59%   <session name>   💾 39M   💾 438K ─42%┃─1M───╮
+╰─                                                                                                                                                                                                    ─╯

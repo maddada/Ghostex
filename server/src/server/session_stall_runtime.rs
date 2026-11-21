@@ -52,6 +52,9 @@ fn tick(state: &AppState, watches: &Mutex<HashMap<SessionKey, StallWatch>>) {
         );
         if effective_lifecycle_state(session) == "running" {
             crate::session_chat_compacting::refresh_compacting_marker_from_screen(state, session);
+            crate::session_chat_compacting::refresh_screen_approval_marker_from_screen(
+                state, session,
+            );
         }
         if !watched(session, &key, &now_iso) {
             continue;

@@ -12,6 +12,8 @@ mod file_link_routes;
 mod headless_settings_routes;
 pub(crate) mod helpers;
 mod notification_failures;
+#[cfg(unix)]
+mod omp_screen_approval;
 mod omp_subagent_viewer;
 mod omp_waits;
 mod project_directories;

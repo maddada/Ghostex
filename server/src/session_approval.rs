@@ -11,13 +11,13 @@ use crate::session_chat_interactive::{
 };
 
 /// CDXC:SessionStatus 2026-10-27 DECISION:
-/// User: "Please for permissions let's show a new red dot so user knows stuff is stuck and waiting on him to approve ... This sub thread for outdated dependeincies audit was stuck on this for a long time and i didn't know!!". A running session waits for approval while it holds the approval card a PermissionRequest hook stored (Claude, Codex, ZCode, Mastra, Droid, Kimi, Devin and the other hook agents) and its agent is not working, the same rule that puts a coordinator thread in `waiting`; a working title means the user already approved and the tool runs. A thread whose approval exists only on its screen (Copilot, Antigravity, Grok, Empryo, Cursor) counts from the supervisor's screen reading, also while its hooks say working. The flag is `awaitingApproval` on the presentation session: its row draws the red dot ahead of every other status, and its orchestrator's crew badge turns red.
-/// SEE-ALSO: server/src/coordinators/state.rs (`classify_thread_session`, `screen_waits_on_approval`), packages/gx-core/src/sidebar_view/view.rs (`CoordinatorBadgeTone::Approval`), apps/desktop/src/app/native_sidebar/status.rs (`APPROVAL_COLOR`).
+/// User: "Please for permissions let's show a new red dot so user knows stuff is stuck and waiting on him to approve ... This sub thread for outdated dependeincies audit was stuck on this for a long time and i didn't know!!". A running session waits for approval while it holds the approval card a PermissionRequest hook stored (Claude, Codex, ZCode, Mastra, Droid, Kimi, Devin and the other hook agents) and its agent is not working, the same rule that puts a coordinator thread in `waiting`; a working title means the user already approved and the tool runs. An approval that exists only on the screen (a permission prompt that holds the agent's input: Copilot, Antigravity, Grok, Empryo, Cursor, and an OMP approval its hooks never announce) counts for every running session, also while its hooks say working: a coordinator's thread from the supervisor's screen reading, any session from the screen marker (`screen_shows_approval`). The flag is `awaitingApproval` on the presentation session: its row draws the red dot ahead of every other status, and its orchestrator's crew badge turns red.
+/// SEE-ALSO: server/src/coordinators/state.rs (`classify_thread_session`, `screen_waits_on_approval`), server/src/session_chat_options/detector.rs (sets the screen marker), server/src/session_chat_compacting.rs (`refresh_screen_approval_marker_from_screen`), packages/gx-core/src/sidebar_view/view.rs (`CoordinatorBadgeTone::Approval`), apps/desktop/src/app/native_sidebar/status.rs (`APPROVAL_COLOR`).
 pub fn session_awaits_approval(session: &Value, generated_at: &str) -> bool {
     if effective_lifecycle_state(session) != "running" {
         return false;
     }
-    if crate::coordinators::screen_waits_on_approval(session) {
+    if crate::coordinators::screen_waits_on_approval(session) || screen_shows_approval(session) {
         return true;
     }
     presentation_activity(session, generated_at) != "working" && stored_approval_card(session)
@@ -27,6 +27,41 @@ fn stored_approval_card(session: &Value) -> bool {
     session_chat_prompt_setting(session)
         .and_then(|stored| parse_stored_session_chat_prompt(&stored))
         .is_some_and(|prompt| matches!(prompt, SessionChatInteractivePrompt::Approval { .. }))
+}
+
+/// Runtime-settings key holding the `detectedAt` of the approval the session's screen shows.
+pub(crate) const SESSION_CHAT_SCREEN_APPROVAL_DETECTED_AT_KEY: &str =
+    "sessionChatScreenApprovalDetectedAt";
+
+/// CDXC:SessionStatus 2026-11-21 WHY:
+/// OMP asks for an eval cell's tool calls (`commit`, any prelude helper) with the same "Allow tool" dialog, but that path raises no `tool_approval_requested`, so Ghostex's OMP extension sends no PermissionRequest; its hooks stay at the eval call's working and a standalone session kept its orange working dot while the chat's notice read "Allow this? (permissionPrompt)" (Ghostex 11.13.0, OMP 19.0.1). Only coordinator threads had a screen record, so the screen reading now leaves a marker on any session, set and cleared by the one funnel every capture passes through, like the compaction marker; a marker only the screen can clear is read again by the stall tick until a capture shows the prompt gone.
+pub(crate) fn screen_shows_approval(session: &Value) -> bool {
+    session
+        .pointer(&format!(
+            "/runtimeSettings/{SESSION_CHAT_SCREEN_APPROVAL_DETECTED_AT_KEY}"
+        ))
+        .and_then(Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty())
+}
+
+/// What one capture does to the screen marker: `(projected, write)`. `projected` is the cache's new
+/// verdict, `write` is `Some(Some(detectedAt))` to set the marker, `Some(None)` to clear it, `None`
+/// to leave it. Only a whole capture changes the verdict; a failed one keeps the last.
+pub(crate) fn screen_approval_transition(
+    previous: Option<bool>,
+    captured: bool,
+    notice: Option<&crate::session_chat_notice::SessionChatTerminalNotice>,
+) -> (Option<bool>, Option<Option<String>>) {
+    let approval = notice.filter(|notice| notice.is_screen_approval());
+    let projected = if captured {
+        Some(approval.is_some())
+    } else {
+        previous
+    };
+    let write = (projected != previous)
+        .then(|| projected.map(|_| approval.map(|notice| notice.detected_at.clone())))
+        .flatten();
+    (projected, write)
 }
 
 /// CDXC:SessionStatus 2026-10-31 WHY:
@@ -97,6 +132,55 @@ mod tests {
             &session("running", "working", Some(approval())),
             NOW
         ));
+    }
+
+    /// OMP's approval for a `commit` call from an eval cell, as Ghostex read it on 2026-11-21.
+    const OMP_EVAL_APPROVAL_SCREEN: &str =
+        include_str!("session_chat_tests/fixtures/omp-eval-commit-approval.txt");
+
+    #[test]
+    fn an_approval_on_the_screen_waits_for_approval_while_hooks_say_working() {
+        let mut waiting = session("running", "working", None);
+        waiting["runtimeSettings"][SESSION_CHAT_SCREEN_APPROVAL_DETECTED_AT_KEY] =
+            json!("2026-11-21T11:30:00.000Z");
+        assert!(session_awaits_approval(&waiting, NOW));
+        waiting["lifecycleState"] = json!("sleeping");
+        assert!(!session_awaits_approval(&waiting, NOW));
+    }
+
+    #[test]
+    fn the_omp_approval_on_screen_sets_the_mark_and_a_clean_capture_clears_it() {
+        let notice = crate::session_chat_notice::classify_session_chat_terminal_notice(
+            Some("omp"),
+            OMP_EVAL_APPROVAL_SCREEN,
+        )
+        .expect("the approval notice");
+        assert!(notice.is_screen_approval());
+        assert_eq!(
+            screen_approval_transition(None, true, Some(&notice)),
+            (Some(true), Some(Some(notice.detected_at.clone())))
+        );
+        // The same approval read again, or a capture that failed, writes nothing.
+        assert_eq!(
+            screen_approval_transition(Some(true), true, Some(&notice)),
+            (Some(true), None)
+        );
+        assert_eq!(
+            screen_approval_transition(Some(true), false, None),
+            (Some(true), None)
+        );
+        // A whole capture without it clears the mark.
+        assert_eq!(
+            screen_approval_transition(Some(true), true, None),
+            (Some(false), Some(None))
+        );
+        // A permission prompt Ghostex answers itself is not the user's.
+        let mut auto = notice.clone();
+        auto.auto_trust = true;
+        assert_eq!(
+            screen_approval_transition(None, true, Some(&auto)),
+            (Some(false), Some(None))
+        );
     }
 
     #[test]

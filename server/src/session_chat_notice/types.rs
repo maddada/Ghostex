@@ -509,6 +509,13 @@ impl SessionChatTerminalNotice {
         self.blocks_input
     }
 
+    /// A permission prompt that holds the agent's input and that Ghostex is not answering itself:
+    /// an approval only the user can grant, the same test a coordinator thread's screen wait makes
+    /// (`ThreadScreenWait::from_screen` in coordinators/state.rs).
+    pub fn is_screen_approval(&self) -> bool {
+        self.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT && self.blocks_input && !self.auto_trust
+    }
+
     /// The session's login can never answer again (its organization disabled Claude
     /// subscription access); only another account fixes it. See `accounts/disabled.rs`.
     pub fn account_disabled(&self) -> bool {
