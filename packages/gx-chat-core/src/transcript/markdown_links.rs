@@ -52,8 +52,8 @@ pub fn markdown_link(href: &str, label: &str) -> Option<Value> {
         entry.insert("kind".to_string(), "boost".into());
         return Some(Value::Object(entry));
     }
-    // What a Reply in chat box answered: its title in a pill, its tags only in the link and the
-    // hover (`questions/answer_pills.rs`). The renderers add how its questions stand from the
+    // What a Reply in chat box answered: its title in a pill, its tags only in the link
+    // (`questions/answer_pills.rs`). The renderers add how its questions stand from the
     // document's `questionStates` (`answer_pills::tooltip`).
     if crate::questions::answer_pills::parse_href(href).is_some() {
         let mut entry = Map::new();

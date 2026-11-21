@@ -148,8 +148,8 @@ pub(super) fn replacements(
                         .map(|comment| comment.tooltip())
                         .unwrap_or_default()
                     } else if reference.kind == "answer" {
-                        // The question it answers, by its title, then its tags (its state is
-                        // the sent pill's, which reads the document's `questionStates`).
+                        // The question it answers, by its title (never its tags); its state is
+                        // the sent pill's, which reads the document's `questionStates`.
                         ghostex_gx_chat_core::questions::answer_pills::tooltip(
                             &reference.label,
                             &reference.path,

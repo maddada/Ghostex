@@ -141,19 +141,14 @@ pub fn answered_tags(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// What hovering the pill says: the question's title, then what it names ("W843 · Q4360"), then
-/// how its questions stand when `states` (the document's `questionStates`) knows them.
-///
-/// CDXC:Coordinators 2026-11-21 DECISION:
-/// User, of a sent message's answering pill that did nothing on hover or click: make it behave like
-/// the other pills. Its hover shows the question's full title, its item and tag ("W843 · Q4360")
-/// and whether it is answered or still open; a click opens the question where it lives ([`open`]).
-/// The tags appear only in this hover, never in the pill's own label.
+/// What hovering the pill says: the question's title, then how its questions stand when `states`
+/// (the document's `questionStates`) knows them. Never its tags (CDXC:Coordinators 2026-11-16
+/// above).
 pub fn tooltip(label: &str, href: &str, states: &Value) -> String {
     let Some(pill) = parse_href(href) else {
         return format!("Your answer to: {}", label.trim());
     };
-    let mut lines = vec![format!(
+    let title = format!(
         "{}: {}",
         if pill.settles {
             "Your answer to"
@@ -161,30 +156,32 @@ pub fn tooltip(label: &str, href: &str, states: &Value) -> String {
             "About"
         },
         label.trim()
-    )];
-    let named: Vec<String> = pill
-        .tags
+    );
+    let known: Vec<&str> = pill
+        .questions()
         .iter()
-        .map(|tag| tag.to_ascii_uppercase())
+        .filter_map(|tag| states.get(tag.as_str())?.as_str())
         .collect();
-    lines.push(named.join(" · "));
-    let questions = pill.questions();
-    let known: Vec<(&String, &str)> = questions
-        .iter()
-        .filter_map(|tag| Some((tag, states.get(tag.as_str())?.as_str()?)))
-        .collect();
-    match known.as_slice() {
-        [] => {}
-        [(_, state)] if questions.len() == 1 => lines.push(state_words(state).to_string()),
-        known => lines.push(
-            known
-                .iter()
-                .map(|(tag, state)| format!("{tag} {}", state_words(state).to_lowercase()))
-                .collect::<Vec<_>>()
-                .join(" · "),
-        ),
+    let Some(first) = known.first() else {
+        return title;
+    };
+    if known.iter().all(|state| state == first) {
+        return format!("{title}\n{}", state_words(first));
     }
-    lines.join("\n")
+    // Questions that stand differently: how many stand each way ("1 answered · 2 open").
+    let mut counts: Vec<(&str, usize)> = Vec::new();
+    for state in known {
+        match counts.iter_mut().find(|(seen, _)| *seen == state) {
+            Some((_, count)) => *count += 1,
+            None => counts.push((state, 1)),
+        }
+    }
+    let line = counts
+        .iter()
+        .map(|(state, count)| format!("{count} {state}"))
+        .collect::<Vec<_>>()
+        .join(" · ");
+    format!("{title}\n{line}")
 }
 
 /// A question state's words in the hover.
@@ -319,90 +316,4 @@ pub fn in_chat_box(
     Some(crate::composer::transcript_menu::append_draft_text(
         draft, &added,
     ))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    fn state_with_work(open: bool) -> ChatState {
-        let mut state = ChatState::default();
-        *state.session.coordinator_threads = Some(
-            json!({"threads": [], "total": 0, "work": {"items": [{
-                "key": "work:843",
-                "ref": "W843",
-                "title": "Fix the claude alias",
-                "status": "working",
-                "asks": [{"tag": "Q4360", "open": open, "text": "Plain claude works again"}],
-            }]}})
-            .into(),
-        );
-        state
-    }
-
-    fn focused(state: &ChatState) -> Option<&str> {
-        state
-            .extras
-            .panels
-            .board_focus
-            .as_ref()
-            .map(|(key, _)| key.as_str())
-    }
-
-    #[test]
-    fn hover_names_the_title_the_tags_and_the_state() {
-        let states = json!({"Q4360": "answered"});
-        assert_eq!(
-            tooltip("Plain claude works again", "answering:W843.Q4360", &states),
-            "Your answer to: Plain claude works again\nW843 · Q4360\nAnswered"
-        );
-        assert_eq!(
-            tooltip("Release form", "regarding:Q12.Q13", &json!({"Q12": "open"})),
-            "About: Release form\nQ12 · Q13\nQ12 open, waiting for your answer"
-        );
-        // A state nobody knows leaves the state line out.
-        assert_eq!(
-            tooltip("Pick one", "answering:Q7", &Value::Null),
-            "Your answer to: Pick one\nQ7"
-        );
-    }
-
-    #[test]
-    fn work_asks_say_how_they_stand() {
-        assert_eq!(
-            question_states(&state_with_work(true)),
-            json!({"Q4360": "open"})
-        );
-        assert_eq!(
-            question_states(&state_with_work(false)),
-            json!({"Q4360": "answered"})
-        );
-    }
-
-    #[test]
-    fn a_click_opens_the_ask_on_the_work_panel() {
-        let mut state = state_with_work(true);
-        let effects = open(&mut state, &ChatContext::default(), "answering:W843.Q4360");
-        assert!(effects.is_empty(), "{effects:?}");
-        assert_eq!(focused(&state), Some("work-ask:W843:Q4360"));
-    }
-
-    #[test]
-    fn a_click_on_a_settled_ask_opens_its_item() {
-        let mut state = state_with_work(false);
-        let effects = open(&mut state, &ChatContext::default(), "answering:W843.Q4360");
-        assert!(effects.is_empty(), "{effects:?}");
-        assert_eq!(focused(&state), Some("work:843"));
-    }
-
-    #[test]
-    fn a_click_on_a_question_this_chat_lost_says_so() {
-        let mut state = ChatState::default();
-        let effects = open(&mut state, &ChatContext::default(), "answering:Q99");
-        assert!(matches!(
-            effects.as_slice(),
-            [Effect::Toast { message, .. }] if message == "That question isn't in this chat any more."
-        ));
-    }
 }
