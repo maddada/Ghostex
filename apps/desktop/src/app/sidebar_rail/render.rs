@@ -1,4 +1,4 @@
-//! Drawing the rail: a 40pt column at the window's left, the room under the window buttons at its
+//! Drawing the rail: a 52pt column at the window's left, the room under the window buttons at its
 //! top, the pinned icons, an unpinned item while its view shows (under a dashed line), ⋯, and at
 //! its foot the workspace, the account usage toggle and Toggle sidebar.
 

@@ -83,7 +83,7 @@ impl GhostexGpuiApp {
                             column.child(
                                 div()
                                     .id(format!("native-empty-project-{id}"))
-                                    .h(px(34.0 * scale))
+                                    .h(px(super::session_list::SESSION_HEIGHT * scale))
                                     .mx(px(3.0 * scale))
                                     .pl(px(26.0 * scale))
                                     .flex()
@@ -142,17 +142,29 @@ impl GhostexGpuiApp {
                                 );
                                 self.render_native_disclosure(key, rows, cx)
                             });
+                        // The gaps of the 2026-11-21 spacing (sections.rs).
+                        let gap_above = match index.checked_sub(1) {
+                            _ if hide_lone_sessions_heading => 0.0,
+                            Some(above) if group.sections[above].collapsed => {
+                                super::sections::SECTION_GAP_AFTER_FOLDED
+                            }
+                            Some(_) => super::sections::SECTION_GAP_AFTER_ROWS,
+                            None => 0.0,
+                        };
                         v_flex()
                             .w_full()
                             .flex_shrink_0()
-                            .when(index > 0 && group.sections[index - 1].collapsed, |column| {
-                                column.mt(px(8.0 * scale))
-                            })
+                            .mt(px(gap_above * scale))
                             .when(!hide_lone_sessions_heading, |column| {
                                 column.child(
                                     self.render_native_section_header(
                                         group, section, appearance, cx,
                                     ),
+                                )
+                            })
+                            .when(!hide_lone_sessions_heading && body.is_some(), |column| {
+                                column.child(
+                                    div().h(px(super::sections::SECTION_HEADING_GAP_BELOW * scale)),
                                 )
                             })
                             .children(body)

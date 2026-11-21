@@ -15,6 +15,31 @@ use gpui::{
 use gpui_component::{ElementExt as _, h_flex};
 use serde_json::json;
 
+/*
+CDXC:Sidebar 2026-11-21 DECISION:
+User: the sidebar's gaps, buttons and text like another app's sidebar (spacing and sizes only).
+There a heading ("Pinned") is a row of its own at the rows' text size, in sentence case and the
+muted grey, 35pt above its first row's centre where rows are 31pt apart, and a group starts about
+15pt below the last row of the one above. The section headings (Pinned, Sessions, Parked and the
+others) and Main Hub's GBots heading take those measures; they were 20pt, 12pt capitals, 8pt apart.
+*/
+/// A section heading's row, unscaled: a session row's height.
+pub(super) const SECTION_HEADING_HEIGHT: f32 = super::session_list::SESSION_HEIGHT;
+/// Between an open section's heading and its first row.
+pub(super) const SECTION_HEADING_GAP_BELOW: f32 = 4.0;
+/// Above a heading whose section follows a folded one (two headings in a row).
+pub(super) const SECTION_GAP_AFTER_FOLDED: f32 = 4.0;
+/// Above a heading whose section follows an open one (under its last row).
+pub(super) const SECTION_GAP_AFTER_ROWS: f32 = 12.0;
+
+/// A section's heading text: its id in sentence case ("pinned" → "Pinned").
+pub(super) fn section_heading_title(id: &str) -> String {
+    let mut chars = id.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
+}
+
 impl GhostexGpuiApp {
     pub(crate) fn render_native_section_header(
         &self,
@@ -102,12 +127,10 @@ impl GhostexGpuiApp {
             .aria_label(format!("{} section", section.id))
             .aria_expanded(!section.collapsed)
             .mx(px(3.0 * scale))
-            .h(px(20.0 * scale))
-            .py(px(3.0 * scale))
+            .h(px(SECTION_HEADING_HEIGHT * scale))
             .pl(px(5.0 * scale))
             .pr(px(6.0 * scale))
             .gap(px(5.0 * scale))
-            .text_size(px(12.0 * scale))
             .font_weight(FontWeight::LIGHT)
             .text_color(chrome_color(0xd8d8d8, 0x292929).opacity(0.34))
             // CDXC:Sidebar 2026-09-18 DECISION: User: the section heading's hover fill has rounded corners, like the session rows; this supersedes the 2026-09-16 square-corner decision for the native sidebar.
@@ -123,7 +146,7 @@ impl GhostexGpuiApp {
                 Some(group.group_id.clone()),
                 cx,
             )
-            .child(section.id.to_uppercase())
+            .child(section_heading_title(&section.id))
             .child(if hovered {
                 titlebar_svg_icon(
                     if section.collapsed {
@@ -131,7 +154,7 @@ impl GhostexGpuiApp {
                     } else {
                         COMMAND_ICON_CHEVRON_DOWN
                     },
-                    12.0 * scale,
+                    14.0 * scale,
                     appearance.muted,
                 )
                 .into_any_element()

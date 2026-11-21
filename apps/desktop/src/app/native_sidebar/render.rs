@@ -388,7 +388,8 @@ impl GhostexGpuiApp {
                                                             div()
                                                             .pl(px(18.0 * appearance.scale))
                                                             .mr(px(5.0 * appearance.scale))
-                                                            .mb(px(10.0 * appearance.scale))
+                                                            // About 15pt between a project's last row and the next header (sections.rs, 2026-11-21).
+                                                            .mb(px(14.0 * appearance.scale))
                                                             .child(
                                                                 self.render_native_sidebar_group(
                                                                     group,

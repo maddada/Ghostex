@@ -260,7 +260,7 @@ impl GhostexGpuiApp {
         )
     }
 
-    /// "GBOTS", in the look of a section heading: a click folds every bot, the "+" and the
+    /// "GBots", in the look of a section heading: a click folds every bot, the "+" and the
     /// right-click menu add one.
     fn render_native_gbots_heading(
         &self,
@@ -285,12 +285,14 @@ impl GhostexGpuiApp {
             .aria_expanded(!collapsed)
             .mx(px(3.0 * scale))
             .mt(px(4.0 * scale))
-            .h(px(20.0 * scale))
-            .py(px(3.0 * scale))
+            // A section heading's measures (sections.rs, 2026-11-21).
+            .h(px(super::sections::SECTION_HEADING_HEIGHT * scale))
+            .when(!collapsed, |row| {
+                row.mb(px(super::sections::SECTION_HEADING_GAP_BELOW * scale))
+            })
             .pl(px(5.0 * scale))
             .pr(px(4.0 * scale))
             .gap(px(5.0 * scale))
-            .text_size(px(12.0 * scale))
             .font_weight(FontWeight::LIGHT)
             .text_color(chrome_color(0xd8d8d8, 0x292929).opacity(0.34))
             .rounded(px(5.0 * scale))
@@ -298,7 +300,7 @@ impl GhostexGpuiApp {
                 row.bg(chrome_ink().opacity(0.06))
                     .text_color(chrome_color(0xd8d8d8, 0x292929).opacity(0.58))
             })
-            .child("GBOTS")
+            .child("GBots")
             .when(hovered, |row| {
                 row.child(titlebar_svg_icon(
                     if collapsed {
@@ -306,7 +308,7 @@ impl GhostexGpuiApp {
                     } else {
                         COMMAND_ICON_CHEVRON_DOWN
                     },
-                    12.0 * scale,
+                    14.0 * scale,
                     appearance.muted,
                 ))
             })
@@ -638,7 +640,7 @@ impl GhostexGpuiApp {
         );
         div()
             .id(format!("native-sidebar-gbot-empty-{}", group.group_id))
-            .h(px(34.0 * scale))
+            .h(px(super::session_list::SESSION_HEIGHT * scale))
             .mx(px(3.0 * scale))
             .pl(px(26.0 * scale))
             .flex()
