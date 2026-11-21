@@ -581,6 +581,21 @@ pub fn exports(module: &str, platform: Platform) -> Vec<(&'static str, Json)> {
                 WINDOW_GLASS_SOURCE_OPTIONS.to_json(),
             ),
             ("WINDOW_ART_OPTIONS", WINDOW_ART_OPTIONS.to_json()),
+            (
+                "THEME_ARTWORKS",
+                Json::Arr(
+                    ARTWORKS
+                        .iter()
+                        .map(|artwork| {
+                            Json::obj([
+                                ("id", Json::str(artwork.id)),
+                                ("name", Json::str(artwork.name)),
+                                ("sizeBytes", Json::Num(artwork.size_bytes as f64)),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ),
         ],
         module::SETTINGS_TYPES => vec![
             (

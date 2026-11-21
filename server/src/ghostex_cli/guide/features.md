@@ -8398,14 +8398,26 @@ silver), Glasshouse (a secret garden after dark), Red Earth (sculpted dunes in w
 Current (luminous ocean currents), Night Garden (wildflowers in a plum dusk) and Nocturne Canyon
 (a desert under a hazy moon). An art theme paints its artwork behind the sidebar and the work
 area and keeps the window solid, so your desktop never shows through; its colours, text, grey
-text and accent come from the artwork. The artwork ships with Ghostex (nothing is downloaded), is
-drawn once and costs nothing while it sits still, and shows in dark mode, on the computer and in
-the web app. In Settings > Themes, **Glass** has **Art behind the window** (pick an artwork, or
-None to go back to the glass), **Art dimming** and **Art blur**, and Strength sets how much of the
-artwork shows through the sidebar and the work area. Then come six **Agent-made** looks (Firefly,
-Ember, Synthwave, Polar, Inkstone and Orchid: Firefly Forest, Ember Forge, Synthwave '84, Polar
-Night, Inkstone and Orchid Dusk), drawn like the presets with a picture of the look. Clicking one sets the whole look as one theme change, the same as
-`ghostex theme apply <theme>` (`ghostex theme list` lists them in the row's order); the line under the row then names it, with **Undo** (`ghostex theme undo`
+text and accent come from the artwork. Then come six **Agent-made** looks (Firefly, Ember,
+Synthwave, Polar, Inkstone and Orchid: Firefly Forest, Ember Forge, Synthwave '84, Polar Night,
+Inkstone and Orchid Dusk) and the twenty presets (Catppuccin, Dracula, Solarized, Tokyo Night,
+Nord, Kanagawa, Everforest, Gruvbox Material), each of which also sets its theme's own text, grey
+text, accent, link, status, message, code and selection colours. Every tile is a screenshot of
+Ghostex in that theme.
+Every theme has a **Background**, picked under the row after the theme: **Art** (its own
+artwork behind a solid window; every theme has one), **Live** (its calm animation behind the
+glass, for Default and the agent-made looks), **Transparent** (your desktop through the glass) or
+**Solid** (nothing behind). A theme starts with its own: Art for the art themes, Live for Default
+and the agent-made looks, and a preset keeps whatever background you had. **Backgrounds**, under
+it, is a gallery of every theme's artwork: pick any of them to go behind any theme (in the
+appearance on screen), or None. No artwork ships inside Ghostex: each downloads from GitHub the
+first time it shows (0.2 to 0.5 MB) and is kept, so it shows at once after that. A theme applies
+its colours at once and its artwork fades in when it arrives; offline the window stays solid in
+the theme's colour until it can download. Light themes paint their artwork in light mode too.
+In Settings > Themes, **Glass** also has **Art behind the window** (the artwork, or None),
+**Art dimming** and **Art blur**, and Strength sets how much of the artwork shows through the
+sidebar and the work area. Clicking a tile sets the whole look as one theme change, the same as
+`ghostex theme apply <theme> [--background art|live|transparent|solid]` (`ghostex theme list` lists them in the row's order, with their backgrounds; `ghostex theme background list` and `ghostex theme background set <image|art|live|transparent|solid>` pick a background); the line under the row then names it, with **Undo** (`ghostex theme undo`
 works too) and Change them. Hovering a look shows **Make it your own**, which opens a Help chat
 with the prompt that describes it as the draft, to change and send. **Describe a look**, under
 the row, has **Ask an agent**, which opens a Help chat with a starter prompt as its draft. The
@@ -8433,11 +8445,11 @@ line under the themes row says which one and how many colours it set, and Change
 computer's own window and the web app; the phone keeps its own look. When a colour makes text hard
 to read (under 4.5:1 for text, 3:1 for grey text, the accent, links and status colours, the text
 on a fill) or a border or divider all but vanish, the change is saved and the card says so.
-Commands: `ghostex theme list`, `ghostex theme apply <theme>`, `ghostex theme read`, `ghostex theme set <key>=<value> ...`, `ghostex theme undo`, `ghostex theme redo`, `ghostex theme history`. Settings: `themeRoles`, `windowArt`, `windowArtDim`, `windowArtBlur`.
+Commands: `ghostex theme list`, `ghostex theme apply <theme> [--background ...]`, `ghostex theme background list|set`, `ghostex theme read`, `ghostex theme set <key>=<value> ...`, `ghostex theme undo`, `ghostex theme redo`, `ghostex theme history`. Settings: `themeRoles`, `windowArt`, `windowArtLight`, `windowArtDim`, `windowArtBlur`.
 
 Settings has an **Interface** group in its sidebar, right under Experience, with four pages
 (`ghostex settings open --tab interface` lists their settings):
-**Themes** (`--tab theme`): Themes (Appearance, Default, the art themes, the agent-made looks and presets, Describe a look), Colours,
+**Themes** (`--tab theme`): Themes (Appearance, Default, the art themes, the agent-made looks and presets, Background, Backgrounds, Describe a look), Colours,
 Glass (with Art behind the window), Chat colours (with Chat theme), Fine-tune colours and Terminal colours (Terminal theme,
 the palettes, Terminal background and its colour, Terminal background opacity, and the
 background image); **Text & Fonts** (`--tab textFonts`): Fonts, Terminal text (the terminal's

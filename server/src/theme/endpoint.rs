@@ -445,19 +445,117 @@ fn read(state: &AppState) -> Result<Value, DomainStateError> {
     }))
 }
 
-/// `apply`: one theme of Settings' themes row (`theme`, its id or name), as one `set` of its changes.
+/// `apply`: one theme of Settings' themes row (`theme`, its id or name) with `background` (art,
+/// live, transparent or solid; the theme's own when absent), as one `set`.
 async fn apply(
     state: &AppState,
     caller: &Principal,
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
     let settings = read_settings(state)?;
-    let (name, changes) = gallery::changes_for(text(params, "theme"), &settings)
+    let background = Some(text(params, "background")).filter(|value| !value.is_empty());
+    let (name, changes) = gallery::changes_for(text(params, "theme"), background, &settings)
         .map_err(|message| error("badRequest", message))?;
     let mut params = params.clone();
     params.insert("changes".into(), Value::Object(changes));
     let mut answer = set(state, caller, &params).await?;
     answer["theme"] = json!(name);
+    Ok(answer)
+}
+
+/// `background`: switches the applied theme's background (`background`: art, live, transparent or
+/// solid), as one `set`.
+async fn background(
+    state: &AppState,
+    caller: &Principal,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let settings = read_settings(state)?;
+    let changes = gallery::background_changes_for(text(params, "background"), &settings)
+        .map_err(|message| error("badRequest", message))?;
+    let mut params = params.clone();
+    params.insert("changes".into(), Value::Object(changes));
+    set(state, caller, &params).await
+}
+
+/// `art`: artwork `id`, downloaded first when it is not kept yet (art.rs): the kept file's path,
+/// and its bytes in base64 when `inline` (the web build, which can't read the file).
+async fn art(params: &Map<String, Value>) -> Result<Value, DomainStateError> {
+    let id = text(params, "id").to_string();
+    let inline = params.get("inline").and_then(Value::as_bool) == Some(true);
+    let path = tokio::task::spawn_blocking(move || super::art::ensure_artwork(&id))
+        .await
+        .map_err(|join| error("internalError", join.to_string()))?
+        .map_err(|message| error("dependencyUnavailable", message))?;
+    let mut answer = json!({ "path": path.to_string_lossy() });
+    if inline {
+        use base64::Engine as _;
+        let bytes =
+            std::fs::read(&path).map_err(|failure| error("internalError", failure.to_string()))?;
+        answer["bytesBase64"] = json!(base64::engine::general_purpose::STANDARD.encode(bytes));
+    }
+    Ok(answer)
+}
+
+/// `artworks`: every artwork a theme or the Backgrounds gallery can show, whether it is downloaded,
+/// and which one shows in dark and light mode now.
+fn artworks(state: &AppState) -> Result<Value, DomainStateError> {
+    let settings = read_settings(state)?;
+    let current = |key: &str| look::current(&settings, key);
+    Ok(json!({
+        "artworks": ghostex_settings_catalog::ARTWORKS.iter().map(|artwork| json!({
+            "id": artwork.id,
+            "name": artwork.name,
+            "sizeBytes": artwork.size_bytes,
+            "downloaded": super::art::is_downloaded(artwork),
+        })).collect::<Vec<_>>(),
+        "dark": current("windowArt"),
+        "light": current("windowArtLight"),
+        "backgroundDark": gallery::current_background(&settings, false),
+        "backgroundLight": gallery::current_background(&settings, true),
+    }))
+}
+
+/// `setArtwork`: shows artwork `id` (or `none`) behind the window in dark mode, or light mode with
+/// `light`, whatever the theme, as one `set`; then downloads it so it is ready.
+async fn set_artwork(
+    state: &AppState,
+    caller: &Principal,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let id = text(params, "id").trim().to_ascii_lowercase();
+    let key = if params.get("light").and_then(Value::as_bool) == Some(true) {
+        "windowArtLight"
+    } else {
+        "windowArt"
+    };
+    if id != "none" && ghostex_settings_catalog::artwork_by_id(&id).is_none() {
+        return Err(error(
+            "badRequest",
+            format!(
+                "There is no artwork \"{id}\". `ghostex theme background list` shows them: {}.",
+                ghostex_settings_catalog::ARTWORKS
+                    .iter()
+                    .map(|artwork| artwork.id)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        ));
+    }
+    let mut params = params.clone();
+    params.insert("changes".into(), json!({ key: id }));
+    let mut answer = set(state, caller, &params).await?;
+    if id != "none" {
+        let download = id.clone();
+        let fetched = tokio::task::spawn_blocking(move || super::art::ensure_artwork(&download))
+            .await
+            .map_err(|join| join.to_string())
+            .and_then(|result| result);
+        answer["downloaded"] = json!(fetched.is_ok());
+        if let Err(message) = fetched {
+            answer["downloadError"] = json!(message);
+        }
+    }
     Ok(answer)
 }
 
@@ -500,6 +598,10 @@ pub(crate) async fn handle_theme_http(
         "change" => one_change(&state, &params),
         "set" => set(&state, &caller, &params).await,
         "apply" => apply(&state, &caller, &params).await,
+        "background" => background(&state, &caller, &params).await,
+        "art" => art(&params).await,
+        "artworks" => artworks(&state),
+        "setArtwork" => set_artwork(&state, &caller, &params).await,
         "undo" => undo_or_redo(&state, &caller, &params, true).await,
         "redo" => undo_or_redo(&state, &caller, &params, false).await,
         other => Err(error(

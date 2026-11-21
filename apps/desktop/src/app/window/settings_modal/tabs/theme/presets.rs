@@ -19,9 +19,7 @@ use super::super::super::fields::{settings_icon, tooltip_text};
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::SettingsValues;
 use super::ThemeTab;
-use super::colours::{
-    COLOURFULNESS_LAST_POSITION, Rgb, colourfulness_patch, foreground_for, preview_colours,
-};
+use super::colours::{COLOURFULNESS_LAST_POSITION, Rgb, colourfulness_patch};
 use super::controls::{CARD_INSET_X, CARD_INSET_Y};
 use super::controls::{ICON_DARK, ICON_LIGHT};
 use gpui::prelude::FluentBuilder as _;
@@ -243,6 +241,11 @@ impl ThemeTab {
                     .any(|other| preset.family.starts_with(other.label.as_str())))
             .then(|| preset.family.clone());
             let selected = theme_preset_matches(values, preset);
+            let preview = self
+                .gallery_picture(&preset.id)
+                .map(|picture| super::prompt_gallery::screenshot_preview(picture, false))
+                .into_iter()
+                .collect();
             let slot = items.len();
             if selected && selected_slot.is_none() {
                 selected_slot = Some(slot);
@@ -254,6 +257,7 @@ impl ThemeTab {
                 caption,
                 selected,
                 cut & (1 << (first_preset + index)) != 0,
+                preview,
                 cx,
             ));
         }
@@ -560,58 +564,17 @@ pub(super) fn theme_tile(
         .into_any_element()
 }
 
-/// One preset card: the sidebar and work area as the preset paints them, two lines of text and the
-/// palette's first four colours, in the row's tile.
+/// One preset's tile: its screenshot (prompt_gallery.rs), its one-word label with a moon or sun.
+/// A press applies it with its palette's theme colours as one theme change (Undo under the row).
 fn preset_card(
     p: &SettingsPalette,
     preset: &ThemePreset,
     caption: Option<String>,
     selected: bool,
     cut: bool,
+    preview: Vec<AnyElement>,
     cx: &mut Context<ThemeTab>,
 ) -> AnyElement {
-    let (sidebar, work, foreground) = preview_colours(
-        &SettingsValues::from_map(theme_preset_patch(preset, None)),
-        preset.dark,
-    );
-    let ink = |alpha: f32| hsla(css_fade(foreground_for(work).gpui(), alpha));
-    let line = move |width: f32, alpha: f32| {
-        div()
-            .h(px(3.0))
-            .w(gpui::relative(width))
-            .rounded(px(2.0))
-            .bg(ink(alpha))
-    };
-    let dots = preset.swatch.iter().map(|hex| {
-        div()
-            .size(px(7.0))
-            .rounded_full()
-            .bg(hsla(colour_of(hex).gpui()))
-    });
-    let preview = vec![
-        div()
-            .w(px(20.0))
-            .h_full()
-            .rounded_tl(px(7.0))
-            .rounded_bl(px(7.0))
-            .bg(hsla(sidebar.gpui()))
-            .into_any_element(),
-        v_flex()
-            .flex_1()
-            .h_full()
-            .gap(px(4.0))
-            .px(px(7.0))
-            .pt(px(7.0))
-            .border_l_1()
-            .border_color(hsla(css_fade(foreground.gpui(), 0.08)))
-            .rounded_tr(px(7.0))
-            .rounded_br(px(7.0))
-            .bg(hsla(work.gpui()))
-            .child(line(0.8, 0.8))
-            .child(line(0.55, 0.45))
-            .child(h_flex().mt(px(4.0)).gap(px(3.0)).children(dots))
-            .into_any_element(),
-    ];
     let id = preset.id.clone();
     theme_tile(
         p,
@@ -626,7 +589,7 @@ fn preset_card(
         },
         preview,
         None,
-        move |page, _window, cx| page.apply_theme_preset(&id, cx),
+        move |page, _window, cx| page.apply_gallery_theme(&id, cx),
         cx,
     )
 }
@@ -643,7 +606,7 @@ fn colour_of(hex: &str) -> Rgb {
 
 #[cfg(test)]
 mod tests {
-    use super::super::colours::{hex_of, preview_scheme_dark};
+    use super::super::colours::{hex_of, preview_colours, preview_scheme_dark};
     use super::*;
 
     /// The work area each preset paints at Full: the theme's own background. Solarized Dark's

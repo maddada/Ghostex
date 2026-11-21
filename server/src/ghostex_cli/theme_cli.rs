@@ -13,7 +13,10 @@ pub(crate) const THEME_HELP: &str =
 
 Usage:
   gx theme list [--json]
-  gx theme apply <theme> [--json]
+  gx theme apply <theme> [--background art|live|transparent|solid] [--json]
+  gx theme background list [--json]
+  gx theme background set <image-id|none> [--light] [--json]
+  gx theme background set art|live|transparent|solid [--json]
   gx theme [read] [--json]
   gx theme set <key>=<value> [<key>=<value> ...] [--dark|--light] [--json]
   gx theme undo [<change-id>] [--json]
@@ -22,10 +25,23 @@ Usage:
 
 list     The themes of Settings > Themes, in its order: Default (Ghostex's own look),
          the art themes (Moonwater, Glasshouse, Red Earth, Deep Current, Night
-         Garden, Nocturne Canyon: an artwork behind the sidebar and work area of
-         a solid window), then the agent-made looks. The applied one is marked.
-apply    Applies one theme by its id or name, as one change Undo puts back. The
-         themes are dark themes: an app set to Light switches to Dark.
+         Garden, Nocturne Canyon), the agent-made looks, then the presets
+         (Catppuccin, Dracula, Solarized, Tokyo Night, Nord, Kanagawa, Everforest,
+         Gruvbox Material). Each line shows the backgrounds it has and the one it
+         starts with. The applied one is marked.
+apply    Applies one theme by its id or name, as one change Undo puts back, with
+         its own background, or --background: art (its artwork behind a solid
+         window), live (its animation behind the glass), transparent (your
+         desktop through the glass) or solid. A dark theme switches an app set
+         to Light to Dark; a preset brings its light or dark partner along.
+background list
+         The artworks, whether each is downloaded, and what shows behind the
+         window now.
+background set <image-id>
+         Puts that artwork behind the window whatever the theme (dark mode, or
+         light mode with --light); none takes it away. It downloads now and is
+         kept; offline the window stays solid until it can. With art, live,
+         transparent or solid it switches the applied theme's background.
 read     The themes, then every look setting on the Settings > Interface
          pages, grouped, with its current value and what it does, and
          anything the current look makes hard to read.
@@ -55,14 +71,19 @@ Limits:
   result: make small changes and ask the user how it looks. A theme keeps
   the user's fonts: change a font only when the user asks for one.
 
-Art themes:
-  windowArt picks the artwork (none turns it off), windowArtDim darkens it
+Backgrounds:
+  windowArt picks the dark-mode artwork and windowArtLight the light-mode one
+  (none turns it off), windowArtDim darkens it
   (0-90%) and windowArtBlur softens it (0-40 points). The glass tints
   (windowGlassSidebarOpacityDark, windowGlassWorkAreaTintDark) set how much
-  of it shows through the sidebar and the work area. Art shows in dark mode.
+  of it shows through the sidebar and the work area. No artwork ships inside
+  Ghostex: each downloads from GitHub the first time it shows and is kept.
 
 Examples:
   gx theme apply moonwater
+  gx theme apply mocha --background art
+  gx theme background set glasshouse
+  gx theme background set transparent
   gx theme set windowArtDim=40
   gx theme apply default
   gx theme set darkThemePreset=blue themeSidebarContrast=-6
@@ -117,27 +138,55 @@ fn print_items(change: &Value, undone: bool) {
 
 /// The themes of Settings > Themes, one per line, the applied one marked.
 fn print_themes(themes: &Value) {
-    println!("Themes (apply one with `ghostex theme apply <id>`)");
-    let mut kind = "";
+    println!("Themes (apply one with `ghostex theme apply <id> [--background art|live|transparent|solid]`)");
+    let mut group = String::new();
     for theme in themes.as_array().into_iter().flatten() {
-        let this = if text(theme, "id") == ghostex_settings_catalog::DEFAULT_LOOK_ID {
-            ""
-        } else if theme["art"] == true {
-            "Art themes: an artwork behind a solid window"
-        } else {
-            "Agent-made looks"
+        let this = match text(theme, "kind") {
+            "default" => String::new(),
+            "art" => "Art themes".to_string(),
+            "look" => "Agent-made looks".to_string(),
+            _ => format!("Presets: {}", text(theme, "family")),
         };
-        if this != kind && !this.is_empty() {
+        if this != group && !this.is_empty() {
             println!("  {this}");
-            kind = this;
         }
+        group = this;
+        let backgrounds: Vec<&str> = theme["backgrounds"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(|background| {
+                if theme["defaultBackground"].as_str() == Some(background) {
+                    match background {
+                        "art" => "art*",
+                        "live" => "live*",
+                        "transparent" => "transparent*",
+                        _ => "solid*",
+                    }
+                } else {
+                    background
+                }
+            })
+            .collect();
+        let mode = if text(theme, "mode") == "light" {
+            ", light"
+        } else {
+            ""
+        };
         let mark = if theme["applied"] == true {
             "  (applied)"
         } else {
             ""
         };
-        println!("  {:<18} {}{mark}", text(theme, "id"), text(theme, "name"));
+        println!(
+            "  {:<18} {:<22} [{}{mode}]{mark}",
+            text(theme, "id"),
+            text(theme, "name"),
+            backgrounds.join(" ")
+        );
     }
+    println!("  (* the background a theme starts with; a preset without one keeps yours)");
     println!();
 }
 
@@ -245,12 +294,101 @@ fn apply(rest: &[String], flags: &Flags) -> CliResult<()> {
             "ghostex theme apply needs a theme: `ghostex theme list` shows them.".to_string(),
         ));
     }
-    let answer = theme(
-        with_caller(json!({ "op": "apply", "theme": wanted })),
-        flags,
-    )?;
+    let mut params = json!({ "op": "apply", "theme": wanted });
+    if let Some(background) = flags.text("background") {
+        params["background"] = json!(background);
+    }
+    let answer = theme(with_caller(params), flags)?;
     let headline = format!("{} applied", text(&answer, "theme"));
     print_change(answer, flags, &headline)
+}
+
+/// `background list`: the artworks, which show now, and the applied theme's background.
+fn background_list(flags: &Flags) -> CliResult<()> {
+    let answer = theme(json!({ "op": "artworks" }), flags)?;
+    if flags.truthy("json") {
+        print_json(&answer);
+        return Ok(());
+    }
+    println!(
+        "Background now: {} in dark mode, {} in light mode.",
+        text(&answer, "backgroundDark"),
+        text(&answer, "backgroundLight")
+    );
+    println!(
+        "Artworks (any of them can go behind any theme; each downloads the first time it shows)"
+    );
+    for artwork in answer["artworks"].as_array().into_iter().flatten() {
+        let id = text(artwork, "id");
+        let mut marks = Vec::new();
+        if answer["dark"].as_str() == Some(id) {
+            marks.push("dark mode");
+        }
+        if answer["light"].as_str() == Some(id) {
+            marks.push("light mode");
+        }
+        let shown = if marks.is_empty() {
+            String::new()
+        } else {
+            format!("  (shows in {})", marks.join(" and "))
+        };
+        let size = artwork["sizeBytes"].as_f64().unwrap_or_default() / 1_048_576.0;
+        let kept = if artwork["downloaded"] == true {
+            "downloaded"
+        } else {
+            "not downloaded"
+        };
+        println!(
+            "  {:<18} {:<18} {size:.1} MB, {kept}{shown}",
+            id,
+            text(artwork, "name")
+        );
+    }
+    Ok(())
+}
+
+/// `background set <image-id|none>` puts an artwork behind any theme (dark mode, or light mode
+/// with `--light`); `background set art|live|transparent|solid` switches the applied theme's
+/// background.
+fn background_set(rest: &[String], flags: &Flags, appearance: Option<&str>) -> CliResult<()> {
+    let wanted = rest.join(" ").trim().to_ascii_lowercase();
+    if wanted.is_empty() {
+        return Err(CliError::Other(
+            "ghostex theme background set needs an artwork (`ghostex theme background list`), none, or art, live, transparent or solid.".to_string(),
+        ));
+    }
+    if matches!(wanted.as_str(), "art" | "live" | "transparent" | "solid") {
+        let answer = theme(
+            with_caller(json!({ "op": "background", "background": wanted })),
+            flags,
+        )?;
+        return print_change(answer, flags, &format!("Background {wanted}"));
+    }
+    let answer = theme(
+        with_caller(json!({
+            "op": "setArtwork",
+            "id": wanted,
+            "light": appearance == Some("light"),
+        })),
+        flags,
+    )?;
+    let note = match (&answer["downloaded"], answer["downloadError"].as_str()) {
+        (Value::Bool(true), _) => " (downloaded)",
+        (_, Some(_)) => " (not downloaded yet: the window stays solid until it is)",
+        _ => "",
+    };
+    let headline = format!("Background {wanted}{note}");
+    print_change(answer, flags, &headline)
+}
+
+fn background(rest: &[String], flags: &Flags, appearance: Option<&str>) -> CliResult<()> {
+    match rest.first().map(String::as_str).unwrap_or("list") {
+        "list" => background_list(flags),
+        "set" => background_set(rest.get(1..).unwrap_or_default(), flags, appearance),
+        other => Err(CliError::Other(format!(
+            "Unknown theme background command: {other}. Use `ghostex theme background list` or `set <image-id>`."
+        ))),
+    }
 }
 
 fn set(rest: &[String], flags: &Flags, appearance: Option<&str>) -> CliResult<()> {
@@ -385,6 +523,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         "read" | "show" | "get" => read(&flags),
         "list" | "themes" => list(&flags),
         "apply" | "use" => apply(tail, &flags),
+        "background" | "backgrounds" => background(tail, &flags, appearance),
         "set" => set(tail, &flags, appearance),
         "undo" => undo_or_redo("undo", tail, &flags),
         "redo" => undo_or_redo("redo", tail, &flags),
