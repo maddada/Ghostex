@@ -491,10 +491,14 @@ async fn step<T: Send + 'static>(
             Some(value)
         }
         Err(message) => {
-            let _ = registry::update(&state.paths, box_id, |stored| {
-                stored.row.state = CloudBoxState::Failed;
-                stored.row.state_detail = Some(message.clone());
-            });
+            // Only bringing the box up fails it; a session's own step keeps its error on the
+            // progress card (`registry::step_fails_the_box`).
+            if registry::step_fails_the_box(&step) {
+                let _ = registry::update(&state.paths, box_id, |stored| {
+                    stored.row.state = CloudBoxState::Failed;
+                    stored.row.state_detail = Some(message.clone());
+                });
+            }
             registry::set_step(box_id, step, StepState::Failed, Some(message));
             push(state, box_id).await;
             None
