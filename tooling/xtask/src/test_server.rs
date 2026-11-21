@@ -95,6 +95,8 @@ pub fn run(args: &[String]) -> Res<i32> {
                 remove_private_home(&tmp_home(name))?;
             }
             if folder.is_dir() {
+                #[cfg(target_os = "macos")]
+                test_bundles::unregister(&folder);
                 fs::remove_dir_all(&folder)?;
             }
             println!("Removed {}.", folder.display());
@@ -911,6 +913,17 @@ fn prepare_folder(server: &Server, debug: &Path, linked: bool) -> Res {
     create_private_home(&server.home())?;
     let bin = server.bin();
     fs::create_dir_all(&bin)?;
+    #[cfg(target_os = "macos")]
+    {
+        test_bundles::install(&bin, debug, linked, &find_zmx()?)
+    }
+    #[cfg(not(target_os = "macos"))]
+    prepare_loose_programs(&bin, debug, linked)
+}
+
+/// Linux and Windows: copies (or, `linked`, links) of the programs beside a `zmx` link.
+#[cfg(not(target_os = "macos"))]
+fn prepare_loose_programs(bin: &Path, debug: &Path, linked: bool) -> Res {
     for binary in ["gxserver", "ghostex"] {
         #[cfg(unix)]
         if linked {
@@ -930,6 +943,280 @@ fn prepare_folder(server: &Server, debug: &Path, linked: bool) -> Res {
     #[cfg(unix)]
     std::os::unix::fs::symlink(&zmx, &link)?;
     Ok(())
+}
+
+/// macOS: a test server's gxserver and zmx run as their own app bundles, "Ghostex Server (Test)"
+/// and "Ghostex Sessions (Test)", with `bin/` links to them as in a release package.
+///
+/// CDXC:HelperNames 2026-11-21 WHY: a test server ran a loose source zmx, so macOS named the
+/// program "zmx" in its prompts: on 2026-11-21 the user got "zmx was prevented from modifying
+/// apps" (App Management) from a test server's session and could not tell it was Ghostex. A loose
+/// program is also remembered by its file and signature, so each rebuild left another stray row in
+/// Privacy & Security. Running both as the main executables of bundles makes macOS name them by
+/// their display names and remember them by bundle identifier and signature (the release reasoning
+/// in apps/desktop/scripts/package-macos-gxserver-bundles.sh). The identifiers end in `.test`, so
+/// nothing a test server is allowed or denied touches the approvals of the real Ghostex Server and
+/// Ghostex Sessions. The bundles come from the release script, renamed, and are signed with the
+/// identity local builds use (ad hoc when this shell cannot sign, which only costs the test
+/// bundles' own approvals at each rebuild). A bundle is rebuilt only when its program changed:
+/// replacing it under a running daemon would take that session's grants away (CDXC:Zmx 2026-11-14
+/// in server/src/zmx/session_host.rs). zmx session jobs name the test bundle because gxserver
+/// reads the identifier from the bundle (`macos_zmx_bundle_identifier`, server/src/zmx/launch.rs).
+#[cfg(target_os = "macos")]
+mod test_bundles {
+    use super::*;
+
+    const LSREGISTER: &str = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
+
+    pub(super) struct TestBundle {
+        /// The folder, identifier and name the release script gives it.
+        release_folder: &'static str,
+        release_id: &'static str,
+        release_name: &'static str,
+        pub(super) folder: &'static str,
+        pub(super) id: &'static str,
+        name: &'static str,
+        executable: &'static str,
+    }
+
+    pub(super) const SERVER: TestBundle = TestBundle {
+        release_folder: "GhostexServer.app",
+        release_id: "com.madda.ghostex.gxserver",
+        release_name: "Ghostex Server",
+        folder: "GhostexServerTest.app",
+        id: "com.madda.ghostex.gxserver.test",
+        name: "Ghostex Server (Test)",
+        executable: "gxserver",
+    };
+
+    pub(super) const SESSIONS: TestBundle = TestBundle {
+        release_folder: "GhostexSessions.app",
+        release_id: "com.madda.ghostex.zmx",
+        release_name: "Ghostex Sessions",
+        folder: "GhostexSessionsTest.app",
+        id: "com.madda.ghostex.zmx.test",
+        name: "Ghostex Sessions (Test)",
+        executable: "zmx",
+    };
+
+    /// Lays out `<bin>/..` (the server's gxserver folder) as a package: the two bundles, `bin/`
+    /// links to their programs, and `bin/ghostex`.
+    pub(super) fn install(bin: &Path, debug: &Path, linked: bool, zmx: &Path) -> Res {
+        let package = bin.parent().ok_or("the bin folder has no parent")?;
+        let gxserver = fs::canonicalize(debug.join("gxserver"))?;
+        let zmx = fs::canonicalize(zmx)?;
+        let sources = [(&SERVER, &gxserver), (&SESSIONS, &zmx)];
+        let stale: Vec<&TestBundle> = sources
+            .iter()
+            .filter(|(bundle, source)| !is_current(package, bundle, source))
+            .map(|(bundle, _)| *bundle)
+            .collect();
+        if !stale.is_empty() {
+            build(package, &gxserver, &zmx, &stale)?;
+            for (bundle, source) in sources {
+                if stale.iter().any(|stale| stale.id == bundle.id) {
+                    fs::write(marker(package, bundle), fingerprint(source)?)?;
+                }
+            }
+        }
+        for bundle in [&SERVER, &SESSIONS] {
+            replace_with_link(
+                &bin.join(bundle.executable),
+                &format!("../{}/Contents/MacOS/{}", bundle.folder, bundle.executable),
+            )?;
+        }
+        // A release's `ghostex` is a link to its gxserver (a copy of a signed bundle program
+        // outside its bundle would be killed by macOS); the debug build's is its own program.
+        let ghostex = fs::canonicalize(debug.join("ghostex"))?;
+        if ghostex == gxserver {
+            replace_with_link(&bin.join("ghostex"), "gxserver")?;
+        } else {
+            let staged = bin.join(".ghostex.new");
+            fs::copy(&ghostex, &staged)?;
+            fs::rename(&staged, bin.join("ghostex"))?;
+        }
+        // An older release's gxserver reported the build identity of the package it ran from;
+        // its copy runs from this one now, so the identity comes along.
+        let identity = package.join("build-identity.json");
+        let source_identity =
+            source_package(&gxserver).map(|root| root.join("build-identity.json"));
+        match source_identity.filter(|path| linked && path.is_file()) {
+            Some(path) => {
+                fs::copy(path, &identity)?;
+            }
+            None => {
+                let _ = fs::remove_file(&identity);
+            }
+        }
+        // Session jobs name the Sessions bundle with AssociatedBundleIdentifiers, which macOS
+        // resolves through Launch Services (`register_app_bundles` in server/src/setup.rs).
+        for bundle in [&SERVER, &SESSIONS] {
+            let _ = output(
+                Command::new(LSREGISTER)
+                    .arg("-f")
+                    .arg(package.join(bundle.folder)),
+            );
+        }
+        Ok(())
+    }
+
+    /// Drops the bundles from Launch Services before a server's folder is deleted.
+    pub(super) fn unregister(folder: &Path) {
+        for bundle in [&SERVER, &SESSIONS] {
+            let path = folder.join("gxserver").join(bundle.folder);
+            if path.is_dir() {
+                let _ = output(Command::new(LSREGISTER).arg("-u").arg(path));
+            }
+        }
+    }
+
+    /// The package a program came from: the folder holding its bundle, or its `bin/`'s parent.
+    fn source_package(program: &Path) -> Option<PathBuf> {
+        let folder = program.parent()?;
+        if folder.ends_with("Contents/MacOS") {
+            return folder.parent()?.parent()?.parent().map(Path::to_path_buf);
+        }
+        folder.parent().map(Path::to_path_buf)
+    }
+
+    fn marker(package: &Path, bundle: &TestBundle) -> PathBuf {
+        package.join(format!(".{}.source", bundle.folder))
+    }
+
+    /// The source program's path, size and change time: a rebuild changes them.
+    fn fingerprint(source: &Path) -> Res<String> {
+        use std::os::unix::fs::MetadataExt;
+        let metadata = fs::metadata(source)?;
+        Ok(format!(
+            "{}\n{}\n{}.{}\n",
+            source.display(),
+            metadata.len(),
+            metadata.mtime(),
+            metadata.mtime_nsec()
+        ))
+    }
+
+    fn is_current(package: &Path, bundle: &TestBundle, source: &Path) -> bool {
+        let program = package
+            .join(bundle.folder)
+            .join("Contents/MacOS")
+            .join(bundle.executable);
+        program.is_file()
+            && fingerprint(source)
+                .is_ok_and(|now| fs::read_to_string(marker(package, bundle)).ok() == Some(now))
+    }
+
+    /// Makes the release bundles in a staging folder, renames and signs the stale ones, and moves
+    /// each over its old copy.
+    fn build(package: &Path, gxserver: &Path, zmx: &Path, stale: &[&TestBundle]) -> Res {
+        let stage = package.join(".bundles.new");
+        let _ = fs::remove_dir_all(&stage);
+        fs::create_dir_all(&stage)?;
+        let script = root().join("apps/desktop/scripts/package-macos-gxserver-bundles.sh");
+        let made = output(
+            Command::new(&script)
+                .arg(&stage)
+                .arg(gxserver)
+                .arg(zmx)
+                .arg("0.0.0-test"),
+        )?;
+        if !made.status.success() {
+            bail!(
+                "{} failed:\n{}",
+                script.display(),
+                String::from_utf8_lossy(&made.stderr).trim()
+            );
+        }
+        let identity = signing_identity();
+        for bundle in stale {
+            let staged = stage.join(bundle.release_folder);
+            rename_bundle(&staged, bundle)?;
+            sign(&staged, &identity)?;
+            let target = package.join(bundle.folder);
+            let old = package.join(format!(".{}.old", bundle.folder));
+            let _ = fs::remove_dir_all(&old);
+            if target.exists() {
+                fs::rename(&target, &old)?;
+            }
+            fs::rename(&staged, &target)?;
+            let _ = fs::remove_dir_all(&old);
+        }
+        let _ = fs::remove_dir_all(&stage);
+        Ok(())
+    }
+
+    /// Gives a release bundle the test identifier and name (its usage strings name it too).
+    fn rename_bundle(bundle_path: &Path, bundle: &TestBundle) -> Res {
+        let plist = bundle_path.join("Contents/Info.plist");
+        let text = fs::read_to_string(&plist)?;
+        let release_id = format!("<string>{}</string>", bundle.release_id);
+        if !text.contains(&release_id) {
+            bail!(
+                "{} does not name {}; package-macos-gxserver-bundles.sh changed, so update TestBundle in tooling/xtask/src/test_server.rs.",
+                plist.display(),
+                bundle.release_id
+            );
+        }
+        let text = text
+            .replace(&release_id, &format!("<string>{}</string>", bundle.id))
+            .replace(bundle.release_name, bundle.name);
+        fs::write(&plist, text)?;
+        let lint = output(Command::new("/usr/bin/plutil").arg("-lint").arg(&plist))?;
+        if !lint.status.success() {
+            bail!("{} is not a valid plist after renaming.", plist.display());
+        }
+        Ok(())
+    }
+
+    fn signing_identity() -> String {
+        match crate::codesign::resolve_identity(Path::new("/Applications/Ghostex.app")) {
+            Ok(identity) => identity,
+            Err(error) => {
+                eprintln!(
+                    "{error}\nSigning the test server's bundles ad hoc: macOS will ask for their permissions again after each rebuild of its gxserver or zmx. The real Ghostex's approvals are not affected."
+                );
+                "-".into()
+            }
+        }
+    }
+
+    /// As releases sign the bundles: hardened runtime, no entitlements (codesign-gpui-app.sh).
+    fn sign(bundle: &Path, identity: &str) -> Res {
+        let _ = output(Command::new("/usr/bin/xattr").arg("-cr").arg(bundle));
+        let mut codesign = Command::new("/usr/bin/codesign");
+        codesign.arg("--force");
+        if identity != "-" {
+            codesign.args(["--options", "runtime"]);
+            let timestamp = crate::codesign::timestamp_flag();
+            if !timestamp.is_empty() {
+                codesign.arg(timestamp);
+            }
+        }
+        codesign.args(["--sign", identity]).arg(bundle);
+        let signed = output(&mut codesign)?;
+        if !signed.status.success() {
+            bail!(
+                "codesign could not sign {}:\n{}",
+                bundle.display(),
+                String::from_utf8_lossy(&signed.stderr).trim()
+            );
+        }
+        Ok(())
+    }
+
+    /// Replaces a file or link with a link (renamed over it, so the name is never missing).
+    fn replace_with_link(path: &Path, target: &str) -> Res {
+        let staged = path.with_file_name(format!(
+            ".{}.link",
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("program")
+        ));
+        let _ = fs::remove_file(&staged);
+        std::os::unix::fs::symlink(target, &staged)?;
+        fs::rename(&staged, path)?;
+        Ok(())
+    }
 }
 
 /// The repository's built zmx first: a test server's daemons then never run from the installed app, whose gxserver treats daemons from its own Resources that it does not track as orphans. The installed app's zmx when the repository has none built.
