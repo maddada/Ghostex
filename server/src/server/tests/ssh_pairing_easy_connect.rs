@@ -110,6 +110,16 @@ struct Computer {
     key_lines: Mutex<Vec<String>>,
 }
 
+/// A pairing that lets a key in with Easy Connect on starts a real `tailcat serve` helper (when the
+/// computer running the tests has one). The helper runs in a process group of its own, so it
+/// outlived the test binary: every suite run left two of them running, each serving a temp folder
+/// that no longer existed. Each test's helpers stop with its computer, before the folder goes.
+impl Drop for Computer {
+    fn drop(&mut self) {
+        self.state.tailcat_runtime.stop();
+    }
+}
+
 impl Computer {
     fn new() -> (std::sync::MutexGuard<'static, ()>, Self) {
         let guard = ONE_AT_A_TIME
