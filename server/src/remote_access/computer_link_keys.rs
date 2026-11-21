@@ -375,7 +375,16 @@ pub fn easy_connect_link_key_answer(paths: &GxserverPaths, params: &Value) -> Re
         .get("gxserverPort")
         .and_then(Value::as_u64)
         .and_then(|port| u16::try_from(port).ok());
-    let path = crate::cloud_boxes::home_keys::own_box_key(paths, address, purpose)
+    // CDXC:CloudBoxes 2026-11-21 FIX: review of c1d1a8a3a (finding 3): a box whose boot answer
+    // named a paired computer's address made this route answer the box key for that computer, so
+    // the desktop's link to it failed until the box was deleted. A paired computer's address never
+    // gets a box key.
+    let paired_computer = super::computer_pairing::read_paired_computers(paths)
+        .iter()
+        .any(|computer| computer.address.trim() == address.trim());
+    let path = (!paired_computer)
+        .then(|| crate::cloud_boxes::home_keys::own_box_key(paths, address, purpose))
+        .flatten()
         .or_else(|| computer_link_key(paths, address, purpose, port_hint));
     Ok(json!({ "keyPath": path.map(|path| path.display().to_string()) }))
 }
