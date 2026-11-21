@@ -15,8 +15,17 @@
 //! is no approval step and no Link menu item; the app offers only Unlink and Stop leading, and agents
 //! learn about leads only from `ghostex agents guide leads`, which opens with "Only when the user
 //! asks for it". A session may only make itself a lead; the user's own terminal or the app may link
-//! any two. One level only: a lead can't be linked, a linked session can't lead, and neither side
-//! may be a coordinator or a coordinator's thread (those have threads).
+//! any two. Neither side may be a coordinator or a coordinator's thread (those have threads).
+//!
+//! CDXC:LeadLinks 2026-11-21 DECISION:
+//! GitHub #701 (the same reporter runs a main lead that links sub-leads, each with its own linked
+//! workers, and kept a watcher for the sub-leads because links were one level deep). The user
+//! picked two levels (Q4329 A), replacing "one level only" above: main lead, sub-lead, workers,
+//! never deeper and never a loop (`MAX_LINK_DEPTH`, `depth_refusal`). Each link still reports only
+//! the turns its own lead started, so the main lead hears its sub-lead's turns and never its
+//! sub-lead's workers'; unlinking a sub-lead keeps its own links; the sidebar and the phone nest
+//! both levels. Still taught only in `ghostex agents guide leads` and `agents link --help`, and
+//! still no Link menu item.
 //! SEE-ALSO: server/src/server/lead_runtime.rs (the watcher), server/src/storage/migrations/0084_lead_links.sql,
 //! server/src/ghostex_cli/agents/guide_leads.md, packages/gx-core/src/sidebar_view/rows.rs (nesting).
 
@@ -193,15 +202,8 @@ fn link_rules_and_write(
             "That session is a coordinator or a coordinator's thread, so it can't be linked to a lead.",
         ));
     }
-    if read_lead_link(db, &lead.0, &lead.1)?.is_some() {
-        return Err(DomainStateError::bad_request(
-            "The lead is itself linked to a lead; links are one level deep.",
-        ));
-    }
-    if is_lead(db, &linked.0, &linked.1) {
-        return Err(DomainStateError::bad_request(
-            "That session leads other sessions, so it can't be linked to a lead; links are one level deep.",
-        ));
+    if let Some(refusal) = depth_refusal(db, linked, lead)? {
+        return Err(DomainStateError::bad_request(refusal));
     }
     let before = read_lead_link(db, &linked.0, &linked.1)?.map(|link| link.lead_key());
     if by_session && before.as_ref().is_some_and(|previous| previous != lead) {
@@ -211,6 +213,106 @@ fn link_rules_and_write(
     }
     write_lead_link(db, linked, lead, owed)?;
     Ok(before)
+}
+
+/// How many links a chain may have: a main lead, its sub-leads, and their linked sessions.
+pub(crate) const MAX_LINK_DEPTH: usize = 2;
+
+/// The leads above `session`, nearest first. Stops after `MAX_LINK_DEPTH + 1` steps, and at a
+/// session seen before (links written before the depth rule can't loop, but a hand-edited table
+/// could).
+pub(crate) fn leads_above(
+    db: &Connection,
+    session: &SessionKey,
+) -> Result<Vec<SessionKey>, DomainStateError> {
+    let mut chain: Vec<SessionKey> = Vec::new();
+    let mut at = session.clone();
+    while chain.len() <= MAX_LINK_DEPTH {
+        let Some(link) = read_lead_link(db, &at.0, &at.1)? else {
+            break;
+        };
+        let lead = link.lead_key();
+        if lead == *session || chain.contains(&lead) {
+            break;
+        }
+        chain.push(lead.clone());
+        at = lead;
+    }
+    Ok(chain)
+}
+
+/// How many levels of links hang below `session`: 0 when it leads nobody, 1 when its linked
+/// sessions lead nobody, and so on (counted up to one past `MAX_LINK_DEPTH`).
+fn levels_below(db: &Connection, session: &SessionKey) -> Result<usize, DomainStateError> {
+    let mut level = 0;
+    let mut current = vec![session.clone()];
+    let mut seen = vec![session.clone()];
+    while level <= MAX_LINK_DEPTH {
+        let mut next = Vec::new();
+        for lead in &current {
+            for link in links_of_lead(db, &lead.0, &lead.1)? {
+                let key = link.key();
+                if !seen.contains(&key) {
+                    seen.push(key.clone());
+                    next.push(key);
+                }
+            }
+        }
+        if next.is_empty() {
+            break;
+        }
+        level += 1;
+        current = next;
+    }
+    Ok(level)
+}
+
+/// Why linking `linked` under `lead` would make a loop or a chain deeper than `MAX_LINK_DEPTH`.
+fn depth_refusal(
+    db: &Connection,
+    linked: &SessionKey,
+    lead: &SessionKey,
+) -> Result<Option<&'static str>, DomainStateError> {
+    let above = leads_above(db, lead)?;
+    if above.contains(linked) {
+        return Ok(Some(
+            "That would make a loop: the lead already reports to that session, directly or through a sub-lead.",
+        ));
+    }
+    if above.len() + 1 > MAX_LINK_DEPTH {
+        return Ok(Some(
+            "The lead is already two levels down (it reports to a sub-lead), so it can't lead; links go at most two levels deep: a lead, its sub-leads, and their sessions.",
+        ));
+    }
+    let below = levels_below(db, linked)?;
+    if above.len() + 1 + below > MAX_LINK_DEPTH {
+        return Ok(Some(if below >= MAX_LINK_DEPTH {
+            "That session leads sub-leads, so it can't be linked to a lead; links go at most two levels deep: a lead, its sub-leads, and their sessions."
+        } else {
+            "That session leads other sessions and the lead reports to a lead itself, so this would make three levels; links go at most two levels deep: a lead, its sub-leads, and their sessions."
+        }));
+    }
+    Ok(None)
+}
+
+/// The links below `lead`, its own first and each sub-lead's right after that sub-lead's row.
+fn links_in_tree(db: &Connection, lead: &SessionKey) -> Result<Vec<LeadLink>, DomainStateError> {
+    let mut rows = Vec::new();
+    let mut seen = vec![lead.clone()];
+    let mut stack = links_of_lead(db, &lead.0, &lead.1)?;
+    stack.reverse();
+    while let Some(link) = stack.pop() {
+        let key = link.key();
+        if seen.contains(&key) || rows.len() > 1_000 {
+            continue;
+        }
+        seen.push(key.clone());
+        let mut below = links_of_lead(db, &key.0, &key.1)?;
+        below.reverse();
+        rows.push(link);
+        stack.extend(below);
+    }
+    Ok(rows)
 }
 
 /// One transcript row as `lead_turn_reply` reads it: a message someone typed (`user`) or the
@@ -425,27 +527,44 @@ pub fn handle_lead_links_endpoint(
             })
         }
         "list" => {
-            let links = match (text(params, "leadProjectId"), text(params, "leadSessionId")) {
-                (Some(project_id), Some(session_id)) => {
-                    links_of_lead(db, &project_id, &session_id)?
-                }
-                _ => list_lead_links(db)?,
+            let asking = match (text(params, "leadProjectId"), text(params, "leadSessionId")) {
+                (Some(project_id), Some(session_id)) => Some((project_id, session_id)),
+                _ => None,
             };
+            let links = match &asking {
+                Some(lead) => links_in_tree(db, lead)?,
+                None => list_lead_links(db)?,
+            };
+            let entry = |key: &SessionKey| json!({ "globalRef": global_ref(key), "title": session_title(repository, key) });
+            // Each row's leads from the top one down to its own (#701: `agents links` shows the
+            // chain), and how many links down it is.
             let rows = links
                 .iter()
                 .map(|link| {
-                    json!({
+                    let mut chain = leads_above(db, &link.key())?;
+                    chain.reverse();
+                    Ok(json!({
                         "globalRef": global_ref(&link.key()),
                         "title": session_title(repository, &link.key()),
                         "leadGlobalRef": global_ref(&link.lead_key()),
                         "leadTitle": session_title(repository, &link.lead_key()),
+                        "leadChain": chain.iter().map(entry).collect::<Vec<_>>(),
+                        "depth": chain.len(),
+                        "isLead": is_lead(db, &link.project_id, &link.session_id),
                         "reportOwed": link.owed_since.is_some(),
                         "linkedAt": link.created_at,
-                    })
+                    }))
                 })
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, DomainStateError>>()?;
+            let mut result = json!({ "links": rows });
+            // The asking session's own leads, top first, when it is linked itself.
+            if let Some(lead) = &asking {
+                let mut above = leads_above(db, lead)?;
+                above.reverse();
+                result["reportsTo"] = json!(above.iter().map(entry).collect::<Vec<_>>());
+            }
             Ok(LeadLinksOutput {
-                result: json!({ "links": rows }),
+                result,
                 changed_sessions: Vec::new(),
             })
         }

@@ -123,22 +123,59 @@ pub(super) fn links(args: &Arguments) -> CliResult<Value> {
         &params,
         &local_flags(&args.flags),
     )?;
-    Ok(json!({ "ok": true, "links": result["links"] }))
+    let mut answer = json!({ "ok": true, "links": result["links"] });
+    if result["reportsTo"]
+        .as_array()
+        .is_some_and(|chain| !chain.is_empty())
+    {
+        answer["reportsTo"] = result["reportsTo"].clone();
+    }
+    Ok(answer)
+}
+
+fn one_line(value: &str) -> String {
+    value.replace(['\n', '\r', '\t'], " ")
+}
+
+/// A chain of leads, top first, as "Main lead > Sub-lead" (`leadChain` / `reportsTo` rows).
+fn chain_text(chain: &Value) -> Option<String> {
+    let titles = chain
+        .as_array()?
+        .iter()
+        .map(|entry| match text(entry, "title") {
+            "" => text(entry, "globalRef").to_string(),
+            title => one_line(title),
+        })
+        .collect::<Vec<_>>();
+    (!titles.is_empty()).then(|| titles.join(" > "))
 }
 
 pub(super) fn print_links(result: &Value) {
+    // CDXC:LeadLinks 2026-11-21 WHY: with two levels (#701) a lead's list holds its sub-leads'
+    // sessions too, so each row names its whole chain of leads, and a sub-lead is told whom it
+    // reports to; a gxserver older than two levels sends no chain, and the direct lead stands in.
+    if let Some(chain) = chain_text(&result["reportsTo"]) {
+        println!("You report to: {chain}");
+    }
     let rows = result["links"].as_array().cloned().unwrap_or_default();
     if rows.is_empty() {
         println!("No sessions are linked to a lead.");
         return;
     }
-    println!("REFERENCE\tTITLE\tLEAD\tREPORT OWED");
+    println!("REFERENCE\tTITLE\tLEADS (TOP FIRST)\tREPORT OWED");
     for row in rows {
+        let depth = row["depth"].as_u64().unwrap_or(1).max(1) as usize;
         println!(
-            "{}\t{}\t{}\t{}",
+            "{}\t{}{}{}\t{}\t{}",
             text(&row, "globalRef"),
-            text(&row, "title").replace(['\n', '\r', '\t'], " "),
-            text(&row, "leadTitle").replace(['\n', '\r', '\t'], " "),
+            "  ".repeat(depth - 1),
+            one_line(text(&row, "title")),
+            if row["isLead"] == json!(true) {
+                " (sub-lead)"
+            } else {
+                ""
+            },
+            chain_text(&row["leadChain"]).unwrap_or_else(|| one_line(text(&row, "leadTitle"))),
             if row["reportOwed"] == json!(true) {
                 "yes"
             } else {
